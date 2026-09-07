@@ -62,6 +62,23 @@ npx ambercast <command>
 - [CI 运行](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/ci/) — 介绍在 CI 环境运行测试的方法，以及在 CI 中阻止 heal 的机制
 - [配置参考](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/) — 完整列出 `ambercast.config.json` 配置文件所支持的全部字段
 
+## 官方技能
+
+ambercast 在 `skills/ambercast/SKILL.md` 中内置了一个 [Agent Skills](https://agentskills.io) 技能。它教会编码代理如何编写提示词、运行 generate / run / check / heal 循环，以及如何解读结果。请使用你所用代理自带的安装器进行安装:
+
+| 代理 | 安装方式 |
+| --- | --- |
+| Claude Code | 先执行 `/plugin marketplace add kotarotsubaki/ambercast`，再执行 `/plugin install ambercast@ambercast` |
+| Codex CLI | 在 Codex 对话中输入: `$skill-installer install https://github.com/kotarotsubaki/ambercast/tree/main/skills/ambercast` |
+| GitHub Copilot、Cursor、Gemini CLI 等支持 `gh skill` 的代理 | `gh skill install kotarotsubaki/ambercast ambercast --agent <agent>` |
+| 任意代理（skills.sh） | `npx skills add kotarotsubaki/ambercast --skill ambercast -y` |
+
+或者从已安装的包中将其复制到你的代理技能目录:
+
+```bash
+mkdir -p .claude/skills && cp -R node_modules/ambercast/skills/ambercast .claude/skills/ambercast
+```
+
 ## 状态与限制
 
 ambercast 目前处于 **0.x、pre-1.0** 版本：破坏性变更可能会出现在次版本（minor release）中。当前支持范围如下：

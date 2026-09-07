@@ -475,7 +475,7 @@ describe('main()', () => {
     expect(runOptions).toContain('--stale <fail>');
     expect(runOptions).toContain('--no-color');
     expect(runOptions).not.toContain('--stale <fail|regenerate>');
-    expect(runOptions).not.toContain('--ai <claude|codex>');
+    expect(runOptions).toContain('--ai <claude|codex>');
     expect(result.stderr).toBe('');
     expect(result.exitCode).toBe(0);
     expect(runRunCommand).not.toHaveBeenCalled();

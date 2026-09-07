@@ -181,7 +181,7 @@ describe('official ambercast skill', () => {
     for (const heading of ['### Good example', '### Bad example']) {
       const indexes = subheadingIndexes.get(heading) ?? [];
       expect(indexes).toHaveLength(1);
-      const [index] = indexes;
+      const index = indexes[0]!;
       expect(writing[index + 1]).toBe('```markdown');
     }
   });

@@ -10,6 +10,7 @@ interface Props {
 
 const { copy, locale } = Astro.props;
 const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+const primaryCtaHref = `${base}tutorials/quick-start/`;
 const mark = `${base}ambercast-mark.svg`;
 const { lead: healLead, tail: healTail } = splitHealNote(copy.figureOne.healPill);
 // The tokenizer treats only ASCII letters and digits as word characters: underscores and CJK
@@ -27,7 +28,7 @@ const splitValue = (value: string) => value.split(/(?<![A-Za-z0-9])(claude|codex
       <h1 id="landing-title">{copy.hero.title}</h1>
       <p class="landing-summary">{copy.hero.summary}</p>
       <div class="landing-actions">
-        <a class="landing-cta" href={`${base}guides/getting-started/`}>{copy.hero.primaryCta}</a>
+        <a class="landing-cta" href={primaryCtaHref}>{copy.hero.primaryCta}</a>
         <code><span aria-hidden="true" class="landing-prompt">$</span>{copy.hero.installCommand}</code>
       </div>
     </div>

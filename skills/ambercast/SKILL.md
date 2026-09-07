@@ -21,7 +21,7 @@ Confirm the prerequisites before running anything:
 - The app under test is running and reachable. The default base URL is `http://localhost:3000`.
 - `ambercast.config.json` in the project root is optional. Without it, the defaults listed in the next section apply.
 
-Install the `ambercast` package as a dev dependency, or call `npx ambercast <command>` directly.
+Install `ambercast` as a dev dependency so that `npx ambercast <command>` resolves to the project's pinned version; do not rely on `npx` downloading it ad hoc.
 
 ## Project facts come from the project
 
@@ -131,7 +131,7 @@ Triage for exit 1 from `run`, based on the failing step in `results[]`:
 - The element was found and operated, but the expected result did not appear: if the user's recent change caused it, fix the app; if the expectation is vague or wrong, fix the prompt.
 - If you cannot tell which case applies, stop and ask the user instead of guessing.
 
-Never confuse exit 1 with 2, 3, or 4. Only exit 1 means the app was actually exercised and the test judged it.
+Never confuse exit 1 with 2, 3, or 4. For `run`, exit 1 means the app was exercised and at least one expectation was not met; in a mixed batch read `results[]`, because the aggregate exit follows the priority order above.
 
 ## What to commit
 

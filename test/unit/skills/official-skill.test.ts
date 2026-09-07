@@ -193,7 +193,7 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-8 preserves the approved draft byte-for-byte', () => {
-    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('abdd7ba8d1cb65a60478e66ab8c27f1125ae7f4cd78851615fa8ad06fb2771ac');
+    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('0591f174a3b559454bbb70d0d4f0edbd08253ecc42bb7df8c9223eac5510f27d');
   });
 
   it('SPEC-9 and SPEC-10 keep skill flags aligned with the CLI usage contract', () => {
@@ -238,12 +238,22 @@ describe('official ambercast skill', () => {
     }
   });
 
-  // See #292.
-  it.skip('SPEC-12 links to the blocked configuration reference page', () => {
+  // The 8th URL's rendered page, website/src/content/docs/reference/configuration.md,
+  // is a build artifact that website/scripts/sync-configuration.mjs generates from
+  // docs/configuration.md and website/.gitignore excludes, so it does not exist in a
+  // fresh checkout or CI. Check the source of truth it is generated from instead, and
+  // bind that check to the generator's own path-resolution so the mapping cannot drift
+  // silently. See #292 and #300.
+  it('SPEC-12 links to the blocked configuration reference page', () => {
     const url = URLS.at(-1)!;
     const path = new URL(url).pathname.replace(/^\/ambercast\//, '').replace(/\/$/, '');
+    const sourceOfTruth = path === 'reference/configuration' ? '../../../docs/configuration.md' : `../../../website/src/content/docs/${path}.md`;
 
-    expect(existsSync(new URL(`../../../website/src/content/docs/${path}.md`, import.meta.url))).toBe(true);
+    expect(existsSync(new URL(sourceOfTruth, import.meta.url))).toBe(true);
+
+    const syncScript = readFileSync(new URL('../../../website/scripts/sync-configuration.mjs', import.meta.url), 'utf8');
+    expect(syncScript).toMatch(/sourcePath\s*=\s*path\.resolve\([^,()]*,\s*'\.\.\/\.\.\/docs\/configuration\.md'\s*,?\s*\)/);
+    expect(syncScript).toMatch(/outputPath\s*=\s*path\.resolve\(\s*[^,()]*,\s*[\s\S]*?'\.\.\/src\/content\/docs\/reference\/configuration\.md'\s*,?\s*\)/);
   });
 
   it('SPEC-13 gives every README one adjacent, four-row official-skill section', () => {

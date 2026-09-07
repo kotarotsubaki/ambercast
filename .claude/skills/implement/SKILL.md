@@ -28,7 +28,7 @@ Artifacts live next to it: `.claude/impl/issue-<N>-plan.md` and `.claude/impl/is
 
 Reviews are independent: performed by OpenAI Codex CLI per the user-level codex-delegation rules (reviewer models: `gpt-5.6-sol` for the single-shot judgment reviews at steps 4 and 12, `gpt-5.6-terra` at medium effort for the interim reviews at steps 8 and 10; load the codex-delegation skill before invoking `codex exec`). If Codex is unavailable in your environment, use an equally independent reviewer agent with a fresh context. Save every review verdict as a Markdown file under `.claude/impl/issue-<N>-reviews/`. Address every finding or record an explicit, reasoned rejection — silence is not an option.
 
-**Single-pass budget (steps 8, 10, 12).** Each of these steps consumes exactly one `codex exec` review call per issue. Run the review once, save the verdict, address every finding (or record a reasoned rejection) in the plan file, record the step `done`, and move on to the next step. Verification of the fixes made after a review belongs to the following gates: the step 10 review covers fixes made after step 8, the step 12 review covers fixes made after step 10, and CI plus the PR review at step 16 cover fixes made after step 12.
+**Single-pass budget (steps 8, 10, 12).** Each of these steps consumes exactly one `codex exec` review call per plan revision (a return to step 3 opens a new plan revision). Run the review once, save the verdict, address every finding (or record a reasoned rejection) in the plan file, record the step `done`, and move on to the next step. Verification of the fixes made after a review belongs to the following gates: the step 10 review covers fixes made after step 8, the step 12 review covers fixes made after step 10, and CI plus the PR review at step 16 cover fixes made after step 12.
 
 ## GAP protocol (Codex delegation, steps 6–11)
 
@@ -85,7 +85,7 @@ After an attempt, timeout, interruption, or non-clean result, perform read-only 
 
 - Steps run in order; never parallelize across steps (parallelism happens inside a step, e.g. the 3 plan review lens groups).
 - Fixed design decisions in `AGENTS.md` are binding — do not re-litigate them in code or plans; propose changes to the human instead.
-- If a step fails repeatedly or the plan proves wrong mid-flow, go back to step 3, revise the plan, and re-run the step 4 plan review for what changed (steps 8, 10, and 12 keep their single review call per issue) — do not improvise forward.
+- If a step fails repeatedly or the plan proves wrong mid-flow, go back to step 3, revise the plan, and re-run the step 4 plan review for what changed — do not improvise forward. A return to step 3 opens a new plan revision: each of steps 8, 10, and 12 that is redone under the revised plan receives a fresh single review call, so the single-pass budget counts per plan revision; a retry that keeps the plan unchanged stays inside the current revision's budget.
 
 ## Autonomous continuation
 

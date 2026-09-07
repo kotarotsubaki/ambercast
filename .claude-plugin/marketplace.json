@@ -1,0 +1,14 @@
+{
+  "name": "ambercast",
+  "owner": {
+    "name": "ambercast contributors",
+    "url": "https://github.com/kotarotsubaki/ambercast"
+  },
+  "plugins": [
+    {
+      "name": "ambercast",
+      "source": "./skills/ambercast",
+      "description": "Official ambercast skill: write prompt-only E2E tests and run the generate / run / check / heal loop"
+    }
+  ]
+}

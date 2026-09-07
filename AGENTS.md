@@ -10,13 +10,15 @@ Test cases are written as natural-language Markdown prompts; the prompt is the s
 
 ## Status
 
-0.1.0. `generate`, `run`, `check`, and `heal` are implemented and exercised by the test suite. Chromium only, local execution only; the results viewer, `init`, and an MCP server are not implemented yet.
+0.x (the exact version is package.json's). `generate`, `run`, `check`, and `heal` are implemented and exercised by the test suite. Chromium only, local execution only; the results viewer, `init`, and an MCP server are not implemented yet. The official agent skill is bundled at skills/ambercast/SKILL.md.
 
 ## Repository layout
 
 - `bin/` — the published CLI entry point: a thin shim (`bin/ambercast.js`) that imports and calls `main()` from the built `dist/cli.js`
 - `src/` — TypeScript sources, compiled by `tsdown` to `dist/` (gitignored, built on demand)
-- `package.json` — `files: ["bin", "dist"]` limits what gets published; keep agent/config files and sources out of the tarball
+- `skills/` — the official Agent Skills bundle published with the package; see skills/ambercast/SKILL.md
+- `.claude-plugin/marketplace.json` — Claude Code plugin marketplace that points at `skills/ambercast`
+- `package.json` — `files: ["bin", "dist", "skills"]` limits what gets published; keep agent/config files and sources out of the tarball
 - `AGENTS.md` / `CLAUDE.md` — agent guidance (this file is canonical)
 
 ## Core design decisions (fixed — do not re-litigate in code)
@@ -103,7 +105,7 @@ Implementation tasks run in a **linked worktree per issue** by default; working 
   command in both `python-version: ["3.9", "3.x"]` matrix legs
 - `node bin/ambercast.js` — run the CLI (requires `npm run build` first)
 - `node scripts/verify-pack.mjs` — authoritative, automated check that the
-  packed tarball contains `dist/`, `bin/ambercast.js`, and that the bin file
+  packed tarball contains `dist/`, `bin/ambercast.js`, `skills/ambercast/SKILL.md`, and that the bin file
   is executable; run this instead of eyeballing `npm pack --dry-run` output
 
 Keep this file updated as the implementation grows.

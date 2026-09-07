@@ -62,6 +62,23 @@ There is no `init` command yet; a prompt file is all you need, and defaults assu
 - [CI usage](https://kotarotsubaki.github.io/ambercast/guides/ci/) — Running on CI and why heal is blocked there.
 - [Configuration reference](https://kotarotsubaki.github.io/ambercast/reference/configuration/) — Full reference for every `ambercast.config.json` field.
 
+## Official skill
+
+ambercast ships an [Agent Skills](https://agentskills.io) skill at `skills/ambercast/SKILL.md`. It teaches a coding agent how to write prompts, run the generate / run / check / heal loop, and read the results. Install it with your agent's own installer:
+
+| Agent | Install |
+| --- | --- |
+| Claude Code | `/plugin marketplace add kotarotsubaki/ambercast` then `/plugin install ambercast@ambercast` |
+| Codex CLI | Type in a Codex conversation: `$skill-installer install https://github.com/kotarotsubaki/ambercast/tree/main/skills/ambercast` |
+| GitHub Copilot, Cursor, Gemini CLI, and other agents supported by `gh skill` | `gh skill install kotarotsubaki/ambercast ambercast --agent <agent>` |
+| Any agent (skills.sh) | `npx skills add kotarotsubaki/ambercast --skill ambercast -y` |
+
+Or copy it from the installed package into your agent's skills directory:
+
+```bash
+mkdir -p .claude/skills && cp -R node_modules/ambercast/skills/ambercast .claude/skills/ambercast
+```
+
 ## Status
 
 ambercast is pre-1.0 (0.x), and breaking changes can land in a minor release.

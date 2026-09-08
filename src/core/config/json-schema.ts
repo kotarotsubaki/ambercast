@@ -17,8 +17,14 @@ import { RawConfig } from './schema.js';
  * @remarks
  * This getter mirrors the IR conversion getter instead of maintaining a
  * handwritten config schema, so zod validation and published structure cannot
- * drift apart.
+ * drift apart. It attaches the published schema identifier, title, and
+ * description to that derived document.
  */
 export function getConfigJsonSchema(): z.core.JSONSchema.BaseSchema {
-  return z.toJSONSchema(RawConfig);
+  return {
+    ...z.toJSONSchema(RawConfig),
+    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json',
+    title: 'ambercast config schema',
+    description: 'Validates the parsed contents of a present Ambercast configuration file.',
+  };
 }

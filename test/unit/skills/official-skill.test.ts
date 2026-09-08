@@ -4,9 +4,13 @@
  * rather than introducing production parsing behavior or a YAML dependency.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { CLI_MANIFEST, renderUsage } from '../../../src/core/cli/manifest.js';
 
 const ROOT = new URL('../../../', import.meta.url);
 const skillPath = new URL('../../../skills/ambercast/SKILL.md', import.meta.url);
@@ -112,12 +116,72 @@ describe('official ambercast skill', () => {
     expect(existsSync(skillPath)).toBe(true);
   });
 
-  it('SPEC-2 permits only the files-list change in package.json', () => {
+  it('SPEC-D requires the three public generated artifacts and excludes internal config defaults', () => {
+    const verifyPack = readFileSync(new URL('../../../scripts/verify-pack.mjs', import.meta.url), 'utf8');
+    const literal = verifyPack.match(/const REQUIRED_FILES = \[([\s\S]*?)\];/);
+
+    expect(literal).not.toBeNull();
+    const entries = [...literal![1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    for (const requiredFile of [
+      'dist/schema/report.schema.json',
+      'dist/manifest/cli.json',
+      'dist/manifest/capabilities.json',
+    ]) {
+      expect.soft(entries).toContain(requiredFile);
+    }
+    expect.soft(entries).not.toContain('dist/manifest/config-defaults.json');
+    expect.soft(entries.at(-1)).toBe('skills/ambercast/SKILL.md');
+  });
+
+  it('SPEC-D executes verify-pack against the built tarball', () => {
+    const script = new URL('../../../scripts/verify-pack.mjs', import.meta.url);
+    const verifyPackSource = readFileSync(script, 'utf8');
+    const literal = verifyPackSource.match(/const REQUIRED_FILES = \[([\s\S]*?)\];/);
+
+    expect(literal).not.toBeNull();
+    const requiredFiles = [...literal![1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]!);
+    const npmCache = mkdtempSync(join(tmpdir(), 'ambercast-verify-pack-'));
+
+    try {
+      const environment = { ...process.env, npm_config_cache: npmCache };
+      const verification = spawnSync(process.execPath, [fileURLToPath(script)], {
+        cwd: fileURLToPath(ROOT),
+        encoding: 'utf8',
+        env: environment,
+      });
+
+      expect(verification.error).toBeUndefined();
+      expect(verification.status).toBe(0);
+      expect(verification.stdout).toContain(`verify-pack: OK (${requiredFiles.length} required files present and correctly moded)`);
+
+      const npmPack = spawnSync('npm', ['pack', '--dry-run', '--json'], {
+        cwd: ROOT.pathname,
+        encoding: 'utf8',
+        env: environment,
+      });
+
+      expect(npmPack.error).toBeUndefined();
+      expect(npmPack.status).toBe(0);
+      const [manifest] = JSON.parse(npmPack.stdout);
+      const packedPaths = new Set(manifest.files.map((entry: { path: string }) => entry.path));
+      for (const artifact of [
+        'dist/schema/report.schema.json',
+        'dist/manifest/cli.json',
+        'dist/manifest/capabilities.json',
+      ]) {
+        expect(packedPaths).toContain(artifact);
+      }
+    } finally {
+      rmSync(npmCache, { recursive: true, force: true });
+    }
+  });
+
+  it('SPEC-2 pins the approved package publication metadata', () => {
     const packageBytes = readFileSync(new URL('../../../package.json', import.meta.url));
     const pkg = JSON.parse(packageBytes.toString('utf8'));
 
     expect(pkg.files).toStrictEqual(['bin', 'dist', 'skills']);
-    expect(createHash('sha256').update(packageBytes).digest('hex')).toBe('683825bc5f8f6e8fa26131fa8f5b45f926e3e0aea24b2d97d14e5734f412e86d');
+    expect(createHash('sha256').update(packageBytes).digest('hex')).toBe('06990114b613f02b039dd3f083ed4b6bebe771295cc49a74b3b3091b90eb7c12');
   });
 
   it('SPEC-3 keeps the skill directory intentionally small', () => {
@@ -197,8 +261,7 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-9 and SPEC-10 keep skill flags aligned with the CLI usage contract', () => {
-    const main = readFileSync(new URL('../../../src/cli/main.ts', import.meta.url), 'utf8');
-    const usage = main.match(/const USAGE = `([\s\S]*?)`;/)?.[1]?.replaceAll('\\n', '\n');
+    const usage = renderUsage(CLI_MANIFEST);
 
     expect(usage).toBeDefined();
     const sections = new Map([...usage!.matchAll(/^(Generate|Run|Check|Heal) options:\n([\s\S]*?)(?=\n\n|(?![\s\S]))/gm)]

@@ -2,7 +2,7 @@
  * Keeps the package's public API boundary deliberate: package.json's exports
  * field is a physical wall against unintended public surface, one of several
  * layered defenses that preserve a deliberate API boundary. This test validates
- * the approved five-entry exports map's complete content, while
+ * the approved eight-entry exports map's complete content, while
  * scripts/verify-pack.mjs separately validates packed-file presence.
  * Internal IR schema declarations such as `TraceAssert`, `TraceEntry`, and
  * `TraceRecord` do not create package subpath exports, so this allowlist is
@@ -21,6 +21,9 @@ describe('package.json exports allowlist', () => {
       './schema/plan.json': './dist/schema/plan.schema.json',
       './schema/grounding.json': './dist/schema/grounding.schema.json',
       './schema/config.json': './dist/schema/config.schema.json',
+      './schema/report.json': './dist/schema/report.schema.json',
+      './manifest/cli.json': './dist/manifest/cli.json',
+      './manifest/capabilities.json': './dist/manifest/capabilities.json',
       './package.json': './package.json',
     });
   });

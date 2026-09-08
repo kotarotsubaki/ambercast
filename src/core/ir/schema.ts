@@ -205,6 +205,14 @@ export const ElementRef = z.discriminatedUnion('strategy', [AccessibilityElement
 export type ElementRef = z.infer<typeof ElementRef>;
 
 /**
+ * The single public spelling of the fingerprint algorithm identifier.
+ *
+ * The schema, fingerprint producer, and generated tooling manifests share
+ * this value so they cannot retype and drift from the same versioned contract.
+ */
+export const FINGERPRINT_ALGORITHM = 'a11y-neighborhood-v2' as const;
+
+/**
  * Validates the stable accessibility-neighborhood fingerprint recorded for a
  * grounding entry.
  *
@@ -219,7 +227,7 @@ export type ElementRef = z.infer<typeof ElementRef>;
  * fallback rather than a runtime error, so the loader needs no migration path.
  */
 export const Fingerprint = z.strictObject({
-  algorithm: z.literal('a11y-neighborhood-v2'),
+  algorithm: z.literal(FINGERPRINT_ALGORITHM),
   hash: HexSha256,
 });
 

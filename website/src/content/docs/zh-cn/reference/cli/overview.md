@@ -48,7 +48,7 @@ ambercast 当前已实现的命令包括 generate、run、check 以及 heal。
 | check | 字面路径；未指定路径则执行发现 | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 
-位置参数必须是 `testDir` 内的字面 `.test.md` 路径。此范围之外的路径属于使用错误；不会被静默忽略，也不会导致执行崩溃。
+除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
 
 `--` 标志用于结束选项解析，其后出现的所有参数均按字面路径处理。
 

@@ -4,7 +4,9 @@
  * Keeping process creation behind this callable lets adapter tests assert a
  * deterministic request protocol without spawning authenticated provider
  * binaries. The real runner remains the single owner of child lifecycle and
- * stream collection.
+ * stream collection. This shared subprocess seam also lets callers isolate
+ * child processes from project-level configuration sources while preserving
+ * inherited working-directory behavior when no isolation is requested.
  */
 
 import { spawn } from 'node:child_process';
@@ -53,6 +55,9 @@ export interface CommandRunOptions {
 
   /** Cancellation that kills the child and rejects the returned promise. */
   readonly signal?: AbortSignal;
+
+  /** Working directory of the child; omission inherits this process's cwd. */
+  readonly cwd?: string;
 }
 
 /**
@@ -120,7 +125,9 @@ export function stripDeniedEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
  * @remarks
  * This factory is the shared process-spawning implementation so the
  * two provider adapters cannot drift in stdin closure, output collection, or
- * cancellation semantics.
+ * cancellation semantics. Callers can provide a conditional working-directory
+ * override here to cut child discovery off from project-level configuration
+ * sources; omission continues to inherit the process cwd.
  *
  * Runtime supplies its environment through the system-adapter boundary because
  * this AI adapter must not observe process-global state directly. The runner
@@ -135,6 +142,7 @@ export function createSpawnCommandRunner(deps: { readonly env?: NodeJS.ProcessEn
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: stripDeniedEnv(deps.env ?? {}),
+      ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
     });
     const signal = options?.signal;
     let stdout = '';

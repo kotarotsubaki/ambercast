@@ -31,9 +31,16 @@ import type {
  * @returns An executor named `codex-cli`.
  * @remarks
  * `execute` writes the output schema to a unique
- * temporary directory, pipes the isolated prompt to
- * `codex exec --sandbox read-only --json --output-schema <schema> -o <output> -`,
- * then validates the output file's text. A best-effort `finally` path attempts
+ * temporary directory, uses that directory as the child cwd to cut
+ * discovery of `AGENTS.md` and `.agents/skills` off from the inherited project,
+ * and pipes the isolated prompt to Codex's structured-output execution
+ * protocol. The narrow `--skip-git-repo-check` exception applies solely to
+ * Codex's repository-trust gate, allowing the fresh, empty per-call directory
+ * to serve as cwd; the separate `--sandbox read-only` policy remains in
+ * effect. The directory's fresh, empty, per-call isolation and the read-only
+ * sandbox compensate for that explicit trust-gate exception. It then validates
+ * the output file's text. A
+ * best-effort `finally` path attempts
  * directory removal after every provider outcome without replacing that
  * outcome when cleanup fails. Nonzero, signaled, spawn-failure, and temporary
  * artifact-preparation outcomes classify as an unavailable executor.
@@ -75,9 +82,10 @@ export function createCodexCliExecutor(
               try {
                 result = await run(
                   'codex',
-                  ['exec', '--sandbox', 'read-only', '--json', '--output-schema', schemaPath, '-o', outputPath, '-'],
+                  ['exec', '--sandbox', 'read-only', '--skip-git-repo-check', '--json', '--output-schema', schemaPath, '-o', outputPath, '-'],
                   {
                     input: buildStructuredPrompt(request),
+                    cwd: directory,
                     ...(request.signal === undefined ? {} : { signal: request.signal }),
                   },
                 );

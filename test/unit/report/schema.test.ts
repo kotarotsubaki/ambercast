@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AiResponseIssue,
   CheckResult,
   GenerateResult,
   HealResult,
@@ -12,6 +13,7 @@ import {
   StepResult,
   Summary,
 } from '../../../src/report/schema.js';
+import { CAUSE_NAMES } from './cause-name-fixtures.js';
 
 interface SchemaUnderTest {
   safeParse(value: unknown): { success: boolean };
@@ -124,7 +126,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.0',
+    schemaVersion: '3.1',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -355,11 +357,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.0', () => {
+  it('requires schema version 3.1', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.0' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.1' });
   });
 });
 
@@ -431,6 +433,104 @@ describe('valid nested schema fixtures', () => {
     [{ id: 'login-succeeds', file: 'tests/login.test.md', status: 'failed', dryRun: false }],
   ] as const)('accepts each exact generate-result status branch', (result) => {
     expectAccepted(GenerateResult, result);
+  });
+});
+
+describe('SPEC-K5 report error details', () => {
+  const detailsByCode = {
+    AI_RESPONSE_INVALID: { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] },
+    SECRET_LITERAL_REJECTED: { detector: 'credential-prefix-sk', path: 'generatorMeta.token', attempts: [] },
+    SECRET_GRANT_UNATTRIBUTABLE: { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'request-token', attempts: [] },
+    AI_EXECUTOR_UNAVAILABLE: { attempts: [{ attempt: 5, code: 'AI_EXECUTOR_UNAVAILABLE' }] },
+    UNEXPECTED_CRASH: { cause: { name: 'AbortError' } },
+  } as const;
+
+  const errorFor = (code: keyof typeof detailsByCode, scope: 'run' | 'case') => ({
+    scope,
+    kind: code === 'SECRET_LITERAL_REJECTED' || code === 'SECRET_GRANT_UNATTRIBUTABLE' ? 'usage' : 'environment',
+    code,
+    message: 'diagnostic',
+    ...(scope === 'case' ? { caseId: 'case-a' } : {}),
+    details: detailsByCode[code],
+  });
+
+  it.each(Object.keys(detailsByCode) as Array<keyof typeof detailsByCode>)('accepts optional %s details at both applicable scopes', (code) => {
+    expectAccepted(ReportError, errorFor(code, 'run'));
+    expectAccepted(ReportError, errorFor(code, 'case'));
+    for (const scope of ['run', 'case'] as const) {
+      const { details: _details, ...withoutDetails } = errorFor(code, scope);
+      expectAccepted(ReportError, withoutDetails);
+    }
+  });
+
+  it('accepts omitted FS_IO_ERROR details at both scopes', () => {
+    expectAccepted(ReportError, { scope: 'run', kind: 'environment', code: 'FS_IO_ERROR', message: 'io' });
+    expectAccepted(ReportError, CASE_FS_IO_ERROR);
+  });
+
+  it('accepts both secret-grant reason branches and rejects their mixed shape', () => {
+    expectAccepted(ReportError, {
+      ...errorFor('SECRET_GRANT_UNATTRIBUTABLE', 'run'),
+      details: { reason: 'uncovered-grant', secretRef: '{{secrets.API_TOKEN}}', sourceSpan: { startLine: 3, endLine: 5 } },
+    });
+    expectRejected(ReportError, {
+      ...errorFor('SECRET_GRANT_UNATTRIBUTABLE', 'run'),
+      details: { reason: 'uncovered-grant', secretRef: '{{secrets.API_TOKEN}}', sourceSpan: { startLine: 5, endLine: 3 }, stepId: 'invented-step' },
+    });
+  });
+
+  it.each([
+    ['AI_RESPONSE_INVALID', { detector: 'credential-prefix-sk', path: 'path' }],
+    ['SECRET_LITERAL_REJECTED', { issues: [] }],
+    ['SECRET_GRANT_UNATTRIBUTABLE', { attempts: [] }],
+    ['AI_EXECUTOR_UNAVAILABLE', { cause: { name: 'Error' } }],
+    ['UNEXPECTED_CRASH', { attempts: [] }],
+  ] as const)('rejects a details shape belonging to another code for %s', (code, details) => {
+    expectRejected(ReportError, { ...errorFor(code, 'run'), details });
+  });
+
+  it('rejects unknown keys in every strict details leaf', () => {
+    for (const code of Object.keys(detailsByCode) as Array<keyof typeof detailsByCode>) {
+      expectRejected(ReportError, { ...errorFor(code, 'run'), details: { ...detailsByCode[code], unexpected: true } });
+    }
+  });
+
+  it('accepts unconstrained attempt-array length while constraining every attempt element', () => {
+    expectAccepted(ReportError, { ...errorFor('AI_EXECUTOR_UNAVAILABLE', 'run'), details: { attempts: [] } });
+    expectAccepted(ReportError, { ...errorFor('AI_EXECUTOR_UNAVAILABLE', 'run'), details: { attempts: Array.from({ length: 7 }, (_, index) => ({ attempt: (index % 5) + 1, code: 'AI_EXECUTOR_UNAVAILABLE' })) } });
+    expectRejected(ReportError, { ...errorFor('AI_EXECUTOR_UNAVAILABLE', 'run'), details: { attempts: [{ attempt: 1.5, code: 'AI_EXECUTOR_UNAVAILABLE' }] } });
+    expectRejected(ReportError, { ...errorFor('AI_EXECUTOR_UNAVAILABLE', 'run'), details: { attempts: [{ attempt: 0, code: 'AI_EXECUTOR_UNAVAILABLE' }] } });
+    expectRejected(ReportError, { ...errorFor('AI_EXECUTOR_UNAVAILABLE', 'run'), details: { attempts: [{ attempt: -1, code: 'AI_EXECUTOR_UNAVAILABLE' }] } });
+    expectRejected(ReportError, { ...errorFor('AI_EXECUTOR_UNAVAILABLE', 'run'), details: { attempts: [{ attempt: 6, code: 'AI_EXECUTOR_UNAVAILABLE' }] } });
+    expectRejected(ReportError, { ...errorFor('AI_EXECUTOR_UNAVAILABLE', 'run'), details: { attempts: [{ attempt: 1, code: 'UNKNOWN' }] } });
+  });
+
+  it.each([
+    'credential-prefix-sk', 'credential-prefix-ghp', 'credential-prefix-aws-access-key', 'high-entropy-token', 'embedded-secret-reference',
+  ])('accepts the reserved %s literal-secret detector', (detector) => {
+    expectAccepted(ReportError, { ...errorFor('SECRET_LITERAL_REJECTED', 'run'), details: { detector, path: 'generatorMeta.key' } });
+  });
+
+  it('rejects an unknown secret detector, whitespace-only secret path, and invalid AI issue fields', () => {
+    expectRejected(ReportError, { ...errorFor('SECRET_LITERAL_REJECTED', 'run'), details: { detector: 'other', path: 'path' } });
+    expectRejected(ReportError, { ...errorFor('SECRET_LITERAL_REJECTED', 'run'), details: { detector: 'credential-prefix-sk', path: ' \t\n' } });
+    expectAccepted(AiResponseIssue, { code: 'schema-mismatch', path: ['steps', 0, 'id'] });
+    expectAccepted(AiResponseIssue, { code: 'invalid-json', path: [] });
+    expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: ['steps', -1] });
+    expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: ['steps', 1.5] });
+    expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: [], message: 'not report-safe' });
+    expectRejected(AiResponseIssue, { code: 'unknown-code', path: [] });
+    expectAccepted(AiResponseIssue, { code: 'schema-mismatch', path: [], stepId: 'step-id' });
+    expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: [], stepId: 'Step_ID' });
+  });
+
+  it.each(CAUSE_NAMES)(
+    'accepts the %s unexpected-crash cause name',
+    (name) => expectAccepted(ReportError, { ...errorFor('UNEXPECTED_CRASH', 'run'), details: { cause: { name } } }),
+  );
+
+  it('rejects an arbitrary unexpected-crash cause name', () => {
+    expectRejected(ReportError, { ...errorFor('UNEXPECTED_CRASH', 'run'), details: { cause: { name: 'CustomError' } } });
   });
 });
 

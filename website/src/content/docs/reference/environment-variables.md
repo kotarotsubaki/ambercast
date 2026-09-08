@@ -13,6 +13,7 @@ Ambercast reads process environment variables for configuration path overrides, 
 | `AMBERCAST_AI_PROVIDER` | `readConfigEnvironment()` → `aiProviderRaw` | Replaces config/default `ai.provider` after validation as `claude`, `codex`, or `auto`. | `--ai` wins; then this variable; then config `ai.provider`; then the default `auto`. Empty is absent; an unsupported nonempty value is invalid. |
 | `AMBERCAST_SECRET_*` | `createEnvSecretsProvider().resolve()` | Resolves a specific `{{secrets.*}}` reference at the secret-provider boundary. | Dots become underscores and segments are uppercased: `{{secrets.a.b}}` maps to `AMBERCAST_SECRET_A_B`; a missing key returns `undefined`. This mapping is non-injective, so references such as `a.b` and `a_b` must not be used together. |
 | `CI` | `createProcessEnvironmentInfo().isCI()` | Supplies the CI-policy boolean consumed by runtime commands. | Active only when defined, nonempty, and not exactly lowercase `false`; `FALSE`, `0`, and whitespace are active. |
+| `AMBERCAST_DEBUG` | bare catch in `main.ts` | Prints the crash cause message and stack to stderr. | Inactive when unset, empty, exactly `0`, or exactly `false`; active otherwise. Matching is case-sensitive and does not trim whitespace. |
 
 Provider resolution applies the command `--ai` override before evaluating the loaded provider. When you specify a non-`auto` value, Ambercast returns it directly without probing; `auto` probes `claude` first and then `codex`. Each automatic provider probe has its own 8,000 ms availability deadline.
 

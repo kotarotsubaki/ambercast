@@ -13,6 +13,7 @@ Ambercastが読み取る環境変数と、AIプロバイダーの子プロセス
 | `AMBERCAST_AI_PROVIDER` | `readConfigEnvironment()` → `aiProviderRaw` | `claude`、`codex`、または `auto` として検証された後、設定ファイルまたは既定値の `ai.provider` を置き換えます。 | `--ai` が優先され、次にこの変数、次に設定ファイルの `ai.provider`、最後に既定値の `auto` の順になります。空値は未指定として扱われ、サポートされていない非空の値は無効となります。 |
 | `AMBERCAST_SECRET_*` | `createEnvSecretsProvider().resolve()` | シークレットプロバイダーの境界において、特定の `{{secrets.*}}` 参照を解決します。 | ドットはアンダースコアに変換され、各セグメントは大文字化されます（例: `{{secrets.a.b}}` は `AMBERCAST_SECRET_A_B` にマッピングされます）。キーが存在しない場合は `undefined` を返します。このマッピングは単射ではないため、`a.b` と `a_b` のような参照を同時に使用してはなりません。 |
 | `CI` | `createProcessEnvironmentInfo().isCI()` | ランタイムコマンドが消費するCIポリシーのブール値を提供します。 | 定義されており、空ではなく、かつ正確に小文字の `false` でない場合にのみアクティブになります。`FALSE`、`0`、および空白文字はアクティブとして扱われます。 |
+| `AMBERCAST_DEBUG` | `main.ts` の bare catch | クラッシュ原因のメッセージとスタックを stderr に出力します。 | 未設定、空、正確に `0`、または正確に `false` のとき非アクティブです。それ以外ではアクティブになり、大文字・小文字を区別して空白をトリムしません。 |
 
 プロバイダーの解決では、読み込まれたプロバイダーの前にコマンドの `--ai` による上書きが適用されます。`auto` 以外の値はプローブを行わずに返されますが、`auto` は `claude`、次に `codex` の順でプローブします。
 

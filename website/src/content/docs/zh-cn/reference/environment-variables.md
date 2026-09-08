@@ -13,6 +13,7 @@ Ambercast 在运行时会读取特定的系统环境变量，用于确定配置�
 | `AMBERCAST_AI_PROVIDER` | `readConfigEnvironment()` → `aiProviderRaw` | 在校验为 `claude`、`codex` 或 `auto` 后，替换配置或默认的 `ai.provider`。 | `--ai` 优先级最高；其次是此环境变量；接着是配置中的 `ai.provider`；最后是默认值 `auto`。空值视作不存在；非空且不受支持的值视为无效。 |
 | `AMBERCAST_SECRET_*` | `createEnvSecretsProvider().resolve()` | 在密钥提供商边界解析具体的 `{{secrets.*}}` 引用。 | 点号转换为下划线且各分段转为大写：`{{secrets.a.b}}` 映射为 `AMBERCAST_SECRET_A_B`；缺失的键返回 `undefined`。此映射为非单射，因此类似 `a.b` 与 `a_b` 的引用不得同时使用。 |
 | `CI` | `createProcessEnvironmentInfo().isCI()` | 提供运行时命令所消费的 CI 策略布尔值。 | 仅在已定义、非空且值不严格等于全小写 `false` 时处于激活状态；`FALSE`、`0` 与空白字符均判定为激活。 |
+| `AMBERCAST_DEBUG` | `main.ts` 中的 bare catch | 将崩溃原因的消息和堆栈输出到 stderr。 | 未设置、为空、严格等于 `0` 或严格等于 `false` 时不激活；其他情况均激活。比较区分大小写且不裁剪空白字符。 |
 
 提供商解析会在已加载的提供商之前优先应用命令行的 `--ai` 覆盖参数；非 `auto` 的值无需探测即可直接返回，而 `auto` 则会先探测 `claude`，再探测 `codex`。
 

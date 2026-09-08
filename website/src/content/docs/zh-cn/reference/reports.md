@@ -9,7 +9,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.0` |
+| `schemaVersion` | 字面量 `3.1` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -94,13 +94,16 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 ## 错误 {#errors}
 
-| 分支 | 必需字段 | 约束条件 |
-| --- | --- | --- |
-| `run` 使用错误（run usage） | `scope`, `kind`, `code`, `message`；`hint` 可选 | `scope` 为 `run`，`kind` 为 `usage` |
-| `run` 环境错误（run environment） | `scope`, `kind`, `code`, `message`；`hint` 可选 | `scope` 为 `run`，`kind` 为 `environment` |
-| `case` 使用错误（case usage） | `scope`, `kind`, `code`, `message`, `caseId`；`hint` 可选 | `scope` 为 `case`，`kind` 为 `usage` |
-| `case` 环境错误（case environment） | `scope`, `kind`, `code`, `message`, `caseId`；`hint` 可选 | 排除 `INTERRUPTED` 与 `FS_IO_ERROR` |
-| `case FS_IO_ERROR` | `scope`, `kind`, `code`, `message`, `caseId`；`hint` 可选，外加可选的 `details.partiallyWritten` | `details.partiallyWritten` 的取值为 `plan` 或 `grounding` |
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下六个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+
+| 代码 | 可选的 `details` 形状 |
+| --- | --- |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任一 instruction-coverage issue code、"invalid-json" 或 "schema-mismatch"; path: Array<string 或非负整数>; stepId?: StepId }>, attempts?: ... }` |
+| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token 或 embedded-secret-reference; path: 非空白字符串; attempts?: ... }` |
+| `SECRET_GRANT_UNATTRIBUTABLE` | `{ reason: "uncovered-grant", secretRef: SecretRef, sourceSpan: { startLine: 正整数, endLine: 不小于 startLine 的正整数 }, attempts?: ... }`，或 `{ reason: citation-not-found、citation-not-unique、citation-missing-ref、citation-unresolved、multiply-attributed-grant 或 stale-grant-span; secretRef: SecretRef; stepId?: StepId; attempts?: ... }` |
+| `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
+| `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
+| `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
 
 ## 报告持久化 {#persistence}
 
@@ -112,16 +115,16 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
 ```json
-{"schemaVersion":"3.0","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.1","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.0","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.1","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.0","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.1","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.0","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.1","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}

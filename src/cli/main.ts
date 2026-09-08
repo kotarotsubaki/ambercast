@@ -193,6 +193,83 @@ function escapeControlChars(value: string): string {
   return escaped;
 }
 
+function escapeStackControlChars(value: string): string {
+  return value.split(/(\r\n|\r|\n)/u)
+    .map((part) => part === '\r\n' || part === '\r' || part === '\n' ? part : escapeControlChars(part))
+    .join('');
+}
+
+/**
+ * Formats structured diagnostic details in each code's declared key order.
+ *
+ * A fixed per-code key-order table follows each `details` sub-schema's field
+ * order. `issues` renders each entry as `<code> @ <JSON.stringify(path)>`,
+ * joined by `; `. Every other field renders as `key=value`: primitives are
+ * stringified, and arrays or objects use compact `JSON.stringify` output.
+ * The whole rendered string, including every JSON serialization result, goes
+ * through {@link escapeControlChars} before return. There is no JSON carve-out
+ * because JSON encoding does not escape DEL or C1 control characters.
+ */
+function formatErrorDetails(code: unknown, details: unknown): string {
+  if (details === null || typeof details !== 'object' || Array.isArray(details)) {
+    return '';
+  }
+
+  const keyOrder: Record<string, readonly string[]> = {
+    AI_RESPONSE_INVALID: ['issues', 'attempts'],
+    SECRET_LITERAL_REJECTED: ['detector', 'path', 'attempts'],
+    SECRET_GRANT_UNATTRIBUTABLE: ['reason', 'secretRef', 'stepId', 'sourceSpan', 'attempts'],
+    AI_EXECUTOR_UNAVAILABLE: ['attempts'],
+    UNEXPECTED_CRASH: ['cause'],
+    FS_IO_ERROR: ['partiallyWritten'],
+  };
+  const detailRecord = details as Record<string, unknown>;
+  const fields = keyOrder[typeof code === 'string' ? code : ''] ?? [];
+
+  return fields
+    .filter((key) => Object.hasOwn(detailRecord, key))
+    .map((key) => {
+      const value = detailRecord[key];
+      if (key === 'issues' && Array.isArray(value)) {
+        const issues = value.map((issue) => {
+          if (issue === null || typeof issue !== 'object' || Array.isArray(issue)) {
+            return escapeControlChars(String(issue));
+          }
+          const issueRecord = issue as Record<string, unknown>;
+          return `${escapeControlChars(String(issueRecord.code ?? ''))} @ ${escapeControlChars(JSON.stringify(issueRecord.path))}`;
+        }).join('; ');
+        return `issues=${issues}`;
+      }
+      const rendered = value !== null && typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value);
+      return `${key}=${escapeControlChars(rendered)}`;
+    })
+    .join('; ');
+}
+
+/**
+ * Projects a trusted caught error to the CLI's stable cause vocabulary.
+ *
+ * The crash boundary avoids exposing implementation-specific classes and must
+ * remain operable for hostile caught values, so it uses the generic category
+ * whenever identity cannot be established safely.
+ */
+function projectCauseName(cause: unknown): string {
+  try {
+    if (!(cause instanceof Error)) {
+      return 'Error';
+    }
+    const name = cause.name;
+    return name === 'Error' || name === 'TypeError' || name === 'RangeError'
+      || name === 'SyntaxError' || name === 'ReferenceError' || name === 'AbortError' || name === 'TimeoutError'
+      ? name
+      : 'Error';
+  } catch {
+    return 'Error';
+  }
+}
+
 /**
  * Renders a report-shaped value as compact terminal lines.
  *
@@ -249,7 +326,19 @@ export function renderHumanReport(
 
   for (const error of errors) {
     const item = error as Record<string, unknown>;
-    lines.push(`${colorize('error', '31', color)} ${escapeControlChars(String(item.message ?? 'Unknown error'))}`);
+    const code = typeof item.code === 'string' ? item.code : undefined;
+    if (code === undefined) {
+      lines.push(`${colorize('error', '31', color)} ${escapeControlChars(String(item.message ?? 'Unknown error'))}`);
+      continue;
+    }
+    const caseId = typeof item.caseId === 'string' ? ` [${escapeControlChars(item.caseId)}]` : '';
+    lines.push(`${colorize('error', '31', color)} ${code}${caseId}: ${escapeControlChars(String(item.message ?? 'Unknown error'))}`);
+    if (typeof item.hint === 'string') {
+      lines.push(`  hint: ${escapeControlChars(item.hint)}`);
+    }
+    if (item.details !== undefined) {
+      lines.push(`  details: ${formatErrorDetails(code, item.details)}`);
+    }
   }
 
   return `${lines.join('\n')}${lines.length === 0 ? '' : '\n'}`;
@@ -696,8 +785,25 @@ export async function main(
       }
       stdout.write(parsed.json ? `${JSON.stringify(output.envelope)}\n` : renderHumanReport(output.envelope, parsed.color));
       process.exitCode = output.exitCode;
-    } catch {
-      stderr.write(`The ${parsed.command} command crashed unexpectedly.\n`);
+    } catch (error) {
+      /*
+       * Opt-in diagnostics can contain sensitive data, but unavailable or
+       * hostile properties must never replace the original failure with a
+       * second crash in this last-resort reporting path.
+       */
+      const name = projectCauseName(error);
+      stderr.write(`The ${parsed.command} command crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
+      const debug = process.env.AMBERCAST_DEBUG;
+      if (debug !== undefined && debug !== '' && debug !== '0' && debug !== 'false') {
+        try {
+          const message = error !== null && typeof error === 'object' ? (error as { message?: unknown }).message : undefined;
+          if (typeof message === 'string') stderr.write(`cause message: ${escapeControlChars(message)}\n`);
+        } catch {}
+        try {
+          const stack = error !== null && typeof error === 'object' ? (error as { stack?: unknown }).stack : undefined;
+          if (typeof stack === 'string') stderr.write(`cause stack:\n${escapeStackControlChars(stack)}\n`);
+        } catch {}
+      }
       process.exitCode = 3;
     }
   } finally {

@@ -44,8 +44,15 @@ function withoutDollarSchema(
   return schemaWithoutDeclaration;
 }
 
-function responseInvalid(raw: string, message: string, cause?: unknown): AiResponseInvalidError {
-  return new AiResponseInvalidError(message, { raw, issues: [{ path: '', message }] }, { cause });
+/**
+ * Builds the normalized transport issue used by all wrapper-shape failures.
+ *
+ * JSON parsing has code `invalid-json`; the two missing-string-result cases
+ * use `schema-mismatch`. None has nested provider data to attribute, so its
+ * path is always empty.
+ */
+function responseInvalid(raw: string, message: string, code: 'invalid-json' | 'schema-mismatch', cause?: unknown): AiResponseInvalidError {
+  return new AiResponseInvalidError(message, { raw, issues: [{ code, path: [] }] }, { cause });
 }
 
 function usageFrom(value: unknown): AiUsage | undefined {
@@ -132,16 +139,16 @@ export function createClaudeCodeCliExecutor(
         try {
           response = JSON.parse(result.stdout);
         } catch (error) {
-          throw responseInvalid(result.stdout, 'The Claude Code CLI returned malformed JSON.', error);
+          throw responseInvalid(result.stdout, 'The Claude Code CLI returned malformed JSON.', 'invalid-json', error);
         }
 
         if (response === null || typeof response !== 'object' || Array.isArray(response)) {
-          throw responseInvalid(result.stdout, 'The Claude Code CLI response did not contain a string result.');
+          throw responseInvalid(result.stdout, 'The Claude Code CLI response did not contain a string result.', 'schema-mismatch');
         }
 
         const payload = response as Record<string, unknown>;
         if (typeof payload.result !== 'string') {
-          throw responseInvalid(result.stdout, 'The Claude Code CLI response did not contain a string result.');
+          throw responseInvalid(result.stdout, 'The Claude Code CLI response did not contain a string result.', 'schema-mismatch');
         }
 
         const data = validateAiResponse(payload.result, request.responseSchema);

@@ -25,6 +25,7 @@ import type { StorageAdapter } from '#ports/storage.js';
 import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
+import { REDACTED_ISSUE_PATH_SEGMENT } from '#report/issue-path.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
@@ -397,7 +398,7 @@ describe('generate', () => {
   );
 
   it.each([
-    ['missing success intent', [], ['verificationIntent', 'dashboard-reached'], 'intent-id-missing'],
+    ['missing success intent', [], ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT], 'intent-id-missing'],
     ['unknown success intent', [{ criterionId: 'unknown', assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' } }], ['verificationIntent', 0, 'criterionId'], 'intent-id-unknown'],
     ['duplicate success intent', [
       { criterionId: 'dashboard-reached', assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' } },
@@ -438,6 +439,88 @@ describe('generate', () => {
       expect(recordingStorage.writes).toEqual([]);
     },
   );
+
+  it('preserves coverage-issue order around two redacted missing intent IDs without deduplication', async () => {
+    const prompt = '# Sign in\n\nFirst success criterion.\nSecond success criterion.\n';
+    const response = {
+      ...coveredResponse,
+      steps: [{
+        ...coveredResponse.steps[0],
+        instructionCoverage: [
+          { id: 'first-ready', kind: 'success', citation: 'First success criterion.' },
+          { id: 'second-ready', kind: 'success', citation: 'Second success criterion.' },
+        ],
+        verificationIntent: [{
+          criterionId: 'unknown-ready',
+          assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' },
+        }],
+      }],
+    } as unknown as GeneratedPlanResponse;
+    const raw = `RAW:${JSON.stringify(response)}`;
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw }) }),
+    });
+    await writePrompt(recordingStorage.storage, 'login.test.md', prompt);
+    recordingStorage.reset();
+
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toMatchObject({
+      details: {
+        raw,
+        issues: [
+          { code: 'intent-id-unknown', path: ['verificationIntent', 0, 'criterionId'] },
+          { code: 'intent-id-missing', path: ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT] },
+          { code: 'intent-id-missing', path: ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT] },
+        ],
+      },
+    });
+    expect(recordingStorage.writes).toEqual([]);
+  });
+
+  it('redacts a dynamic generatorMeta key when the policy-boundary Zod validation rejects it', async () => {
+    const response = { steps: [], ambiguities: [], generatorMeta: { providerSecret: undefined } } as unknown as GeneratedPlanResponse;
+    const raw = 'RAW:generator-meta-policy-failure';
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw }) }),
+    });
+    await writePrompt(recordingStorage.storage);
+    recordingStorage.reset();
+
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toMatchObject({
+      details: { raw, issues: [{ code: 'schema-mismatch', path: ['generatorMeta', REDACTED_ISSUE_PATH_SEGMENT] }] },
+    });
+    expect(recordingStorage.writes).toEqual([]);
+  });
+
+  it('redacts the dynamic target name and field when final PlanDocument validation rejects a target', async () => {
+    const response = { steps: [], ambiguities: [] } as GeneratedPlanResponse;
+    const raw = 'RAW:target-plan-failure';
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw }) }),
+    });
+    const invalidTargetDeps = {
+      ...deps,
+      config: {
+        ...deps.config,
+        targets: {
+          ...deps.config.targets,
+          web: { ...deps.config.targets.web, baseUrl: 'not a URL' },
+        },
+      },
+    } as GenerateDeps;
+    await writePrompt(recordingStorage.storage);
+    recordingStorage.reset();
+
+    const outcome = await generate(invalidTargetDeps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toMatchObject({
+      details: { raw, issues: [{ code: 'schema-mismatch', path: ['targets', REDACTED_ISSUE_PATH_SEGMENT, REDACTED_ISSUE_PATH_SEGMENT] }] },
+    });
+    expect(recordingStorage.writes).toEqual([]);
+  });
 
   it('rejects an action criterion named by terminal intent with raw output, path, and zero writes', async () => {
     const response = {

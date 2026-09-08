@@ -20,6 +20,7 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'config-invalid', reportCode: 'CONFIG_INVALID', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'secret-unresolved', reportCode: 'SECRET_UNRESOLVED', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'target-unresolved', reportCode: 'TARGET_UNRESOLVED', exitCode: 2, reportKind: 'usage' },
+  { errorKind: 'prompt-path-invalid', reportCode: 'PROMPT_PATH_INVALID', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'secret-literal-rejected', reportCode: 'SECRET_LITERAL_REJECTED', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'secret-grant-unattributable', reportCode: 'SECRET_GRANT_UNATTRIBUTABLE', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'missing-plan', reportCode: 'MISSING_PLAN', exitCode: 4, reportKind: 'usage' },
@@ -37,6 +38,7 @@ const REPORTABLE_ERROR_KINDS = [
   'config-invalid',
   'secret-unresolved',
   'target-unresolved',
+  'prompt-path-invalid',
   'secret-literal-rejected',
   'secret-grant-unattributable',
   'missing-plan',
@@ -76,7 +78,7 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     expect(new Set(mappedKinds)).toStrictEqual(new Set(REPORTABLE_ERROR_KINDS));
   });
 
-  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind }) => errorKind !== 'interrupted'))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
+  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind }) => errorKind !== 'interrupted' && errorKind !== 'prompt-path-invalid'))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
     expectAccepted(ReportError, {
       scope: 'run',
       kind: reportKind,
@@ -98,6 +100,15 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     });
     expect(ReportError.safeParse({
       scope: 'case', kind: 'environment', code: 'INTERRUPTED', message: 'The case was interrupted.', caseId: 'case-a',
+    }).success).toBe(false);
+  });
+
+  it('accepts PROMPT_PATH_INVALID only as a run-scoped usage error', () => {
+    expectAccepted(ReportError, {
+      scope: 'run', kind: 'usage', code: 'PROMPT_PATH_INVALID', message: 'The selected prompt path is invalid.',
+    });
+    expect(ReportError.safeParse({
+      scope: 'case', kind: 'usage', code: 'PROMPT_PATH_INVALID', message: 'The selected prompt path is invalid.', caseId: 'case-a',
     }).success).toBe(false);
   });
 });

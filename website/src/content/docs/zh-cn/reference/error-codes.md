@@ -10,6 +10,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | 错误代码 | 类别 | 作用域 | 退出码 | 触发条件 |
 | --- | --- | --- | --- | --- |
 | CONFIG_INVALID | usage | run/case | 2 | 配置无效 |
+| PROMPT_PATH_INVALID | usage | run only | 2 | 所选 prompt 路径不符合资格 |
 | SECRET_UNRESOLVED | usage | run/case | 2 | 未解析的 secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | 目标无法解析 |
 | MISSING_PLAN | usage | run/case | 4 | 缺失 plan |

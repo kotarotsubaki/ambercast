@@ -20,13 +20,15 @@ export type ExitCode = 0 | 1 | 2 | 3 | 4 | 5;
  *
  * The classification, rather than a message string or a concrete subclass
  * name, is the contract used to select handling policy and a process exit
- * status.
+ * status. `prompt-path-invalid` identifies a selected path that lies outside
+ * the eligible prompt-file domain before any individual case starts.
  */
 export type ErrorKind =
   | 'assertion-failed'
   | 'config-invalid'
   | 'secret-unresolved'
   | 'target-unresolved'
+  | 'prompt-path-invalid'
   | 'secret-literal-rejected'
   | 'secret-grant-unattributable'
   | 'missing-plan'

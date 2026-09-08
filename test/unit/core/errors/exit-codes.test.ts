@@ -7,6 +7,7 @@ const ALL_ERROR_KINDS = [
   'config-invalid',
   'secret-unresolved',
   'target-unresolved',
+  'prompt-path-invalid',
   'secret-literal-rejected',
   'secret-grant-unattributable',
   'missing-plan',
@@ -36,6 +37,7 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
     case 'config-invalid':
     case 'secret-unresolved':
     case 'target-unresolved':
+    case 'prompt-path-invalid':
     case 'secret-literal-rejected':
     case 'secret-grant-unattributable':
       return 2;

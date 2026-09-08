@@ -31,7 +31,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `$schema` | string | — | 存在するファイルでは必須 | ローダー |
 | `testDir` | string | `tests/ambercast` | 絶対配置パスへと解決 | generate、run、check、heal の探索／配置 |
 | `runsDir` | string | `tests/ambercast/.runs` | 絶対配置パスへと解決 | run のレポート／エビデンス、heal 内の書き込み |
-| `testMatch` | string[] | `["**/*.test.md"]` | 限定された `*`/`**` マッチャー | generate、run、check、heal の探索 |
+| `testMatch` | string[] | `["**/*.test.md"]` | 限定された `*`/`**` マッチャー。すべてのパターンは `.test.md` で終わる必要があり、そうでなければ設定読み込みは `CONFIG_INVALID` で失敗 | generate、run、check、heal の探索 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含マッチ後に除外 | generate、run、check、heal の探索 |
 | `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
 | `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |

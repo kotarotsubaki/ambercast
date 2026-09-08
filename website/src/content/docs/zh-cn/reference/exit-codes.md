@@ -16,6 +16,8 @@ ambercast 向系统环境提供面向机器的进程退出状态码。本参考�
 | 4 | 不可信的计划或 grounding 制件 | 2 |
 | 5 | 空选择集 | 4 |
 
+例如，[`PROMPT_PATH_INVALID`](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) 是以退出代码 2 结束的使用错误。
+
 ## 聚合优先级 {#aggregation-priority}
 
 优先级数值较小者胜出，确立了 2 > 3 > 4 > 1 > 5 > 0 的优先级规则。退出码的选择独立于遍历顺序；在没有候选对象时返回 0。

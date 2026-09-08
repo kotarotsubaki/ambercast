@@ -34,6 +34,7 @@ import type {
 import { validateCommittedInstructionCoverage } from './instruction-coverage-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { inspectGroundingArtifact } from './check-grounding.js';
+import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 
 /**
  * Performs the prompt-dependent committed-coverage portion of freshness.
@@ -240,6 +241,7 @@ export interface CheckOutcome {
  * @throws A rejection from `discoverTestFiles` during test selection, plan
  * orphan scanning, or grounding orphan scanning propagates without
  * reclassification.
+ * @throws {import('#core/errors/prompt-path-invalid-error.js').PromptPathInvalidError} When a selected path is ineligible before per-file work begins.
  * @remarks
  * The shared core resolver treats an explicit target as a caller-supplied
  * validity requirement, so an invalid explicit name resolves before discovery
@@ -333,6 +335,8 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
       interrupted: false,
     };
   }
+
+  assertPromptPathsEligible(deps.layout, selectedTestFiles);
 
   const results: CheckFileOutcome[] = [];
   const errors: CheckFileError[] = [];

@@ -16,6 +16,8 @@ ambercast conveys machine-facing process status through numeric exit codes. If y
 | 4 | untrustworthy plan or grounding artifact | 2 |
 | 5 | empty selection | 4 |
 
+For example, [`PROMPT_PATH_INVALID`](/ambercast/reference/error-codes/#code-vocabulary) is a usage error that exits 2.
+
 ## Aggregation priority {#aggregation-priority}
 
 When aggregating exit codes across multiple outcomes, lower rank wins, establishing 2 > 3 > 4 > 1 > 5 > 0.

@@ -14,6 +14,7 @@ import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
+import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
@@ -2078,6 +2079,118 @@ describe('run', () => {
     });
     expect(recordingStorage.reads).toEqual([]);
     expect(recordingStorage.exists).toEqual([]);
+  });
+
+  it.each([
+    ['outside the test directory', '/workspace/outside.test.md', 'outside-test-dir'],
+    ['inside the test directory without the test suffix', `${TEST_DIR}/login.md`, 'not-test-md'],
+    ['anonymous inside the test directory', `${TEST_DIR}/.test.md`, 'no-name'],
+  ] as const)('rejects a literal prompt path %s before replay work begins', async (_description, path, reason) => {
+    const { deps } = createScenario();
+
+    await expect(run(deps, { ...DEFAULT_OPTIONS, files: [path] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      exitCode: 2,
+      details: { path, reason },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('processes a boundary-valid direct child of testDir without a prompt-path error', async () => {
+    const { deps, recordingStorage } = createScenario();
+    const path = await writePrompt(recordingStorage.storage, 'x.test.md');
+    await seedFreshArtifacts(recordingStorage.storage, path, []);
+
+    await expect(run(deps, { ...DEFAULT_OPTIONS, files: [path] })).resolves.toMatchObject({
+      results: [{ result: { file: path, status: 'passed' } }],
+      noTestsFound: false,
+    });
+  });
+
+  it('keeps list mode lenient for an ineligible literal prompt path', async () => {
+    const { deps } = createScenario();
+    const path = '/workspace/outside.test.md';
+
+    await expect(run(deps, { ...DEFAULT_OPTIONS, files: [path], list: true })).resolves.toEqual({
+      results: [],
+      noTestsFound: false,
+      listed: [{ file: path }],
+      skipped: [],
+      interrupted: false,
+    });
+  });
+
+  it('preflights the whole selection before reading an eligible first prompt or resolving AI', async () => {
+    const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => createFakeAiExecutor());
+    const { deps, recordingStorage } = createScenario({ resolveAiExecutor });
+    const eligiblePath = await writePrompt(recordingStorage.storage, 'eligible.test.md');
+    await seedFreshArtifacts(recordingStorage.storage, eligiblePath, []);
+    const ineligiblePath = `${TEST_DIR}/ineligible.md`;
+    recordingStorage.reads.splice(0);
+    recordingStorage.exists.splice(0);
+    recordingStorage.writes.splice(0);
+
+    await expect(run(deps, {
+      ...DEFAULT_OPTIONS,
+      files: [eligiblePath, ineligiblePath],
+    })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path: ineligiblePath, reason: 'not-test-md' },
+    } satisfies Partial<PromptPathInvalidError>);
+    expect(recordingStorage.reads).toEqual([]);
+    expect(recordingStorage.writes).toEqual([]);
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ineligible path before observing an already-aborted signal', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled before selection'));
+    const { deps } = createScenario({ signal: controller.signal });
+    const path = `${TEST_DIR}/ineligible.md`;
+
+    await expect(run(deps, { ...DEFAULT_OPTIONS, files: [path] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path, reason: 'not-test-md' },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('reports the first ineligible file reason in document order', async () => {
+    const { deps } = createScenario();
+    const firstPath = `${TEST_DIR}/.test.md`;
+    const secondPath = '/workspace/outside.test.md';
+
+    await expect(run(deps, { ...DEFAULT_OPTIONS, files: [firstPath, secondPath] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path: firstPath, reason: 'no-name' },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('filters an ineligible path out with grep before eligibility validation', async () => {
+    const { deps, recordingStorage } = createScenario();
+    const eligiblePath = await writePrompt(recordingStorage.storage, 'matching/login.test.md');
+    await seedFreshArtifacts(recordingStorage.storage, eligiblePath, []);
+    const excludedIneligiblePath = `${TEST_DIR}/other/skip.md`;
+
+    await expect(run(deps, {
+      ...DEFAULT_OPTIONS,
+      files: [eligiblePath, excludedIneligiblePath],
+      grep: /^matching\//,
+    })).resolves.toMatchObject({
+      results: [{ result: { file: eligiblePath, status: 'passed' } }],
+      noTestsFound: false,
+    });
+  });
+
+  it('deduplicates an ineligible literal path before the one batch-level eligibility error', async () => {
+    const { deps } = createScenario();
+    const path = `${TEST_DIR}/duplicated.md`;
+    const promptPathIneligibility = vi.spyOn(deps.layout, 'promptPathIneligibility');
+
+    await expect(run(deps, { ...DEFAULT_OPTIONS, files: [path, path] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      exitCode: 2,
+      details: { path, reason: 'not-test-md' },
+    } satisfies Partial<PromptPathInvalidError>);
+    expect(promptPathIneligibility).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a grep-filtered empty list on the ordinary zero-match path', async () => {

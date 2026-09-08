@@ -27,7 +27,7 @@ const SourceSpan = z.strictObject({
 }); // JSON Schema omits this sibling-value ordering constraint, as it does for the core schema.
 
 /** Version shared by every structured report envelope. */
-export const REPORT_SCHEMA_VERSION = '3.1' as const;
+export const REPORT_SCHEMA_VERSION = '3.2' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -44,6 +44,7 @@ const USAGE_REPORT_ERROR_CODES = [
   'CONFIG_INVALID',
   'SECRET_UNRESOLVED',
   'TARGET_UNRESOLVED',
+  'PROMPT_PATH_INVALID',
   'MISSING_PLAN',
   'STALE_PLAN',
   'INTEGRITY_VIOLATION',
@@ -156,6 +157,11 @@ export type CauseName = z.infer<typeof CauseName>;
 export const AiResponseInvalidDetails = z.strictObject({ issues: z.array(AiResponseIssue), attempts: ReportAttempts.optional() });
 /** Optional details for a rejected literal secret, retaining only its detector and safe path. */
 export const SecretLiteralRejectedDetails = z.strictObject({ detector: SecretDetector, path: NonWhitespaceString, attempts: ReportAttempts.optional() });
+/** Optional stable evidence for a selected prompt path outside the processing domain. */
+export const PromptPathInvalidDetails = z.strictObject({
+  path: NonWhitespaceString,
+  reason: z.enum(['outside-test-dir', 'not-test-md', 'no-name']),
+});
 /** Optional reason-specific attribution details without a fabricated step or source location. */
 export const SecretGrantUnattributableDetails = z.union([
   z.strictObject({ reason: z.literal('uncovered-grant'), secretRef: SecretRef, sourceSpan: SourceSpan, attempts: ReportAttempts.optional() }),
@@ -198,6 +204,7 @@ const RunUsageReportError = z.discriminatedUnion('code', [
   RunUsageErrorBase.extend({ code: z.literal('CONFIG_INVALID') }),
   RunUsageErrorBase.extend({ code: z.literal('SECRET_UNRESOLVED') }),
   RunUsageErrorBase.extend({ code: z.literal('TARGET_UNRESOLVED') }),
+  RunUsageErrorBase.extend({ code: z.literal('PROMPT_PATH_INVALID'), details: PromptPathInvalidDetails.optional() }),
   RunUsageErrorBase.extend({ code: z.literal('MISSING_PLAN') }),
   RunUsageErrorBase.extend({ code: z.literal('STALE_PLAN') }),
   RunUsageErrorBase.extend({ code: z.literal('INTEGRITY_VIOLATION') }),
@@ -252,7 +259,9 @@ const CaseFsIoReportError = z.strictObject({
  * their code correlation structural. `INTERRUPTED` belongs only to the
  * run-scoped environment branch: cancellation describes an incomplete batch,
  * while skipped rows identify the affected cases without fabricating a
- * case-level failure. A `z.discriminatedUnion` cannot express the remaining
+ * case-level failure. `PROMPT_PATH_INVALID` is similarly restricted to the
+ * run-scoped usage branch, with optional strict `{ path, reason }` details.
+ * A `z.discriminatedUnion` cannot express the remaining
  * correlation because `scope` repeats across branches and case errors require
  * an identifying case reference.
  */

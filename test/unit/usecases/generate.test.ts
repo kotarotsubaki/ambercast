@@ -57,29 +57,6 @@ const SECRET_GRANT_CITATION_FAILURES = [
     'citation-not-found',
   ],
   [
-    'citation not unique',
-    {
-      steps: [{
-        id: 'complete-sign-in',
-        kind: 'ai',
-        instruction: 'Complete the sign-in flow.',
-        instructionCoverage: [{
-          id: 'dashboard-reached',
-          kind: 'success',
-          citation: 'When I submit valid credentials, I reach the dashboard.',
-        }],
-        verificationIntent: [{
-          criterionId: 'dashboard-reached',
-          assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' },
-        }],
-        secrets: [{ ref: FIRST_SECRET_REF, citation: `@ambercast-secret ${FIRST_SECRET_REF}` }],
-      }],
-      ambiguities: [],
-    },
-    `${PROMPT}\n@ambercast-secret ${FIRST_SECRET_REF}\n@ambercast-secret ${FIRST_SECRET_REF}\n`,
-    'citation-not-unique',
-  ],
-  [
     'citation missing its reference',
     {
       steps: [
@@ -2058,6 +2035,61 @@ describe('generate', () => {
 
     expect(outcome.results[0]).toMatchObject({ file: testPath, status });
     expect(recordingStorage.writes).toHaveLength(options.dryRun ? 0 : 2);
+  });
+
+  it.each([
+    ['generated', DEFAULT_OPTIONS, 'generated'],
+    ['dry-run', { ...DEFAULT_OPTIONS, dryRun: true }, 'would-generate'],
+  ] as const)('attributes repeated identical grant citations on the %s path', async (_mode, options, status) => {
+    const repeatedSecretRef = FIRST_SECRET_REF;
+    const response: GeneratedPlanResponse = {
+      steps: [
+        {
+          id: 'first-password',
+          kind: 'action',
+          action: 'fill-secret',
+          target: PASSWORD_TARGET,
+          secretRef: repeatedSecretRef,
+          citation: `@ambercast-secret ${repeatedSecretRef}`,
+        },
+        {
+          id: 'second-password',
+          kind: 'action',
+          action: 'fill-secret',
+          target: PASSWORD_TARGET,
+          secretRef: repeatedSecretRef,
+          citation: `@ambercast-secret ${repeatedSecretRef}`,
+        },
+      ],
+      ambiguities: [],
+    };
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({
+        execute: async () => ({ data: response, raw: JSON.stringify(response) }),
+      }),
+    });
+    const testPath = await writePrompt(
+      recordingStorage.storage,
+      'login.test.md',
+      `${PROMPT}\n@ambercast-secret ${repeatedSecretRef}\n@ambercast-secret ${repeatedSecretRef}\n`,
+    );
+    recordingStorage.reset();
+
+    const outcome = await generate(deps, options);
+
+    expect(outcome.results[0]).toMatchObject({ file: testPath, status });
+    expect(recordingStorage.writes).toHaveLength(options.dryRun ? 0 : 2);
+    if (options.dryRun) {
+      return;
+    }
+
+    const artifact = PlanDocument.parse(JSON.parse(
+      await recordingStorage.storage.readText(deps.layout.planPathFor(testPath)),
+    ));
+    expect(artifact.steps).toMatchObject([
+      { id: 'first-password', secretGrantSpan: { startLine: 5, endLine: 5 } },
+      { id: 'second-password', secretGrantSpan: { startLine: 6, endLine: 6 } },
+    ]);
   });
 
   it('classifies duplicate assembled plan step IDs as a final PlanDocument validation failure', async () => {

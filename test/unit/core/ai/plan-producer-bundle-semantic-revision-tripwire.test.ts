@@ -8,7 +8,7 @@ const INSTRUCTION_COVERAGE_POLICY_FILE = fileURLToPath(new URL('../../../../src/
 const GENERATOR_SECRET_POLICY_FILE = fileURLToPath(new URL('../../../../src/usecases/generator-secret-policy.ts', import.meta.url));
 
 const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 1, sourceSha256: '5cfaff98dbdb14aaa0b8ae6faeb45e7a491cf2e14a8cfd79a077e0138952bd77' } as const;
-const GENERATOR_SECRET_POLICY_PIN = { revision: 3, sourceSha256: '39c0cd3469205e6f2784570f260f4c193825d8ab498ef2c31b04428f69dffd14' } as const;
+const GENERATOR_SECRET_POLICY_PIN = { revision: 4, sourceSha256: '542f069ea7ac69421bf48df7c8cdaac9d44a2988537910c467cbb0b5703b46ef' } as const;
 
 async function sha256File(fileName: string): Promise<string> {
   return createHash('sha256').update(await readFile(fileName)).digest('hex');

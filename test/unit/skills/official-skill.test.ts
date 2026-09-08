@@ -257,7 +257,7 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-8 preserves the approved draft byte-for-byte', () => {
-    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('560f324312a3e9ef93bdb70f57373000fa213c8065179b76fb0f0a9604b20c32');
+    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('21b34c58f9fff195b83e40befdb4781492c5fb0ad2c380b21108a2db86500b7d');
   });
 
   it('SPEC-9 and SPEC-10 keep skill flags aligned with the CLI usage contract', () => {

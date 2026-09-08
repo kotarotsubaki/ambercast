@@ -43,6 +43,7 @@ import type {
   PreScannedTraceRecord,
   SafeLegacyTraceRecord,
 } from '#ports/ai.js';
+import { INSTRUCTION_COVERAGE_ISSUE_CODES } from '#report/schema.js';
 
 /** Provider-only fields that generation validates and then separates. */
 export interface GeneratedInstructionCoverage {
@@ -99,6 +100,9 @@ export type InstructionCoverageIssueCode =
   | 'verification-coverage-index-duplicate'
   | 'verification-coverage-index-invalid'
   | 'verification-assertion-repeated';
+
+// This legal usecases-to-report edge keeps report literals aligned with the usecase-owned union.
+const _reportIssueCodesTripwire = INSTRUCTION_COVERAGE_ISSUE_CODES satisfies readonly InstructionCoverageIssueCode[];
 
 /** Step-relative roots used by deterministic policy diagnostics. */
 export type InstructionCoverageIssuePathRoot =

@@ -9,13 +9,13 @@ description: 为 CLI 用户汇总检查状态。
 
 | 标志 | 值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| files | path[] | 字面提示词；未指定时选择自动发现 | discovery |
-| --target | name | 选择目标 | 省略 |
-| --allow-empty | boolean | 允许空选择 | false |
-| --list | boolean | 仅列出而不执行检查 | false |
-| --json | boolean | JSON 外层封包 | false |
-| --config | path | 显式指定配置 | 省略 |
-| --no-color | boolean | 禁用 ANSI 颜色 | false |
+| `files` | path[] | 字面提示词；未指定时选择自动发现 | discovery |
+| `--target` | name | 选择目标 | 省略 |
+| `--allow-empty` | boolean | 允许空选择 | false |
+| `--list` | boolean | 仅列出而不执行检查 | false |
+| `--json` | boolean | JSON 外层封包 | false |
+| `--config` | path | 显式指定配置 | 省略 |
+| `--no-color` | boolean | 禁用 ANSI 颜色 | false |
 
 ## 状态词汇 {#status-vocabulary}
 

@@ -21,22 +21,23 @@ description: "プランはシークレット値を 値型 `SecretRef` のみに�
 
 ## シークレットリテラルの拒否 {#literal-secret-rejection}
 
-本セクションは、リテラルシークレット検出器のセマンティクスに対する正準な定義元である。リファレンスページは局所的な目的に対して検出器境界を要約するのみにとどめ、本セクションへリンクしなければならない（MUST）。永続化またはレポートのシリアライズの前に、生成処理は `generatorMeta` および曖昧性を含む、プロバイダに由来するすべてのJSON文字列およびオブジェクトキーを検査しなければならない（MUST）。字句キーおよび配列インデックスの走査順序において、最初に一致した検出器で拒否しなければならない（MUST）。[src/usecases/generator-secret-policy.ts:520](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L520)
+本セクションは、リテラルシークレット検出器のセマンティクスに対する正準な定義元である。リファレンスページは局所的な目的に対して検出器境界を要約するのみにとどめ、本セクションへリンクしなければならない（MUST）。永続化またはレポートのシリアライズの前に、生成処理は `generatorMeta` および曖昧性を含む、プロバイダに由来するすべてのJSON文字列およびオブジェクトキーを、字句キーおよび配列インデックスの走査順序で検査しなければならない（MUST）。各文字列値またはオブジェクトキーについて、埋め込まれた `{{secrets.` マーカー（SEC-17）は、以下の4種の primitive 検出器を確認するより前に拒否しなければならない（MUST）。それらの間では、以下の固定順序で最初に一致した検出器で拒否しなければならない（MUST）。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
 
 | id | 検出器 | 一致する値 | 例外 | 分類される障害 |
 | --- | --- | --- | --- | --- |
-| SEC-01 | `credential-prefix-sk` | `sk-` で始まる | 文字列値内の有効な完全値 `SecretRef` のみ；`source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-02 | `credential-prefix-ghp` | `ghp_` で始まる | 文字列値内の有効な完全値 `SecretRef` のみ；`source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-03 | `credential-prefix-aws-access-key` | `AKIA` で始まる | 文字列値内の有効な完全値 `SecretRef` のみ；`source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-04 | `high-entropy-token` | 32 UTF-16 コード単位以上かつシャノンエントロピーが 4.0 ビット以上。頻度キーは Unicode コードポイントとして反復されるが、各確率の分母には UTF-16 コード単位の長さを使用する | 文字列値内の有効な完全値 `SecretRef` のみ；`source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-01 | `credential-prefix-sk` | `sk-` で始まる | 文字列値またはオブジェクトキーとしての有効な完全値 `SecretRef`；`source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-02 | `credential-prefix-ghp` | `ghp_` で始まる | 文字列値またはオブジェクトキーとしての有効な完全値 `SecretRef`；`source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-03 | `credential-prefix-aws-access-key` | `AKIA` で始まる | 文字列値またはオブジェクトキーとしての有効な完全値 `SecretRef`；`source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-04 | `high-entropy-token` | トークン形状（32 UTF-16 コード単位以上、空白文字なし、全文字が `[A-Za-z0-9+/=_.-]`）かつシャノンエントロピーが 4.0 ビット以上。頻度キーは Unicode コードポイントとして反復されるが、各確率の分母には UTF-16 コード単位の長さを使用する | 文字列値またはオブジェクトキーとしての有効な完全値 `SecretRef`；`source.inputsDigest` のみ；さらに `steps[<index>].url`・`steps[<index>].pattern`・`targets[<key>].baseUrl` の値位置でも例外となる | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-17 | `embedded-secret-reference` | 有効な完全値 `SecretRef` を除く、`{{secrets.` マーカーを含む文字列値またはオブジェクトキー | `source.inputsDigest` のみ | `SECRET_LITERAL_REJECTED`, exit `2` |
 
-`SecretRef` の例外はオブジェクトキーには決して適用されない。すべてのキーは、その値が走査される前に検出器に渡される。拒否の診断情報は検出器およびリダクションされたJSON風パスのみを含まなければならず（MUST）、検出されたリテラルを保持してはならない（MUST NOT）。また、検出されたオブジェクトキーには `[redacted-key]` を使用する。[src/usecases/generator-secret-policy.ts:546](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L546) [src/usecases/generator-secret-policy.ts:567](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L567) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/errors/exit-codes.ts#L31)
+有効な完全値 `SecretRef` は、文字列値であってもオブジェクトキーであっても、本セクションのすべての検出器から除外される。それ以外のキーは、その値が走査される前に検出器に渡される。拒否の診断情報は検出器およびリダクションされたJSON風パスのみを含まなければならず（MUST）、検出されたリテラルを保持してはならない（MUST NOT）。また、検出されたオブジェクトキーには `[redacted-key]` を使用する。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585) [src/usecases/generator-secret-policy.ts:615](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L615) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/errors/exit-codes.ts#L31)
 
 ## 境界固有の機密性要件 {#boundary-specific-secrecy}
 
 | id | 境界 | 要件 | エビデンス |
 | --- | --- | --- | --- |
-| SEC-05 | 生成 | プロバイダに由来するJSONは、永続化またはレポートのシリアライズの前にリテラルシークレット拒否を通過しなければならない（MUST）。 | [src/usecases/generator-secret-policy.ts:520](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L520) |
+| SEC-05 | 生成 | プロバイダに由来するJSONは、永続化またはレポートのシリアライズの前にリテラルシークレット拒否を通過しなければならない（MUST）。 | [src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585) |
 | SEC-06 | フィンガープリント生成 | 空でない解決済みシークレットと完全一致する記述子は `secret-contaminated` を生成しなければならない（MUST）。部分文字列の一致は比較値が 3 UTF-16 コード単位以上である場合にのみ適用され、フィンガープリントを生成してはならない（MUST NOT）。 | [src/core/ir/fingerprint.ts:278](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L278) |
 | SEC-07 | コミットされたトレース | `TraceFillSecret` は実体化された値ではなく、`secretRef` を保存しなければならない（MUST）。 | [src/core/ir/schema.ts:949](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L949) |
 | SEC-08 | グラウンディングの永続化 | 実行パイプラインは、スキャンされた文字列値がいずれかの空でない解決済みシークレットと完全に等しい場合、または解決された値が 3 UTF-16 コード単位以上であるシークレットを含む場合、グラウンディングの書き込みを拒絶しなければならず（MUST）、これを整合性の失敗（integrity failure）として分類しなければならない（MUST）。 | [src/usecases/run.ts:1252](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252) [src/usecases/run.ts:3425](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L3425) |

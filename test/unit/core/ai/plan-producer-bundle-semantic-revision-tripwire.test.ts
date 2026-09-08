@@ -7,8 +7,9 @@ import { PLAN_PRODUCER_SEMANTIC_REVISIONS } from '#core/ai/plan-producer-bundle.
 const INSTRUCTION_COVERAGE_POLICY_FILE = fileURLToPath(new URL('../../../../src/usecases/instruction-coverage-policy.ts', import.meta.url));
 const GENERATOR_SECRET_POLICY_FILE = fileURLToPath(new URL('../../../../src/usecases/generator-secret-policy.ts', import.meta.url));
 
-const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 1, sourceSha256: '5cfaff98dbdb14aaa0b8ae6faeb45e7a491cf2e14a8cfd79a077e0138952bd77' } as const;
-const GENERATOR_SECRET_POLICY_PIN = { revision: 2, sourceSha256: 'cb5787ddfcfdbd3fb2879e5fe0bfe51cbc3b4133fdcb846353154c543ab1b21d' } as const;
+// This compile-time-only change has zero runtime plan behavior, so the documented semantic revision rule keeps revision 1.
+const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 1, sourceSha256: '48c3c3b1c35bc66f16bf6535e93dd5a76de94634514f7b719f94126687f13de6' } as const;
+const GENERATOR_SECRET_POLICY_PIN = { revision: 3, sourceSha256: '39c0cd3469205e6f2784570f260f4c193825d8ab498ef2c31b04428f69dffd14' } as const;
 
 async function sha256File(fileName: string): Promise<string> {
   return createHash('sha256').update(await readFile(fileName)).digest('hex');

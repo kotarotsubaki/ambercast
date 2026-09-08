@@ -9,7 +9,7 @@ const GENERATOR_SECRET_POLICY_FILE = fileURLToPath(new URL('../../../../src/usec
 
 // This compile-time-only change has zero runtime plan behavior, so the documented semantic revision rule keeps revision 1.
 const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 1, sourceSha256: '48c3c3b1c35bc66f16bf6535e93dd5a76de94634514f7b719f94126687f13de6' } as const;
-const GENERATOR_SECRET_POLICY_PIN = { revision: 3, sourceSha256: '39c0cd3469205e6f2784570f260f4c193825d8ab498ef2c31b04428f69dffd14' } as const;
+const GENERATOR_SECRET_POLICY_PIN = { revision: 4, sourceSha256: '542f069ea7ac69421bf48df7c8cdaac9d44a2988537910c467cbb0b5703b46ef' } as const;
 
 async function sha256File(fileName: string): Promise<string> {
   return createHash('sha256').update(await readFile(fileName)).digest('hex');

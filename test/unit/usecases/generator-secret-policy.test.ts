@@ -321,6 +321,120 @@ describe('attributeSecretGrants', () => {
     expect(attributeSecretGrants([generatedFill()], prompt(FIRST_REF))).toEqual([committedFill(FIRST_REF, 3)]);
   });
 
+  it('attributes adjacent identical grant lines to two repeated citations in document order', () => {
+    const testMd = prompt(FIRST_REF, FIRST_REF);
+
+    expect(attributeSecretGrants([
+      generatedFill(FIRST_REF, grantLine(FIRST_REF), 'first-use'),
+      generatedFill(FIRST_REF, grantLine(FIRST_REF), 'second-use'),
+    ], testMd)).toEqual([
+      committedFill(FIRST_REF, 3, 'first-use'),
+      committedFill(FIRST_REF, 4, 'second-use'),
+    ]);
+  });
+
+  it('attributes non-adjacent identical grant lines to two repeated citations in document order', () => {
+    const testMd = normalizeTestMd([
+      '# Sign in',
+      '',
+      grantLine(FIRST_REF),
+      '',
+      'Sign out before signing in again.',
+      '',
+      grantLine(FIRST_REF),
+      '',
+    ].join('\n'));
+
+    expect(attributeSecretGrants([
+      generatedFill(FIRST_REF, grantLine(FIRST_REF), 'first-use'),
+      generatedFill(FIRST_REF, grantLine(FIRST_REF), 'second-use'),
+    ], testMd)).toEqual([
+      committedFill(FIRST_REF, 3, 'first-use'),
+      committedFill(FIRST_REF, 7, 'second-use'),
+    ]);
+  });
+
+  it('reports an uncovered third identical grant after two repeated citations', () => {
+    expectAttributionFailure(
+      () => attributeSecretGrants([
+        generatedFill(FIRST_REF, grantLine(FIRST_REF), 'first-use'),
+        generatedFill(FIRST_REF, grantLine(FIRST_REF), 'second-use'),
+      ], prompt(FIRST_REF, FIRST_REF, FIRST_REF)),
+      { reason: 'uncovered-grant', secretRef: FIRST_REF, sourceSpan: { startLine: 5, endLine: 5 } },
+    );
+  });
+
+  it('reports a multiply attributed grant when a third repeated citation has no candidate left', () => {
+    expectAttributionFailure(
+      () => attributeSecretGrants([
+        generatedFill(FIRST_REF, grantLine(FIRST_REF), 'first-use'),
+        generatedFill(FIRST_REF, grantLine(FIRST_REF), 'second-use'),
+        generatedFill(FIRST_REF, grantLine(FIRST_REF), 'third-use'),
+      ], prompt(FIRST_REF, FIRST_REF)),
+      { reason: 'multiply-attributed-grant', secretRef: FIRST_REF, stepId: 'third-use' },
+    );
+  });
+
+  it('rejects a repeated citation when one occurrence does not bracket a matching grant', () => {
+    const repeatedCitation = grantLine(FIRST_REF);
+    const testMd = normalizeTestMd([
+      grantLine(FIRST_REF),
+      `prefix${grantLine(FIRST_REF)}`,
+      grantLine(FIRST_REF),
+      '',
+    ].join('\n'));
+
+    expectAttributionFailure(
+      () => attributeSecretGrants([generatedFill(FIRST_REF, repeatedCitation, 'invalid-use')], testMd),
+      { reason: 'citation-not-unique', secretRef: FIRST_REF, stepId: 'invalid-use' },
+    );
+  });
+
+  it('rejects a repeated citation when each occurrence brackets two matching grants', () => {
+    const repeatedCitation = `${grantLine(FIRST_REF)}\n${grantLine(FIRST_REF)}`;
+    const testMd = normalizeTestMd(`${grantLine(FIRST_REF)}\n${grantLine(FIRST_REF)}\n${grantLine(FIRST_REF)}\n`);
+
+    expectAttributionFailure(
+      () => attributeSecretGrants([generatedFill(FIRST_REF, repeatedCitation, 'invalid-use')], testMd),
+      { reason: 'citation-not-unique', secretRef: FIRST_REF, stepId: 'invalid-use' },
+    );
+  });
+
+  it('rejects a repeated citation when both occurrences point at the same grant', () => {
+    const grant = grantLine(FIRST_REF);
+    const citation = `${grant}\nmarker\n${grant}`;
+    const testMd = normalizeTestMd([
+      `prefix${grant}`,
+      'marker',
+      grant,
+      'marker',
+      `${grant}suffix`,
+    ].join('\n'));
+
+    expectAttributionFailure(
+      () => attributeSecretGrants([generatedFill(FIRST_REF, citation, 'invalid-use')], testMd),
+      { reason: 'citation-not-unique', secretRef: FIRST_REF, stepId: 'invalid-use' },
+    );
+  });
+
+  it('uses an unclaimed identical grant for a partial-repair replacement', () => {
+    const testMd = prompt(FIRST_REF, FIRST_REF);
+    const [firstGrant] = extractSecretGrants(testMd);
+    const replacement = [generatedFill(FIRST_REF, grantLine(FIRST_REF), 'replace-tail')];
+
+    expect(firstGrant).toBeDefined();
+    expect(attributeSecretGrants(replacement, testMd, new Set([firstGrant!.offsetStart]))).toEqual([
+      committedFill(FIRST_REF, 4, 'replace-tail'),
+    ]);
+  });
+
+  it('reports an uncovered identical grant when only one repeated citation uses two grants', () => {
+    expectAttributionFailure(
+      () => attributeSecretGrants([generatedFill()], prompt(FIRST_REF, FIRST_REF)),
+      { reason: 'uncovered-grant', secretRef: FIRST_REF, sourceSpan: { startLine: 4, endLine: 4 } },
+    );
+  });
+
   it('accepts prefix-owned grant offsets only when explicitly pre-seeded', () => {
     const testMd = prompt(FIRST_REF, SECOND_REF);
     const replacement = [generatedFill(SECOND_REF, grantLine(SECOND_REF), 'replace-tail')];

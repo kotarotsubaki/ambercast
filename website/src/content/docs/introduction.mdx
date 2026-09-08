@@ -1,0 +1,45 @@
+---
+title: Introduction
+description: Understand ambercast's prompt-driven workflow, generating deterministic test plans and grounding artifacts that replay with 0 AI calls and repair deliberate UI drift.
+---
+
+import IntroCycle from '../../components/intro/IntroCycle.astro';
+import IntroFiles from '../../components/intro/IntroFiles.astro';
+import IntroLedger from '../../components/intro/IntroLedger.astro';
+import introData from '../../data/intro/en.json';
+
+ambercast compiles natural-language test prompts into deterministic plan and grounding artifacts, enabling test replays and deliberate drift repair while preserving prompt content and schema authority across your test suite.
+
+## What ambercast preserves \{#what-ambercast-preserves}
+
+To maintain provenance, prompt normalization changes only one leading BOM and CR/CRLF line endings, preserving all other content.
+
+For the committed plan and grounding artifacts, Zod IR schemas serve as the runtime authority, and JSON Schema is derived directly from them.
+
+## The generate, run, heal cycle \{#generate-run-heal-cycle}
+
+The workflow cycle moves through generation, replay, and repair. A normalized prompt serves as the input to generation, where `ambercast generate` composes a lazy AI executor to write companion paths derived from the test file. Running `ambercast run` executes the derived artifacts; fully grounded replay does not require an available provider and operates with `0 AI calls` on a grounding hit, resolving a provider only through its fallback port. If a failure occurs and repair is needed, you can explicitly choose to invoke `ambercast heal`, where the heal runtime owns confirmation and commit composition before an authorized update writes back to the companions.
+
+<IntroCycle {...introData.cycle} />
+
+## The three files \{#three-files}
+
+ambercast structures tests around an authored prompt and two paired derived artifacts. Only exact terminal `.test.md` paths have companion mappings. When you generate from a prompt, it branches into two derived JSON companions stored adjacent to it: a plan file ending in `.ambercast.plan.json` and a grounding file ending in `.ambercast.grounding.json`.
+
+<IntroFiles {...introData.files} />
+
+## AI-call ledger \{#ai-call-ledger}
+
+Provider interaction is explicitly budgeted across every phase of the lifecycle. Generation receives a lazy AI-executor resolver, invoking a provider as needed to produce committed companions. During replay, run resolves a provider only through its fallback port, achieving `0 AI calls` when grounded. When repair is needed, heal maintains separate confirmation and persistence composition, requiring explicit authorization before updating companions and returning to replay.
+
+<IntroLedger {...introData.ledger} />
+
+## Next \{#next}
+
+Links:
+- [Your first test in 5 minutes](/ambercast/tutorials/quick-start/)
+- [Philosophy](/ambercast/philosophy/)
+- [File layout](/ambercast/reference/file-layout/)
+- [ambercast generate](/ambercast/reference/cli/generate/)
+- [ambercast run](/ambercast/reference/cli/run/)
+- [ambercast heal](/ambercast/reference/cli/heal/)

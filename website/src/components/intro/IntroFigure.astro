@@ -1,0 +1,19 @@
+---
+interface Props {
+  alt: string;
+  caption: string | null;
+}
+
+const { alt, caption } = Astro.props;
+
+// The figure owns the accessible description so repeated visual labels do not create a
+// competing spoken description. Keeping the caption outside the hidden flow preserves the
+// figure/figcaption relationship.
+---
+
+<figure class="intro-figure" role="img" aria-label={alt}>
+  <div class="intro-flow" aria-hidden="true">
+    <slot />
+  </div>
+  {caption !== null && <figcaption class="intro-caption" aria-hidden="true">{caption}</figcaption>}
+</figure>

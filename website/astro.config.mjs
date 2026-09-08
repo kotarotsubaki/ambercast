@@ -1,5 +1,6 @@
 import starlight from '@astrojs/starlight';
 import { ExpressiveCodeTheme } from '@astrojs/starlight/expressive-code';
+import mdx from '@astrojs/mdx';
 import { defineConfig } from 'astro/config';
 import remarkHeadingId from './scripts/lib/remark-heading-id.mjs';
 import { sidebar } from './src/sidebar.mjs';
@@ -101,5 +102,7 @@ export default defineConfig({
       },
       sidebar,
     }),
+    // astro-expressive-code is registered by starlight and must run before mdx so MDX page code blocks render through it.
+    mdx(),
   ],
 });

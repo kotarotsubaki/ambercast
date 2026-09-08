@@ -8,6 +8,7 @@
 | fingerprint v1 → v2 | repo:CHANGELOG.md:78 | v2 is the only accepted tag. A current-provenance document with a coverage claim MUST fail integrity if strict/canonical validation then fails; a companion without that claim may be a cache miss in `run`, while `check` grounding inspection classifies schema-invalid content as `invalid` (public status per [[spec/freshness#freshness-consequences]]). [repo:src/usecases/run.ts:498] [repo:src/usecases/check-grounding.ts:45] |
 | producer bundle fingerprint enters `inputsDigest` | repo:CHANGELOG.md:8 | Plans generated before the change MUST be regenerated because they are stale. [repo:CHANGELOG.md:8] |
 | report 2.0 → 3.0 | repo:CHANGELOG.md:55, repo:CHANGELOG.md:58 | Report consumers MUST accept the current `3.0` contract, not infer compatibility from the Plan version. [repo:src/report/schema.ts:15] |
+| report 3.0 → 3.1 | repo:src/report/schema.ts:22 | Report consumers MUST accept the current `3.1` contract, including optional structured error diagnostics, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:22] |
 
 ## Compatibility policy {#compatibility-policy}
 

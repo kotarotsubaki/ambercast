@@ -3,6 +3,13 @@ import { AmbercastError, type ErrorKind } from '#core/errors/types.js';
 import * as errorMapping from '#report/error-mapping.js';
 import { InterruptedError } from '#core/errors/interrupted-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
+import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
+import { assertNoLiteralSecrets } from '#usecases/generator-secret-policy.js';
+import { ReportError } from '#report/schema.js';
+import { CAUSE_NAMES } from './cause-name-fixtures.js';
 
 const EXPECTED_REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
@@ -52,6 +59,7 @@ describe('reportError', () => {
       ...details,
       caseId: 'login-succeeds',
       message: error.message,
+      ...(kind === 'unexpected-crash' ? { details: { cause: { name: 'Error' } } } : {}),
     });
   });
 
@@ -152,5 +160,78 @@ describe('reportError', () => {
       caseId: 'login-succeeds',
       message: 'browser failed',
     });
+  });
+
+  it.each(REPORTABLE_ERROR_DETAILS)('copies a string hint for every reportable %s scope and code', (kind) => {
+    const error = new ClassifiedError(kind, 'failed', { hint: 'Use the documented remediation.' });
+    const location = kind === 'interrupted' ? { scope: 'run' as const } : { scope: 'case' as const, caseId: 'case-a' };
+
+    expect(errorMapping.reportError(error, location as never)).toMatchObject({ hint: 'Use the documented remediation.' });
+  });
+
+  it.each([
+    [new AiResponseInvalidError('invalid response', { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] }), { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] }],
+    [new ClassifiedError('secret-literal-rejected', 'literal', { detector: 'credential-prefix-sk', path: 'generatorMeta.apiKey', attempts: [] }), { detector: 'credential-prefix-sk', path: 'generatorMeta.apiKey', attempts: [] }],
+    [new SecretGrantUnattributableError('grant', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', hint: 'repair' }), { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a' }],
+    [new AiExecutorUnavailableError('unavailable', { attempts: [] }), { attempts: [] }],
+  ] as const)('projects normalized details for %s', (error, details) => {
+    const report = errorMapping.reportError(error, { scope: 'run' });
+    expect(report).toMatchObject({ details });
+    expect(ReportError.safeParse(report).success).toBe(true);
+  });
+
+  it('projects an unexpected crash cause name from error.cause rather than details', () => {
+    class AbortFailure extends Error { override name = 'AbortError'; }
+    const error = new UnexpectedCrashError('crashed', { cause: { name: 'wrong-source' } }, { cause: new AbortFailure('aborted') });
+
+    expect(errorMapping.reportError(error, { scope: 'run' })).toMatchObject({ details: { cause: { name: 'AbortError' } } });
+    expect(errorMapping.projectCauseName(new Error('plain'))).toBe('Error');
+    expect(errorMapping.projectCauseName({})).toBe('Error');
+    expect(errorMapping.projectCauseName(undefined)).toBe('Error');
+  });
+
+  it.each(CAUSE_NAMES)('projects the allowlisted %s Error name', (name) => {
+    const cause = Object.assign(new Error('crashed'), { name });
+
+    expect(errorMapping.projectCauseName(cause)).toBe(name);
+  });
+
+  it('falls back for a plain object that mimics an allowlisted Error name', () => {
+    expect(errorMapping.projectCauseName({ name: 'TypeError' })).toBe('Error');
+  });
+
+  it('projects a missing unexpected-crash cause as the generic Error detail', () => {
+    const error = new UnexpectedCrashError('crashed');
+
+    expect(errorMapping.reportError(error, { scope: 'run' }))
+      .toMatchObject({ details: { cause: { name: 'Error' } } });
+  });
+
+  it('falls back safely when reading a crash cause name throws', () => {
+    const cause = Object.defineProperty(new Error('crashed'), 'name', { get() { throw new Error('hostile name'); } });
+    const error = new UnexpectedCrashError('crashed', undefined, { cause });
+
+    expect(errorMapping.projectCauseName(cause)).toBe('Error');
+    expect(errorMapping.reportError(error, { scope: 'run' })).toMatchObject({ details: { cause: { name: 'Error' } } });
+  });
+
+  it('omits malformed details rather than throwing or serializing them', () => {
+    const error = new ClassifiedError('ai-response-invalid', 'invalid', { issues: [{ code: 'other', path: [] }] });
+
+    expect(errorMapping.reportError(error, { scope: 'run' })).not.toHaveProperty('details');
+  });
+
+  it('preserves a real literal-secret rejection through report serialization', () => {
+    let caught: unknown;
+    try {
+      assertNoLiteralSecrets({ generatorMeta: { apiKey: 'sk-test-literal' } });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AmbercastError);
+    const report = errorMapping.reportError(caught as AmbercastError, { scope: 'run' });
+    expect(report).toMatchObject({ details: { detector: 'credential-prefix-sk', path: 'generatorMeta.apiKey' } });
+    expect(ReportError.safeParse(report).success).toBe(true);
   });
 });

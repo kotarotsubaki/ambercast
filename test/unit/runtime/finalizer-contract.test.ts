@@ -97,7 +97,7 @@ const CONFIG: ResolvedConfig = {
 
 const summary = { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 };
 const runRaw = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'run' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,
@@ -107,7 +107,7 @@ const runRaw = {
   results: [],
 };
 const healRaw = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'heal' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,
@@ -116,7 +116,7 @@ const healRaw = {
   results: [],
 };
 const checkRaw = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'check' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,
@@ -125,7 +125,7 @@ const checkRaw = {
   results: [],
 };
 const generateRaw = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'generate' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,

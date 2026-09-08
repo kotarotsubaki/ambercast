@@ -66,7 +66,7 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生工件 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 工件 Schema 版本 |
-| `0.3.1` | `0.3.1` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.0` |
+| `0.3.1` | `0.3.1` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.1` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
 | `@ambercast-secret` | `@ambercast-secret` 用于在 CommonMark 代码范围之外开启一个完整的授权行。 | 授权提取器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization-and-grants) | 密钥引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |

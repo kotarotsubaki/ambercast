@@ -52,6 +52,7 @@ ambercast 是面向 prompt 原生的端到端测试 CLI 工具，由 AI 将自�
 | Feature | `heal` 报告新增列出的分支（listed branch）与 `dryRun`。 |
 | Feature | 报告定稿（report finalization）收敛为单一类型化边界。 |
 | Feature | 报告 Schema 3.0 将 `heal` 的 `repairOutcome` 与 `application` 分离；拒绝修复将退出且退出码为 1。 |
+| Feature | 报告 Schema 3.1 新增按代码划分的可选错误 `details`，并让所有报告错误都可使用 `hint`。 |
 | Feature | `run` 实现了 Chromium Grounding 命中重放，且零 AI 调用。 |
 | Feature | `run` 获得了 Grounding 未命中恢复与追踪重放功能。 |
 | Feature | `run` 实现了 `--allow-empty` 与 `--list`，同时保持故意不支持 `--stale=regenerate`。 |

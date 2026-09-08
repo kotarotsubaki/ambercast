@@ -16,6 +16,7 @@ vi.mock('#runtime/check-command.js', () => ({ runCheckCommand }));
 vi.mock('#runtime/heal-command.js', () => ({ runHealCommand }));
 
 import { main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
+import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
 
 const expectedUsage = readFileSync(new URL('../fixtures/cli-usage.txt', import.meta.url), 'utf8');
 
@@ -33,7 +34,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -43,7 +44,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -54,7 +55,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -79,7 +80,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.0' as const,
+  schemaVersion: '3.1' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -129,7 +130,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.0', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.1', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -150,7 +151,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.0', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.1', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -296,8 +297,91 @@ describe('main()', () => {
     const result = await run(['generate']);
 
     expect(result.stdout).toBe('');
-    expect(result.stderr).toBe('The generate command crashed unexpectedly.\n');
+    expect(result.stderr).toBe('The generate command crashed unexpectedly (Error). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n');
     expect(result.exitCode).toBe(3);
+  });
+
+  it.each([
+    ['an unlisted Error subclass', new (class CustomFailure extends Error {})('custom'), 'Error'],
+    ['a non-Error value', { name: 'not trusted' }, 'Error'],
+    ['a plain object with an allowlisted name', { name: 'TypeError' }, 'Error'],
+  ] as const)('projects %s in the fixed crash line', async (_description, rejection, name) => {
+    runGenerateCommand.mockRejectedValue(rejection);
+
+    const result = await run(['generate']);
+
+    expect(result.stderr).toBe(`The generate command crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
+    expect(result.exitCode).toBe(3);
+  });
+
+  it.each(CAUSE_NAMES)('projects the allowlisted %s Error name in the fixed crash line', async (name) => {
+    runGenerateCommand.mockRejectedValue(Object.assign(new Error('aborted'), { name }));
+
+    const result = await run(['generate']);
+
+    expect(result.stderr).toBe(`The generate command crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
+  });
+
+  it.each([undefined, '', '0', 'false'] as const)('suppresses crash message and stack when AMBERCAST_DEBUG is %j', async (debug) => {
+    if (debug === undefined) delete process.env.AMBERCAST_DEBUG;
+    else process.env.AMBERCAST_DEBUG = debug;
+    runGenerateCommand.mockRejectedValue(new Error('sensitive message'));
+
+    const result = await run(['generate']);
+
+    expect(result.stderr).not.toContain('sensitive message');
+    expect(result.stderr).not.toContain('cause message:');
+    delete process.env.AMBERCAST_DEBUG;
+  });
+
+  it.each(['FALSE', 'no', '1'] as const)('prints crash message and stack when AMBERCAST_DEBUG is active for %s', async (debug) => {
+    process.env.AMBERCAST_DEBUG = debug;
+    runGenerateCommand.mockRejectedValue(new Error('sensitive message'));
+
+    const result = await run(['generate']);
+
+    expect(result.stderr).toContain('cause message: sensitive message');
+    expect(result.stderr).toContain('Error: sensitive message');
+    delete process.env.AMBERCAST_DEBUG;
+  });
+
+  it('escapes terminal controls in active-debug crash diagnostics while preserving stack newlines', async () => {
+    process.env.AMBERCAST_DEBUG = '1';
+    const error = new Error('unsafe\u001b[31m message');
+    error.stack = 'first\u001b[31m line\nsecond\u009b31m line';
+    runGenerateCommand.mockRejectedValue(error);
+
+    const result = await run(['generate']);
+
+    expect(result.stderr).toContain('cause message: unsafe\\u001b[31m message\n');
+    expect(result.stderr).toContain('cause stack:\nfirst\\u001b[31m line\nsecond\\u009b31m line\n');
+    expect(result.stderr).not.toContain('\u001b');
+    expect(result.stderr).not.toContain('\u009b');
+    delete process.env.AMBERCAST_DEBUG;
+  });
+
+  it('does not crash again when a caught value throws from diagnostic getters', async () => {
+    const hostile = new Proxy({}, {
+      get() { throw new Error('getter failure'); },
+    });
+    runGenerateCommand.mockRejectedValue(hostile);
+
+    const result = await run(['generate']);
+
+    expect(result.exitCode).toBe(3);
+    expect(result.stderr).toContain('crashed unexpectedly (Error)');
+  });
+
+  it('omits hostile crash message and stack values independently when debug is active', async () => {
+    process.env.AMBERCAST_DEBUG = '1';
+    const hostile = new Proxy({}, { get() { throw new Error('getter failure'); } });
+    runGenerateCommand.mockRejectedValue(hostile);
+
+    const result = await run(['generate']);
+
+    expect(result.exitCode).toBe(3);
+    expect(result.stderr).toBe('The generate command crashed unexpectedly (Error). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n');
+    delete process.env.AMBERCAST_DEBUG;
   });
 
   it('passes every documented run argument to runtime and renders JSON output', async () => {
@@ -761,6 +845,103 @@ describe('main()', () => {
   });
 
   describe('renderHumanReport', () => {
+    it('renders the run-scope error line without optional hint or details', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{ scope: 'run', kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE', message: 'executor unavailable' }],
+      } as never, false);
+
+      expect(rendered).toBe('error AI_EXECUTOR_UNAVAILABLE: executor unavailable\n');
+    });
+
+    it('renders a run-scope error with hint and ordered details without ANSI when color is disabled', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'run', kind: 'environment', code: 'AI_RESPONSE_INVALID', message: 'invalid response', hint: 'retry',
+          details: { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] },
+        }],
+      } as never, false);
+
+      expect(rendered).toBe('error AI_RESPONSE_INVALID: invalid response\n  hint: retry\n  details: issues=invalid-json @ []; attempts=[{"attempt":1,"code":"AI_RESPONSE_INVALID"}]\n');
+    });
+
+    it.each([
+      ['SECRET_LITERAL_REJECTED', { detector: 'credential-prefix-sk', path: 'generatorMeta.key', attempts: [] }, 'detector=credential-prefix-sk; path=generatorMeta.key; attempts=[]'],
+      ['SECRET_GRANT_UNATTRIBUTABLE', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', attempts: [] }, 'reason=citation-not-found; secretRef={{secrets.API_TOKEN}}; stepId=step-a; attempts=[]'],
+      ['AI_EXECUTOR_UNAVAILABLE', { attempts: [] }, 'attempts=[]'],
+      ['UNEXPECTED_CRASH', { cause: { name: 'AbortError' } }, 'cause={"name":"AbortError"}'],
+      ['FS_IO_ERROR', { partiallyWritten: ['plan', 'grounding'] }, 'partiallyWritten=["plan","grounding"]'],
+    ] as const)('renders ordered details for %s', (code, details, expected) => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{ scope: 'run', kind: code.startsWith('SECRET_') ? 'usage' : 'environment', code, message: 'message', details }],
+      } as never, false);
+
+      expect(rendered).toBe(`error ${code}: message\n  details: ${expected}\n`);
+    });
+
+    it('renders a case-scope error with an escaped case ID and hint only', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{ scope: 'case', kind: 'usage', code: 'SECRET_LITERAL_REJECTED', caseId: 'case\u001b\nnext', message: 'message', hint: 'hint' }],
+      } as never, false);
+
+      expect(rendered).toBe('error SECRET_LITERAL_REJECTED [case\\u001b\\nnext]: message\n  hint: hint\n');
+    });
+
+    it('renders a case-scope error with details but no hint', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'case', kind: 'environment', code: 'FS_IO_ERROR', caseId: 'write-plan', message: 'write failed',
+          details: { partiallyWritten: ['plan'] },
+        }],
+      } as never, false);
+
+      expect(rendered).toBe('error FS_IO_ERROR [write-plan]: write failed\n  details: partiallyWritten=["plan"]\n');
+    });
+
+    it('renders an empty issue collection as an exact details field', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'run', kind: 'environment', code: 'AI_RESPONSE_INVALID', message: 'message',
+          details: { issues: [], attempts: [] },
+        }],
+      } as never, false);
+
+      expect(rendered).toBe('error AI_RESPONSE_INVALID: message\n  details: issues=; attempts=[]\n');
+    });
+
+    it('escapes DEL and C1 characters that reach details through JSON serialization', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'run', kind: 'environment', code: 'AI_RESPONSE_INVALID', message: 'message',
+          details: { issues: [{ code: 'schema-mismatch', path: ['dynamic\u007f\u0080'] }], attempts: [] },
+        }],
+      } as never, false);
+
+      expect(rendered).toContain('\\u007f\\u0080');
+    });
+
+    it('escapes DEL and C1 characters in non-issues object details', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'run', kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE', message: 'message',
+          details: {
+            reason: 'uncovered-grant',
+            secretRef: '{{secrets.API_TOKEN}}',
+            sourceSpan: { startLine: 'unsafe\u007f\u0080', endLine: 2 },
+          },
+        }],
+      } as never, false);
+
+      expect(rendered).toBe('error SECRET_GRANT_UNATTRIBUTABLE: message\n  details: reason=uncovered-grant; secretRef={{secrets.API_TOKEN}}; sourceSpan={"startLine":"unsafe\\u007f\\u0080","endLine":2}\n');
+    });
+
     it('renders normal filesystem and error text as exact report lines', () => {
       const rendered = renderHumanReport({
         ...CHECK_ENVELOPE,

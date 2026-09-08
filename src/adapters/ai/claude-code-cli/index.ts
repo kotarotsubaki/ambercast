@@ -75,9 +75,10 @@ function usageFrom(value: unknown): AiUsage | undefined {
  * @param deps - Optional subprocess seam for hermetic adapter tests.
  * @returns An executor named `claude-code-cli`.
  * @remarks
- * `execute` sends an isolated prompt through
- * stdin to `claude -p --output-format json --json-schema <inline-schema>` and
- * validates its JSON result field before returning it. A nonzero, signaled,
+ * `execute` sends an isolated prompt through Claude Code's structured JSON
+ * protocol, excluding project-level `CLAUDE.md`, skills, and settings while
+ * retaining the user tier, and validates its JSON result field before
+ * returning it. A nonzero, signaled,
  * unspawnable, or argument-oversized command becomes
  * `AiExecutorUnavailableError`; availability probes use `claude --version`
  * and fold every failure into `false`.
@@ -111,7 +112,7 @@ export function createClaudeCodeCliExecutor(
         try {
           result = await run(
             'claude',
-            ['-p', '--output-format', 'json', '--json-schema', responseSchema],
+            ['-p', '--output-format', 'json', '--json-schema', responseSchema, '--setting-sources', 'user'],
             {
               input: buildStructuredPrompt(request),
               ...(request.signal === undefined ? {} : { signal: request.signal }),

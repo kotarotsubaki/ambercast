@@ -60,6 +60,7 @@ Secrets:
 - Reference a secret as `{{secrets.name}}` and grant it on its own line, outside any code block: `@ambercast-secret {{secrets.name}}`. A grant inside a code block or code span is documentation, not a grant.
 - The value comes from the environment variable `AMBERCAST_SECRET_<NAME>`: dots become underscores and letters are uppercased, so `{{secrets.api.key}}` reads `AMBERCAST_SECRET_API_KEY`.
 - A reference without a grant line, or a grant without a value in the environment, fails closed with exit code 2.
+- One grant line authorizes exactly one use. Repeat the grant line once per use when the same secret is used more than once.
 
 ### Good example
 ```markdown

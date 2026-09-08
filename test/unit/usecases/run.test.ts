@@ -126,11 +126,12 @@ const GENERATE_OPTIONS: GenerateOptions = {
 };
 const AI_TIMEOUT_MESSAGE = 'The AI provider did not respond within the configured timeout.';
 const GENERIC_ABORT_EXPLANATION = 'The browser session could not complete this case and no deterministic fallback is available.';
+const HIGH_ENTROPY_TOKEN_LITERAL = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea';
 const CREDENTIAL_LITERALS = [
   ['an sk prefix', 'sk-live-secret-value', 'credential-prefix-sk'],
   ['a GitHub token prefix', 'ghp_secret-value', 'credential-prefix-ghp'],
   ['an AWS access key prefix', 'AKIASECRET123456789', 'credential-prefix-aws-access-key'],
-  ['a high-entropy token', 'aB3!dE5@fG7#hI9$jK2%mN4^pQ6&rS8T', 'high-entropy-token'],
+  ['a high-entropy token', HIGH_ENTROPY_TOKEN_LITERAL, 'high-entropy-token'],
 ] as const;
 
 function createFakeBrowserSession(
@@ -6563,6 +6564,29 @@ describe('run credential-literal symmetry', () => {
     expect(aiCalls(events)).toEqual([]);
   });
 
+  it('accepts a fresh-agentic fill with the original symbol-containing literal outside the token shape', async () => {
+    const value = 'aB3!dE5@fG7#hI9$jK2%mN4^pQ6&rS8T';
+    const session = createFakeBrowserSession(liveEntries([EMAIL]));
+    const executor = createFakeAiExecutor({
+      async executeAgentic(request) {
+        await request.controller.perform({ type: 'fill', target: EMAIL, value });
+        await evaluateTerminalAssert(request, passingText('Dashboard'));
+        return { outcome: 'success' };
+      },
+    });
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(IntegrityViolationError);
+  });
+
   it.each([
     ['navigate URL', async (request: AiAgenticRequest, target: ElementRef, literal: string) => {
       await request.controller.perform({ type: 'navigate', url: literal });
@@ -7428,7 +7452,7 @@ describe('run credential-literal symmetry', () => {
 
   it('rejects a fresh-agentic high-entropy fill whose residue is not a captured run value', async () => {
     const capturedValue = 'ordinary-case-value';
-    const fabricatedValue = 'aB3!dE5@fG7#hI9$jK2%mN4^pQ6&rS8T';
+    const fabricatedValue = HIGH_ENTROPY_TOKEN_LITERAL;
     const session = createFakeBrowserSession(liveEntries([EMAIL, PASSWORD]), {
       captureValues: new Map([[elementRefKey(EMAIL), { text: capturedValue, value: '' }]]),
     });
@@ -7461,7 +7485,7 @@ describe('run credential-literal symmetry', () => {
 
   it('rejects a stored high-entropy fill whose residue is not a captured run value', async () => {
     const capturedValue = 'ordinary-case-value';
-    const fabricatedValue = 'aB3!dE5@fG7#hI9$jK2%mN4^pQ6&rS8T';
+    const fabricatedValue = HIGH_ENTROPY_TOKEN_LITERAL;
     const session = createFakeBrowserSession(liveEntries([EMAIL, PASSWORD]), {
       captureValues: new Map([[elementRefKey(EMAIL), { text: capturedValue, value: '' }]]),
     });
@@ -7497,7 +7521,7 @@ describe('run credential-literal symmetry', () => {
 
   // The heuristic intentionally permits values assembled entirely from trusted captured partitions; the separate trace-entry scan is the hard boundary for known resolved secrets.
   it('permits a fresh-agentic fill reassembled from two captured high-entropy-token partitions', async () => {
-    const secretShapedValue = 'aB3!dE5@fG7#hI9$jK2%mN4^pQ6&rS8T';
+    const secretShapedValue = HIGH_ENTROPY_TOKEN_LITERAL;
     const firstPartition = secretShapedValue.slice(0, secretShapedValue.length / 2);
     const secondPartition = secretShapedValue.slice(secretShapedValue.length / 2);
     const session = createFakeBrowserSession(liveEntries([EMAIL, SUBMIT, PASSWORD]), {

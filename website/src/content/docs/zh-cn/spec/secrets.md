@@ -21,22 +21,23 @@ description: "计划必须（MUST）仅使用 值类型 `SecretRef` 来表示机
 
 ## 字面量机密拒绝 {#literal-secret-rejection}
 
-本节是字面量机密检测器语义的权威所有者。参考页面必须（MUST）仅出于其局部目的概述检测器边界，并链接至此处。在持久化或报告序列化之前，生成过程必须（MUST）检查来自 provider 的每个 JSON 字符串和对象键，包括 `generatorMeta` 和歧义项。其必须（MUST）按照字典序键和数组索引的遍历顺序，拒绝首个匹配的检测器。[src/usecases/generator-secret-policy.ts:520](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L520)
+本节是字面量机密检测器语义的权威所有者。参考页面必须（MUST）仅出于其局部目的概述检测器边界，并链接至此处。在持久化或报告序列化之前，生成过程必须（MUST）按照字典序键和数组索引的遍历顺序，检查来自 provider 的每个 JSON 字符串和对象键，包括 `generatorMeta` 和歧义项。对于每个字符串值或对象键，嵌入的 `{{secrets.` 标记（SEC-17）必须（MUST）在检查以下四种 primitive 检测器之前被拒绝；在这四者之间，必须（MUST）按以下固定顺序拒绝首个匹配的检测器。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
 
 | id | 检测器 | 匹配值 | 例外 | 分类故障 |
 | --- | --- | --- | --- | --- |
-| SEC-01 | `credential-prefix-sk` | 以 `sk-` 开头 | 仅限字符串值中有效的全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-02 | `credential-prefix-ghp` | 以 `ghp_` 开头 | 仅限字符串值中有效的全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-03 | `credential-prefix-aws-access-key` | 以 `AKIA` 开头 | 仅限字符串值中有效的全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-04 | `high-entropy-token` | 至少 32 个 UTF-16 代码单元且香农熵至少 4.0 比特，其中频数键按 Unicode 码点迭代，但每个概率分母使用 UTF-16 代码单元长度 | 仅限字符串值中有效的全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-01 | `credential-prefix-sk` | 以 `sk-` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-02 | `credential-prefix-ghp` | 以 `ghp_` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-03 | `credential-prefix-aws-access-key` | 以 `AKIA` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-04 | `high-entropy-token` | 具有 token 形状（至少 32 个 UTF-16 代码单元、无空白字符、每个字符均属于 `[A-Za-z0-9+/=_.-]`）且香农熵至少 4.0 比特，其中频数键按 Unicode 码点迭代，但每个概率分母使用 UTF-16 代码单元长度 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest`；在 `steps[<index>].url`、`steps[<index>].pattern`、`targets[<key>].baseUrl` 的值位置同样例外 | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-17 | `embedded-secret-reference` | 包含 `{{secrets.` 标记、但不是有效全值 `SecretRef` 的字符串值或对象键 | 仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
 
-`SecretRef` 例外绝不适用于对象键：每个键在遍历其值之前都会传递给检测器。拒绝诊断信息必须（MUST）仅包含检测器和脱敏后的类 JSON 路径；其严禁（MUST NOT）保留检测到的字面量，且检测到的对象键使用 `[redacted-key]`。[src/usecases/generator-secret-policy.ts:546](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L546) [src/usecases/generator-secret-policy.ts:567](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L567) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/errors/exit-codes.ts#L31)
+有效的全值 `SecretRef` 无论作为字符串值还是对象键，均可豁免本节的所有检测器；其余的键在遍历其值之前都会传递给检测器。拒绝诊断信息必须（MUST）仅包含检测器和脱敏后的类 JSON 路径；其严禁（MUST NOT）保留检测到的字面量，且检测到的对象键使用 `[redacted-key]`。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585) [src/usecases/generator-secret-policy.ts:615](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L615) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/errors/exit-codes.ts#L31)
 
 ## 特定边界的机密性要求 {#boundary-specific-secrecy}
 
 | id | 边界 | 要求 | 证据 |
 | --- | --- | --- | --- |
-| SEC-05 | 生成 | 来自 provider 的 JSON 在持久化或报告序列化之前，必须（MUST）通过字面量机密拒绝检查。 | [src/usecases/generator-secret-policy.ts:520](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L520) |
+| SEC-05 | 生成 | 来自 provider 的 JSON 在持久化或报告序列化之前，必须（MUST）通过字面量机密拒绝检查。 | [src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585) |
 | SEC-06 | 指纹生成 | 包含非空已解析机密作为完全匹配的描述符必须（MUST）产生 `secret-contaminated`；子字符串匹配仅在比较值至少为 3 个 UTF-16 代码单元时适用，且严禁（MUST NOT）生成指纹。 | [src/core/ir/fingerprint.ts:278](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L278) |
 | SEC-07 | 已提交的 trace | `TraceFillSecret` 必须（MUST）存储 `secretRef`，而非具体化的值。 | [src/core/ir/schema.ts:949](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L949) |
 | SEC-08 | grounding 持久化 | 当扫描的字符串值与任何非空已解析机密完全相等，或包含解析值至少为 3 个 UTF-16 代码单元的机密时，运行流水线必须（MUST）拒绝写入 grounding；且必须（MUST）将其归类为完整性违规。 | [src/usecases/run.ts:1252](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252) [src/usecases/run.ts:3425](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L3425) |

@@ -18,22 +18,23 @@ The sink policy parses and normalizes origins at runtime; an absent configured e
 
 ## Literal-secret rejection {#literal-secret-rejection}
 
-This section is the canonical owner of literal-secret detector semantics. Reference pages MUST only summarize the detector boundary for their local purpose and link here. Before persistence or report serialization, generation MUST inspect every provider-derived JSON string and object key, including `generatorMeta` and ambiguities. It MUST reject the first matching detector in lexical-key and array-index traversal order. [repo:src/usecases/generator-secret-policy.ts:520]
+This section is the canonical owner of literal-secret detector semantics. Reference pages MUST only summarize the detector boundary for their local purpose and link here. Before persistence or report serialization, generation MUST inspect every provider-derived JSON string and object key, including `generatorMeta` and ambiguities, using lexical-key and array-index traversal order. For each string value or object key, an embedded `{{secrets.` marker (SEC-17) MUST be rejected before the four primitive detectors below are checked; among those, the first match in the fixed order below MUST be rejected. [repo:src/usecases/generator-secret-policy.ts:585]
 
 | id | detector | matching value | exception | classified failure |
 | --- | --- | --- | --- | --- |
-| SEC-01 | `credential-prefix-sk` | begins `sk-` | a valid whole-value `SecretRef` in a string value only; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-02 | `credential-prefix-ghp` | begins `ghp_` | a valid whole-value `SecretRef` in a string value only; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-03 | `credential-prefix-aws-access-key` | begins `AKIA` | a valid whole-value `SecretRef` in a string value only; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-04 | `high-entropy-token` | at least 32 UTF-16 code units and Shannon entropy at least 4.0 bits, with frequency keys iterated as Unicode code points but each probability denominator using the UTF-16 code-unit length | a valid whole-value `SecretRef` in a string value only; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-01 | `credential-prefix-sk` | begins `sk-` | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-02 | `credential-prefix-ghp` | begins `ghp_` | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-03 | `credential-prefix-aws-access-key` | begins `AKIA` | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-04 | `high-entropy-token` | token-shaped (at least 32 UTF-16 code units, no whitespace, every character in `[A-Za-z0-9+/=_.-]`) and Shannon entropy at least 4.0 bits, with frequency keys iterated as Unicode code points but each probability denominator using the UTF-16 code-unit length | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only; also exempt at a `steps[<index>].url`, `steps[<index>].pattern`, or `targets[<key>].baseUrl` value position | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-17 | `embedded-secret-reference` | a string value or object key, other than a valid whole-value `SecretRef`, containing the `{{secrets.` marker | `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
 
-The `SecretRef` exception never applies to an object key: every key is passed to the detector before its value is traversed. The rejection diagnostic MUST contain only detector and redacted JSON-like path; it MUST NOT retain the detected literal, and a detected object key uses `[redacted-key]`. [repo:src/usecases/generator-secret-policy.ts:546] [repo:src/usecases/generator-secret-policy.ts:567] [repo:src/report/error-mapping.ts:23] [repo:src/core/errors/exit-codes.ts:31]
+A valid whole-value `SecretRef` exempts a string value or object key from every detector in this section; every other key is passed to the detector before its value is traversed. The rejection diagnostic MUST contain only detector and redacted JSON-like path; it MUST NOT retain the detected literal, and a detected object key uses `[redacted-key]`. [repo:src/usecases/generator-secret-policy.ts:585] [repo:src/usecases/generator-secret-policy.ts:615] [repo:src/report/error-mapping.ts:23] [repo:src/core/errors/exit-codes.ts:31]
 
 ## Boundary-specific secrecy requirements {#boundary-specific-secrecy}
 
 | id | boundary | requirement | evidence |
 | --- | --- | --- | --- |
-| SEC-05 | generation | Provider-derived JSON MUST pass literal-secret rejection before persistence or report serialization. | repo:src/usecases/generator-secret-policy.ts:520 |
+| SEC-05 | generation | Provider-derived JSON MUST pass literal-secret rejection before persistence or report serialization. | repo:src/usecases/generator-secret-policy.ts:585 |
 | SEC-06 | fingerprint generation | A descriptor containing a nonempty resolved secret as an exact match MUST produce `secret-contaminated`; substring matching applies only when the comparison value is at least 3 UTF-16 code units, and it MUST NOT yield a fingerprint. | repo:src/core/ir/fingerprint.ts:278 |
 | SEC-07 | committed traces | `TraceFillSecret` MUST store `secretRef`, not a materialized value. | repo:src/core/ir/schema.ts:949 |
 | SEC-08 | grounding persistence | The run pipeline MUST refuse to write grounding when a scanned string value exactly equals any nonempty resolved secret, or contains one whose resolved value is at least 3 UTF-16 code units; it MUST classify this as an integrity violation. | repo:src/usecases/run.ts:1252 [repo:src/usecases/run.ts:3425] |

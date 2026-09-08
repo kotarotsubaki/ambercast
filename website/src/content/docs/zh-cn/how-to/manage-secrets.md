@@ -11,7 +11,13 @@ description: 遵循安全编写路径在测试提示词中管理与使用机密�
 
 ## 操作步骤 {#steps}
 
-1. 在单独的非代码提示词行中精确写入 `@ambercast-secret {{secrets.password}}`。授权解析器会接受完整匹配的行，并排除代码块、缩进代码和行内代码。
+1. 在单独的非代码提示词行中精确写入 `@ambercast-secret {{secrets.password}}`。授权解析器会接受完整匹配的行，并排除代码块、缩进代码和行内代码。一行授权仅授权一次使用；同一机密需要多次使用时，每次使用都重复一行。例如，先登录、登出后再次登录。
+
+   ```
+   @ambercast-secret {{secrets.password}}
+   ...sign in, then sign out...
+   @ambercast-secret {{secrets.password}}
+   ```
 2. 在首次执行 `npx ambercast generate tests/ambercast/<name>.test.md` 之前，请由人工或经批准的扫描工具确认整个提示词在 SecretRef 授权之外不包含任何明文机密。随后，`generate` 会在执行明文机密检查之前将其 AI 提供商上下文中的规范化提示词发送出去；该检查无法保护已在提示词中发送的机密。
 3. 在命令环境中设置 `AMBERCAST_SECRET_PASSWORD`，然后运行 `npx ambercast generate tests/ambercast/<name>.test.md`。随后，生成阶段会授权提示词 grant，但不会构建机密提供商，也不会解析其值。
 4. 若填充操作不在 `baseUrl`，请按照 [配置目标环境](/ambercast/zh-cn/how-to/configure-targets/) 配置额外源。缺失的映射默认回退至 base-URL 源。

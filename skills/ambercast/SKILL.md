@@ -154,11 +154,11 @@ Never edit plan or grounding files by hand. Change the prompt and regenerate, or
 
 ## Learn more
 
-- Getting started: https://kotarotsubaki.github.io/ambercast/guides/getting-started/
-- Writing prompts: https://kotarotsubaki.github.io/ambercast/guides/writing-prompts/
-- Commands: https://kotarotsubaki.github.io/ambercast/guides/commands/
-- Exit codes: https://kotarotsubaki.github.io/ambercast/guides/exit-codes/
-- Artifacts: https://kotarotsubaki.github.io/ambercast/guides/artifacts/
-- Secrets: https://kotarotsubaki.github.io/ambercast/guides/secrets/
-- CI usage: https://kotarotsubaki.github.io/ambercast/guides/ci/
+- Getting started: https://kotarotsubaki.github.io/ambercast/tutorials/quick-start/
+- Writing prompts: https://kotarotsubaki.github.io/ambercast/how-to/write-effective-prompts/
+- Commands: https://kotarotsubaki.github.io/ambercast/reference/cli/overview/
+- Exit codes: https://kotarotsubaki.github.io/ambercast/reference/exit-codes/
+- Artifacts: https://kotarotsubaki.github.io/ambercast/reference/file-layout/
+- Secrets: https://kotarotsubaki.github.io/ambercast/how-to/manage-secrets/
+- CI usage: https://kotarotsubaki.github.io/ambercast/tutorials/github-actions/
 - Configuration reference: https://kotarotsubaki.github.io/ambercast/reference/configuration/

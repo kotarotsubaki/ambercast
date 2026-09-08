@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +31,17 @@ const LOCALE_DEMO_LABELS = {
   '/ja/': { tryIt: '試してみる', generate: '生成 ›', run: '実行 ›', runAgain: 'もう一度実行 ›', reset: 'リセット' },
   '/zh-cn/': { tryIt: '试一试', generate: '生成 ›', run: '运行 ›', runAgain: '再次运行 ›', reset: '重置' },
 };
+const PLANNED_PAGES = [
+  'agents/mcp-server',
+  'agents/official-skill',
+  'reference/cli/baseline-restore',
+  'reference/cli/init',
+  'reference/cli/mcp',
+  'reference/cli/review',
+  'reference/cli/view',
+  'reference/mcp-tools',
+];
+const RUN_H2_IDS = ['flags', 'replay', 'ai-calls', 'cache-only', 'grounding-write-back', 'report-and-exits'];
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version;
 
 const APPROVED_EXTERNAL_SITE_URLS = [
@@ -61,34 +72,34 @@ const SCREENSHOTS = [
   { name: 'landing-1440-light-zh-cn', path: '/zh-cn/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
   { name: 'landing-390-dark-zh-cn', path: '/zh-cn/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
   { name: 'landing-390-light-zh-cn', path: '/zh-cn/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'guide-dark', path: '/guides/getting-started/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'guide-light', path: '/guides/getting-started/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'guide-ja', path: '/ja/guides/getting-started/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'reference-dark', path: '/reference/cli/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'reference-light', path: '/reference/cli/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'guide-390-dark', path: '/guides/getting-started/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'guide-390-light', path: '/guides/getting-started/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'guide-zh-cn-dark', path: '/zh-cn/guides/getting-started/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'reference-390-dark', path: '/reference/cli/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-1440-dark', path: '/ja/guides/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-2000-dark', path: '/ja/guides/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
-  { name: 'guide-ja-1440-light', path: '/ja/guides/getting-started/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'guide-ja-390-dark', path: '/ja/guides/getting-started/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'guide-ja-390-light', path: '/ja/guides/getting-started/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'guide-zh-cn-1440-light', path: '/zh-cn/guides/getting-started/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'guide-zh-cn-390-dark', path: '/zh-cn/guides/getting-started/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'guide-zh-cn-390-light', path: '/zh-cn/guides/getting-started/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'reference-ja-1440-dark', path: '/ja/reference/cli/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'reference-ja-1440-light', path: '/ja/reference/cli/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'reference-ja-390-dark', path: '/ja/reference/cli/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'reference-ja-390-light', path: '/ja/reference/cli/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'reference-390-light', path: '/reference/cli/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'introduction-en-1440-dark', path: '/guides/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-en-2000-dark', path: '/guides/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-en-1151-dark', path: '/guides/introduction/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-en-1152-dark', path: '/guides/introduction/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-1151-dark', path: '/ja/guides/introduction/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-1152-dark', path: '/ja/guides/introduction/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
+  { name: 'guide-dark', path: '/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'guide-light', path: '/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'guide-ja', path: '/ja/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'reference-dark', path: '/reference/cli/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'reference-light', path: '/reference/cli/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'guide-390-dark', path: '/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'guide-390-light', path: '/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'guide-zh-cn-dark', path: '/zh-cn/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'reference-390-dark', path: '/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'introduction-ja-1440-dark', path: '/ja/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-ja-2000-dark', path: '/ja/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
+  { name: 'guide-ja-1440-light', path: '/ja/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'guide-ja-390-dark', path: '/ja/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'guide-ja-390-light', path: '/ja/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'guide-zh-cn-1440-light', path: '/zh-cn/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'guide-zh-cn-390-dark', path: '/zh-cn/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'guide-zh-cn-390-light', path: '/zh-cn/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'reference-ja-1440-dark', path: '/ja/reference/cli/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'reference-ja-1440-light', path: '/ja/reference/cli/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'reference-ja-390-dark', path: '/ja/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'reference-ja-390-light', path: '/ja/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'reference-390-light', path: '/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'introduction-en-1440-dark', path: '/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-en-2000-dark', path: '/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-en-1151-dark', path: '/introduction/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-en-1152-dark', path: '/introduction/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-ja-1151-dark', path: '/ja/introduction/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-ja-1152-dark', path: '/ja/introduction/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
 ];
 
 function sleep(milliseconds) {
@@ -547,7 +558,7 @@ async function assertResponsiveAndDocumentationInvariants(browser) {
   const guide = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
   const guidePage = await guide.newPage();
   try {
-    await guidePage.goto(pageUrl('/guides/getting-started/'), { waitUntil: 'networkidle' });
+    await guidePage.goto(pageUrl('/tutorials/quick-start/'), { waitUntil: 'networkidle' });
     assert.equal(await guidePage.locator('body').evaluate((node) => getComputedStyle(node).backgroundColor), 'rgb(24, 19, 16)');
   } finally { await guide.close(); }
   for (const [width, heroPadding, heroSize, flowGap, planSize, sectionPadding, panelHeight] of [[1440, '72px 0px 56px', '44px', '16px 14px', '11.5px', '64px 0px', '380px'], [390, '40px 0px', '36px', '10px', '10.5px', '40px 0px', '0px']]) {
@@ -1041,9 +1052,9 @@ async function assertReducedMotion(browser) {
 
 async function assertHeaderV13(browser) {
   const locales = [
-    { path: '/', docsPath: '/ambercast/guides/introduction/', label: 'Docs' },
-    { path: '/ja/', docsPath: '/ambercast/ja/guides/introduction/', label: 'ドキュメント' },
-    { path: '/zh-cn/', docsPath: '/ambercast/zh-cn/guides/introduction/', label: '文档' },
+    { path: '/', docsPath: '/ambercast/introduction/', label: 'Docs' },
+    { path: '/ja/', docsPath: '/ambercast/ja/introduction/', label: 'ドキュメント' },
+    { path: '/zh-cn/', docsPath: '/ambercast/zh-cn/introduction/', label: '文档' },
   ];
 
   for (const viewport of [{ width: 1440, height: 1100 }, { width: 390, height: 844 }]) {
@@ -1088,14 +1099,14 @@ async function assertHeaderV13(browser) {
     }
   }
 
-  for (const path of ['/', '/ja/', '/zh-cn/', '/guides/getting-started/']) {
+  for (const path of ['/', '/ja/', '/zh-cn/', '/tutorials/quick-start/']) {
     const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 390, height: 844 } });
     const page = await context.newPage();
     try {
       await page.goto(pageUrl(path), { waitUntil: 'networkidle' });
       await waitForFonts(page);
       const docs = page.locator('.ac-docs-link');
-      if (path === '/guides/getting-started/') {
+      if (path === '/tutorials/quick-start/') {
         assert.equal(await docs.isHidden(), true, `${path} must hide the Docs link when its sidebar already provides documentation navigation.`);
       } else {
         assert.equal(await docs.isVisible(), true, `${path} must retain the Docs link on a landing page.`);
@@ -1163,24 +1174,25 @@ async function assertCodeTokenPalette(browser) {
     dark: { allowed: [[226, 217, 204], [118, 107, 96], [250, 246, 240], [241, 235, 226], [158, 145, 132]], keyword: [250, 246, 240], string: [241, 235, 226], punctuation: [158, 145, 132], background: [16, 12, 9] },
     light: { allowed: [[59, 51, 44], [158, 145, 132], [24, 19, 16], [39, 33, 28], [118, 107, 96]], keyword: [24, 19, 16], string: [39, 33, 28], punctuation: [118, 107, 96], background: [241, 235, 226] },
   };
-  for (const scenario of SCREENSHOTS.filter((entry) => entry.path === '/guides/getting-started/' && entry.viewport.width === 1440)) {
+  for (const scenario of SCREENSHOTS.filter((entry) => entry.path === '/tutorials/quick-start/' && entry.viewport.width === 1440)) {
     const { colorScheme, viewport } = scenario; const expected = themes[colorScheme];
     const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage();
     try {
-      await page.goto(pageUrl('/guides/getting-started/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
-      const tokens = await page.$$eval('.expressive-code pre span', (spans) => spans.map((span) => ({ text: span.textContent, color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) })));
-      assert.ok(tokens.length > 0, `${colorScheme} guide must contain highlighted spans.`);
+      await page.goto(pageUrl('/tutorials/quick-start/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
+      const tokens = await page.$$eval('.expressive-code pre[data-language="bash"] span', (spans) => spans.map((span) => ({ text: span.textContent, color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) })));
+      assert.ok(tokens.length > 0, `${colorScheme} quick-start page must contain highlighted bash spans.`);
       for (const token of tokens) assert.ok(expected.allowed.some((color) => color.join(',') === rgbChannels(token.color).join(',')), `${colorScheme} token ${JSON.stringify(token.text)} must use the approved palette.`);
       for (const command of ['npx', 'npm']) {
         const commandTokens = tokens.filter((token) => token.text?.trim() === command);
-        assert.ok(commandTokens.length > 0, `${colorScheme} guide must render ${command} tokens.`);
+        assert.ok(commandTokens.length > 0, `${colorScheme} quick-start bash block must render ${command} tokens.`);
         for (const token of commandTokens) { assert.deepEqual(rgbChannels(token.color), expected.keyword); assert.ok(token.weight >= 700); }
       }
-      const json = await page.$$eval('.expressive-code pre', (pres) => pres.map((pre) => ({ text: pre.textContent, background: getComputedStyle(pre).backgroundColor })));
-      const jsonBlock = json.find((block) => block.text.includes('"') && block.text.includes(':')); assert.ok(jsonBlock, 'The guide must include a JSON code block.');
+      await page.goto(pageUrl('/spec/plan-document/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
+      const json = await page.$$eval('.expressive-code pre[data-language="json"]', (pres) => pres.map((pre) => ({ text: pre.textContent, background: getComputedStyle(pre).backgroundColor })));
+      const jsonBlock = json.find((block) => block.text.includes('"') && block.text.includes(':')); assert.ok(jsonBlock, 'The plan-document page must include a JSON code block.');
       const jsonTokens = await page.evaluate(() => {
-        const pre = [...document.querySelectorAll('.expressive-code pre')].find((entry) => entry.textContent?.includes('"') && entry.textContent?.includes(':'));
-        if (!pre) throw new Error('The guide needs a JSON code block.');
+        const pre = [...document.querySelectorAll('.expressive-code pre[data-language="json"]')].find((entry) => entry.textContent?.includes('"') && entry.textContent?.includes(':'));
+        if (!pre) throw new Error('The plan-document page needs a JSON code block.');
         const token = (span) => ({ text: span.textContent ?? '', color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) });
         const keys = []; const values = []; const punctuation = [];
         for (const line of pre.querySelectorAll('.ec-line .code')) {
@@ -1225,7 +1237,7 @@ async function assertCodeTokenPalette(browser) {
  * preserving the same non-persistent DOM contract as the frame variants.
  */
 async function assertDocumentationSurfaces(browser) {
-  for (const scenario of SCREENSHOTS.filter((entry) => entry.path.endsWith('/guides/getting-started/'))) {
+  for (const scenario of SCREENSHOTS.filter((entry) => entry.path.endsWith('/tutorials/quick-start/'))) {
     const { path, colorScheme, viewport } = scenario;
     const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage();
     try {
@@ -1233,11 +1245,11 @@ async function assertDocumentationSurfaces(browser) {
       if (viewport.width === 390) { await openDocumentationMenu(page); assert.equal(await page.locator('.sidebar-pane').isVisible(), true, `${scenario.name} must open the documentation drawer.`); }
       const values = await page.evaluate(() => { const probe = document.createElement('i'); probe.style.color = 'var(--sl-color-gray-3)'; document.body.append(probe); const gray3 = getComputedStyle(probe).color; probe.style.color = 'var(--sl-color-hairline)'; const hairline = getComputedStyle(probe).color; probe.remove(); const labels = [...document.querySelectorAll('.ac-sidebar summary .large')].map((element) => { const style = getComputedStyle(element); return { text: element.textContent, size: style.fontSize, weight: style.fontWeight, family: style.fontFamily, spacing: parseFloat(style.letterSpacing), transform: style.textTransform, color: style.color }; }); const headings = [...document.querySelectorAll('.sl-heading-wrapper.level-h2')].map((element) => { const style = getComputedStyle(element); const h2 = element.querySelector(':scope > h2'); const h2Style = h2 && getComputedStyle(h2); return { width: element.getBoundingClientRect().width, articleWidth: element.closest('.sl-markdown-content')?.getBoundingClientRect().width, borderWidth: style.borderTopWidth, borderStyle: style.borderTopStyle, borderColor: style.borderTopColor, padding: style.paddingTop, margin: style.marginTop, h2: h2Style && { border: h2Style.borderTopWidth, padding: h2Style.paddingTop, margin: h2Style.marginTop } }; }); return { gray3, hairline, labels, headings }; });
       assert.ok(values.labels.length >= 2); for (const label of values.labels) { assert.equal(label.size, '11px'); assert.equal(label.weight, '500'); assert.match(label.family, /mono/i); assertWithinTolerance(label.spacing, 1.32, 0.05, 'Sidebar label letter spacing'); assert.equal(label.transform, 'uppercase'); assert.deepEqual(rgbChannels(label.color), rgbChannels(values.gray3)); }
-      assert.deepEqual(values.labels.map((label) => label.text), ['Guides', 'Reference']);
+      assert.deepEqual(values.labels.map((label) => label.text), ['START HERE', 'TUTORIALS', 'HOW-TO GUIDES', 'REFERENCE', 'CLI', 'PLAN SPECIFICATION', 'EXPLANATION', 'FOR AI AGENTS']);
       if (!path.startsWith('/zh-cn/')) { assert.ok(values.headings.length > 0); for (const heading of values.headings) { assert.equal(heading.borderWidth, '1px'); assert.equal(heading.borderStyle, 'solid'); assert.deepEqual(rgbChannels(heading.borderColor), rgbChannels(values.hairline)); assert.equal(heading.padding, '28px'); assert.equal(heading.margin, '40px'); assertWithinTolerance(heading.width, heading.articleWidth, 1, 'Heading wrapper width'); assert.deepEqual(heading.h2, { border: '0px', padding: '0px', margin: '0px' }); } const fallback = await page.evaluate(() => { const article = document.querySelector('.sl-markdown-content'); const source = article?.querySelector('h2'); if (!article || !source) throw new Error('A fallback heading requires a markdown article h2.'); const clone = source.cloneNode(true); article.append(clone); const style = getComputedStyle(clone); const result = { border: style.borderTopWidth, style: style.borderTopStyle, color: style.borderTopColor, padding: style.paddingTop, margin: style.marginTop }; clone.remove(); return result; }); assert.deepEqual({ border: fallback.border, style: fallback.style, padding: fallback.padding, margin: fallback.margin }, { border: '1px', style: 'solid', padding: '28px', margin: '40px' }); assert.deepEqual(rgbChannels(fallback.color), rgbChannels(values.hairline)); }
     } finally { await context.close(); }
   }
-  for (const scenario of SCREENSHOTS.filter((entry) => entry.path.endsWith('/reference/cli/'))) { const { path, colorScheme, viewport } = scenario; const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage(); try { await page.goto(pageUrl(path), { waitUntil: 'networkidle' }); const table = await page.evaluate(() => { const probe = (property) => { const element = document.createElement('i'); element.style.color = `var(${property})`; document.body.append(element); const color = getComputedStyle(element).color; element.remove(); return color; }; const padding = (style) => ({ top: style.paddingTop, right: style.paddingRight, bottom: style.paddingBottom, left: style.paddingLeft }); return [...document.querySelectorAll('.sl-markdown-content table')].map((entry) => ({ fontSize: getComputedStyle(entry).fontSize, gray3: probe('--sl-color-gray-3'), gray4: probe('--sl-color-gray-4'), hairline: probe('--sl-color-hairline'), white: probe('--sl-color-white'), headers: [...entry.querySelectorAll('th')].map((cell) => { const style = getComputedStyle(cell); return { size: style.fontSize, weight: style.fontWeight, family: style.fontFamily, spacing: parseFloat(style.letterSpacing), transform: style.textTransform, padding: padding(style), borderWidth: style.borderBottomWidth, borderStyle: style.borderBottomStyle, borderColor: style.borderBottomColor, first: cell.matches(':first-child'), last: cell.matches(':last-child'), color: style.color }; }), cells: [...entry.querySelectorAll('td')].map((cell) => { const style = getComputedStyle(cell); const codes = [...cell.querySelectorAll('code')].map((code) => ({ color: getComputedStyle(code).color, whiteSpace: getComputedStyle(code).whiteSpace })); return { padding: padding(style), lineHeight: style.lineHeight, verticalAlign: style.verticalAlign, borderWidth: style.borderBottomWidth, borderStyle: style.borderBottomStyle, borderColor: style.borderBottomColor, first: cell.matches(':first-child'), last: cell.matches(':last-child'), color: style.color, codes }; }) })); }); assert.ok(table.length > 0); for (const entry of table) { assert.equal(entry.fontSize, '13px'); for (const header of entry.headers) { assert.equal(header.size, '11px'); assert.equal(header.weight, '500'); assert.match(header.family, /mono/i); assertWithinTolerance(header.spacing, 1.32, 0.05, 'Table heading letter spacing'); assert.equal(header.transform, 'uppercase'); assert.deepEqual(header.padding, { top: '9.6px', right: header.last ? '0px' : '12px', bottom: '9.6px', left: header.first ? '0px' : '12px' }); assert.equal(header.borderWidth, '1px'); assert.equal(header.borderStyle, 'solid'); assert.deepEqual(rgbChannels(header.borderColor), rgbChannels(entry.gray4)); assert.deepEqual(rgbChannels(header.color), rgbChannels(entry.gray3)); } for (const cell of entry.cells) { assert.deepEqual(cell.padding, { top: '11.2px', right: cell.last ? '0px' : '12px', bottom: '11.2px', left: cell.first ? '0px' : '12px' }); assert.equal(cell.lineHeight, '19.5px'); assert.equal(cell.verticalAlign, 'top'); assert.equal(cell.borderWidth, '1px'); assert.equal(cell.borderStyle, 'solid'); assert.deepEqual(rgbChannels(cell.borderColor), rgbChannels(entry.hairline)); if (cell.first) { assert.deepEqual(rgbChannels(cell.color), rgbChannels(entry.white)); for (const code of cell.codes) assert.deepEqual(rgbChannels(code.color), rgbChannels(entry.white)); } for (const code of cell.codes) assert.equal(code.whiteSpace, 'nowrap'); } } } finally { await context.close(); } }
+  for (const scenario of SCREENSHOTS.filter((entry) => entry.path.endsWith('/reference/cli/overview/'))) { const { path, colorScheme, viewport } = scenario; const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage(); try { await page.goto(pageUrl(path), { waitUntil: 'networkidle' }); const table = await page.evaluate(() => { const probe = (property) => { const element = document.createElement('i'); element.style.color = `var(${property})`; document.body.append(element); const color = getComputedStyle(element).color; element.remove(); return color; }; const padding = (style) => ({ top: style.paddingTop, right: style.paddingRight, bottom: style.paddingBottom, left: style.paddingLeft }); return [...document.querySelectorAll('.sl-markdown-content table')].map((entry) => ({ fontSize: getComputedStyle(entry).fontSize, gray3: probe('--sl-color-gray-3'), gray4: probe('--sl-color-gray-4'), hairline: probe('--sl-color-hairline'), white: probe('--sl-color-white'), headers: [...entry.querySelectorAll('th')].map((cell) => { const style = getComputedStyle(cell); return { size: style.fontSize, weight: style.fontWeight, family: style.fontFamily, spacing: parseFloat(style.letterSpacing), transform: style.textTransform, padding: padding(style), borderWidth: style.borderBottomWidth, borderStyle: style.borderBottomStyle, borderColor: style.borderBottomColor, first: cell.matches(':first-child'), last: cell.matches(':last-child'), color: style.color }; }), cells: [...entry.querySelectorAll('td')].map((cell) => { const style = getComputedStyle(cell); const codes = [...cell.querySelectorAll('code')].map((code) => ({ color: getComputedStyle(code).color, whiteSpace: getComputedStyle(code).whiteSpace })); return { padding: padding(style), lineHeight: style.lineHeight, verticalAlign: style.verticalAlign, borderWidth: style.borderBottomWidth, borderStyle: style.borderBottomStyle, borderColor: style.borderBottomColor, first: cell.matches(':first-child'), last: cell.matches(':last-child'), color: style.color, codes }; }) })); }); assert.ok(table.length > 0); for (const entry of table) { assert.equal(entry.fontSize, '13px'); for (const header of entry.headers) { assert.equal(header.size, '11px'); assert.equal(header.weight, '500'); assert.match(header.family, /mono/i); assertWithinTolerance(header.spacing, 1.32, 0.05, 'Table heading letter spacing'); assert.equal(header.transform, 'uppercase'); assert.deepEqual(header.padding, { top: '9.6px', right: header.last ? '0px' : '12px', bottom: '9.6px', left: header.first ? '0px' : '12px' }); assert.equal(header.borderWidth, '1px'); assert.equal(header.borderStyle, 'solid'); assert.deepEqual(rgbChannels(header.borderColor), rgbChannels(entry.gray4)); assert.deepEqual(rgbChannels(header.color), rgbChannels(entry.gray3)); } for (const cell of entry.cells) { assert.deepEqual(cell.padding, { top: '11.2px', right: cell.last ? '0px' : '12px', bottom: '11.2px', left: cell.first ? '0px' : '12px' }); assert.equal(cell.lineHeight, '19.5px'); assert.equal(cell.verticalAlign, 'top'); assert.equal(cell.borderWidth, '1px'); assert.equal(cell.borderStyle, 'solid'); assert.deepEqual(rgbChannels(cell.borderColor), rgbChannels(entry.hairline)); if (cell.first) { assert.deepEqual(rgbChannels(cell.color), rgbChannels(entry.white)); for (const code of cell.codes) assert.deepEqual(rgbChannels(code.color), rgbChannels(entry.white)); } for (const code of cell.codes) assert.equal(code.whiteSpace, 'nowrap'); } } } finally { await context.close(); } }
 }
 
 /**
@@ -1255,7 +1267,7 @@ async function assertDocumentationSurfaces(browser) {
  * box rather than the plugin's fixed-size dot geometry, while its inset remains content-driven.
  */
 async function assertCodeFrameVariants(browser) {
-  for (const scenario of SCREENSHOTS.filter((entry) => entry.path === '/guides/getting-started/' || entry.path === '/ja/guides/getting-started/')) {
+  for (const scenario of SCREENSHOTS.filter((entry) => entry.path === '/tutorials/quick-start/' || entry.path === '/ja/tutorials/quick-start/')) {
     const { colorScheme, viewport } = scenario; const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage();
     try {
       await page.goto(pageUrl(scenario.path), { waitUntil: 'networkidle' }); await waitForFonts(page);
@@ -1312,9 +1324,9 @@ function assertWithinTolerance(actual, expected, tolerance, message) {
  * proves that the final portion of the command can be reached without mutating durable content.
  */
 async function assertCodeBlockScroll(browser) {
-  for (const scenario of SCREENSHOTS.filter((entry) => entry.path === '/reference/cli/' && entry.colorScheme === 'dark')) {
+  for (const scenario of SCREENSHOTS.filter((entry) => entry.path === '/reference/cli/overview/' && entry.colorScheme === 'dark')) {
     const { viewport } = scenario; const context = await browser.newContext({ colorScheme: scenario.colorScheme, viewport }); const page = await context.newPage();
-    try { await page.goto(pageUrl('/reference/cli/'), { waitUntil: 'networkidle' }); const measure = await page.evaluate(() => { const pre = [...document.querySelectorAll('.expressive-code pre[data-language="text"]')].find((entry) => entry.textContent?.includes('Usage: ambercast')); if (!pre) throw new Error('The CLI reference needs its Usage: ambercast text code block.'); pre.scrollLeft = pre.scrollWidth; return { scrollWidth: pre.scrollWidth, clientWidth: pre.clientWidth, scrollLeft: pre.scrollLeft, overflow: getComputedStyle(pre).overflowX, pageWidth: document.documentElement.scrollWidth, clientPageWidth: document.documentElement.clientWidth }; }); if (viewport.width === 390) { assert.ok(measure.scrollWidth > measure.clientWidth); assert.ok(['auto', 'scroll'].includes(measure.overflow)); assertWithinTolerance(measure.scrollLeft, measure.scrollWidth - measure.clientWidth, 1, 'Code block final scroll position'); } assert.ok(measure.pageWidth <= measure.clientPageWidth + 1); } finally { await context.close(); }
+    try { await page.goto(pageUrl('/reference/cli/overview/'), { waitUntil: 'networkidle' }); const measure = await page.evaluate(() => { const pre = [...document.querySelectorAll('.expressive-code pre[data-language="text"]')].find((entry) => entry.textContent?.includes('Usage: ambercast')); if (!pre) throw new Error('The CLI reference needs its Usage: ambercast text code block.'); pre.scrollLeft = pre.scrollWidth; return { scrollWidth: pre.scrollWidth, clientWidth: pre.clientWidth, scrollLeft: pre.scrollLeft, overflow: getComputedStyle(pre).overflowX, pageWidth: document.documentElement.scrollWidth, clientPageWidth: document.documentElement.clientWidth }; }); if (viewport.width === 390) { assert.ok(measure.scrollWidth > measure.clientWidth); assert.ok(['auto', 'scroll'].includes(measure.overflow)); assertWithinTolerance(measure.scrollLeft, measure.scrollWidth - measure.clientWidth, 1, 'Code block final scroll position'); } assert.ok(measure.pageWidth <= measure.clientPageWidth + 1); } finally { await context.close(); }
   }
 }
 
@@ -1326,7 +1338,7 @@ async function assertCodeBlockScroll(browser) {
  * the 1440px and 2000px acceptance widths.
  */
 async function assertDocumentColumnSymmetry(browser) {
-  for (const scenario of SCREENSHOTS.filter((entry) => ['/guides/introduction/', '/ja/guides/introduction/'].includes(entry.path))) {
+  for (const scenario of SCREENSHOTS.filter((entry) => ['/introduction/', '/ja/introduction/'].includes(entry.path))) {
     const { viewport } = scenario; const context = await browser.newContext({ colorScheme: scenario.colorScheme, viewport }); const page = await context.newPage();
     try { await page.goto(pageUrl(scenario.path), { waitUntil: 'networkidle' }); const geometry = await page.evaluate(() => { const sidebar = document.querySelector('.sidebar-pane'); const contents = [...document.querySelectorAll('.main-pane .content-panel .sl-container')]; const toc = document.querySelector('.right-sidebar-container'); const inner = document.querySelector('.right-sidebar-panel .sl-container'); if (!sidebar || !toc || !inner || contents.length === 0) throw new Error('The three-column document layout is incomplete.'); return { sidebarRight: sidebar.getBoundingClientRect().right, content: contents.map((entry) => { const rect = entry.getBoundingClientRect(); return { left: rect.left, right: rect.right }; }), toc: toc.getBoundingClientRect().toJSON(), innerRight: inner.getBoundingClientRect().right, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }; }); assert.ok(geometry.scrollWidth <= geometry.clientWidth + 1); if (viewport.width >= 1152) { for (const content of geometry.content) { assertWithinTolerance(content.left, geometry.content[0].left, 1, 'All content columns share a left edge'); assertWithinTolerance(content.right, geometry.content[0].right, 1, 'All content columns share a right edge'); } const content = geometry.content[0]; assertWithinTolerance((content.left - geometry.sidebarRight) - (geometry.toc.left - content.right), 0, 2, 'Document gutters must be symmetric'); assertWithinTolerance(geometry.toc.right, geometry.clientWidth, 1, 'TOC right edge'); assertWithinTolerance(geometry.toc.width, 272, 1, 'TOC width'); assert.ok(geometry.innerRight <= geometry.clientWidth); if (viewport.width >= 1440) assert.ok(geometry.toc.left - content.right >= 48); } else assert.notEqual(Math.round(geometry.toc.width), 272); } finally { await context.close(); }
   }
@@ -1343,6 +1355,93 @@ async function openDocumentationMenu(page) {
   if (!await page.locator('#starlight__sidebar:popover-open').count()) await menu.click();
   await page.waitForFunction(() => document.querySelector('#starlight__sidebar')?.matches(':popover-open') === true);
   await page.locator('.sidebar-pane').waitFor({ state: 'visible' });
+}
+
+async function assertIssue295DocumentationContracts(browser) {
+  const locales = [
+    { prefix: '', root: '/', docs: '/ambercast/introduction/', tutorial: '/ambercast/tutorials/quick-start/' },
+    { prefix: 'ja/', root: '/ja/', docs: '/ambercast/ja/introduction/', tutorial: '/ambercast/ja/tutorials/quick-start/' },
+    { prefix: 'zh-cn/', root: '/zh-cn/', docs: '/ambercast/zh-cn/introduction/', tutorial: '/ambercast/zh-cn/tutorials/quick-start/' },
+  ];
+
+  for (const locale of locales) {
+    const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
+    const page = await context.newPage();
+    try {
+      await page.goto(pageUrl(locale.root), { waitUntil: 'networkidle' });
+      assert.equal(new URL(await page.locator('.ac-docs-link').getAttribute('href'), page.url()).pathname, locale.docs, `${locale.root} Header CTA must target introduction.`);
+      assert.equal(new URL(await page.locator('.landing-cta').getAttribute('href'), page.url()).pathname, locale.tutorial, `${locale.root} Landing CTA must target quick start.`);
+
+      for (const plannedPage of PLANNED_PAGES) {
+        await page.goto(pageUrl(`/${locale.prefix}${plannedPage}/`), { waitUntil: 'networkidle' });
+        const badges = page.locator('.sl-badge');
+        assert.ok(await badges.count() > 0, `${locale.prefix}${plannedPage} must expose its planned badge.`);
+        assert.ok((await badges.allTextContents()).some((text) => /planned/i.test(text)), `${locale.prefix}${plannedPage} must retain its Planned badge text.`);
+      }
+
+      await page.goto(pageUrl(`/${locale.prefix}agents/overview/`), { waitUntil: 'networkidle' });
+      assert.equal(await page.locator('.sl-badge').count(), 0, `${locale.prefix}agents/overview must remain available without a planned badge.`);
+    } finally {
+      await context.close();
+    }
+  }
+
+  const pageTitleContext = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
+  const pageTitlePage = await pageTitleContext.newPage();
+  try {
+    for (const [path, label] of [
+      ['/ja/reference/cli/run/', 'REFERENCE · CLI · NO. 03 · run'],
+      ['/spec/steps/', 'PLAN SPECIFICATION · NO. 03 · steps'],
+    ]) {
+      await pageTitlePage.goto(pageUrl(path), { waitUntil: 'networkidle' });
+      assert.equal((await pageTitlePage.locator('.ac-page-title .ac-label').textContent())?.trim(), label, `${path} must derive its PageTitle specimen label from the sidebar.`);
+    }
+  } finally {
+    await pageTitleContext.close();
+  }
+
+  for (const viewport of [{ width: 1440, height: 1100 }, { width: 390, height: 844 }]) {
+    const context = await browser.newContext({ colorScheme: 'dark', viewport });
+    const page = await context.newPage();
+    try {
+      await page.goto(pageUrl('/ja/reference/cli/run/'), { waitUntil: 'networkidle' });
+      let tocPermalinks;
+      if (viewport.width < 800) {
+        const tocToggle = page.locator('starlight-toc button, .mobile-starlight-toc button').first();
+        await tocToggle.waitFor({ state: 'visible' });
+        await tocToggle.click();
+        const mobileTocPermalinks = page.locator('starlight-toc a[href^="#"], .mobile-starlight-toc a[href^="#"]').first();
+        await mobileTocPermalinks.waitFor({ state: 'visible' });
+        tocPermalinks = await page.locator('starlight-toc a[href^="#"], .mobile-starlight-toc a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
+      } else {
+        tocPermalinks = await page.locator('.right-sidebar-container a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
+      }
+      const ids = await page.locator('.sl-heading-wrapper.level-h2 > h2[id]').evaluateAll((headings) => headings.map((heading) => heading.id));
+      assert.deepEqual(ids, RUN_H2_IDS, `${viewport.width}px run page must preserve the specified h2 ids.`);
+      const headingPermalinks = await page.locator('.sl-heading-wrapper.level-h2 a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
+      assert.deepEqual(headingPermalinks, RUN_H2_IDS, `${viewport.width}px heading permalinks must match the specified ids.`);
+      assert.deepEqual(tocPermalinks, RUN_H2_IDS, `${viewport.width}px TOC permalinks must match the specified ids.`);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+async function assertNoResidualWikilinks() {
+  const distDirectory = resolve(WEBSITE_DIRECTORY, 'dist');
+  const findHtmlFiles = async (directory) => {
+    const entries = await readdir(directory, { withFileTypes: true });
+    const nested = await Promise.all(entries.map(async (entry) => {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) return findHtmlFiles(path);
+      return entry.isFile() && entry.name.endsWith('.html') ? [path] : [];
+    }));
+    return nested.flat();
+  };
+  const htmlFiles = await findHtmlFiles(distDirectory);
+  assert.ok(htmlFiles.length > 0, 'The built site must contain HTML files.');
+  const offenders = htmlFiles.filter((path) => readFileSync(path, 'utf8').includes('[['));
+  assert.deepEqual(offenders, [], 'Built HTML must not contain residual wikilink syntax.');
 }
 
 async function captureScreenshots(browser) {
@@ -1406,6 +1505,8 @@ async function main() {
     await assertCodeFrameVariants(browser);
     await assertCodeBlockScroll(browser);
     await assertDocumentColumnSymmetry(browser);
+    await assertIssue295DocumentationContracts(browser);
+    await assertNoResidualWikilinks();
     await captureBoundaryAndPhaseScreenshots(browser);
     await captureScreenshots(browser);
   } finally {

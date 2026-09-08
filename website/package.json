@@ -7,14 +7,16 @@
     "node": ">=22.14"
   },
   "scripts": {
-    "sync": "node scripts/sync-configuration.mjs",
-    "predev": "npm run sync",
+    "sync": "node scripts/sync-spec.mjs",
+    "predev": "SYNC_OPTIONAL=1 npm run sync",
     "dev": "astro dev",
     "prebuild": "npm run sync",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "check": "node scripts/check-parity.mjs"
   },
   "dependencies": {
+    "@astrojs/markdown-remark": "7.3.0",
     "@astrojs/starlight": "0.42.0",
     "astro": "7.2.10"
   }

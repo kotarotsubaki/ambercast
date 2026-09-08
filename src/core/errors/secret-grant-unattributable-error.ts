@@ -75,7 +75,7 @@ export type SecretGrantUnattributableDetails =
  * | Reason | Meaning |
  * | --- | --- |
  * | `citation-not-found` | The provider excerpt does not occur in the prompt. |
- * | `citation-not-unique` | The provider excerpt occurs more than once. |
+ * | `citation-not-unique` | Its occurrences do not each resolve to exactly one distinct matching grant. |
  * | `citation-missing-ref` | The excerpt omits the literal secret reference. |
  * | `citation-unresolved` | Its unique source range contains zero or more than one matching grant. |
  * | `multiply-attributed-grant` | The same grant occurrence is claimed twice. |

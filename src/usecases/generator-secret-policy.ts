@@ -129,6 +129,13 @@ export const SECRET_GRANT_UNATTRIBUTABLE_HINTS: Record<
  * response has one deterministic correction target. Verified citations become
  * local source spans before the response can be persisted.
  *
+ * Each citation resolves to an ordered list of candidate grants. `claim`
+ * consumes the first candidate whose offset is not already claimed, so
+ * repeated complete grant lines can authorize separate uses without changing
+ * the one grant per use rule. For a single-candidate citation, an already
+ * claimed candidate reports `multiply-attributed-grant`. A multi-candidate
+ * citation reports that reason only after every candidate is claimed.
+ *
  * Claimed occurrences use `grant.offsetStart`, which remains unique when two
  * complete grant lines have identical text. Citation and duplicate-claim
  * failures therefore take precedence over the final document-order scan for
@@ -219,8 +226,11 @@ export function attributeSecretGrants(
 ): Step[] {
   const grants = extractSecretGrants(normalizedTestMd);
   const claimed = new Set<number>(alreadyClaimedOffsets);
-  const claim = (grant: SecretGrant, ref: string, stepId: string) => {
-    if (claimed.has(grant.offsetStart)) {
+  // Candidate order preserves prompt order, so repeated citations keep
+  // byte-identical grant lines as distinct authorization occurrences.
+  const claim = (candidates: readonly SecretGrant[], ref: string, stepId: string) => {
+    const grant = candidates.find((candidate) => !claimed.has(candidate.offsetStart));
+    if (grant === undefined) {
       throwSecretGrantUsageError('multiply-attributed-grant', ref, stepId);
     }
 
@@ -234,11 +244,11 @@ export function attributeSecretGrants(
         return step;
       }
 
-      const grant = resolveCitation(step.citation, step.secretRef, step.id, normalizedTestMd, grants);
+      const candidates = resolveCitation(step.citation, step.secretRef, step.id, normalizedTestMd, grants);
       const { citation: _citation, ...fillSecret } = step;
       return {
         ...fillSecret,
-        secretGrantSpan: claim(grant, step.secretRef, step.id),
+        secretGrantSpan: claim(candidates, step.secretRef, step.id),
       };
     }
 
@@ -254,8 +264,8 @@ export function attributeSecretGrants(
     return {
       ...aiStep,
       secrets: secrets.map(({ ref, citation }) => {
-        const grant = resolveCitation(citation, ref, step.id, normalizedTestMd, grants);
-        return { ref, sourceSpan: claim(grant, ref, step.id) };
+        const candidates = resolveCitation(citation, ref, step.id, normalizedTestMd, grants);
+        return { ref, sourceSpan: claim(candidates, ref, step.id) };
       }),
     };
   });
@@ -280,29 +290,33 @@ export function attributeSecretGrants(
 }
 
 /**
- * Resolves one provider citation to its unique matching prompt grant.
+ * Resolves one provider citation to ordered matching prompt-grant candidates.
  *
- * It counts overlapping citation occurrences, which prevents a
- * self-overlapping excerpt from being misclassified as unique. The citation
- * is non-empty because its schema enforces that boundary before this function
- * runs. Its unique source occurrence must include the literal reference and
- * exactly one same-reference grant by offset containment; text equality alone
- * would confuse identical grant lines at different locations.
+ * The overlap-counting `indexOf` scan considers every citation occurrence,
+ * keeping self-overlapping excerpts visible. A single occurrence requires the
+ * literal reference and exactly one matching grant.
  *
- * Validation first counts every occurrence, advancing one code unit after
- * each match so overlaps count. It next requires the literal reference, then
- * selects same-reference grants whose complete offset ranges are contained by
- * the unique citation. Each failure reports `SecretGrantUsageDetails` for the
- * supplied step.
+ * Two or more occurrences resolve only when every occurrence brackets exactly
+ * one matching-reference grant. `citation-not-unique` covers an occurrence
+ * with no matching grant, an occurrence with multiple matching grants, and
+ * multiple occurrences that resolve to the grant sharing an `offsetStart`.
+ * Candidates follow document order. Offset identity keeps byte-identical grant
+ * lines as separate authorization occurrences.
+ *
+ * The multi-occurrence branch omits the single-occurrence
+ * `citation.includes(ref)` check because a contained matching grant already
+ * proves that the occurrence contains its reference. A failed per-occurrence
+ * match therefore captures an absent reference structurally.
  *
  * @param citation - The schema-validated non-empty provider excerpt.
  * @param ref - The literal secret reference that the excerpt must contain.
  * @param stepId - The secret-using step retained in a failure's diagnostics.
  * @param testMd - Canonical prompt in which the excerpt is resolved.
  * @param grants - Locally extracted grants in the same prompt.
- * @returns The unique prompt grant the citation authorizes.
- * @throws {SecretGrantUnattributableError} When the citation cannot authorize
- * exactly one grant for this reference.
+ * @returns Candidate prompt grants in document order for `claim` to consume.
+ * @throws {SecretGrantUnattributableError} When no citation occurs, a single
+ * occurrence cannot authorize exactly one matching grant, or multiple
+ * occurrences do not each identify distinct matching grants.
  * @remarks
  * The step identifier enters at this low level so all citation failures name
  * the actual use that needs correction rather than an arbitrary caller.
@@ -313,9 +327,8 @@ function resolveCitation(
   stepId: string,
   testMd: NormalizedTestMd,
   grants: readonly SecretGrant[],
-): SecretGrant {
-  let firstOffset = -1;
-  let occurrences = 0;
+): readonly SecretGrant[] {
+  const occurrences: number[] = [];
 
   for (let fromIndex = 0; ; ) {
     const offset = testMd.indexOf(citation, fromIndex);
@@ -323,34 +336,51 @@ function resolveCitation(
       break;
     }
 
-    if (occurrences === 0) {
-      firstOffset = offset;
-    }
-    occurrences += 1;
-    if (occurrences === 2) {
-      throwSecretGrantUsageError('citation-not-unique', ref, stepId);
-    }
+    occurrences.push(offset);
     fromIndex = offset + 1;
   }
 
-  if (occurrences === 0) {
+  if (occurrences.length === 0) {
     throwSecretGrantUsageError('citation-not-found', ref, stepId);
   }
-  if (!citation.includes(ref)) {
-    throwSecretGrantUsageError('citation-missing-ref', ref, stepId);
+
+  if (occurrences.length === 1) {
+    if (!citation.includes(ref)) {
+      throwSecretGrantUsageError('citation-missing-ref', ref, stepId);
+    }
+
+    const [offset] = occurrences;
+    const citationEnd = offset! + citation.length;
+    const matchingGrants = grants.filter((grant) => (
+      grant.ref === ref
+      && grant.offsetStart >= offset!
+      && grant.offsetEnd <= citationEnd
+    ));
+    if (matchingGrants.length !== 1) {
+      throwSecretGrantUsageError('citation-unresolved', ref, stepId);
+    }
+
+    return matchingGrants;
   }
 
-  const citationEnd = firstOffset + citation.length;
-  const matchingGrants = grants.filter((grant) => (
-    grant.ref === ref
-    && grant.offsetStart >= firstOffset
-    && grant.offsetEnd <= citationEnd
-  ));
-  if (matchingGrants.length !== 1) {
-    throwSecretGrantUsageError('citation-unresolved', ref, stepId);
+  const candidates = occurrences.map((offset) => {
+    const citationEnd = offset + citation.length;
+    const matchingGrants = grants.filter((grant) => (
+      grant.ref === ref
+      && grant.offsetStart >= offset
+      && grant.offsetEnd <= citationEnd
+    ));
+    if (matchingGrants.length !== 1) {
+      throwSecretGrantUsageError('citation-not-unique', ref, stepId);
+    }
+
+    return matchingGrants[0]!;
+  });
+  if (new Set(candidates.map((candidate) => candidate.offsetStart)).size !== candidates.length) {
+    throwSecretGrantUsageError('citation-not-unique', ref, stepId);
   }
 
-  return matchingGrants[0]!;
+  return candidates;
 }
 
 /**

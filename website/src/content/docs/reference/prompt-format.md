@@ -26,6 +26,8 @@ Before extraction, test prompt sources undergo strict normalization:
 
 Grant extraction receives normalized Markdown and returns grants in source order. A candidate line is excluded when its physical source range overlaps a CommonMark fenced-code, indented-code, or inline-code node. Each returned grant preserves raw line text, zero-based UTF-16 start/exclusive-end offsets, and one-based physical line numbers.
 
+When an identical citation occurs two or more times, attribution resolves its occurrences in document order only when every occurrence uniquely brackets a distinct matching grant; otherwise it fails with `citation-not-unique`.
+
 Grant lines matching the `@ambercast-secret` pragma are evaluated using the following regular expression construction:
 
 ```ts

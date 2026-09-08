@@ -9,8 +9,8 @@ const GENERATOR_SECRET_POLICY_FILE = fileURLToPath(new URL('../../../../src/usec
 
 // Producer-bundle revisions can advance independently of this policy file's bytes because instruction-coverage semantics also reside in prompt-layer inputs such as the generator template.
 const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 2, sourceSha256: '48c3c3b1c35bc66f16bf6535e93dd5a76de94634514f7b719f94126687f13de6' } as const;
-// The source hash covers diagnostic step-identity plumbing in the thrown error; that plumbing leaves citation and grant acceptance decisions—and therefore policy semantics—unchanged, so the semantic revision remains unchanged.
-const GENERATOR_SECRET_POLICY_PIN = { revision: 3, sourceSha256: '1f2735b465309d4014a46c2b05ec55d5ea2186430288305f002d91cf13770587' } as const;
+// The source hash covers the offset-ordered candidate-list resolution and diagnostic step-identity plumbing merged into this file from two parallel changes; policy semantics changed, so the semantic revision advanced.
+const GENERATOR_SECRET_POLICY_PIN = { revision: 4, sourceSha256: '489913227591435a9edb43f401f29600ca3c1f0a2e38b8e8b186ec14f322e3cd' } as const;
 
 async function sha256File(fileName: string): Promise<string> {
   return createHash('sha256').update(await readFile(fileName)).digest('hex');

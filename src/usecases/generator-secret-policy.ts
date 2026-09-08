@@ -30,11 +30,15 @@ import {
   SecretGrantUnattributableError,
 } from '#core/errors/secret-grant-unattributable-error.js';
 
-export type SecretDetector =
+/** Names credential-shaped literal detectors returned by the shared classifier; deliberately excludes walk-only structural detection. */
+export type CredentialShapeDetector =
   | 'credential-prefix-sk'
   | 'credential-prefix-ghp'
   | 'credential-prefix-aws-access-key'
   | 'high-entropy-token';
+
+/** Names every detector the JSON walk can report, including an embedded secret reference that the shared classifier deliberately does not return. */
+export type WalkSecretDetector = CredentialShapeDetector | 'embedded-secret-reference';
 
 /**
  * Identifies one committed secret-use claim without deciding whether it is
@@ -468,8 +472,22 @@ function throwSecretGrantUncoveredError(grant: SecretGrant): never {
   );
 }
 
+/**
+ * Provides the token-shape gate that {@link hasHighEntropy} requires before
+ * it evaluates entropy.
+ *
+ * Requiring the length threshold and a restricted token charset prevents
+ * natural-language sentences and URLs from becoming false positives through
+ * character variety alone, as reported in issue #301. Symbols such as
+ * `!@#$%^&` are deliberately outside that token shape rather than a known
+ * limitation.
+ */
+function isTokenShaped(value: string): boolean {
+  return value.length >= 32 && /^[A-Za-z0-9+/=_.-]+$/.test(value);
+}
+
 function hasHighEntropy(value: string): boolean {
-  if (value.length < 32) {
+  if (!isTokenShaped(value)) {
     return false;
   }
 
@@ -499,7 +517,7 @@ function hasHighEntropy(value: string): boolean {
  * @returns The matched detector identifier, or `undefined` when no detector
  * matches.
  */
-export function detectSecretLiteral(value: string): SecretDetector | undefined {
+export function detectSecretLiteral(value: string): CredentialShapeDetector | undefined {
   if (value.startsWith('sk-')) {
     return 'credential-prefix-sk';
   }
@@ -526,32 +544,58 @@ export function detectSecretLiteral(value: string): SecretDetector | undefined {
  * @remarks
  * The policy visits every string and object key in the provider-derived JSON
  * graph, including unconstrained `generatorMeta` and reportable ambiguities,
- * using lexical object-key order and array-index order. It rejects the first
- * match from this fixed detector set:
+ * using lexical object-key order and array-index order. The walk rejects the
+ * first match identified by the shared classifier's four detector set:
  * `credential-prefix-sk` for strings beginning `sk-`,
  * `credential-prefix-ghp` for strings beginning `ghp_`,
  * `credential-prefix-aws-access-key` for strings beginning `AKIA`, and
- * `high-entropy-token` for an otherwise-unconstrained token of at least 32
- * characters whose Shannon entropy is at least 4.0 bits per character.
+ * `high-entropy-token` for an otherwise-unconstrained token that has at least
+ * 32 UTF-16 code units, contains no whitespace and only
+ * `[A-Za-z0-9+/=_.-]`, and whose Shannon entropy is at least 4.0 bits per
+ * character.
  *
- * A valid whole-value `{{secrets.*}}` reference is exempt because it is the
- * permitted representation, while an embedded reference remains ordinary text
- * for detection. `source.inputsDigest` is exempt by this exact field path
- * because the locally computed SHA-256 digest otherwise resembles high-entropy
- * data. Rejection details contain only the named detector and a dot/bracket
- * JSON-path-like location such as `generatorMeta.apiKeys[0]`; a detected
- * object key uses the fixed `[redacted-key]` segment instead of its value.
- * Diagnostics never retain the rejected literal itself.
+ * A valid whole-value `{{secrets.*}}` reference is exempt whether the string
+ * under examination is a value or an object key. Every other qualifying string
+ * value or object key containing `{{secrets.` is rejected as
+ * `embedded-secret-reference` before `detectSecretLiteral` is called. Its
+ * trigger condition is unconditional, and its reported label is part of the
+ * rejection diagnostic contract, so this ordering is not cosmetic.
+ *
+ * `source.inputsDigest` is exempt by this exact field path because the locally
+ * computed SHA-256 digest otherwise resembles high-entropy data. Rejection
+ * details contain only the named detector and a dot/bracket JSON-path-like
+ * location such as `generatorMeta.apiKeys[0]`; a detected object key uses the
+ * fixed `[redacted-key]` segment instead of its value. Diagnostics never retain
+ * the rejected literal itself.
+ *
+ * The walk exempts only `high-entropy-token` at
+ * `steps[<index>].url`, `steps[<index>].pattern`, and
+ * `targets[<any single key>].baseUrl`; prefix and embedded detectors continue
+ * to apply there. Only a value walk whose raw segment array is
+ * exactly `['steps', <number>, 'url']`, `['steps', <number>, 'pattern']`, or
+ * `['targets', <string>, 'baseUrl']` is exempt, and only when the matched
+ * detector is `high-entropy-token`; every other segment sequence, including
+ * any key walk and any array-root walk, is not exempt. A URL-shaped value can
+ * coincidentally satisfy the token charset without being a credential. The
+ * exemption compares a parallel array of raw path segments rather than the
+ * rendered dot/bracket path so a `targets` key containing a literal `.` or `[`
+ * cannot be confused with a deeper or shallower path by string matching.
  */
 export function assertNoLiteralSecrets(value: unknown): void {
-  const visit = (nextValue: unknown, path: string): void => {
+  const visit = (
+    nextValue: unknown,
+    path: string,
+    segments: readonly (string | number)[],
+  ): void => {
     if (typeof nextValue === 'string') {
       if (path === 'source.inputsDigest' || SecretRef.safeParse(nextValue).success) {
         return;
       }
 
-      const detector = detectSecretLiteral(nextValue);
-      if (detector !== undefined) {
+      const detector: WalkSecretDetector | undefined = nextValue.includes('{{secrets.')
+        ? 'embedded-secret-reference'
+        : detectSecretLiteral(nextValue);
+      if (detector !== undefined && !(detector === 'high-entropy-token' && isHighEntropyTokenExempt(segments))) {
         throw new SecretLiteralRejectedError('The generated plan contains a literal secret.', { detector, path });
       }
       return;
@@ -559,7 +603,7 @@ export function assertNoLiteralSecrets(value: unknown): void {
 
     if (Array.isArray(nextValue)) {
       nextValue.forEach((item, index) => {
-        visit(item, `${path}[${index}]`);
+        visit(item, `${path}[${index}]`, [...segments, index]);
       });
       return;
     }
@@ -567,7 +611,11 @@ export function assertNoLiteralSecrets(value: unknown): void {
     if (nextValue !== null && typeof nextValue === 'object') {
       const record = nextValue as Record<string, unknown>;
       for (const key of Object.keys(record).sort()) {
-        const detector = detectSecretLiteral(key);
+        const detector: WalkSecretDetector | undefined = SecretRef.safeParse(key).success
+          ? undefined
+          : key.includes('{{secrets.')
+            ? 'embedded-secret-reference'
+            : detectSecretLiteral(key);
         const childPath = detector === undefined
           ? (path === '' ? key : `${path}.${key}`)
           : `${path}${REDACTED_KEY_PATH_SEGMENT}`;
@@ -576,10 +624,22 @@ export function assertNoLiteralSecrets(value: unknown): void {
           throw new SecretLiteralRejectedError('The generated plan contains a literal secret.', { detector, path: childPath });
         }
 
-        visit(record[key], childPath);
+        visit(record[key], childPath, [...segments, key]);
       }
     }
   };
 
-  visit(value, '');
+  visit(value, '', []);
+}
+
+function isHighEntropyTokenExempt(segments: readonly (string | number)[]): boolean {
+  if (segments.length !== 3) {
+    return false;
+  }
+
+  const [root, middle, leaf] = segments;
+  if (root === 'steps' && typeof middle === 'number') {
+    return leaf === 'url' || leaf === 'pattern';
+  }
+  return root === 'targets' && typeof middle === 'string' && leaf === 'baseUrl';
 }

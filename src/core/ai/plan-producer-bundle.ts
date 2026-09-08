@@ -28,7 +28,7 @@ import {
  */
 export const PLAN_PRODUCER_SEMANTIC_REVISIONS = Object.freeze({
   instructionCoveragePolicy: 1,
-  generatorSecretPolicy: 2,
+  generatorSecretPolicy: 3,
 } as const);
 
 /**

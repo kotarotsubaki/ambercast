@@ -436,7 +436,9 @@ function formatSet(values) {
 }
 
 function compareViolations(left, right) {
-  return left.check.localeCompare(right.check) || left.page.localeCompare(right.page) || left.rule.localeCompare(right.rule);
+  return (left.check > right.check) - (left.check < right.check)
+    || (left.page > right.page) - (left.page < right.page)
+    || (left.rule > right.rule) - (left.rule < right.rule);
 }
 
 /**

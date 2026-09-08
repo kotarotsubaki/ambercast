@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CLI_MANIFEST, renderUsage } from '../../../src/core/cli/manifest.js';
 
@@ -143,8 +144,8 @@ describe('official ambercast skill', () => {
 
     try {
       const environment = { ...process.env, npm_config_cache: npmCache };
-      const verification = spawnSync(process.execPath, [script.pathname], {
-        cwd: ROOT.pathname,
+      const verification = spawnSync(process.execPath, [fileURLToPath(script)], {
+        cwd: fileURLToPath(ROOT),
         encoding: 'utf8',
         env: environment,
       });

@@ -4,6 +4,9 @@
 // bundled official skill, and that the CLI shim retains its executable bit.
 import { execFileSync } from 'node:child_process';
 
+// The skill entry remains last because SPEC-1 treats that ordering as part of
+// the published skill contract. Configuration defaults remain absent because
+// they are internal-only artifacts that package exports never publish.
 const REQUIRED_FILES = [
   'dist/index.js',
   'dist/index.d.ts',
@@ -12,6 +15,9 @@ const REQUIRED_FILES = [
   'dist/schema/plan.schema.json',
   'dist/schema/grounding.schema.json',
   'dist/schema/config.schema.json',
+  'dist/schema/report.schema.json',
+  'dist/manifest/cli.json',
+  'dist/manifest/capabilities.json',
   'skills/ambercast/SKILL.md',
 ];
 const EXECUTABLE_FILES = ['bin/ambercast.js'];

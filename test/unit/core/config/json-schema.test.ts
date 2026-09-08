@@ -22,6 +22,14 @@ describe('config JSON Schema document', () => {
     expect(second).not.toBe(first);
   });
 
+  it('publishes the exact config schema metadata', () => {
+    const schema = getConfigJsonSchema();
+
+    expect(schema.$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json');
+    expect(schema.title).toBe('ambercast config schema');
+    expect(schema.description).toBe('Validates the parsed contents of a present Ambercast configuration file.');
+  });
+
   it.each([
     ['a minimal present config file', { $schema: CONFIG_SCHEMA_URL }, true],
     ['a document missing its required $schema', {}, false],

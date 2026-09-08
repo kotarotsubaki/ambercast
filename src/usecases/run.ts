@@ -79,7 +79,7 @@ import { z } from 'zod';
 import {
   assertCommittedSecretAttributionSound,
   detectSecretLiteral,
-  type SecretDetector,
+  type CredentialShapeDetector,
 } from './generator-secret-policy.js';
 import type {
   CoveredTraceRecord,
@@ -1379,7 +1379,8 @@ function stripCapturedRunValues(value: string, runState: ReadonlyMap<RunVariable
  * reclassified. Its diagnostic identifies the matching detector, never the
  * literal. Fill values need no secret-reference exemption because their schema
  * rejects every `{{secrets.` substring before either runtime boundary reaches
- * this guard.
+ * this guard. The token-shape gate in the shared classifier also governs
+ * residue classification without a separate run-side branch.
  *
  * @param value - The single parsed fill value to classify.
  * @param runState - Values captured from the current case.
@@ -1387,7 +1388,7 @@ function stripCapturedRunValues(value: string, runState: ReadonlyMap<RunVariable
  * high-entropy-token residue remains classified after captured values are removed.
  */
 function assertNoCredentialShapedFillValue(value: string, runState: ReadonlyMap<RunVariableName, string>): void {
-  const detector: SecretDetector | undefined = detectSecretLiteral(value);
+  const detector: CredentialShapeDetector | undefined = detectSecretLiteral(value);
   if (detector === undefined) {
     return;
   }

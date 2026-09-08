@@ -88,6 +88,33 @@ describe('IR JSON Schema documents', () => {
     expect(() => new Ajv2020({ strict: true }).compile(schema)).not.toThrow();
   });
 
+  it.each([
+    [
+      'plan',
+      getPlanJsonSchema,
+      {
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json',
+        title: 'ambercast plan schema v2',
+        description: 'Validates the complete generated plan document that is reviewed and committed beside its source test prompt.',
+      },
+    ],
+    [
+      'grounding',
+      getGroundingJsonSchema,
+      {
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json',
+        title: 'ambercast grounding schema v1',
+        description: 'Validates the committed grounding cache associated with one plan digest.',
+      },
+    ],
+  ] as const)('publishes the exact %s schema metadata', (_document, getSchema, metadata) => {
+    const schema = getSchema();
+
+    expect(schema.$id).toBe(metadata.$id);
+    expect(schema.title).toBe(metadata.title);
+    expect(schema.description).toBe(metadata.description);
+  });
+
   it('publishes Plan v2 instruction coverage and additive Grounding-v1 trace coverage', () => {
     const planV2 = {
       schemaVersion: 2,

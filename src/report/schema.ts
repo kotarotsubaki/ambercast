@@ -1,12 +1,5 @@
 import { z } from 'zod';
 
-import {
-  SecretRef,
-  SourceSpan,
-  StepId as IrStepId,
-} from '#core/ir/schema.js';
-import type { InstructionCoverageIssueCode } from '#usecases/instruction-coverage-policy.js';
-
 /*
  * Defines the versioned structured-report contract shared by CLI JSON and MCP
  * structured responses. A single exported version constant pins every command
@@ -17,6 +10,21 @@ import type { InstructionCoverageIssueCode } from '#usecases/instruction-coverag
 
 const NON_WHITESPACE_STRING_PATTERN = /\S/;
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const SECRET_REF_PATTERN = /^\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
+const STEP_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+/** Report-local equivalent of the core IR secret-reference schema, kept local because report may only import core types. */
+const SecretRef = z.string().regex(SECRET_REF_PATTERN);
+/** Report-local equivalent of the core IR step-identifier schema, kept local because report may only import core types. */
+const StepId = z.string().regex(STEP_ID_PATTERN);
+/** Report-local equivalent of the core IR source-span schema, kept local because report may only import core types. */
+const SourceSpan = z.strictObject({
+  startLine: z.int().positive(),
+  endLine: z.int().positive(),
+}).refine((span) => span.endLine >= span.startLine, {
+  message: 'endLine must be greater than or equal to startLine',
+  path: ['endLine'],
+}); // JSON Schema omits this sibling-value ordering constraint, as it does for the core schema.
 
 /** Version shared by every structured report envelope. */
 export const REPORT_SCHEMA_VERSION = '3.1' as const;
@@ -84,7 +92,8 @@ export const ReportAttempts = z.array(z.strictObject({
   code: ReportErrorCode,
 }));
 
-const INSTRUCTION_COVERAGE_ISSUE_CODES = [
+// The usecase-owned compile-time cross-check stays there because report may not import usecases.
+export const INSTRUCTION_COVERAGE_ISSUE_CODES = [
   'citation-whitespace-only', 'citation-not-found', 'citation-not-unique',
   'criterion-id-duplicate', 'criterion-range-duplicate', 'criterion-order-invalid',
   'source-span-invalid', 'source-span-whitespace-only', 'success-criterion-missing',
@@ -93,7 +102,7 @@ const INSTRUCTION_COVERAGE_ISSUE_CODES = [
   'verification-coverage-id-missing', 'verification-coverage-id-unknown',
   'verification-coverage-id-action', 'verification-coverage-index-duplicate',
   'verification-coverage-index-invalid', 'verification-assertion-repeated',
-] as const satisfies readonly InstructionCoverageIssueCode[];
+] as const;
 
 /** Keeps provider-validation causes machine-readable without serializing prose diagnostics. */
 export const AiResponseIssueCode = z.enum([
@@ -114,7 +123,7 @@ export const AiResponseIssuePath = z.array(z.union([NonNegativeInteger, z.string
 export const AiResponseIssue = z.strictObject({
   code: AiResponseIssueCode,
   path: AiResponseIssuePath,
-  stepId: IrStepId.optional(),
+  stepId: StepId.optional(),
 });
 
 /** Reserves every literal-secret detector identifier in the public closed enum. */
@@ -150,7 +159,7 @@ export const SecretLiteralRejectedDetails = z.strictObject({ detector: SecretDet
 /** Optional reason-specific attribution details without a fabricated step or source location. */
 export const SecretGrantUnattributableDetails = z.union([
   z.strictObject({ reason: z.literal('uncovered-grant'), secretRef: SecretRef, sourceSpan: SourceSpan, attempts: ReportAttempts.optional() }),
-  z.strictObject({ reason: SecretGrantUsageReasonEnum, secretRef: SecretRef, stepId: IrStepId.optional(), attempts: ReportAttempts.optional() }),
+  z.strictObject({ reason: SecretGrantUsageReasonEnum, secretRef: SecretRef, stepId: StepId.optional(), attempts: ReportAttempts.optional() }),
 ]);
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });

@@ -1,0 +1,447 @@
+{
+  "version": "0.3.1",
+  "commands": [
+    {
+      "name": "generate",
+      "summary": "Generate deterministic plans",
+      "positional": {
+        "name": "files",
+        "variadic": true,
+        "description": "literal prompts; absent selects discovery"
+      },
+      "flags": [
+        {
+          "name": "strict",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "strict generation policy",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "force",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "force generation",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "dry-run",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "preview: would-generate only when generation is needed; fresh Plan returns skipped-fresh; neither outcome writes",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "target",
+          "alias": null,
+          "value": "<name>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "select target",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "ai",
+          "alias": null,
+          "value": "<claude|codex>",
+          "hidden": false,
+          "acceptedValues": [
+            "claude",
+            "codex"
+          ],
+          "shownValue": null,
+          "effect": "provider override",
+          "default": "omitted",
+          "lineBreakAfter": true
+        },
+        {
+          "name": "allow-empty",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "allow empty selection",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "list",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "list without generation",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "JSON envelope",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "config",
+          "alias": null,
+          "value": "<path>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "explicit config",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "no-color",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "disable ANSI",
+          "default": "false",
+          "lineBreakAfter": false
+        }
+      ]
+    },
+    {
+      "name": "run",
+      "summary": "Replay deterministic plans",
+      "positional": {
+        "name": "files",
+        "variadic": true,
+        "description": "literal prompts; absent selects discovery"
+      },
+      "flags": [
+        {
+          "name": "grep",
+          "alias": null,
+          "value": "<pattern>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "RegExp path filter",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "target",
+          "alias": null,
+          "value": "<name>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "select target",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "headed",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "headed browser",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "cache-only",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "forbid AI fallback",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "update-cache",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "request cache write",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "allow-empty",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "allow empty selection",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "list",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "list without replay",
+          "default": "false",
+          "lineBreakAfter": true
+        },
+        {
+          "name": "stale",
+          "alias": null,
+          "value": "<fail|regenerate>",
+          "hidden": false,
+          "acceptedValues": [
+            "fail",
+            "regenerate"
+          ],
+          "shownValue": "<fail>",
+          "effect": "stale policy parser value",
+          "default": "fail",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "ai",
+          "alias": null,
+          "value": "<claude|codex>",
+          "hidden": false,
+          "acceptedValues": [
+            "claude",
+            "codex"
+          ],
+          "shownValue": null,
+          "effect": "fallback override",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "JSON envelope",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "no-color",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "disable ANSI",
+          "default": "false",
+          "lineBreakAfter": false
+        }
+      ]
+    },
+    {
+      "name": "check",
+      "summary": "Check plan freshness",
+      "positional": {
+        "name": "files",
+        "variadic": true,
+        "description": "literal prompts; absent selects discovery"
+      },
+      "flags": [
+        {
+          "name": "target",
+          "alias": null,
+          "value": "<name>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "select target",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "allow-empty",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "allow empty selection",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "list",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "list without inspection",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "JSON envelope",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "config",
+          "alias": null,
+          "value": "<path>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "explicit configuration",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "no-color",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "disable ANSI",
+          "default": "false",
+          "lineBreakAfter": false
+        }
+      ]
+    },
+    {
+      "name": "heal",
+      "summary": "Repair deterministic plans",
+      "positional": {
+        "name": "files",
+        "variadic": true,
+        "description": "literal prompts; absent selects discovery"
+      },
+      "flags": [
+        {
+          "name": "dry-run",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "measures repair without committing buffered Plan or Grounding changes",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "yes",
+          "alias": "y",
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "authorizes non-interactive commit",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "target",
+          "alias": null,
+          "value": "<name>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "select target",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "ai",
+          "alias": null,
+          "value": "<claude|codex>",
+          "hidden": false,
+          "acceptedValues": [
+            "claude",
+            "codex"
+          ],
+          "shownValue": null,
+          "effect": "provider override",
+          "default": "omitted",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "allow-empty",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "allow empty selection",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "list",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "list without healing",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "JSON envelope",
+          "default": "false",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "no-color",
+          "alias": null,
+          "value": null,
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "disable ANSI",
+          "default": "false",
+          "lineBreakAfter": false
+        }
+      ]
+    }
+  ],
+  "helpFooter": "Heal configuration:\n  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.\n  heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.\n"
+}

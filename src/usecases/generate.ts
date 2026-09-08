@@ -41,7 +41,7 @@ import { resolveTarget } from '#core/target/resolve.js';
 import type { AiExecutor } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { EventSink } from '#ports/system.js';
-import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#report/issue-path.js';
+import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
   assertCommittedSecretAttributionSound,
   assertNoLiteralSecrets,

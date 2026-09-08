@@ -1,0 +1,25 @@
+Usage: ambercast <command> [options]
+
+Commands:
+  generate [files...]  Generate deterministic plans
+  run [files...]       Replay deterministic plans
+  check [files...]     Check plan freshness
+  heal [files...]      Repair deterministic plans
+
+Generate options:
+  --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
+  --allow-empty  --list  --json  --config <path>  --no-color
+
+Run options:
+  --grep <pattern>  --target <name>  --headed  --cache-only  --update-cache  --allow-empty  --list
+  --stale <fail>  --ai <claude|codex>  --json  --no-color
+
+Check options:
+  --target <name>  --allow-empty  --list  --json  --config <path>  --no-color
+
+Heal options:
+  --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
+
+Heal configuration:
+  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
+  heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.

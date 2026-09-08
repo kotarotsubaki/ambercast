@@ -25,7 +25,7 @@ import type { StorageAdapter } from '#ports/storage.js';
 import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
-import { REDACTED_ISSUE_PATH_SEGMENT } from '#report/issue-path.js';
+import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';

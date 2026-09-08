@@ -1,13 +1,12 @@
 /**
- * Marks the parsed-response fields whose descendants can contain dynamic,
+ * Marks parsed-response fields whose descendants can contain dynamic,
  * provider- or configuration-authored keys.
  *
- * `generatorMeta` is a recursive `z.record(z.string(), JsonValue)` value;
- * `ambiguities` contains arbitrary `JsonValue` elements; `assertion` is an
- * arbitrary `JsonValue`; `targets` is a dynamic target-name record; and
- * `secretSinkOrigins` is a dynamic secret-reference record. Once traversal
- * enters any of these roots, no descendant string key is safe to disclose.
+ * This AI and IR concern lives in core because both the AI adapter and
+ * usecases may import core as values, the AI adapter may not import report,
+ * and no report module depends on it.
  */
+
 export const DYNAMIC_SUBTREE_ROOTS = new Set<string>([
   'generatorMeta',
   'ambiguities',

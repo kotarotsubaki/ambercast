@@ -40,6 +40,8 @@
  */
 import { runGenerateCommand } from '#runtime/generate-command.js';
 import { runCheckCommand } from '#runtime/check-command.js';
+import { CLI_MANIFEST, flagLookup, renderUsage } from '#runtime/cli-manifest.js';
+import { readDebugEnvironment } from '#runtime/debug-environment.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runRunCommand } from '#runtime/run-command.js';
 
@@ -116,7 +118,7 @@ interface ParsedHealCommand {
   readonly color: boolean;
 }
 
-const USAGE = `Usage: ambercast <command> [options]\n\nCommands:\n  generate [files...]  Generate deterministic plans\n  run [files...]       Replay deterministic plans\n  check [files...]     Check plan freshness\n  heal [files...]      Repair deterministic plans\n\nGenerate options:\n  --strict  --force  --dry-run  --target <name>  --ai <claude|codex>\n  --allow-empty  --list  --json  --config <path>  --no-color\n\nRun options:\n  --grep <pattern>  --target <name>  --headed  --cache-only  --update-cache  --allow-empty  --list\n  --stale <fail>  --ai <claude|codex>  --json  --no-color\n\nCheck options:\n  --target <name>  --allow-empty  --list  --json  --config <path>  --no-color\n\nHeal options:\n  --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color\n\nHeal configuration:\n  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.\n  heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.\n`;
+const USAGE = renderUsage(CLI_MANIFEST);
 
 /*
  * Human rendering remains command-agnostic: only known healthy states are
@@ -344,6 +346,14 @@ export function renderHumanReport(
   return `${lines.join('\n')}${lines.length === 0 ? '' : '\n'}`;
 }
 
+/**
+ * Command-local lookup precedes generic token classification across the
+ * parsers. That ordering keeps unregistered single-hyphen tokens usable as
+ * literal paths through the positional fallback while declared aliases resolve
+ * through their canonical descriptors before long-option rejection. This is a
+ * compatibility invariant that types cannot enforce.
+ *
+ */
 function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGenerateCommand | string {
   const separator = argv.indexOf('--');
   if (argv.slice(0, separator === -1 ? undefined : separator).includes('--help')) {
@@ -361,6 +371,7 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
   let json = false;
   let configPathOverride: string | undefined;
   let color = true;
+  const flags = flagLookup(CLI_MANIFEST.commands.find((command) => command.name === 'generate')!);
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
@@ -368,44 +379,50 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
       files.push(...argv.slice(index + 1));
       break;
     }
+    const flag = flags.get(argument);
+    if (flag !== undefined) {
+      if (flag.value === null) {
+        if (flag.name === 'strict') {
+          strict = true;
+        } else if (flag.name === 'force') {
+          force = true;
+        } else if (flag.name === 'dry-run') {
+          dryRun = true;
+        } else if (flag.name === 'allow-empty') {
+          allowEmpty = true;
+        } else if (flag.name === 'list') {
+          list = true;
+        } else if (flag.name === 'json') {
+          json = true;
+        } else if (flag.name === 'no-color') {
+          color = false;
+        }
+      } else {
+        const value = argv[index + 1];
+        if (value === undefined || value.startsWith('--')) {
+          return `Missing value for ${argument}.`;
+        }
+
+        index += 1;
+        if (flag.acceptedValues !== null && !flag.acceptedValues.includes(value)) {
+          return `The ${argument} value must be ${flag.acceptedValues.join(' or ')}.`;
+        }
+        if (flag.name === 'target') {
+          target = value;
+        } else if (flag.name === 'config') {
+          configPathOverride = value;
+        } else if (flag.name === 'ai') {
+          aiProviderOverride = value as 'claude' | 'codex';
+        }
+      }
+      continue;
+    }
     if (!argument.startsWith('--')) {
       files.push(argument);
       continue;
     }
 
-    if (argument === '--strict') {
-      strict = true;
-    } else if (argument === '--force') {
-      force = true;
-    } else if (argument === '--dry-run') {
-      dryRun = true;
-    } else if (argument === '--allow-empty') {
-      allowEmpty = true;
-    } else if (argument === '--list') {
-      list = true;
-    } else if (argument === '--json') {
-      json = true;
-    } else if (argument === '--no-color') {
-      color = false;
-    } else if (argument === '--target' || argument === '--ai' || argument === '--config') {
-      const value = argv[index + 1];
-      if (value === undefined || value.startsWith('--')) {
-        return `Missing value for ${argument}.`;
-      }
-
-      index += 1;
-      if (argument === '--target') {
-        target = value;
-      } else if (argument === '--config') {
-        configPathOverride = value;
-      } else if (value === 'claude' || value === 'codex') {
-        aiProviderOverride = value;
-      } else {
-        return 'The --ai value must be claude or codex.';
-      }
-    } else {
-      return `Unknown generate option: ${argument}.`;
-    }
+    return `Unknown generate option: ${argument}.`;
   }
 
   return {
@@ -429,28 +446,9 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
 }
 
 /**
- * Parses the `run [files...]` replay surface before it crosses into runtime.
- *
- * Positional files identify literal prompts; with none, runtime uses configured
- * discovery. `--grep` filters those paths, `--target` selects a configured
- * target, `--headed` requests visible browser execution, `--json` selects the
- * report rendering, and `--no-color` disables its ANSI styling. `--cache-only`
- * forces a replay miss to fail immediately instead of falling back to the AI
- * executor. `--update-cache` is the caller's explicit request to persist this
- * invocation's grounding-cache changes: it is required before an `explicit`
- * local write-back posture may write, and in CI it independently opts in
- * alongside `ci.updateGroundingCache`. `--stale` accepts `fail` and `regenerate` as enum
- * values, while runtime rejects `regenerate` as an unavailable option before
- * touching files. `--ai` retains the shared CLI provider-override syntax without
- * making replay resolve a provider.
- * `--allow-empty` makes an empty selection successful at report time, while
- * `--list` stops after deterministic selection and reports the matched paths.
- *
- * `--grep` constructs its regular expression here rather than deferring it to
- * runtime. A malformed pattern is argument-shape validation, like the
- * parser's existing eager `--ai` value check, so parsing returns plain-text
- * usage with exit 2 and no report envelope instead of creating a runtime
- * `ConfigInvalidError`.
+ * `--grep` is compiled at the CLI boundary, so malformed expressions remain
+ * argument-shape errors and use CLI usage reporting instead of becoming
+ * runtime configuration failures.
  */
 function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunCommand | string {
   const separator = argv.indexOf('--');
@@ -470,6 +468,7 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
   let stale: 'fail' | 'regenerate' = 'fail';
   let aiProviderOverride: 'claude' | 'codex' | undefined;
   let color = true;
+  const flags = flagLookup(CLI_MANIFEST.commands.find((command) => command.name === 'run')!);
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
@@ -477,53 +476,56 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
       files.push(...argv.slice(index + 1));
       break;
     }
+    const flag = flags.get(argument);
+    if (flag !== undefined) {
+      if (flag.value === null) {
+        if (flag.name === 'headed') {
+          headed = true;
+        } else if (flag.name === 'allow-empty') {
+          allowEmpty = true;
+        } else if (flag.name === 'list') {
+          list = true;
+        } else if (flag.name === 'json') {
+          json = true;
+        } else if (flag.name === 'cache-only') {
+          cacheOnly = true;
+        } else if (flag.name === 'update-cache') {
+          updateCache = true;
+        } else if (flag.name === 'no-color') {
+          color = false;
+        }
+      } else {
+        const value = argv[index + 1];
+        if (value === undefined || value.startsWith('--')) {
+          return `Missing value for ${argument}.`;
+        }
+
+        index += 1;
+        if (flag.acceptedValues !== null && !flag.acceptedValues.includes(value)) {
+          return `The ${argument} value must be ${flag.acceptedValues.join(' or ')}.`;
+        }
+        if (flag.name === 'grep') {
+          try {
+            grep = new RegExp(value);
+          } catch {
+            return 'The --grep value must be a valid regular expression.';
+          }
+        } else if (flag.name === 'target') {
+          target = value;
+        } else if (flag.name === 'stale') {
+          stale = value as 'fail' | 'regenerate';
+        } else if (flag.name === 'ai') {
+          aiProviderOverride = value as 'claude' | 'codex';
+        }
+      }
+      continue;
+    }
     if (!argument.startsWith('--')) {
       files.push(argument);
       continue;
     }
 
-    if (argument === '--headed') {
-      headed = true;
-    } else if (argument === '--allow-empty') {
-      allowEmpty = true;
-    } else if (argument === '--list') {
-      list = true;
-    } else if (argument === '--json') {
-      json = true;
-    } else if (argument === '--cache-only') {
-      cacheOnly = true;
-    } else if (argument === '--update-cache') {
-      updateCache = true;
-    } else if (argument === '--no-color') {
-      color = false;
-    } else if (argument === '--grep' || argument === '--target' || argument === '--stale' || argument === '--ai') {
-      const value = argv[index + 1];
-      if (value === undefined || value.startsWith('--')) {
-        return `Missing value for ${argument}.`;
-      }
-
-      index += 1;
-      if (argument === '--grep') {
-        try {
-          grep = new RegExp(value);
-        } catch {
-          return 'The --grep value must be a valid regular expression.';
-        }
-      } else if (argument === '--target') {
-        target = value;
-      } else if (argument === '--stale') {
-        if (value !== 'fail' && value !== 'regenerate') {
-          return 'The --stale value must be fail or regenerate.';
-        }
-        stale = value;
-      } else if (value === 'claude' || value === 'codex') {
-        aiProviderOverride = value;
-      } else {
-        return 'The --ai value must be claude or codex.';
-      }
-    } else {
-      return `Unknown run option: ${argument}.`;
-    }
+    return `Unknown run option: ${argument}.`;
   }
 
   return {
@@ -548,19 +550,8 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
 }
 
 /**
- * Parses the `check [files...]` freshness-inspection surface before it crosses
- * into runtime.
- *
- * @param argv - Arguments following the `check` command name.
- * @param signal - Command-lifetime cancellation propagated to runtime.
- * @returns Parsed check input and rendering policy, plain-text usage failure,
- * or the command-local help sentinel.
- * @remarks
- * Check exposes only options meaningful to read-only freshness inspection;
- * generation and replay controls are intentionally absent because it neither
- * creates plans nor executes them. Its option surface and bare `--` handling
- * follow the same parser contract as the other commands, keeping literal paths
- * that begin with `--` addressable.
+ * Check keeps a read-only option surface so freshness inspection cannot
+ * accidentally acquire generation or replay controls.
  */
 function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCommand | string {
   const separator = argv.indexOf('--');
@@ -575,6 +566,7 @@ function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCo
   let json = false;
   let configPathOverride: string | undefined;
   let color = true;
+  const flags = flagLookup(CLI_MANIFEST.commands.find((command) => command.name === 'check')!);
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
@@ -582,34 +574,42 @@ function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCo
       files.push(...argv.slice(index + 1));
       break;
     }
+    const flag = flags.get(argument);
+    if (flag !== undefined) {
+      if (flag.value === null) {
+        if (flag.name === 'allow-empty') {
+          allowEmpty = true;
+        } else if (flag.name === 'list') {
+          list = true;
+        } else if (flag.name === 'json') {
+          json = true;
+        } else if (flag.name === 'no-color') {
+          color = false;
+        }
+      } else {
+        const value = argv[index + 1];
+        if (value === undefined || value.startsWith('--')) {
+          return `Missing value for ${argument}.`;
+        }
+
+        index += 1;
+        if (flag.acceptedValues !== null && !flag.acceptedValues.includes(value)) {
+          return `The ${argument} value must be ${flag.acceptedValues.join(' or ')}.`;
+        }
+        if (flag.name === 'target') {
+          target = value;
+        } else if (flag.name === 'config') {
+          configPathOverride = value;
+        }
+      }
+      continue;
+    }
     if (!argument.startsWith('--')) {
       files.push(argument);
       continue;
     }
 
-    if (argument === '--allow-empty') {
-      allowEmpty = true;
-    } else if (argument === '--list') {
-      list = true;
-    } else if (argument === '--json') {
-      json = true;
-    } else if (argument === '--no-color') {
-      color = false;
-    } else if (argument === '--target' || argument === '--config') {
-      const value = argv[index + 1];
-      if (value === undefined || value.startsWith('--')) {
-        return `Missing value for ${argument}.`;
-      }
-
-      index += 1;
-      if (argument === '--target') {
-        target = value;
-      } else {
-        configPathOverride = value;
-      }
-    } else {
-      return `Unknown check option: ${argument}.`;
-    }
+    return `Unknown check option: ${argument}.`;
   }
 
   return {
@@ -643,6 +643,7 @@ function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealComm
   let list = false;
   let json = false;
   let color = true;
+  const flags = flagLookup(CLI_MANIFEST.commands.find((command) => command.name === 'heal')!);
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
@@ -650,8 +651,38 @@ function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealComm
       files.push(...argv.slice(index + 1));
       break;
     }
-    if (argument === '-y') {
-      yes = true;
+    const flag = flags.get(argument);
+    if (flag !== undefined) {
+      if (flag.value === null) {
+        if (flag.name === 'dry-run') {
+          dryRun = true;
+        } else if (flag.name === 'yes') {
+          yes = true;
+        } else if (flag.name === 'allow-empty') {
+          allowEmpty = true;
+        } else if (flag.name === 'list') {
+          list = true;
+        } else if (flag.name === 'json') {
+          json = true;
+        } else if (flag.name === 'no-color') {
+          color = false;
+        }
+      } else {
+        const value = argv[index + 1];
+        if (value === undefined || value.startsWith('--')) {
+          return `Missing value for ${argument}.`;
+        }
+
+        index += 1;
+        if (flag.acceptedValues !== null && !flag.acceptedValues.includes(value)) {
+          return `The ${argument} value must be ${flag.acceptedValues.join(' or ')}.`;
+        }
+        if (flag.name === 'target') {
+          target = value;
+        } else if (flag.name === 'ai') {
+          aiProviderOverride = value as 'claude' | 'codex';
+        }
+      }
       continue;
     }
     if (!argument.startsWith('--')) {
@@ -659,35 +690,7 @@ function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealComm
       continue;
     }
 
-    if (argument === '--dry-run') {
-      dryRun = true;
-    } else if (argument === '--yes') {
-      yes = true;
-    } else if (argument === '--allow-empty') {
-      allowEmpty = true;
-    } else if (argument === '--list') {
-      list = true;
-    } else if (argument === '--json') {
-      json = true;
-    } else if (argument === '--no-color') {
-      color = false;
-    } else if (argument === '--target' || argument === '--ai') {
-      const value = argv[index + 1];
-      if (value === undefined || value.startsWith('--')) {
-        return `Missing value for ${argument}.`;
-      }
-
-      index += 1;
-      if (argument === '--target') {
-        target = value;
-      } else if (value === 'claude' || value === 'codex') {
-        aiProviderOverride = value;
-      } else {
-        return 'The --ai value must be claude or codex.';
-      }
-    } else {
-      return `Unknown heal option: ${argument}.`;
-    }
+    return `Unknown heal option: ${argument}.`;
   }
 
   return {
@@ -793,8 +796,7 @@ export async function main(
        */
       const name = projectCauseName(error);
       stderr.write(`The ${parsed.command} command crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
-      const debug = process.env.AMBERCAST_DEBUG;
-      if (debug !== undefined && debug !== '' && debug !== '0' && debug !== 'false') {
+      if (readDebugEnvironment()) {
         try {
           const message = error !== null && typeof error === 'object' ? (error as { message?: unknown }).message : undefined;
           if (typeof message === 'string') stderr.write(`cause message: ${escapeControlChars(message)}\n`);

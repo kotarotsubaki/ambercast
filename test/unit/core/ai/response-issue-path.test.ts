@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   REDACTED_ISSUE_PATH_SEGMENT,
   redactDynamicPathSegments,
-} from '#report/issue-path.js';
+} from '#core/ai/response-issue-path.js';
 
 describe('redactDynamicPathSegments', () => {
   it('preserves a path that never enters a dynamic subtree', () => {

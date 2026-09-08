@@ -19,10 +19,17 @@ import { GroundingDocument, PlanDocument } from './schema.js';
  *
  * Each call returns a pure, unmodified value suitable for independent AJV
  * compilation; the build tool alone owns file serialization. Cross-step ID
- * uniqueness remains zod-only because JSON Schema cannot express it.
+ * uniqueness remains zod-only because JSON Schema cannot express it. The
+ * getter attaches the plan's published schema identifier, title, and
+ * description.
  */
 export function getPlanJsonSchema(): z.core.JSONSchema.BaseSchema {
-  return z.toJSONSchema(PlanDocument);
+  return {
+    ...z.toJSONSchema(PlanDocument),
+    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json',
+    title: 'ambercast plan schema v2',
+    description: 'Validates the complete generated plan document that is reviewed and committed beside its source test prompt.',
+  };
 }
 
 /**
@@ -30,8 +37,14 @@ export function getPlanJsonSchema(): z.core.JSONSchema.BaseSchema {
  * cache artifact.
  *
  * Like {@link getPlanJsonSchema}, this filesystem-free, deterministic getter
- * gives strict-AJV tests and the build tool the same derived value.
+ * gives strict-AJV tests and the build tool the same derived value. It attaches
+ * the grounding artifact's published schema identifier, title, and description.
  */
 export function getGroundingJsonSchema(): z.core.JSONSchema.BaseSchema {
-  return z.toJSONSchema(GroundingDocument);
+  return {
+    ...z.toJSONSchema(GroundingDocument),
+    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json',
+    title: 'ambercast grounding schema v1',
+    description: 'Validates the committed grounding cache associated with one plan digest.',
+  };
 }

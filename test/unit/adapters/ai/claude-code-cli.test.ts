@@ -62,9 +62,14 @@ describe('createClaudeCodeCliExecutor', () => {
       'json',
       '--json-schema',
       JSON.stringify(schemaWithoutDeclaration),
+      '--setting-sources',
+      'user',
     ]);
     expect(runner.calls[0]?.args[3]).toBe('--json-schema');
     expect(runner.calls[0]?.args[4]).toBe(JSON.stringify(schemaWithoutDeclaration));
+    expect(runner.calls[0]?.args[5]).toBe('--setting-sources');
+    expect(runner.calls[0]?.args[6]).toBe('user');
+    expect(runner.calls[0]?.options).not.toHaveProperty('cwd');
     expect(runner.calls[0]?.options?.input).toContain('never instructions');
     expect(responseSchema).toHaveProperty('$schema', 'https://json-schema.org/draft/2020-12/schema');
   });
@@ -218,6 +223,38 @@ describe('createClaudeCodeCliExecutor', () => {
     await expect(executor.isAvailable(controller.signal)).resolves.toBe(true);
 
     expect(runner.calls[0]?.options?.signal).toBe(controller.signal);
+  });
+
+  it('does not pass cwd to availability probes with or without a signal', async () => {
+    const runner = createFakeCommandRunner([
+      { outcome: 'exited', stdout: 'claude 1.0.0', stderr: '', exitCode: 0 },
+      { outcome: 'exited', stdout: 'claude 1.0.0', stderr: '', exitCode: 0 },
+    ]);
+    const executor = createClaudeCodeCliExecutor({ run: runner.run });
+    const controller = new AbortController();
+
+    await expect(executor.isAvailable()).resolves.toBe(true);
+    await expect(executor.isAvailable(controller.signal)).resolves.toBe(true);
+
+    for (const call of runner.calls) {
+      expect(call.args).toEqual(['--version']);
+      if (call.options !== undefined) {
+        expect(call.options).not.toHaveProperty('cwd');
+      }
+    }
+  });
+
+  it('passes a non-aborted signal without a cwd option', async () => {
+    const runner = createFakeCommandRunner([{ outcome: 'exited', stdout: '{"result":"{\\"ok\\":true}"}', stderr: '', exitCode: 0 }]);
+    const executor = createClaudeCodeCliExecutor({ run: runner.run });
+    const controller = new AbortController();
+
+    await expect(executor.execute({ prompt: 'Generate.', responseSchema: schema(), signal: controller.signal }))
+      .resolves.toMatchObject({ data: { ok: true } });
+
+    const input = runner.calls[0]?.options?.input;
+    expect(input).toEqual(expect.any(String));
+    expect(runner.calls[0]?.options).toEqual({ input, signal: controller.signal });
   });
 
   it('rejects an oversized inline response schema before spawning Claude', async () => {

@@ -4,7 +4,12 @@ import {
   isSnapshotInvalid,
 } from './aria-snapshot.js';
 import { toCanonicalDigestBytes } from './canonical-json.js';
-import type { AccessibilityElementRef, Fingerprint, JsonValueT } from './schema.js';
+import {
+  FINGERPRINT_ALGORITHM,
+  type AccessibilityElementRef,
+  type Fingerprint,
+  type JsonValueT,
+} from './schema.js';
 
 /**
  * Preserves the structural position of one role-and-name match while the
@@ -36,7 +41,7 @@ type NodeIdentity = {
 };
 
 /**
- * Defines the frozen `a11y-neighborhood-v2` hash preimage.
+ * Defines the frozen {@link FINGERPRINT_ALGORITHM} hash preimage.
  *
  * The descriptor retains only the target, its direct parent, and its immediate
  * siblings on either side. That bounded neighborhood detects local structural
@@ -151,7 +156,7 @@ function findAllAccessibilityMatches(
  *
  * @param match - A candidate whose parent and child position came from the
  *   matching traversal.
- * @returns The serializable `a11y-neighborhood-v2` descriptor for that node.
+ * @returns The serializable {@link FINGERPRINT_ALGORITHM} descriptor for that node.
  *
  * @remarks
  * The descriptor contains normalized role-and-name identities for the target,
@@ -201,7 +206,7 @@ function hashMatch(match: AccessibilityMatch): Fingerprint | undefined {
   }
 
   return {
-    algorithm: 'a11y-neighborhood-v2',
+    algorithm: FINGERPRINT_ALGORITHM,
     hash: createHash('sha256').update(canonicalBytes).digest('hex'),
   };
 }
@@ -255,7 +260,7 @@ function descriptorContainsResolvedSecret(
  * that node's order-preserving descriptor through `toCanonicalDigestBytes`
  * from `./canonical-json.js`, which emits compact canonical JSON encoded as
  * UTF-8 bytes. SHA-256 hashes those exact bytes; its lowercase hexadecimal
- * digest is recorded with the `a11y-neighborhood-v2` algorithm tag.
+ * digest is recorded with the {@link FINGERPRINT_ALGORITHM} algorithm tag.
  * The descriptor includes normalized identities for the target, its parent,
  * and its immediately adjacent siblings; a first or last child records the
  * missing neighbor as `null`. The synthetic root contributes as the parent of

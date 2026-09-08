@@ -4,7 +4,7 @@ import { validateAiResponse } from '#adapters/ai/shared/response-validator.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
-import { REDACTED_ISSUE_PATH_SEGMENT } from '#report/issue-path.js';
+import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
 
 function schema() {
   return typedJsonSchema(z.object({ ok: z.boolean(), count: z.int().positive() }));

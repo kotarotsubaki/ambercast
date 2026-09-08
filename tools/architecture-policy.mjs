@@ -67,9 +67,14 @@
  *   category rather than a folder element. It has no default product-layer
  *   target; a public API target, when needed, is an explicit allowance rather
  *   than a catch-all inherited permission.
- * - `build-tools` is rooted at `src/build-tools`; it may import `core` and
- *   has the separate external allowance of `node:fs`, `node:path`, and
- *   `node:url`, rather than inheriting core's external permission.
+ * - `build-tools` is rooted at `src/build-tools`; it may import `core`,
+ *   `report`, and `config`, and has the separate external allowance of
+ *   `node:fs`, `node:path`, and `node:url`, rather than inheriting core's
+ *   external permission. Its schema-artifact generator imports `report` for
+ *   the report-owned JSON Schema getter and `config` to project
+ *   `DEFAULT_RAW_CONFIG` into a published defaults artifact. Those remain
+ *   narrow, single-purpose edges; no other build tool needs either
+ *   cross-layer permission.
  * - `global-types` is the exact file `src/global.d.ts`, also classified by a
  *   file category. Its ambient `declare const` declarations have no import
  *   permissions because a global declaration file cannot contain runtime
@@ -191,7 +196,7 @@ export const LAYERS = Object.freeze({
     root: 'src/build-tools',
     path: '^src/build-tools(?:/|$)',
     element: { type: 'build-tools', pattern: 'src/build-tools', partialMatch: false },
-    mayImport: [{ layer: 'core' }],
+    mayImport: [{ layer: 'core' }, { layer: 'report' }, { layer: 'config' }],
     externalAllow: ['node:fs', 'node:path', 'node:url'],
   },
   'global-types': {

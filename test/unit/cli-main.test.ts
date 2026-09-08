@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReportEnvelope } from '#report/schema.js';
@@ -16,6 +17,8 @@ vi.mock('#runtime/heal-command.js', () => ({ runHealCommand }));
 
 import { main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
+
+const expectedUsage = readFileSync(new URL('../fixtures/cli-usage.txt', import.meta.url), 'utf8');
 
 class MemoryWritable extends Writable {
   chunks: string[] = [];
@@ -1049,5 +1052,102 @@ describe('main()', () => {
 
       expect(result.stdout).toBe(`${expectedJson}\n`);
     });
+  });
+});
+
+describe('manifest-driven CLI parser contracts', () => {
+  it.each([
+    ['top-level help', ['--help']],
+    ['top-level help adjacent to --version', ['--help', '--version']],
+    ['generate command-local help', ['generate', '--help']],
+    ['run command-local help', ['run', '--help']],
+    ['check command-local help', ['check', '--help']],
+    ['heal command-local help', ['heal', '--help']],
+  ] as const)('writes the captured usage bytes for %s', async (_description, argv) => {
+    const result = await run(argv);
+
+    expect(result.stdout).toBe(expectedUsage);
+    expect(result.stderr).toBe('');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it.each([
+    ['generate', ['generate', '--headed'], '--headed'],
+    ['generate', ['generate', '--cache-only'], '--cache-only'],
+    ['run', ['run', '--force'], '--force'],
+    ['run', ['run', '--strict'], '--strict'],
+    ['check', ['check', '--yes'], '--yes'],
+    ['heal', ['heal', '--config', 'ambercast.config.json'], '--config'],
+    ['heal', ['heal', '--headed'], '--headed'],
+  ] as const)('rejects the foreign %s option %s through that command\'s own manifest lookup', async (command, argv, flag) => {
+    const result = await run(argv);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(`Unknown ${command} option: ${flag}.\n${expectedUsage}`);
+    expect(result.exitCode).toBe(2);
+  });
+
+  it.each([
+    ['generate', runGenerateCommand, ENVELOPE],
+    ['run', runRunCommand, RUN_ENVELOPE],
+    ['check', runCheckCommand, CHECK_ENVELOPE],
+  ] as const)('preserves -y outside heal as a literal positional path for %s', async (command, runtimeCommand, envelope) => {
+    runtimeCommand.mockResolvedValue({ exitCode: 0, envelope });
+
+    await run([command, '-y']);
+
+    expect(runtimeCommand).toHaveBeenCalledWith(expect.objectContaining({ files: ['-y'] }));
+  });
+
+  it.each([
+    ['generate --ai', ['generate', '--ai', 'other'], 'The --ai value must be claude or codex.'],
+    ['run --ai', ['run', '--ai', 'other'], 'The --ai value must be claude or codex.'],
+    ['heal --ai', ['heal', '--ai', 'other'], 'The --ai value must be claude or codex.'],
+    ['run --stale', ['run', '--stale', 'other'], 'The --stale value must be fail or regenerate.'],
+  ] as const)('keeps the manifest-derived enum rejection text exact for %s', async (_description, argv, message) => {
+    const result = await run(argv);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(`${message}\n${expectedUsage}`);
+    expect(result.exitCode).toBe(2);
+  });
+});
+
+describe('manifest-driven CLI parser compatibility boundaries', () => {
+  it.each([
+    ['generate', ['generate', '--target', '--json'], '--target'],
+    ['run', ['run', '--grep', '--json'], '--grep'],
+    ['check', ['check', '--target', '--json'], '--target'],
+    ['heal', ['heal', '--target', '--json'], '--target'],
+  ] as const)('does not consume a following known flag as the missing %s value', async (command, argv, flag) => {
+    const result = await run(argv);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(`Missing value for ${flag}.\n${expectedUsage}`);
+    expect(result.exitCode).toBe(2);
+  });
+
+  it.each([
+    ['generate consumes -y as a --target value', ['generate', '--target', '-y'], runGenerateCommand, ENVELOPE, { target: '-y' }],
+    ['check keeps an unregistered single-hyphen token as a positional path', ['check', '-x'], runCheckCommand, CHECK_ENVELOPE, { files: ['-x'] }],
+    ['generate keeps the final duplicate --target value', ['generate', '--target', 'a', '--target', 'b'], runGenerateCommand, ENVELOPE, { target: 'b' }],
+    ['generate keeps --help after the separator as a literal positional path', ['generate', '--', '--help'], runGenerateCommand, ENVELOPE, { files: ['--help'] }],
+  ] as const)('preserves %s', async (_description, argv, runtimeCommand, envelope, expectedInput) => {
+    runtimeCommand.mockResolvedValue({ exitCode: 0, envelope });
+
+    const result = await run(argv);
+
+    expect(runtimeCommand).toHaveBeenCalledWith(expect.objectContaining(expectedInput));
+    expect(result.exitCode).toBe(0);
+  });
+
+  it.each([
+    ['generate', ['generate', '--target=web'], '--target=web'],
+  ] as const)('rejects unsupported combined value syntax for %s', async (command, argv, flag) => {
+    const result = await run(argv);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(`Unknown ${command} option: ${flag}.\n${expectedUsage}`);
+    expect(result.exitCode).toBe(2);
   });
 });

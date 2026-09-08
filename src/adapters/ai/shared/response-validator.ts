@@ -8,7 +8,7 @@ import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
 
 import type { TypedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
-import { redactDynamicPathSegments } from '#report/issue-path.js';
+import { redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 
 // Node ESM resolves this default export to a callable, while the package's
 // CommonJS metadata makes TypeScript's NodeNext resolver expose its namespace.

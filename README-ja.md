@@ -62,6 +62,23 @@ npx ambercast <command>
 - [CI での実行](https://kotarotsubaki.github.io/ambercast/ja/guides/ci/) — CI パイプラインでの実行手順と、CI 上で heal がブロックされる仕様
 - [設定リファレンス](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/) — `ambercast.config.json` で利用可能な全設定フィールドの一覧
 
+## 公式スキル
+
+ambercast は `skills/ambercast/SKILL.md` に [Agent Skills](https://agentskills.io) 形式のスキルを同梱しています。コーディングエージェントにプロンプトの書き方、generate / run / check / heal ループの回し方、結果の読み方を教えます。各エージェント自身のインストーラで導入してください:
+
+| エージェント | インストール |
+| --- | --- |
+| Claude Code | `/plugin marketplace add kotarotsubaki/ambercast` の後 `/plugin install ambercast@ambercast` |
+| Codex CLI | Codex の会話内で入力: `$skill-installer install https://github.com/kotarotsubaki/ambercast/tree/main/skills/ambercast` |
+| GitHub Copilot、Cursor、Gemini CLI など `gh skill` 対応エージェント | `gh skill install kotarotsubaki/ambercast ambercast --agent <agent>` |
+| 任意のエージェント（skills.sh） | `npx skills add kotarotsubaki/ambercast --skill ambercast -y` |
+
+またはインストール済みのパッケージからエージェントのスキルディレクトリへコピーしてください:
+
+```bash
+mkdir -p .claude/skills && cp -R node_modules/ambercast/skills/ambercast .claude/skills/ambercast
+```
+
 ## ステータスと制限事項
 
 ambercast は **0.x、pre-1.0** です: マイナーリリースで破壊的変更が入り得ます。現在のスコープ:

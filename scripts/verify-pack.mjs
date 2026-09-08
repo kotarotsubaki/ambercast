@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// Automated replacement for eyeballing `npm pack --dry-run` output by hand.
-// Fails the build if the packed tarball is missing the built CLI/library
-// output or if bin/ambercast.js loses its executable bit, guarding the
-// packaging regression fixed in issue #10.
+// Automated replacement for manually eyeballing `npm pack --dry-run` output.
+// Checks that the packed tarball contains the built CLI/library output and
+// bundled official skill, and that the CLI shim retains its executable bit.
 import { execFileSync } from 'node:child_process';
 
 const REQUIRED_FILES = [
@@ -13,6 +12,7 @@ const REQUIRED_FILES = [
   'dist/schema/plan.schema.json',
   'dist/schema/grounding.schema.json',
   'dist/schema/config.schema.json',
+  'skills/ambercast/SKILL.md',
 ];
 const EXECUTABLE_FILES = ['bin/ambercast.js'];
 

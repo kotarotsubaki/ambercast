@@ -81,7 +81,7 @@ STEPS = [
     ("step01_issue", "create/record the GitHub issue"),
     ("step02_branch", "create the issues/<N> branch or stack layers"),
     ("step03_plan", "write the implementation plan"),
-    ("step04_plan_review", "run the 7-perspective plan review"),
+    ("step04_plan_review", "run the 3-group plan review"),
     ("step05_plan_revised", "fold review findings into the plan"),
     ("step06_scaffold", "create empty skeletons for every planned file"),
     ("step07_docs", "write all comments/JSDoc before any logic"),

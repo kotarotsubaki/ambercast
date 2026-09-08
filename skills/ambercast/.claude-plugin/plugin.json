@@ -1,0 +1,9 @@
+{
+  "name": "ambercast",
+  "description": "Official ambercast skill: write prompt-only E2E tests and run the generate / run / check / heal loop",
+  "author": {
+    "name": "ambercast contributors"
+  },
+  "repository": "https://github.com/kotarotsubaki/ambercast",
+  "license": "MIT"
+}

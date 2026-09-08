@@ -11,10 +11,33 @@ const tree = (en: string, ja = en, zh = en) => ({
   'website/src/content/docs/ja/guide.md': ja,
   'website/src/content/docs/zh-cn/guide.md': zh,
 });
-const parity = async (files: Record<string, string>) => {
-  const fixture = createDocsFixture(files);
+const introData = {
+  cycle: {
+    nodes: [{ id: 'cycle-start' }, { id: 'cycle-end' }],
+    edges: [{ from: 'cycle-start', to: 'cycle-end', direction: 'forward' }],
+  },
+  files: {
+    nodes: [{ id: 'files-start' }, { id: 'files-end' }],
+    edges: [{ from: 'files-start', to: 'files-end', direction: 'forward' }],
+  },
+  ledger: {
+    nodes: [{ id: 'ledger-start' }, { id: 'ledger-end' }],
+    edges: [{ from: 'ledger-start', to: 'ledger-end', direction: 'forward' }],
+  },
+};
+const introTree = (en = introData, ja = en, zh = en) => ({
+  'website/src/data/intro/en.json': `${JSON.stringify(en)}\n`,
+  'website/src/data/intro/ja.json': `${JSON.stringify(ja)}\n`,
+  'website/src/data/intro/zh-cn.json': `${JSON.stringify(zh)}\n`,
+});
+const parity = async (files: Record<string, string>, dataFiles = introTree()) => {
+  const fixture = createDocsFixture({ ...dataFiles, ...files });
   fixtures.push(fixture);
-  return checkParity({ docsRoot: `${fixture.website}/src/content/docs`, specRoot: `${fixture.root}/docs/spec` });
+  return checkParity({
+    docsRoot: `${fixture.website}/src/content/docs`,
+    specRoot: `${fixture.root}/docs/spec`,
+    dataRoot: `${fixture.website}/src/data/intro`,
+  });
 };
 
 describe('checkParity', () => {
@@ -126,6 +149,142 @@ describe('checkParity', () => {
       { locale: 'ja', page: 'spec/overview', rule: 'spec-table-rows', expected: '1\n1', actual: '2\n0' },
     ]);
   });
+
+  it('accepts matching introduction JSON structures via dataRoot', async () => {
+    expect(await parity(tree(page('# Guide')))).toEqual([]);
+  });
+
+  it('reports a locale missing an introduction node id', async () => {
+    const ja = {
+      ...introData,
+      cycle: { ...introData.cycle, nodes: [introData.cycle.nodes[0]] },
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/intro/cycle', rule: 'intro-json-nodes' }),
+    ]);
+  });
+
+  it('reports a locale with an extra introduction node id', async () => {
+    const ja = {
+      ...introData,
+      cycle: {
+        ...introData.cycle,
+        nodes: [...introData.cycle.nodes, { id: 'cycle-extra' }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/intro/cycle', rule: 'intro-json-nodes' }),
+    ]);
+  });
+
+  it('reports a locale with a flipped introduction edge direction', async () => {
+    const zh = {
+      ...introData,
+      cycle: {
+        ...introData.cycle,
+        edges: [{ ...introData.cycle.edges[0], direction: 'bidirectional' }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(introData, introData, zh))).toEqual([
+      expect.objectContaining({ locale: 'zh-cn', page: 'data/intro/cycle', rule: 'intro-json-edges' }),
+    ]);
+  });
+
+  it('reports a locale with an extra introduction edge triple', async () => {
+    const zh = {
+      ...introData,
+      cycle: {
+        ...introData.cycle,
+        edges: [
+          ...introData.cycle.edges,
+          { from: 'cycle-end', to: 'cycle-start', direction: 'forward' },
+        ],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(introData, introData, zh))).toEqual([
+      expect.objectContaining({ locale: 'zh-cn', page: 'data/intro/cycle', rule: 'intro-json-edges' }),
+    ]);
+  });
+
+  it('reports a missing localized introduction JSON file', async () => {
+    const dataFiles = introTree();
+    delete dataFiles['website/src/data/intro/ja.json'];
+
+    expect(await parity(tree(page('# Guide')), dataFiles)).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/intro/ja', rule: 'intro-json-read' }),
+    ]);
+  });
+
+  it('reports an extra or renamed introduction figure key', async () => {
+    const ja = {
+      cycle: introData.cycle,
+      documents: introData.files,
+      ledger: introData.ledger,
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/intro/files', rule: 'intro-json-keys' }),
+    ]);
+  });
+
+  it('reports a locale with an extra introduction figure key', async () => {
+    const ja = {
+      ...introData,
+      extra: introData.files,
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/intro/extra', rule: 'intro-json-keys' }),
+    ]);
+  });
+
+  it('reports a malformed localized introduction JSON file without affecting the other locale', async () => {
+    const ja = {
+      ...introData,
+      files: { ...introData.files, edges: 'not an array' },
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/intro/ja', rule: 'intro-json-shape' }),
+    ]);
+  });
+
+  it('reports an unparsable localized introduction JSON file as one shape violation', async () => {
+    const dataFiles = {
+      ...introTree(),
+      'website/src/data/intro/ja.json': '{"cycle":',
+    };
+
+    expect(await parity(tree(page('# Guide')), dataFiles)).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/intro/ja', rule: 'intro-json-shape' }),
+    ]);
+  });
+
+  it('reports only an English baseline shape violation when its introduction JSON is malformed', async () => {
+    const en = {
+      ...introData,
+      ledger: null,
+    };
+
+    expect(await parity(tree(page('# Guide')), introTree(en, introData, introData))).toEqual([
+      expect.objectContaining({ locale: 'en', page: 'data/intro/en', rule: 'intro-json-shape' }),
+    ]);
+  });
+
+  it('reports only an English baseline shape violation when its introduction JSON is unparsable', async () => {
+    const dataFiles = {
+      ...introTree(),
+      'website/src/data/intro/en.json': '{"cycle":',
+    };
+
+    expect(await parity(tree(page('# Guide')), dataFiles)).toEqual([
+      expect.objectContaining({ locale: 'en', page: 'data/intro/en', rule: 'intro-json-shape' }),
+    ]);
+  });
 });
 
 describe('check-parity CLI entry point', () => {
@@ -133,6 +292,7 @@ describe('check-parity CLI entry point', () => {
     const matchingPage = page('## Same {#same}\n\n```txt\nshared\n```\n\n| Code | Meaning |\n| --- | --- |\n| `E_ONE` | one |');
     const matchingSpec = '## Same {#same}\n\n```txt\nshared\n```\n\n| A | B |\n| --- | --- |\n| one | two |\n';
     const fixture = createDocsFixture({
+      ...introTree(),
       ...tree(matchingPage),
       'docs/spec/overview.md': matchingSpec,
       'website/src/content/docs/ja/spec/overview.md': matchingSpec,
@@ -149,6 +309,7 @@ describe('check-parity CLI entry point', () => {
 
   it('prints every violation, exits non-zero, and does not modify its failing input tree', () => {
     const fixture = createDocsFixture({
+      ...introTree(),
       ...tree(page('## First {#first}'), page('## Second {#second}')),
       'website/src/content/docs/zh-cn/extra.md': page('# Extra'),
     });

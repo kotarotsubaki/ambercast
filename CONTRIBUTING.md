@@ -4,16 +4,20 @@ Thanks for your interest in ambercast!
 
 ## Current state
 
-ambercast is published on npm (0.x, pre-1.0). The CLI (`generate`, `run`, `check`, `heal`) is functional, but breaking changes can still land in a minor release. Contributions to code, tests, docs (README in three locales, the docs site under `website/`), and toolchain are all welcome. Please open an issue before large changes.
+ambercast is published on npm (v0.3.1, pre-1.0). The CLI (`generate`, `run`, `check`, `heal`) is functional, but breaking changes can still land in a minor release. Contributions to code, tests, docs (README in three locales, the docs site under `website/`), and toolchain are all welcome. Please open an issue before large changes.
 
 ## Development
 
-Requires Node.js >= 22.14, then run `npm ci`.
+Requires Node.js >= 22.14.
 
-- `npm run build` — compile `src/` to `dist/` (tsdown) and regenerate the config schema
+- `npm run build` — compile `src/` to `dist/` (tsdown) and regenerate the schemas and CLI/capabilities manifests
 - `npm test` — build then run the Vitest suite
 - `npm run typecheck` / `npm run lint`
-- `cd website && npm ci && npm run build` — build the docs site (Astro/Starlight); `npm run dev` there for a local preview
+- Docs site (Astro/Starlight): the website build reads the generated schemas and the CLI/capabilities manifests that the root build writes to `dist/`, so build the root package first, then the site:
+  1. `npm ci && npm run build`
+  2. `cd website && npm ci && npm run build`
+
+  Run `npm run dev` in `website/` for a local preview.
 
 ## How to contribute
 
@@ -37,5 +41,6 @@ run in CI.
 
 ## Security
 
-See [SECURITY.md](SECURITY.md) — please do not report vulnerabilities in
-public issues.
+Report vulnerabilities privately via GitHub Security Advisories rather than
+public issues — see [SECURITY.md](SECURITY.md) for the submission link and
+what to include.

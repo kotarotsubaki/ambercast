@@ -82,6 +82,13 @@ const SCREENSHOTS = [
   { name: 'guide-zh-cn-dark', path: '/zh-cn/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
   { name: 'reference-390-dark', path: '/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
   { name: 'introduction-ja-1440-dark', path: '/ja/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-ja-1440-light', path: '/ja/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'introduction-ja-390-dark', path: '/ja/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'introduction-ja-390-light', path: '/ja/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'introduction-zh-cn-1440-dark', path: '/zh-cn/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-zh-cn-1440-light', path: '/zh-cn/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'introduction-zh-cn-390-dark', path: '/zh-cn/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'introduction-zh-cn-390-light', path: '/zh-cn/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
   { name: 'introduction-ja-2000-dark', path: '/ja/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
   { name: 'guide-ja-1440-light', path: '/ja/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
   { name: 'guide-ja-390-dark', path: '/ja/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
@@ -95,6 +102,9 @@ const SCREENSHOTS = [
   { name: 'reference-ja-390-light', path: '/ja/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
   { name: 'reference-390-light', path: '/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
   { name: 'introduction-en-1440-dark', path: '/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-en-1440-light', path: '/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'introduction-en-390-dark', path: '/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'introduction-en-390-light', path: '/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
   { name: 'introduction-en-2000-dark', path: '/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
   { name: 'introduction-en-1151-dark', path: '/introduction/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
   { name: 'introduction-en-1152-dark', path: '/introduction/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
@@ -1427,6 +1437,53 @@ async function assertIssue295DocumentationContracts(browser) {
   }
 }
 
+async function assertIssue297IntroFigures(browser) {
+  const figureKeys = ['cycle', 'files', 'ledger'];
+  const locales = [
+    { path: '/introduction/', dataFile: 'en' },
+    { path: '/ja/introduction/', dataFile: 'ja' },
+    { path: '/zh-cn/introduction/', dataFile: 'zh-cn' },
+  ];
+
+  for (const locale of locales) {
+    const introData = JSON.parse(readFileSync(new URL(`../../src/data/intro/${locale.dataFile}.json`, import.meta.url), 'utf8'));
+    const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
+    const page = await context.newPage();
+    try {
+      await page.goto(pageUrl(locale.path), { waitUntil: 'networkidle' });
+      const figures = page.locator('figure[role="img"]');
+      assert.equal(await figures.count(), 3, `${locale.path} must render exactly three introduction figures.`);
+      // This production-JSON oracle verifies DOM wiring; independent fixture unit tests own translated-content accuracy.
+      assert.deepEqual(await figures.evaluateAll((elements) => elements.map((figure) => ({
+        ariaLabel: figure.getAttribute('aria-label'),
+        introFlowAriaHidden: figure.querySelector(':scope > .intro-flow')?.getAttribute('aria-hidden'),
+      }))), [
+        { ariaLabel: introData.cycle.alt, introFlowAriaHidden: 'true' },
+        { ariaLabel: introData.files.alt, introFlowAriaHidden: 'true' },
+        { ariaLabel: introData.ledger.alt, introFlowAriaHidden: 'true' },
+      ], `${locale.path} figures must preserve JSON-backed labels and hide their flow markup.`);
+
+      for (const [index, figureKey] of figureKeys.entries()) {
+        const figcaption = figures.nth(index).locator(':scope > figcaption');
+        if (introData[figureKey].caption === null) {
+          assert.equal(await figcaption.count(), 0, `${locale.path} ${figureKey} must omit a figcaption when its JSON caption is null.`);
+          continue;
+        }
+        assert.equal(await figcaption.count(), 1, `${locale.path} ${figureKey} must render its JSON-backed figcaption as a direct figure child.`);
+        assert.equal(await figcaption.getAttribute('aria-hidden'), 'true', `${locale.path} ${figureKey} figcaption must be hidden from the accessibility tree.`);
+      }
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      const hasHorizontalOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      );
+      assert.equal(hasHorizontalOverflow, false, `${locale.path} introduction figures must not overflow horizontally at 390px.`);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function assertNoResidualWikilinks() {
   const distDirectory = resolve(WEBSITE_DIRECTORY, 'dist');
   const findHtmlFiles = async (directory) => {
@@ -1506,6 +1563,7 @@ async function main() {
     await assertCodeBlockScroll(browser);
     await assertDocumentColumnSymmetry(browser);
     await assertIssue295DocumentationContracts(browser);
+    await assertIssue297IntroFigures(browser);
     await assertNoResidualWikilinks();
     await captureBoundaryAndPhaseScreenshots(browser);
     await captureScreenshots(browser);

@@ -1,0 +1,98 @@
+---
+import IntroFigure from './IntroFigure.astro';
+import { NODE_EMPHASIS } from './emphasis.mjs';
+
+interface IntroNode {
+  id: string;
+  label: string;
+  text: string;
+}
+
+interface IntroEdge {
+  from: string;
+  to: string;
+  label: string;
+  direction: 'forward' | 'bidirectional';
+}
+
+interface Props {
+  nodes: IntroNode[];
+  edges: IntroEdge[];
+  alt: string;
+  caption: string | null;
+}
+
+const { nodes, edges, alt, caption } = Astro.props;
+
+// The full-width branch note keeps the healed return tied to artifacts rather than implying a
+// vertical edge to run. Resolving the fixed graph shape before rendering makes incomplete data
+// fail visibly instead of presenting a plausible but partial flow.
+function getNode(id: string): IntroNode {
+  const node = nodes.find((candidate) => candidate.id === id);
+  if (!node) throw new Error(`Missing cycle node: ${id}`);
+  return node;
+}
+
+function getEdge(from: string, to: string, direction: IntroEdge['direction']): IntroEdge {
+  const edge = edges.find(
+    (candidate) => candidate.from === from && candidate.to === to && candidate.direction === direction,
+  );
+  if (!edge) throw new Error(`Missing cycle edge: ${from} -> ${to} (${direction})`);
+  return edge;
+}
+
+function nodeClass(node: IntroNode): string {
+  const emphasis = NODE_EMPHASIS[node.id as keyof typeof NODE_EMPHASIS];
+  return emphasis ? `intro-node intro-node-${emphasis}` : 'intro-node';
+}
+
+const prompt = getNode('prompt');
+const generate = getNode('generate');
+const artifacts = getNode('artifacts');
+const run = getNode('run');
+const replay = getNode('replay');
+const heal = getNode('heal');
+const promptToGenerate = getEdge('prompt', 'generate', 'forward');
+const generateToArtifacts = getEdge('generate', 'artifacts', 'forward');
+const artifactsToRun = getEdge('artifacts', 'run', 'forward');
+const runToReplay = getEdge('run', 'replay', 'forward');
+const runToHeal = getEdge('run', 'heal', 'forward');
+const healToArtifacts = getEdge('heal', 'artifacts', 'forward');
+---
+
+<IntroFigure alt={alt} caption={caption}>
+  <div class="intro-cycle-flow">
+    <div class={nodeClass(prompt)} style="grid-area: prompt">
+      <strong>{prompt.label}</strong>
+      <span>{prompt.text}</span>
+    </div>
+    <div class="intro-arrow" style="grid-area: prompt-to-generate">→ {promptToGenerate.label}</div>
+    <div class={nodeClass(generate)} style="grid-area: generate">
+      <strong>{generate.label}</strong>
+      <span>{generate.text}</span>
+    </div>
+    <div class="intro-arrow" style="grid-area: generate-to-artifacts">→ {generateToArtifacts.label}</div>
+    <div class={nodeClass(artifacts)} style="grid-area: artifacts">
+      <strong>{artifacts.label}</strong>
+      <span>{artifacts.text}</span>
+    </div>
+    <div class="intro-arrow" style="grid-area: artifacts-to-run">→ {artifactsToRun.label}</div>
+    <div class={nodeClass(run)} style="grid-area: run">
+      <strong>{run.label}</strong>
+      <span>{run.text}</span>
+    </div>
+    <div class="intro-arrow" style="grid-area: run-to-replay">→ {runToReplay.label}</div>
+    <div class={nodeClass(replay)} style="grid-area: replay">
+      <strong>{replay.label}</strong>
+      <span>{replay.text}</span>
+    </div>
+    <div style="grid-area: heal-note">
+      <div class={nodeClass(heal)}>
+        <strong>{heal.label}</strong>
+        <span>{heal.text}</span>
+      </div>
+      <div class="intro-arrow">{run.label} → {heal.label} · {runToHeal.label}</div>
+      <div class="intro-arrow">{heal.label} → {artifacts.label} · {healToArtifacts.label}</div>
+    </div>
+  </div>
+</IntroFigure>

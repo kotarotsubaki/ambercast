@@ -1,0 +1,158 @@
+{
+  "cycle": {
+    "caption": null,
+    "alt": "A directed loop: a prompt becomes plan and grounding companions; run either replays them without provider resolution on a grounding hit or, after a failure, lets the user explicitly choose the separate heal command; an authorized heal updates the companions.",
+    "nodes": [
+      {
+        "id": "prompt",
+        "label": "SIGN-IN.TEST.MD · PROMPT",
+        "text": "A normalized prompt is generation input."
+      },
+      {
+        "id": "generate",
+        "label": "GENERATE · AI WHEN NEEDED",
+        "text": "Generate composes a lazy AI executor."
+      },
+      {
+        "id": "artifacts",
+        "label": "PLAN + GROUNDING",
+        "text": "Companion paths derive from a `.test.md` path."
+      },
+      {
+        "id": "run",
+        "label": "RUN · REPLAY",
+        "text": "Fully grounded replay does not require an available provider."
+      },
+      {
+        "id": "replay",
+        "label": "GROUNDING HIT · 0 AI CALLS",
+        "text": "Run resolves a provider through its fallback port."
+      },
+      {
+        "id": "heal",
+        "label": "HEAL · APPROVAL BEFORE WRITE",
+        "text": "Heal runtime owns confirmation and commit composition."
+      }
+    ],
+    "edges": [
+      {
+        "from": "prompt",
+        "to": "generate",
+        "label": "ambercast generate",
+        "direction": "forward"
+      },
+      {
+        "from": "generate",
+        "to": "artifacts",
+        "label": "write companions",
+        "direction": "forward"
+      },
+      {
+        "from": "artifacts",
+        "to": "run",
+        "label": "ambercast run",
+        "direction": "forward"
+      },
+      {
+        "from": "run",
+        "to": "replay",
+        "label": "grounding hit",
+        "direction": "forward"
+      },
+      {
+        "from": "run",
+        "to": "heal",
+        "label": "repair needed",
+        "direction": "forward"
+      },
+      {
+        "from": "heal",
+        "to": "artifacts",
+        "label": "authorized update",
+        "direction": "forward"
+      }
+    ]
+  },
+  "files": {
+    "caption": null,
+    "alt": "One authored prompt branches to two adjacent derived JSON companions: a plan and grounding.",
+    "nodes": [
+      {
+        "id": "prompt-file",
+        "label": "PROMPT · <name>.test.md",
+        "text": "Only exact terminal `.test.md` paths have companion mappings."
+      },
+      {
+        "id": "plan-file",
+        "label": "PLAN · <name>.ambercast.plan.json",
+        "text": "The plan suffix is `.ambercast.plan.json`."
+      },
+      {
+        "id": "grounding-file",
+        "label": "GROUNDING · <name>.ambercast.grounding.json",
+        "text": "The grounding suffix is `.ambercast.grounding.json`."
+      }
+    ],
+    "edges": [
+      {
+        "from": "prompt-file",
+        "to": "plan-file",
+        "label": "generate",
+        "direction": "forward"
+      },
+      {
+        "from": "prompt-file",
+        "to": "grounding-file",
+        "label": "generate",
+        "direction": "forward"
+      },
+      {
+        "from": "plan-file",
+        "to": "grounding-file",
+        "label": "paired derived artifacts",
+        "direction": "bidirectional"
+      }
+    ]
+  },
+  "ledger": {
+    "caption": null,
+    "alt": "Provider work is shown during generation, zero provider work for a fully grounded replay, and explicit confirmation around repair.",
+    "nodes": [
+      {
+        "id": "generate",
+        "label": "GENERATE · PROVIDER AS NEEDED",
+        "text": "Generation receives a lazy AI-executor resolver."
+      },
+      {
+        "id": "replay",
+        "label": "REPLAY · 0 AI CALLS WHEN GROUNDED",
+        "text": "Run resolves a provider only through its fallback port."
+      },
+      {
+        "id": "heal",
+        "label": "HEAL · EXPLICIT REPAIR",
+        "text": "Heal has separate confirmation and persistence composition."
+      }
+    ],
+    "edges": [
+      {
+        "from": "generate",
+        "to": "replay",
+        "label": "committed companions",
+        "direction": "forward"
+      },
+      {
+        "from": "replay",
+        "to": "heal",
+        "label": "repair needed",
+        "direction": "forward"
+      },
+      {
+        "from": "heal",
+        "to": "replay",
+        "label": "authorized update",
+        "direction": "forward"
+      }
+    ]
+  }
+}

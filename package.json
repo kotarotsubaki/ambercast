@@ -31,6 +31,9 @@
     "./schema/plan.json": "./dist/schema/plan.schema.json",
     "./schema/grounding.json": "./dist/schema/grounding.schema.json",
     "./schema/config.json": "./dist/schema/config.schema.json",
+    "./schema/report.json": "./dist/schema/report.schema.json",
+    "./manifest/cli.json": "./dist/manifest/cli.json",
+    "./manifest/capabilities.json": "./dist/manifest/capabilities.json",
     "./package.json": "./package.json"
   },
   "files": [

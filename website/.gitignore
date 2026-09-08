@@ -8,6 +8,12 @@ dist
 # migrate-spec-translations.mjs, so only the root copy is derived output here.
 src/content/docs/spec/*.md
 
+# sync-generated.mjs copies root build artifacts here at sync time; they are published output,
+# not website source, and are regenerated from the repository's root dist/ directory.
+public/schemas/
+public/capabilities.json
+public/manifest/
+
 # visual-and-behavior.mjs writes regenerable screenshots here on every run;
 # they are PR-attached evidence (like .runs/ elsewhere in this repo), not source.
 test/e2e/.artifacts

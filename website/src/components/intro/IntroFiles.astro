@@ -1,0 +1,69 @@
+---
+import IntroFigure from './IntroFigure.astro';
+
+interface IntroNode {
+  id: string;
+  label: string;
+  text: string;
+}
+
+interface IntroEdge {
+  from: string;
+  to: string;
+  label: string;
+  direction: 'forward' | 'bidirectional';
+}
+
+interface Props {
+  nodes: IntroNode[];
+  edges: IntroEdge[];
+  alt: string;
+  caption: string | null;
+}
+
+const { nodes, edges, alt, caption } = Astro.props;
+
+// Separate prompt connectors retain both generated-companion edges even when their labels
+// diverge. Resolving the fixed graph shape before rendering makes malformed data fail instead
+// of hiding a companion behind a shared arrow.
+function getNode(id: string): IntroNode {
+  const node = nodes.find((candidate) => candidate.id === id);
+  if (!node) throw new Error(`Missing files node: ${id}`);
+  return node;
+}
+
+function getEdge(from: string, to: string, direction: IntroEdge['direction']): IntroEdge {
+  const edge = edges.find(
+    (candidate) => candidate.from === from && candidate.to === to && candidate.direction === direction,
+  );
+  if (!edge) throw new Error(`Missing files edge: ${from} -> ${to} (${direction})`);
+  return edge;
+}
+
+const promptFile = getNode('prompt-file');
+const planFile = getNode('plan-file');
+const groundingFile = getNode('grounding-file');
+const promptToPlan = getEdge('prompt-file', 'plan-file', 'forward');
+const promptToGrounding = getEdge('prompt-file', 'grounding-file', 'forward');
+const planGrounding = getEdge('plan-file', 'grounding-file', 'bidirectional');
+---
+
+<IntroFigure alt={alt} caption={caption}>
+  <div class="intro-files-flow">
+    <div class="intro-node" style="grid-area: prompt-file">
+      <strong>{promptFile.label}</strong>
+      <span>{promptFile.text}</span>
+    </div>
+    <div class="intro-arrow" style="grid-area: prompt-to-plan">↓ {promptToPlan.label}</div>
+    <div class="intro-arrow" style="grid-area: prompt-to-grounding">↓ {promptToGrounding.label}</div>
+    <div class="intro-node" style="grid-area: plan-file">
+      <strong>{planFile.label}</strong>
+      <span>{planFile.text}</span>
+    </div>
+    <div class="intro-node" style="grid-area: grounding-file">
+      <strong>{groundingFile.label}</strong>
+      <span>{groundingFile.text}</span>
+    </div>
+    <div class="intro-arrow" style="grid-area: plan-grounding-connector">↔ {planGrounding.label}</div>
+  </div>
+</IntroFigure>

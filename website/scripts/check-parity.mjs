@@ -10,8 +10,9 @@ import { splitByCodeRegions } from './lib/wikilinks.mjs';
  * setup-prompt URL-only carve-out); `status` and sidebar badges; reference-table identifiers
  * (inline-code content only, except for two anchor-scoped identifier tables that use their full
  * first cell); and the specification chapters'
- * anchors, code blocks, and table-row counts. A violation is `{ locale, page, rule, expected,
- * actual }`, sorted by rule, page, then locale before output so runs are deterministic.
+ * anchors, code blocks, and table-row counts, plus introduction-figure JSON structure. A
+ * violation is `{ locale, page, rule, expected, actual }`, sorted by rule, page, then locale
+ * before output so runs are deterministic.
  *
  * One checker owns these related invariants because they require the same page, anchor, fence,
  * and table extraction primitives; separate checkers would duplicate boundary-sensitive parsing.
@@ -23,16 +24,38 @@ import { splitByCodeRegions } from './lib/wikilinks.mjs';
 /**
  * Collects every structural parity violation without formatting it for a terminal.
  *
+ * The comparison reads the locale trees and introduction-figure JSON selected by `options` and
+ * returns violations sorted by rule, page, then locale. Intro JSON violations use `intro-json-shape` and
+ * `intro-json-read` with `data/intro/<locale>` pages, and `intro-json-keys`,
+ * `intro-json-nodes`, and `intro-json-edges` with `data/intro/<figureKey>` pages. A malformed
+ * English baseline produces one `intro-json-shape` violation for `data/intro/en`, rather than
+ * one per locale, and ends intro JSON comparison for both localized files because neither locale
+ * has a valid baseline.
+ *
+ * @example
+ * const violations = await checkParity({ docsRoot, specRoot, dataRoot });
+ *
+ * @remarks
  * Keeping this boundary separate lets callers assert the stable structured result while the CLI
- * remains responsible only for presentation and its non-zero status. The comparison reads the
- * locale trees selected by `options` and returns violations sorted by rule, page, then locale.
+ * remains responsible only for presentation and its non-zero status. Missing localized intro JSON
+ * is an `intro-json-read` violation, while a missing English baseline is an `intro-json-shape`
+ * violation. Any other I/O failure while reading documentation or intro JSON rejects instead of
+ * becoming a violation.
  *
  * @param {object} [options] Input locations and comparison options for the documentation trees.
- * @returns {Promise<Violation[]>} Every detected violation in deterministic order.
+ * @param {string} [options.docsRoot=resolve(process.cwd(), 'src/content/docs')] Root directory
+ * for the English and localized documentation trees.
+ * @param {string} [options.specRoot=resolve(process.cwd(), '../docs/spec')] Root directory for
+ * the English specification tree.
+ * @param {string} [options.dataRoot=resolve(process.cwd(), 'src/data/intro')] Root directory for
+ * the English and localized introduction-figure JSON files.
+ * @returns {Promise<Violation[]>} Every documentation and introduction-JSON violation in
+ * deterministic order.
  */
 export async function checkParity(options = {}) {
   const docsRoot = options.docsRoot ?? resolve(process.cwd(), 'src/content/docs');
   const specRoot = options.specRoot ?? resolve(process.cwd(), '../docs/spec');
+  const dataRoot = options.dataRoot ?? resolve(process.cwd(), 'src/data/intro');
   const rootPages = await readPages(docsRoot, (page) => !page.startsWith('ja/') && !page.startsWith('zh-cn/') && !page.startsWith('spec/'));
   const violations = [];
 
@@ -66,6 +89,26 @@ export async function checkParity(options = {}) {
       compare(violations, locale, `spec/${page}`, 'spec-anchors', anchors(expected), anchors(actualMarkdown));
       compareFences(violations, locale, `spec/${page}`, fences(expected), fences(actualMarkdown), 'spec-code-blocks');
       compare(violations, locale, `spec/${page}`, 'spec-table-rows', tableRowCounts(expected).map(String), tableRowCounts(actualMarkdown).map(String));
+    }
+  }
+
+  // Shape validation prevents malformed JSON from being interpreted as structural drift. English
+  // supplies the single baseline, so no localized comparison is meaningful without it.
+  const englishIntro = await readIntroData(join(dataRoot, 'en.json'));
+  if (englishIntro.status !== 'valid') {
+    introViolation(violations, 'en', 'intro-json-shape', 'valid', 'invalid');
+  } else {
+    for (const locale of ['ja', 'zh-cn']) {
+      const localizedIntro = await readIntroData(join(dataRoot, `${locale}.json`));
+      if (localizedIntro.status === 'missing') {
+        introViolation(violations, locale, 'intro-json-read', 'present', 'absent');
+        continue;
+      }
+      if (localizedIntro.status !== 'valid') {
+        introViolation(violations, locale, 'intro-json-shape', 'valid', 'invalid');
+        continue;
+      }
+      compareIntroData(violations, locale, englishIntro.data, localizedIntro.data);
     }
   }
 
@@ -111,6 +154,81 @@ function compare(violations, locale, page, rule, expected, actual) {
   const expectedText = expected.join('\n');
   const actualText = actual.join('\n');
   if (expectedText !== actualText) violations.push({ locale, page, rule, expected: expectedText, actual: actualText });
+}
+
+async function readIntroData(path) {
+  let source;
+  try {
+    source = await readFile(path, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return { status: 'missing' };
+    throw error;
+  }
+
+  try {
+    const data = JSON.parse(source);
+    return isIntroData(data) ? { status: 'valid', data } : { status: 'invalid' };
+  } catch {
+    return { status: 'invalid' };
+  }
+}
+
+function isIntroData(data) {
+  return isPlainObject(data) && Object.values(data).every((figure) => (
+    isPlainObject(figure) && Array.isArray(figure.nodes) && Array.isArray(figure.edges)
+  ));
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function introViolation(violations, locale, rule, expected, actual) {
+  violations.push({ locale, page: `data/intro/${locale}`, rule, expected, actual });
+}
+
+function compareIntroData(violations, locale, expectedData, actualData) {
+  const expectedKeys = sortedSet(Object.keys(expectedData));
+  const actualKeys = sortedSet(Object.keys(actualData));
+  const keyDifference = firstSetDifference(expectedKeys, actualKeys);
+  if (keyDifference !== undefined) {
+    compare(violations, locale, `data/intro/${keyDifference}`, 'intro-json-keys', expectedKeys, actualKeys);
+  }
+
+  const actualKeySet = new Set(actualKeys);
+  for (const key of expectedKeys) {
+    if (!actualKeySet.has(key)) continue;
+    compare(
+      violations,
+      locale,
+      `data/intro/${key}`,
+      'intro-json-nodes',
+      sortedSet(expectedData[key].nodes.map((node) => node?.id)),
+      sortedSet(actualData[key].nodes.map((node) => node?.id)),
+    );
+    compare(
+      violations,
+      locale,
+      `data/intro/${key}`,
+      'intro-json-edges',
+      sortedSet(expectedData[key].edges.map(edgeTriple)),
+      sortedSet(actualData[key].edges.map(edgeTriple)),
+    );
+  }
+}
+
+function firstSetDifference(expected, actual) {
+  const expectedSet = new Set(expected);
+  const actualSet = new Set(actual);
+  return expected.find((value) => !actualSet.has(value)) ?? actual.find((value) => !expectedSet.has(value));
+}
+
+function sortedSet(values) {
+  return [...new Set(values)].sort();
+}
+
+function edgeTriple(edge) {
+  return `${edge?.from}|${edge?.to}|${edge?.direction}`;
 }
 
 function anchors(markdown) {

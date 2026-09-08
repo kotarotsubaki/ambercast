@@ -1,0 +1,49 @@
+---
+title: はじめに
+description: 自然言語テストプロンプトからプランとグラウンディングを生成し、プロバイダーの解決を行わないリプレイとUIドリフトに対する意図的な修復サイクルを提供するambercastの概要です。
+---
+
+import IntroCycle from '../../../components/intro/IntroCycle.astro';
+import IntroFiles from '../../../components/intro/IntroFiles.astro';
+import IntroLedger from '../../../components/intro/IntroLedger.astro';
+import introData from '../../../data/intro/ja.json';
+
+ambercastは、自然言語で記述されたテストプロンプトからプランおよびグラウンディングの成果物を生成し、グラウンディングされたリプレイやUIドリフトに対する意図的な修復を実現するプロンプトネイティブなE2Eテストツールです。プロンプトの来歴を保持し、明確に定義されたスキーマに基づいてテスト成果物を管理します。本書では、ambercastの中核となるワークフローサイクルと各成果物ファイルの構成を説明します。
+
+## ambercastが保持するもの \{#what-ambercast-preserves}
+
+ambercastでは、テストの再現性と来歴を正確に管理するため、入力と成果物の保持に関して明確な設計方針をとっています。
+
+プロンプトの正規化において変更されるのは、先頭の1つのBOMおよびCR/CRLF改行コードのみです。来歴を保持するため、それ以外のすべてのコンテンツはそのまま保持されます。
+
+また、コミットされたプランおよびグラウンディング成果物に対する実行時のオーソリティはZod IRスキーマであり、JSON SchemaはこのZod IRスキーマから導出されます。
+
+## 生成・実行・修復のサイクル \{#generate-run-heal-cycle}
+
+ambercastの中核となるのは、プロンプトの作成から日々のテスト実行、そしてUIの変更に伴う修復までを一貫して扱うワークフローサイクルです。
+
+<IntroCycle {...introData.cycle} />
+
+## 3つのファイル \{#three-files}
+
+ambercastにおけるファイル配置は、プロンプトと生成される成果物の対応関係が明確になるよう設計されています。
+
+<IntroFiles {...introData.files} />
+
+## AI呼び出しの台帳 \{#ai-call-ledger}
+
+テストの各フェーズにおいて、いつプロバイダーが関与するのかを可視化することは重要です。ambercastでは、プロバイダー呼び出しの発生を厳密に制御しています。
+
+<IntroLedger {...introData.ledger} />
+
+## 次のステップ \{#next}
+
+ambercastの全体像を把握した後は、以下のリンクからチュートリアルや詳細なリファレンスをご覧ください。
+
+リンク:
+- [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
+- [設計思想](/ambercast/ja/philosophy/)
+- [ファイルレイアウト](/ambercast/ja/reference/file-layout/)
+- [ambercast generate](/ambercast/ja/reference/cli/generate/)
+- [ambercast run](/ambercast/ja/reference/cli/run/)
+- [ambercast heal](/ambercast/ja/reference/cli/heal/)

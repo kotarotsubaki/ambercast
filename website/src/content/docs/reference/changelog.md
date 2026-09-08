@@ -54,6 +54,7 @@ Release date: 2026-09-03.
 | Feature | Heal reports gained the listed branch and `dryRun`. |
 | Feature | Report finalization became one typed boundary. |
 | Feature | Report schema 3.0 separated heal `repairOutcome` from `application`; declining a repair exits 1. |
+| Feature | Report schema 3.1 adds optional per-code error `details` and makes `hint` available for every report error. |
 | Feature | Run gained Chromium grounding-hit replay with zero AI calls. |
 | Feature | Run gained grounding-miss recovery and trace replay. |
 | Feature | Run implemented `--allow-empty` and `--list`, while `--stale=regenerate` remained intentionally unsupported. |

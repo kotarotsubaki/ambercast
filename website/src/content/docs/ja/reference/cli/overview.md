@@ -43,10 +43,10 @@ Heal configuration:
 
 | コマンド | 位置引数 | 受け付けるオプション | 設定ファイルの探索優先順位 |
 | --- | --- | --- | --- |
-| `generate` | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| `run` | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`cache-only`（キャッシュのみ）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
-| `check` | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| `heal` | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| generate | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`cache-only`（キャッシュのみ）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 
 `--` はオプション解析を終了し、後続のすべての引数をリテラルパスとして残します。
 

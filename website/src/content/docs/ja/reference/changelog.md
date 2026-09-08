@@ -56,6 +56,7 @@ ambercast の各リリースにおける、ユーザーから見える製品の�
 | Feature | Heal レポートに一覧化されたブランチと `dryRun` が追加されました。 |
 | Feature | レポートの確定処理が単一の型付き境界となりました。 |
 | Feature | レポートスキーマ 3.0 において、heal の `repairOutcome` が `application` から分離されました。修復を拒絶した場合は終了コード 1 で終了します。 |
+| Feature | レポートスキーマ 3.1 により、コードごとの任意のエラー `details` が追加され、すべてのレポートエラーで `hint` を使用できるようになりました。 |
 | Feature | `run` に Chromium での grounding ヒット時に AI 呼び出しゼロでリプレイする機能が追加されました。 |
 | Feature | `run` に grounding ミス時のリカバリおよびトレースリプレイ機能が追加されました。 |
 | Feature | `run` に `--allow-empty` と `--list` が実装され、`--stale=regenerate` は意図的に未サポートのまま維持されました。 |

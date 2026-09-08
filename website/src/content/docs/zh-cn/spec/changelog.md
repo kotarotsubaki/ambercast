@@ -11,6 +11,7 @@ description: "工件版本的接受必须（MUST）遵循 Ambercast 计划规范
 | fingerprint v1 → v2 | [CHANGELOG.md:78](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L78) | v2 是唯一被接受的标签。带有覆盖声明的当前出处文档在随后的严格/规范验证失败时，完整性必须（MUST）判定为失败；未带有该声明的伴随文档在 `run` 中可能发生缓存未命中，而 `check` grounding 检查将模式无效的内容归类为 `invalid`（公开状态依据 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences)）。[src/usecases/run.ts:498](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L498) [src/usecases/check-grounding.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L45) |
 | 生成者 bundle 指纹进入 `inputsDigest` | [CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) | 变更前生成的 Plan 必须（MUST）重新生成，因为它们已过时。[CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) |
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report 消费者必须（MUST）接受当前的 `3.0` 契约，而不是从 Plan 版本推断兼容性。[src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
+| report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report 消费者必须（MUST）接受当前的 `3.1` 契约（包括可选的结构化错误诊断），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
 
 ## 兼容性策略 {#compatibility-policy}
 

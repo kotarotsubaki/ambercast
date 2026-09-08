@@ -41,6 +41,7 @@ import { resolveTarget } from '#core/target/resolve.js';
 import type { AiExecutor } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { EventSink } from '#ports/system.js';
+import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
   assertCommittedSecretAttributionSound,
   assertNoLiteralSecrets,
@@ -511,6 +512,8 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       break;
     }
 
+    // Parsed-value traversal keeps dynamic provider data non-disclosive even
+    // where generated-schema structure cannot identify the true container.
     const parsedResponse = GeneratedPlanResponseForPolicy.safeParse(response.data);
     if (!parsedResponse.success) {
       results.push({
@@ -518,7 +521,13 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         status: 'failed',
         error: new AiResponseInvalidError(
           'The AI provider response did not match the generation contract.',
-          { raw: response.raw, issues: parsedResponse.error.issues },
+          {
+            raw: response.raw,
+            issues: parsedResponse.error.issues.map((issue) => ({
+              code: 'schema-mismatch',
+              path: redactDynamicPathSegments(response.data, issue.path),
+            })),
+          },
         ),
       });
       continue;
@@ -535,12 +544,23 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       continue;
     }
     if (!prepared.success) {
+      // Internal context retains raw provider output for diagnostics, while
+      // the public report projection excludes it and exposes only safe issue
+      // fields.
       results.push({
         file,
         status: 'failed',
         error: new AiResponseInvalidError(
           'The AI provider response contains invalid instruction coverage.',
-          { raw: response.raw, issues: prepared.issues },
+          {
+            raw: response.raw,
+            issues: prepared.issues.map((issue) => ({
+              code: issue.code,
+              path: issue.code === 'intent-id-missing'
+                ? [...issue.path.slice(0, -1), REDACTED_ISSUE_PATH_SEGMENT]
+                : issue.path,
+            })),
+          },
         ),
       });
       continue;
@@ -560,6 +580,8 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       targets: resolvedTargets,
       steps: normalizedSteps,
     };
+    // Candidate-value traversal preserves the same non-disclosure invariant
+    // for dynamic target namespaces after assembly.
     const parsedPlan = PlanDocument.safeParse(candidate);
     if (!parsedPlan.success) {
       results.push({
@@ -567,7 +589,13 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         status: 'failed',
         error: new AiResponseInvalidError(
           'The AI provider response could not form a valid plan.',
-          { raw: response.raw, issues: parsedPlan.error.issues },
+          {
+            raw: response.raw,
+            issues: parsedPlan.error.issues.map((issue) => ({
+              code: 'schema-mismatch',
+              path: redactDynamicPathSegments(candidate, issue.path),
+            })),
+          },
         ),
       });
       continue;

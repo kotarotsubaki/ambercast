@@ -8,23 +8,29 @@ import addFormatsModule, { type FormatsPlugin } from 'ajv-formats';
 
 import type { TypedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 
 // Node ESM resolves this default export to a callable, while the package's
 // CommonJS metadata makes TypeScript's NodeNext resolver expose its namespace.
 const addFormats = addFormatsModule as unknown as FormatsPlugin;
 
 /**
- * One readable location and explanation for a provider-response violation.
+ * One report-safe, normalized provider-response validation issue.
+ *
+ * The closed `code` classifies malformed JSON or a schema mismatch without
+ * carrying parser prose. `path` holds redacted field names and numeric array
+ * indices, making it safe to place in a public report.
  */
 export interface AiResponseValidationIssue {
   /**
-   * JSON Pointer-like location: invalid JSON uses `''`, while an AJV
-   * root-level schema violation uses `/`.
+   * Report-safe path segments derived from the parsed value so dynamic record
+   * keys are redacted without changing true
+   * array indices.
    */
-  readonly path: string;
+  readonly path: readonly (string | number)[];
 
-  /** Parser or JSON Schema diagnostic that explains the violation. */
-  readonly message: string;
+  /** Closed origin classification; parser prose never crosses this boundary. */
+  readonly code: 'invalid-json' | 'schema-mismatch';
 }
 
 /**
@@ -37,13 +43,15 @@ export interface AiResponseValidationIssue {
  * @throws {import('#core/errors/ai-response-invalid-error.js').AiResponseInvalidError}
  * When JSON parsing or schema validation fails.
  * @remarks
- * Validation uses an `Ajv2020` instance configured with
- * `allErrors: true`. Invalid JSON becomes one issue with `path: ''` because
- * AJV has no instance path to inspect. Schema failures become one issue per AJV
- * error. A `required` violation appends its missing property to AJV's
- * `instancePath`; all other violations render an empty `instancePath` as `/`
- * for a readable root-level location. Both paths retain raw text for callers
- * while classifying the failure identically.
+ * Validation uses an `Ajv2020` instance with `allErrors: true` and projects
+ * every failure to the closed `{ code, path }` report shape. JSON parsing
+ * yields `{ code: 'invalid-json', path: [] }`. Every AJV failure yields
+ * `code: 'schema-mismatch'`; for `required`, its missing-property suffix is
+ * appended to the JSON Pointer before conversion, with `~1` and `~0`
+ * unescaped. The pre-validation parsed `value`, not the derived schema, then
+ * travels with that pointer through `redactDynamicPathSegments`, preserving
+ * real array indices while redacting dynamic object keys. Parser and AJV
+ * messages remain internal and never become report issue fields.
  */
 export function validateAiResponse<T>(raw: string, schema: TypedJsonSchema<T>): T {
   let value: unknown;
@@ -53,7 +61,7 @@ export function validateAiResponse<T>(raw: string, schema: TypedJsonSchema<T>): 
   } catch (error) {
     throw new AiResponseInvalidError(
       'The AI provider returned malformed JSON.',
-      { raw, issues: [{ path: '', message: error instanceof Error ? error.message : String(error) }] },
+      { raw, issues: [{ code: 'invalid-json', path: [] }] },
       { cause: error },
     );
   }
@@ -65,12 +73,19 @@ export function validateAiResponse<T>(raw: string, schema: TypedJsonSchema<T>): 
     return value as T;
   }
 
-  const issues: readonly AiResponseValidationIssue[] = (validator.errors ?? []).map((error: ErrorObject) => ({
-    path: error.keyword === 'required'
-      ? `${error.instancePath}/${String(error.params.missingProperty).replace(/~/g, '~0').replace(/\//g, '~1')}`
-      : error.instancePath === '' ? '/' : error.instancePath,
-    message: error.message ?? 'JSON Schema validation failed.',
-  }));
+  const issues: readonly AiResponseValidationIssue[] = (validator.errors ?? []).map((error: ErrorObject) => {
+    const missingProperty = error.keyword === 'required' && typeof error.params.missingProperty === 'string'
+      ? error.params.missingProperty.replaceAll('~', '~0').replaceAll('/', '~1')
+      : undefined;
+    const pointer = missingProperty === undefined
+      ? error.instancePath
+      : `${error.instancePath}/${missingProperty}`;
+    const path = pointer === ''
+      ? []
+      : pointer.slice(1).split('/').map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
+
+    return { code: 'schema-mismatch', path: redactDynamicPathSegments(value, path) };
+  });
 
   throw new AiResponseInvalidError('The AI provider response did not satisfy its schema.', { raw, issues });
 }

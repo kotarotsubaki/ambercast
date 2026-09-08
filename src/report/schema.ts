@@ -10,9 +10,24 @@ import { z } from 'zod';
 
 const NON_WHITESPACE_STRING_PATTERN = /\S/;
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const SECRET_REF_PATTERN = /^\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
+const STEP_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+/** Report-local equivalent of the core IR secret-reference schema, kept local because report may only import core types. */
+const SecretRef = z.string().regex(SECRET_REF_PATTERN);
+/** Report-local equivalent of the core IR step-identifier schema, kept local because report may only import core types. */
+const StepId = z.string().regex(STEP_ID_PATTERN);
+/** Report-local equivalent of the core IR source-span schema, kept local because report may only import core types. */
+const SourceSpan = z.strictObject({
+  startLine: z.int().positive(),
+  endLine: z.int().positive(),
+}).refine((span) => span.endLine >= span.startLine, {
+  message: 'endLine must be greater than or equal to startLine',
+  path: ['endLine'],
+}); // JSON Schema omits this sibling-value ordering constraint, as it does for the core schema.
 
 /** Version shared by every structured report envelope. */
-export const REPORT_SCHEMA_VERSION = '3.0' as const;
+export const REPORT_SCHEMA_VERSION = '3.1' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -62,42 +77,160 @@ export const ReportErrorCode = z.enum([
  */
 export type ReportErrorCode = z.infer<typeof ReportErrorCode>;
 
-const UsageReportErrorCode = z.enum(USAGE_REPORT_ERROR_CODES);
-const EnvironmentReportErrorCode = z.enum(ENVIRONMENT_REPORT_ERROR_CODES);
+/** Limits each retry record to the bounded attempt numbers emitted by generators. */
+export const ReportAttemptNumber = z.int().min(1).max(5);
+
+/**
+ * Records prior generator failures without constraining the collection length.
+ *
+ * Each element is bounded because attempt identifiers are part of the public
+ * contract; collection length remains unconstrained because no report clause
+ * assigns an independent observable meaning to an empty or repeated history.
+ */
+export const ReportAttempts = z.array(z.strictObject({
+  attempt: ReportAttemptNumber,
+  code: ReportErrorCode,
+}));
+
+// The usecase-owned compile-time cross-check stays there because report may not import usecases.
+export const INSTRUCTION_COVERAGE_ISSUE_CODES = [
+  'citation-whitespace-only', 'citation-not-found', 'citation-not-unique',
+  'criterion-id-duplicate', 'criterion-range-duplicate', 'criterion-order-invalid',
+  'source-span-invalid', 'source-span-whitespace-only', 'success-criterion-missing',
+  'intent-id-duplicate', 'intent-id-missing', 'intent-id-unknown', 'intent-id-action',
+  'intent-assertion-unsupported', 'terminal-url-matches-forbidden',
+  'verification-coverage-id-missing', 'verification-coverage-id-unknown',
+  'verification-coverage-id-action', 'verification-coverage-index-duplicate',
+  'verification-coverage-index-invalid', 'verification-assertion-repeated',
+] as const;
+
+/** Keeps provider-validation causes machine-readable without serializing prose diagnostics. */
+export const AiResponseIssueCode = z.enum([
+  ...INSTRUCTION_COVERAGE_ISSUE_CODES,
+  'invalid-json',
+  'schema-mismatch',
+]);
+
+/** Preserves literal fields and nonnegative array indices in a report issue path. */
+export const AiResponseIssuePath = z.array(z.union([NonNegativeInteger, z.string()]));
+
+/**
+ * One strict, report-safe projection of a provider or coverage validation issue.
+ *
+ * Strictness ensures internal parser messages and arbitrary provider fields do
+ * not become an accidental public diagnostics contract.
+ */
+export const AiResponseIssue = z.strictObject({
+  code: AiResponseIssueCode,
+  path: AiResponseIssuePath,
+  stepId: StepId.optional(),
+});
+
+/** Reserves every literal-secret detector identifier in the public closed enum. */
+export const SecretDetector = z.enum([
+  'credential-prefix-sk',
+  'credential-prefix-ghp',
+  'credential-prefix-aws-access-key',
+  'high-entropy-token',
+  'embedded-secret-reference',
+]);
+
+/** Mirrors the closed attribution reasons so reports cannot invent remediation states. */
+export const SecretGrantUnattributableReasonEnum = z.enum([
+  'citation-not-found', 'citation-not-unique', 'citation-missing-ref',
+  'citation-unresolved', 'multiply-attributed-grant', 'uncovered-grant', 'stale-grant-span',
+]);
+const SecretGrantUsageReasonEnum = z.enum([
+  'citation-not-found', 'citation-not-unique', 'citation-missing-ref',
+  'citation-unresolved', 'multiply-attributed-grant', 'stale-grant-span',
+]);
+
+/** Projects only stable built-in error names, preventing implementation-specific names from leaking. */
+export const CauseName = z.enum([
+  'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'AbortError', 'TimeoutError',
+]);
+/** A stable built-in cause name accepted by unexpected-crash diagnostics. */
+export type CauseName = z.infer<typeof CauseName>;
+
+/** Optional details for invalid structured AI output. */
+export const AiResponseInvalidDetails = z.strictObject({ issues: z.array(AiResponseIssue), attempts: ReportAttempts.optional() });
+/** Optional details for a rejected literal secret, retaining only its detector and safe path. */
+export const SecretLiteralRejectedDetails = z.strictObject({ detector: SecretDetector, path: NonWhitespaceString, attempts: ReportAttempts.optional() });
+/** Optional reason-specific attribution details without a fabricated step or source location. */
+export const SecretGrantUnattributableDetails = z.union([
+  z.strictObject({ reason: z.literal('uncovered-grant'), secretRef: SecretRef, sourceSpan: SourceSpan, attempts: ReportAttempts.optional() }),
+  z.strictObject({ reason: SecretGrantUsageReasonEnum, secretRef: SecretRef, stepId: StepId.optional(), attempts: ReportAttempts.optional() }),
+]);
+/** Optional retry history for an unavailable AI executor. */
+export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
+/** Projects an unexpected failure to a stable cause name rather than arbitrary error details. */
+export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ name: CauseName }) });
+
 const ReportErrorMessageFields = {
   message: z.string(),
   hint: z.string().optional(),
 };
 
-const RunUsageReportError = z.strictObject({
+const RunUsageErrorBase = z.strictObject({
   scope: z.literal('run'),
   kind: z.literal('usage'),
-  code: UsageReportErrorCode,
   ...ReportErrorMessageFields,
 });
-
-const RunEnvironmentReportError = z.strictObject({
+const RunEnvironmentErrorBase = z.strictObject({
   scope: z.literal('run'),
   kind: z.literal('environment'),
-  code: EnvironmentReportErrorCode,
   ...ReportErrorMessageFields,
 });
-
-const CaseUsageReportError = z.strictObject({
+const CaseUsageErrorBase = z.strictObject({
   scope: z.literal('case'),
   kind: z.literal('usage'),
-  code: UsageReportErrorCode,
+  ...ReportErrorMessageFields,
+  caseId: NonWhitespaceString,
+});
+const CaseEnvironmentErrorBase = z.strictObject({
+  scope: z.literal('case'),
+  kind: z.literal('environment'),
   ...ReportErrorMessageFields,
   caseId: NonWhitespaceString,
 });
 
-const CaseOtherEnvironmentReportError = z.strictObject({
-  scope: z.literal('case'),
-  kind: z.literal('environment'),
-  code: z.enum(ENVIRONMENT_REPORT_ERROR_CODES.filter((code) => code !== 'INTERRUPTED' && code !== 'FS_IO_ERROR')),
-  ...ReportErrorMessageFields,
-  caseId: NonWhitespaceString,
-});
+const RunUsageReportError = z.discriminatedUnion('code', [
+  RunUsageErrorBase.extend({ code: z.literal('CONFIG_INVALID') }),
+  RunUsageErrorBase.extend({ code: z.literal('SECRET_UNRESOLVED') }),
+  RunUsageErrorBase.extend({ code: z.literal('TARGET_UNRESOLVED') }),
+  RunUsageErrorBase.extend({ code: z.literal('MISSING_PLAN') }),
+  RunUsageErrorBase.extend({ code: z.literal('STALE_PLAN') }),
+  RunUsageErrorBase.extend({ code: z.literal('INTEGRITY_VIOLATION') }),
+  RunUsageErrorBase.extend({ code: z.literal('SECRET_LITERAL_REJECTED'), details: SecretLiteralRejectedDetails.optional() }),
+  RunUsageErrorBase.extend({ code: z.literal('SECRET_GRANT_UNATTRIBUTABLE'), details: SecretGrantUnattributableDetails.optional() }),
+]);
+
+const RunEnvironmentReportError = z.discriminatedUnion('code', [
+  RunEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED') }),
+  RunEnvironmentErrorBase.extend({ code: z.literal('AI_EXECUTOR_UNAVAILABLE'), details: AiExecutorUnavailableDetails.optional() }),
+  RunEnvironmentErrorBase.extend({ code: z.literal('AI_RESPONSE_INVALID'), details: AiResponseInvalidDetails.optional() }),
+  RunEnvironmentErrorBase.extend({ code: z.literal('FS_IO_ERROR') }),
+  RunEnvironmentErrorBase.extend({ code: z.literal('UNEXPECTED_CRASH'), details: UnexpectedCrashDetails.optional() }),
+  RunEnvironmentErrorBase.extend({ code: z.literal('INTERRUPTED') }),
+]);
+
+const CaseUsageReportError = z.discriminatedUnion('code', [
+  CaseUsageErrorBase.extend({ code: z.literal('CONFIG_INVALID') }),
+  CaseUsageErrorBase.extend({ code: z.literal('SECRET_UNRESOLVED') }),
+  CaseUsageErrorBase.extend({ code: z.literal('TARGET_UNRESOLVED') }),
+  CaseUsageErrorBase.extend({ code: z.literal('MISSING_PLAN') }),
+  CaseUsageErrorBase.extend({ code: z.literal('STALE_PLAN') }),
+  CaseUsageErrorBase.extend({ code: z.literal('INTEGRITY_VIOLATION') }),
+  CaseUsageErrorBase.extend({ code: z.literal('SECRET_LITERAL_REJECTED'), details: SecretLiteralRejectedDetails.optional() }),
+  CaseUsageErrorBase.extend({ code: z.literal('SECRET_GRANT_UNATTRIBUTABLE'), details: SecretGrantUnattributableDetails.optional() }),
+]);
+
+const CaseOtherEnvironmentReportError = z.discriminatedUnion('code', [
+  CaseEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED') }),
+  CaseEnvironmentErrorBase.extend({ code: z.literal('AI_EXECUTOR_UNAVAILABLE'), details: AiExecutorUnavailableDetails.optional() }),
+  CaseEnvironmentErrorBase.extend({ code: z.literal('AI_RESPONSE_INVALID'), details: AiResponseInvalidDetails.optional() }),
+  CaseEnvironmentErrorBase.extend({ code: z.literal('UNEXPECTED_CRASH'), details: UnexpectedCrashDetails.optional() }),
+]);
 
 const CaseFsIoReportError = z.strictObject({
   scope: z.literal('case'),

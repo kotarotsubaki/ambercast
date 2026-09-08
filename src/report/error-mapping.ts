@@ -1,5 +1,43 @@
 import type { AmbercastError, ErrorKind } from '#core/errors/types.js';
-import type { ReportError, ReportErrorCode } from './schema.js';
+import {
+  AiExecutorUnavailableDetails,
+  AiResponseInvalidDetails,
+  CauseName,
+  SecretGrantUnattributableDetails,
+  SecretLiteralRejectedDetails,
+  UnexpectedCrashDetails,
+  type ReportError,
+  type ReportErrorCode,
+} from './schema.js';
+
+const CAUSE_NAMES = new Set(['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'AbortError', 'TimeoutError']);
+
+function readRecordField(value: unknown, key: string): unknown {
+  try {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)[key]
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Projects a trusted caught error to the report's stable cause vocabulary.
+ *
+ * Only genuine `Error` instances establish class identity at this public
+ * boundary. The conservative fallback prevents untrusted values or hostile
+ * accessors from turning crash reporting into a second failure.
+ */
+export function projectCauseName(cause: unknown): CauseName {
+  try {
+    if (!(cause instanceof Error)) return 'Error';
+    const name = cause.name;
+    return CAUSE_NAMES.has(name) ? name as CauseName : 'Error';
+  } catch {
+    return 'Error';
+  }
+}
 
 /**
  * Maps classified Ambercast errors to stable report classifications and codes.
@@ -45,6 +83,12 @@ export const REPORT_ERROR_DETAILS = {
  * cancellation from inflating case-error accounting.
  *
  * @remarks
+ * A string `error.details.hint` is copied for every report scope and code.
+ * The six diagnostic codes construct strict `details` values from normalized
+ * producer context; `UNEXPECTED_CRASH` alone reads `error.cause`, never
+ * `error.details`. A malformed or unexpected producer details shape is
+ * omitted defensively rather than causing report construction to throw.
+ *
  * `partiallyWritten` is extracted only for a case-scoped `FS_IO_ERROR`.
  * Report schemas reject that field on every other branch, and this conversion
  * otherwise omits `AmbercastError.details`, so preserving validated storage
@@ -64,7 +108,39 @@ export function reportError(
     throw new Error('Error kind interrupted cannot be serialized at case scope.');
   }
 
-  const partiallyWritten = error.details?.partiallyWritten;
+  const hint = readRecordField(error.details, 'hint');
+  const hintField = typeof hint === 'string' ? { hint } : {};
+  const sourceDetails = error.details;
+  const detailsByCode = error.kind === 'ai-response-invalid' && readRecordField(sourceDetails, 'issues') !== undefined
+    ? AiResponseInvalidDetails.safeParse({
+      issues: readRecordField(sourceDetails, 'issues'),
+      ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
+    })
+    : error.kind === 'secret-literal-rejected'
+      ? SecretLiteralRejectedDetails.safeParse({
+        detector: readRecordField(sourceDetails, 'detector'),
+        path: readRecordField(sourceDetails, 'path'),
+        ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
+      })
+      : error.kind === 'secret-grant-unattributable'
+        ? SecretGrantUnattributableDetails.safeParse({
+          reason: readRecordField(sourceDetails, 'reason'),
+          secretRef: readRecordField(sourceDetails, 'secretRef'),
+          ...(readRecordField(sourceDetails, 'sourceSpan') === undefined
+            ? { stepId: readRecordField(sourceDetails, 'stepId') }
+            : { sourceSpan: readRecordField(sourceDetails, 'sourceSpan') }),
+          ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
+        })
+        : error.kind === 'ai-executor-unavailable' && readRecordField(sourceDetails, 'attempts') !== undefined
+          ? AiExecutorUnavailableDetails.safeParse({
+            ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
+          })
+          : error.kind === 'unexpected-crash'
+            ? UnexpectedCrashDetails.safeParse({ cause: { name: projectCauseName(error.cause) } })
+            : undefined;
+  const diagnosticDetails = detailsByCode?.success ? { details: detailsByCode.data } : {};
+
+  const partiallyWritten = readRecordField(error.details, 'partiallyWritten');
   const fsIoDetails = error.kind === 'fs-io-error'
     && Array.isArray(partiallyWritten)
     && partiallyWritten.every((artifact): artifact is 'plan' | 'grounding' => artifact === 'plan' || artifact === 'grounding')
@@ -72,6 +148,6 @@ export function reportError(
     : {};
 
   return (location.scope === 'run'
-    ? { scope: location.scope, ...details, message: error.message }
-    : { scope: location.scope, ...details, caseId: location.caseId, message: error.message, ...fsIoDetails }) as ReportError;
+    ? { scope: location.scope, ...details, message: error.message, ...hintField, ...diagnosticDetails }
+    : { scope: location.scope, ...details, caseId: location.caseId, message: error.message, ...hintField, ...diagnosticDetails, ...fsIoDetails }) as ReportError;
 }

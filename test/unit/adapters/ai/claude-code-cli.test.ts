@@ -5,6 +5,8 @@ import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { reportError } from '#report/error-mapping.js';
+import { ReportError } from '#report/schema.js';
 import type { AiResolutionSnapshot, InstructionCoveredAiAgenticRequest } from '#ports/ai.js';
 import { registerAiExecutorTransportContract, type AiExecutorTransportScenario } from '../../../contracts/ai-executor-transport.contract.js';
 import { createFakeCommandRunner, createDeferredCommandRun } from '../../../doubles/create-fake-command-runner.js';
@@ -158,7 +160,19 @@ describe('createClaudeCodeCliExecutor', () => {
     });
 
     await expect(executor.execute({ prompt: 'Generate.', responseSchema: schema() }))
-      .rejects.toBeInstanceOf(AiResponseInvalidError);
+      .rejects.toMatchObject({ details: { issues: [{ code: 'invalid-json', path: [] }] } });
+  });
+
+  it.each([
+    ['an object with no result', '{}'],
+    ['an object whose result is not a string', '{"result":null}'],
+  ] as const)('maps %s to the wrapper-shape issue with no nested path', async (_description, stdout) => {
+    const executor = createClaudeCodeCliExecutor({
+      run: createFakeCommandRunner([{ outcome: 'exited', stdout, stderr: '', exitCode: 0 }]).run,
+    });
+
+    await expect(executor.execute({ prompt: 'Generate.', responseSchema: schema() }))
+      .rejects.toMatchObject({ details: { issues: [{ code: 'schema-mismatch', path: [] }] } });
   });
 
   it.each([
@@ -171,6 +185,23 @@ describe('createClaudeCodeCliExecutor', () => {
 
     await expect(executor.execute({ prompt: 'Generate.', responseSchema: schema() }))
       .rejects.toBeInstanceOf(AiResponseInvalidError);
+  });
+
+  it('survives the Claude transport boundary through report serialization', async () => {
+    const executor = createClaudeCodeCliExecutor({
+      run: createFakeCommandRunner([{ outcome: 'exited', stdout: 'not JSON at all', stderr: '', exitCode: 0 }]).run,
+    });
+    let caught: unknown;
+    try {
+      await executor.execute({ prompt: 'Generate.', responseSchema: schema() });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AiResponseInvalidError);
+    const report = reportError(caught as AiResponseInvalidError, { scope: 'run' });
+    expect(ReportError.safeParse(report).success).toBe(true);
+    expect(report).toMatchObject({ details: { issues: [{ code: 'invalid-json', path: [] }] } });
   });
 
   it.each([

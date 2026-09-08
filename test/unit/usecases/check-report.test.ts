@@ -80,7 +80,7 @@ describe('buildCheckReport', () => {
     const output = report({ outcome: { noTestsFound: false, results, errors: [] } });
 
     expect(ReportEnvelope.parse(output.envelope)).toEqual({
-      schemaVersion: '3.0',
+      schemaVersion: '3.1',
       command: 'check',
       startedAt: BASE.startedAt,
       durationMs: BASE.durationMs,
@@ -198,7 +198,7 @@ describe('buildCheckReport v3 interruption accounting', () => {
     } } as unknown as Omit<CheckReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.0');
+    expect(output.envelope.schemaVersion).toBe('3.1');
     expect(output.envelope.summary).toEqual({ total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));
   });

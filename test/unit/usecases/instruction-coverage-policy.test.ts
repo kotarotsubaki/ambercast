@@ -227,6 +227,15 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
     ]);
   });
 
+  it('keeps literal and index paths unchanged outside report projection', () => {
+    const result = validateGeneratedInstructionCoverage({
+      instructionCoverage: [],
+      verificationIntent: [],
+    }, normalizeTestMd('Ready'));
+    const issues = expectIssueCodes(result, ['success-criterion-missing']);
+    expect(issues[0]?.path).toEqual(['instructionCoverage']);
+  });
+
   it('rejects an action ID in terminal intent', () => {
     expectIssueCodes(validateGeneratedInstructionCoverage({
       instructionCoverage: [

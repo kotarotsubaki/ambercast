@@ -1,0 +1,59 @@
+---
+title: "符合性"
+description: "Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding 和配置 JSON Schema，而不是维护手写的并行模式。"
+---
+
+## 结构验证 {#structural-validation}
+
+Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding 和配置 JSON Schema，而不是维护手写的并行模式。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) 构建工具对以下投影进行序列化，且包导出公开其生成的文件。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
+
+| Zod 投影 | JSON Schema 获取器 | 生成的文件 | 包导出 |
+| --- | --- | --- | --- |
+| `PlanDocument` | `getPlanJsonSchema()` | `plan.schema.json` | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
+| `GroundingDocument` | `getGroundingJsonSchema()` | `grounding.schema.json` | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
+| `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
+
+Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其值；配置获取器从 `RawConfig` 派生其值。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) 外部使用者只要验证已发布的结构与语义契约即符合规范；它不需要使用 Zod 或重现 Ambercast 的发布流水线。
+
+## 语义验证 {#semantic-validation}
+
+仅进行 JSON Schema 验证是不够的。符合规范的验证器必须（MUST）额外强制执行以下内容。问题代码是稳定的实现值；策略问题由其调用方（generation、check 或 run）映射，而不是在此处定义第二个公共状态。[src/usecases/instruction-coverage-policy.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L70)
+
+| id | 适用目标 | 约束 | 问题代码 / 失败 | 证据 |
+| --- | --- | --- | --- | --- |
+| CON-01 | Plan | Plan 步骤 ID 必须唯一（MUST）。 | `duplicate step id: <id>` | [src/core/ir/schema.ts:1195](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1195) |
+| CON-02 | `SourceSpan` | `endLine` 必须至少为（MUST）`startLine`。 | `endLine must be greater than or equal to startLine` | [src/core/ir/schema.ts:261](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L261) |
+| CON-03 | 生成的准则 | 引文必须为非空白字符且在规范化 prompt 中恰好出现一次（MUST）。 | `citation-whitespace-only`, `citation-not-found`, `citation-not-unique` | [src/usecases/instruction-coverage-policy.ts:376](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L376) |
+| CON-04 | 生成的准则 | 准则 ID 和解析后的引文范围必须唯一（MUST）；引文边界不得拆分（MUST NOT）代理对。 | `criterion-id-duplicate`, `criterion-range-duplicate`, `source-span-invalid` | [src/usecases/instruction-coverage-policy.ts:376](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L376) |
+| CON-05 | 生成的 AI 步骤 | 至少一个准则必须为（MUST）`success`；成功 ID 与验证意图 ID 必须构成（MUST）精确的双射。 | `success-criterion-missing`, `intent-id-duplicate`, `intent-id-missing`, `intent-id-unknown`, `intent-id-action` | [src/usecases/instruction-coverage-policy.ts:418](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L418) |
+| CON-06 | 生成的验证意图 | 终端断言必须是（MUST）受支持的 `TraceAssert`，且不得为（MUST NOT）`url-matches`。 | `intent-assertion-unsupported`, `terminal-url-matches-forbidden` | [src/usecases/instruction-coverage-policy.ts:433](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L433) |
+| CON-07 | 已提交的准则 | 准则必须非空（MUST），具有唯一的 ID 和跨度，重新提取为非空白 prompt 文本，并使用有效的非零宽度 UTF-16 坐标。 | `criterion-id-duplicate`, `criterion-range-duplicate`, `source-span-invalid`, `source-span-whitespace-only`, `success-criterion-missing` | [src/usecases/instruction-coverage-policy.ts:467](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L467) |
+| CON-08 | 已提交的准则 | 准则必须已经处于（MUST）规范的 source/end/kind/ID 顺序中。 | `criterion-order-invalid` | [src/usecases/instruction-coverage-policy.ts:489](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L489) |
+| CON-09 | 已提交的机密声明 | 每项持久化的声明都必须匹配（MUST）当前的授权跨度与引用；一项授权必须拥有（MUST）恰好一个声明者；没有任何已解析的授权可保持未使用（MUST）。 | `stale-grant-span`, `multiply-attributed-grant`, `uncovered-grant` | [src/usecases/generator-secret-policy.ts:365](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L365) |
+| CON-10 | 生成的机密声明 | 提供方引文必须恰好出现一次（MUST），包含其 `SecretRef`，并解析为恰好一个已解析的授权。 | `citation-not-found`, `citation-not-unique`, `citation-missing-ref`, `citation-unresolved` | [src/usecases/generator-secret-policy.ts:275](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L275) |
+| CON-11 | grounding 覆盖 | `verificationCoverage` 必须将每个且仅将成功准则映射到（MUST）一个不同的范围内终端验证索引；每个终端索引都必须被映射（MUST）。 | `verification-coverage-id-missing`, `verification-coverage-id-unknown`, `verification-coverage-id-action`, `verification-coverage-index-duplicate`, `verification-coverage-index-invalid` | [src/usecases/instruction-coverage-policy.ts:560](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L560) |
+| CON-12 | grounding 终端证据 | 终端断言在运行值具体化之后不得为（MUST NOT）`url-matches` 或重复事件断言。 | `terminal-url-matches-forbidden`, `verification-assertion-repeated` | [src/usecases/instruction-coverage-policy.ts:589](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L589) |
+| CON-13 | grounding 绑定 | Grounding 仅在其 `planDigest` 等于重新计算的 Plan 摘要时才必须被接受（MUST）。 | 检查分类 `stale` | [src/usecases/check-grounding.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L45) |
+| CON-14 | 携带覆盖率的 grounding 字节 | 声称具有覆盖率的 grounding 文档必须使用（MUST）规范化工件字节。 | 检查分类 `invalid` | [src/usecases/check-grounding.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L57) |
+| CON-15 | 缓存的 AI trace 机密使用 | 每个 `TraceFillSecret.secretRef` 都必须属于（MUST）所在 Plan AI 步骤的已提交授权集。违规属于完整性失败，且不得回退（MUST NOT）。 | 完整性失败 | [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) |
+| CON-16 | 导航 | 每个 Plan、缓存 trace 以及全新 agentic 导航都必须基于（MUST）目标 `baseUrl` 解析，使用 HTTP(S)，并保持与目标同源。 | 完整性失败 | [src/usecases/run.ts:701](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L701) |
+| CON-17 | 缓存的 AI trace 机密标记 | 缓存的 AI trace 中除专用的 `TraceFillSecret.secretRef` 字段外，每个字符串值的后代节点均不得包含（MUST NOT）连续的 `{{secrets.` 标记。违规属于完整性失败，且不得回退（MUST NOT）。 | 完整性失败 | [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984) |
+| CON-18 | 缓存的 AI trace `RunRef` | `RunRef` 必须格式良好（MUST），仅命名在所在 AI 步骤之前声明的捕获变量，并在当前用例中具有可用值。格式错误、未授权或不可用的引用属于完整性失败，且不得回退（MUST NOT）。 | 完整性失败 | [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:3180](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L3180) |
+| CON-19 | 缓存的 AI trace 具体化机密 | 在重放之前，解析 trace 的事件和验证列表中每个已授权的 `fill-secret` 引用；连同当前用例已解析的值，扫描除固定的 `type`、`check`、`target.strategy`、`key` 和 `secretRef` 词汇表之外的每个值。非空的已解析机密通过完全匹配予以禁止，且当其具有至少 3 个 UTF-16 代码单元时，通过子字符串匹配予以禁止。 | 完整性失败；不得回退（MUST NOT） | [src/usecases/run.ts:1075-1129](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075-L1129); [src/usecases/run.ts:1252-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1313); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
+| CON-20 | 存储及全新的 AI `fill.value` 凭据字面量 | 存储的 trace 和全新的 agentic 操作必须无条件拒绝（MUST）`sk-`、`ghp_` 以及 `AKIA` 填充值。高熵填充值仅在其移除当前用例捕获值后的剩余文本没有检测器匹配项时才被接受。存储 trace 失败不得回退（MUST NOT）；全新操作失败发生在浏览器执行或日志持久化之前。 | 完整性失败 | [src/usecases/run.ts:984-1040](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984-L1040); [src/usecases/run.ts:1350-1405](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1350-L1405); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
+| CON-21 | 跨 AI 边界的捕获值 | 不带 `verificationCoverage` 的旧版存储 trace 在任何非固定词汇表值中均不得包含（MUST NOT）非空的当前用例捕获值（未解析的 `{{run.name}}` 占位符除外）；该检查采用子字符串匹配。全新的 agentic 导航 URL、填充值和断言文本/模式均不得完全等于（MUST NOT）捕获值。这些值必须改用（MUST）授权的 `RunRef` 插值；违规将在存储 trace 到达浏览器/提供方回退之前，或全新输入到达浏览器/持久化之前失败。 | 完整性失败 | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
+| CON-22 | 全新 agentic 操作/断言具体化机密 | 在具体化之前，每个全新的 agentic 操作和断言都必须根据（MUST）在该用例中观察到的每个非空已解析机密，对非固定词汇表的值进行扫描。仅有的封闭词汇表排除项为 `type`、`check`、`target.strategy`、`key` 和 `secretRef`。对任何非空机密都禁止完全相等；当机密至少为 3 个 UTF-16 代码单元时，禁止子字符串匹配。匹配项在浏览器执行、日志追加、Grounding 更新或持久化之前构成完整性失败。 | 完整性失败 | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
+
+CON-03 至 CON-06 以及 CON-10 适用于 Plan 构建之前；CON-07 至 CON-09 适用于已提交的 Plan；CON-11 至 CON-22 适用于 Grounding/重放验证。Grounding/重放验证在浏览器操作接收具体化值之前，检查 trace 机密标记、已解析机密、凭据字面量和捕获值边界，以及动态 `RunRef` 授权。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generator-secret-policy.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L191) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
+
+## 验证规程 {#verification-procedure}
+
+使用者必须从结构上解析（MUST）工件，在 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#inputs-digest) 下计算当前摘要，并在重放之前应用语义检查。失败的 Grounding 验证绝不得授权（MUST NOT）缓存重放。[src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L215) [src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+
+## 设计理由 {#rationale}
+
+问题在于可移植的 JSON Schema 可以验证形状，但无法比较同级值、prompt 源或跨记录的关系。
+
+所选设计显式化了轻量语义层，并在结构解析后报告稳定的错误代码。它将所有可表达的约束保留在 Zod/派生的 JSON Schema 中。
+
+一个被否决的备选方案是将所有规则隐藏在不可移植的细化（refinements）中；它被否决是因为模式使用者会丢失这些规则。另一个方案仅依赖 JSON Schema；它被否决是因为无法从孤立的 JSON 值中证明出处和覆盖范围。 

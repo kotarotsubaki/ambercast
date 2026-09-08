@@ -1,7 +1,12 @@
 node_modules
 dist
 .astro
-src/content/docs/reference/configuration.md
+
+# sync-spec.mjs regenerates the root-locale PLAN SPECIFICATION chapters from
+# docs/spec/**/*.md at build/dev time (see package.json's prebuild/predev
+# hooks); ja/zh-cn translations are committed separately by
+# migrate-spec-translations.mjs, so only the root copy is derived output here.
+src/content/docs/spec/*.md
 
 # visual-and-behavior.mjs writes regenerable screenshots here on every run;
 # they are PR-attached evidence (like .runs/ elsewhere in this repo), not source.

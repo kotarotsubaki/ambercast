@@ -1,6 +1,8 @@
 import starlight from '@astrojs/starlight';
 import { ExpressiveCodeTheme } from '@astrojs/starlight/expressive-code';
 import { defineConfig } from 'astro/config';
+import remarkHeadingId from './scripts/lib/remark-heading-id.mjs';
+import { sidebar } from './src/sidebar.mjs';
 import { codeThemes } from './src/styles/code-themes';
 
 const site = 'https://kotarotsubaki.github.io';
@@ -10,6 +12,12 @@ const assetUrl = (asset) => new URL(`${base}/${asset}`, site).href;
 export default defineConfig({
   site,
   base,
+  markdown: {
+    // The local plugin preserves explicit heading anchors while avoiding the upstream
+    // remark-custom-heading-id package; entering this pipeline at all still requires
+    // @astrojs/markdown-remark as a dependency, independent of which plugin runs here.
+    remarkPlugins: [remarkHeadingId],
+  },
   integrations: [
     starlight({
       title: 'ambercast',
@@ -91,16 +99,7 @@ export default defineConfig({
           },
         },
       },
-      sidebar: [
-        {
-          label: 'Guides',
-          items: [{ autogenerate: { directory: 'guides' } }],
-        },
-        {
-          label: 'Reference',
-          items: [{ autogenerate: { directory: 'reference' } }],
-        },
-      ],
+      sidebar,
     }),
   ],
 });

@@ -7,13 +7,14 @@
     "node": ">=22.14"
   },
   "scripts": {
-    "sync": "node scripts/sync-spec.mjs",
+    "sync": "node scripts/sync-spec.mjs && node scripts/sync-generated.mjs",
     "predev": "SYNC_OPTIONAL=1 npm run sync",
     "dev": "astro dev",
     "prebuild": "npm run sync",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "node scripts/check-parity.mjs"
+    "precheck": "npm run sync",
+    "check": "node scripts/check-parity.mjs && node scripts/check-reference.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "7.3.0",

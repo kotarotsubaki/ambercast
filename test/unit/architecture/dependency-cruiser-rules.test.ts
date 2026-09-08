@@ -281,6 +281,12 @@ describe('dependency-cruiser architecture rules', () => {
     ].sort());
   });
 
+  test('declares D0 build-tools imports as exactly core, report, and config', () => {
+    expect(new Set(LAYERS['build-tools'].mayImport.map(({ layer }: { readonly layer: string }) => layer))).toStrictEqual(
+      new Set(['core', 'report', 'config']),
+    );
+  });
+
   test('generates one internal boundary for every policy role', () => {
     expect(dependencyCruiserConfig.forbidden.map((rule: { readonly name: string }) => rule.name)).toEqual(expect.arrayContaining([
       'core-is-leaf',

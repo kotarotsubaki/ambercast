@@ -7,6 +7,15 @@ import type { ErrorKind, ExitCode } from './types.js';
  */
 
 /**
+ * Ordered public vocabulary of every process exit status Ambercast can
+ * produce.
+ *
+ * It feeds `capabilities.json` publication while remaining distinct from, but
+ * consistent with, the `ExitCode` and `ErrorExitCode` type vocabulary.
+ */
+export const EXIT_CODES = [0, 1, 2, 3, 4, 5] as const;
+
+/**
  * A non-success exit status that an {@link AmbercastError} can produce.
  *
  * Excluding the successful status makes it impossible to assign a thrown,

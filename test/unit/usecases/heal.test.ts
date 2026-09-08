@@ -3313,7 +3313,7 @@ describe('heal state-machine contract', () => {
     const sentence = 'Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.';
     const [schema, cli, docs] = await Promise.all([
       readFile(new URL('../../../src/core/config/schema.ts', import.meta.url), 'utf8'),
-      readFile(new URL('../../../src/cli/main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../../../src/core/cli/manifest.ts', import.meta.url), 'utf8'),
       readFile(new URL('../../../docs/configuration.md', import.meta.url), 'utf8'),
     ]);
 

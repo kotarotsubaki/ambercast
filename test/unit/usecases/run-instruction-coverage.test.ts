@@ -218,7 +218,7 @@ function scenario(
       testIgnore: ['**/.runs/**'],
       targets: RESOLVED_TARGETS,
       defaultTarget: 'web',
-      ai: { provider: 'codex', timeoutMs: 1000 },
+      ai: { provider: 'codex', timeoutMs: 1000, maxGenerateAttempts: 2 },
       ci: { heal: false, updateGroundingCache: false },
       grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
     },

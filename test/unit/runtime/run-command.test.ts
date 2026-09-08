@@ -72,7 +72,7 @@ const CONFIG: ResolvedConfig = {
   testIgnore: ['**/.runs/**'],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful' } },
   defaultTarget: 'web',
-  ai: { provider: 'auto', timeoutMs: 120_000 },
+  ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 },
   viewer: { port: 4600 },
   ci: { heal: false, updateGroundingCache: false },
   grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },

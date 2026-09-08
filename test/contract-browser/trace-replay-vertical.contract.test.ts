@@ -161,7 +161,7 @@ describe('hand-authored trace replay against real Chromium', () => {
           testIgnore: ['**/.runs/**'],
           targets: { fixture: { ...targets.fixture, healReplayIsolation: 'stateful' } },
           defaultTarget: 'fixture',
-          ai: { provider: 'codex', timeoutMs: 120_000 },
+          ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
           ci: { heal: false, updateGroundingCache: false },
           grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
         },

@@ -37,7 +37,7 @@ const CONFIG: ResolvedConfig = {
   testDir: '/workspace/tests', runsDir: '/workspace/tests/.runs', projectRoot: '/workspace',
   testMatch: ['**/*.test.md'], testIgnore: ['**/.runs/**'],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'idempotent' } }, defaultTarget: 'web',
-  ai: { provider: 'auto', timeoutMs: 120_000 }, viewer: { port: 4600 },
+  ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 }, viewer: { port: 4600 },
   ci: { heal: true, updateGroundingCache: false }, grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
   heal: { caseTimeoutMs: 300_000 },
 };

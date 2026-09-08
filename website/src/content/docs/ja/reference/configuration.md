@@ -39,6 +39,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal には選択された `idempotent` ターゲットが必要 | heal |
 | `defaultTarget` | string | `web-user` | ターゲットへと解決される必要あり | generate、run、check、heal のターゲット選択 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |
+| `ai.maxGenerateAttempts` | 正の整数 | `2` | 1〜5。ファイルごとの生成試行回数 | generate のみ。heal Stage 3 には適用しない |
 | `ai.timeoutMs` | 正の整数 | `120000` | 正の値 | generate、run のフォールバック、heal |
 | `viewer.port` | 整数 | `4600` | 1〜65535。viewer コマンドは計画段階です | 計画されている `view` のみ |
 | `ci.heal` | boolean | `false` | CI におけるリスト表示以外の heal のオプトイン | heal |

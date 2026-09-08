@@ -213,6 +213,7 @@ export async function loadConfig(options: LoadConfigOptions): Promise<ResolvedCo
         ? (overrides.ai?.provider ?? DEFAULT_RAW_CONFIG.ai.provider)
         : aiProviderRaw as AiProvider,
       timeoutMs: overrides.ai?.timeoutMs ?? DEFAULT_RAW_CONFIG.ai.timeoutMs,
+      maxGenerateAttempts: overrides.ai?.maxGenerateAttempts ?? DEFAULT_RAW_CONFIG.ai.maxGenerateAttempts,
     },
     viewer: {
       port: overrides.viewer?.port ?? DEFAULT_RAW_CONFIG.viewer.port,

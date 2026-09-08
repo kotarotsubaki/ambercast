@@ -12,6 +12,10 @@ Focused test prompts keep test cases clear and make plan review straightforward.
 ## Steps {#steps}
 
 1. Create `tests/ambercast/checkout.test.md` with one H1, setup needed for the case, and one observable outcome per sentence. Treat these as recommendations for focused review, not parser syntax.
+
+   A success criterion should name something visible at the destination—a heading, message, or element—not only that a URL was reached.
+
+   > …I reach the dashboard and see the heading "Welcome back".
 2. Split unrelated user outcomes into separate `<name>.test.md` files to keep cases focused.
 3. Use a standalone `@ambercast-secret {{secrets.name}}` line only when needed. The parser identifies only complete grant lines outside code.
 4. Run `npx ambercast generate tests/ambercast/checkout.test.md --dry-run`. A valid preview result has status `would-generate` and `dryRun: true`; it does not claim a committed write.

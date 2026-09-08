@@ -901,6 +901,7 @@ async function tryFullPlanRepair(
       list: false,
       strict: options.strict ?? false,
       force: true,
+      maxAttempts: 1,
       allowEmpty: options.allowEmpty ?? false,
       dryRun: false,
       ...(options.target === undefined ? {} : { target: options.target }),

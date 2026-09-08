@@ -123,11 +123,19 @@ describe('RawConfig', () => {
   });
 
   it('accepts an AI timeout of one millisecond at the positive-integer boundary', () => {
-    expectAccepted(RawConfig, { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 1 } });
+    expectAccepted(RawConfig, { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 1, maxGenerateAttempts: 2 } });
   });
 
   it.each([0, -1, 1.5, '1000'] as const)('rejects an invalid AI timeout value: %j', (timeoutMs) => {
-    expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs } });
+    expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs, maxGenerateAttempts: 2 } });
+  });
+
+  it.each([1, 2, 3, 4, 5])('accepts maxGenerateAttempts %d within the inclusive range', (maxGenerateAttempts) => {
+    expectAccepted(RawConfig, { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts } });
+  });
+
+  it.each([0, 6, 1.5, '2'] as const)('rejects an invalid maxGenerateAttempts value: %j', (maxGenerateAttempts) => {
+    expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts } });
   });
 
   it.each([1, 65_535])('accepts viewer port %d at the inclusive boundary', (port) => {

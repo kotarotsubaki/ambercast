@@ -31,6 +31,7 @@ description: 本页定义了配置键及其解析逻辑。
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal 要求所选目标必须为 `idempotent` | heal |
 | `defaultTarget` | string | `web-user` | 必须解析为一个目标 | generate、run、check、heal 目标选择 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |
+| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；绝不用于 heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `120000` | 正数 | generate；run 兜底；heal |
 | `viewer.port` | integer | `4600` | 1–65535；viewer 命令处于计划中 | 仅用于计划中的 `view` |
 | `ci.heal` | boolean | `false` | 在 CI 中选择开启非 list 的 heal | heal |

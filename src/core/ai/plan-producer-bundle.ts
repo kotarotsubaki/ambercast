@@ -27,7 +27,7 @@ import {
  * layering, so explicit revisions make that semantic dependency reviewable.
  */
 export const PLAN_PRODUCER_SEMANTIC_REVISIONS = Object.freeze({
-  instructionCoveragePolicy: 1,
+  instructionCoveragePolicy: 2,
   generatorSecretPolicy: 3,
 } as const);
 

@@ -56,6 +56,26 @@ describe('createLayoutResolver', () => {
   });
 });
 
+describe('LayoutResolver promptPathIneligibility', () => {
+  const resolver = createLayoutResolver(CONFIG);
+
+  it.each([
+    ['/workspace/other/login.test.md', 'outside-test-dir'],
+    ['/workspace/tests/ambercast/login.md', 'not-test-md'],
+    ['/workspace/tests/ambercast/.test.md', 'no-name'],
+  ] as const)('classifies %s as %s', (path, reason) => {
+    expect(resolver.promptPathIneligibility(path)).toBe(reason);
+  });
+
+  it('uses containment before suffix validation when a path violates both rules', () => {
+    expect(resolver.promptPathIneligibility('/workspace/other/login.md')).toBe('outside-test-dir');
+  });
+
+  it('returns undefined for an eligible prompt path', () => {
+    expect(resolver.promptPathIneligibility('/workspace/tests/ambercast/login.test.md')).toBeUndefined();
+  });
+});
+
 describe('LayoutResolver companion derivation', () => {
   const resolver = createLayoutResolver(CONFIG);
 

@@ -46,6 +46,8 @@ Heal configuration:
 | check | literal paths; no paths = discovery | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 
+A positional argument must be a literal `.test.md` path inside `testDir`. A path outside that domain is a usage error; it is not silently ignored or allowed to crash execution.
+
 - Passing `--` terminates option parsing, leaving all subsequent arguments to be interpreted as literal paths.
 - The `--json` and `--no-color` flags are handled individually by each command rather than through a shared global-flag abstraction.
 - Target precedence follows a strict order: an explicit `--target` flag takes priority, followed by the configured default target, and finally resolving when exactly one configured target is present; otherwise, target selection fails.

@@ -35,6 +35,19 @@ const RUN_ID_PATTERN = /^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/;
  */
 export interface LayoutResolver {
   /**
+   * Classifies why a selected path cannot be processed as a prompt.
+   *
+   * @param testPath - The absolute path selected by a literal or discovery.
+   * @returns The first ineligibility reason, or `undefined` for a path inside
+   *   `testDir` with an exact `.test.md` suffix and a non-empty name.
+   * @remarks
+   * The classifier checks containment, suffix, and name in that order.
+   * Selection-time callers use its stable reason vocabulary to reject
+   * an entire batch before per-file I/O, while forward layout methods retain
+   * `RangeError` for callers that violate their already-eligible contract.
+   */
+  promptPathIneligibility(testPath: string): 'outside-test-dir' | 'not-test-md' | 'no-name' | undefined;
+  /**
    * Derives the plan artifact path for a discovered test file.
    *
    * @param testPath - A discovered test path inside the configured test tree
@@ -175,6 +188,13 @@ export function createLayoutResolver(config: LayoutConfig): LayoutResolver {
     }
   }
 
+  function promptPathIneligibility(testPath: string): 'outside-test-dir' | 'not-test-md' | 'no-name' | undefined {
+    if (relativeWithin(config.testDir, testPath) === undefined) return 'outside-test-dir';
+    if (!testPath.endsWith(TEST_SUFFIX)) return 'not-test-md';
+    if (basenamePath(testPath) === TEST_SUFFIX) return 'no-name';
+    return undefined;
+  }
+
   /**
    * Converts a known discovered test into its test-root-relative path.
    *
@@ -186,15 +206,11 @@ export function createLayoutResolver(config: LayoutConfig): LayoutResolver {
   function discoveredTestPathRelativeToTestDir(testPath: string): string {
     const relativeTestPath = relativeWithin(config.testDir, testPath);
 
-    if (relativeTestPath === undefined || !testPath.endsWith(TEST_SUFFIX)) {
-      throw new RangeError('Expected a discovered test path within testDir ending in .test.md.');
+    if (promptPathIneligibility(testPath) !== undefined) {
+      throw new RangeError('Expected an eligible discovered test path.');
     }
 
-    if (basenamePath(testPath) === TEST_SUFFIX) {
-      throw new RangeError('Expected a discovered test path with a name before .test.md.');
-    }
-
-    return relativeTestPath;
+    return relativeTestPath!;
   }
 
   /**
@@ -236,6 +252,7 @@ export function createLayoutResolver(config: LayoutConfig): LayoutResolver {
   }
 
   const resolver: LayoutResolver = {
+    promptPathIneligibility,
     planPathFor(testPath: string): string {
       return companionPathFor(testPath, PLAN_SUFFIX);
     },

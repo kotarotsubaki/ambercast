@@ -12,6 +12,7 @@ Usage errors and environment errors have independent report vocabularies; each c
 | code | kind | scope | exit | condition |
 | --- | --- | --- | --- | --- |
 | CONFIG_INVALID | usage | run/case | 2 | invalid configuration |
+| PROMPT_PATH_INVALID | usage | run only | 2 | selected prompt path ineligible |
 | SECRET_UNRESOLVED | usage | run/case | 2 | unresolved secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | target cannot resolve |
 | MISSING_PLAN | usage | run/case | 4 | plan absent |

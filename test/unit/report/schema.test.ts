@@ -126,7 +126,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.1',
+    schemaVersion: '3.2',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -357,11 +357,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.1', () => {
+  it('requires schema version 3.2', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.1' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.2' });
   });
 });
 
@@ -466,6 +466,23 @@ describe('SPEC-K5 report error details', () => {
   it('accepts omitted FS_IO_ERROR details at both scopes', () => {
     expectAccepted(ReportError, { scope: 'run', kind: 'environment', code: 'FS_IO_ERROR', message: 'io' });
     expectAccepted(ReportError, CASE_FS_IO_ERROR);
+  });
+
+  it('accepts PROMPT_PATH_INVALID only at run scope, with optional strict details', () => {
+    const error = {
+      scope: 'run',
+      kind: 'usage',
+      code: 'PROMPT_PATH_INVALID',
+      message: 'The selected prompt path is not an eligible .test.md file.',
+      details: { path: '/workspace/outside.md', reason: 'outside-test-dir' },
+    } as const;
+
+    expectAccepted(ReportError, error);
+    const { details: _details, ...withoutDetails } = error;
+    expectAccepted(ReportError, withoutDetails);
+    expectRejected(ReportError, { ...error, scope: 'case', caseId: 'case-a' });
+    expectRejected(ReportError, { ...error, details: { path: '/workspace/outside.md', reason: 'other' } });
+    expectRejected(ReportError, { ...error, details: { ...error.details, unexpected: true } });
   });
 
   it('accepts both secret-grant reason branches and rejects their mixed shape', () => {

@@ -29,6 +29,8 @@ The implemented grammar has only two wildcard tokens, `*` and `**`; everything e
 
 The selected path order is the stable execution order supplied to consuming use cases.
 
+A prompt intended only for explicit execution, rather than normal discovery, should be excluded with `testIgnore` and run by its literal path. `--list` intentionally performs no eligibility validation on any selection, literal or discovered.
+
 ## Defaults {#defaults}
 
 Defaults first include `.test.md` prompts, then exclude run directories and both companion artifact suffixes.

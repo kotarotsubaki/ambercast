@@ -67,7 +67,8 @@ const EMERGENCY_ENVELOPE = Object.freeze({
  * result rows, and removes a screenshot that cannot be represented as a
  * project-contained POSIX relative path instead of representing it as `null`.
  * It then relativizes only `id`, `file`,
- * `planFile`, `caseId`, `groundingFile`, and `artifactFile`, recomputes the
+ * `planFile`, `caseId`, `groundingFile`, and `artifactFile`. The path-invalid
+ * branch also relativizes its optional `details.path`, recomputes the
  * summary from those final identities, and validates the completed candidate.
  * This ordering keeps summaries from observing stale public identities while
  * leaving unexecuted and command-level duration facts intact.
@@ -135,11 +136,22 @@ export function finalizeReportEnvelope(
 
       return normalized;
     }),
-    errors: screenshotNormalized.errors.map((error) => (
-      'caseId' in error && typeof error.caseId === 'string'
+    errors: screenshotNormalized.errors.map((error) => {
+      const caseIdNormalized = 'caseId' in error && typeof error.caseId === 'string'
         ? { ...error, caseId: relativeWithinOrOriginal(projectRoot, error.caseId) }
-        : { ...error }
-    )),
+        : { ...error };
+      // This boundary owns portable conversion, so selection preserves the original path.
+      if (caseIdNormalized.code === 'PROMPT_PATH_INVALID' && caseIdNormalized.details !== undefined) {
+        return {
+          ...caseIdNormalized,
+          details: {
+            ...caseIdNormalized.details,
+            path: relativeWithinOrOriginal(projectRoot, caseIdNormalized.details.path),
+          },
+        };
+      }
+      return caseIdNormalized;
+    }),
   } as ReportEnvelope;
   const candidate = {
     ...identityNormalized,

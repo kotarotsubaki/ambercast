@@ -502,7 +502,7 @@ describe('loadConfig', () => {
     it('merges ai, viewer, ci, and grounding one level deep while replacing other supplied top-level values', async () => {
       const storage = createInMemoryStorage();
       await writeConfig(storage, `${CWD}/ambercast.config.json`, {
-        testMatch: ['specs/**/*.md'],
+        testMatch: ['specs/**/*.test.md'],
         testIgnore: [],
         ai: { provider: 'claude', timeoutMs: 321 },
         viewer: { port: 4_321 },
@@ -514,13 +514,45 @@ describe('loadConfig', () => {
 
       expect(config).toStrictEqual({
         ...expectedDefaults(CWD),
-        testMatch: ['specs/**/*.md'],
+        testMatch: ['specs/**/*.test.md'],
         testIgnore: [],
         ai: { provider: 'claude', timeoutMs: 321 },
         viewer: { port: 4_321 },
         ci: { heal: true, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'uncommitted', localWriteBack: 'auto' },
       });
+    });
+
+    it('rejects a supplied testMatch pattern that does not end in .test.md without echoing it', async () => {
+      const storage = createInMemoryStorage();
+      const invalidPattern = 'specs/**/*.md';
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { testMatch: [invalidPattern] });
+
+      const error = await expectConfigInvalid(load(storage));
+
+      expect(error.message).toBe('Every testMatch pattern must end with .test.md.');
+      expect(error.message).not.toContain(invalidPattern);
+    });
+
+    it('accepts an all-eligible multi-pattern testMatch array', async () => {
+      const storage = createInMemoryStorage();
+      const testMatch = ['specs/**/*.test.md', 'focused/*.test.md'];
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { testMatch });
+
+      await expect(load(storage)).resolves.toMatchObject({ testMatch });
+    });
+
+    // The fixed, pattern-free error contract makes within-array priority a code-review property rather than a black-box assertion.
+    it.each([
+      ['invalid-first', ['specs/**/*.md', 'focused/*.test.md']],
+      ['invalid-last', ['focused/*.test.md', 'specs/**/*.md']],
+    ] as const)('rejects a multi-pattern testMatch array when its %s pattern is invalid', async (_position, testMatch) => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { testMatch });
+
+      const error = await expectConfigInvalid(load(storage));
+
+      expect(error.message).toBe('Every testMatch pattern must end with .test.md.');
     });
 
     it('defaults an omitted grounding repository policy when the file supplies local write-back', async () => {

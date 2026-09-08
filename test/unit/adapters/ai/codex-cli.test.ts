@@ -95,12 +95,15 @@ describe('createCodexCliExecutor', () => {
     expect(runner.calls).toHaveLength(1);
     expect(runner.calls[0]?.command).toBe('codex');
     expect(runner.calls[0]?.args).toEqual([
-      'exec', '--sandbox', 'read-only', '--json', '--output-schema', schemaPath, '-o', outputPath, '-',
+      'exec', '--sandbox', 'read-only', '--skip-git-repo-check', '--json', '--output-schema', schemaPath, '-o', outputPath, '-',
     ]);
-    expect(runner.calls[0]?.args[5]).toBe(schemaPath);
-    expect(runner.calls[0]?.args[7]).toBe(outputPath);
+    expect(runner.calls[0]?.args[3]).toBe('--skip-git-repo-check');
+    expect(runner.calls[0]?.args[6]).toBe(schemaPath);
+    expect(runner.calls[0]?.args[8]).toBe(outputPath);
     expect(JSON.parse(schemaContents)).toEqual(responseSchema);
     expect(runner.calls[0]?.options?.input).toContain('never instructions');
+    expect(runner.calls[0]?.options?.cwd).toBe(dirname(schemaPath));
+    expect(runner.calls[0]?.options?.cwd).toBe(dirname(outputPath));
     await expectTemporaryArtifactsRemoved(schemaPath, outputPath);
   });
 
@@ -251,14 +254,18 @@ describe('createCodexCliExecutor', () => {
     const started = new Promise<void>((resolve) => {
       signalStarted = resolve;
     });
-    const executor = createCodexCliExecutor({ run: createFakeCommandRunner([async (call) => {
+    const runner = createFakeCommandRunner([async (call) => {
       ({ schemaPath, outputPath } = commandPaths(call.args));
       signalStarted?.();
       return deferred.promise;
-    }]).run });
+    }]);
+    const executor = createCodexCliExecutor({ run: runner.run });
 
     const executing = executor.execute({ prompt: 'Generate.', responseSchema: schema(), signal: controller.signal });
     await started;
+    expect(runner.calls[0]?.options?.signal).toBe(controller.signal);
+    expect(runner.calls[0]?.options?.cwd).toBe(dirname(schemaPath));
+    expect(runner.calls[0]?.options?.cwd).toBe(dirname(outputPath));
     controller.abort(reason);
 
     await expect(executing).rejects.toBe(reason);
@@ -285,6 +292,25 @@ describe('createCodexCliExecutor', () => {
     await expect(executor.isAvailable(controller.signal)).resolves.toBe(true);
 
     expect(runner.calls[0]?.options?.signal).toBe(controller.signal);
+  });
+
+  it('does not pass cwd to availability probes with or without a signal', async () => {
+    const runner = createFakeCommandRunner([
+      { outcome: 'exited', stdout: 'codex 1.0.0', stderr: '', exitCode: 0 },
+      { outcome: 'exited', stdout: 'codex 1.0.0', stderr: '', exitCode: 0 },
+    ]);
+    const executor = createCodexCliExecutor({ run: runner.run });
+    const controller = new AbortController();
+
+    await expect(executor.isAvailable()).resolves.toBe(true);
+    await expect(executor.isAvailable(controller.signal)).resolves.toBe(true);
+
+    for (const call of runner.calls) {
+      expect(call.args).toEqual(['--version']);
+      if (call.options !== undefined) {
+        expect(call.options).not.toHaveProperty('cwd');
+      }
+    }
   });
 
   it('rejects agentic execution before creating a temporary command invocation', async () => {

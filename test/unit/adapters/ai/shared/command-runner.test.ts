@@ -1,5 +1,6 @@
+import * as childProcess from 'node:child_process';
 import { ChildProcess } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,6 +10,11 @@ import {
   createSpawnCommandRunner,
   stripDeniedEnv,
 } from '#adapters/ai/shared/command-runner.js';
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, spawn: vi.fn(actual.spawn) };
+});
 
 const CHILD_PID_WAIT_TIMEOUT_MS = 1_000;
 const PROCESS_EXIT_WAIT_TIMEOUT_MS = ABORT_GRACE_PERIOD_MS + 1_000;
@@ -208,6 +214,57 @@ describe('stripDeniedEnv', () => {
 });
 
 describe('createSpawnCommandRunner', () => {
+  it('starts a child in the supplied working directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ambercast-runner-cwd-'));
+    const runner = createSpawnCommandRunner();
+
+    try {
+      const result = await runner(process.execPath, ['-e', 'process.stdout.write(process.cwd())'], { cwd: root });
+
+      expect(result).toMatchObject({ outcome: 'exited', exitCode: 0 });
+      if (result.outcome !== 'exited') {
+        throw new Error('Expected command to exit normally.');
+      }
+      expect(await realpath(result.stdout)).toBe(await realpath(root));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('inherits the parent working directory when cwd is omitted', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ambercast-runner-cwd-'));
+    const spawnSpy = vi.spyOn(childProcess, 'spawn');
+    spawnSpy.mockClear();
+    const runner = createSpawnCommandRunner();
+
+    try {
+      const result = await runner(process.execPath, ['-e', 'process.stdout.write(process.cwd())']);
+
+      expect(result).toMatchObject({ outcome: 'exited', exitCode: 0 });
+      if (result.outcome !== 'exited') {
+        throw new Error('Expected command to exit normally.');
+      }
+      expect(await realpath(result.stdout)).toBe(await realpath(process.cwd()));
+      expect(spawnSpy.mock.calls[0]?.[2]).not.toHaveProperty('cwd');
+    } finally {
+      spawnSpy.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('propagates spawn failure for a nonexistent working directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ambercast-runner-cwd-'));
+    const runner = createSpawnCommandRunner();
+
+    try {
+      await expect(runner(process.execPath, ['-e', 'process.stdout.write(process.cwd())'], {
+        cwd: join(root, 'missing'),
+      })).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('does not expose Ambercast secret namespaces to a spawned child', async () => {
     const keys = [
       'AMBERCAST_SECRET_DUMMY',

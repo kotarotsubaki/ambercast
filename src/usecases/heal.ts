@@ -42,6 +42,7 @@ import {
 } from './heal-provider-context.js';
 import { createHealAiDispatchBudget } from './heal-ai-dispatch-budget.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
+import { composeAiDeadline, isAiDeadlineTimeout } from '#core/ai/ai-deadline.js';
 
 /**
  * Selection and write-intent choices for one healing batch.
@@ -162,6 +163,9 @@ export interface HealCaseOutcome {
 
   /** Measured case duration before report-boundary integer normalization. */
   readonly durationMs: number;
+
+  /** Counts admissions at the case budget so nested run/generate work cannot be double-counted. */
+  readonly aiCalls: number;
 
   /** Baseline first-failure index: all passed → N (`plan.steps.length`); first failed/error step → its index; pre-evidence failure → -1 (below every real index). */
   readonly baselineFirstFailureIndex: number;
@@ -779,24 +783,44 @@ async function trySingleStepRepair(
     return propagate(error);
   }
 
+  const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
+  const request = {
+    prompt: buildGeneratorTask('Repair the requested failing plan step. Return exactly one replacement step with the requested ID, preserving its kind and obligations. Use the supplied test prompt, target definitions, plan continuity, and replay evidence to repair the failure.'),
+    responseSchema: typedJsonSchema(GeneratedPlanResponse),
+    context: buildStage2RepairContext({
+      normalizedTestMd: normalized,
+      baseline: caseBaseline,
+      current: { plan, measurement },
+      repairHistory,
+    }),
+    signal: deadline.signal,
+  };
+  const callId = deps.allocateCallId();
+  deps.events.emit({ type: 'ai-call', callId, file, attempt: 1, attemptLimit: 1, stepId: step.id });
+  const startedMs = deps.clock.monotonicMs();
+  let providerOutcome: 'ok' | 'error' = 'error';
   let response;
   try {
-    deps.events.emit({ type: 'ai-call', stepId: step.id });
-    response = await executor.execute({
-      prompt: buildGeneratorTask('Repair the requested failing plan step. Return exactly one replacement step with the requested ID, preserving its kind and obligations. Use the supplied test prompt, target definitions, plan continuity, and replay evidence to repair the failure.'),
-      responseSchema: typedJsonSchema(GeneratedPlanResponse),
-      context: buildStage2RepairContext({
-        normalizedTestMd: normalized,
-        baseline: caseBaseline,
-        current: { plan, measurement },
-        repairHistory,
-      }),
-      ...(deps.signal === undefined ? {} : { signal: deps.signal }),
-    });
+    response = await executor.execute(request);
+    providerOutcome = 'ok';
   } catch (error) {
+    const providerError = isAiDeadlineTimeout(deadline, error)
+      ? new AiExecutorUnavailableError(
+        'The AI provider did not respond within the configured timeout.',
+        undefined,
+        { cause: error },
+      )
+      : error;
     if (deps.signal?.aborted) return reject('provider-error');
-    if (error instanceof AiExecutorUnavailableError || error instanceof AiResponseInvalidError) return reject('provider-error');
-    return propagate(error);
+    if (providerError instanceof AiExecutorUnavailableError || providerError instanceof AiResponseInvalidError) return reject('provider-error');
+    return propagate(providerError);
+  } finally {
+    deps.events.emit({
+      type: 'ai-result',
+      callId,
+      durationMs: Math.max(0, Math.round(deps.clock.monotonicMs() - startedMs)),
+      outcome: providerOutcome,
+    });
   }
 
   const parsed = GeneratedPlanResponse.safeParse(response.data);
@@ -894,6 +918,8 @@ async function tryFullPlanRepair(
       // that resolved executor to its dependency shape, not a second lazy point.
       resolveAiExecutor: async () => aiExecutor,
       events: deps.events,
+      clock: deps.clock,
+      allocateCallId: deps.allocateCallId,
       discoverTestFiles: deps.discoverTestFiles,
       config: deps.config,
       ...(deps.signal === undefined ? {} : { signal: deps.signal }),
@@ -962,6 +988,7 @@ function caseOutcome(
   stage3Error: AmbercastError | undefined,
   fullPlanReplayed: boolean,
   stopReason: HealCaseOutcome['stopReason'],
+  aiCalls: number,
 ): HealCaseOutcome {
   const repairOutcome = fullPlanReplayed
     ? (measurement.firstFailureIndex === plan.steps.length ? 'healed' : 'unresolved')
@@ -980,6 +1007,7 @@ function caseOutcome(
     steps: measurement.replay.result.steps,
     explanation: measurement.replay.result.explanation,
     durationMs: measurement.replay.result.durationMs,
+    aiCalls,
     baselineFirstFailureIndex: baseline,
     finalFirstFailureIndex: measurement.firstFailureIndex,
     stopReason,
@@ -1208,7 +1236,17 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
       }
   }
 
-  const outcome = caseOutcome(file, planFile, baselineFirstFailureIndex, measurement, plan, stage3Error, fullPlanReplayed, stopReason);
+  const outcome = caseOutcome(
+    file,
+    planFile,
+    baselineFirstFailureIndex,
+    measurement,
+    plan,
+    stage3Error,
+    fullPlanReplayed,
+    stopReason,
+    budget.aiCalls,
+  );
   const commit = (outcome.repairOutcome === 'healed' || outcome.repairOutcome === 'partially-healed') && overlay.hasBufferedWrites()
     ? commitFor(file, planFile, overlay, repairKind ?? 'grounding-element')
     : undefined;

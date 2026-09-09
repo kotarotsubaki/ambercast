@@ -12,13 +12,14 @@ import { createBrowserDriverResolver } from '#adapters/browser/registry.js';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 import { createEnvSecretsProvider } from '#adapters/system/env-secrets-provider.js';
 import { createCryptoRandom } from '#adapters/system/crypto-random.js';
-import { createNoopEventSink } from '#adapters/system/noop-event-sink.js';
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
+import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { loadConfig } from '#config/load.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type ExitCode } from '#core/errors/types.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
@@ -118,6 +119,9 @@ export interface RunCommandInput {
   /** Current project directory used for configuration selection. */
   readonly cwd: string;
 
+  /** Stream injected by the CLI for progress only; the command preserves this reference through sink composition. */
+  readonly stderr: NodeJS.WritableStream;
+
   /** Optional caller cancellation propagated to replay. */
   readonly signal?: AbortSignal;
 }
@@ -208,61 +212,73 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
     projectRoot = config.projectRoot;
     const browserDriver = createBrowserDriverResolver({ headed: input.headed });
     const secrets = createEnvSecretsProvider();
-    const events = createNoopEventSink();
-    const ambercast = createAmbercast({
-      config,
-      aiProvider: 'claude',
-      browserDriver,
-      secrets,
-      events,
-    });
-    const outcome = await run({
-      storage: ambercast.storage,
-      layout: ambercast.layout,
-      clock: ambercast.clock,
-      runId,
-      browserDriver,
-      secrets,
-      events,
-      discoverTestFiles: ambercast.discoverTestFiles,
-      config,
+    const events = createStderrProgressSink({
+      command: 'run',
+      stderr: input.stderr,
+      projectRoot: config.projectRoot,
       isCI,
-      resolveAiExecutor: (signal) => resolveAiProvider(
-        config.ai.provider,
-        input.aiProviderOverride,
-        signal,
-      ).then((provider) => AI_EXECUTOR_FACTORIES[provider]({
-        run: createSpawnCommandRunner({ env: readCommandEnvironment() }),
-      })),
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-    }, {
-      files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-      ...(input.grep === undefined ? {} : { grep: input.grep }),
-      ...(input.target === undefined ? {} : { target: input.target }),
-      cacheOnly: input.cacheOnly,
-      updateCache: input.updateCache,
-      allowEmpty: input.allowEmpty,
-      list: input.list,
-      stale: input.stale,
+      clock,
     });
-
-    const built = buildRunReport({ ...reportContext(), outcome });
-    const rawPersisted = { ...built.envelope, reportPersistence: 'persisted' as const };
-    const rawFailed = { ...built.envelope, reportPersistence: 'failed' as const };
-    const finalizedPersisted = finalizeReportEnvelope(rawPersisted, projectRoot);
-    if (isEmergencyFinalizedEnvelope(finalizedPersisted)) {
-      return { exitCode: 3, envelope: finalizedPersisted };
-    }
+    const allocateCallId = createCallIdAllocator();
     try {
-      await ambercast.storage.writeText(
-        ambercast.layout.runReportPathFor(runId),
-        JSON.stringify(finalizedPersisted),
-      );
-      return { exitCode: built.exitCode, envelope: finalizedPersisted };
-    } catch {
-      const finalizedFailed = finalizeReportEnvelope(rawFailed, projectRoot);
-      const exitCode = isEmergencyFinalizedEnvelope(finalizedFailed) || built.exitCode === 0 ? 3 : built.exitCode;
-      return { exitCode, envelope: finalizedFailed };
+      const ambercast = createAmbercast({
+        config,
+        aiProvider: 'claude',
+        browserDriver,
+        secrets,
+        events,
+      });
+      const outcome = await run({
+        storage: ambercast.storage,
+        layout: ambercast.layout,
+        clock: ambercast.clock,
+        allocateCallId,
+        runId,
+        browserDriver,
+        secrets,
+        events,
+        discoverTestFiles: ambercast.discoverTestFiles,
+        config,
+        isCI,
+        resolveAiExecutor: (signal) => resolveAiProvider(
+          config.ai.provider,
+          input.aiProviderOverride,
+          signal,
+        ).then((provider) => AI_EXECUTOR_FACTORIES[provider]({
+          run: createSpawnCommandRunner({ env: readCommandEnvironment() }),
+        })),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      }, {
+        files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
+        ...(input.grep === undefined ? {} : { grep: input.grep }),
+        ...(input.target === undefined ? {} : { target: input.target }),
+        cacheOnly: input.cacheOnly,
+        updateCache: input.updateCache,
+        allowEmpty: input.allowEmpty,
+        list: input.list,
+        stale: input.stale,
+      });
+
+      const built = buildRunReport({ ...reportContext(), outcome });
+      const rawPersisted = { ...built.envelope, reportPersistence: 'persisted' as const };
+      const rawFailed = { ...built.envelope, reportPersistence: 'failed' as const };
+      const finalizedPersisted = finalizeReportEnvelope(rawPersisted, projectRoot);
+      if (isEmergencyFinalizedEnvelope(finalizedPersisted)) {
+        return { exitCode: 3, envelope: finalizedPersisted };
+      }
+      try {
+        await ambercast.storage.writeText(
+          ambercast.layout.runReportPathFor(runId),
+          JSON.stringify(finalizedPersisted),
+        );
+        return { exitCode: built.exitCode, envelope: finalizedPersisted };
+      } catch {
+        const finalizedFailed = finalizeReportEnvelope(rawFailed, projectRoot);
+        const exitCode = isEmergencyFinalizedEnvelope(finalizedFailed) || built.exitCode === 0 ? 3 : built.exitCode;
+        return { exitCode, envelope: finalizedFailed };
+      }
+    } finally {
+      events.close();
     }
   } catch (error) {
     const classified = error instanceof AmbercastError

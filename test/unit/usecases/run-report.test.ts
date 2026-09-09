@@ -47,6 +47,7 @@ function caseOutcome(
   status: ExecutedRunResult['status'],
   id: string,
   error?: AmbercastError,
+  aiCalls = 0,
 ): RunCaseOutcome {
   return {
     result: {
@@ -55,6 +56,7 @@ function caseOutcome(
       planFile: `${id}.ambercast.plan.json`,
       status,
       durationMs: 7,
+      aiCalls,
       steps: [],
       explanation: `The ${id} case ${status}.`,
     },
@@ -154,6 +156,29 @@ describe('buildRunReport', () => {
     const output = report({ outcome: { noTestsFound: false, results: [caseOutcome('passed', 'login.test.md')], listed: [] } });
 
     expect(output.envelope.reportPersistence).toBe('not-attempted');
+  });
+
+  it('preserves each executed row AI dispatch count, including an explicit zero', () => {
+    const zeroDispatch = caseOutcome('passed', 'cached.test.md', undefined, 0);
+    const threeDispatches = caseOutcome('failed', 'fallback.test.md', undefined, 3);
+
+    const output = report({
+      outcome: {
+        noTestsFound: false,
+        results: [zeroDispatch, threeDispatches],
+        listed: [{ file: 'listed.test.md' }],
+        skipped: [{ file: 'skipped.test.md' }],
+      },
+    });
+
+    expect(output.envelope.results).toEqual([
+      expect.objectContaining({ id: 'cached.test.md', status: 'passed', aiCalls: 0 }),
+      expect.objectContaining({ id: 'fallback.test.md', status: 'failed', aiCalls: 3 }),
+      { id: 'listed.test.md', file: 'listed.test.md', status: 'listed' },
+      { id: 'skipped.test.md', file: 'skipped.test.md', status: 'skipped' },
+    ]);
+    expect(output.envelope.results[2]).not.toHaveProperty('aiCalls');
+    expect(output.envelope.results[3]).not.toHaveProperty('aiCalls');
   });
 
   it.each(PRIORITY_PAIRS)(
@@ -349,7 +374,7 @@ describe('buildRunReport v3 interruption accounting', () => {
     } } as unknown as Omit<RunReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(2);
-    expect(output.envelope.schemaVersion).toBe('3.2');
+    expect(output.envelope.schemaVersion).toBe('3.3');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 0, failed: 0, errored: 1, skipped: 1 });
     expect(output.envelope.results).toContainEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));

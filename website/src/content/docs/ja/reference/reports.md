@@ -9,7 +9,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.2` |
+| `schemaVersion` | リテラル `3.3` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -28,26 +28,26 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## generate コマンドの結果 {#generate-results}
 
-`GenerateResult` の各ブランチは厳格（strict）であり、記載されていないフィールドは禁止されます。
+`GenerateResult` の各ブランチは厳格（strict）です。下表の任意メトリクスは、示されたブランチに限り追加できます。
 
-| ステータス | 必須フィールド | ブランチで禁止されるフィールド |
-| --- | --- | --- |
-| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | — |
-| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | — |
-| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `ambiguities` |
-| `listed` | `id`, `file`, `dryRun: false` | `planFile`, `ambiguities` |
-| `failed` | `id`, `file`, `dryRun: boolean` | `planFile`, `ambiguities` |
-| `skipped` | `id`, `file` | `planFile`, `dryRun`, `ambiguities` |
+| ステータス | 必須フィールド | 任意フィールド | ブランチで禁止されるフィールド |
+| --- | --- | --- | --- |
+| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `durationMs`, `aiCalls` | `ambiguities` |
+| `listed` | `id`, `file`, `dryRun: false` | — | `planFile`, `ambiguities`, `durationMs`, `aiCalls` |
+| `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
+| `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
 ## run コマンドの結果 {#run-results}
 
 `RunResult` の各ブランチは厳格（strict）です。
 
-| ステータス | 必須フィールド | ブランチで禁止されるフィールド |
-| --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | — |
-| `listed` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
-| `skipped` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
+| ステータス | 必須フィールド | 任意フィールド | ブランチで禁止されるフィールド |
+| --- | --- | --- | --- |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | `aiCalls` | — |
+| `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+| `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
 ## check コマンドの結果 {#check-results}
 
@@ -62,7 +62,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## heal コマンドの結果 {#heal-results}
 
-`HealResult` において、`completed` の各ブランチはすべて `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、および `explanation` を必須とします。
+`HealResult` において、`completed` の各ブランチはすべて `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、および `explanation` を必須とし、`aiCalls` は任意です。
 
 | repairOutcome | 許可される application | 許可される stopReason |
 | --- | --- | --- |
@@ -119,19 +119,19 @@ ambercast が出力するすべての構造化フィールドを定義します�
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
 ```json
-{"schemaVersion":"3.2","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.2","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.3","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.2","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.2","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}

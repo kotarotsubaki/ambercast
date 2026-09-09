@@ -44,7 +44,7 @@ export const DEFAULT_RAW_CONFIG = {
   defaultTarget: 'web-user',
   ai: {
     provider: 'auto',
-    timeoutMs: 120_000,
+    timeoutMs: 600_000,
     maxGenerateAttempts: 2,
   },
   viewer: {

@@ -113,7 +113,7 @@ interface ParsedCheckCommand {
 
 interface ParsedHealCommand {
   readonly command: 'heal';
-  readonly input: HealCommandInput & { readonly signal: AbortSignal };
+  readonly input: Omit<HealCommandInput, 'stderr'> & { readonly signal: AbortSignal };
   readonly json: boolean;
   readonly color: boolean;
 }
@@ -773,12 +773,12 @@ export async function main(
   try {
     try {
       const output = parsed.command === 'generate'
-        ? await runGenerateCommand(parsed.input)
+        ? await runGenerateCommand({ ...parsed.input, stderr })
         : parsed.command === 'run'
-          ? await runRunCommand(parsed.input)
+          ? await runRunCommand({ ...parsed.input, stderr })
           : parsed.command === 'check'
-            ? await runCheckCommand(parsed.input)
-            : await runHealCommand(parsed.input);
+            ? await runCheckCommand({ ...parsed.input, stderr })
+            : await runHealCommand({ ...parsed.input, stderr });
       if (
         parsed.command === 'run'
         && output.envelope.command === 'run'

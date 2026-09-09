@@ -27,7 +27,7 @@ const SourceSpan = z.strictObject({
 }); // JSON Schema omits this sibling-value ordering constraint, as it does for the core schema.
 
 /** Version shared by every structured report envelope. */
-export const REPORT_SCHEMA_VERSION = '3.2' as const;
+export const REPORT_SCHEMA_VERSION = '3.3' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -377,6 +377,9 @@ const ResultIdentityFields = {
 
 const ExecutedResultFields = {
   durationMs: NonNegativeInteger,
+  // The dispatch boundary increments this independently of events so
+  // consumers can distinguish real provider work from presentation delivery.
+  aiCalls: NonNegativeInteger.optional(),
   steps: z.array(StepResult),
   explanation: z.string(),
 };
@@ -609,6 +612,8 @@ export const GenerateResult = z.discriminatedUnion('status', [
     status: z.literal('generated'),
     dryRun: z.literal(false),
     ambiguities: z.array(z.json()),
+    durationMs: NonNegativeInteger.optional(),
+    aiCalls: NonNegativeInteger.optional(),
   }),
   z.strictObject({
     id: NonWhitespaceString,
@@ -617,6 +622,8 @@ export const GenerateResult = z.discriminatedUnion('status', [
     status: z.literal('would-generate'),
     dryRun: z.literal(true),
     ambiguities: z.array(z.json()),
+    durationMs: NonNegativeInteger.optional(),
+    aiCalls: NonNegativeInteger.optional(),
   }),
   z.strictObject({
     id: NonWhitespaceString,
@@ -624,6 +631,8 @@ export const GenerateResult = z.discriminatedUnion('status', [
     planFile: NonWhitespaceString,
     status: z.literal('skipped-fresh'),
     dryRun: z.boolean(),
+    durationMs: NonNegativeInteger.optional(),
+    aiCalls: NonNegativeInteger.optional(),
   }),
   z.strictObject({
     id: NonWhitespaceString,
@@ -636,6 +645,8 @@ export const GenerateResult = z.discriminatedUnion('status', [
     file: NonWhitespaceString,
     status: z.literal('failed'),
     dryRun: z.boolean(),
+    durationMs: NonNegativeInteger.optional(),
+    aiCalls: NonNegativeInteger.optional(),
   }),
   SkippedResult,
 ]);

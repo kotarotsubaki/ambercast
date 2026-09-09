@@ -14,7 +14,7 @@ Ambercast 0.3.1 does not yet publish these metadata or identical site/npm bytes.
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | unversioned; config has no `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | A present configuration document. | planned (not implemented in 0.3.1) |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed `PlanDocument`, including provenance, targets, and steps. | planned (not implemented in 0.3.1) |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | planned (not implemented in 0.3.1) |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | planned (not implemented in 0.3.1) |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.3"`) | `ambercast report schema v3` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | planned (not implemented in 0.3.1) |
 
 Each `$id` equals its public-path URL; publishing byte-identical schema files to the site and the npm `schemas/` export is planned (not implemented in 0.3.1).
 
@@ -46,6 +46,6 @@ Validating only the generated Plan JSON Schema does not establish duplicate-step
 
 | artifact | current state |
 | --- | --- |
-| Report JSON Schema | Not generated today: the generator's exhaustive write list and package export map contain only plan, grounding, and config. Runtime reports still carry `schemaVersion: "3.2"`. |
+| Report JSON Schema | Not generated today: the generator's exhaustive write list and package export map contain only plan, grounding, and config. Runtime reports carry `schemaVersion: "3.3"`. |
 
 No generated report-schema filename or npm export is established by the 0.3.1 implementation. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
@@ -103,6 +104,8 @@ describe('fake vertical slice', () => {
         execute: async () => ({ data: GENERATED_RESPONSE, raw: JSON.stringify(GENERATED_RESPONSE) }),
       }),
       events: createRecordingEventSink().sink,
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       discoverTestFiles: async () => [],
       config: {
         testDir: TEST_DIR,
@@ -145,6 +148,8 @@ describe('fake vertical slice', () => {
         execute: async () => ({ data: generatedResponse, raw: JSON.stringify(generatedResponse) }),
       }),
       events: createRecordingEventSink().sink,
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       discoverTestFiles: async () => [],
       config: {
         testDir: TEST_DIR,
@@ -165,6 +170,7 @@ describe('fake vertical slice', () => {
       storage,
       layout,
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver: () => createFakeBrowserDriver(() => session),
       secrets: createFakeSecretsProvider(new Map()),
@@ -225,6 +231,8 @@ describe('fake vertical slice', () => {
         execute: async () => ({ data: generatedResponse, raw: JSON.stringify(generatedResponse) }),
       }),
       events: createRecordingEventSink().sink,
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       discoverTestFiles: async () => [],
       config: {
         testDir: TEST_DIR,
@@ -244,6 +252,7 @@ describe('fake vertical slice', () => {
       storage,
       layout,
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver: () => createFakeBrowserDriver(() => recordingSession),
       secrets: createFakeSecretsProvider(new Map()),
@@ -296,6 +305,8 @@ describe('fake vertical slice', () => {
     expect(replay.results).toHaveLength(1);
     expect(replay.results[0]?.error).toBeUndefined();
     expect(events.emitted().filter((event) => event.type === 'ai-call')).toEqual([]);
+    expect(events.emitted().filter((event) => event.type === 'ai-result')).toEqual([]);
+    expect(replay.results[0]?.result.aiCalls).toBe(0);
   });
 
   it('rejects a noncanonical coverage-bearing grounding consistently in check and run', async () => {
@@ -320,6 +331,8 @@ describe('fake vertical slice', () => {
         execute: async () => ({ data: generatedResponse, raw: JSON.stringify(generatedResponse) }),
       }),
       events: createRecordingEventSink().sink,
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       discoverTestFiles: async () => [],
       config: {
         testDir: TEST_DIR,
@@ -339,6 +352,7 @@ describe('fake vertical slice', () => {
       storage,
       layout,
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver: () => createFakeBrowserDriver(() => session),
       secrets: createFakeSecretsProvider(new Map()),
@@ -400,6 +414,8 @@ describe('fake vertical slice', () => {
       layout,
       resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
       events: generateEvents.sink,
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       discoverTestFiles: async () => [],
       config: {
         testDir: TEST_DIR,
@@ -416,7 +432,16 @@ describe('fake vertical slice', () => {
       results: [{ file: TEST_PATH, status: 'generated', planFile: layout.planPathFor(TEST_PATH) }],
     });
     expect(execute).toHaveBeenCalledOnce();
-    expect(generateEvents.emitted()).toEqual([{ type: 'ai-call' }]);
+    expect(generateEvents.emitted()).toEqual([
+      {
+        type: 'ai-call',
+        callId: 'ai-1',
+        file: TEST_PATH,
+        attempt: 1,
+        attemptLimit: 1,
+      },
+      { type: 'ai-result', callId: 'ai-1', durationMs: 0, outcome: 'ok' },
+    ]);
 
     const plan = PlanDocument.parse(JSON.parse(await storage.readText(layout.planPathFor(TEST_PATH))));
     expect(GroundingDocument.parse(JSON.parse(await storage.readText(layout.groundingPathFor(TEST_PATH))))).toEqual({
@@ -459,6 +484,7 @@ describe('fake vertical slice', () => {
       storage,
       layout,
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver: () => createFakeBrowserDriver(() => session),
       secrets: createFakeSecretsProvider(new Map()),
@@ -483,12 +509,14 @@ describe('fake vertical slice', () => {
     const outcome = await run(runDeps, RUN_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(outcome.results[0]?.result.aiCalls).toBe(0);
     expect(events.emitted().filter((event) => event.type === 'step-result')).toEqual(plan.steps.map((step) => ({
       type: 'step-result',
       stepId: step.id,
       via: 'grounding',
     })));
     expect(events.emitted().filter((event) => event.type === 'ai-call')).toEqual([]);
+    expect(events.emitted().filter((event) => event.type === 'ai-result')).toEqual([]);
     expect(execute).toHaveBeenCalledOnce();
   });
 
@@ -517,6 +545,8 @@ describe('fake vertical slice', () => {
       layout,
       resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
       events: createRecordingEventSink().sink,
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       discoverTestFiles: async () => [],
       config: {
         testDir: TEST_DIR,
@@ -573,6 +603,7 @@ describe('fake vertical slice', () => {
       storage,
       layout,
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver: () => createFakeBrowserDriver(() => session),
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'resolved-at-run-time']])),
@@ -595,6 +626,7 @@ describe('fake vertical slice', () => {
     const outcome = await run(runDeps, RUN_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(outcome.results[0]?.result.aiCalls).toBe(0);
     expect(session.operations()).toContainEqual({
       type: 'fill-secret',
       target: expect.objectContaining({ ref: secretTarget }),
@@ -602,6 +634,7 @@ describe('fake vertical slice', () => {
       policy: baseUrlSecretPolicy(secretRef, TARGETS.web),
     });
     expect(events.emitted().filter((event) => event.type === 'ai-call')).toEqual([]);
+    expect(events.emitted().filter((event) => event.type === 'ai-result')).toEqual([]);
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(JSON.stringify(outcome.results[0])).not.toContain('resolved-at-run-time');
     expect(await storage.readText(layout.groundingPathFor(TEST_PATH))).not.toContain('resolved-at-run-time');
@@ -631,6 +664,8 @@ describe('fake vertical slice', () => {
         execute: async () => ({ data: generatedResponse, raw: JSON.stringify(generatedResponse) }),
       }),
       events: createRecordingEventSink().sink,
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       discoverTestFiles: async () => [],
       config: {
         testDir: TEST_DIR,

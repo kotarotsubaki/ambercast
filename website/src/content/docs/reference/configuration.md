@@ -35,7 +35,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `defaultTarget` | string | `web-user` | must resolve to a target | generate, run, check, heal target selection |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
-| `ai.timeoutMs` | positive integer | `120000` | positive | generate; run fallback; heal |
+| `ai.timeoutMs` | positive integer | `600000` | positive | generate; run fallback; heal |
 | `viewer.port` | integer | `4600` | 1–65535; viewer command is planned | planned `view` only |
 | `ci.heal` | boolean | `false` | opt-in to non-list heal in CI | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI write-back opt-in | run |
@@ -43,6 +43,12 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `grounding.localWriteBack` | `auto|explicit` | `auto` | ignored in CI | run |
 | `heal.maxStepRepairs` | positive integer | absent | caps incremental real-provider dispatches only | heal |
 | `heal.caseTimeoutMs` | positive integer | `300000` | case admission deadline | heal |
+
+## AI configuration {#ai}
+
+`ai.maxGenerateAttempts`: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
+
+`ai.timeoutMs`: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
 
 ## Healing configuration {#heal}
 

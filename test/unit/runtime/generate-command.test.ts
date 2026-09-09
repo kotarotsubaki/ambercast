@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   claudeFactory: vi.fn(),
   codexFactory: vi.fn(),
   createNoopEventSink: vi.fn(),
+  createStderrProgressSink: vi.fn(),
+  closeProgressSink: vi.fn(),
+  createProcessEnvironmentInfo: vi.fn(),
   createSystemClock: vi.fn(),
   readCommandEnvironment: vi.fn(),
   finalizeReportEnvelope: vi.fn(),
@@ -33,6 +36,8 @@ vi.mock('#adapters/ai/registry.js', () => ({
   AI_EXECUTOR_FACTORIES: { claude: mocks.claudeFactory, codex: mocks.codexFactory },
 }));
 vi.mock('#adapters/system/noop-event-sink.js', () => ({ createNoopEventSink: mocks.createNoopEventSink }));
+vi.mock('#adapters/system/stderr-progress-sink.js', () => ({ createStderrProgressSink: mocks.createStderrProgressSink }));
+vi.mock('#adapters/system/process-environment-info.js', () => ({ createProcessEnvironmentInfo: mocks.createProcessEnvironmentInfo }));
 vi.mock('#adapters/system/system-clock.js', () => ({ createSystemClock: mocks.createSystemClock }));
 vi.mock('#adapters/system/process-command-environment.js', () => ({
   readCommandEnvironment: mocks.readCommandEnvironment,
@@ -62,6 +67,8 @@ const CONFIG: ResolvedConfig = {
   heal: { caseTimeoutMs: 300_000 },
 };
 
+const TEST_STDERR = { write: vi.fn() } as unknown as NodeJS.WritableStream;
+
 function reportOutput(
   exitCode: GenerateCommandOutput['exitCode'],
   errors: ReportError[] = [],
@@ -69,7 +76,7 @@ function reportOutput(
   const output = {
     exitCode,
     envelope: {
-      schemaVersion: '3.2' as const,
+      schemaVersion: '3.3' as const,
       command: 'generate',
       startedAt: '2026-08-08T00:00:00Z',
       durationMs: 1,
@@ -85,7 +92,7 @@ function reportOutput(
 
 function input(overrides: Partial<GenerateCommandInput> = {}): GenerateCommandInput {
   return {
-    files: [], strict: false, force: false, dryRun: false, allowEmpty: false, list: false, cwd: '/workspace', ...overrides,
+    files: [], strict: false, force: false, dryRun: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides,
   };
 }
 
@@ -109,6 +116,7 @@ function arrangeSuccessfulCommand(
     mocks.codexFactory.mockReturnValue(selected);
   }
   mocks.createNoopEventSink.mockReturnValue(events.sink);
+  mocks.createStderrProgressSink.mockReturnValue(Object.assign(events.sink, { close: mocks.closeProgressSink }));
   mocks.createAmbercast.mockReturnValue({
     clock: { now: () => new Date('2026-08-08T00:00:00Z'), monotonicMs: () => 10 },
   });
@@ -151,6 +159,8 @@ beforeEach(async () => {
     now: () => new Date('2026-08-08T00:00:00Z'),
     monotonicMs: () => 10,
   });
+  mocks.createProcessEnvironmentInfo.mockReturnValue({ isCI: () => false });
+  mocks.createStderrProgressSink.mockImplementation(() => ({ emit: vi.fn(), close: mocks.closeProgressSink }));
 });
 
 describe('runGenerateCommand', () => {
@@ -160,7 +170,7 @@ describe('runGenerateCommand', () => {
     const cwd = `${projectRoot}/nested-cwd`;
     const rawEnvelope = {
       ...output.envelope,
-      schemaVersion: '3.2',
+      schemaVersion: '3.3',
       results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }],
       summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
     } as unknown as GenerateCommandOutput['envelope'];
@@ -204,7 +214,7 @@ describe('runGenerateCommand', () => {
     const { output } = arrangeSuccessfulCommand('codex', 'codex');
     const cwd = '/workspace/no-config-project';
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
-    const rawEnvelope = { ...output.envelope, schemaVersion: '3.2', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
+    const rawEnvelope = { ...output.envelope, schemaVersion: '3.3', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
     mocks.loadConfig.mockResolvedValue(config);
     mocks.buildGenerateReport.mockReturnValue({ ...output, envelope: rawEnvelope });
 
@@ -476,6 +486,43 @@ describe('runGenerateCommand', () => {
     mocks.buildGenerateReport.mockReturnValue(output);
 
     await expect(runGenerateCommand(input())).resolves.toEqual(output);
+  });
+
+  it('constructs progress reporting only after config resolves, threads the injected stderr, and closes it on success', async () => {
+    const stderr = { write: vi.fn() } as unknown as NodeJS.WritableStream;
+    arrangeSuccessfulCommand('codex', 'codex');
+
+    await runGenerateCommand(input({ stderr }));
+
+    expect(mocks.loadConfig.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.createStderrProgressSink.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledExactlyOnceWith({
+      command: 'generate',
+      stderr,
+      projectRoot: CONFIG.projectRoot,
+      isCI: false,
+      clock: mocks.createSystemClock.mock.results[0]?.value,
+    });
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+  });
+
+  it('closes progress reporting when composition throws after the sink exists', async () => {
+    const failure = new Error('composition failed');
+    const built = reportOutput(3, [{
+      scope: 'run', kind: 'environment', code: 'UNEXPECTED_CRASH', message: 'The generate command crashed unexpectedly.',
+    }]);
+    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.createAmbercast.mockImplementation(() => { throw failure; });
+    mocks.buildGenerateReport.mockReturnValue(built);
+
+    await expect(runGenerateCommand(input())).resolves.toEqual(built);
+
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledOnce();
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+    expect(mocks.buildGenerateReport).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.objectContaining({ cause: failure }),
+    }));
   });
 
   it('passes a classified AI response failure into run-scoped report construction', async () => {

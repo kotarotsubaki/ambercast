@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   createFsStorage: vi.fn(),
   createFsTestFileDiscovery: vi.fn(),
   createNoopEventSink: vi.fn(),
+  createStderrProgressSink: vi.fn(),
   createProcessEnvironmentInfo: vi.fn(),
   createSystemClock: vi.fn(),
   createTtyInteractivityCheck: vi.fn(),
@@ -53,6 +54,9 @@ vi.mock('#adapters/system/env-secrets-provider.js', () => ({
 }));
 vi.mock('#adapters/system/noop-event-sink.js', () => ({
   createNoopEventSink: mocks.createNoopEventSink,
+}));
+vi.mock('#adapters/system/stderr-progress-sink.js', () => ({
+  createStderrProgressSink: mocks.createStderrProgressSink,
 }));
 vi.mock('#adapters/system/process-environment-info.js', () => ({
   createProcessEnvironmentInfo: mocks.createProcessEnvironmentInfo,
@@ -97,7 +101,7 @@ const CONFIG: ResolvedConfig = {
 
 const summary = { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 };
 const runRaw = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'run' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,
@@ -107,7 +111,7 @@ const runRaw = {
   results: [],
 };
 const healRaw = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'heal' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,
@@ -116,7 +120,7 @@ const healRaw = {
   results: [],
 };
 const checkRaw = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'check' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,
@@ -125,7 +129,7 @@ const checkRaw = {
   results: [],
 };
 const generateRaw = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'generate' as const,
   startedAt: '2026-08-26T00:00:00Z',
   durationMs: 0,
@@ -133,6 +137,8 @@ const generateRaw = {
   errors: [],
   results: [],
 };
+
+const TEST_STDERR = { write: vi.fn() } as unknown as NodeJS.WritableStream;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -147,6 +153,7 @@ beforeEach(() => {
   mocks.createBrowserDriverResolver.mockReturnValue({});
   mocks.createEnvSecretsProvider.mockReturnValue({});
   mocks.createNoopEventSink.mockReturnValue({ emit: vi.fn() });
+  mocks.createStderrProgressSink.mockReturnValue({ emit: vi.fn(), close: vi.fn() });
   mocks.createTtyInteractivityCheck.mockReturnValue(() => false);
   mocks.createConfirmationAnswerReader.mockReturnValue(vi.fn(async () => 'declined' as const));
   mocks.createFsStorage.mockReturnValue(storage);
@@ -180,24 +187,24 @@ beforeEach(() => {
 function runInput() {
   return {
     files: [], headed: false, cacheOnly: false, updateCache: false,
-    allowEmpty: false, list: false, stale: 'fail' as const, cwd: '/workspace',
+    allowEmpty: false, list: false, stale: 'fail' as const, cwd: '/workspace', stderr: TEST_STDERR,
   };
 }
 
 function healInput() {
   return {
-    files: [], dryRun: false, yes: true, allowEmpty: false, list: false, cwd: '/workspace',
+    files: [], dryRun: false, yes: true, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR,
   };
 }
 
 function checkInput() {
-  return { files: [], allowEmpty: false, list: false, cwd: '/workspace' };
+  return { files: [], allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR };
 }
 
 function generateInput() {
   return {
     files: [], strict: false, force: false, dryRun: false,
-    allowEmpty: false, list: false, cwd: '/workspace',
+    allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR,
   };
 }
 

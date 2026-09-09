@@ -8,11 +8,13 @@ import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js'
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
-import { createNoopEventSink } from '#adapters/system/noop-event-sink.js';
+import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
+import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { loadConfig } from '#config/load.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError } from '#core/errors/types.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
 import { generate } from '#usecases/generate.js';
 import type { FinalizedReportEnvelope } from '#usecases/report-finalization.js';
@@ -52,6 +54,8 @@ export interface GenerateCommandInput {
   readonly configPathOverride?: string;
   /** Current project directory used for configuration selection. */
   readonly cwd: string;
+  /** Stream injected by the CLI for progress only; the command never replaces it with process-global stderr. */
+  readonly stderr: NodeJS.WritableStream;
   /** Optional caller cancellation propagated to generation. */
   readonly signal?: AbortSignal;
 }
@@ -117,36 +121,49 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
       ...(input.configPathOverride === undefined ? {} : { configPathOverride: input.configPathOverride }),
     });
     projectRoot = config.projectRoot;
-    const events = createNoopEventSink();
-    const ambercast = createAmbercast({ config, events });
-    const outcome = await generate({
-      storage: ambercast.storage,
-      layout: ambercast.layout,
-      resolveAiExecutor: (signal) => resolveAiProvider(
-        config.ai.provider,
-        input.aiProviderOverride,
-        signal,
-      ).then((provider) => AI_EXECUTOR_FACTORIES[provider]({
-        run: createSpawnCommandRunner({ env: readCommandEnvironment() }),
-      })),
-      events,
-      discoverTestFiles: ambercast.discoverTestFiles,
-      config,
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-    }, {
-      files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-      strict: input.strict,
-      force: input.force,
-      maxAttempts: config.ai.maxGenerateAttempts,
-      dryRun: input.dryRun,
-      ...(input.target === undefined ? {} : { target: input.target }),
-      allowEmpty: input.allowEmpty,
-      list: input.list,
+    const events = createStderrProgressSink({
+      command: 'generate',
+      stderr: input.stderr,
+      projectRoot: config.projectRoot,
+      isCI: createProcessEnvironmentInfo().isCI(),
+      clock,
     });
+    const allocateCallId = createCallIdAllocator();
+    try {
+      const ambercast = createAmbercast({ config, events });
+      const outcome = await generate({
+        storage: ambercast.storage,
+        layout: ambercast.layout,
+        resolveAiExecutor: (signal) => resolveAiProvider(
+          config.ai.provider,
+          input.aiProviderOverride,
+          signal,
+        ).then((provider) => AI_EXECUTOR_FACTORIES[provider]({
+          run: createSpawnCommandRunner({ env: readCommandEnvironment() }),
+        })),
+        events,
+        clock: ambercast.clock,
+        allocateCallId,
+        discoverTestFiles: ambercast.discoverTestFiles,
+        config,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      }, {
+        files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
+        strict: input.strict,
+        force: input.force,
+        maxAttempts: config.ai.maxGenerateAttempts,
+        dryRun: input.dryRun,
+        ...(input.target === undefined ? {} : { target: input.target }),
+        allowEmpty: input.allowEmpty,
+        list: input.list,
+      });
 
-    const output = buildGenerateReport({ ...reportContext(), outcome });
-    const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
-    return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+      const output = buildGenerateReport({ ...reportContext(), outcome });
+      const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
+      return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+    } finally {
+      events.close();
+    }
   } catch (error) {
     const classified = error instanceof AmbercastError
       ? error

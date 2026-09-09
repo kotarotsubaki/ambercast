@@ -137,6 +137,8 @@ export function buildRunReport(input: RunReportInput): RunReportOutput {
 
   const outcome = input.outcome!;
   const results: RunResult[] = [
+    // Executed rows already own their case-local AI count; report construction
+    // passes it through instead of inferring dispatches from lifecycle events.
     ...outcome.results.map(({ result }) => result),
     ...outcome.listed.map(({ file }): RunResult => ({ id: file, file, status: 'listed' })),
     ...outcome.skipped

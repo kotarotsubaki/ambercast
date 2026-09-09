@@ -106,9 +106,9 @@ export type VersionlessCliManifest = Omit<CliManifest, 'version'>;
  * This is the single source read by `renderUsage`, `flagLookup`, and the CLI
  * parsers, so help presentation and accepted syntax cannot drift apart.
  * Whenever `acceptedValues` is non-null, `value` is derived as
- * `` `<${acceptedValues.join('|')}>` ``. `helpFooter` is byte-identical to
- * the historical heal-configuration help tail and remains here rather than in
- * `main.ts` to protect usage compatibility.
+ * `` `<${acceptedValues.join('|')}>` ``. `helpFooter` remains here rather
+ * than in `main.ts` so the shared configuration vocabulary has one public,
+ * byte-stable rendering surface.
  */
 export const CLI_MANIFEST: VersionlessCliManifest = {
   commands: [
@@ -176,7 +176,7 @@ export const CLI_MANIFEST: VersionlessCliManifest = {
       ],
     },
   ],
-  helpFooter: 'Heal configuration:\n  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.\n  heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.\n',
+  helpFooter: 'AI configuration:\n  ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.\n  ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.\n\nHeal configuration:\n  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.\n  heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.\n',
 };
 
 /**

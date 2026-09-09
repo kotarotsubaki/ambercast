@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
@@ -66,6 +67,24 @@ import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.j
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 
 const groundingModeAccesses = vi.hoisted(() => ({ accesses: [] as string[] }));
+const requestConstructionFailure = vi.hoisted(() => ({ enabled: false }));
+
+vi.mock('#core/ai/ai-deadline.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#core/ai/ai-deadline.js')>();
+  return {
+    ...actual,
+    composeAiDeadline(...args: Parameters<typeof actual.composeAiDeadline>) {
+      const deadline = actual.composeAiDeadline(...args);
+      if (!requestConstructionFailure.enabled) return deadline;
+      return new Proxy(deadline, {
+        get(target, property, receiver) {
+          if (property === 'signal') throw new Error('request construction failed');
+          return Reflect.get(target, property, receiver);
+        },
+      });
+    },
+  };
+});
 
 vi.mock('#core/ir/grounding-recovery-mode.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('#core/ir/grounding-recovery-mode.js')>();
@@ -234,6 +253,7 @@ function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
       grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
     },
     ...overrides,
+    allocateCallId: overrides.allocateCallId ?? createCallIdAllocator(),
   };
 
   return { deps, browserDriver, events, recordingStorage, sessionFactory, resolveAiExecutor };
@@ -370,6 +390,18 @@ function evaluateTerminalAssert(
 
 function aiCalls(events: ReturnType<typeof createRecordingEventSink>): readonly Extract<RunEvent, { type: 'ai-call' }>[] {
   return events.emitted().filter((event): event is Extract<RunEvent, { type: 'ai-call' }> => event.type === 'ai-call');
+}
+
+function aiResults(events: ReturnType<typeof createRecordingEventSink>): readonly Extract<RunEvent, { type: 'ai-result' }>[] {
+  return events.emitted().filter((event): event is Extract<RunEvent, { type: 'ai-result' }> => event.type === 'ai-result');
+}
+
+function expectedAiCall(
+  callId: string,
+  stepId: string,
+  file = `${TEST_DIR}/login.test.md`,
+): Extract<RunEvent, { type: 'ai-call' }> {
+  return { type: 'ai-call', callId, file, attempt: 1, attemptLimit: 1, stepId };
 }
 
 function pathBAccessibilityTree(statusName = 'Resolution status'): JsonValueT {
@@ -664,6 +696,8 @@ describe('run', () => {
     const generateDeps: GenerateDeps = {
       storage: recordingStorage.storage,
       layout: deps.layout,
+      clock: deps.clock,
+      allocateCallId: deps.allocateCallId,
       resolveAiExecutor: async () => createFakeAiExecutor({
         execute: async () => ({ data: response, raw: JSON.stringify(response) }),
       }),
@@ -710,7 +744,7 @@ describe('run', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 0 });
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(browserDriver).toHaveBeenCalledTimes(1);
   });
@@ -1046,7 +1080,7 @@ describe('run', () => {
     expect(browserDriver).not.toHaveBeenCalled();
   });
 
-  it('replays multiple grounded steps without emitting an AI-call event', async () => {
+  it('reports aiCalls zero for a full grounding-cache hit and emits no AI lifecycle event', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(liveEntries([SUBMIT, EMAIL]), { onClose: closed });
     const { deps, events, recordingStorage } = createScenario({
@@ -1062,7 +1096,7 @@ describe('run', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed' });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 0 });
     expect(derive).toHaveBeenCalled();
     expect(events.emitted()).toEqual([
       { type: 'step-start', stepId: 'click-submit' },
@@ -1070,7 +1104,8 @@ describe('run', () => {
       { type: 'step-start', stepId: 'fill-email' },
       { type: 'step-result', stepId: 'fill-email', via: 'grounding' },
     ]);
-    expect(events.emitted().filter((event) => event.type === 'ai-call')).toEqual([]);
+    expect(aiCalls(events)).toEqual([]);
+    expect(aiResults(events)).toEqual([]);
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
@@ -1721,7 +1756,7 @@ describe('run', () => {
   it('uses the unclassified case-abort stopgap for a cold AI step in cache-only mode and closes the session', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(new Map(), { onClose: closed });
-    const { deps, recordingStorage } = createScenario({
+    const { deps, events, recordingStorage } = createScenario({
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -1740,6 +1775,9 @@ describe('run', () => {
     const outcome = await run(deps, { ...DEFAULT_OPTIONS, cacheOnly: true });
 
     expectStopgapOutcome(outcome, 'recorded-ai', 'after-ai', 'before-ai');
+    expect(outcome.results[0]?.result.aiCalls).toBe(0);
+    expect(aiCalls(events)).toEqual([]);
+    expect(aiResults(events)).toEqual([]);
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
@@ -2285,6 +2323,144 @@ describe('run interruption contract', () => {
   });
 });
 
+describe('run AI lifecycle accounting', () => {
+  it('does not emit or count executeAgentic when request construction fails after deadline composition', async () => {
+    const executor = createFakeAiExecutor();
+    const { deps, events, recordingStorage } = createScenario({ resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    requestConstructionFailure.enabled = true;
+    try {
+      const outcome = await run(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results[0]?.result).toMatchObject({ status: 'error', aiCalls: 0 });
+      expect(events.emitted().filter(({ type }) => type === 'ai-call' || type === 'ai-result')).toEqual([]);
+      expect(executor.agenticRequests).toHaveLength(0);
+    } finally {
+      requestConstructionFailure.enabled = false;
+    }
+  });
+
+  it('does not emit or count element reconfirmation when request construction fails after deadline composition', async () => {
+    const executor = createFakeAiExecutor();
+    const session = createFakeBrowserSession(
+      liveEntries([SUBMIT], DIFFERENT_FINGERPRINT),
+      { snapshot: pathBSnapshot() },
+    );
+    const { deps, events, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(
+      recordingStorage.storage,
+      testPath,
+      [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }],
+      elementGrounding(['click-submit']),
+    );
+
+    requestConstructionFailure.enabled = true;
+    try {
+      const outcome = await run(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results[0]?.result).toMatchObject({ status: 'error', aiCalls: 0 });
+      expect(events.emitted().filter(({ type }) => type === 'ai-call' || type === 'ai-result')).toEqual([]);
+      expect(executor.structuredRequests).toHaveLength(0);
+    } finally {
+      requestConstructionFailure.enabled = false;
+    }
+  });
+
+  it('emits one complete 1/1 lifecycle pair for executeAgentic and reports the admitted dispatch', async () => {
+    const fixed = createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0);
+    const monotonicMs = vi.fn<() => number>()
+      .mockReturnValueOnce(100)
+      .mockReturnValueOnce(200.4)
+      .mockReturnValueOnce(208)
+      .mockReturnValueOnce(250);
+    const executor = createFakeAiExecutor({
+      async executeAgentic(request) {
+        await evaluateTerminalAssert(request, passingText('Dashboard'));
+        return { outcome: 'success' };
+      },
+    });
+    const { deps, events, recordingStorage } = createScenario({
+      clock: { ...fixed, monotonicMs },
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'passed',
+      durationMs: 150,
+      aiCalls: 1,
+    });
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai', testPath)]);
+    expect(aiResults(events)).toEqual([{
+      type: 'ai-result',
+      callId: 'ai-1',
+      durationMs: 8,
+      outcome: 'ok',
+    }]);
+    expect(events.emitted().filter(({ type }) => type === 'ai-call' || type === 'ai-result')).toEqual([
+      expectedAiCall('ai-1', 'recorded-ai', testPath),
+      { type: 'ai-result', callId: 'ai-1', durationMs: 8, outcome: 'ok' },
+    ]);
+    expect(monotonicMs).toHaveBeenCalledTimes(4);
+  });
+
+  it('emits an error result for execute rejection, clamps a negative delta, and still counts the dispatch', async () => {
+    const fixed = createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0);
+    const monotonicMs = vi.fn<() => number>()
+      .mockReturnValueOnce(500)
+      .mockReturnValueOnce(50.7)
+      .mockReturnValueOnce(49.2)
+      .mockReturnValueOnce(600);
+    const executor = createFakeAiExecutor({
+      execute: () => {
+        throw new Error('confirmation provider rejected');
+      },
+    });
+    const session = createFakeBrowserSession(
+      liveEntries([SUBMIT], DIFFERENT_FINGERPRINT),
+      { snapshot: pathBSnapshot() },
+    );
+    const { deps, events, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      clock: { ...fixed, monotonicMs },
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(
+      recordingStorage.storage,
+      testPath,
+      [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }],
+      elementGrounding(['click-submit']),
+    );
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      durationMs: 100,
+      aiCalls: 1,
+    });
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit', testPath)]);
+    expect(aiResults(events)).toEqual([{
+      type: 'ai-result',
+      callId: 'ai-1',
+      durationMs: 0,
+      outcome: 'error',
+    }]);
+    expect(executor.structuredRequests).toHaveLength(1);
+    expect(monotonicMs).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('run agentic fallback pipeline', () => {
   it('records one cold-start AI call, persists its unresolved trace, then replays it without an AI call or write', async () => {
     const firstSession = createFakeBrowserSession(new Map());
@@ -2313,7 +2489,7 @@ describe('run agentic fallback pipeline', () => {
       [passingText('Dashboard')],
     );
     expect(coldStart.results[0]?.result).toMatchObject({ status: 'passed' });
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(resolveAiExecutor).toHaveBeenCalledTimes(1);
     expect(executor.agenticRequests).toHaveLength(1);
     expect(executor.agenticRequests[0]).toMatchObject({
@@ -2701,12 +2877,12 @@ describe('run agentic fallback pipeline', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 1 });
     expect(resolveAiExecutor).toHaveBeenCalledTimes(1);
     expect(executeAgentic).toHaveBeenCalledTimes(1);
     expect(executor.agenticRequests).toHaveLength(1);
     expect(executor.agenticRequests[0]).not.toHaveProperty('priorTrace');
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(session.operations().filter((operation) => operation.type === 'fill-secret')).toHaveLength(1);
     expect(session.operations()).toContainEqual({
       type: 'perform',
@@ -2755,7 +2931,7 @@ describe('run agentic fallback pipeline', () => {
     expect(resolveAiExecutor).toHaveBeenCalledTimes(1);
     expect(executeAgentic).toHaveBeenCalledTimes(1);
     expect(executor.agenticRequests[0]).not.toHaveProperty('priorTrace');
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(session.operations()).toContainEqual({
       type: 'resolve-grounded',
       target: PASSWORD,
@@ -2813,7 +2989,7 @@ describe('run agentic fallback pipeline', () => {
     expect(executeAgentic).toHaveBeenCalledTimes(1);
     expect(executor.agenticRequests).toHaveLength(1);
     expect(executor.agenticRequests[0]).not.toHaveProperty('priorTrace');
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(recordingStorage.writes).toEqual([]);
     expect(await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`)).toBe(groundingBefore);
     expect(JSON.stringify({ outcome, events: events.emitted() })).not.toContain(secretValue);
@@ -2868,7 +3044,7 @@ describe('run agentic fallback pipeline', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result).toMatchObject({ status: 'passed' });
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(executor.agenticRequests).toHaveLength(1);
     expect(executor.agenticRequests[0]).not.toHaveProperty('priorTrace');
     expect(session.operations()).toEqual([
@@ -2924,7 +3100,7 @@ describe('run agentic fallback pipeline', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(executor.agenticRequests[0]).not.toHaveProperty('priorTrace');
   });
 
@@ -2954,7 +3130,7 @@ describe('run agentic fallback pipeline', () => {
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(executor.agenticRequests).toHaveLength(1);
     expect(executor.agenticRequests[0]).not.toHaveProperty('priorTrace');
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(resolveGrounded).toHaveBeenCalledTimes(2);
     expect(resolveGrounded.mock.calls.map(([, query]) => (query as unknown as { readonly mode: string }).mode)).toEqual([
       'compute',
@@ -3006,7 +3182,7 @@ describe('run agentic fallback pipeline', () => {
       'The supplied locator has no matching element in the current accessibility evidence.',
     );
     expect(executor.agenticRequests).toHaveLength(1);
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(resolveGrounded).toHaveBeenCalledWith(SUBMIT, expect.objectContaining({ mode: 'compute' }));
     expect(session.operations().filter((operation) => operation.type === 'perform' || operation.type === 'evaluate-assert')).toEqual([]);
   });
@@ -3146,7 +3322,7 @@ describe('run path-B element recovery', () => {
       'The supplied locator has no matching element in the current accessibility evidence.',
     );
     expect(executor.structuredRequests).toHaveLength(1);
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'click-submit' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(resolveGrounded).toHaveBeenNthCalledWith(1, SUBMIT, {
       mode: 'verify',
       fingerprint: FINGERPRINT,
@@ -3263,7 +3439,7 @@ describe('run path-B element recovery', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'click-submit' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
     const requestContext = executor.structuredRequests[0]?.context as {
       readonly target: ElementRef;
@@ -3340,7 +3516,7 @@ describe('run path-B element recovery', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('error');
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'click-submit' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({
       'click-submit': { kind: 'element', fingerprint: expectedFingerprint },
     });
@@ -3403,7 +3579,7 @@ describe('run path-B element recovery', () => {
       mode: 'verify',
       fingerprint: expectedFingerprint,
     });
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'click-submit' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({
       'click-submit': { kind: 'element', fingerprint: expectedFingerprint },
@@ -3496,7 +3672,7 @@ describe('run path-B element recovery', () => {
     expect(outcome.results[0]?.result.explanation).toBe('The AI could not confirm that the supplied locator identifies the intended element.');
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(executor.structuredRequests).toHaveLength(1);
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'click-submit' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(recordingStorage.writes).toEqual([]);
     expect(await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`)).toBe(groundingBefore);
     expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
@@ -3600,7 +3776,7 @@ describe('run path-B element recovery', () => {
 
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(resolveAiExecutor).toHaveBeenCalledTimes(1);
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'click-submit' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toStrictEqual({
       'click-submit': { kind: 'element', fingerprint: expectedFingerprint },
@@ -5197,7 +5373,7 @@ describe('run agentic materialization boundary', () => {
         { id: 'recorded-ai', status: 'passed' },
       ],
     });
-    expect(aiCalls(successful.events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(successful.events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(successful.events.emitted().filter((event) => event.type === 'step-result' && event.stepId === 'recorded-ai')).toEqual([
       { type: 'step-result', stepId: 'recorded-ai', via: 'ai-resolve' },
     ]);
@@ -5250,7 +5426,7 @@ describe('run agentic materialization boundary', () => {
         { id: 'recorded-ai', status: 'error', kind: 'environment' },
       ],
     });
-    expect(aiCalls(failing.events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(failing.events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     for (const surface of [
       successfulGroundingText,
       JSON.stringify(successfulOutcome.results[0]?.result),
@@ -5679,13 +5855,17 @@ describe('run per-case grounding flush and dispatch wiring', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 2 });
     expect(resolveAiExecutor).toHaveBeenCalledTimes(1);
     expect(executor.agenticRequests).toHaveLength(1);
     expect(executor.structuredRequests).toHaveLength(1);
     expect(aiCalls(events)).toEqual([
-      { type: 'ai-call', stepId: 'recorded-ai' },
-      { type: 'ai-call', stepId: 'click-submit' },
+      expectedAiCall('ai-1', 'recorded-ai'),
+      expectedAiCall('ai-2', 'click-submit'),
+    ]);
+    expect(aiResults(events)).toEqual([
+      { type: 'ai-result', callId: 'ai-1', durationMs: 0, outcome: 'ok' },
+      { type: 'ai-result', callId: 'ai-2', durationMs: 0, outcome: 'ok' },
     ]);
     expect(events.emitted().filter((event) => event.type === 'step-result')).toEqual([
       { type: 'step-result', stepId: 'capture-name', via: 'grounding' },
@@ -5821,6 +6001,7 @@ describe('run failure evidence', () => {
       });
       const outcome = await run({
         storage, layout, clock: createFixedClock(new Date('2026-08-10T00:00:00.000Z'), 0), runId,
+        allocateCallId: createCallIdAllocator(),
         browserDriver: () => createFakeBrowserDriver(() => session), secrets: createFakeSecretsProvider(new Map()),
         resolveAiExecutor: async () => createFakeAiExecutor(), events: createRecordingEventSink().sink,
         discoverTestFiles: async () => [],
@@ -7087,7 +7268,7 @@ describe('run credential-literal symmetry', () => {
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(resolveAiExecutor).toHaveBeenCalledTimes(1);
-    expect(aiCalls(events)).toEqual([{ type: 'ai-call', stepId: 'recorded-ai' }]);
+    expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
   });
 
   it('does not scan object keys while inspecting stored traces', async () => {

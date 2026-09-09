@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
@@ -223,6 +224,7 @@ function scenario(
       grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
     },
     ...overrides,
+    allocateCallId: overrides.allocateCallId ?? createCallIdAllocator(),
   };
   return { deps, session, browserDriver, resolveAiExecutor, events };
 }
@@ -325,9 +327,10 @@ describe('run instruction coverage trust boundary', () => {
 
     const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
 
-    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 0 });
     expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
     expect(arranged.events.emitted().filter(({ type }) => type === 'ai-call')).toEqual([]);
+    expect(arranged.events.emitted().filter(({ type }) => type === 'ai-result')).toEqual([]);
     expect(arranged.session.operations()).toEqual([
       { type: 'evaluate-assert', check: { check: 'text-visible', text: 'Dashboard' } },
     ]);
@@ -496,7 +499,7 @@ describe('run instruction coverage trust boundary', () => {
 
     const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly: true });
 
-    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', aiCalls: 0 });
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(outcome.results[0]?.result.steps[0]).toMatchObject({
       id: 'reach-dashboard',

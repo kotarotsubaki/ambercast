@@ -17,25 +17,36 @@ import { InterruptedError } from '#core/errors/interrupted-error.js';
 import { selectExitCode } from './exit-code-priority.js';
 import type { GenerateOptions, GenerateOutcome } from './generate.js';
 
+/**
+ * Projects one use-case outcome into its strict status-specific report row.
+ *
+ * Duration and provider-call totals travel only with terminal generation
+ * outcomes; listed and interruption-skipped identities deliberately remain
+ * evidence-free. Keeping that projection here prevents report schema details
+ * from leaking back into generation control flow.
+ */
 function reportResult(
   result: GenerateOutcome['results'][number],
   dryRun: boolean,
 ): GenerateResult {
   const identity = { id: result.file, file: result.file };
+  const metrics = result.durationMs === undefined || result.aiCalls === undefined
+    ? {}
+    : { durationMs: result.durationMs, aiCalls: result.aiCalls };
 
   switch (result.status) {
     case 'generated':
-      return { ...identity, status: result.status, dryRun: false, planFile: result.planFile!, ambiguities: [...result.ambiguities!] };
+      return { ...identity, ...metrics, status: result.status, dryRun: false, planFile: result.planFile!, ambiguities: [...result.ambiguities!] };
     case 'would-generate':
-      return { ...identity, status: result.status, dryRun: true, planFile: result.planFile!, ambiguities: [...result.ambiguities!] };
+      return { ...identity, ...metrics, status: result.status, dryRun: true, planFile: result.planFile!, ambiguities: [...result.ambiguities!] };
     case 'skipped-fresh':
-      return { ...identity, status: result.status, dryRun, planFile: result.planFile! };
+      return { ...identity, ...metrics, status: result.status, dryRun, planFile: result.planFile! };
     case 'listed':
       return { ...identity, status: result.status, dryRun: false };
     case 'skipped':
       return { ...identity, status: result.status };
     case 'failed':
-      return { ...identity, status: result.status, dryRun };
+      return { ...identity, ...metrics, status: result.status, dryRun };
   }
 }
 

@@ -1,5 +1,5 @@
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
-import { composeAiDeadline, isAiDeadlineTimeout } from '#core/ai/ai-deadline.js';
+import { composeAiDeadline, isAiDeadlineTimeout, type AiDeadline } from '#core/ai/ai-deadline.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
@@ -136,6 +136,23 @@ type MaterializedAction = PerformableAction | MaterializedFillSecretAction;
 interface DispatchContext {
   readonly session: BrowserSession;
   /**
+   * Identifies the case that owns provider lifecycle events, preserving an
+   * absolute path even when progress rendering later makes it relative.
+   */
+  readonly file: string;
+  /**
+   * Supplies one monotonic time source for dispatch-only measurement so local
+   * request preparation cannot be counted as provider latency.
+   */
+  readonly clock: Pick<Clock, 'monotonicMs'>;
+  /**
+   * Shares command-wide call IDs with nested healing paths, making every
+   * admitted provider dispatch correlate to exactly one lifecycle pair.
+   */
+  readonly allocateCallId: () => string;
+  /** Counts only provider calls admitted after request preparation succeeds. */
+  aiCalls: number;
+  /**
    * The resolved replay target retained while actions are materialized.
    *
    * Navigate fields deliberately continue to accept relative URLs, whose
@@ -257,11 +274,26 @@ const CONFIRMATION_RESPONSE_SCHEMA = typedJsonSchema(CONFIRMATION_RESPONSE);
  */
 async function callAiExecutor<T>(
   context: DispatchContext,
-  invoke: (signal: AbortSignal) => Promise<T>,
+  stepId: StepId,
+  deadline: AiDeadline,
+  invoke: () => Promise<T>,
 ): Promise<T> {
-  const deadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
+  const callId = context.allocateCallId();
+  context.events.emit({
+    type: 'ai-call',
+    callId,
+    file: context.file,
+    attempt: 1,
+    attemptLimit: 1,
+    stepId,
+  });
+  context.aiCalls += 1;
+  const startedMs = context.clock.monotonicMs();
+  let providerOutcome: 'ok' | 'error' = 'error';
   try {
-    return await invoke(deadline.signal);
+    const value = await invoke();
+    providerOutcome = 'ok';
+    return value;
   } catch (error) {
     if (isAiDeadlineTimeout(deadline, error)) {
       throw new AiExecutorUnavailableError(
@@ -272,6 +304,13 @@ async function callAiExecutor<T>(
     }
 
     throw error;
+  } finally {
+    context.events.emit({
+      type: 'ai-result',
+      callId,
+      durationMs: Math.max(0, Math.round(context.clock.monotonicMs() - startedMs)),
+      outcome: providerOutcome,
+    });
   }
 }
 
@@ -2147,16 +2186,17 @@ async function executeAgentic(
   const secretRefs = step.secrets?.map((grant) => grant.ref) ?? [];
   const executor = await context.resolveAiExecutor();
   const pipeline = new AgenticRunPipeline(context, secretRefs, step, fallbackFromReplay);
-  context.events.emit({ type: 'ai-call', stepId: step.id });
-  const result = await callAiExecutor(context, (signal) => executor.executeAgentic({
+  const deadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
+  const request = {
     instructionPrompt: step.instruction,
     allowedSecretRefs: secretRefs,
     allowedRunRefs: [...context.allowedRunRefs],
     trustedInstructionCoverage: context.instructionCoverageByStepId.get(step.id) ?? [],
     controller: pipeline,
     ...(priorTrace === undefined ? {} : { priorTrace }),
-    signal,
-  }));
+    signal: deadline.signal,
+  };
+  const result = await callAiExecutor(context, step.id, deadline, () => executor.executeAgentic(request));
 
   return pipeline.finalize(result.outcome);
 }
@@ -2305,22 +2345,24 @@ async function groundedTarget(
   }
 
   const executor = await context.resolveAiExecutor();
-  context.events.emit({ type: 'ai-call', stepId: step.id });
-  const response = await callAiExecutor(context, (signal) => executor.execute({
+  const redactedAccessibilityTree = redactJsonStrings(
+    snapshot.accessibilityTree,
+    context.resolvedSecrets,
+    context.runState,
+  ) as JsonValueT;
+  const deadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
+  const request = {
     prompt: 'Confirm whether the supplied locator still identifies the intended element.',
     responseSchema: CONFIRMATION_RESPONSE_SCHEMA,
     context: {
       target,
       snapshot: {
-        accessibilityTree: redactJsonStrings(
-          snapshot.accessibilityTree,
-          context.resolvedSecrets,
-          context.runState,
-        ) as JsonValueT,
+        accessibilityTree: redactedAccessibilityTree,
       },
     },
-    signal,
-  }));
+    signal: deadline.signal,
+  };
+  const response = await callAiExecutor(context, step.id, deadline, () => executor.execute(request));
   if (!response.data.confirmed) {
     throw new CaseAbort('The AI could not confirm that the supplied locator identifies the intended element.');
   }
@@ -2828,6 +2870,15 @@ export interface RunDeps {
   readonly clock: Clock;
 
   /**
+   * Allocates provider-call IDs across the entire top-level command.
+   *
+   * This dependency stays outside case state because heal reuses run and
+   * generate within one command, where a per-case allocator would make
+   * progress pairing ambiguous.
+   */
+  readonly allocateCallId: () => string;
+
+  /**
    * Collision-resistant identity assigned to this command invocation.
    *
    * It belongs with cancellation and events as invocation-scoped context,
@@ -2865,11 +2916,14 @@ export interface RunDeps {
   readonly resolveAiExecutor: InstructionCoveredAiExecutorResolver;
 
   /**
-   * Receives successful step and real AI-call lifecycle events without affecting replay.
+   * Receives successful step and provider lifecycle events without affecting replay.
    *
-   * Result events identify deterministic grounding, AI element resolution, or
-   * successful trace replay. Each actual executor invocation emits one
-   * `ai-call` event, while cache hits and cache-only aborts emit none.
+   * Step results identify deterministic grounding, AI element resolution, or
+   * successful trace replay. For each attempted executor dispatch, its caller
+   * owns both emissions: one `ai-call` immediately before invocation and one
+   * matching `ai-result` from `finally`, whether the invocation succeeds or
+   * fails. Full cache hits and cache-only paths that suppress fallback emit
+   * neither event.
    */
   readonly events: EventSink;
 
@@ -3141,6 +3195,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   let result: ResultWithoutDuration | undefined;
   let resolvedSecrets: Map<string, Set<string>> | undefined;
   let runState: Map<RunVariableName, string> | undefined;
+  let context: DispatchContext | undefined;
 
   try {
     let testMd: string;
@@ -3251,8 +3306,12 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     const resolvedVias = new Map<Step['id'], ResolutionVia>();
     resolvedSecrets ??= new Map<string, Set<string>>();
     runState = new Map<RunVariableName, string>();
-    const context: DispatchContext = {
+    context = {
       session,
+      file,
+      clock: deps.clock,
+      allocateCallId: deps.allocateCallId,
+      aiCalls: 0,
       target,
       grounding: loadedGrounding,
       runState,
@@ -3473,7 +3532,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
 
   const durationMs = deps.clock.monotonicMs() - startedAt;
   return {
-    result: { ...result!, durationMs },
+    result: { ...result!, durationMs, aiCalls: context?.aiCalls ?? 0 },
     ...(classifiedError === undefined ? {} : { error: classifiedError }),
   };
 }

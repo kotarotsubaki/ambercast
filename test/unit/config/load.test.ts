@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { ConfigEnvSnapshot, ResolvedConfig } from '#core/config/schema.js';
+import { readFile } from 'node:fs/promises';
+import {
+  RawConfig,
+  type ConfigEnvSnapshot,
+  type ResolvedConfig,
+} from '#core/config/schema.js';
+import { CLI_MANIFEST } from '#core/cli/manifest.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { DEFAULT_RAW_CONFIG } from '#config/defaults.js';
 import { loadConfig } from '#config/load.js';
@@ -44,7 +50,7 @@ function expectedDefaults(configRoot: string): ResolvedConfig {
     defaultTarget: 'web-user',
     ai: {
       provider: 'auto',
-      timeoutMs: 120_000,
+      timeoutMs: 600_000,
       maxGenerateAttempts: 2,
     },
     viewer: {
@@ -588,7 +594,7 @@ describe('loadConfig', () => {
 
       expect(config).toStrictEqual({
         ...expectedDefaults(CWD),
-        ai: { provider, timeoutMs: 120_000, maxGenerateAttempts: 2 },
+        ai: { provider, timeoutMs: 600_000, maxGenerateAttempts: 2 },
       });
     });
 
@@ -718,5 +724,48 @@ describe('loadConfig', () => {
       });
       expect(DEFAULT_RAW_CONFIG).toStrictEqual(EXPECTED_DEFAULT_CONFIG);
     });
+  });
+});
+
+describe('public AI configuration descriptions', () => {
+  const timeoutDescription = 'Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.';
+  const maxGenerateAttemptsDescription = 'Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.';
+
+  async function documentationSection(setting: string): Promise<string> {
+    const documentation = await readFile(new URL('../../../docs/configuration.md', import.meta.url), 'utf8');
+    const heading = `## \`${setting}\`\n\n`;
+    const sectionStart = documentation.indexOf(heading);
+    expect(sectionStart).toBeGreaterThanOrEqual(0);
+    const bodyStart = sectionStart + heading.length;
+    const nextHeading = documentation.indexOf('\n## ', bodyStart);
+    return documentation.slice(bodyStart, nextHeading === -1 ? undefined : nextHeading).trim();
+  }
+
+  function schemaDescriptions(): { readonly timeoutMs: string | undefined; readonly maxGenerateAttempts: string | undefined } {
+    const aiSchema = RawConfig.shape.ai.unwrap();
+    return {
+      timeoutMs: aiSchema.shape.timeoutMs.description,
+      maxGenerateAttempts: aiSchema.shape.maxGenerateAttempts.description,
+    };
+  }
+
+  it('keeps the ai.timeoutMs description byte-identical across schema, CLI help, and documentation', async () => {
+    const surfaces = [
+      schemaDescriptions().timeoutMs,
+      CLI_MANIFEST.helpFooter,
+      await documentationSection('ai.timeoutMs'),
+    ];
+
+    for (const surface of surfaces) expect(surface).toContain(timeoutDescription);
+  });
+
+  it('keeps the ai.maxGenerateAttempts description byte-identical across schema, CLI help, and documentation', async () => {
+    const surfaces = [
+      schemaDescriptions().maxGenerateAttempts,
+      CLI_MANIFEST.helpFooter,
+      await documentationSection('ai.maxGenerateAttempts'),
+    ];
+
+    for (const surface of surfaces) expect(surface).toContain(maxGenerateAttemptsDescription);
   });
 });

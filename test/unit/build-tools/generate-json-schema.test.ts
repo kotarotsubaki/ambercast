@@ -12,9 +12,24 @@ interface CapturedWrite {
   content: string;
 }
 
-const expectedCliManifest = JSON.parse(
+const pkg = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'));
+
+/**
+ * Composes the manifest this test expects with the version a release PR is
+ * free to change, rather than freezing it inside the fixture. `cli.json`'s
+ * only version-dependent field is `version` itself (createCliManifest spreads
+ * the static CLI_MANIFEST after it), so overriding just that key keeps every
+ * other field fixture-pinned while tracking whatever package.json currently
+ * says — matching how the generator derives its own output.
+ */
+function withLiveVersion(manifestLike: { version: string }, version: string) {
+  return { ...manifestLike, version };
+}
+
+const fixtureCliManifest = JSON.parse(
   readFileSync(new URL('../../fixtures/cli-manifest.json', import.meta.url), 'utf8'),
 );
+const expectedCliManifest = withLiveVersion(fixtureCliManifest, pkg.version);
 
 const EXPECTED_REPORT_ERROR_CODES = [
   'CONFIG_INVALID',
@@ -113,6 +128,13 @@ describe('writeGeneratedArtifacts', () => {
 
     expect(cliManifest).toStrictEqual(expectedCliManifest);
     expect(cliText).toBe(JSON.stringify(cliManifest));
+  });
+
+  it('regression: withLiveVersion overrides the fixture\'s frozen version instead of tracking it', () => {
+    const probe = { ...fixtureCliManifest, version: '9.9.9-regression-probe' };
+
+    expect(withLiveVersion(probe, pkg.version).version).toBe(pkg.version);
+    expect(withLiveVersion(probe, pkg.version).version).not.toBe(probe.version);
   });
 
   it('writes the exact capabilities vocabulary without coercing schema-version types', () => {

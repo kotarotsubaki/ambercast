@@ -45,6 +45,12 @@ Secret references identify credential slots within secret grants and schema fiel
 
 Surrounding prose is not accepted by `SecretRef`; whole-value anchoring enforced by `SECRET_REF_PATTERN` keeps secret-bearing fields unambiguous. A valid reference such as `{{secrets.name}}` must occupy the entire field value rather than being embedded alongside prose.
 
+## Terminal assertions and instruction coverage {#terminal-assertions-and-instruction-coverage}
+
+Each terminal success assertion must be covered by its instruction. URL arrival alone is not terminal proof; state a heading, message, or element that is visible at the destination.
+
+> …I reach the dashboard and see the heading "Welcome back".
+
 ## Literal-secret rejection {#literal-secret-rejection}
 
 The canonical detector contract is defined in [Secrets in plans](/ambercast/spec/secrets/#literal-secret-rejection).

@@ -41,11 +41,19 @@ describe('config JSON Schema document', () => {
     ['a target secret-sink origin with a path', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, secretSinkOrigins: { '{{secrets.app.password}}': ['https://idp.example.test/path'] } } } }, false],
     ['a supported AI provider', { $schema: CONFIG_SCHEMA_URL, ai: { provider: 'codex' } }, true],
     ['an invalid AI provider', { $schema: CONFIG_SCHEMA_URL, ai: { provider: 'openai' } }, false],
-    ['the positive AI timeout boundary', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 1 } }, true],
-    ['a zero AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 0 } }, false],
-    ['a negative AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: -1 } }, false],
-    ['a fractional AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 1.5 } }, false],
-    ['a wrong-typed AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: '1000' } }, false],
+    ['the positive AI timeout boundary', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 1, maxGenerateAttempts: 2 } }, true],
+    ['a zero AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 0, maxGenerateAttempts: 2 } }, false],
+    ['a negative AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: -1, maxGenerateAttempts: 2 } }, false],
+    ['a fractional AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: 1.5, maxGenerateAttempts: 2 } }, false],
+    ['a wrong-typed AI timeout', { $schema: CONFIG_SCHEMA_URL, ai: { timeoutMs: '1000', maxGenerateAttempts: 2 } }, false],
+    ['one generate attempt', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 1 } }, true],
+    ['two generate attempts', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 2 } }, true],
+    ['three generate attempts', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 3 } }, true],
+    ['four generate attempts', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 4 } }, true],
+    ['five generate attempts', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 5 } }, true],
+    ['a zero generate-attempt budget', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 0 } }, false],
+    ['an overlarge generate-attempt budget', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 6 } }, false],
+    ['a fractional generate-attempt budget', { $schema: CONFIG_SCHEMA_URL, ai: { maxGenerateAttempts: 1.5 } }, false],
     ['the lowest valid viewer port', { $schema: CONFIG_SCHEMA_URL, viewer: { port: 1 } }, true],
     ['the highest valid viewer port', { $schema: CONFIG_SCHEMA_URL, viewer: { port: 65_535 } }, true],
     ['a viewer port below the range', { $schema: CONFIG_SCHEMA_URL, viewer: { port: 0 } }, false],
@@ -68,5 +76,25 @@ describe('config JSON Schema document', () => {
     expect.soft(zodVerdict).toBe(expected);
     expect.soft(ajvVerdict).toBe(expected);
     expect(ajvVerdict).toBe(zodVerdict);
+  });
+
+  it('derives the optional maxGenerateAttempts property and its stable description', () => {
+    const schema = getConfigJsonSchema();
+    expect(schema).toMatchObject({
+      properties: {
+        ai: {
+          properties: {
+            maxGenerateAttempts: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 5,
+              description: 'Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.',
+            },
+          },
+        },
+      },
+    });
+    const aiSchema = (schema as unknown as { properties: { ai: { required?: readonly string[] } } }).properties.ai;
+    expect(aiSchema.required ?? []).not.toContain('maxGenerateAttempts');
   });
 });

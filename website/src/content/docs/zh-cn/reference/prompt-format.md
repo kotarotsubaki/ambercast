@@ -51,6 +51,12 @@ new RegExp(`^[ \\t]*@ambercast-secret[ \\t]+(${SECRET_REF_SOURCE})[ \\t]*$`)
 
 合法的机密引用形如 `{{secrets.name}}`。`SecretRef` 不接受外围文字（surrounding prose）；通过 `SECRET_REF_PATTERN` 的全值锚定，确保承载机密的字段始终明确无歧义。
 
+## 终端断言与指令覆盖 {#terminal-assertions-and-instruction-coverage}
+
+每个终端成功断言都必须由其指令覆盖。仅到达 URL 不是终端证明；请描述在目标页面可见的标题、消息或元素。
+
+> …I reach the dashboard and see the heading "Welcome back".
+
 ## 明文机密拒绝 {#literal-secret-rejection}
 
 提示词格式在生成计划阶段对明文机密执行严格的拒绝机制，规范的检测器契约详见 [计划中的机密](/ambercast/zh-cn/spec/secrets/#literal-secret-rejection)。

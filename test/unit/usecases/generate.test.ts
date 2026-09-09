@@ -18,9 +18,11 @@ import { normalizeTestMd } from '#core/ir/normalize.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
+import { AmbercastError } from '#core/errors/types.js';
 import type { AiExecuteRequest } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
@@ -130,6 +132,7 @@ const DEFAULT_OPTIONS: GenerateOptions = {
   files: [],
   strict: false,
   force: false,
+  maxAttempts: 2,
   dryRun: false,
   allowEmpty: false,
   list: false,
@@ -203,7 +206,7 @@ function createScenario(overrides: Partial<GenerateDeps> = {}) {
       testIgnore: ['**/.runs/**'],
       targets: RESOLVED_TARGETS,
       defaultTarget: 'web',
-      ai: { provider: 'codex', timeoutMs: 100 },
+      ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
     },
     ...overrides,
   };
@@ -241,6 +244,7 @@ function sequentialTimeoutConfig(timeoutMsValues: readonly number[]) {
 
   return {
     provider: 'codex' as const,
+    maxGenerateAttempts: 2,
     get timeoutMs() {
       const timeoutMs = timeoutMsValues[timeoutMsIndex];
       timeoutMsIndex += 1;
@@ -395,9 +399,10 @@ describe('generate', () => {
         steps: [{ ...coveredResponse.steps[0], verificationIntent }],
       } as unknown as GeneratedPlanResponse;
       const raw = `RAW:${JSON.stringify(response)}`;
-      const { deps, recordingStorage } = createScenario({
+      const execute = vi.fn(async () => ({ data: response, raw }));
+      const { deps, events, recordingStorage } = createScenario({
         resolveAiExecutor: async () => createFakeAiExecutor({
-          execute: async () => ({ data: response, raw }),
+          execute,
         }),
       });
       await writePrompt(recordingStorage.storage);
@@ -414,6 +419,10 @@ describe('generate', () => {
           issues: expect.arrayContaining([expect.objectContaining({ path: expectedPath, code: expectedCode })]),
         },
       });
+      const attempts = expectedCode === 'terminal-url-matches-forbidden' ? 1 : DEFAULT_OPTIONS.maxAttempts;
+      expect(execute).toHaveBeenCalledTimes(attempts);
+      expect(events.emitted()).toEqual(Array.from({ length: attempts }, () => ({ type: 'ai-call' })));
+      expect(error).toMatchObject({ details: { attempts: Array.from({ length: attempts }, (_, index) => ({ attempt: index + 1, code: 'AI_RESPONSE_INVALID' })) } });
       expect(recordingStorage.writes).toEqual([]);
     },
   );
@@ -435,8 +444,9 @@ describe('generate', () => {
       }],
     } as unknown as GeneratedPlanResponse;
     const raw = `RAW:${JSON.stringify(response)}`;
+    const execute = vi.fn(async () => ({ data: response, raw }));
     const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw }) }),
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
     });
     await writePrompt(recordingStorage.storage, 'login.test.md', prompt);
     recordingStorage.reset();
@@ -452,6 +462,10 @@ describe('generate', () => {
           { code: 'intent-id-missing', path: ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT] },
         ],
       },
+    });
+    expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
+    expect(outcome.results[0]?.error).toMatchObject({
+      details: { attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' }] },
     });
     expect(recordingStorage.writes).toEqual([]);
   });
@@ -768,7 +782,7 @@ describe('generate', () => {
         testIgnore: ['**/.runs/**'],
         targets,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     });
     await writePrompt(recordingStorage.storage);
@@ -1431,7 +1445,7 @@ describe('generate', () => {
         testMatch: ['**/*.test.md'],
         testIgnore: [],
         targets: soleTargets,
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     });
     await writePrompt(recordingStorage.storage);
@@ -1470,7 +1484,7 @@ describe('generate', () => {
         testIgnore: [],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex' as const, timeoutMs: 100 },
+        ai: { provider: 'codex' as const, timeoutMs: 100, maxGenerateAttempts: 2 },
       },
       { target: 'missing' },
       'The requested target is not configured.',
@@ -1486,7 +1500,7 @@ describe('generate', () => {
           web: RESOLVED_TARGETS.web,
           admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
         },
-        ai: { provider: 'codex' as const, timeoutMs: 100 },
+        ai: { provider: 'codex' as const, timeoutMs: 100, maxGenerateAttempts: 2 },
       },
       {},
       'A target could not be selected from the configured targets.',
@@ -1553,7 +1567,7 @@ describe('generate', () => {
         testIgnore: [],
         targets,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
       discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
     });
@@ -1602,7 +1616,7 @@ describe('generate', () => {
         testIgnore: [],
         targets,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     });
     await writePrompt(recordingStorage.storage);
@@ -1647,7 +1661,7 @@ describe('generate', () => {
         testIgnore: [],
         targets: selectedChanged,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     });
     const changedPath = await writePrompt(changedScenario.recordingStorage.storage);
@@ -1666,7 +1680,7 @@ describe('generate', () => {
         testIgnore: [],
         targets: unrelatedChanged,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     });
     const unrelatedPath = await writePrompt(unrelatedScenario.recordingStorage.storage);
@@ -1680,30 +1694,46 @@ describe('generate', () => {
   });
 
   it.each([
-    ['provider rejection', new AiExecutorUnavailableError('provider unavailable'), 'ai-executor-unavailable'],
-    ['invalid response rejection', new AiResponseInvalidError('invalid response'), 'ai-response-invalid'],
-  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind) => {
+    [
+      'provider rejection',
+      new AiExecutorUnavailableError('provider unavailable'),
+      'ai-executor-unavailable',
+      2,
+      [{ attempt: 1, code: 'AI_EXECUTOR_UNAVAILABLE' }],
+    ],
+    [
+      'invalid response rejection',
+      new AiResponseInvalidError('invalid response'),
+      'ai-response-invalid',
+      3,
+      [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' }],
+    ],
+  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, expectedAiCalls, expectedAttempts) => {
+    const execute = vi.fn(async (request: AiExecuteRequest<unknown>) => {
+      if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && String(request.context.testMd).includes('first')) {
+        throw error;
+      }
+      return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
+    });
     const { deps, events, recordingStorage } = createScenario({
       resolveAiExecutor: async () => createFakeAiExecutor({
-        execute: async (request) => {
-          if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && String(request.context.testMd).includes('first')) {
-            throw error;
-          }
-          return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
-        },
+        execute,
       }),
       discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
     });
     await writePrompt(recordingStorage.storage, 'first.test.md', 'first');
     await writePrompt(recordingStorage.storage, 'second.test.md', 'second');
 
-    await expect(generate(deps, DEFAULT_OPTIONS)).resolves.toMatchObject({
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+    expect(outcome).toMatchObject({
       results: [
         { file: `${TEST_DIR}/first.test.md`, status: 'failed', error: { kind } },
         { file: `${TEST_DIR}/second.test.md`, status: 'generated' },
       ],
     });
-    expect(events.emitted()).toEqual([{ type: 'ai-call' }, { type: 'ai-call' }]);
+    expect(outcome.results[0]?.error).toMatchObject({ details: { attempts: expectedAttempts } });
+    expect(execute).toHaveBeenCalledTimes(expectedAiCalls);
+    expect(events.emitted()).toEqual(Array.from({ length: expectedAiCalls }, () => ({ type: 'ai-call' })));
   });
 
   it('wraps a per-call timeout as an unavailable executor failure and continues the batch', async () => {
@@ -1932,11 +1962,14 @@ describe('generate', () => {
       if (failure !== 'read') {
         await writePrompt(storage.storage);
       }
-      const { deps } = createScenario({ storage: storage.storage });
+      const { deps, execute } = createScenario({ storage: storage.storage });
 
-      await expect(generate(deps, { ...DEFAULT_OPTIONS, files: [testPath] })).resolves.toMatchObject({
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, files: [testPath] });
+      expect(outcome).toMatchObject({
         results: [{ status: 'failed', error: { kind: 'fs-io-error' } }],
       });
+      expect(execute).toHaveBeenCalledTimes(failure === 'read' ? 0 : 1);
+      expect(outcome.results[0]?.error?.details?.['attempts']).toBeUndefined();
     }
   });
 
@@ -2014,6 +2047,7 @@ describe('generate', () => {
     await expect(generate(deps, DEFAULT_OPTIONS)).resolves.toMatchObject({
       results: [{ status: 'failed', error: { kind: 'fs-io-error' } }],
     });
+    expect(execute).toHaveBeenCalledOnce();
     expect(PlanDocument.safeParse(JSON.parse(await storage.readText(planPath))).success).toBe(true);
     await expect(storage.exists(groundingPath)).resolves.toBe(false);
 
@@ -2080,20 +2114,21 @@ describe('generate', () => {
   });
 
   it('continues to the next file when secret-grant attribution fails for one generated response', async () => {
-    const unattributableResponse: GeneratedPlanResponse = {
+    const [, unattributableResponse, secretPrompt, reason] = SECRET_GRANT_CITATION_FAILURES[0];
+    const attributableResponse: GeneratedPlanResponse = {
       steps: [{
         id: 'fill-password',
         kind: 'action',
         action: 'fill-secret',
         target: PASSWORD_TARGET,
         secretRef: FIRST_SECRET_REF,
-        citation: 'This citation is absent from the first prompt.',
+        citation: `@ambercast-secret ${FIRST_SECRET_REF}`,
       }],
       ambiguities: [],
     };
-    const responses: readonly GeneratedPlanResponse[] = [unattributableResponse, RESPONSE];
+    const responses: readonly GeneratedPlanResponse[] = [unattributableResponse, attributableResponse, RESPONSE];
     let responseIndex = 0;
-    const execute = vi.fn(async () => {
+    const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
       const response = responses[responseIndex];
       responseIndex += 1;
       if (response === undefined) {
@@ -2105,26 +2140,36 @@ describe('generate', () => {
       resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
       discoverTestFiles: async () => ['unattributable.test.md', 'valid.test.md'],
     });
-    await writePrompt(recordingStorage.storage, 'unattributable.test.md', `@ambercast-secret ${FIRST_SECRET_REF}\n`);
+    await writePrompt(recordingStorage.storage, 'unattributable.test.md', secretPrompt);
     await writePrompt(recordingStorage.storage, 'valid.test.md', 'A prompt without secret grants.\n');
     recordingStorage.reset();
 
     const outcome = await generate(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results).toMatchObject([
-      { file: `${TEST_DIR}/unattributable.test.md`, status: 'failed' },
+      { file: `${TEST_DIR}/unattributable.test.md`, status: 'generated' },
       { file: `${TEST_DIR}/valid.test.md`, status: 'generated' },
     ]);
-    expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute.mock.calls[1]?.[0].context).toEqual({
+      testMd: normalizeTestMd(secretPrompt),
+      targets: TARGETS,
+      previousAttempts: [{
+        attempt: 1,
+        code: 'SECRET_GRANT_UNATTRIBUTABLE',
+        reason,
+        stepId: 'fill-password',
+      }],
+    });
   });
 
   it.each(SECRET_GRANT_CITATION_FAILURES)(
     'rejects %s before writing generated artifacts',
     async (_description, response, testMd, reason) => {
+      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
       const { deps, recordingStorage } = createScenario({
         resolveAiExecutor: async () => createFakeAiExecutor({
-          execute: async () => ({ data: response, raw: JSON.stringify(response) }),
+          execute,
         }),
       });
       const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', testMd);
@@ -2134,7 +2179,11 @@ describe('generate', () => {
 
       expect(outcome.results[0]).toMatchObject({ file: testPath, status: 'failed' });
       expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-      expect(outcome.results[0]?.error).toMatchObject({ details: { reason } });
+      expect(outcome.results[0]?.error).toMatchObject({ details: {
+        reason,
+        attempts: [{ attempt: 1, code: 'SECRET_GRANT_UNATTRIBUTABLE' }, { attempt: 2, code: 'SECRET_GRANT_UNATTRIBUTABLE' }],
+      } });
+      expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
       expect(recordingStorage.writes).toEqual([]);
     },
   );
@@ -2142,9 +2191,10 @@ describe('generate', () => {
   it.each(SECRET_GRANT_CITATION_FAILURES)(
     'rejects %s through the --dry-run path without writing artifacts',
     async (_description, response, testMd, reason) => {
+      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
       const { deps, recordingStorage } = createScenario({
         resolveAiExecutor: async () => createFakeAiExecutor({
-          execute: async () => ({ data: response, raw: JSON.stringify(response) }),
+          execute,
         }),
       });
       const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', testMd);
@@ -2154,7 +2204,11 @@ describe('generate', () => {
 
       expect(outcome.results[0]).toMatchObject({ file: testPath, status: 'failed' });
       expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-      expect(outcome.results[0]?.error).toMatchObject({ details: { reason } });
+      expect(outcome.results[0]?.error).toMatchObject({ details: {
+        reason,
+        attempts: [{ attempt: 1, code: 'SECRET_GRANT_UNATTRIBUTABLE' }, { attempt: 2, code: 'SECRET_GRANT_UNATTRIBUTABLE' }],
+      } });
+      expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
       expect(recordingStorage.writes).toEqual([]);
     },
   );
@@ -2423,6 +2477,601 @@ describe('generate', () => {
     fingerprintSpy.mockRestore();
     diagnosticsSpy.mockRestore();
     inputsSpy.mockRestore();
+  });
+
+  describe('bounded validation retries', () => {
+    const responseWithMissingSuccessIntent = () => ({
+      ...coveredResponse,
+      steps: [{ ...coveredResponse.steps[0], id: 'sign-in', verificationIntent: [] }],
+    } as unknown as GeneratedPlanResponse);
+
+    function requireRawPreviousAttempts(context: unknown): unknown[] {
+      if (context === null || typeof context !== 'object') {
+        throw new Error('Expected a raw object context.');
+      }
+      const previousAttempts = Reflect.get(context, 'previousAttempts');
+      if (!Array.isArray(previousAttempts)) {
+        throw new Error('Expected raw context.previousAttempts to be an array.');
+      }
+      return previousAttempts;
+    }
+
+    function requireRawObject(value: unknown, name: string): object {
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`Expected ${name} to be a raw object.`);
+      }
+      return value;
+    }
+
+    it('retries coverage rejection, supplies only projected feedback, and preserves context key order', async () => {
+      const rejected = responseWithMissingSuccessIntent();
+      const responses = [rejected, coveredResponse] as const;
+      let index = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        const response = responses[index++];
+        if (response === undefined) throw new Error('Unexpected retry dispatch.');
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const { deps, events, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+      const firstContext = execute.mock.calls[0]?.[0].context as Record<string, unknown>;
+      const secondContext = execute.mock.calls[1]?.[0].context as Record<string, unknown>;
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(outcome.results[0]).not.toHaveProperty('error');
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(events.emitted()).toEqual([{ type: 'ai-call' }, { type: 'ai-call' }]);
+      expect(Object.keys(firstContext)).toEqual(['testMd', 'targets']);
+      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'previousAttempts']);
+      expect(secondContext).toEqual({
+        testMd: normalizeTestMd(PROMPT),
+        targets: TARGETS,
+        previousAttempts: [{
+          attempt: 1,
+          code: 'AI_RESPONSE_INVALID',
+          issues: [{
+            code: 'intent-id-missing',
+            path: ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT],
+            stepId: 'sign-in',
+          }],
+        }],
+      });
+    });
+
+    it('exhausts three retryable coverage failures with complete ordered retry feedback and attempts history', async () => {
+      const rejected = responseWithMissingSuccessIntent();
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({ data: rejected, raw: JSON.stringify(rejected) }));
+      const { deps, events, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 3 });
+      const thirdContext = execute.mock.calls[2]?.[0].context;
+
+      expect(outcome.results[0]).toMatchObject({ status: 'failed' });
+      expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+      expect(outcome.results[0]?.error).toMatchObject({ details: {
+        attempts: [
+          { attempt: 1, code: 'AI_RESPONSE_INVALID' },
+          { attempt: 2, code: 'AI_RESPONSE_INVALID' },
+          { attempt: 3, code: 'AI_RESPONSE_INVALID' },
+        ],
+      } });
+      expect(execute).toHaveBeenCalledTimes(3);
+      expect(events.emitted()).toEqual([{ type: 'ai-call' }, { type: 'ai-call' }, { type: 'ai-call' }]);
+      expect(thirdContext).toEqual({
+        testMd: normalizeTestMd(PROMPT),
+        targets: TARGETS,
+        previousAttempts: [
+          {
+            attempt: 1,
+            code: 'AI_RESPONSE_INVALID',
+            issues: [{
+              code: 'intent-id-missing',
+              path: ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT],
+              stepId: 'sign-in',
+            }],
+          },
+          {
+            attempt: 2,
+            code: 'AI_RESPONSE_INVALID',
+            issues: [{
+              code: 'intent-id-missing',
+              path: ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT],
+              stepId: 'sign-in',
+            }],
+          },
+        ],
+      });
+    });
+
+    it('retries an invalid response with an explicit empty issues list', async () => {
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        if (dispatch++ === 0) throw new AiResponseInvalidError('No issue details were supplied.', { issues: [] });
+        return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(execute.mock.calls[1]?.[0].context).toMatchObject({
+        previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [] }],
+      });
+    });
+
+    it('normalizes a non-array invalid-response issues value to empty retry feedback', async () => {
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        if (dispatch++ === 0) {
+          throw new AiResponseInvalidError('Malformed issue details.', { issues: 'not-an-array' });
+        }
+        return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(execute.mock.calls[1]?.[0].context).toMatchObject({
+        previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [] }],
+      });
+    });
+
+    it('normalizes no-details invalid responses before attaching terminal history', async () => {
+      const execute = vi.fn(async () => { throw new AiResponseInvalidError('No details.'); });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+
+      expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+      expect(outcome.results[0]?.error?.details).toEqual({
+        issues: [],
+        attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }],
+      });
+      expect(execute).toHaveBeenCalledOnce();
+    });
+
+    it('preserves an adapter invalid-response cause while attaching terminal history', async () => {
+      const cause = new SyntaxError('provider JSON could not be parsed');
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        throw new AiResponseInvalidError('Invalid provider response.', { issues: [] }, { cause });
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+
+      expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+      expect(outcome.results[0]?.error?.cause).toBe(cause);
+      expect(outcome.results[0]?.error?.details).toEqual({
+        issues: [],
+        attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }],
+      });
+      expect(execute).toHaveBeenCalledOnce();
+    });
+
+    it('stops a literal secret found by the plan safety policy after one attempt without dropping diagnostics', async () => {
+      const literal = 'sk-live-secret-in-provider-ambiguity';
+      const response: GeneratedPlanResponse = { steps: [], ambiguities: [literal] };
+      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
+      const { deps, events, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 3 });
+
+      expect(outcome.results[0]?.error).toBeInstanceOf(SecretLiteralRejectedError);
+      expect(outcome.results[0]?.error?.details).toMatchObject({
+        detector: 'credential-prefix-sk',
+        path: '[0]',
+        attempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }],
+      });
+      expect(execute).toHaveBeenCalledOnce();
+      expect(events.emitted()).toEqual([{ type: 'ai-call' }]);
+    });
+
+    it('preserves an unmapped classified terminal error without attaching retry history', async () => {
+      class UnmappedGenerationError extends AmbercastError {
+        readonly kind = 'assertion-failed' as const;
+      }
+
+      const terminal = new UnmappedGenerationError('A future classified error reached generation.', { origin: 'test' });
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        if (dispatch++ === 0) {
+          throw new AiResponseInvalidError('Retryable invalid response.', { issues: [] });
+        }
+        throw terminal;
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 3 });
+
+      expect(outcome.results[0]).toMatchObject({ status: 'failed' });
+      expect(outcome.results[0]?.error).toBe(terminal);
+      expect(Object.hasOwn(terminal.details ?? {}, 'attempts')).toBe(false);
+      expect(execute).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      [
+        'an unavailable executor',
+        'AI_EXECUTOR_UNAVAILABLE',
+        (cause: Error) => new AiExecutorUnavailableError('Provider unavailable.', undefined, { cause }),
+      ],
+      [
+        'a literal-secret rejection',
+        'SECRET_LITERAL_REJECTED',
+        (cause: Error) => new SecretLiteralRejectedError(
+          'Literal secret rejected.',
+          { detector: 'credential-prefix-sk', path: 'generatorMeta.token' },
+          { cause },
+        ),
+      ],
+      [
+        'an unattributable secret grant',
+        'SECRET_GRANT_UNATTRIBUTABLE',
+        (cause: Error) => new SecretGrantUnattributableError(
+          'Secret grant rejected.',
+          {
+            reason: 'citation-not-found',
+            secretRef: FIRST_SECRET_REF,
+            stepId: 'fill-password',
+            hint: 'Use an exact prompt citation.',
+          },
+          { cause },
+        ),
+      ],
+    ] as const)(
+      'preserves the original cause while attaching terminal history for %s',
+      async (_description, code, createError) => {
+        const cause = new Error(`Original cause for ${code}`);
+        const terminal = createError(cause);
+        const execute = vi.fn(async () => { throw terminal; });
+        const { deps, recordingStorage } = createScenario({
+          resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+        });
+        await writePrompt(recordingStorage.storage);
+        recordingStorage.reset();
+
+        const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+
+        expect(outcome.results[0]?.error).toBeInstanceOf(terminal.constructor);
+        expect(outcome.results[0]?.error?.cause).toBe(cause);
+        expect(outcome.results[0]?.error?.details).toMatchObject({
+          attempts: [{ attempt: 1, code }],
+        });
+        expect(execute).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('does not retry a terminal-url-matches-only rejection but retries a mixed issue list', async () => {
+      const terminalOnly = {
+        ...coveredResponse,
+        steps: [{
+          ...coveredResponse.steps[0],
+          verificationIntent: [{
+            criterionId: 'dashboard-reached',
+            assertion: { type: 'assert', check: 'url-matches', pattern: '/dashboard$' },
+          }],
+        }],
+      } as unknown as GeneratedPlanResponse;
+      const terminalExecute = vi.fn(async () => ({ data: terminalOnly, raw: JSON.stringify(terminalOnly) }));
+      const terminalScenario = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute: terminalExecute }),
+      });
+      await writePrompt(terminalScenario.recordingStorage.storage, 'terminal.test.md');
+      terminalScenario.recordingStorage.reset();
+
+      const terminalOutcome = await generate(terminalScenario.deps, { ...DEFAULT_OPTIONS, files: [`${TEST_DIR}/terminal.test.md`] });
+
+      expect(terminalOutcome.results).toMatchObject([{ status: 'failed', error: { kind: 'ai-response-invalid' } }]);
+      expect(terminalExecute).toHaveBeenCalledOnce();
+
+      const mixed = {
+        ...terminalOnly,
+        steps: [{
+          ...terminalOnly.steps[0],
+          verificationIntent: [
+            { criterionId: 'dashboard-reached', assertion: { type: 'assert', check: 'url-matches', pattern: '/dashboard$' } },
+            { criterionId: 'unknown', assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' } },
+          ],
+        }],
+      } as unknown as GeneratedPlanResponse;
+      let mixedDispatch = 0;
+      const mixedExecute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        const response = mixedDispatch++ === 0 ? mixed : RESPONSE;
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const mixedScenario = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute: mixedExecute }),
+      });
+      await writePrompt(mixedScenario.recordingStorage.storage, 'mixed.test.md');
+      mixedScenario.recordingStorage.reset();
+
+      await expect(generate(mixedScenario.deps, { ...DEFAULT_OPTIONS, files: [`${TEST_DIR}/mixed.test.md`] }))
+        .resolves.toMatchObject({ results: [{ status: 'generated' }] });
+      expect(mixedExecute).toHaveBeenCalledTimes(2);
+      expect(mixedExecute.mock.calls[1]?.[0].context).toMatchObject({
+        previousAttempts: [{
+          attempt: 1,
+          code: 'AI_RESPONSE_INVALID',
+          issues: expect.arrayContaining([
+            expect.objectContaining({ code: 'terminal-url-matches-forbidden' }),
+            expect.objectContaining({ code: 'intent-id-unknown' }),
+          ]),
+        }],
+      });
+    });
+
+    it('retries an unattributable secret grant and preserves its terminal diagnostic details after exhaustion', async () => {
+      const response: GeneratedPlanResponse = {
+        steps: [{
+          id: 'fill-password',
+          kind: 'action',
+          action: 'fill-secret',
+          target: PASSWORD_TARGET,
+          secretRef: FIRST_SECRET_REF,
+          citation: 'This citation is absent from the prompt.',
+        }],
+        ambiguities: [],
+      };
+      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage, 'secret.test.md', `@ambercast-secret ${FIRST_SECRET_REF}\n`);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, files: [`${TEST_DIR}/secret.test.md`] });
+
+      expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
+      expect(outcome.results[0]?.error?.details).toMatchObject({
+        reason: 'citation-not-found',
+        secretRef: FIRST_SECRET_REF,
+        stepId: 'fill-password',
+        hint: expect.any(String),
+        attempts: [{ attempt: 1, code: 'SECRET_GRANT_UNATTRIBUTABLE' }, { attempt: 2, code: 'SECRET_GRANT_UNATTRIBUTABLE' }],
+      });
+      expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
+    });
+
+    it('stops an unavailable executor after an earlier retryable failure and retains both attempts', async () => {
+      const rejected = responseWithMissingSuccessIntent();
+      let dispatch = 0;
+      const execute = vi.fn(async () => {
+        if (dispatch++ === 0) return { data: rejected, raw: JSON.stringify(rejected) };
+        throw new AiExecutorUnavailableError('Provider became unavailable.');
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results[0]?.error).toBeInstanceOf(AiExecutorUnavailableError);
+      expect(outcome.results[0]?.error?.details).toEqual({
+        attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_EXECUTOR_UNAVAILABLE' }],
+      });
+      expect(execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('propagates coverage step identity but leaves schema-mismatch issues unscoped', async () => {
+      const coverageExecute = vi.fn(async () => ({
+        data: responseWithMissingSuccessIntent(),
+        raw: 'coverage failure',
+      }));
+      const coverageScenario = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute: coverageExecute }),
+      });
+      await writePrompt(coverageScenario.recordingStorage.storage, 'coverage.test.md');
+      coverageScenario.recordingStorage.reset();
+
+      const coverageOutcome = await generate(coverageScenario.deps, {
+        ...DEFAULT_OPTIONS,
+        files: [`${TEST_DIR}/coverage.test.md`],
+        maxAttempts: 1,
+      });
+      const coverageIssues = (coverageOutcome.results[0]?.error as AiResponseInvalidError | undefined)?.details?.issues as readonly Record<string, unknown>[];
+      expect(coverageIssues).not.toHaveLength(0);
+      expect(coverageIssues.every((issue) => issue.stepId === 'sign-in')).toBe(true);
+
+      const schemaExecute = vi.fn(async () => ({ data: { steps: 'not-an-array', ambiguities: [] }, raw: 'schema failure' }));
+      const schemaScenario = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute: schemaExecute }),
+      });
+      await writePrompt(schemaScenario.recordingStorage.storage, 'schema.test.md');
+      schemaScenario.recordingStorage.reset();
+
+      const schemaOutcome = await generate(schemaScenario.deps, {
+        ...DEFAULT_OPTIONS,
+        files: [`${TEST_DIR}/schema.test.md`],
+        maxAttempts: 1,
+      });
+      const issues = (schemaOutcome.results[0]?.error as AiResponseInvalidError | undefined)?.details?.issues as readonly Record<string, unknown>[];
+      expect(issues).not.toHaveLength(0);
+      expect(issues.every((issue) => !Object.hasOwn(issue, 'stepId'))).toBe(true);
+    });
+
+    it('omits schema-mismatch issue step IDs from raw retry feedback instead of assigning undefined', async () => {
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        if (dispatch++ === 0) {
+          return { data: { steps: 'not-an-array', ambiguities: [] }, raw: 'schema failure' };
+        }
+        return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage, 'schema-retry.test.md');
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, {
+        ...DEFAULT_OPTIONS,
+        files: [`${TEST_DIR}/schema-retry.test.md`],
+      });
+      const rawPreviousAttempts = requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context);
+      const rawFirstAttempt = requireRawObject(rawPreviousAttempts[0], 'the first previous attempt');
+      const rawIssues = Reflect.get(rawFirstAttempt, 'issues');
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(Array.isArray(rawIssues)).toBe(true);
+      if (!Array.isArray(rawIssues)) {
+        throw new Error('Expected schema-mismatch retry feedback issues to be an array.');
+      }
+      expect(rawIssues).not.toHaveLength(0);
+      expect(rawIssues.every((issue) => issue !== null
+        && typeof issue === 'object'
+        && !Object.hasOwn(issue, 'stepId'))).toBe(true);
+    });
+
+    it('omits an uncovered secret-grant step ID from raw retry feedback instead of assigning undefined', async () => {
+      const uncoveredResponse: GeneratedPlanResponse = { steps: [], ambiguities: [] };
+      const attributableResponse: GeneratedPlanResponse = {
+        steps: [{
+          id: 'fill-password',
+          kind: 'action',
+          action: 'fill-secret',
+          target: PASSWORD_TARGET,
+          secretRef: FIRST_SECRET_REF,
+          citation: `@ambercast-secret ${FIRST_SECRET_REF}`,
+        }],
+        ambiguities: [],
+      };
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        const response = dispatch++ === 0 ? uncoveredResponse : attributableResponse;
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(
+        recordingStorage.storage,
+        'uncovered-grant-retry.test.md',
+        `@ambercast-secret ${FIRST_SECRET_REF}\n`,
+      );
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, {
+        ...DEFAULT_OPTIONS,
+        files: [`${TEST_DIR}/uncovered-grant-retry.test.md`],
+      });
+      const rawPreviousAttempts = requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context);
+      const rawFirstAttempt = requireRawObject(rawPreviousAttempts[0], 'the first previous attempt');
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(rawFirstAttempt).toMatchObject({
+        attempt: 1,
+        code: 'SECRET_GRANT_UNATTRIBUTABLE',
+        reason: 'uncovered-grant',
+      });
+      expect(Object.hasOwn(rawFirstAttempt, 'stepId')).toBe(false);
+    });
+
+    it('stops before a retry dispatch when cancellation occurs while retry feedback is projected', async () => {
+      const controller = new AbortController();
+      const details: Record<string, unknown> = {
+        secretRef: FIRST_SECRET_REF,
+        stepId: 'fill-password',
+        hint: 'Fix the citation.',
+      };
+      Object.defineProperty(details, 'reason', {
+        enumerable: true,
+        get: () => {
+          controller.abort(new Error('abort before retry'));
+          return 'citation-not-found';
+        },
+      });
+      const execute = vi.fn(async () => {
+        throw new SecretGrantUnattributableError('Unattributable secret grant.', details);
+      });
+      const { deps, recordingStorage } = createScenario({
+        signal: controller.signal,
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      const testPath = await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome).toMatchObject({ interrupted: true, results: [{ file: testPath, status: 'skipped' }] });
+      expect(execute).toHaveBeenCalledOnce();
+    });
+
+    it.each(['provider rejection', 'post-response interruption'] as const)(
+      'turns the current and pending files into skipped rows at the %s checkpoint without further dispatch',
+      async (checkpoint) => {
+        const controller = new AbortController();
+        let started!: () => void;
+        const firstStarted = new Promise<void>((resolve) => { started = resolve; });
+        let release!: (value: { data: GeneratedPlanResponse; raw: string }) => void;
+        const execute = vi.fn((request: AiExecuteRequest<unknown>) => new Promise<{ data: GeneratedPlanResponse; raw: string }>((resolve, reject) => {
+          started();
+          if (checkpoint === 'provider rejection') {
+            request.signal?.addEventListener('abort', () => reject(request.signal?.reason), { once: true });
+            return;
+          }
+          release = resolve;
+        }));
+        const { deps, recordingStorage } = createScenario({
+          signal: controller.signal,
+          resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+          discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
+        });
+        const first = await writePrompt(recordingStorage.storage, 'first.test.md');
+        const second = await writePrompt(recordingStorage.storage, 'second.test.md');
+        recordingStorage.reset();
+
+        const running = generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+        await firstStarted;
+        controller.abort(new Error(`abort at ${checkpoint}`));
+        if (checkpoint === 'post-response interruption') release({ data: RESPONSE, raw: JSON.stringify(RESPONSE) });
+
+        await expect(running).resolves.toMatchObject({
+          interrupted: true,
+          results: [{ file: first, status: 'skipped' }, { file: second, status: 'skipped' }],
+        });
+        expect(execute).toHaveBeenCalledOnce();
+      },
+    );
   });
 });
 

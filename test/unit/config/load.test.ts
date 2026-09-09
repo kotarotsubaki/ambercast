@@ -45,6 +45,7 @@ function expectedDefaults(configRoot: string): ResolvedConfig {
     ai: {
       provider: 'auto',
       timeoutMs: 120_000,
+      maxGenerateAttempts: 2,
     },
     viewer: {
       port: 4_600,
@@ -504,7 +505,7 @@ describe('loadConfig', () => {
       await writeConfig(storage, `${CWD}/ambercast.config.json`, {
         testMatch: ['specs/**/*.test.md'],
         testIgnore: [],
-        ai: { provider: 'claude', timeoutMs: 321 },
+        ai: { provider: 'claude', timeoutMs: 321, maxGenerateAttempts: 4 },
         viewer: { port: 4_321 },
         ci: { heal: true },
         grounding: { repositoryPolicy: 'uncommitted' },
@@ -516,7 +517,7 @@ describe('loadConfig', () => {
         ...expectedDefaults(CWD),
         testMatch: ['specs/**/*.test.md'],
         testIgnore: [],
-        ai: { provider: 'claude', timeoutMs: 321 },
+        ai: { provider: 'claude', timeoutMs: 321, maxGenerateAttempts: 4 },
         viewer: { port: 4_321 },
         ci: { heal: true, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'uncommitted', localWriteBack: 'auto' },
@@ -587,12 +588,23 @@ describe('loadConfig', () => {
 
       expect(config).toStrictEqual({
         ...expectedDefaults(CWD),
-        ai: { provider, timeoutMs: 120_000 },
+        ai: { provider, timeoutMs: 120_000, maxGenerateAttempts: 2 },
       });
     });
 
     it.each(['unsupported', ''] as const)('rejects an invalid raw AI provider %j', async (aiProviderRaw) => {
       await expectConfigInvalid(load(createInMemoryStorage(), { configEnv: { aiProviderRaw } }));
+    });
+  });
+
+  describe('generate attempt configuration', () => {
+    it('resolves the default when maxGenerateAttempts is omitted and honors an explicit override', async () => {
+      const defaulted = await load(createInMemoryStorage());
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { ai: { maxGenerateAttempts: 5 } });
+
+      await expect(load(storage)).resolves.toMatchObject({ ai: { maxGenerateAttempts: 5 } });
+      expect(defaulted.ai.maxGenerateAttempts).toBe(2);
     });
   });
 
@@ -669,7 +681,7 @@ describe('loadConfig', () => {
         testMatch: ['file/**/*.test.md'],
         testIgnore: ['file-ignore'],
         targets: { app: APP_TARGET },
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         viewer: { port: 4_321 },
         ci: { heal: true, updateGroundingCache: true },
         grounding: { repositoryPolicy: 'uncommitted', localWriteBack: 'explicit' },
@@ -702,7 +714,7 @@ describe('loadConfig', () => {
         ...withoutDefaultTarget(expectedDefaults(CWD)),
         ...fileConfig,
         targets: { app: RESOLVED_APP_TARGET },
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
       });
       expect(DEFAULT_RAW_CONFIG).toStrictEqual(EXPECTED_DEFAULT_CONFIG);
     });

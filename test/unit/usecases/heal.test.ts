@@ -56,6 +56,7 @@ const generateRunObserver = vi.hoisted(() => ({
   rejectWith: undefined as Error | undefined,
   beforeGenerate: undefined as undefined | (() => void | Promise<void>),
   afterGenerate: undefined as undefined | ((outcome: Awaited<ReturnType<typeof import('#usecases/generate.js').generate>>) => void | Promise<void>),
+  options: undefined as undefined | Parameters<typeof import('#usecases/generate.js').generate>[1],
 }));
 
 vi.mock('#usecases/run.js', async (importOriginal) => {
@@ -92,6 +93,7 @@ vi.mock('#usecases/generate.js', async (importOriginal) => {
     generate: async (...args: Parameters<typeof actual.generate>) => {
       await generateRunObserver.beforeGenerate?.();
       if (generateRunObserver.rejectWith !== undefined) throw generateRunObserver.rejectWith;
+      generateRunObserver.options = args[1];
       const outcome = await actual.generate(...args);
       await generateRunObserver.afterGenerate?.(outcome);
       return outcome;
@@ -106,6 +108,7 @@ afterEach(() => {
   generateRunObserver.rejectWith = undefined;
   generateRunObserver.beforeGenerate = undefined;
   generateRunObserver.afterGenerate = undefined;
+  generateRunObserver.options = undefined;
 });
 
 const PLAN = '/workspace/tests/login.ambercast.plan.json';
@@ -363,7 +366,7 @@ async function createScenario(options: {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
         heal: { caseTimeoutMs: 300_000 },
@@ -1714,6 +1717,7 @@ describe('heal state-machine contract', () => {
 
     expect(resolveAiExecutor).toHaveBeenCalledOnce();
     expect(order).toEqual(['stage3-resolved', 'generate-invoked', 'generate-execute']);
+    expect(generateRunObserver.options).toMatchObject({ maxAttempts: 1 });
   });
 
   it('propagates an unclassified Stage-2 resolver failure as a case-scoped unexpected crash without Stage 3', async () => {

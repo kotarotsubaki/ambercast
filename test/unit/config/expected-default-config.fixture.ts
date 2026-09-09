@@ -16,6 +16,7 @@ export const EXPECTED_DEFAULT_CONFIG = {
   ai: {
     provider: 'auto',
     timeoutMs: 120_000,
+    maxGenerateAttempts: 2,
   },
   viewer: {
     port: 4_600,

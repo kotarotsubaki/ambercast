@@ -34,6 +34,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires selected `idempotent` target | heal |
 | `defaultTarget` | string | `web-user` | must resolve to a target | generate, run, check, heal target selection |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
+| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `120000` | positive | generate; run fallback; heal |
 | `viewer.port` | integer | `4600` | 1–65535; viewer command is planned | planned `view` only |
 | `ci.heal` | boolean | `false` | opt-in to non-list heal in CI | heal |

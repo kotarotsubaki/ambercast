@@ -17,8 +17,10 @@ import type { ResolvedConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
+import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
+import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
-import { AmbercastError, type AmbercastError as AmbercastErrorType } from '#core/errors/types.js';
+import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computePlanDigest } from '#core/ir/digest.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
@@ -41,6 +43,8 @@ import { resolveTarget } from '#core/target/resolve.js';
 import type { AiExecutor } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { EventSink } from '#ports/system.js';
+import { REPORT_ERROR_DETAILS } from '#report/error-mapping.js';
+import type { ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
   assertCommittedSecretAttributionSound,
@@ -52,7 +56,7 @@ import {
 } from './generator-secret-policy.js';
 import {
   validateCommittedInstructionCoverage,
-  type InstructionCoverageResult,
+  type InstructionCoverageIssue,
 } from './instruction-coverage-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
@@ -67,6 +71,19 @@ type GeneratedPlanResponseForPolicyType = Omit<
 };
 
 /**
+ * Keeps generation-only step provenance beside instruction-coverage failures.
+ *
+ * The shared instruction-policy result deliberately remains reusable by
+ * callers that have no generated step identity to report. Generation instead
+ * retains the failing step here, so its response-error projection can give a
+ * retry and a final report the same actionable scope without widening the
+ * policy module's general contract.
+ */
+type PrepareInstructionCoveredStepsResult =
+  | { readonly success: true; readonly data: InstructionCoveredStep[] }
+  | { readonly success: false; readonly issues: readonly InstructionCoverageIssue[]; readonly stepId: string };
+
+/**
  * Attributes and validates provider instruction coverage before Plan assembly.
  *
  * @param response - Strict provider response with citations and full intents.
@@ -74,27 +91,28 @@ type GeneratedPlanResponseForPolicyType = Omit<
  * @param alreadyClaimedOffsets - Prompt-grant offsets already owned by
  * committed steps outside this provider response.
  * @returns Committed-shape steps without citation or intent data, or the
- * complete deterministic provider issue list.
+ * complete deterministic provider issue list and its generated step identity.
  * @remarks
  * Generation composes this phase with secret attribution, but neither policy
  * grants authority to the other. Instruction validation runs
  * for every AI step, requires exact step-local success/intent bijections, and
- * discards transient fields before Plan construction. Failure maps to
- * `AiResponseInvalidError` with raw provider output and performs no artifact
- * write. The default empty set keeps whole-response generation unchanged;
- * replacement-tail callers seed prefix-owned grants so the same prompt-wide
- * secret policy does not mistake them for uncovered.
+ * discards transient fields before Plan construction. On failure, generation
+ * maps the returned raw provider output and affected step to
+ * `AiResponseInvalidError`, then performs no artifact write. The default empty
+ * set keeps whole-response generation unchanged; replacement-tail callers seed
+ * prefix-owned grants so the same prompt-wide secret policy does not mistake
+ * them for uncovered.
  */
 export function prepareInstructionCoveredSteps(
   response: GeneratedPlanResponseForPolicyType,
   normalizedTestMd: NormalizedTestMd,
   alreadyClaimedOffsets: ReadonlySet<number> = new Set(),
-): InstructionCoverageResult<InstructionCoveredStep[]> {
+): PrepareInstructionCoveredStepsResult {
   try {
     return { success: true, data: attributeSecretGrants(response.steps, normalizedTestMd, alreadyClaimedOffsets) };
   } catch (error) {
     if (error instanceof InstructionCoverageAttributionError) {
-      return { success: false, issues: error.issues };
+      return { success: false, issues: error.issues, stepId: error.stepId };
     }
     throw error;
   }
@@ -228,6 +246,16 @@ export interface GenerateOptions {
   /** Whether a fresh existing plan still regenerates. */
   readonly force: boolean;
 
+  /**
+   * Limits provider attempts for one prompt during regular generation.
+   *
+   * Callers supply the resolved one-to-five configuration value so normal
+   * generation can retry local validation rejections without making retry
+   * policy implicit. Heal repairs retain their separately explicit one-shot
+   * policy and never inherit this budget.
+   */
+  readonly maxAttempts: number;
+
   /** Whether validated artifacts are previewed instead of written. */
   readonly dryRun: boolean;
 
@@ -324,6 +352,157 @@ export interface GenerateFileOutcome {
 
   /** Classified per-file failure retained only for a failed result. */
   readonly error?: AmbercastError;
+}
+
+/**
+ * Represents one report-safe provider or instruction-coverage issue.
+ *
+ * The retry context and the final response error share this projection
+ * instead of each defensively interpreting error details. That single shape
+ * keeps a missing or malformed issue list from producing inconsistent retry
+ * feedback and report diagnostics.
+ */
+type GenerateResponseIssue = {
+  readonly code: string;
+  readonly path: readonly (string | number)[];
+  readonly stepId?: string;
+};
+
+/**
+ * Records the safe feedback from one rejected provider attempt.
+ *
+ * A discriminated two-variant union prevents unrelated diagnostic fields from
+ * crossing back into provider context and rules out a bag of optional fields
+ * that could describe no real failure. The retry loop creates
+ * only these two retryable records, each with the information needed to avoid
+ * the prior rejection and no raw provider text, secret reference, hint, or
+ * detector data.
+ */
+type PreviousAttemptContext =
+  | {
+    readonly attempt: number;
+    readonly code: 'AI_RESPONSE_INVALID';
+    readonly issues: readonly GenerateResponseIssue[];
+  }
+  | {
+    readonly attempt: number;
+    readonly code: 'SECRET_GRANT_UNATTRIBUTABLE';
+    readonly reason: string;
+    readonly stepId?: string;
+  };
+
+/**
+ * Separates one generation dispatch from the file-level retry controller.
+ *
+ * The discriminant lets that controller consume a feedback record only after
+ * a retryable failure, preserve a concrete classified error for every
+ * terminal failure, and stop scheduling immediately for interruption. A
+ * successful branch guarantees a complete file outcome, so callers never
+ * reconstruct success or retryability from raw provider data twice.
+ */
+type AttemptOutcome =
+  | { readonly kind: 'success'; readonly outcome: GenerateFileOutcome }
+  | { readonly kind: 'retryable'; readonly error: AmbercastError; readonly record: PreviousAttemptContext }
+  | { readonly kind: 'terminal'; readonly error: AmbercastError }
+  | { readonly kind: 'interrupted' };
+
+const ATTEMPTS_ELIGIBLE_CODES = new Set<ReportErrorCode>([
+  'AI_RESPONSE_INVALID',
+  'SECRET_GRANT_UNATTRIBUTABLE',
+  'SECRET_LITERAL_REJECTED',
+  'AI_EXECUTOR_UNAVAILABLE',
+]);
+
+/**
+ * Projects an invalid-response error's issues to the retry-safe shape.
+ *
+ * The defensive reader normalizes absent or malformed details to
+ * an empty list. Keeping that rule in one helper prevents retry classification,
+ * provider feedback, and terminal report reconstruction from disagreeing
+ * about the same error. Terminal invalid-response reconstruction stores this
+ * normalized array back into `details.issues`, so report projection has the
+ * required key even when the original error did not.
+ */
+function responseIssues(error: AiResponseInvalidError): readonly GenerateResponseIssue[] {
+  const issues = error.details?.['issues'];
+  return Array.isArray(issues) ? issues as readonly GenerateResponseIssue[] : [];
+}
+
+/**
+ * Decides whether a classified generation failure merits another attempt.
+ *
+ * The policy allows only invalid responses and unattributable
+ * secret grants. An invalid response with no projected issues remains
+ * retryable, while a non-empty issue list containing only the terminal URL
+ * prohibition is terminal: that carve-out guarantees generation does not
+ * spend another provider call on a prompt condition the provider cannot infer
+ * a valid destination assertion for.
+ */
+function isRetryable(error: AmbercastError): boolean {
+  if (error instanceof SecretGrantUnattributableError) return true;
+  if (!(error instanceof AiResponseInvalidError)) return false;
+
+  const issues = responseIssues(error);
+  return issues.length === 0 || !issues.every((issue) => issue.code === 'terminal-url-matches-forbidden');
+}
+
+/**
+ * Finds the stable report code for a classified generation error.
+ *
+ * The checked lookup returns `undefined` for an unexpected error
+ * kind instead of indexing the intentionally partial report mapping directly.
+ * That boundary lets future error kinds omit retry history safely rather than
+ * turning terminal error handling into a second failure.
+ */
+function reportCodeFor(error: AmbercastError): ReportErrorCode | undefined {
+  return (REPORT_ERROR_DETAILS as Partial<Record<ErrorKind, { readonly code: ReportErrorCode }>>)[error.kind]?.code;
+}
+
+/**
+ * Adds retry history while preserving a terminal error's concrete class.
+ *
+ * Explicit `instanceof` dispatch over the four report-eligible classes, rather
+ * than constructor reflection, keeps the supported reconstruction and
+ * preservation of all existing details and `cause` auditable; an ineligible
+ * error passes through untouched if a future caller reaches this boundary
+ * unexpectedly.
+ *
+ * When reconstructing an `AiResponseInvalidError`, the dispatch must write
+ * `responseIssues(error)` to `details.issues` rather than only spreading the
+ * original details. `reportError()` forwards its `details.attempts` only when
+ * that key is present, so this always-present normalized array preserves
+ * terminal retry history for both ordinary and no-details invalid responses.
+ */
+function attachAttemptsHistory(
+  error: AmbercastError,
+  history: readonly { readonly attempt: number; readonly code: ReportErrorCode }[],
+): AmbercastError {
+  if (error instanceof AiResponseInvalidError) {
+    return new AiResponseInvalidError(error.message, {
+      ...error.details,
+      issues: responseIssues(error),
+      attempts: history,
+    }, { cause: error.cause });
+  }
+  if (error instanceof SecretGrantUnattributableError) {
+    return new SecretGrantUnattributableError(error.message, {
+      ...error.details,
+      attempts: history,
+    }, { cause: error.cause });
+  }
+  if (error instanceof SecretLiteralRejectedError) {
+    return new SecretLiteralRejectedError(error.message, {
+      ...error.details,
+      attempts: history,
+    }, { cause: error.cause });
+  }
+  if (error instanceof AiExecutorUnavailableError) {
+    return new AiExecutorUnavailableError(error.message, {
+      ...error.details,
+      attempts: history,
+    }, { cause: error.cause });
+  }
+  return error;
 }
 
 /**
@@ -491,41 +670,75 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
 
     aiExecutorPromise ??= deps.resolveAiExecutor(deps.signal);
     const aiExecutor = await aiExecutorPromise;
-    const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
-    let response;
-    try {
-      deps.events.emit({ type: 'ai-call' });
-      response = await aiExecutor.execute({
-        prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
-        responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
-        context: { testMd: normalizedTestMd, targets: resolvedTargets } as unknown as JsonValueT,
-        signal: deadline.signal,
-      });
-    } catch (error) {
-      const isTimeout = isAiDeadlineTimeout(deadline, error);
 
-      if (!isTimeout && deps.signal?.aborted) {
-        interruptedDuringAi = true;
-        break;
+    /**
+     * Executes one provider attempt using the per-file state captured by this
+     * scope.
+     *
+     * Caller cancellation interrupts an `execute()` rejection only when it is
+     * not this request's timeout. Response and final-Plan schema mismatches,
+     * plus retryable coverage failures, retain the classified error and
+     * feedback needed by the file-level controller. Literal-secret and
+     * artifact-write failures are terminal. The outer `fileFailure()` boundary
+     * around `prepareInstructionCoveredSteps` keeps unexpected inspection
+     * errors isolated to this file rather than rejecting the batch.
+     */
+    async function attemptGeneration(
+      attempt: number,
+      previousAttempts: readonly PreviousAttemptContext[],
+    ): Promise<AttemptOutcome> {
+      const outcomeForError = (error: AmbercastError): AttemptOutcome => {
+        if (!isRetryable(error)) return { kind: 'terminal', error };
+        if (error instanceof AiResponseInvalidError) {
+          return {
+            kind: 'retryable',
+            error,
+            record: { attempt, code: 'AI_RESPONSE_INVALID', issues: responseIssues(error) },
+          };
+        }
+        if (error instanceof SecretGrantUnattributableError) {
+          const details = error.details as { readonly reason: string; readonly stepId?: string };
+          return {
+            kind: 'retryable',
+            error,
+            record: details.stepId === undefined
+              ? { attempt, code: 'SECRET_GRANT_UNATTRIBUTABLE', reason: details.reason }
+              : {
+                attempt,
+                code: 'SECRET_GRANT_UNATTRIBUTABLE',
+                reason: details.reason,
+                stepId: details.stepId,
+              },
+          };
+        }
+        return { kind: 'terminal', error };
+      };
+
+      const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
+      let response;
+      try {
+        deps.events.emit({ type: 'ai-call' });
+        response = await aiExecutor.execute({
+          prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
+          responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
+          context: (attempt === 1
+            ? { testMd: normalizedTestMd, targets: resolvedTargets }
+            : { testMd: normalizedTestMd, targets: resolvedTargets, previousAttempts }) as unknown as JsonValueT,
+          signal: deadline.signal,
+        });
+      } catch (error) {
+        const isTimeout = isAiDeadlineTimeout(deadline, error);
+        if (!isTimeout && deps.signal?.aborted) return { kind: 'interrupted' };
+        return outcomeForError(aiFailure(error, isTimeout));
       }
 
-      results.push({ file, status: 'failed', error: aiFailure(error, isTimeout) });
-      continue;
-    }
+      if (tracker.interrupted) return { kind: 'interrupted' };
 
-    if (tracker.interrupted) {
-      interruptedDuringAi = true;
-      break;
-    }
-
-    // Parsed-value traversal keeps dynamic provider data non-disclosive even
-    // where generated-schema structure cannot identify the true container.
-    const parsedResponse = GeneratedPlanResponseForPolicy.safeParse(response.data);
-    if (!parsedResponse.success) {
-      results.push({
-        file,
-        status: 'failed',
-        error: new AiResponseInvalidError(
+      // Parsed-value traversal keeps dynamic provider data non-disclosive even
+      // where generated-schema structure cannot identify the true container.
+      const parsedResponse = GeneratedPlanResponseForPolicy.safeParse(response.data);
+      if (!parsedResponse.success) {
+        return outcomeForError(new AiResponseInvalidError(
           'The AI provider response did not match the generation contract.',
           {
             raw: response.raw,
@@ -534,29 +747,20 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
               path: redactDynamicPathSegments(response.data, issue.path),
             })),
           },
-        ),
-      });
-      continue;
-    }
+        ));
+      }
 
-    let prepared: InstructionCoverageResult<InstructionCoveredStep[]>;
-    try {
-      prepared = prepareInstructionCoveredSteps(
-        parsedResponse.data,
-        normalizedTestMd,
-      );
-    } catch (error) {
-      results.push({ file, status: 'failed', error: fileFailure(error, 'The generated plan could not be inspected.') });
-      continue;
-    }
-    if (!prepared.success) {
-      // Internal context retains raw provider output for diagnostics, while
-      // the public report projection excludes it and exposes only safe issue
-      // fields.
-      results.push({
-        file,
-        status: 'failed',
-        error: new AiResponseInvalidError(
+      let prepared: PrepareInstructionCoveredStepsResult;
+      try {
+        prepared = prepareInstructionCoveredSteps(parsedResponse.data, normalizedTestMd);
+      } catch (error) {
+        return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
+      }
+      if (!prepared.success) {
+        // Internal context retains raw provider output for diagnostics, while
+        // the public report projection excludes it and exposes only safe issue
+        // fields.
+        return outcomeForError(new AiResponseInvalidError(
           'The AI provider response contains invalid instruction coverage.',
           {
             raw: response.raw,
@@ -565,35 +769,31 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
               path: issue.code === 'intent-id-missing'
                 ? [...issue.path.slice(0, -1), REDACTED_ISSUE_PATH_SEGMENT]
                 : issue.path,
+              ...(prepared.stepId === undefined ? {} : { stepId: prepared.stepId }),
             })),
           },
-        ),
-      });
-      continue;
-    }
+        ));
+      }
 
-    const normalizedSteps = normalizeAiStepSecretGrants(prepared.data);
-    const candidate = {
-      schemaVersion: PLAN_SCHEMA_VERSION,
-      source: { inputsDigest },
-      generatorMeta: {
-        ...(response.data.generatorMeta ?? {}),
-        planProducerBundle: {
-          fingerprint: producerBundleFingerprint,
-          components: planProducerBundleComponentDiagnostics(producerBundleInputs),
+      const normalizedSteps = normalizeAiStepSecretGrants(prepared.data);
+      const candidate = {
+        schemaVersion: PLAN_SCHEMA_VERSION,
+        source: { inputsDigest },
+        generatorMeta: {
+          ...(response.data.generatorMeta ?? {}),
+          planProducerBundle: {
+            fingerprint: producerBundleFingerprint,
+            components: planProducerBundleComponentDiagnostics(producerBundleInputs),
+          },
         },
-      },
-      targets: resolvedTargets,
-      steps: normalizedSteps,
-    };
-    // Candidate-value traversal preserves the same non-disclosure invariant
-    // for dynamic target namespaces after assembly.
-    const parsedPlan = PlanDocument.safeParse(candidate);
-    if (!parsedPlan.success) {
-      results.push({
-        file,
-        status: 'failed',
-        error: new AiResponseInvalidError(
+        targets: resolvedTargets,
+        steps: normalizedSteps,
+      };
+      // Candidate-value traversal preserves the same non-disclosure invariant
+      // for dynamic target namespaces after assembly.
+      const parsedPlan = PlanDocument.safeParse(candidate);
+      if (!parsedPlan.success) {
+        return outcomeForError(new AiResponseInvalidError(
           'The AI provider response could not form a valid plan.',
           {
             raw: response.raw,
@@ -602,43 +802,74 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
               path: redactDynamicPathSegments(candidate, issue.path),
             })),
           },
-        ),
-      });
-      continue;
-    }
+        ));
+      }
 
-    try {
-      assertNoLiteralSecrets(parsedPlan.data);
-    } catch (error) {
-      results.push({ file, status: 'failed', error: fileFailure(error, 'The generated plan could not be inspected.') });
-      continue;
-    }
+      try {
+        assertNoLiteralSecrets(parsedPlan.data);
+      } catch (error) {
+        return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
+      }
 
-    if (options.dryRun) {
       try {
         assertNoLiteralSecrets(response.data.ambiguities);
       } catch (error) {
-        results.push({ file, status: 'failed', error: fileFailure(error, 'The generated ambiguities could not be inspected.') });
-        continue;
+        return outcomeForError(fileFailure(error, 'The generated ambiguities could not be inspected.'));
       }
-      results.push({ file, status: 'would-generate', planFile: planPath, ambiguities: response.data.ambiguities });
-      continue;
+
+      if (options.dryRun) {
+        return {
+          kind: 'success',
+          outcome: { file, status: 'would-generate', planFile: planPath, ambiguities: response.data.ambiguities },
+        };
+      }
+
+      try {
+        await deps.storage.writeText(planPath, asArtifactText(parsedPlan.data as unknown as JsonValueT));
+        await deps.storage.writeText(groundingPath, asArtifactText(emptyGrounding(parsedPlan.data) as unknown as JsonValueT));
+        return {
+          kind: 'success',
+          outcome: { file, status: 'generated', planFile: planPath, ambiguities: response.data.ambiguities },
+        };
+      } catch (error) {
+        return outcomeForError(fsIoError('The generated artifacts could not be written.', error));
+      }
     }
 
-    try {
-      assertNoLiteralSecrets(response.data.ambiguities);
-    } catch (error) {
-      results.push({ file, status: 'failed', error: fileFailure(error, 'The generated ambiguities could not be inspected.') });
-      continue;
+    const history: { attempt: number; code: ReportErrorCode }[] = [];
+    let previousAttempts: PreviousAttemptContext[] = [];
+    let outcome: GenerateFileOutcome | undefined;
+    for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
+      if (attempt > 1 && deps.signal?.aborted) {
+        interruptedDuringAi = true;
+        break;
+      }
+
+      const attemptResult = await attemptGeneration(attempt, previousAttempts);
+      if (attemptResult.kind === 'interrupted') {
+        interruptedDuringAi = true;
+        break;
+      }
+      if (attemptResult.kind === 'success') {
+        outcome = attemptResult.outcome;
+        break;
+      }
+
+      const code = reportCodeFor(attemptResult.error);
+      if (code !== undefined) history.push({ attempt, code });
+      const isFinal = attemptResult.kind === 'terminal' || attempt === options.maxAttempts;
+      if (isFinal) {
+        const error = code !== undefined && ATTEMPTS_ELIGIBLE_CODES.has(code)
+          ? attachAttemptsHistory(attemptResult.error, history)
+          : attemptResult.error;
+        outcome = { file, status: 'failed', error };
+        break;
+      }
+      previousAttempts = [...previousAttempts, attemptResult.record];
     }
 
-    try {
-      await deps.storage.writeText(planPath, asArtifactText(parsedPlan.data as unknown as JsonValueT));
-      await deps.storage.writeText(groundingPath, asArtifactText(emptyGrounding(parsedPlan.data) as unknown as JsonValueT));
-      results.push({ file, status: 'generated', planFile: planPath, ambiguities: response.data.ambiguities });
-    } catch (error) {
-      results.push({ file, status: 'failed', error: fsIoError('The generated artifacts could not be written.', error) });
-    }
+    if (outcome !== undefined) results.push(outcome);
+    if (interruptedDuringAi) break;
     } finally {
       if (!interruptedDuringAi) tracker.markTerminal(workKey);
     }

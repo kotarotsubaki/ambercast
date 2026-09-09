@@ -56,6 +56,7 @@ const GENERATE_OPTIONS: GenerateOptions = {
   files: [TEST_PATH],
   strict: false,
   force: false,
+  maxAttempts: 1,
   dryRun: false,
   allowEmpty: false,
   list: false,
@@ -109,7 +110,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     };
 
@@ -151,7 +152,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     };
     await generate(generateDeps, GENERATE_OPTIONS);
@@ -183,7 +184,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
       },
@@ -231,7 +232,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     }, GENERATE_OPTIONS);
 
@@ -262,7 +263,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
       },
@@ -326,7 +327,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     }, GENERATE_OPTIONS);
 
@@ -357,7 +358,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
       },
@@ -406,7 +407,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     };
 
@@ -473,7 +474,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
       },
@@ -523,7 +524,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     };
 
@@ -585,7 +586,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000 },
+        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
       },
@@ -637,7 +638,7 @@ describe('fake vertical slice', () => {
         testIgnore: ['**/.runs/**'],
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100 },
+        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
       },
     };
 

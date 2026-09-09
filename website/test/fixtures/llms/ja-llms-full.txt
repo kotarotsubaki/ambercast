@@ -758,7 +758,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `defaultTarget` | string | `web-user` | ターゲットへと解決される必要あり | generate、run、check、heal のターゲット選択 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |
 | `ai.maxGenerateAttempts` | 正の整数 | `2` | 1〜5。ファイルごとの生成試行回数 | generate のみ。heal Stage 3 には適用しない |
-| `ai.timeoutMs` | 正の整数 | `120000` | 正の値 | generate、run のフォールバック、heal |
+| `ai.timeoutMs` | 正の整数 | `600000` | 正の値 | generate、run のフォールバック、heal |
 | `viewer.port` | 整数 | `4600` | 1〜65535。viewer コマンドは計画段階です | 計画されている `view` のみ |
 | `ci.heal` | boolean | `false` | CI におけるリスト表示以外の heal のオプトイン | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI での書き戻しのオプトイン | run |
@@ -766,6 +766,12 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `grounding.localWriteBack` | `auto|explicit` | `auto` | CI では無視される | run |
 | `heal.maxStepRepairs` | 正の整数 | なし | 実際のプロバイダーへの増分ディスパッチのみを制限 | heal |
 | `heal.caseTimeoutMs` | 正の整数 | `300000` | ケース受付のデッドライン | heal |
+
+## AI 設定 {#ai}
+
+`ai.maxGenerateAttempts`：ローカル検証で応答が拒否された場合に、generate がプロンプトごとに行うプロバイダー試行の最大回数です。1〜5 の範囲で指定でき、既定値は 2 です。heal の修復には適用されません。
+
+`ai.timeoutMs`：1 回のプロバイダーディスパッチに対する期限（ミリ秒）です。generate、run、heal のすべてのディスパッチに適用されます。heal のケース期限は受付境界にすぎないため、受付済みのディスパッチはこの値まで実行を継続できます。既定値は 600000 です。
 
 ## 自己修復設定 {#heal}
 
@@ -923,7 +929,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.2` |
+| `schemaVersion` | リテラル `3.3` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -942,26 +948,26 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## generate コマンドの結果 {#generate-results}
 
-`GenerateResult` の各ブランチは厳格（strict）であり、記載されていないフィールドは禁止されます。
+`GenerateResult` の各ブランチは厳格（strict）です。下表の任意メトリクスは、示されたブランチに限り追加できます。
 
-| ステータス | 必須フィールド | ブランチで禁止されるフィールド |
-| --- | --- | --- |
-| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | — |
-| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | — |
-| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `ambiguities` |
-| `listed` | `id`, `file`, `dryRun: false` | `planFile`, `ambiguities` |
-| `failed` | `id`, `file`, `dryRun: boolean` | `planFile`, `ambiguities` |
-| `skipped` | `id`, `file` | `planFile`, `dryRun`, `ambiguities` |
+| ステータス | 必須フィールド | 任意フィールド | ブランチで禁止されるフィールド |
+| --- | --- | --- | --- |
+| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `durationMs`, `aiCalls` | `ambiguities` |
+| `listed` | `id`, `file`, `dryRun: false` | — | `planFile`, `ambiguities`, `durationMs`, `aiCalls` |
+| `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
+| `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
 ## run コマンドの結果 {#run-results}
 
 `RunResult` の各ブランチは厳格（strict）です。
 
-| ステータス | 必須フィールド | ブランチで禁止されるフィールド |
-| --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | — |
-| `listed` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
-| `skipped` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
+| ステータス | 必須フィールド | 任意フィールド | ブランチで禁止されるフィールド |
+| --- | --- | --- | --- |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | `aiCalls` | — |
+| `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+| `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
 ## check コマンドの結果 {#check-results}
 
@@ -976,7 +982,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## heal コマンドの結果 {#heal-results}
 
-`HealResult` において、`completed` の各ブランチはすべて `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、および `explanation` を必須とします。
+`HealResult` において、`completed` の各ブランチはすべて `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、および `explanation` を必須とし、`aiCalls` は任意です。
 
 | repairOutcome | 許可される application | 許可される stopReason |
 | --- | --- | --- |
@@ -1033,19 +1039,19 @@ ambercast が出力するすべての構造化フィールドを定義します�
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
 ```json
-{"schemaVersion":"3.2","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.2","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.3","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.2","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.2","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}
@@ -1227,7 +1233,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がありません） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | provenance、targets、steps を含む完成した `PlanDocument`。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.3"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
 各スキーマの `$id` はその公開パス URL と一致します。バイト単位で同一のスキーマファイルが、ドキュメントサイトと npm の `schemas/` エクスポートに公開されています。
 
@@ -1240,7 +1246,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | `plan.schema.json` | Plan の `schemaVersion` が 2 であり、provenance source、targets、steps を含む完成した `PlanDocument`。 | JSON Schema 2020-12 として変換された Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | Grounding の `schemaVersion` が 1 であり、`planDigest` およびステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 として変換された Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須であり、それ以外に宣言される設定は任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 として変換された Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report の `schemaVersion` 3.2 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report の `schemaVersion` 3.3 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行します。これによりスキーマディレクトリが再帰的に作成され、上記のちょうど 4 つのファイルが書き出されます。
 
@@ -1256,7 +1262,7 @@ Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、
 
 ## レポートスキーマ {#report-schema}
 
-`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.2 を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
+`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.3 を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#key-table), [レポート](/ambercast/ja/reference/reports/#envelope), [適合性](/ambercast/ja/spec/conformance/), [計画ドキュメント](/ambercast/ja/spec/plan-document/), [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)
 
@@ -1597,6 +1603,10 @@ Check options:
 Heal options:
   --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
+AI configuration:
+  ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
+  ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
+
 Heal configuration:
   heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
@@ -1867,7 +1877,7 @@ flowchart LR
 | Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.2` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| Report `schemaVersion` | `3.3` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 読解順序 {#reading-order}
 
@@ -2548,6 +2558,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report consumer は、Plan バージョンから互換性を推論するのではなく、現在の `3.0` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の構造化エラー診断を含む現在の `3.1` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `PROMPT_PATH_INVALID` details 分岐を含む現在の `3.2` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の AI 呼び出し計測フィールドを含む現在の `3.3` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 互換性ポリシー {#compatibility-policy}
 

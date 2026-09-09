@@ -764,7 +764,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/
 | `defaultTarget` | string | `web-user` | 必须解析为一个目标 | generate、run、check、heal 目标选择 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；绝不用于 heal Stage 3 |
-| `ai.timeoutMs` | positive integer | `120000` | 正数 | generate；run 兜底；heal |
+| `ai.timeoutMs` | positive integer | `600000` | 正数 | generate；run 兜底；heal |
 | `viewer.port` | integer | `4600` | 1–65535；viewer 命令处于计划中 | 仅用于计划中的 `view` |
 | `ci.heal` | boolean | `false` | 在 CI 中选择开启非 list 的 heal | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI 回写选择启用项 | run |
@@ -772,6 +772,12 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/
 | `grounding.localWriteBack` | `auto|explicit` | `auto` | 在 CI 中被忽略 | run |
 | `heal.maxStepRepairs` | positive integer | absent | 仅限制向真实提供商发起的增量分发次数 | heal |
 | `heal.caseTimeoutMs` | positive integer | `300000` | 用例准入截止时间 | heal |
+
+## AI 配置 {#ai}
+
+`ai.maxGenerateAttempts`：当本地验证器拒绝响应时，generate 针对每个提示词允许的提供商最大尝试次数。取值范围为 1 至 5，默认值为 2。绝不用于 heal 修复。
+
+`ai.timeoutMs`：单次提供商分发的截止时间（毫秒）。适用于 generate、run 和 heal 的每次分发。heal 用例截止时间仅是准入边界，因此已准入的分发仍可继续运行，最长不超过此值。默认值为 600000。
 
 ## 自愈配置 {#heal}
 
@@ -925,7 +931,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.2` |
+| `schemaVersion` | 字面量 `3.3` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -942,26 +948,26 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 ## Generate 结果 {#generate-results}
 
-`GenerateResult` 的每个分支均为严格模式，未列出的字段均被禁止。
+`GenerateResult` 的每个分支均为严格模式。下表所列可选指标仅允许出现在对应分支中。
 
-| 状态 | 必需字段 | 禁止出现的分支字段 |
-| --- | --- | --- |
-| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | — |
-| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | — |
-| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `ambiguities` |
-| `listed` | `id`, `file`, `dryRun: false` | `planFile`, `ambiguities` |
-| `failed` | `id`, `file`, `dryRun: boolean` | `planFile`, `ambiguities` |
-| `skipped` | `id`, `file` | `planFile`, `dryRun`, `ambiguities` |
+| 状态 | 必需字段 | 可选字段 | 禁止出现的分支字段 |
+| --- | --- | --- | --- |
+| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `durationMs`, `aiCalls` | `ambiguities` |
+| `listed` | `id`, `file`, `dryRun: false` | — | `planFile`, `ambiguities`, `durationMs`, `aiCalls` |
+| `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
+| `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
 ## Run 结果 {#run-results}
 
 `RunResult` 的每个分支均为严格模式。
 
-| 状态 | 必需字段 | 禁止出现的分支字段 |
-| --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | — |
-| `listed` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
-| `skipped` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
+| 状态 | 必需字段 | 可选字段 | 禁止出现的分支字段 |
+| --- | --- | --- | --- |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | `aiCalls` | — |
+| `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+| `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
 ## Check 结果 {#check-results}
 
@@ -976,7 +982,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 ## Heal 结果 {#heal-results}
 
-`HealResult` 的每个已完成分支均要求具备 `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps` 和 `explanation`。
+`HealResult` 的每个已完成分支均要求具备 `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps` 和 `explanation`；`aiCalls` 为可选字段。
 
 | `repairOutcome` | 允许的 application | 允许的 stopReason |
 | --- | --- | --- |
@@ -1032,16 +1038,16 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
 ```json
-{"schemaVersion":"3.2","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.2","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.3","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.2","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.2","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}
@@ -1220,7 +1226,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 完整的 `PlanDocument`，包含来源出处（provenance）、目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.3"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
 
 - 每个 `$id` 均与其公开路径 URL 完全一致；内容完全一致（byte-identical）的 Schema 文件已发布至文档站点以及 npm 的 `schemas/` 导出。
 - 当前 Astro 配置将 `site` 设定为主机 `https://kotarotsubaki.github.io`，基路径为 `/ambercast`；上述发布 URL 均基于该主机。
@@ -1232,7 +1238,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | `plan.schema.json` | 包含 Plan `schemaVersion` 2、来源出处（provenance source）、目标（targets）与步骤（steps）的完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 包含 Grounding `schemaVersion` 1、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | 当前存在的配置文档，其 `$schema` 为必填项，其余声明的设置项均为可选项。 | Zod `RawConfig` 转换为 JSON Schema 2020-12。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | 包含 Report `schemaVersion` 3.2 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | 包含 Report `schemaVersion` 3.3 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 - 执行 `npm run build` 会先编译软件包，随后运行 `node dist/schema-gen.js`；该命令会以递归方式创建 Schema 目录，并精确写入上述四个文件。
 - 已校验的生成文件通过 `$schema` 声明了 JSON Schema draft 2020-12，并且包含发布元数据中所示的 `$id`。
@@ -1245,7 +1251,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.2 的结构化报告外层信封（envelope）及其命令专属结果。
+`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.3 的结构化报告外层信封（envelope）及其命令专属结果。
 
 ## 相关链接
 
@@ -1572,6 +1578,10 @@ Check options:
 Heal options:
   --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
+AI configuration:
+  ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
+  ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
+
 Heal configuration:
   heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
@@ -1833,7 +1843,7 @@ flowchart LR
 | Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
 | 指纹算法 | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.2` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| Report `schemaVersion` | `3.3` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 阅读顺序 {#reading-order}
 
@@ -2514,6 +2524,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report 消费者必须（MUST）接受当前的 `3.0` 契约，而不是从 Plan 版本推断兼容性。[src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report 消费者必须（MUST）接受当前的 `3.1` 契约（包括可选的结构化错误诊断），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.2` 契约（包括可选的 `PROMPT_PATH_INVALID` details 分支），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.3` 契约（包括可选的 AI 调用计量字段），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 兼容性策略 {#compatibility-policy}
 

@@ -770,7 +770,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `defaultTarget` | string | `web-user` | must resolve to a target | generate, run, check, heal target selection |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
-| `ai.timeoutMs` | positive integer | `120000` | positive | generate; run fallback; heal |
+| `ai.timeoutMs` | positive integer | `600000` | positive | generate; run fallback; heal |
 | `viewer.port` | integer | `4600` | 1–65535; viewer command is planned | planned `view` only |
 | `ci.heal` | boolean | `false` | opt-in to non-list heal in CI | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI write-back opt-in | run |
@@ -778,6 +778,12 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `grounding.localWriteBack` | `auto|explicit` | `auto` | ignored in CI | run |
 | `heal.maxStepRepairs` | positive integer | absent | caps incremental real-provider dispatches only | heal |
 | `heal.caseTimeoutMs` | positive integer | `300000` | case admission deadline | heal |
+
+## AI configuration {#ai}
+
+`ai.maxGenerateAttempts`: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
+
+`ai.timeoutMs`: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
 
 ## Healing configuration {#heal}
 
@@ -930,7 +936,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.2 |
+| `schemaVersion` | literal 3.3 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -945,26 +951,26 @@ The envelope's `results` array is command-specific. The following sections enume
 
 ## Generate results {#generate-results}
 
-In `GenerateResult`, every branch is strict; fields not listed are forbidden.
+In `GenerateResult`, every branch is strict. The optional metrics listed below are the only additional fields permitted on their named branches.
 
-| Status | Required Fields | Forbidden Branch Fields |
-| --- | --- | --- |
-| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | — |
-| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | — |
-| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `ambiguities` |
-| `listed` | `id`, `file`, `dryRun: false` | `planFile`, `ambiguities` |
-| `failed` | `id`, `file`, `dryRun: boolean` | `planFile`, `ambiguities` |
-| `skipped` | `id`, `file` | `planFile`, `dryRun`, `ambiguities` |
+| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| --- | --- | --- | --- |
+| `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]` | `durationMs`, `aiCalls` | — |
+| `skipped-fresh` | `id`, `file`, `planFile`, `dryRun: boolean` | `durationMs`, `aiCalls` | `ambiguities` |
+| `listed` | `id`, `file`, `dryRun: false` | — | `planFile`, `ambiguities`, `durationMs`, `aiCalls` |
+| `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
+| `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
 ## Run results {#run-results}
 
 In `RunResult`, every branch is strict.
 
-| Status | Required Fields | Forbidden Branch Fields |
-| --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | — |
-| `listed` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
-| `skipped` | `id`, `file` | `planFile`, `durationMs`, `steps`, `explanation` |
+| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| --- | --- | --- | --- |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | `aiCalls` | — |
+| `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+| `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
 ## Check results {#check-results}
 
@@ -979,7 +985,7 @@ In `CheckResult`, every branch is strict.
 
 ## Heal results {#heal-results}
 
-In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, and `explanation`.
+In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, and `explanation`; `aiCalls` is optional.
 
 | repairOutcome | Allowed Application | Allowed stopReason |
 | --- | --- | --- |
@@ -1035,16 +1041,16 @@ The `reportPersistence` property tracks the write outcome:
 - `not-attempted` applies when a write is never tried, including a command failure before an outcome.
 
 ```json
-{"schemaVersion":"3.2","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.2","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.3","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.2","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.2","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.3","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}
@@ -1213,7 +1219,7 @@ Ambercast publishes these metadata and byte-identical files to the site and npm.
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | unversioned; config has no `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | A present configuration document. | available |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed `PlanDocument`, including provenance, targets, and steps. | available |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.3"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
 Each `$id` equals its public-path URL; byte-identical schema files are published to the site and the npm `schemas/` export.
 
@@ -1226,7 +1232,7 @@ The current Astro configuration sets `site` to the `https://kotarotsubaki.github
 | `plan.schema.json` | A completed `PlanDocument` with Plan `schemaVersion` 2, provenance source, targets, and steps. | Zod `PlanDocument` converted as JSON Schema 2020-12. | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 1, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.2. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.3. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 Running `npm run build` compiles the package and then runs `node dist/schema-gen.js`, which creates the schema directory recursively and writes exactly the four files above.
 
@@ -1244,7 +1250,7 @@ Validating only the generated Plan JSON Schema does not establish duplicate-step
 
 ## Report schema {#report-schema}
 
-`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.2. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
+`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.3. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
 
 ---
 
@@ -1577,6 +1583,10 @@ Check options:
 Heal options:
   --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
+AI configuration:
+  ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
+  ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
+
 Heal configuration:
   heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
@@ -1838,7 +1848,7 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.2` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| Report `schemaVersion` | `3.3` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## Reading order {#reading-order}
 
@@ -2519,6 +2529,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report consumers MUST accept the current `3.0` contract, not infer compatibility from the Plan version. [src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report consumers MUST accept the current `3.1` contract, including optional structured error diagnostics, rather than infer compatibility from the Plan version. [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.2` contract, including the optional `PROMPT_PATH_INVALID` details branch, rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.3` contract, including optional AI-call accounting fields, rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## Compatibility policy {#compatibility-policy}
 

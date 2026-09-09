@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createCodexCliExecutor } from '#adapters/ai/codex-cli/index.js';
 import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
@@ -227,6 +228,7 @@ function createRunScenario(
       storage: recordingStorage.storage,
       layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
       clock: createFixedClock(new Date('2026-08-10T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       runId: '2026-08-10T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(secrets),
@@ -301,6 +303,8 @@ function createGenerateScenario(
     deps: {
       storage: recordingStorage.storage,
       layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
+      clock: createFixedClock(new Date('2026-08-10T00:00:00.000Z'), 0),
+      allocateCallId: createCallIdAllocator(),
       resolveAiExecutor: async () => aiExecutor,
       events: createRecordingEventSink().sink,
       discoverTestFiles: async () => ['login.test.md'],

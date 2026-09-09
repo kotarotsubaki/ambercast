@@ -13,6 +13,7 @@ description: "アーティファクトのバージョン受け入れは、リリ
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report consumer は、Plan バージョンから互換性を推論するのではなく、現在の `3.0` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の構造化エラー診断を含む現在の `3.1` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `PROMPT_PATH_INVALID` details 分岐を含む現在の `3.2` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の AI 呼び出し計測フィールドを含む現在の `3.3` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 互換性ポリシー {#compatibility-policy}
 

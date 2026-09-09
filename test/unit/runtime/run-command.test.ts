@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   createCryptoRandom: vi.fn(),
   createAmbercast: vi.fn(),
   createNoopEventSink: vi.fn(),
+  createStderrProgressSink: vi.fn(),
+  closeProgressSink: vi.fn(),
   createProcessEnvironmentInfo: vi.fn(),
   readCommandEnvironment: vi.fn(),
   createSystemClock: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock('#adapters/system/env-secrets-provider.js', () => ({
   createEnvSecretsProvider: mocks.createEnvSecretsProvider,
 }));
 vi.mock('#adapters/system/noop-event-sink.js', () => ({ createNoopEventSink: mocks.createNoopEventSink }));
+vi.mock('#adapters/system/stderr-progress-sink.js', () => ({ createStderrProgressSink: mocks.createStderrProgressSink }));
 vi.mock('#adapters/system/process-environment-info.js', () => ({ createProcessEnvironmentInfo: mocks.createProcessEnvironmentInfo }));
 vi.mock('#adapters/system/process-command-environment.js', () => ({
   readCommandEnvironment: mocks.readCommandEnvironment,
@@ -83,7 +86,7 @@ function reportOutput(exitCode: RunCommandOutput['exitCode'], errors: ReportErro
   const output = {
     exitCode,
     envelope: {
-      schemaVersion: '3.2' as const,
+      schemaVersion: '3.3' as const,
       command: 'run',
       startedAt: '2026-08-09T00:00:00Z',
       durationMs: 1,
@@ -99,12 +102,14 @@ function reportOutput(exitCode: RunCommandOutput['exitCode'], errors: ReportErro
 }
 
 const rawRunEnvelopeForRendererBoundary = ReportEnvelope.parse({
-  schemaVersion: '3.2', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+  schemaVersion: '3.3', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
   summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [], reportPersistence: 'not-attempted',
 }) as Extract<ReportEnvelope, { command: 'run' }>;
 // @ts-expect-error The renderer-derived run output cannot carry an unbranded envelope.
 const rawRunCommandOutput: RunCommandOutput = { exitCode: 0, envelope: rawRunEnvelopeForRendererBoundary };
 void rawRunCommandOutput;
+
+const TEST_STDERR = { write: vi.fn() } as unknown as NodeJS.WritableStream;
 
 function runEnvelope(output: RunCommandOutput): Extract<RunCommandOutput['envelope'], { command: 'run' }> {
   if (output.envelope.command !== 'run') {
@@ -115,7 +120,7 @@ function runEnvelope(output: RunCommandOutput): Extract<RunCommandOutput['envelo
 
 function input(overrides: Partial<RunCommandInput> = {}): RunCommandInput {
   return {
-    files: [], headed: false, cacheOnly: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail', cwd: '/workspace', ...overrides,
+    files: [], headed: false, cacheOnly: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail', cwd: '/workspace', stderr: TEST_STDERR, ...overrides,
   };
 }
 
@@ -155,6 +160,10 @@ beforeEach(async () => {
   mocks.createSystemClock.mockReturnValue(createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 10));
   mocks.createCryptoRandom.mockReturnValue({ uuid: () => '550e8400-e29b-41d4-a716-446655440000' });
   mocks.createProcessEnvironmentInfo.mockReturnValue({ isCI: () => false });
+  mocks.createStderrProgressSink.mockImplementation(() => {
+    const sink = mocks.createNoopEventSink() ?? { emit: vi.fn() };
+    return Object.assign(sink, { close: mocks.closeProgressSink });
+  });
 });
 
 describe('runRunCommand', () => {
@@ -318,7 +327,7 @@ describe('runRunCommand', () => {
       ...baseOutput,
       envelope: {
         ...baseOutput.envelope,
-        schemaVersion: '3.2',
+        schemaVersion: '3.3',
         results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'passed', durationMs: 1, explanation: 'passed', steps: [] }],
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
       },
@@ -352,7 +361,7 @@ describe('runRunCommand', () => {
       ...baseOutput,
       envelope: {
         ...baseOutput.envelope,
-        schemaVersion: '3.2',
+        schemaVersion: '3.3',
         results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'passed', durationMs: 1, explanation: 'passed', steps: [] }],
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
       },
@@ -435,7 +444,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.2' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.3' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 2, passed: 1, failed: 1, errored: 0, skipped: 0 }, errors: [], results: persistedResults,
         reportPersistence: 'not-attempted',
       },
@@ -506,7 +515,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.2' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.3' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{
           id: 'tests/login.test.md',
@@ -584,7 +593,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.2' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.3' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{
           id: 'tests/login.test.md', file: 'tests/login.test.md', planFile: 'tests/login.ambercast.plan.json',
@@ -934,6 +943,7 @@ describe('runRunCommand', () => {
       storage,
       layout,
       clock: replayClock,
+      allocateCallId: expect.any(Function),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver,
       secrets,
@@ -1099,7 +1109,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 0,
       envelope: {
-        schemaVersion: '3.2' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.3' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [],
         results: [outcome.results[0]!.result], reportPersistence: 'not-attempted',
       },
@@ -1325,5 +1335,51 @@ describe('runRunCommand', () => {
     const persistedEnvelope = JSON.parse(await storage.readText(reportPath));
     expect(persistedEnvelope.errors[0].caseId).toBe('/elsewhere/tests/outside.test.md');
     expect(persistedEnvelope.errors[1].caseId).toBe('tests/inside.test.md');
+  });
+
+  it('constructs progress reporting after config resolution with the injected stderr and closes it on success', async () => {
+    const stderr = { write: vi.fn() } as unknown as NodeJS.WritableStream;
+    const storage = createInMemoryStorage();
+    const layout = { runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
+    mocks.createFsStorage.mockReturnValue(storage);
+    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
+    mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
+    mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
+    mocks.run.mockResolvedValue({ results: [], noTestsFound: false, listed: [] });
+    mocks.buildRunReport.mockReturnValue(reportOutput(0));
+
+    await runRunCommand(input({ stderr }));
+
+    expect(mocks.loadConfig.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.createStderrProgressSink.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledExactlyOnceWith({
+      command: 'run',
+      stderr,
+      projectRoot: CONFIG.projectRoot,
+      isCI: false,
+      clock: mocks.createSystemClock.mock.results[0]?.value,
+    });
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+  });
+
+  it('closes progress reporting when composition throws after the sink exists', async () => {
+    const failure = new Error('composition failed');
+    mocks.createFsStorage.mockReturnValue(createInMemoryStorage());
+    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
+    mocks.createAmbercast.mockImplementation(() => { throw failure; });
+    mocks.buildRunReport.mockReturnValue(reportOutput(3));
+
+    await expect(runRunCommand(input())).resolves.toMatchObject({ exitCode: 3 });
+
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledOnce();
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+    expect(mocks.buildRunReport).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.any(UnexpectedCrashError),
+    }));
   });
 });

@@ -3,6 +3,7 @@ import {
   GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE,
   promptTemplateFingerprint,
 } from '#core/ai/prompt-envelope.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import {
   PlanDocument,
   type GeneratedPlanResponse,
@@ -23,8 +24,9 @@ import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattr
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError } from '#core/errors/types.js';
-import type { AiExecuteRequest } from '#ports/ai.js';
+import type { AiExecuteRequest, AiExecuteResult } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
+import type { Clock, RunEvent } from '#ports/system.js';
 import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
@@ -199,6 +201,8 @@ function createScenario(overrides: Partial<GenerateDeps> = {}) {
     layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
     resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
     events: events.sink,
+    clock: { now: () => new Date(0), monotonicMs: () => 0 },
+    allocateCallId: createCallIdAllocator(),
     discoverTestFiles: vi.fn(async () => ['login.test.md']),
     config: {
       testDir: TEST_DIR,
@@ -212,6 +216,29 @@ function createScenario(overrides: Partial<GenerateDeps> = {}) {
   };
 
   return { deps, events, execute, recordingStorage };
+}
+
+function sequenceClock(readings: readonly number[]): Clock {
+  let index = 0;
+  return {
+    now: () => new Date(0),
+    monotonicMs() {
+      const reading = readings[index];
+      index += 1;
+      if (reading === undefined) {
+        throw new Error(`Unexpected monotonic clock read ${index}.`);
+      }
+      return reading;
+    },
+  };
+}
+
+function aiEvents(events: readonly RunEvent[]): readonly RunEvent[] {
+  return events.filter((event) => event.type === 'ai-call' || event.type === 'ai-result');
+}
+
+function aiCallEvents(events: readonly RunEvent[]) {
+  return events.filter((event) => event.type === 'ai-call');
 }
 
 function interceptTimeouts(controllersByTimeoutMs: ReadonlyMap<number, AbortController>) {
@@ -421,7 +448,8 @@ describe('generate', () => {
       });
       const attempts = expectedCode === 'terminal-url-matches-forbidden' ? 1 : DEFAULT_OPTIONS.maxAttempts;
       expect(execute).toHaveBeenCalledTimes(attempts);
-      expect(events.emitted()).toEqual(Array.from({ length: attempts }, () => ({ type: 'ai-call' })));
+      expect(aiCallEvents(events.emitted())).toHaveLength(attempts);
+      expect(aiEvents(events.emitted())).toHaveLength(attempts * 2);
       expect(error).toMatchObject({ details: { attempts: Array.from({ length: attempts }, (_, index) => ({ attempt: index + 1, code: 'AI_RESPONSE_INVALID' })) } });
       expect(recordingStorage.writes).toEqual([]);
     },
@@ -957,8 +985,20 @@ describe('generate', () => {
 
     await expect(generate(deps, DEFAULT_OPTIONS)).resolves.toEqual({
       results: [
-        { file: first, status: 'skipped-fresh', planFile: `${TEST_DIR}/first.ambercast.plan.json` },
-        { file: second, status: 'skipped-fresh', planFile: `${TEST_DIR}/second.ambercast.plan.json` },
+        {
+          file: first,
+          status: 'skipped-fresh',
+          planFile: `${TEST_DIR}/first.ambercast.plan.json`,
+          durationMs: 0,
+          aiCalls: 0,
+        },
+        {
+          file: second,
+          status: 'skipped-fresh',
+          planFile: `${TEST_DIR}/second.ambercast.plan.json`,
+          durationMs: 0,
+          aiCalls: 0,
+        },
       ],
       noTestsFound: false,
       interrupted: false,
@@ -1073,7 +1113,7 @@ describe('generate', () => {
       releaseResolver(executor);
       await expect(running).resolves.toMatchObject({ results: [{ status: 'generated' }] });
 
-      expect(order).toEqual(['deadline', 'ai-call', 'execute']);
+      expect(order).toEqual(['deadline', 'ai-call', 'execute', 'ai-result']);
     } finally {
       timeoutSpy.mockRestore();
     }
@@ -1268,7 +1308,8 @@ describe('generate', () => {
           }],
         });
         expect(execute).toHaveBeenCalledTimes(1);
-        expect(events.emitted()).toEqual([{ type: 'ai-call' }]);
+        expect(aiCallEvents(events.emitted())).toHaveLength(1);
+        expect(aiEvents(events.emitted())).toHaveLength(2);
         expect(recordingStorage.writes).toHaveLength(dryRun ? 0 : 2);
       }
     },
@@ -1378,7 +1419,8 @@ describe('generate', () => {
       results: [{ file: testPath, status }],
     });
     expect(execute).toHaveBeenCalledTimes(1);
-    expect(events.emitted()).toEqual([{ type: 'ai-call' }]);
+    expect(aiCallEvents(events.emitted())).toHaveLength(1);
+    expect(aiEvents(events.emitted())).toHaveLength(2);
     expect(recordingStorage.writes.length).toBe(policy.dryRun ? 0 : 2);
   });
 
@@ -1733,7 +1775,8 @@ describe('generate', () => {
     });
     expect(outcome.results[0]?.error).toMatchObject({ details: { attempts: expectedAttempts } });
     expect(execute).toHaveBeenCalledTimes(expectedAiCalls);
-    expect(events.emitted()).toEqual(Array.from({ length: expectedAiCalls }, () => ({ type: 'ai-call' })));
+    expect(aiCallEvents(events.emitted())).toHaveLength(expectedAiCalls);
+    expect(aiEvents(events.emitted())).toHaveLength(expectedAiCalls * 2);
   });
 
   it('wraps a per-call timeout as an unavailable executor failure and continues the batch', async () => {
@@ -2479,6 +2522,193 @@ describe('generate', () => {
     inputsSpy.mockRestore();
   });
 
+  describe('K6 provider lifecycle and per-occurrence metrics', () => {
+    it('emits one command-numbered call/result pair per fulfilled retry attempt with exact attempt metadata and rounded durations', async () => {
+      const rejected = {
+        ...coveredResponse,
+        steps: [{ ...coveredResponse.steps[0], verificationIntent: [] }],
+      } as unknown as GeneratedPlanResponse;
+      const responses = [rejected, coveredResponse] as const;
+      let responseIndex = 0;
+      const execute = vi.fn(async () => {
+        const response = responses[responseIndex];
+        responseIndex += 1;
+        if (response === undefined) throw new Error('Unexpected provider dispatch.');
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const { deps, events, recordingStorage } = createScenario({
+        clock: sequenceClock([10, 100.1, 112.6, 200, 219.5, 310.4]),
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      const file = await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toMatchObject([{
+        file,
+        status: 'generated',
+        durationMs: 300,
+        aiCalls: 2,
+      }]);
+      expect(events.emitted()).toEqual([
+        { type: 'ai-call', callId: 'ai-1', file, attempt: 1, attemptLimit: 2 },
+        { type: 'ai-result', callId: 'ai-1', durationMs: 13, outcome: 'ok' },
+        { type: 'ai-call', callId: 'ai-2', file, attempt: 2, attemptLimit: 2 },
+        { type: 'ai-result', callId: 'ai-2', durationMs: 20, outcome: 'ok' },
+      ]);
+    });
+
+    it('marks a rejected executor call as error and retains its exact dispatch count on the failed row', async () => {
+      const rejection = new AiExecutorUnavailableError('provider unavailable');
+      const execute = vi.fn(async () => { throw rejection; });
+      const { deps, events, recordingStorage } = createScenario({
+        clock: sequenceClock([20, 50, 58.4, 80.5]),
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      const file = await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toMatchObject([{
+        file,
+        status: 'failed',
+        durationMs: 61,
+        aiCalls: 1,
+      }]);
+      expect(events.emitted()).toEqual([
+        { type: 'ai-call', callId: 'ai-1', file, attempt: 1, attemptLimit: 2 },
+        { type: 'ai-result', callId: 'ai-1', durationMs: 8, outcome: 'error' },
+      ]);
+    });
+
+    it('emits exactly one error result when the executor method throws synchronously', async () => {
+      const rejection = new Error('synchronous provider failure');
+      const invoked = vi.fn();
+      const executor = {
+        ...createFakeAiExecutor(),
+        execute<T>(_request: AiExecuteRequest<T>): Promise<AiExecuteResult<T>> {
+          invoked();
+          throw rejection;
+        },
+      };
+      const { deps, events, recordingStorage } = createScenario({
+        clock: sequenceClock([1, 10, 16.6, 20]),
+        resolveAiExecutor: async () => executor,
+      });
+      const file = await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+
+      expect(invoked).toHaveBeenCalledOnce();
+      expect(outcome.results[0]).toMatchObject({ status: 'failed', durationMs: 19, aiCalls: 1 });
+      expect(events.emitted()).toEqual([
+        { type: 'ai-call', callId: 'ai-1', file, attempt: 1, attemptLimit: 1 },
+        { type: 'ai-result', callId: 'ai-1', durationMs: 7, outcome: 'error' },
+      ]);
+    });
+
+    it('adds exact durationMs and aiCalls to a would-generate row', async () => {
+      const { deps, events, recordingStorage } = createScenario({
+        clock: sequenceClock([10, 20, 21.4, 25.1]),
+      });
+      const file = await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, dryRun: true });
+
+      expect(outcome.results).toEqual([{
+        file,
+        status: 'would-generate',
+        planFile: `${TEST_DIR}/login.ambercast.plan.json`,
+        ambiguities: [],
+        durationMs: 15,
+        aiCalls: 1,
+      }]);
+      expect(events.emitted()).toEqual([
+        { type: 'ai-call', callId: 'ai-1', file, attempt: 1, attemptLimit: 2 },
+        { type: 'ai-result', callId: 'ai-1', durationMs: 1, outcome: 'ok' },
+      ]);
+    });
+
+    it('adds a duration and zero AI calls to a fresh-plan skip without lifecycle events', async () => {
+      const { deps, events, execute, recordingStorage } = createScenario({
+        clock: sequenceClock([0.2, 10.6]),
+      });
+      const file = await writePrompt(recordingStorage.storage);
+      await seedFreshArtifacts(recordingStorage.storage, file);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toEqual([{
+        file,
+        status: 'skipped-fresh',
+        planFile: `${TEST_DIR}/login.ambercast.plan.json`,
+        durationMs: 10,
+        aiCalls: 0,
+      }]);
+      expect(execute).not.toHaveBeenCalled();
+      expect(events.emitted()).toEqual([]);
+    });
+
+    it('adds clamped durationMs and zero AI calls to a failure before provider dispatch', async () => {
+      const { deps, events, execute } = createScenario({
+        clock: sequenceClock([100, 40]),
+      });
+      const readFailure = new Error('read failed before dispatch');
+      const storage: StorageAdapter = {
+        ...deps.storage,
+        readText: async () => { throw readFailure; },
+      };
+
+      const outcome = await generate({ ...deps, storage }, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toMatchObject([{
+        file: `${TEST_DIR}/login.test.md`,
+        status: 'failed',
+        durationMs: 0,
+        aiCalls: 0,
+      }]);
+      expect(execute).not.toHaveBeenCalled();
+      expect(events.emitted()).toEqual([]);
+    });
+
+    it('clamps a negative executor delta to zero without changing the fulfilled outcome', async () => {
+      const { deps, events, recordingStorage } = createScenario({
+        clock: sequenceClock([100, 80, 70, 60]),
+      });
+      const file = await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results[0]).toMatchObject({ status: 'generated', durationMs: 0, aiCalls: 1 });
+      expect(events.emitted()).toEqual([
+        { type: 'ai-call', callId: 'ai-1', file, attempt: 1, attemptLimit: 2 },
+        { type: 'ai-result', callId: 'ai-1', durationMs: 0, outcome: 'ok' },
+      ]);
+    });
+
+    it('emits no lifecycle event when local deadline construction throws before executor invocation', async () => {
+      const localFailure = new Error('request deadline construction failed');
+      const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => { throw localFailure; });
+      const { deps, events, execute, recordingStorage } = createScenario();
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      try {
+        await expect(generate(deps, DEFAULT_OPTIONS)).rejects.toBe(localFailure);
+        expect(execute).not.toHaveBeenCalled();
+        expect(events.emitted()).toEqual([]);
+      } finally {
+        timeout.mockRestore();
+      }
+    });
+  });
+
   describe('bounded validation retries', () => {
     const responseWithMissingSuccessIntent = () => ({
       ...coveredResponse,
@@ -2525,7 +2755,8 @@ describe('generate', () => {
       expect(outcome.results).toMatchObject([{ status: 'generated' }]);
       expect(outcome.results[0]).not.toHaveProperty('error');
       expect(execute).toHaveBeenCalledTimes(2);
-      expect(events.emitted()).toEqual([{ type: 'ai-call' }, { type: 'ai-call' }]);
+      expect(aiCallEvents(events.emitted())).toHaveLength(2);
+      expect(aiEvents(events.emitted())).toHaveLength(4);
       expect(Object.keys(firstContext)).toEqual(['testMd', 'targets']);
       expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'previousAttempts']);
       expect(secondContext).toEqual({
@@ -2565,7 +2796,8 @@ describe('generate', () => {
         ],
       } });
       expect(execute).toHaveBeenCalledTimes(3);
-      expect(events.emitted()).toEqual([{ type: 'ai-call' }, { type: 'ai-call' }, { type: 'ai-call' }]);
+      expect(aiCallEvents(events.emitted())).toHaveLength(3);
+      expect(aiEvents(events.emitted())).toHaveLength(6);
       expect(thirdContext).toEqual({
         testMd: normalizeTestMd(PROMPT),
         targets: TARGETS,
@@ -2695,7 +2927,8 @@ describe('generate', () => {
         attempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }],
       });
       expect(execute).toHaveBeenCalledOnce();
-      expect(events.emitted()).toEqual([{ type: 'ai-call' }]);
+      expect(aiCallEvents(events.emitted())).toHaveLength(1);
+      expect(aiEvents(events.emitted())).toHaveLength(2);
     });
 
     it('preserves an unmapped classified terminal error without attaching retry history', async () => {

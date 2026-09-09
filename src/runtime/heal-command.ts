@@ -15,14 +15,15 @@ import { createRunsDirContainedStorage } from '#adapters/storage/runs-dir-contai
 import { createConfirmationAnswerReader, type ConfirmationAnswer, type ConfirmationAnswerReader } from '#adapters/system/confirmation-answer-reader.js';
 import { createCryptoRandom } from '#adapters/system/crypto-random.js';
 import { createEnvSecretsProvider } from '#adapters/system/env-secrets-provider.js';
-import { createNoopEventSink } from '#adapters/system/noop-event-sink.js';
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
+import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { createTtyInteractivityCheck } from '#adapters/system/tty-interactivity.js';
 import { loadConfig } from '#config/load.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
@@ -95,6 +96,9 @@ export type HealCommandInput = Omit<HealCommandFlags, 'json'> & {
 
   /** Current project directory used for configuration selection. */
   readonly cwd: string;
+
+  /** Stream injected by the CLI for progress only; sink cleanup always applies to this exact stream. */
+  readonly stderr: NodeJS.WritableStream;
 
   /** Optional caller cancellation propagated to healing. */
   readonly signal?: AbortSignal;
@@ -470,99 +474,111 @@ export async function runHealCommand(
     const isCI = createProcessEnvironmentInfo().isCI();
     const browserDriver = createBrowserDriverResolver();
     const secrets = createEnvSecretsProvider();
-    const events = createNoopEventSink();
-    const ambercast = createAmbercast({
-      config,
-      aiProvider: 'claude',
-      browserDriver,
-      secrets,
-      events,
-    });
-    const deps: HealDeps = {
-      storage: ambercast.storage,
-      containWrites: createRunsDirContainedStorage(ambercast.storage),
-      layout: ambercast.layout,
-      clock: ambercast.clock,
-      runId,
-      browserDriver,
-      secrets,
-      events,
-      discoverTestFiles: ambercast.discoverTestFiles,
-      config,
+    const events = createStderrProgressSink({
+      command: 'heal',
+      stderr: input.stderr,
+      projectRoot: config.projectRoot,
       isCI,
-      resolveAiExecutor: (signal) => resolveAiProvider(
-        config.ai.provider,
-        input.aiProviderOverride,
-        signal,
-      ).then((provider) => AI_EXECUTOR_FACTORIES[provider]({
-        run: createSpawnCommandRunner({ env: readCommandEnvironment() }),
-      })),
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-    };
-    const options = {
-      files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-      ...(input.target === undefined ? {} : { target: input.target }),
-      dryRun: input.dryRun,
-      yes: input.yes,
-      allowEmpty: input.allowEmpty,
-      list: input.list,
-    };
-
-    if (!input.list && isCI && !config.ci.heal) {
-      throw new ConfigInvalidError('Healing is disabled in CI; set ci.heal to true to enable it.');
-    }
-    if (!input.list) {
-      const target = resolveTarget({
-        targets: config.targets,
-        defaultTarget: config.defaultTarget,
-        explicitTarget: input.target,
+      clock,
+    });
+    const allocateCallId = createCallIdAllocator();
+    try {
+      const ambercast = createAmbercast({
+        config,
+        aiProvider: 'claude',
+        browserDriver,
+        secrets,
+        events,
       });
-      if (target instanceof AmbercastError) throw target;
-      if (config.targets[target.name]!.healReplayIsolation !== 'idempotent') {
-        throw new ConfigInvalidError('Healing requires the selected target to set healReplayIsolation to idempotent.');
-      }
-    }
+      const deps: HealDeps = {
+        storage: ambercast.storage,
+        containWrites: createRunsDirContainedStorage(ambercast.storage),
+        layout: ambercast.layout,
+        clock: ambercast.clock,
+        allocateCallId,
+        runId,
+        browserDriver,
+        secrets,
+        events,
+        discoverTestFiles: ambercast.discoverTestFiles,
+        config,
+        isCI,
+        resolveAiExecutor: (signal) => resolveAiProvider(
+          config.ai.provider,
+          input.aiProviderOverride,
+          signal,
+        ).then((provider) => AI_EXECUTOR_FACTORIES[provider]({
+          run: createSpawnCommandRunner({ env: readCommandEnvironment() }),
+        })),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      };
+      const options = {
+        files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
+        ...(input.target === undefined ? {} : { target: input.target }),
+        dryRun: input.dryRun,
+        yes: input.yes,
+        allowEmpty: input.allowEmpty,
+        list: input.list,
+      };
 
-    const result: HealBatchResult = await heal(deps, options);
-    const confirmation = await promptForHealConfirmation(result.commits, input, {
-      isCI,
-      isInteractive: () => createTtyInteractivityCheck()(),
-      readConfirmationAnswer: (commits, signal) => createConfirmationAnswerReader()(commits, signal),
-    });
-    const settlements: HealCommitSettlement[] = [];
-    if (!input.dryRun && confirmation === 'authorized') {
-      for (const [caseId, commit] of result.commits) {
-        try {
-          settlements.push({ caseId, commit, result: await commit.commit() });
-        } catch (error) {
-          const partiallyWritten: ('plan' | 'grounding')[] = [];
-          const persisted = partiallyWritten.length === 0 ? 'no artifacts' : partiallyWritten.join(' and ');
-          settlements.push({
-            caseId,
-            commit,
-            result: {
-              outcome: 'failed',
-              error: new FsIoError(
-                `Healing artifacts could not be committed after persisting ${persisted}.`,
-                {
-                  ...(error instanceof FsIoError ? error.details ?? {} : {}),
-                  partiallyWritten: [...partiallyWritten],
-                },
-                { cause: error },
-              ),
-              partiallyWritten,
-            },
-          });
+      if (!input.list && isCI && !config.ci.heal) {
+        throw new ConfigInvalidError('Healing is disabled in CI; set ci.heal to true to enable it.');
+      }
+      if (!input.list) {
+        const target = resolveTarget({
+          targets: config.targets,
+          defaultTarget: config.defaultTarget,
+          explicitTarget: input.target,
+        });
+        if (target instanceof AmbercastError) throw target;
+        if (config.targets[target.name]!.healReplayIsolation !== 'idempotent') {
+          throw new ConfigInvalidError('Healing requires the selected target to set healReplayIsolation to idempotent.');
         }
       }
-    }
 
-    const output = buildHealReport({
-      ...reportContext(),
-      outcome: settleHealOutcome(result.outcome, confirmation, input.dryRun, new Set(result.commits.keys()), settlements),
-    });
-    const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
-    return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+      const result: HealBatchResult = await heal(deps, options);
+      const confirmation = await promptForHealConfirmation(result.commits, input, {
+        isCI,
+        isInteractive: () => createTtyInteractivityCheck()(),
+        readConfirmationAnswer: (commits, signal) => createConfirmationAnswerReader()(commits, signal),
+      });
+      const settlements: HealCommitSettlement[] = [];
+      if (!input.dryRun && confirmation === 'authorized') {
+        for (const [caseId, commit] of result.commits) {
+          try {
+            settlements.push({ caseId, commit, result: await commit.commit() });
+          } catch (error) {
+            const partiallyWritten: ('plan' | 'grounding')[] = [];
+            const persisted = partiallyWritten.length === 0 ? 'no artifacts' : partiallyWritten.join(' and ');
+            settlements.push({
+              caseId,
+              commit,
+              result: {
+                outcome: 'failed',
+                error: new FsIoError(
+                  `Healing artifacts could not be committed after persisting ${persisted}.`,
+                  {
+                    ...(error instanceof FsIoError ? error.details ?? {} : {}),
+                    partiallyWritten: [...partiallyWritten],
+                  },
+                  { cause: error },
+                ),
+                partiallyWritten,
+              },
+            });
+          }
+        }
+      }
+
+      const output = buildHealReport({
+        ...reportContext(),
+        outcome: settleHealOutcome(result.outcome, confirmation, input.dryRun, new Set(result.commits.keys()), settlements),
+      });
+      const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
+      return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+    } finally {
+      events.close();
+    }
   } catch (error) {
     const classified = error instanceof AmbercastError
       ? error

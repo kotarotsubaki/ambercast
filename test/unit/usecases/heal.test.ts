@@ -10,6 +10,7 @@ import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
@@ -45,6 +46,21 @@ import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
 import { createFakeBrowserSession, elementRefKey, type FakeBrowserSessionEntry } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
+
+const aiExecutorUnavailableObserver = vi.hoisted(() => ({ messages: [] as string[] }));
+
+vi.mock('#core/errors/ai-executor-unavailable-error.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#core/errors/ai-executor-unavailable-error.js')>();
+  return {
+    ...actual,
+    AiExecutorUnavailableError: class extends actual.AiExecutorUnavailableError {
+      constructor(...args: ConstructorParameters<typeof actual.AiExecutorUnavailableError>) {
+        super(...args);
+        aiExecutorUnavailableObserver.messages.push(this.message);
+      }
+    },
+  };
+});
 
 const replayRunObserver = vi.hoisted(() => ({
   afterRun: undefined as undefined | ((deps: Pick<HealDeps, 'layout' | 'runId'>, storage: StorageAdapter, options: { readonly files: readonly string[]; readonly cacheOnly?: boolean }, outcome: RunOutcome) => void | Promise<void>),
@@ -102,6 +118,7 @@ vi.mock('#usecases/generate.js', async (importOriginal) => {
 });
 
 afterEach(() => {
+  aiExecutorUnavailableObserver.messages.splice(0);
   replayRunObserver.afterRun = undefined;
   replayRunObserver.dropFirstLiveAiCall = false;
   replayRunObserver.droppedCount = 0;
@@ -356,6 +373,7 @@ async function createScenario(options: {
       resolveAiExecutor: vi.fn(async () => options.aiExecutor ?? createFakeAiExecutor({
         execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
       })),
+      allocateCallId: createCallIdAllocator(),
       events: createRecordingEventSink().sink,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       discoverTestFiles: vi.fn(async () => ['login.test.md']),
@@ -2055,13 +2073,19 @@ describe('heal state-machine contract', () => {
       (event.type === 'ai-call' && event.stepId === 'repair-me')
       || event.type === 'heal-stage2-rejected'
     ))).toEqual([
-      { type: 'ai-call', stepId: 'repair-me' },
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1, stepId: 'repair-me',
+      }),
       { type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'provider-error' },
     ]);
     expect(recording.emitted().filter((event) => (
       event.type === 'ai-call' && event.stepId === undefined
     ))).toEqual([
-      { type: 'ai-call' },
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1,
+      }),
     ]);
     expect(recording.emitted().filter((event) => event.type === 'step-start')).toEqual([
       { type: 'step-start', stepId: 'repair-me' },
@@ -3020,7 +3044,10 @@ describe('heal state-machine contract', () => {
 
     expect(result.outcome.results[0]).toMatchObject({ stopReason: 'attempt-limit' });
     expect(recording.emitted().filter((event) => event.type === 'ai-call' && event.stepId === 'ai-step')).toEqual([
-      { type: 'ai-call', stepId: 'ai-step' },
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1, stepId: 'ai-step',
+      }),
     ]);
     expect(executeAgentic).toHaveBeenCalledOnce();
   });
@@ -3155,7 +3182,7 @@ describe('heal state-machine contract', () => {
         ? AI_STEP
         : Step.parse({ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT });
     const scenario = await createScenario({ steps: [step], grounding: {}, aiExecutor: createFakeAiExecutor({ execute, executeAgentic }) });
-    await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 1 } } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 1 } } }, OPTIONS);
     const replacementDispatches = execute.mock.calls.filter(([request]) => stage2Frontier(request) !== undefined);
     const nonReplacementDispatches = execute.mock.calls.filter(([request]) => stage2Frontier(request) === undefined);
     const expected = mode === 'none'
@@ -3164,6 +3191,135 @@ describe('heal state-machine contract', () => {
         ? { replacement: 0, nonReplacement: 1, aiRetrace: 1 }
         : { replacement: 1, nonReplacement: 1, aiRetrace: 0 };
     expect({ replacement: replacementDispatches.length, nonReplacement: nonReplacementDispatches.length, aiRetrace: executeAgentic.mock.calls.length }).toEqual(expected);
+    expect(result.outcome.results[0]?.aiCalls).toBe(expected.replacement + expected.nonReplacement + expected.aiRetrace);
+  });
+
+  it('reports zero AI calls for a fully cached case that needs no repair', async () => {
+    const sessionEntries = liveEntries(SUBMIT);
+    const fingerprint = sessionEntries.get(elementRefKey(SUBMIT))?.currentFingerprint;
+    if (fingerprint === undefined) throw new Error('The cache-hit fixture requires a live fingerprint.');
+    const scenario = await createScenario({
+      sessionEntries,
+      grounding: { 'click-submit': { kind: 'element', fingerprint } },
+    });
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]).toMatchObject({
+      repairOutcome: 'no-changes-needed',
+      aiCalls: 0,
+    });
+    expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('applies ai.timeoutMs to Stage 2 and classifies its own timeout as a provider rejection', async () => {
+    let stage2Signal: AbortSignal | undefined;
+    const execute = vi.fn(async (request: { readonly context?: unknown; readonly signal?: AbortSignal }) => {
+      if (stage2Frontier(request) !== undefined) {
+        stage2Signal = request.signal;
+        if (request.signal === undefined) throw new Error('Stage 2 must pass a composed deadline signal.');
+        await new Promise<never>((_resolve, reject) => {
+          if (request.signal!.aborted) {
+            reject(request.signal!.reason);
+            return;
+          }
+          request.signal!.addEventListener('abort', () => reject(request.signal!.reason), { once: true });
+        });
+      }
+      return { data: { steps: [], ambiguities: [] }, raw: '{}' };
+    });
+    const recording = createRecordingEventSink();
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute }),
+    });
+
+    const result = await heal({
+      ...scenario.deps,
+      events: recording.sink,
+      config: { ...scenario.deps.config, ai: { ...scenario.deps.config.ai, timeoutMs: 5 } },
+    }, OPTIONS);
+
+    expect(stage2Signal?.aborted).toBe(true);
+    expect(stage2Signal?.reason).toMatchObject({ name: 'TimeoutError' });
+    expect(recording.emitted()).toContainEqual({
+      type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'provider-error',
+    });
+    const stage2Call = recording.emitted().find((event) => event.type === 'ai-call' && event.stepId === 'repair-me');
+    expect(stage2Call).toMatchObject({ type: 'ai-call', callId: 'ai-1', stepId: 'repair-me' });
+    if (stage2Call?.type !== 'ai-call') throw new Error('Expected one admitted Stage 2 dispatch.');
+    expect(recording.emitted().filter((event) => event.type === 'ai-result' && event.callId === stage2Call.callId)).toEqual([
+      { type: 'ai-result', callId: stage2Call.callId, durationMs: 0, outcome: 'error' },
+    ]);
+    expect(aiExecutorUnavailableObserver.messages.filter((message) => (
+      message === 'The AI provider did not respond within the configured timeout.'
+    ))).toHaveLength(1);
+    expect(execute.mock.calls.filter(([request]) => stage2Frontier(request) !== undefined)).toHaveLength(1);
+    expect(result.outcome.results[0]?.aiCalls).toBe(2);
+  });
+
+  it('counts a discarded Stage 2 repair and Stage 3 generation once each and emits one result per admission', async () => {
+    const recording = createRecordingEventSink();
+    const execute = vi.fn(async (request: { readonly context?: unknown }) => ({
+      data: stage2Frontier(request) === undefined
+        ? { steps: [{ id: 'regenerated', kind: 'action', action: 'navigate', url: '/healed' }], ambiguities: [] }
+        : { steps: [{ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' }], ambiguities: [] },
+      raw: '{}',
+    }));
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute }),
+    });
+
+    const result = await heal({ ...scenario.deps, events: recording.sink }, OPTIONS);
+    const aiCalls = recording.emitted().filter((event) => event.type === 'ai-call');
+    const aiResults = recording.emitted().filter((event) => event.type === 'ai-result');
+
+    expect(result.outcome.results[0]?.aiCalls).toBe(2);
+    expect(aiCalls).toEqual([
+      expect.objectContaining({ type: 'ai-call', callId: 'ai-1', file: OPTIONS.files[0], attempt: 1, attemptLimit: 1, stepId: 'repair-me' }),
+      expect.objectContaining({ type: 'ai-call', callId: 'ai-2', file: OPTIONS.files[0], attempt: 1, attemptLimit: 1 }),
+    ]);
+    expect(aiResults.map(({ callId }) => callId)).toEqual(['ai-1', 'ai-2']);
+    expect(aiResults.filter(({ callId }) => callId === 'ai-1')).toHaveLength(1);
+    expect(aiResults.filter(({ callId }) => callId === 'ai-2')).toHaveLength(1);
+    expect(recording.emitted()).toContainEqual({
+      type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'no-advance',
+    });
+  });
+
+  it('shares one unbroken call-id sequence across nested replay, Stage 2, and Stage 3 without double-counting', async () => {
+    const recording = createRecordingEventSink();
+    const execute = vi.fn(async () => ({ data: { confirmed: false }, raw: '{}' }));
+    const executeAgentic = vi.fn(async () => ({ outcome: 'failure' as const }));
+    const scenario = await createScenario({
+      steps: [AI_STEP],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute, executeAgentic }),
+    });
+
+    const result = await heal({
+      ...scenario.deps,
+      events: recording.sink,
+      config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 3 } },
+    }, OPTIONS);
+    const aiCalls = recording.emitted().filter((event) => event.type === 'ai-call');
+    const aiResults = recording.emitted().filter((event) => event.type === 'ai-result');
+    const actualProviderCalls = execute.mock.calls.length + executeAgentic.mock.calls.length;
+
+    expect(aiCalls.map(({ callId }) => callId)).toEqual(['ai-1', 'ai-2', 'ai-3', 'ai-4']);
+    expect(aiCalls.map(({ stepId }) => stepId)).toEqual(['ai-step', 'ai-step', 'ai-step', undefined]);
+    expect(aiCalls).toEqual(aiCalls.map((event) => expect.objectContaining({
+      type: 'ai-call', callId: event.callId, file: OPTIONS.files[0], attempt: 1, attemptLimit: 1,
+    })));
+    expect(aiResults.map(({ callId }) => callId)).toEqual(['ai-1', 'ai-2', 'ai-3', 'ai-4']);
+    for (const call of aiCalls) {
+      expect(aiResults.filter((event) => event.callId === call.callId)).toHaveLength(1);
+    }
+    expect(result.outcome.results[0]?.aiCalls).toBe(actualProviderCalls);
+    expect(result.outcome.results[0]?.aiCalls).toBe(4);
   });
 
   it('deduplicates explicitly selected files before creating cases', async () => {
@@ -3285,7 +3441,10 @@ describe('heal state-machine contract', () => {
       deniedPhaseStorage!.readText(GROUNDING),
     ])).resolves.toEqual([originalPlan, originalGrounding]);
     expect(events.emitted().filter((event) => event.type === 'ai-call' && event.stepId === 'click-submit')).toEqual([
-      { type: 'ai-call', stepId: 'click-submit' },
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1, stepId: 'click-submit',
+      }),
     ]);
     expect(events.emitted().filter((event) => event.type === 'heal-stage2-rejected')).toEqual([]);
   });
@@ -3563,7 +3722,10 @@ describe('heal interruption contract', () => {
     expect(replacementRequests).toHaveLength(1);
     expect(replacementRequests[0]).toMatchObject({ trustedInputs: { frontier: { stepId: 'repair-me', index: 0 }, repairHistory: [] } });
     expect(events.emitted().filter((event) => event.type === 'ai-call' && event.stepId === 'repair-me')).toEqual([
-      { type: 'ai-call', stepId: 'repair-me' },
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1, stepId: 'repair-me',
+      }),
     ]);
     expect(events.emitted().filter((event) => event.type === 'heal-stage2-rejected')).toEqual([]);
     expect(result.commits.size).toBe(0);
@@ -3633,7 +3795,10 @@ describe('heal interruption contract', () => {
     expect(replacementRequests).toHaveLength(1);
     expect(replacementRequests[0]).toMatchObject({ trustedInputs: { frontier: { stepId: 'repair-me', index: 0 }, repairHistory: [] } });
     expect(events.emitted().filter((event) => event.type === 'ai-call' && event.stepId === 'repair-me')).toEqual([
-      { type: 'ai-call', stepId: 'repair-me' },
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1, stepId: 'repair-me',
+      }),
     ]);
     expect(events.emitted().filter((event) => event.type === 'heal-stage2-rejected')).toEqual([]);
     expect(result.commits.size).toBe(0);

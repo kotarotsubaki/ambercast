@@ -117,6 +117,9 @@ export function buildHealReport(input: HealReportInput): HealReportOutput {
   }
   const outcome = input.outcome!;
   const results: HealResult[] = [
+    // The case-scoped budget supplies aiCalls once for all nested replay and
+    // generation work, so this projection must pass it through without adding
+    // nested outcome counters a second time.
     ...outcome.results.map(({ baselineFirstFailureIndex: _baseline, finalFirstFailureIndex: _final, stage3Error: _stage3, finalReplayError: _replay, ...result }): HealResult => ({ ...result, status: 'completed', steps: [...result.steps] }) as HealResult),
     ...outcome.listed.map(({ file }): HealResult => ({ id: file, file, status: 'listed' })),
     ...outcome.skipped.map(({ file }): HealResult => ({ id: file, file, status: 'skipped' })),

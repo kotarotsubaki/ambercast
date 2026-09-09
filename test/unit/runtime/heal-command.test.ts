@@ -16,11 +16,13 @@ const mocks = vi.hoisted(() => ({
   createTtyInteractivityCheck: vi.fn(), createConfirmationAnswerReader: vi.fn(), loadConfig: vi.fn(), createAmbercast: vi.fn(),
   heal: vi.fn(), buildHealReport: vi.fn(), finalizeReportEnvelope: vi.fn(), isEmergencyFinalizedEnvelope: vi.fn(),
   createRunsDirContainedStorage: vi.fn(),
+  createStderrProgressSink: vi.fn(), closeProgressSink: vi.fn(),
 }));
 
 vi.mock('#adapters/storage/fs-storage.js', () => ({ createFsStorage: mocks.createFsStorage }));
 vi.mock('#adapters/storage/runs-dir-contained-storage.js', () => ({ createRunsDirContainedStorage: mocks.createRunsDirContainedStorage }));
 vi.mock('#adapters/system/process-environment-info.js', () => ({ createProcessEnvironmentInfo: mocks.createProcessEnvironmentInfo }));
+vi.mock('#adapters/system/stderr-progress-sink.js', () => ({ createStderrProgressSink: mocks.createStderrProgressSink }));
 vi.mock('#adapters/system/system-clock.js', () => ({ createSystemClock: mocks.createSystemClock }));
 vi.mock('#adapters/system/tty-interactivity.js', () => ({ createTtyInteractivityCheck: mocks.createTtyInteractivityCheck }));
 vi.mock('#adapters/system/confirmation-answer-reader.js', () => ({ createConfirmationAnswerReader: mocks.createConfirmationAnswerReader }));
@@ -47,17 +49,19 @@ const rawEnvelopeForFinalizedBoundary = {} as ReportEnvelope;
 const rawHealCommandOutput: HealCommandOutput = { exitCode: 0, envelope: rawEnvelopeForFinalizedBoundary };
 void rawHealCommandOutput;
 
+const TEST_STDERR = { write: vi.fn() } as unknown as NodeJS.WritableStream;
+
 function input(overrides: Partial<HealCommandInput> = {}): HealCommandInput {
-  return { files: [], dryRun: false, yes: false, allowEmpty: false, list: false, cwd: '/workspace', ...overrides };
+  return { files: [], dryRun: false, yes: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides };
 }
 function report(exitCode: HealCommandOutput['exitCode']): HealCommandOutput {
-  return { exitCode, envelope: { schemaVersion: '3.2', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
+  return { exitCode, envelope: { schemaVersion: '3.3', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
 }
 function reportWithExecutionEvidence(root: string): HealCommandOutput {
   return {
     exitCode: 1,
     envelope: {
-      schemaVersion: '3.2', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
+      schemaVersion: '3.3', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
       summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
       errors: [{
         scope: 'case', kind: 'environment', code: 'FS_IO_ERROR',
@@ -81,7 +85,7 @@ function reportWithExecutionEvidence(root: string): HealCommandOutput {
 }
 function caseResult(id: string, overrides: Partial<HealCaseOutcome> = {}): HealCaseOutcome {
   const file = `/workspace/tests/${id}`;
-  return { id: file, file, planFile: `/workspace/tests/${id}.ambercast.plan.json`, repairOutcome: 'healed', steps: [], explanation: 'The candidate repaired the case.', durationMs: 1.6, baselineFirstFailureIndex: 0, finalFirstFailureIndex: 1, stopReason: 'settled', stage3Error: undefined, finalReplayError: undefined, ...overrides };
+  return { id: file, file, planFile: `/workspace/tests/${id}.ambercast.plan.json`, repairOutcome: 'healed', steps: [], explanation: 'The candidate repaired the case.', durationMs: 1.6, aiCalls: 0, baselineFirstFailureIndex: 0, finalFirstFailureIndex: 1, stopReason: 'settled', stage3Error: undefined, finalReplayError: undefined, ...overrides };
 }
 function outcome(overrides: Partial<HealOutcome> = {}): HealOutcome {
   return { results: [caseResult('login.test.md')], errors: [], noTestsFound: false, listed: [], skipped: [], interrupted: false, ...overrides };
@@ -108,6 +112,7 @@ function configure({ result = batch(), isCI = false, interactive = false, readCo
   }));
   mocks.createSystemClock.mockReturnValue({ now: () => new Date('2026-08-25T00:00:00.000Z'), monotonicMs: vi.fn().mockReturnValueOnce(monotonic[0] ?? 10).mockReturnValue(monotonic[1] ?? 12.6) });
   mocks.createProcessEnvironmentInfo.mockReturnValue({ isCI: vi.fn(() => isCI) });
+  mocks.createStderrProgressSink.mockReturnValue({ emit: vi.fn(), close: mocks.closeProgressSink });
   mocks.createTtyInteractivityCheck.mockReturnValue(vi.fn(() => interactive));
   mocks.createConfirmationAnswerReader.mockReturnValue(readConfirmationAnswer);
   mocks.loadConfig.mockResolvedValue(config);
@@ -1094,6 +1099,38 @@ describe('runHealCommand', () => {
       durationMs: 2,
       steps: [expect.objectContaining({ screenshot: 'tests/.runs/evidence.png' })],
     });
+  });
+
+  it('constructs progress reporting after config resolution with the injected stderr and closes it on success', async () => {
+    const stderr = { write: vi.fn() } as unknown as NodeJS.WritableStream;
+    configure();
+
+    await runHealCommand(input({ stderr, yes: true }));
+
+    expect(mocks.loadConfig.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.createStderrProgressSink.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledExactlyOnceWith({
+      command: 'heal',
+      stderr,
+      projectRoot: CONFIG.projectRoot,
+      isCI: false,
+      clock: mocks.createSystemClock.mock.results[0]?.value,
+    });
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+  });
+
+  it('closes progress reporting when healing throws after the sink exists', async () => {
+    configure({ built: report(3) });
+    mocks.heal.mockRejectedValue(new Error('healing failed'));
+
+    await expect(runHealCommand(input({ yes: true }))).resolves.toMatchObject({ exitCode: 3 });
+
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledOnce();
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.any(Error),
+    }));
   });
 
   it.each(['completed', 'error'] as const)('forces exit 3 when %s finalization returns the emergency singleton', async (branch) => {

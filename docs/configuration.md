@@ -2,7 +2,11 @@
 
 ## `ai.maxGenerateAttempts`
 
-Maximum provider attempts for one prompt during `generate` when local validation rejects a response. The accepted range is 1–5 and the default is 2. It applies only to `generate`; heal Stage 3 always uses one attempt.
+Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
+
+## `ai.timeoutMs`
+
+Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
 
 ## `heal.maxStepRepairs`
 

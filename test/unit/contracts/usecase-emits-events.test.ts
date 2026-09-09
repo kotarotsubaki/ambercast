@@ -1,4 +1,5 @@
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
@@ -53,6 +54,8 @@ registerUsecaseEmitsEventsContract([
           execute: async () => ({ data: GENERATED_RESPONSE, raw: JSON.stringify(GENERATED_RESPONSE) }),
         }),
         events: events.sink,
+        clock: createFixedClock(new Date('2026-08-11T00:00:00.000Z'), 0),
+        allocateCallId: createCallIdAllocator(),
         discoverTestFiles: async () => [],
         config: {
           testDir: TEST_DIR,
@@ -99,6 +102,7 @@ registerUsecaseEmitsEventsContract([
         storage,
         layout,
         clock: createFixedClock(new Date('2026-08-11T00:00:00.000Z'), 0),
+        allocateCallId: createCallIdAllocator(),
         runId: '2026-08-11T000000Z-550e8400-e29b-41d4-a716-446655440000',
         browserDriver: () => createFakeBrowserDriver(() => createFakeBrowserSession(new Map())),
         secrets: createFakeSecretsProvider(new Map()),

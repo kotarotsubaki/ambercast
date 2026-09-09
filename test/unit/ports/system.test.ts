@@ -23,7 +23,20 @@ describe('system port shapes', () => {
     expectTypeOf<RunEvent>().toEqualTypeOf<
       | { readonly type: 'step-start'; readonly stepId: StepId }
       | { readonly type: 'step-result'; readonly stepId: StepId; readonly via: 'grounding' | 'ai-resolve' | 'trace-replay' }
-      | { readonly type: 'ai-call'; readonly stepId?: StepId }
+      | {
+        readonly type: 'ai-call';
+        readonly callId: string;
+        readonly file: string;
+        readonly attempt: number;
+        readonly attemptLimit: number;
+        readonly stepId?: StepId;
+      }
+      | {
+        readonly type: 'ai-result';
+        readonly callId: string;
+        readonly durationMs: number;
+        readonly outcome: 'ok' | 'error';
+      }
       | {
         readonly type: 'heal-stage2-rejected';
         readonly stepId: StepId;

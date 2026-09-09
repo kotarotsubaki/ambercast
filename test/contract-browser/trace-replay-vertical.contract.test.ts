@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chromium } from 'playwright-core';
 import { createChromiumBrowserDriver } from '#adapters/browser/chromium.js';
+import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
@@ -149,6 +150,7 @@ describe('hand-authored trace replay against real Chromium', () => {
         storage,
         layout,
         clock: createFixedClock(new Date('2026-08-10T00:00:00.000Z'), 0),
+        allocateCallId: createCallIdAllocator(),
         runId: '2026-08-10T000000Z-550e8400-e29b-41d4-a716-446655440000',
         browserDriver: () => createChromiumBrowserDriver(),
         secrets: createFakeSecretsProvider(new Map()),
@@ -171,6 +173,7 @@ describe('hand-authored trace replay against real Chromium', () => {
       const outcome = await run(deps, RUN_OPTIONS);
 
       expect(outcome.results[0]?.result.status).toBe('passed');
+      expect(outcome.results[0]?.result.aiCalls).toBe(0);
       expect(events.emitted().filter((event) => event.type === 'step-result')).toEqual([
         {
           type: 'step-result',
@@ -179,6 +182,7 @@ describe('hand-authored trace replay against real Chromium', () => {
         },
       ]);
       expect(events.emitted().filter((event) => event.type === 'ai-call')).toEqual([]);
+      expect(events.emitted().filter((event) => event.type === 'ai-result')).toEqual([]);
       expect(resolveAiExecutor).not.toHaveBeenCalled();
     } finally {
       if (server.listening) {

@@ -14,7 +14,7 @@ description: 规范重新构建时的发布约定，并梳理当前生成的 JSO
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 计划中（0.3.1 尚未实现） |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 完整的 `PlanDocument`，包含来源出处（provenance）、目标（targets）与步骤（steps）。 | 计划中（0.3.1 尚未实现） |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 计划中（0.3.1 尚未实现） |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 计划中（0.3.1 尚未实现） |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.3"`) | `ambercast report schema v3` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 计划中（0.3.1 尚未实现） |
 
 - 每个 `$id` 均与其公开路径 URL 完全一致；重新构建会将内容完全一致（byte-identical）的 Schema 文件发布至文档站点以及 npm 的 `schemas/` 导出。
 - 当前 Astro 配置将 `site` 设定为主机 `https://kotarotsubaki.github.io`，基路径为 `/ambercast`；上述发布 URL 均基于该主机，目前处于计划中状态（0.3.1 尚未实现）。
@@ -40,7 +40,7 @@ description: 规范重新构建时的发布约定，并梳理当前生成的 JSO
 
 | 产物 | 当前状态 |
 | --- | --- |
-| 报告 JSON Schema | 目前尚未生成：生成器的详尽写入列表和 package 导出映射仅包含 plan、grounding 和 config。运行时报告仍带有 `schemaVersion: "3.2"`。 |
+| 报告 JSON Schema | 目前尚未生成：生成器的详尽写入列表和 package 导出映射仅包含 plan、grounding 和 config。运行时报告带有 `schemaVersion: "3.3"`。 |
 
 - 在 0.3.1 的实现中，尚未确立生成的报告 Schema 文件名或 npm 导出。
 

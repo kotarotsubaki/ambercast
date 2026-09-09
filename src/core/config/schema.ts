@@ -22,6 +22,15 @@ export const HEAL_MAX_STEP_REPAIRS_DESCRIPTION = 'Hard limit on real provider di
 export const AI_MAX_GENERATE_ATTEMPTS_DESCRIPTION = 'Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.';
 
 /**
+ * Describes the per-dispatch deadline shared by every provider call.
+ *
+ * Keeping the literal here makes the configuration schema, CLI help, and
+ * reference documentation one byte-identical public contract rather than
+ * independently maintained paraphrases.
+ */
+export const AI_TIMEOUT_MS_DESCRIPTION = 'Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.';
+
+/**
  * Schema for a target as it may appear in a partial configuration file.
  *
  * @remarks
@@ -68,8 +77,7 @@ export const RawConfig = z.strictObject({
   defaultTarget: z.string().optional(),
   ai: z.strictObject({
     provider: z.enum(['claude', 'codex', 'auto']).optional(),
-    // A positive timeout bounds each provider call after configuration resolves.
-    timeoutMs: z.int().positive().optional(),
+    timeoutMs: z.int().positive().optional().describe(AI_TIMEOUT_MS_DESCRIPTION),
     /**
      * Lets a partial configuration override regular generation's bounded
      * validation-retry policy without making heal repairs inherit it.

@@ -13,7 +13,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/contract-ai/**/*.smoke.test.ts'],
-    // Keep command and contract timeouts aligned with the default Vitest lane.
-    testTimeout: 30_000,
+    // Allow the configured provider deadline plus bounded process overhead.
+    testTimeout: 660_000,
   },
 });

@@ -56,6 +56,14 @@ export interface CheckCommandInput {
   /** Current project directory used for configuration selection. */
   readonly cwd: string;
 
+  /**
+   * Stderr selected by the CLI.
+   *
+   * Check retains this field only for command-input symmetry; it must not
+   * create a progress sink or any AI dependency.
+   */
+  readonly stderr: NodeJS.WritableStream;
+
   /** Optional caller cancellation propagated to freshness inspection. */
   readonly signal?: AbortSignal;
 }

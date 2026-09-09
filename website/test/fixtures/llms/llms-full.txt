@@ -757,7 +757,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `$schema` | string | — | required in a present file | loader |
 | `testDir` | string | `tests/ambercast` | resolves to an absolute layout path | generate, run, check, heal discovery/layout |
 | `runsDir` | string | `tests/ambercast/.runs` | resolves to an absolute layout path | run reports/evidence; heal contained writes |
-| `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher | generate, run, check, heal discovery |
+| `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher; every pattern must end in `.test.md` or config loading fails with `CONFIG_INVALID` | generate, run, check, heal discovery |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | excludes after inclusion match | generate, run, check, heal discovery |
 | `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate, run, check, heal target selection |
 | `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | target field | generate, run, heal browser composition; check (freshness) |
@@ -882,6 +882,8 @@ The implemented grammar has only two wildcard tokens, `*` and `**`; everything e
 
 The selected path order is the stable execution order supplied to consuming use cases.
 
+A prompt intended only for explicit execution, rather than normal discovery, should be excluded with `testIgnore` and run by its literal path. `--list` intentionally performs no eligibility validation on any selection, literal or discovered.
+
 ## Defaults {#defaults}
 
 Defaults first include `.test.md` prompts, then exclude run directories and both companion artifact suffixes.
@@ -917,7 +919,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.1 |
+| `schemaVersion` | literal 3.2 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -1000,7 +1002,7 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these six codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these seven codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
 
 | Code | Optional `details` shape |
 | --- | --- |
@@ -1010,6 +1012,7 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
+| `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
 
 ## Report persistence {#persistence}
 
@@ -1021,16 +1024,16 @@ The `reportPersistence` property tracks the write outcome:
 - `not-attempted` applies when a write is never tried, including a command failure before an outcome.
 
 ```json
-{"schemaVersion":"3.1","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.1","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.2","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.1","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.1","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}
@@ -1053,6 +1056,7 @@ Usage errors and environment errors have independent report vocabularies; each c
 | code | kind | scope | exit | condition |
 | --- | --- | --- | --- | --- |
 | CONFIG_INVALID | usage | run/case | 2 | invalid configuration |
+| PROMPT_PATH_INVALID | usage | run only | 2 | selected prompt path ineligible |
 | SECRET_UNRESOLVED | usage | run/case | 2 | unresolved secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | target cannot resolve |
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
@@ -1086,6 +1090,8 @@ ambercast conveys machine-facing process status through numeric exit codes. If y
 | 3 | environment error | 1 |
 | 4 | untrustworthy plan or grounding artifact | 2 |
 | 5 | empty selection | 4 |
+
+For example, [`PROMPT_PATH_INVALID`](/ambercast/reference/error-codes/#code-vocabulary) is a usage error that exits 2.
 
 ## Aggregation priority {#aggregation-priority}
 
@@ -1196,7 +1202,7 @@ Ambercast publishes these metadata and byte-identical files to the site and npm.
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | unversioned; config has no `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | A present configuration document. | available |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed `PlanDocument`, including provenance, targets, and steps. | available |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.1"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
 Each `$id` equals its public-path URL; byte-identical schema files are published to the site and the npm `schemas/` export.
 
@@ -1209,7 +1215,7 @@ The current Astro configuration sets `site` to the `https://kotarotsubaki.github
 | `plan.schema.json` | A completed `PlanDocument` with Plan `schemaVersion` 2, provenance source, targets, and steps. | Zod `PlanDocument` converted as JSON Schema 2020-12. | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 1, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.1. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.2. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 Running `npm run build` compiles the package and then runs `node dist/schema-gen.js`, which creates the schema directory recursively and writes exactly the four files above.
 
@@ -1227,7 +1233,7 @@ Validating only the generated Plan JSON Schema does not establish duplicate-step
 
 ## Report schema {#report-schema}
 
-`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.1. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
+`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.2. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
 
 ---
 
@@ -1574,6 +1580,8 @@ Heal configuration:
 | check | literal paths; no paths = discovery | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 
+Except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
+
 - Passing `--` terminates option parsing, leaving all subsequent arguments to be interpreted as literal paths.
 - The `--json` and `--no-color` flags are handled individually by each command rather than through a shared global-flag abstraction.
 - Target precedence follows a strict order: an explicit `--target` flag takes priority, followed by the configured default target, and finally resolving when exactly one configured target is present; otherwise, target selection fails.
@@ -1819,7 +1827,7 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.1` | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
+| Report `schemaVersion` | `3.2` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## Reading order {#reading-order}
 
@@ -2469,8 +2477,9 @@ JSON Schema validation alone is insufficient. A conforming validator MUST additi
 | CON-20 | stored and fresh AI `fill.value` credential literals | Stored traces and fresh agentic actions MUST reject `sk-`, `ghp_`, and `AKIA` fill values unconditionally. A high-entropy fill value is accepted only when its residual text after removal of captured current-case values has no detector match. Stored-trace failure MUST NOT fall back; fresh failure occurs before browser execution or journal persistence. | integrity failure | [src/usecases/run.ts:984-1040](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984-L1040); [src/usecases/run.ts:1350-1405](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1350-L1405); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
 | CON-21 | captured values across AI boundaries | A legacy stored trace without `verificationCoverage` MUST NOT contain a nonempty captured current-case value, except an unresolved `{{run.name}}` placeholder, in any non-fixed-vocabulary value; the check is substring matching. Fresh agentic navigation URLs, fill values, and assertion text/patterns MUST NOT exactly equal a captured value. These values MUST use authorized `RunRef` interpolation instead; violations fail before the stored trace reaches browser/provider fallback or fresh input reaches browser/persistence. | integrity failure | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
 | CON-22 | fresh agentic action/assert materialized secrets | Before materialization, every fresh agentic action and assertion MUST scan non-fixed-vocabulary values against every nonempty resolved secret observed in the case. The only closed-vocabulary exclusions are `type`, `check`, `target.strategy`, `key`, and `secretRef`. Exact equality is forbidden for every nonempty secret; substring matching is forbidden when the secret is at least 3 UTF-16 code units. A match is an integrity failure before browser execution, journal append, Grounding update, or persistence. | integrity failure | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
+| CON-23 | positional/discovered prompt-path selection | A selected prompt path MUST resolve inside `testDir` with an exact `.test.md` suffix and a non-empty name component, checked once for the whole selection before any per-file work begins; `--list` MUST NOT apply this check. | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/prompt-path-eligibility.ts#L25) |
 
-CON-03 through CON-06 and CON-10 apply before Plan construction; CON-07 through CON-09 apply to committed Plans; CON-11 through CON-22 apply to Grounding/replay validation. Grounding/replay validation checks trace secret-marker, resolved-secret, credential-literal, and captured-value boundaries, plus dynamic `RunRef` authority, before browser operations receive materialized values. [src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generator-secret-policy.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L191) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
+CON-23 applies during file selection, before every other CON item. CON-03 through CON-06 and CON-10 apply before Plan construction; CON-07 through CON-09 apply to committed Plans; CON-11 through CON-22 apply to Grounding/replay validation. Grounding/replay validation checks trace secret-marker, resolved-secret, credential-literal, and captured-value boundaries, plus dynamic `RunRef` authority, before browser operations receive materialized values. [src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generator-secret-policy.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L191) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
 
 ## Verification procedure {#verification-procedure}
 
@@ -2498,6 +2507,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 | producer bundle fingerprint enters `inputsDigest` | [CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) | Plans generated before the change MUST be regenerated because they are stale. [CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) |
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report consumers MUST accept the current `3.0` contract, not infer compatibility from the Plan version. [src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report consumers MUST accept the current `3.1` contract, including optional structured error diagnostics, rather than infer compatibility from the Plan version. [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
+| report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.2` contract, including the optional `PROMPT_PATH_INVALID` details branch, rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## Compatibility policy {#compatibility-policy}
 

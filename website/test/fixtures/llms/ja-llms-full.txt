@@ -745,7 +745,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `$schema` | string | — | 存在するファイルでは必須 | ローダー |
 | `testDir` | string | `tests/ambercast` | 絶対配置パスへと解決 | generate、run、check、heal の探索／配置 |
 | `runsDir` | string | `tests/ambercast/.runs` | 絶対配置パスへと解決 | run のレポート／エビデンス、heal 内の書き込み |
-| `testMatch` | string[] | `["**/*.test.md"]` | 限定された `*`/`**` マッチャー | generate、run、check、heal の探索 |
+| `testMatch` | string[] | `["**/*.test.md"]` | 限定された `*`/`**` マッチャー。すべてのパターンは `.test.md` で終わる必要があり、そうでなければ設定読み込みは `CONFIG_INVALID` で失敗 | generate、run、check、heal の探索 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含マッチ後に除外 | generate、run、check、heal の探索 |
 | `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
 | `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |
@@ -877,6 +877,8 @@ ambercastにおいて設定されたテストファイルの検出（ディス�
 
 選択されたパスの順序が、これを使用するユースケースに提供される安定した実行順序となります。
 
+通常のディスカバリーではなく明示的な実行だけを意図するプロンプトは、`testIgnore` で除外し、そのリテラルパスで実行します。`--list` は、リテラルかディスカバリー由来かを問わず、どの選択に対しても適格性検証を意図的に行いません。
+
 ## デフォルト値 {#defaults}
 
 | キー | デフォルトパターン |
@@ -910,7 +912,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.1` |
+| `schemaVersion` | リテラル `3.2` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -982,8 +984,8 @@ ambercast が出力するすべての構造化フィールドを定義します�
 | --- | --- | --- |
 | `step` | `id`, `type: action/assert/capture/ai`, `status: passed/failed/error/skipped` | `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed` |
 | `observed` | `note`: 固定値 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
-| `review` (`sufficient` / `insufficient`) | `id`, `file`, `planFile`, `concerns[]` | — |
-| `review` (`skipped`) | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+| `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
+| `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
 
 ## review の懸念事項 {#review-concerns}
 
@@ -997,7 +999,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の6コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の7コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
@@ -1007,6 +1009,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
+| `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
 
 ## レポートの永続化 {#persistence}
 
@@ -1019,19 +1022,19 @@ ambercast が出力するすべての構造化フィールドを定義します�
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
 ```json
-{"schemaVersion":"3.1","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.1","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.2","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.1","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.1","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}
@@ -1052,6 +1055,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | code | kind | scope | exit | condition |
 | --- | --- | --- | --- | --- |
 | CONFIG_INVALID | usage | run/case | 2 | invalid configuration |
+| PROMPT_PATH_INVALID | usage | run only | 2 | selected prompt path ineligible |
 | SECRET_UNRESOLVED | usage | run/case | 2 | unresolved secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | target cannot resolve |
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
@@ -1093,6 +1097,8 @@ ambercast がプロセス終了時に返す終了コード、その定義、お�
 | 3 | environment error | 1 |
 | 4 | untrustworthy plan or grounding artifact | 2 |
 | 5 | empty selection | 4 |
+
+たとえば、[`PROMPT_PATH_INVALID`](/ambercast/ja/reference/error-codes/#code-vocabulary) は終了コード 2 となる利用エラーです。
 
 ## 集約優先順位 {#aggregation-priority}
 
@@ -1210,7 +1216,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がありません） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | provenance、targets、steps を含む完成した `PlanDocument`。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.1"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
 各スキーマの `$id` はその公開パス URL と一致します。バイト単位で同一のスキーマファイルが、ドキュメントサイトと npm の `schemas/` エクスポートに公開されています。
 
@@ -1223,7 +1229,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | `plan.schema.json` | Plan の `schemaVersion` が 2 であり、provenance source、targets、steps を含む完成した `PlanDocument`。 | JSON Schema 2020-12 として変換された Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | Grounding の `schemaVersion` が 1 であり、`planDigest` およびステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 として変換された Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須であり、それ以外に宣言される設定は任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 として変換された Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report の `schemaVersion` 3.1 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report の `schemaVersion` 3.2 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行します。これによりスキーマディレクトリが再帰的に作成され、上記のちょうど 4 つのファイルが書き出されます。
 
@@ -1239,7 +1245,7 @@ Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、
 
 ## レポートスキーマ {#report-schema}
 
-`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.1 を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
+`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.2 を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#key-table), [レポート](/ambercast/ja/reference/reports/#envelope), [適合性](/ambercast/ja/spec/conformance/), [計画ドキュメント](/ambercast/ja/spec/plan-document/), [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)
 
@@ -1602,6 +1608,8 @@ Heal configuration:
 
 `--json` および `--no-color` は、グローバルフラグの抽象化機構ではなく、各コマンドによって個別に解析されます。
 
+`--list` を除き、各位置引数は `testDir` 内にあり、空でない名前部分を持ち、拡張子が正確に `.test.md` であるリテラルパスでなければなりません。適格でないパスは、黙って無視されたり実行時クラッシュに至ったりする代わりに `PROMPT_PATH_INVALID` を発生させます。
+
 ターゲットの優先順位は、明示的に指定されたターゲット、設定された既定値、単一のみ設定されたターゲットの順序で評価され、いずれにも該当しない場合は選択に失敗します。
 
 ## 探索の既定動作 {#discovery-default}
@@ -1848,7 +1856,7 @@ flowchart LR
 | Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.1` | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
+| Report `schemaVersion` | `3.2` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 読解順序 {#reading-order}
 
@@ -2498,8 +2506,9 @@ JSON Schema の検証のみでは不十分である。適合するバリデー�
 | CON-20 | 保存済みおよび新規 AI の `fill.value` 認証情報リテラル | 保存されたトレースおよび新規のエージェントアクションは、`sk-`、`ghp_`、および `AKIA` の fill 値を無条件に拒絶しなければならない（MUST）。高エントロピーの fill 値は、キャプチャされた現在のケースの値を除去した後の残余テキストに検出器の一致がない場合にのみ受け入れられる。保存済みトレースの失敗はフォールバックしてはならず（MUST NOT）、新規の失敗はブラウザの実行またはジャーナルの永続化の前に発生する。 | 整合性の失敗（integrity failure） | [src/usecases/run.ts:984-1040](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984-L1040); [src/usecases/run.ts:1350-1405](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1350-L1405); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
 | CON-21 | AI 境界を越えるキャプチャ値 | `verificationCoverage` を持たないレガシーな保存済みトレースは、固定ボキャブラリ以外の任意の値において、未解決の `{{run.name}}` プレースホルダーを除き、空でないキャプチャされた現在のケースの値を含んではならない（MUST NOT）。この検査は部分文字列一致である。新規エージェントによるナビゲーション URL、fill 値、およびアサーションテキスト/パターンは、キャプチャされた値と完全に等しくてはならない（MUST NOT）。これらの値は代わりに認可された `RunRef` 補間を使用しなければならず（MUST）、違反は保存されたトレースがブラウザ/プロバイダのフォールバックに到達する前、または新規入力がブラウザ/永続化に到達する前に失敗する。 | 整合性の失敗（integrity failure） | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
 | CON-22 | 新規エージェントアクション/アサートの具体化シークレット | 具体化の前に、すべての新規エージェントアクションおよびアサーションは、ケース内で観測された空でないすべての解決済みシークレットに対して、固定ボキャブラリ以外の値をスキャンしなければならない（MUST）。唯一の閉じたボキャブラリの除外対象は、`type`、`check`、`target.strategy`、`key`、および `secretRef` である。空でないすべてのシークレットについて完全一致は禁止され、シークレットが 3 UTF-16 コードユニット以上である場合は部分文字列一致が禁止される。一致は、ブラウザの実行、ジャーナル追記、Grounding 更新、または永続化の前の整合性の失敗（integrity failure）となる。 | 整合性の失敗（integrity failure） | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
+| CON-23 | 位置引数／ディスカバリー済みプロンプトパスの選択 | 選択されたプロンプトパスは `testDir` 内に解決され、厳密な `.test.md` サフィックスと空でない名前要素を持たなければならない（MUST）。この検査はファイル単位の作業を始める前に選択全体に対して一度だけ行い、`--list` には適用してはならない（MUST NOT）。 | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/prompt-path-eligibility.ts#L25) |
 
-CON-03 から CON-06 および CON-10 は Plan 構築前に適用される。CON-07 から CON-09 はコミットされた Plan に適用される。CON-11 から CON-22 は Grounding/リプレイ検証に適用される。Grounding/リプレイ検証は、ブラウザ操作が具体化された値を受け取る前に、トレースのシークレットマーカー、解決済みシークレット、認証情報リテラル、およびキャプチャ値の境界に加え、動的な `RunRef` の権限を検査する。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generator-secret-policy.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L191) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
+CON-23 はファイル選択中に、他のすべての CON 項目より前に適用される。CON-03 から CON-06 および CON-10 は Plan 構築前に適用される。CON-07 から CON-09 はコミットされた Plan に適用される。CON-11 から CON-22 は Grounding/リプレイ検証に適用される。Grounding/リプレイ検証は、ブラウザ操作が具体化された値を受け取る前に、トレースのシークレットマーカー、解決済みシークレット、認証情報リテラル、およびキャプチャ値の境界に加え、動的な `RunRef` の権限を検査する。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generator-secret-policy.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L191) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
 
 ## 検証手順 {#verification-procedure}
 
@@ -2527,6 +2536,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 | producer bundle fingerprint が `inputsDigest` に入る | [CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) | この変更前に生成された Plan は stale であるため、再生成しなければならない（MUST）。[CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) |
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report consumer は、Plan バージョンから互換性を推論するのではなく、現在の `3.0` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の構造化エラー診断を含む現在の `3.1` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
+| report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `PROMPT_PATH_INVALID` details 分岐を含む現在の `3.2` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 互換性ポリシー {#compatibility-policy}
 

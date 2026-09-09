@@ -751,7 +751,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/
 | `$schema` | string | — | 配置文件存在时必填 | loader |
 | `testDir` | string | `tests/ambercast` | 解析为绝对布局路径 | generate、run、check、heal 发现/布局 |
 | `runsDir` | string | `tests/ambercast/.runs` | 解析为绝对布局路径 | run 报告/证据；heal 包含的写入 |
-| `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器 | generate、run、check、heal 发现 |
+| `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器；每个模式必须以 `.test.md` 结尾，否则加载配置会以 `CONFIG_INVALID` 失败 | generate、run、check、heal 发现 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含匹配后排除 | generate、run、check、heal 发现 |
 | `targets.<name>.baseUrl` | string | `web-user` 上的 `http://localhost:3000` | 替换整个 target 记录 | generate、run、check、heal 目标选择 |
 | `targets.<name>.browser` | `chromium` | `web-user` 上的 `chromium` | target 字段 | generate、run、heal 浏览器编排；check（新鲜度） |
@@ -879,6 +879,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/discovery-patt
 
 选定路径的排序是提供给下游使用场景的稳定执行顺序。
 
+仅用于显式执行而不参与常规发现的 prompt，应通过 `testIgnore` 排除，并使用其字面路径运行。`--list` 有意不对任何选择执行资格验证，无论其为字面路径还是发现结果。
+
 ## 默认配置 {#defaults}
 
 | 配置项 | 默认模式 |
@@ -912,7 +914,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.1` |
+| `schemaVersion` | 字面量 `3.2` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -982,8 +984,8 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 | --- | --- | --- |
 | `step` | `id`, `type: action/assert/capture/ai`, `status: passed/failed/error/skipped` | `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed` |
 | `observed` | `note`: 固定为 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
-| `review`（`sufficient` / `insufficient`） | `id`, `file`, `planFile`, `concerns[]` | — |
-| `review`（`skipped`） | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+| `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
+| `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
 
 ## Review 关注事项 {#review-concerns}
 
@@ -997,7 +999,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下六个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下七个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
@@ -1007,6 +1009,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
+| `PROMPT_PATH_INVALID` | `{ path: 非空白字符串, reason: "outside-test-dir"、"not-test-md" 或 "no-name" }` |
 
 ## 报告持久化 {#persistence}
 
@@ -1018,16 +1021,16 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
 ```json
-{"schemaVersion":"3.1","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.1","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.2","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.1","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.1","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.2","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}
@@ -1048,6 +1051,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | 错误代码 | 类别 | 作用域 | 退出码 | 触发条件 |
 | --- | --- | --- | --- | --- |
 | CONFIG_INVALID | usage | run/case | 2 | 配置无效 |
+| PROMPT_PATH_INVALID | usage | run only | 2 | 所选 prompt 路径不符合资格 |
 | SECRET_UNRESOLVED | usage | run/case | 2 | 未解析的 secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | 目标无法解析 |
 | MISSING_PLAN | usage | run/case | 4 | 缺失 plan |
@@ -1089,6 +1093,8 @@ ambercast 向系统环境提供面向机器的进程退出状态码。本参考�
 | 3 | 环境错误 | 1 |
 | 4 | 不可信的计划或 grounding 制件 | 2 |
 | 5 | 空选择集 | 4 |
+
+例如，[`PROMPT_PATH_INVALID`](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) 是以退出代码 2 结束的使用错误。
 
 ## 聚合优先级 {#aggregation-priority}
 
@@ -1203,7 +1209,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 完整的 `PlanDocument`，包含来源出处（provenance）、目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.1"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
 
 - 每个 `$id` 均与其公开路径 URL 完全一致；内容完全一致（byte-identical）的 Schema 文件已发布至文档站点以及 npm 的 `schemas/` 导出。
 - 当前 Astro 配置将 `site` 设定为主机 `https://kotarotsubaki.github.io`，基路径为 `/ambercast`；上述发布 URL 均基于该主机。
@@ -1215,7 +1221,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | `plan.schema.json` | 包含 Plan `schemaVersion` 2、来源出处（provenance source）、目标（targets）与步骤（steps）的完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 包含 Grounding `schemaVersion` 1、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | 当前存在的配置文档，其 `$schema` 为必填项，其余声明的设置项均为可选项。 | Zod `RawConfig` 转换为 JSON Schema 2020-12。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | 包含 Report `schemaVersion` 3.1 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | 包含 Report `schemaVersion` 3.2 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 - 执行 `npm run build` 会先编译软件包，随后运行 `node dist/schema-gen.js`；该命令会以递归方式创建 Schema 目录，并精确写入上述四个文件。
 - 已校验的生成文件通过 `$schema` 声明了 JSON Schema draft 2020-12，并且包含发布元数据中所示的 `$id`。
@@ -1228,7 +1234,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.1 的结构化报告外层信封（envelope）及其命令专属结果。
+`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.2 的结构化报告外层信封（envelope）及其命令专属结果。
 
 ## 相关链接
 
@@ -1573,6 +1579,8 @@ ambercast 当前已实现的命令包括 generate、run、check 以及 heal。
 | check | 字面路径；未指定路径则执行发现 | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 
+除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
+
 `--` 标志用于结束选项解析，其后出现的所有参数均按字面路径处理。
 
 `--json` 与 `--no-color` 由各个命令独立解析，而非通过全局标志抽象层统一处理。
@@ -1814,7 +1822,7 @@ flowchart LR
 | Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
 | 指纹算法 | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.1` | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
+| Report `schemaVersion` | `3.2` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 阅读顺序 {#reading-order}
 
@@ -2464,8 +2472,9 @@ Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其
 | CON-20 | 存储及全新的 AI `fill.value` 凭据字面量 | 存储的 trace 和全新的 agentic 操作必须无条件拒绝（MUST）`sk-`、`ghp_` 以及 `AKIA` 填充值。高熵填充值仅在其移除当前用例捕获值后的剩余文本没有检测器匹配项时才被接受。存储 trace 失败不得回退（MUST NOT）；全新操作失败发生在浏览器执行或日志持久化之前。 | 完整性失败 | [src/usecases/run.ts:984-1040](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984-L1040); [src/usecases/run.ts:1350-1405](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1350-L1405); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
 | CON-21 | 跨 AI 边界的捕获值 | 不带 `verificationCoverage` 的旧版存储 trace 在任何非固定词汇表值中均不得包含（MUST NOT）非空的当前用例捕获值（未解析的 `{{run.name}}` 占位符除外）；该检查采用子字符串匹配。全新的 agentic 导航 URL、填充值和断言文本/模式均不得完全等于（MUST NOT）捕获值。这些值必须改用（MUST）授权的 `RunRef` 插值；违规将在存储 trace 到达浏览器/提供方回退之前，或全新输入到达浏览器/持久化之前失败。 | 完整性失败 | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
 | CON-22 | 全新 agentic 操作/断言具体化机密 | 在具体化之前，每个全新的 agentic 操作和断言都必须根据（MUST）在该用例中观察到的每个非空已解析机密，对非固定词汇表的值进行扫描。仅有的封闭词汇表排除项为 `type`、`check`、`target.strategy`、`key` 和 `secretRef`。对任何非空机密都禁止完全相等；当机密至少为 3 个 UTF-16 代码单元时，禁止子字符串匹配。匹配项在浏览器执行、日志追加、Grounding 更新或持久化之前构成完整性失败。 | 完整性失败 | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
+| CON-23 | 位置参数／发现的 prompt 路径选择 | 所选 prompt 路径必须（MUST）解析到 `testDir` 内，具有精确的 `.test.md` 后缀及非空名称组成部分；此检查必须在任何逐文件工作开始前对整个选择仅执行一次，且不得（MUST NOT）应用于 `--list`。 | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/prompt-path-eligibility.ts#L25) |
 
-CON-03 至 CON-06 以及 CON-10 适用于 Plan 构建之前；CON-07 至 CON-09 适用于已提交的 Plan；CON-11 至 CON-22 适用于 Grounding/重放验证。Grounding/重放验证在浏览器操作接收具体化值之前，检查 trace 机密标记、已解析机密、凭据字面量和捕获值边界，以及动态 `RunRef` 授权。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generator-secret-policy.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L191) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
+CON-23 在文件选择期间、所有其他 CON 项目之前适用。CON-03 至 CON-06 以及 CON-10 适用于 Plan 构建之前；CON-07 至 CON-09 适用于已提交的 Plan；CON-11 至 CON-22 适用于 Grounding/重放验证。Grounding/重放验证在浏览器操作接收具体化值之前，检查 trace 机密标记、已解析机密、凭据字面量和捕获值边界，以及动态 `RunRef` 授权。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generator-secret-policy.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L191) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
 
 ## 验证规程 {#verification-procedure}
 
@@ -2493,6 +2502,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 | 生成者 bundle 指纹进入 `inputsDigest` | [CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) | 变更前生成的 Plan 必须（MUST）重新生成，因为它们已过时。[CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) |
 | report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report 消费者必须（MUST）接受当前的 `3.0` 契约，而不是从 Plan 版本推断兼容性。[src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report 消费者必须（MUST）接受当前的 `3.1` 契约（包括可选的结构化错误诊断），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
+| report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.2` 契约（包括可选的 `PROMPT_PATH_INVALID` details 分支），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 兼容性策略 {#compatibility-policy}
 

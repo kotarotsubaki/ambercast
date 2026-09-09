@@ -1263,9 +1263,9 @@ async function assertDocumentationSurfaces(browser) {
 }
 
 /**
- * Exercises all frame variants without changing documentation content. The two unavailable
+ * Exercises all frame variants without changing documentation content. The three unavailable
  * variants are cloned with their enclosing expressive-code wrapper, because frame styling relies
- * on that ancestor; every temporary wrapper is removed after measurement. Geometry permits one
+ * on that ancestor; every temporary wrapper is removed after measurement. A cloned variant's title text is only assigned when that variant calls for a title; the `terminal:true, title:false` clone leaves its title element empty so the `.title:empty` CSS rule in website/src/styles/custom.css governs its visibility, matching a genuine untitled terminal frame. Geometry permits one
  * pixel of browser rounding, while the COPY button must be wider than its height and remain
  * compact rather than being mistaken for the plugin's square icon geometry; first-line clearance is
  * guaranteed by inline-end padding at least eight pixels wider than the COPY button, with rect
@@ -1284,11 +1284,11 @@ async function assertCodeFrameVariants(browser) {
       const ids = await page.evaluate(() => {
         const source = document.querySelector('.expressive-code .frame'); if (!source) throw new Error('The guide needs a code frame.');
         const targets = [...document.querySelectorAll('.expressive-code .frame')].map((frame) => ({ frame, cloned: false, terminal: frame.classList.contains('is-terminal'), titled: frame.classList.contains('has-title') }));
-        for (const variant of [{ terminal: true, title: true }, { terminal: false, title: true }]) {
+        for (const variant of [{ terminal: true, title: true }, { terminal: false, title: true }, { terminal: true, title: false }]) {
           if (targets.some((target) => target.terminal === variant.terminal && target.titled === variant.title)) continue;
           const wrapper = source.closest('.expressive-code')?.cloneNode(true); const frame = wrapper?.querySelector('.frame'); if (!wrapper || !frame) throw new Error('Frame clones require an expressive-code wrapper.'); frame.classList.toggle('is-terminal', variant.terminal); frame.classList.toggle('has-title', variant.title);
           let title = frame.querySelector('.header .title'); if (!title) { title = document.createElement('div'); title.className = 'title'; frame.querySelector('.header')?.append(title); }
-          title.textContent = 'example.txt'; wrapper.dataset.acTemporaryFrame = 'true'; document.body.append(wrapper); targets.push({ frame, cloned: true, wrapper, terminal: variant.terminal, titled: variant.title });
+          title.textContent = variant.title ? 'example.txt' : ''; wrapper.dataset.acTemporaryFrame = 'true'; document.body.append(wrapper); targets.push({ frame, cloned: true, wrapper, terminal: variant.terminal, titled: variant.title });
         }
         return targets.map((entry, index) => { entry.frame.dataset.acFrameCase = String(index); return String(index); });
       });

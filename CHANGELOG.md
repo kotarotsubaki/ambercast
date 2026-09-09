@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.4.0](https://github.com/kotarotsubaki/ambercast/compare/v0.3.1...v0.4.0) (2026-09-09)
+
+
+### Features
+
+* **cli:** CLI manifest as the single source for --help/parsers, report JSON Schema, schema metadata, capabilities.json and site publication (SPEC-D) ([#314](https://github.com/kotarotsubaki/ambercast/issues/314)) ([51006d4](https://github.com/kotarotsubaki/ambercast/commit/51006d485344e0063e5e145a62a8015808dd125f))
+* **skills:** bundle the official agent skill ([#293](https://github.com/kotarotsubaki/ambercast/issues/293)) ([97cb4c7](https://github.com/kotarotsubaki/ambercast/commit/97cb4c7ff03d686f0370b4ad751aed9110da60ff))
+* **website:** Introduction page figures as Astro components (cycle / files / AI-call ledger) with per-locale data (SPEC-B) ([#320](https://github.com/kotarotsubaki/ambercast/issues/320)) ([0c00468](https://github.com/kotarotsubaki/ambercast/commit/0c004689b41fb045ae9004b2c2cf8cb73248aacb))
+* **website:** llms.txt family, machine-readable resources page facts, website CI job (SPEC-E) ([#338](https://github.com/kotarotsubaki/ambercast/issues/338)) ([2d02257](https://github.com/kotarotsubaki/ambercast/commit/2d022570ef1e9eafbcfffe994d7f0930cb7ddedb))
+* **website:** rebuild docs site content, sidebar, and PLAN SPECIFICATION sync (SPEC-A + SPEC-C) ([#311](https://github.com/kotarotsubaki/ambercast/issues/311)) ([39ba090](https://github.com/kotarotsubaki/ambercast/commit/39ba090fa76dc498fce22e45c97316154f270807))
+
+
+### Bug Fixes
+
+* **ai:** isolate claude/codex child processes from project agent config ([#313](https://github.com/kotarotsubaki/ambercast/issues/313)) ([d98c944](https://github.com/kotarotsubaki/ambercast/commit/d98c944e52a720b1773bcbc22257356821d0a6cb))
+* **cli:** expose structured error diagnostics in human and --json report output ([#316](https://github.com/kotarotsubaki/ambercast/issues/316)) ([6351ad7](https://github.com/kotarotsubaki/ambercast/commit/6351ad7851ac53b328a8f6f22aad16deda1aab09))
+* **cli:** raise the AI timeout default and add stderr dispatch progress ([#327](https://github.com/kotarotsubaki/ambercast/issues/327)) ([9d80dcd](https://github.com/kotarotsubaki/ambercast/commit/9d80dcd9c625649f51084bd35bd7e4216600bb8d))
+* **cli:** reject ineligible prompt paths and testMatch patterns with usage errors ([#317](https://github.com/kotarotsubaki/ambercast/issues/317)) ([a15d7f0](https://github.com/kotarotsubaki/ambercast/commit/a15d7f07def7b0eab47649f325350d7343e426bc))
+* **cli:** render PROMPT_PATH_INVALID details and drop empty details lines ([#335](https://github.com/kotarotsubaki/ambercast/issues/335)) ([45b23c3](https://github.com/kotarotsubaki/ambercast/commit/45b23c307c4269bd2c71d150f5f284adfc13284c))
+* **generate:** retry rejected provider responses with corrective feedback ([#318](https://github.com/kotarotsubaki/ambercast/issues/318)) ([b4fd03f](https://github.com/kotarotsubaki/ambercast/commit/b4fd03f1a1233923dc0d6d8f7a1de24f4006deac))
+* **secrets:** attribute repeated grant lines by document order ([#319](https://github.com/kotarotsubaki/ambercast/issues/319)) ([e91b8e7](https://github.com/kotarotsubaki/ambercast/commit/e91b8e71ba434b537f1c6c3fbe4150649b5a10d2))
+* **secrets:** gate the high-entropy literal detector on token shape ([#315](https://github.com/kotarotsubaki/ambercast/issues/315)) ([e07bcb6](https://github.com/kotarotsubaki/ambercast/commit/e07bcb67a83c2efa787623972551447384dcf749))
+* **skills:** apply SPEC-8 CodeRabbit wording fixes and un-skip SPEC-12 configuration check ([#307](https://github.com/kotarotsubaki/ambercast/issues/307)) ([87c6cc1](https://github.com/kotarotsubaki/ambercast/commit/87c6cc18a2614d04bffc0105a7a7a5e2f1b3a680))
+* **test:** decouple publication-metadata and CLI-manifest pins from the released version ([#339](https://github.com/kotarotsubaki/ambercast/issues/339)) ([90f1c5a](https://github.com/kotarotsubaki/ambercast/commit/90f1c5aa44eafffe3d0cdacc95846a91c07e8c27))
+* **website:** correct assertIssue295DocumentationContracts's TOC-permalinks check ([#334](https://github.com/kotarotsubaki/ambercast/issues/334)) ([#336](https://github.com/kotarotsubaki/ambercast/issues/336)) ([a588847](https://github.com/kotarotsubaki/ambercast/commit/a588847b0f354be7b54b0c640cf9a57d4c948c4c))
+* **website:** decouple the llms-full.txt fixture from the released version ([#347](https://github.com/kotarotsubaki/ambercast/issues/347)) ([454a2c6](https://github.com/kotarotsubaki/ambercast/commit/454a2c626d18ce9b12f6473dc4064991e2e8e869))
+* **website:** make LandingPage's primary CTA locale-aware ([#331](https://github.com/kotarotsubaki/ambercast/issues/331)) ([#333](https://github.com/kotarotsubaki/ambercast/issues/333)) ([ae74e4d](https://github.com/kotarotsubaki/ambercast/commit/ae74e4dd43862c568e37b8d5dfb0ef6e765ec430))
+* **website:** pause the fake clock in e2e suite ([#348](https://github.com/kotarotsubaki/ambercast/issues/348)) ([ef72954](https://github.com/kotarotsubaki/ambercast/commit/ef72954bf58c6e8abe3e2191157d2d9f873faa8f))
+* **website:** scope assertIssue295DocumentationContracts's badge checks to each page's own sidebar link ([#328](https://github.com/kotarotsubaki/ambercast/issues/328)) ([#330](https://github.com/kotarotsubaki/ambercast/issues/330)) ([cd430a1](https://github.com/kotarotsubaki/ambercast/commit/cd430a1c592b72452971973f430e10f5617df819))
+* **website:** split assertCodeTokenPalette into three independent page checks ([#325](https://github.com/kotarotsubaki/ambercast/issues/325)) ([536f45f](https://github.com/kotarotsubaki/ambercast/commit/536f45f5cd1926df9d3d507857c9b958ae819059))
+* **website:** synthesize all three missing code-frame variants in assertCodeFrameVariants ([#326](https://github.com/kotarotsubaki/ambercast/issues/326)) ([6f3fb89](https://github.com/kotarotsubaki/ambercast/commit/6f3fb89adb14910cd2e8eddeba860ba8ca84d7fa))
+
 ## [0.3.1](https://github.com/kotarotsubaki/ambercast/compare/v0.3.0...v0.3.1) (2026-09-07)
 
 

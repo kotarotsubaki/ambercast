@@ -1171,32 +1171,69 @@ async function assertHeaderV13(browser) {
 }
 
 /**
- * Verifies that syntax highlighting stays inside the approved monochrome palette instead of
- * accepting a theme-specific rendering accident. The oracle walks every rendered span so a
- * newly introduced token category cannot escape a spot check, while its literals remain
- * independent of the production theme table. JSON categories are mapped from each line's
- * concatenated text back to leaf spans by character offsets: Shiki may serialize a quoted
- * string as quote, body, and quote spans, so only spans inside the quote pair receive the
- * string's semantic colour and weight; the quote spans themselves remain punctuation.
+ * The dark/light palette table is hoisted because all three independent checks need the same
+ * approved colors. Sharing this table keeps the page-specific checks aligned without making any
+ * one of them own the palette.
  */
-async function assertCodeTokenPalette(browser) {
-  const themes = {
-    dark: { allowed: [[226, 217, 204], [118, 107, 96], [250, 246, 240], [241, 235, 226], [158, 145, 132]], keyword: [250, 246, 240], string: [241, 235, 226], punctuation: [158, 145, 132], background: [16, 12, 9] },
-    light: { allowed: [[59, 51, 44], [158, 145, 132], [24, 19, 16], [39, 33, 28], [118, 107, 96]], keyword: [24, 19, 16], string: [39, 33, 28], punctuation: [118, 107, 96], background: [241, 235, 226] },
-  };
-  for (const scenario of SCREENSHOTS.filter((entry) => entry.path === '/tutorials/quick-start/' && entry.viewport.width === 1440)) {
-    const { colorScheme, viewport } = scenario; const expected = themes[colorScheme];
-    const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage();
+const CODE_TOKEN_THEMES = {
+  dark: { allowed: [[226, 217, 204], [118, 107, 96], [250, 246, 240], [241, 235, 226], [158, 145, 132]], keyword: [250, 246, 240], string: [241, 235, 226], punctuation: [158, 145, 132], background: [16, 12, 9] },
+  light: { allowed: [[59, 51, 44], [158, 145, 132], [24, 19, 16], [39, 33, 28], [118, 107, 96]], keyword: [24, 19, 16], string: [39, 33, 28], punctuation: [118, 107, 96], background: [241, 235, 226] },
+};
+
+/**
+ * A fixed theme set instead of screenshot scenarios prevents a missing scenario from turning
+ * this check into a vacuous pass; non-empty guards preserve that invariant for token categories.
+ *
+ * `npm` is deliberately absent because it shares `npx`'s highlighting scope, color, and weight,
+ * so retaining it would add no independent coverage.
+ */
+async function assertBashCodeTokenPalette(browser) {
+  for (const [colorScheme, expected] of Object.entries(CODE_TOKEN_THEMES)) {
+    const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
+    try {
+      await page.goto(pageUrl('/how-to/choose-ai-provider/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
+      const tokens = await page.$$eval('.expressive-code pre[data-language="bash"] span', (spans) => spans.map((span) => ({ text: span.textContent, color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) })));
+      assert.ok(tokens.length > 0, `${colorScheme} provider guide must contain highlighted bash spans.`);
+      for (const token of tokens) assert.ok(expected.allowed.some((color) => color.join(',') === rgbChannels(token.color).join(',')), `${colorScheme} token ${JSON.stringify(token.text)} must use the approved palette.`);
+      const npxTokens = tokens.filter((token) => token.text?.trim() === 'npx');
+      assert.ok(npxTokens.length > 0, `${colorScheme} provider guide bash block must render npx tokens.`);
+      for (const token of npxTokens) { assert.deepEqual(rgbChannels(token.color), expected.keyword); assert.ok(token.weight >= 700); }
+      const stringTokens = tokens.filter((token) => ['ambercast', 'generate', '--ai', 'codex'].includes(token.text?.trim()));
+      assert.ok(stringTokens.length > 0, `${colorScheme} provider guide bash block must render string tokens.`);
+      for (const token of stringTokens) { assert.deepEqual(rgbChannels(token.color), expected.string); assert.ok(token.weight < 700); }
+    } finally { await context.close(); }
+  }
+}
+
+/**
+ * This page retains direct palette coverage because its screenshots are capture-only rather than
+ * pixel-compared elsewhere. The fixed-theme rationale matches the Bash check, preventing a
+ * missing screenshot scenario from becoming a vacuous pass.
+ */
+async function assertMarkdownCodeTokenPalette(browser) {
+  for (const [colorScheme, expected] of Object.entries(CODE_TOKEN_THEMES)) {
+    const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
     try {
       await page.goto(pageUrl('/tutorials/quick-start/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
-      const tokens = await page.$$eval('.expressive-code pre[data-language="bash"] span', (spans) => spans.map((span) => ({ text: span.textContent, color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) })));
-      assert.ok(tokens.length > 0, `${colorScheme} quick-start page must contain highlighted bash spans.`);
+      const tokens = await page.$$eval('.expressive-code pre[data-language="markdown"] span', (spans) => spans.map((span) => ({ text: span.textContent, color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) })));
+      assert.ok(tokens.length > 0, `${colorScheme} quick-start page must contain highlighted markdown spans.`);
       for (const token of tokens) assert.ok(expected.allowed.some((color) => color.join(',') === rgbChannels(token.color).join(',')), `${colorScheme} token ${JSON.stringify(token.text)} must use the approved palette.`);
-      for (const command of ['npx', 'npm']) {
-        const commandTokens = tokens.filter((token) => token.text?.trim() === command);
-        assert.ok(commandTokens.length > 0, `${colorScheme} quick-start bash block must render ${command} tokens.`);
-        for (const token of commandTokens) { assert.deepEqual(rgbChannels(token.color), expected.keyword); assert.ok(token.weight >= 700); }
-      }
+      const hashTokens = tokens.filter((token) => token.text?.trim() === '#');
+      assert.ok(hashTokens.length > 0, `${colorScheme} quick-start markdown block must render hash tokens.`);
+      for (const token of hashTokens) { assert.deepEqual(rgbChannels(token.color), expected.punctuation); assert.ok(token.weight < 700); }
+    } finally { await context.close(); }
+  }
+}
+
+/**
+ * Relocation preserves the existing classification contract rather than introducing a new one.
+ * Offset-based mapping relates leaf spans to their containing quoted strings, distinguishing
+ * string content from delimiters when syntax highlighting splits them across spans.
+ */
+async function assertJsonCodeTokenPalette(browser) {
+  for (const [colorScheme, expected] of Object.entries(CODE_TOKEN_THEMES)) {
+    const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
+    try {
       await page.goto(pageUrl('/spec/plan-document/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
       const json = await page.$$eval('.expressive-code pre[data-language="json"]', (pres) => pres.map((pre) => ({ text: pre.textContent, background: getComputedStyle(pre).backgroundColor })));
       const jsonBlock = json.find((block) => block.text.includes('"') && block.text.includes(':')); assert.ok(jsonBlock, 'The plan-document page must include a JSON code block.');
@@ -1263,9 +1300,9 @@ async function assertDocumentationSurfaces(browser) {
 }
 
 /**
- * Exercises all frame variants without changing documentation content. The two unavailable
+ * Exercises all frame variants without changing documentation content. The three unavailable
  * variants are cloned with their enclosing expressive-code wrapper, because frame styling relies
- * on that ancestor; every temporary wrapper is removed after measurement. Geometry permits one
+ * on that ancestor; every temporary wrapper is removed after measurement. A cloned variant's title text is only assigned when that variant calls for a title; the `terminal:true, title:false` clone leaves its title element empty so the `.title:empty` CSS rule in website/src/styles/custom.css governs its visibility, matching a genuine untitled terminal frame. Geometry permits one
  * pixel of browser rounding, while the COPY button must be wider than its height and remain
  * compact rather than being mistaken for the plugin's square icon geometry; first-line clearance is
  * guaranteed by inline-end padding at least eight pixels wider than the COPY button, with rect
@@ -1284,11 +1321,11 @@ async function assertCodeFrameVariants(browser) {
       const ids = await page.evaluate(() => {
         const source = document.querySelector('.expressive-code .frame'); if (!source) throw new Error('The guide needs a code frame.');
         const targets = [...document.querySelectorAll('.expressive-code .frame')].map((frame) => ({ frame, cloned: false, terminal: frame.classList.contains('is-terminal'), titled: frame.classList.contains('has-title') }));
-        for (const variant of [{ terminal: true, title: true }, { terminal: false, title: true }]) {
+        for (const variant of [{ terminal: true, title: true }, { terminal: false, title: true }, { terminal: true, title: false }]) {
           if (targets.some((target) => target.terminal === variant.terminal && target.titled === variant.title)) continue;
           const wrapper = source.closest('.expressive-code')?.cloneNode(true); const frame = wrapper?.querySelector('.frame'); if (!wrapper || !frame) throw new Error('Frame clones require an expressive-code wrapper.'); frame.classList.toggle('is-terminal', variant.terminal); frame.classList.toggle('has-title', variant.title);
           let title = frame.querySelector('.header .title'); if (!title) { title = document.createElement('div'); title.className = 'title'; frame.querySelector('.header')?.append(title); }
-          title.textContent = 'example.txt'; wrapper.dataset.acTemporaryFrame = 'true'; document.body.append(wrapper); targets.push({ frame, cloned: true, wrapper, terminal: variant.terminal, titled: variant.title });
+          title.textContent = variant.title ? 'example.txt' : ''; wrapper.dataset.acTemporaryFrame = 'true'; document.body.append(wrapper); targets.push({ frame, cloned: true, wrapper, terminal: variant.terminal, titled: variant.title });
         }
         return targets.map((entry, index) => { entry.frame.dataset.acFrameCase = String(index); return String(index); });
       });
@@ -1635,7 +1672,9 @@ async function main() {
     await assertApprovedCopyAndNoClipping(browser);
     await assertSsrClientBuilderEquality(browser);
     await assertDocumentationSurfaces(browser);
-    await assertCodeTokenPalette(browser);
+    await assertBashCodeTokenPalette(browser);
+    await assertMarkdownCodeTokenPalette(browser);
+    await assertJsonCodeTokenPalette(browser);
     await assertCodeFrameVariants(browser);
     await assertCodeBlockScroll(browser);
     await assertDocumentColumnSymmetry(browser);

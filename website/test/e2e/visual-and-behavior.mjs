@@ -1608,7 +1608,7 @@ async function assertIssue298MachineReadableResourceLinks(browser) {
     for (const path of pages) {
       await page.goto(pageUrl(path), { waitUntil: 'networkidle' });
       // The machine-readable resource links belong to the table immediately after this stable heading.
-      const rawHrefs = await page.locator('#planned-artifacts + table a').evaluateAll((anchors) => anchors.map((anchor) => anchor.getAttribute('href')));
+      const rawHrefs = await page.locator('.sl-heading-wrapper:has(> #planned-artifacts) + table a').evaluateAll((anchors) => anchors.map((anchor) => anchor.getAttribute('href')));
       assert.deepEqual(rawHrefs, hrefs, `${path} must contain the exact ordered absolute resource hrefs.`);
 
       for (const href of rawHrefs) {

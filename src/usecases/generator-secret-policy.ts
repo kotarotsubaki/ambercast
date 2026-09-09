@@ -174,8 +174,28 @@ type SecretAttributedGeneratedStep =
     readonly secrets?: AiStepSecretGrant[];
   });
 
+/**
+ * Signals instruction-coverage feedback that belongs to one generated AI step.
+ *
+ * Catchers can use `stepId` to scope corrective response feedback to the
+ * provider-authored step that needs correction.
+ *
+ * @remarks
+ * Keeping this context on the attribution error avoids widening the shared
+ * instruction-policy result's general contract for callers that do not have a
+ * truthful generated-step identity.
+ */
 export class InstructionCoverageAttributionError extends Error {
-  constructor(readonly issues: readonly InstructionCoverageIssue[]) {
+  /**
+   * Creates step-scoped instruction-coverage feedback.
+   *
+   * @param issues - Deterministic instruction-policy violations for the step.
+   * @param stepId - Identifier of the generated AI step that produced them.
+   */
+  constructor(
+    readonly issues: readonly InstructionCoverageIssue[],
+    readonly stepId: string,
+  ) {
     super('Generated instruction coverage could not be attributed.');
   }
 }
@@ -262,7 +282,7 @@ export function attributeSecretGrants(
       verificationIntent: step.verificationIntent,
     }, normalizedTestMd);
     if (!result.success) {
-      throw new InstructionCoverageAttributionError(result.issues);
+      throw new InstructionCoverageAttributionError(result.issues, step.id);
     }
     const { verificationIntent: _intent, instructionCoverage: _coverage, ...committed } = step;
     return { ...committed, instructionCoverage: [...result.data] };

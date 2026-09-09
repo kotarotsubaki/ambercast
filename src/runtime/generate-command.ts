@@ -137,6 +137,7 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
       files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
       strict: input.strict,
       force: input.force,
+      maxAttempts: config.ai.maxGenerateAttempts,
       dryRun: input.dryRun,
       ...(input.target === undefined ? {} : { target: input.target }),
       allowEmpty: input.allowEmpty,

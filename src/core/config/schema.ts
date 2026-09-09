@@ -12,6 +12,16 @@ import { TargetDefinition } from '#core/ir/schema.js';
 export const HEAL_MAX_STEP_REPAIRS_DESCRIPTION = 'Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.';
 
 /**
+ * Describes the bounded provider-attempt policy exposed by configuration.
+ *
+ * This shared literal keeps the generated JSON Schema and every configuration
+ * surface aligned on the same user-facing contract. Heal repairs are excluded
+ * because their one-shot dispatch policy is intentionally independent from
+ * regular generation.
+ */
+export const AI_MAX_GENERATE_ATTEMPTS_DESCRIPTION = 'Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.';
+
+/**
  * Schema for a target as it may appear in a partial configuration file.
  *
  * @remarks
@@ -60,6 +70,15 @@ export const RawConfig = z.strictObject({
     provider: z.enum(['claude', 'codex', 'auto']).optional(),
     // A positive timeout bounds each provider call after configuration resolves.
     timeoutMs: z.int().positive().optional(),
+    /**
+     * Lets a partial configuration override regular generation's bounded
+     * validation-retry policy without making heal repairs inherit it.
+     *
+     * Loading supplies the stable default when this field is absent, so the
+     * schema keeps it optional at the configuration-file boundary while every
+     * runtime consumer receives a resolved number.
+     */
+    maxGenerateAttempts: z.int().min(1).max(5).optional().describe(AI_MAX_GENERATE_ATTEMPTS_DESCRIPTION),
   }).optional(),
   viewer: z.strictObject({
     port: z.int().min(1).max(65_535).optional(),
@@ -128,8 +147,21 @@ export interface ResolvedConfig extends LayoutConfig {
   readonly testIgnore: readonly string[];
   readonly targets: Readonly<Record<string, Readonly<ResolvedTargetConfigEntry>>>;
   readonly defaultTarget?: string;
-  /** AI-provider policy with a positive, resolved per-call timeout. */
-  readonly ai: Readonly<{ provider: 'claude' | 'codex' | 'auto'; timeoutMs: number }>;
+  /**
+   * AI-provider policy with a positive, resolved per-call timeout and a
+   * bounded generation retry budget.
+   *
+   * The fully resolved shape makes command composition name the normal
+   * generation policy explicitly instead of reinterpreting optional raw
+   * configuration. Heal keeps its one-attempt repair policy at its own call
+   * boundary.
+   */
+  readonly ai: Readonly<{
+    readonly provider: 'claude' | 'codex' | 'auto';
+    readonly timeoutMs: number;
+    /** Maximum provider attempts for one prompt during regular generation. */
+    readonly maxGenerateAttempts: number;
+  }>;
   readonly viewer: Readonly<{ port: number }>;
   readonly ci: Readonly<{ heal: boolean; updateGroundingCache: boolean }>;
   /*

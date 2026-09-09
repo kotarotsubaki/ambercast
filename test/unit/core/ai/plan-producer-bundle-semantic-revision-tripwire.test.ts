@@ -7,9 +7,10 @@ import { PLAN_PRODUCER_SEMANTIC_REVISIONS } from '#core/ai/plan-producer-bundle.
 const INSTRUCTION_COVERAGE_POLICY_FILE = fileURLToPath(new URL('../../../../src/usecases/instruction-coverage-policy.ts', import.meta.url));
 const GENERATOR_SECRET_POLICY_FILE = fileURLToPath(new URL('../../../../src/usecases/generator-secret-policy.ts', import.meta.url));
 
-// This compile-time-only change has zero runtime plan behavior, so the documented semantic revision rule keeps revision 1.
-const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 1, sourceSha256: '48c3c3b1c35bc66f16bf6535e93dd5a76de94634514f7b719f94126687f13de6' } as const;
-const GENERATOR_SECRET_POLICY_PIN = { revision: 4, sourceSha256: '542f069ea7ac69421bf48df7c8cdaac9d44a2988537910c467cbb0b5703b46ef' } as const;
+// Producer-bundle revisions can advance independently of this policy file's bytes because instruction-coverage semantics also reside in prompt-layer inputs such as the generator template.
+const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 2, sourceSha256: '48c3c3b1c35bc66f16bf6535e93dd5a76de94634514f7b719f94126687f13de6' } as const;
+// The source hash covers the offset-ordered candidate-list resolution and diagnostic step-identity plumbing merged into this file from two parallel changes; policy semantics changed, so the semantic revision advanced.
+const GENERATOR_SECRET_POLICY_PIN = { revision: 4, sourceSha256: '489913227591435a9edb43f401f29600ca3c1f0a2e38b8e8b186ec14f322e3cd' } as const;
 
 async function sha256File(fileName: string): Promise<string> {
   return createHash('sha256').update(await readFile(fileName)).digest('hex');

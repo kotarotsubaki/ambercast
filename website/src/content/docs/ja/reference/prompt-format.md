@@ -53,6 +53,12 @@ new RegExp(`^[ \\t]*@ambercast-secret[ \\t]+(${SECRET_REF_SOURCE})[ \\t]*$`)
 
 `SecretRef` では、`{{secrets.name}}` などの参照の周囲に地の文を含めることは認められません。値全体にアンカーを設定することで、シークレットを保持するフィールドの曖昧さを排除しています。
 
+## 終端アサーションと指示カバレッジ {#terminal-assertions-and-instruction-coverage}
+
+終端の成功アサーションは、その指示によってカバーされている必要があります。URL への到達だけでは終端証明にならないため、到達先で見える見出し、メッセージ、要素を記述します。
+
+> …I reach the dashboard and see the heading "Welcome back".
+
 ## シークレットリテラルの拒否 {#literal-secret-rejection}
 
 シークレット検出器の標準規約は [プランにおけるシークレット](/ambercast/ja/spec/secrets/#literal-secret-rejection) に定義されています。プロンプト形式に関連する方針は以下の通りです。

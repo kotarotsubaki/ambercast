@@ -55,7 +55,7 @@ const CONFIG: ResolvedConfig = {
   testIgnore: [],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful' } },
   defaultTarget: 'web',
-  ai: { provider: 'auto', timeoutMs: 120_000 },
+  ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 4 },
   viewer: { port: 4600 },
   ci: { heal: false, updateGroundingCache: false },
   grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
@@ -228,7 +228,10 @@ describe('runGenerateCommand', () => {
     expect(mocks.loadConfig).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/workspace' }));
     expect(mocks.createAmbercast).toHaveBeenCalledWith(expect.objectContaining({ events: events.sink }));
     expect(mocks.createAmbercast.mock.calls[0]?.[0]).not.toHaveProperty('aiProvider');
-    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ events: events.sink }), expect.objectContaining({ files: [] }));
+    expect(mocks.generate).toHaveBeenCalledWith(expect.objectContaining({ events: events.sink }), expect.objectContaining({
+      files: [],
+      maxAttempts: 4,
+    }));
     expect(mocks.codexFactory).toHaveBeenCalledExactlyOnceWith({ run: expect.any(Function) });
     expect(selected.isAvailable).not.toHaveBeenCalled();
     expect(mocks.claudeFactory).not.toHaveBeenCalled();

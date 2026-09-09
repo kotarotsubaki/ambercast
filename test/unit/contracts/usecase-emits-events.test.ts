@@ -31,6 +31,7 @@ const GENERATE_OPTIONS: GenerateOptions = {
   files: [TEST_PATH],
   strict: false,
   force: false,
+  maxAttempts: 1,
   dryRun: false,
   allowEmpty: false,
   list: false,
@@ -59,7 +60,7 @@ registerUsecaseEmitsEventsContract([
           testIgnore: ['**/.runs/**'],
           targets: { web: { ...TARGETS.web, healReplayIsolation: 'stateful' } },
           defaultTarget: 'web',
-          ai: { provider: 'codex', timeoutMs: 100 },
+          ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
         },
       } satisfies GenerateDeps, GENERATE_OPTIONS);
 
@@ -112,7 +113,7 @@ registerUsecaseEmitsEventsContract([
           testIgnore: ['**/.runs/**'],
           targets: { web: { ...TARGETS.web, healReplayIsolation: 'stateful' } },
           defaultTarget: 'web',
-          ai: { provider: 'codex', timeoutMs: 120_000 },
+          ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
           ci: { heal: false, updateGroundingCache: false },
           grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
         },

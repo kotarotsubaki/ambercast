@@ -12,6 +12,10 @@ Prompt 文件名必须严格以 `.test.md` 结尾，才能建立有效的伴生�
 ## 操作步骤 {#steps}
 
 1. **创建测试文件**：创建 `tests/ambercast/checkout.test.md`，在文件中包含一个 H1 标题、用例所需的前置准备（setup），并在每个句子中表达一个可观察到的结果（observable outcome）。这些约定属于便于代码审查的编写建议，并非解析器的语法限制。
+
+   成功条件应描述到达页面后可见的标题、消息或元素，而不能只说明已到达某个 URL。
+
+   > …I reach the dashboard and see the heading "Welcome back".
 2. **保持用例聚焦**：若存在不相关的用户预期结果，请拆分至独立的 `<name>.test.md` 文件中。
 3. **按需声明密钥授权**：仅在确实需要时，使用单独成行的 `@ambercast-secret {{secrets.name}}`。解析器仅会识别位于代码块之外、独立成行的完整授权语句。一行授权仅授权一次使用；同一机密需要多次使用时，每次使用都重复一行。关于具体的语法定义，请查阅 [提示词文件格式](/ambercast/zh-cn/reference/prompt-format/) 与 [计划中的机密](/ambercast/zh-cn/spec/secrets/)。
 4. **运行生成预检**：

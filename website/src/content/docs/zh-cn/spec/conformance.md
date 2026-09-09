@@ -12,6 +12,7 @@ Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan�
 | `PlanDocument` | `getPlanJsonSchema()` | `plan.schema.json` | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `GroundingDocument` | `getGroundingJsonSchema()` | `grounding.schema.json` | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
+| `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其值；配置获取器从 `RawConfig` 派生其值。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) 外部使用者只要验证已发布的结构与语义契约即符合规范；它不需要使用 Zod 或重现 Ambercast 的发布流水线。
 

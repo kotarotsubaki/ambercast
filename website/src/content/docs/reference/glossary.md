@@ -46,7 +46,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 
 | invariant | normative sentence | owner | not to be confused with |
 | --- | --- | --- | --- |
-| `$id` | `$id` is reserved for a JSON Schema identifier, but generated 0.3.1 schemas do not establish one. | [JSON Schemas](/ambercast/reference/json-schemas/#publication-metadata) | config `$schema` |
+| `$id` | `$id` is the public JSON Schema identifier published for each generated schema. | [JSON Schemas](/ambercast/reference/json-schemas/#publication-metadata) | config `$schema` |
 | `$schema` | `$schema` is the required identifier field of a present config file and the draft declaration in generated schemas. | `RawConfig`; [Configuration](/ambercast/reference/configuration/#key-table) | `$id` |
 | `**` | `**` is the discovery wildcard that crosses path separators. | matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#pattern-language) | one-segment `*` |
 | `--` | `--` ends option parsing and leaves following tokens as literal paths. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | a filename beginning `--` |

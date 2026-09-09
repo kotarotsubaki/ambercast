@@ -9,6 +9,7 @@ Ambercast's publication pipeline MUST derive Plan, Grounding, and configuration 
 | `PlanDocument` | `getPlanJsonSchema()` | `plan.schema.json` | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `GroundingDocument` | `getGroundingJsonSchema()` | `grounding.schema.json` | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
+| `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 The Plan and Grounding getters derive their values from `PlanDocument` and `GroundingDocument`; the configuration getter derives its value from `RawConfig`. [repo:src/core/ir/json-schema.ts:15-37] [repo:src/core/config/json-schema.ts:7-24] An external consumer conforms when it validates the published structural and semantic contract; it need not use Zod or reproduce Ambercast's publication pipeline.
 

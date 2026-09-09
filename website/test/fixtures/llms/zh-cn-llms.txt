@@ -1,0 +1,79 @@
+# ambercast
+
+> 提示词原生的 E2E 测试。
+
+## START HERE
+- [介绍](https://kotarotsubaki.github.io/ambercast/zh-cn/introduction/): 了解 ambercast 如何将自然语言测试提示词转换为计划与 grounding 伴生文件，并在发生预期漂移时完成受控修复。
+- [设计哲学](https://kotarotsubaki.github.io/ambercast/zh-cn/philosophy/): 阐述 ambercast 核心设计决策背后的持久理念与基本考量。
+
+## TUTORIALS
+- [5 分钟完成您的首个测试](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/): 引导您生成并运行首个 ambercast 测试。
+- [阅读您的首个 plan 与 grounding](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/review-your-first-plan/): 学习如何定位测试生成的 plan 与 grounding 文件，并检查其新鲜度。
+- [UI 变更后的测试自愈](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/repair-your-first-drift/): 在一次性练习应用中，安全地自愈并验证因定位器变更而失败的既有测试用例。
+- [在 GitHub Actions 中运行 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/github-actions/): 在 GitHub Actions 工作流中运行 ambercast 的规范操作流程。
+
+## HOW-TO GUIDES
+- [编写高效的 Prompt](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/): 掌握编写清晰、聚焦的测试用例 Prompt 的推荐做法，并通过预检安全验证生成流程。
+- [管理机密](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/): 遵循安全编写路径在测试提示词中管理与使用机密引用。
+- [配置目标环境](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/configure-targets/): 配置 ambercast 测试运行的目标环境，包括基础 URL、自愈重放隔离及密钥注入源。
+- [选择 AI 提供商](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/choose-ai-provider/): 配置 ambercast 使用固定的 AI 提供商或使用自动探测。
+- [选择要运行的测试](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/): 介绍如何指定测试文件路径、使用模式过滤用例以及配置用例发现规则。
+- [控制 grounding 回写](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/control-grounding-writeback/): 配置本地开发与 CI 环境中变更后的 grounding 缓存回写策略。
+- [审查生成的 diff](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/review-generated-diffs/): 按照实用的审查顺序，依次检查测试提示词以及派生的 plan 与 grounding 伴生文件变更。
+- [在 Git 中管理构件](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/): 指导您在 Git 中管理 ambercast 生成的测试计划、grounding 伴生文件和运行目录。
+- [在其他 CI 平台上运行](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/run-on-other-ci/): 适用于 GitLab CI 与通用运行器的可移植 CI 配置方案。
+- [恢复 stale（已过期）产物](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/recover-stale-artifacts/): 查阅 check 状态至后续操作的对照表，以恢复处于 stale 或异常状态的产物。
+- [在不同版本间升级](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/upgrade/): 跨版本安全升级 ambercast 的操作流程与验证方法。
+- [常见故障排查](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/troubleshoot/): 按故障症状排查原因并执行对应的处置操作。
+- [参与贡献](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/contribute/): ambercast 代码仓库的贡献指南与流程说明。
+
+## REFERENCE
+- [配置](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/): 本页定义了配置键及其解析逻辑。
+- [提示词文件格式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/prompt-format/): 说明 ambercast 0.3.1 中提示词文件所强制执行的文件标识、文本规范化、机密授权及引用语法规范。
+- [发现模式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/discovery-patterns/): 定义 ambercast 测试发现中的配置匹配规则与路径排序约定。
+- [报告](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/): ambercast 结构化输出字段与结果 Schema 的完整规范参考。
+- [错误代码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/error-codes/): ambercast 稳定错误代码词汇表、作用域、退出码及触发条件的完整参考。
+- [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/): ambercast 面向机器的进程状态退出码定义与聚合优先级参考。
+- [环境变量](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/environment-variables/): Ambercast 所读取环境数据的详尽参考，以及向 AI 提供商子进程传递变量时的过滤边界。
+- [文件布局](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/file-layout/): 详细定义 Ambercast 的路径运算规则、产物写入方、生成时机以及基于实现的仓库提交策略。
+- [JSON Schema 规范](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/json-schemas/): 规范重新构建时的发布约定，并梳理当前生成的 JSON Schema 产物与结构约束边界。
+- [兼容性](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/compatibility/): 说明产物格式的兼容性与重新生成要求。
+- [变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/changelog/): 记录 ambercast 用户可见的产品行为与公共契约变更，优先展示破坏性变更。
+- [安全策略](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/security-policy/): ambercast 的版本支持范围与安全漏洞私下报告流程。
+- [术语表](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/): ambercast 全站术语的权威规范性定义以及翻译人员必须保留的字面量词元索引。
+
+### CLI
+- [CLI 概览](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/): 介绍 ambercast 命令行界面的全局解析规则、核心命令集、命令与标志支持矩阵以及默认文件发现机制。
+- [ambercast generate](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/generate/): 详细参考 ambercast generate 的命令行参数、AI 提供商调用逻辑、伴生产物映射及退出状态。
+- [ambercast run](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/): 规范 ambercast run 的回放路径与运行写入行为。
+- [ambercast check](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/check/): 为 CLI 用户汇总检查状态。
+- [ambercast heal](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/): 规定 ambercast heal 命令的授权机制与运行时副作用，并提供选项、修复模型、限制及运行时行为的完整参考。
+
+## PLAN SPECIFICATION
+- [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.3.1 接受的工件。
+- [计划文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/plan-document/): `PlanDocument` 是一个严格对象。
+- [步骤](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/steps/): 每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严格分支；每个分支都具有 `id: StepId`。
+- [值类型](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/): 所有其他章节必须（MUST）使用这些定义，而不是重新陈述其形态。
+- [Grounding 文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/): `GroundingDocument` 是一个严格对象，绑定到恰好一个 Plan 摘要。
+- [元素指纹](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/): `Fingerprint.
+- [新鲜度与摘要](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/): `inputsDigest` 必须（MUST）是对新构建对象的规范 JSON（canonical JSON）计算得出的小写 SHA-256，该对象精确包含以下五个成员：`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint` 和 `targetDefinitions`。
+- [规范 JSON](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/canonical-json/): 摘要输入必须（MUST）使用以 UTF-8 编码且不含标记间空白的紧凑 RFC 8785 兼容 JSON。
+- [计划中的机密](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/secrets/): 计划必须（MUST）仅使用 值类型 `SecretRef` 来表示机密值；连续的 `{{secrets.
+- [符合性](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/conformance/): Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding 和配置 JSON Schema，而不是维护手写的并行模式。
+- [规范变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/): 工件版本的接受必须（MUST）遵循 Ambercast 计划规范，而非凭借发布版本号的直觉。
+
+## EXPLANATION
+- [计划生命周期与新鲜度](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecycle/): 解释计划产物的出处与新鲜度判定机制，帮助您判断某个产物是否可以安全重放。
+- [重放与 grounding](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-grounding/): 解释重放路径及其安全边界。
+- [自愈模型](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/healing-model/): 解释受限递进与人工控制如何规范自愈行为。
+- [信任与安全](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/trust-and-security/): 阐释 ambercast 的信任边界与故障安全设计考量。
+- [CI 中的确定性](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/): 解释 CI 行为背后的信任边界。
+- [ambercast 的设计模型对比](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/comparison/): 对比 ambercast 与代码生成、录制测试及直接驱动型 Agent 的核心设计模型。
+- [状态与路线图](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-roadmap/): 明确 ambercast 0.3.1 的功能边界与后续设计规划。
+
+## FOR AI AGENTS
+- [在 AI Agent 中使用 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/overview/): 为 AI Agent 提供修改测试资产前的操作阅读顺序、副作用范围与有界运行循环指引。
+- [操作契约](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/operating-contract/): 规定 AI Agent 安全调用 ambercast 时的动作边界、核心禁令以及退出状态与错误处理契约。
+- [设置提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/setup-prompt/): 为处理指定测试的 AI Agent 提供轻量、以审查为先的完整可复制运行提示词。
+- [读取结构化输出](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/reading-structured-output/): 指导 Agent 根据报告信封进行逻辑分支，按固定安全顺序处理命令、结果状态、错误代码与报告持久化。
+- [机器可读资源](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-resources/): 明确列出已发布的机器可读资源及其可用性规则。

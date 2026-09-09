@@ -1501,6 +1501,83 @@ async function assertNoResidualWikilinks() {
   assert.deepEqual(offenders, [], 'Built HTML must not contain residual wikilink syntax.');
 }
 
+async function assertIssue298LlmsArtifacts(browser) {
+  const plannedSlugs = [
+    'reference/mcp-tools',
+    'reference/cli/init',
+    'reference/cli/view',
+    'reference/cli/review',
+    'reference/cli/mcp',
+    'reference/cli/baseline-restore',
+    'agents/official-skill',
+    'agents/mcp-server',
+  ];
+  const plannedUrls = plannedSlugs.map((slug) => `https://kotarotsubaki.github.io/ambercast/${slug}/`);
+  const artifacts = ['llms.txt', 'llms-full.txt', 'ja/llms.txt', 'ja/llms-full.txt', 'zh-cn/llms.txt', 'zh-cn/llms-full.txt', 'llms-planned.txt'];
+
+  // Keep the signature aligned with the per-issue browser assertions; these artifacts only need preview-origin fetches.
+  void browser;
+  const bodies = new Map();
+  for (const artifact of artifacts) {
+    const response = await fetch(pageUrl(`/${artifact}`));
+    assert.ok(response.ok, `${artifact} must be served by the preview.`);
+    bodies.set(artifact, await response.text());
+  }
+
+  const artifactLocales = [
+    ['llms.txt', ''],
+    ['llms-full.txt', ''],
+    ['ja/llms.txt', 'ja/'],
+    ['ja/llms-full.txt', 'ja/'],
+    ['zh-cn/llms.txt', 'zh-cn/'],
+    ['zh-cn/llms-full.txt', 'zh-cn/'],
+  ];
+  for (const [artifact, localePrefix] of artifactLocales) {
+    const artifactPlannedUrls = plannedSlugs.map((slug) => `https://kotarotsubaki.github.io/ambercast/${localePrefix}${slug}/`);
+    for (const plannedUrl of artifactPlannedUrls) assert.equal(bodies.get(artifact).includes(plannedUrl), false, `${artifact} must omit planned page ${plannedUrl}.`);
+  }
+  const plannedLines = bodies.get('llms-planned.txt').trim().split('\n').filter(Boolean);
+  assert.equal(plannedLines.length, 8, 'llms-planned.txt must contain exactly eight planned entries.');
+  for (const plannedUrl of plannedUrls) assert.ok(bodies.get('llms-planned.txt').includes(plannedUrl), `llms-planned.txt must contain ${plannedUrl}.`);
+}
+
+async function assertIssue298MachineReadableResourceLinks(browser) {
+  const hrefs = [
+    'https://kotarotsubaki.github.io/ambercast/llms.txt',
+    'https://kotarotsubaki.github.io/ambercast/llms-full.txt',
+    'https://kotarotsubaki.github.io/ambercast/ja/llms.txt',
+    'https://kotarotsubaki.github.io/ambercast/ja/llms-full.txt',
+    'https://kotarotsubaki.github.io/ambercast/zh-cn/llms.txt',
+    'https://kotarotsubaki.github.io/ambercast/zh-cn/llms-full.txt',
+    'https://kotarotsubaki.github.io/ambercast/llms-planned.txt',
+    'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json',
+    'https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json',
+    'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json',
+    'https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json',
+    'https://kotarotsubaki.github.io/ambercast/capabilities.json',
+    'https://kotarotsubaki.github.io/ambercast/manifest/cli.json',
+  ];
+  const pages = ['/agents/machine-readable-resources/', '/ja/agents/machine-readable-resources/', '/zh-cn/agents/machine-readable-resources/'];
+  const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
+  const page = await context.newPage();
+  try {
+    for (const path of pages) {
+      await page.goto(pageUrl(path), { waitUntil: 'networkidle' });
+      // The machine-readable resource links belong to the table immediately after this stable heading.
+      const rawHrefs = await page.locator('#planned-artifacts + table a').evaluateAll((anchors) => anchors.map((anchor) => anchor.getAttribute('href')));
+      assert.deepEqual(rawHrefs, hrefs, `${path} must contain the exact ordered absolute resource hrefs.`);
+
+      for (const href of rawHrefs) {
+        const parsedHref = new URL(href);
+        const response = await fetch(new URL(parsedHref.pathname, origin));
+        assert.ok(response.ok, `${path} resource probe must succeed for ${href}.`);
+      }
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 async function captureScreenshots(browser) {
   await mkdir(SCREENSHOT_DIRECTORY, { recursive: true });
 
@@ -1565,6 +1642,8 @@ async function main() {
     await assertIssue295DocumentationContracts(browser);
     await assertIssue297IntroFigures(browser);
     await assertNoResidualWikilinks();
+    await assertIssue298LlmsArtifacts(browser);
+    await assertIssue298MachineReadableResourceLinks(browser);
     await captureBoundaryAndPhaseScreenshots(browser);
     await captureScreenshots(browser);
   } finally {

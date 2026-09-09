@@ -12,6 +12,7 @@ Ambercast の公開パイプラインは、手書きの並行スキーマを維�
 | `PlanDocument` | `getPlanJsonSchema()` | `plan.schema.json` | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `GroundingDocument` | `getGroundingJsonSchema()` | `grounding.schema.json` | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
+| `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 Plan および Grounding のゲッターはそれらの値を `PlanDocument` および `GroundingDocument` から導出し、構成のゲッターはその値を `RawConfig` から導出する。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) 外部のコンシューマは、公開された構造的および意味的規約を検証するときに適合し、Zod を使用したり Ambercast の公開パイプラインを再現したりする必要はない。
 

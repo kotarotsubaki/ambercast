@@ -41,7 +41,7 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 
 | 不可变词元 | 规范性说明 | 归属 | 避免混淆的概念 |
 | --- | --- | --- | --- |
-| `$id` | `$id` 保留供 JSON Schema 标识符使用，但生成的 0.3.1 Schema 并未确立该标识符。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#publication-metadata) | 配置中的 `$schema` |
+| `$id` | `$id` 是为每个生成的 Schema 公开发布的 JSON Schema 标识符。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#publication-metadata) | 配置中的 `$schema` |
 | `$schema` | `$schema` 是现有配置文件中的必填标识字段，也是生成 Schema 中的 draft 声明。 | `RawConfig`；[配置](/ambercast/zh-cn/reference/configuration/#key-table) | `$id` |
 | `**` | `**` 是可跨越路径分隔符的发现通配符。 | 匹配器；[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#pattern-language) | 单段 `*` |
 | `--` | `--` 终止选项解析，并将其后的词元保留为字面量路径。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | 以 `--` 开头的文件名 |

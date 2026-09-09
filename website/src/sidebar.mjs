@@ -9,8 +9,8 @@ const groups = [
   ['TUTORIALS', ['tutorials/quick-start', 'tutorials/review-your-first-plan', 'tutorials/repair-your-first-drift', 'tutorials/github-actions']],
   ['HOW-TO GUIDES', ['how-to/write-effective-prompts', 'how-to/manage-secrets', 'how-to/configure-targets', 'how-to/choose-ai-provider', 'how-to/select-tests', 'how-to/control-grounding-writeback', 'how-to/review-generated-diffs', 'how-to/manage-artifacts-in-git', 'how-to/run-on-other-ci', 'how-to/recover-stale-artifacts', 'how-to/upgrade', 'how-to/troubleshoot', 'how-to/contribute']],
   ['REFERENCE', [
-    ['CLI', ['reference/cli/overview', 'reference/cli/generate', 'reference/cli/run', 'reference/cli/check', 'reference/cli/heal', 'reference/cli/init', 'reference/cli/view', 'reference/cli/review', 'reference/cli/mcp', 'reference/cli/baseline-restore']],
     'reference/configuration', 'reference/prompt-format', 'reference/discovery-patterns', 'reference/reports', 'reference/error-codes', 'reference/exit-codes', 'reference/environment-variables', 'reference/file-layout', 'reference/json-schemas', 'reference/compatibility', 'reference/changelog', 'reference/security-policy', 'reference/glossary', 'reference/mcp-tools',
+    ['CLI', ['reference/cli/overview', 'reference/cli/generate', 'reference/cli/run', 'reference/cli/check', 'reference/cli/heal', 'reference/cli/init', 'reference/cli/view', 'reference/cli/review', 'reference/cli/mcp', 'reference/cli/baseline-restore']],
   ]],
   ['PLAN SPECIFICATION', ['spec/overview', 'spec/plan-document', 'spec/steps', 'spec/value-types', 'spec/grounding-document', 'spec/fingerprint', 'spec/freshness', 'spec/canonical-json', 'spec/secrets', 'spec/conformance', 'spec/changelog']],
   ['EXPLANATION', ['explanation/plan-lifecycle', 'explanation/replay-and-grounding', 'explanation/healing-model', 'explanation/trust-and-security', 'explanation/determinism-in-ci', 'explanation/comparison', 'explanation/status-and-roadmap']],
@@ -30,6 +30,21 @@ export const sidebar = groups.map(([label, items]) => ({
     ? { label: item[0], items: item[1].map((slug) => ({ slug })) }
     : { slug: item }),
 }));
+
+/**
+ * Flat, ordered page records shared by navigation consumers and the llms build.
+ *
+ * Sharing the static table keeps published machine-readable indexes in the reader-visible
+ * Starlight order. Subgroup labels preserve the structural boundary needed to render `### CLI`
+ * without inferring meaning from slugs.
+ *
+ * @returns {Array<{ slug: string, groupLabel: string, subgroupLabel: string | null }>} Every
+ * sidebar page in canonical display order, including its group and optional subgroup.
+ */
+export const orderedPages = groups.flatMap(([groupLabel, items]) =>
+  items.flatMap((item) => Array.isArray(item)
+    ? item[1].map((slug) => ({ slug, groupLabel, subgroupLabel: item[0] }))
+    : [{ slug: item, groupLabel, subgroupLabel: null }]));
 
 /**
  * Finds a page's visible navigation group and its one-based position within that group.

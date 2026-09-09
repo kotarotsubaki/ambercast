@@ -20,6 +20,8 @@ ambercast がプロセス終了時に返す終了コード、その定義、お�
 | 4 | untrustworthy plan or grounding artifact | 2 |
 | 5 | empty selection | 4 |
 
+たとえば、[`PROMPT_PATH_INVALID`](/ambercast/ja/reference/error-codes/#code-vocabulary) は終了コード 2 となる利用エラーです。
+
 ## 集約優先順位 {#aggregation-priority}
 
 複数の終了コードが集約される場合、優先順位の数値（ランク）がより小さいコードが優先されます。これにより、優先関係は 2 > 3 > 4 > 1 > 5 > 0 と定まります。

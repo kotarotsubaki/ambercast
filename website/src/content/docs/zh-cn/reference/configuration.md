@@ -23,7 +23,7 @@ description: 本页定义了配置键及其解析逻辑。
 | `$schema` | string | — | 配置文件存在时必填 | loader |
 | `testDir` | string | `tests/ambercast` | 解析为绝对布局路径 | generate、run、check、heal 发现/布局 |
 | `runsDir` | string | `tests/ambercast/.runs` | 解析为绝对布局路径 | run 报告/证据；heal 包含的写入 |
-| `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器 | generate、run、check、heal 发现 |
+| `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器；每个模式必须以 `.test.md` 结尾，否则加载配置会以 `CONFIG_INVALID` 失败 | generate、run、check、heal 发现 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含匹配后排除 | generate、run、check、heal 发现 |
 | `targets.<name>.baseUrl` | string | `web-user` 上的 `http://localhost:3000` | 替换整个 target 记录 | generate、run、check、heal 目标选择 |
 | `targets.<name>.browser` | `chromium` | `web-user` 上的 `chromium` | target 字段 | generate、run、heal 浏览器编排；check（新鲜度） |

@@ -90,6 +90,7 @@ import {
   validateCommittedInstructionCoverage,
 } from './instruction-coverage-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
+import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 
 /**
  * Execution evidence while a case is still in progress.
@@ -3052,6 +3053,10 @@ export type RunListedFile = { readonly file: string };
  * computation, plan inspection, provider resolution, or browser launch, then
  * remains captured by that case so later cases keep run's existing per-file
  * isolation.
+ * A separate batch-level prompt-path preflight runs after selection filtering
+ * and deduplication but before any case starts, so it cannot be confused with
+ * that per-case target-selection failure. It throws `PromptPathInvalidError`
+ * before per-case work when any selected path is ineligible.
  *
  * Deterministic steps materialize run and secret values only immediately
  * before browser operations. Agentic instructions, provider-visible context,
@@ -3089,6 +3094,8 @@ export async function run(deps: RunDeps, options: RunOptions): Promise<RunOutcom
 
   if (files.length === 0) return { results: [], noTestsFound: true, listed: [], skipped: [], interrupted: false };
   if (options.list) return { results: [], noTestsFound: false, listed: files.map((file) => ({ file })), skipped: [], interrupted: false };
+
+  assertPromptPathsEligible(deps.layout, files);
 
   for (const file of files) tracker.addDiscovered(file, file);
   const results: RunCaseOutcome[] = [];

@@ -26,7 +26,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `$schema` | string | — | required in a present file | loader |
 | `testDir` | string | `tests/ambercast` | resolves to an absolute layout path | generate, run, check, heal discovery/layout |
 | `runsDir` | string | `tests/ambercast/.runs` | resolves to an absolute layout path | run reports/evidence; heal contained writes |
-| `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher | generate, run, check, heal discovery |
+| `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher; every pattern must end in `.test.md` or config loading fails with `CONFIG_INVALID` | generate, run, check, heal discovery |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | excludes after inclusion match | generate, run, check, heal discovery |
 | `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate, run, check, heal target selection |
 | `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | target field | generate, run, heal browser composition; check (freshness) |

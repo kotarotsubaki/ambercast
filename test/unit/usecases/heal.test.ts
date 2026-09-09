@@ -8,6 +8,7 @@ import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
+import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
@@ -449,6 +450,71 @@ describe('heal validated overlay capability', () => {
 });
 
 describe('heal state-machine contract', () => {
+  it.each([
+    ['outside the test directory', '/workspace/outside.test.md', 'outside-test-dir'],
+    ['inside the test directory without the test suffix', `${TEST_DIR}/login.md`, 'not-test-md'],
+    ['anonymous inside the test directory', `${TEST_DIR}/.test.md`, 'no-name'],
+  ] as const)('rejects a literal prompt path %s before healing work begins', async (_description, path, reason) => {
+    const scenario = await createScenario();
+
+    await expect(heal(scenario.deps, { ...OPTIONS, files: [path] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      exitCode: 2,
+      details: { path, reason },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('keeps list mode lenient for an ineligible literal prompt path', async () => {
+    const scenario = await createScenario();
+    const path = '/workspace/outside.test.md';
+
+    await expect(heal(scenario.deps, { ...OPTIONS, files: [path], list: true })).resolves.toEqual({
+      outcome: { results: [], errors: [], noTestsFound: false, listed: [{ file: path }], skipped: [], interrupted: false },
+      commits: new Map(),
+    });
+  });
+
+  it('preflights the whole selection before reading an eligible first prompt or dispatching AI', async () => {
+    const scenario = await createScenario();
+    const eligiblePath = OPTIONS.files[0]!;
+    const ineligiblePath = `${TEST_DIR}/ineligible.md`;
+    const readText = vi.spyOn(scenario.storage, 'readText');
+    const exists = vi.spyOn(scenario.storage, 'exists');
+    const writeText = vi.spyOn(scenario.storage, 'writeText');
+
+    await expect(heal(scenario.deps, { ...OPTIONS, files: [eligiblePath, ineligiblePath] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path: ineligiblePath, reason: 'not-test-md' },
+    } satisfies Partial<PromptPathInvalidError>);
+    expect(readText).not.toHaveBeenCalledWith(eligiblePath);
+    expect(exists).not.toHaveBeenCalledWith(scenario.deps.layout.planPathFor(eligiblePath));
+    expect(writeText).not.toHaveBeenCalled();
+    expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ineligible path before observing an already-aborted signal', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled before selection'));
+    const scenario = await createScenario({ signal: controller.signal });
+    const path = `${TEST_DIR}/ineligible.md`;
+
+    await expect(heal(scenario.deps, { ...OPTIONS, files: [path] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path, reason: 'not-test-md' },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('reports the first ineligible file reason in document order', async () => {
+    const scenario = await createScenario();
+    const firstPath = `${TEST_DIR}/.test.md`;
+    const secondPath = '/workspace/outside.test.md';
+
+    await expect(heal(scenario.deps, { ...OPTIONS, files: [firstPath, secondPath] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path: firstPath, reason: 'no-name' },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
   function injectReplayIntegrityViolation(when: (call: number, options: { readonly cacheOnly?: boolean }) => boolean, violation: IntegrityViolationError): () => number {
     let call = 0;
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {

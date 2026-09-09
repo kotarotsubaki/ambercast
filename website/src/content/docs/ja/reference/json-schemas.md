@@ -14,7 +14,7 @@ Ambercast におけるスキーマ再構築時の公開規約を定義し、現�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がありません） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 計画中（0.3.1 では未実装） |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | provenance、targets、steps を含む完成した `PlanDocument`。 | 計画中（0.3.1 では未実装） |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 計画中（0.3.1 では未実装） |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.1"`) | `ambercast report schema v3` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 計画中（0.3.1 では未実装） |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.2"`) | `ambercast report schema v3` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 計画中（0.3.1 では未実装） |
 
 各スキーマの `$id` はその公開パス URL と一致します。再構築時には、ドキュメントサイトと npm の `schemas/` エクスポートに対してバイト単位で同一のスキーマファイルが公開されます。
 
@@ -44,7 +44,7 @@ Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、
 
 | アーティファクト | 現在の状態 |
 | --- | --- |
-| Report JSON Schema | 現在は生成されていません。ジェネレーターの網羅的な書き出しリストおよびパッケージのエクスポートマップには plan、grounding、config のみが含まれます。ランタイムのレポートは引き続き `schemaVersion: "3.1"` を保持します。 |
+| Report JSON Schema | 現在は生成されていません。ジェネレーターの網羅的な書き出しリストおよびパッケージのエクスポートマップには plan、grounding、config のみが含まれます。ランタイムのレポートは引き続き `schemaVersion: "3.2"` を保持します。 |
 
 0.3.1 の実装では、生成されるレポートスキーマのファイル名や npm エクスポートは確立されていません。
 

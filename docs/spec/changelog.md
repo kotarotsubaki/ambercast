@@ -9,6 +9,7 @@
 | producer bundle fingerprint enters `inputsDigest` | repo:CHANGELOG.md:8 | Plans generated before the change MUST be regenerated because they are stale. [repo:CHANGELOG.md:8] |
 | report 2.0 → 3.0 | repo:CHANGELOG.md:55, repo:CHANGELOG.md:58 | Report consumers MUST accept the current `3.0` contract, not infer compatibility from the Plan version. [repo:src/report/schema.ts:15] |
 | report 3.0 → 3.1 | repo:src/report/schema.ts:22 | Report consumers MUST accept the current `3.1` contract, including optional structured error diagnostics, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:22] |
+| report 3.1 → 3.2 | repo:src/report/schema.ts:30 | Report consumers MUST accept the current `3.2` contract, including the optional `PROMPT_PATH_INVALID` details branch, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:30] |
 
 ## Compatibility policy {#compatibility-policy}
 

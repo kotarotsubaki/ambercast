@@ -3,6 +3,7 @@ import {
   AiExecutorUnavailableDetails,
   AiResponseInvalidDetails,
   CauseName,
+  PromptPathInvalidDetails,
   SecretGrantUnattributableDetails,
   SecretLiteralRejectedDetails,
   UnexpectedCrashDetails,
@@ -47,7 +48,10 @@ export function projectCauseName(cause: unknown): CauseName {
  * correspondence. Keeping it here prevents drift between hand-maintained
  * command tables. Interruption maps to the stable environment vocabulary but
  * remains a run-only condition; the conversion boundary rejects any attempt
- * to attach it to a case. Its process status still comes only from
+ * to attach it to a case. `prompt-path-invalid` carries the same run-only
+ * restriction for a different reason: it is always raised before any case's
+ * work begins, so no case identifier could ever describe it truthfully. Its
+ * process status still comes only from
  * `ERROR_EXIT_CODES`, while each interrupted report builder creates exactly
  * one `{ scope: 'run', kind: 'environment', code: 'INTERRUPTED' }` entry. The
  * `test/unit/report/error-code-correspondence.test.ts` contract test pins
@@ -58,6 +62,7 @@ export const REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
   'secret-unresolved': { kind: 'usage', code: 'SECRET_UNRESOLVED' },
   'target-unresolved': { kind: 'usage', code: 'TARGET_UNRESOLVED' },
+  'prompt-path-invalid': { kind: 'usage', code: 'PROMPT_PATH_INVALID' },
   'secret-literal-rejected': { kind: 'usage', code: 'SECRET_LITERAL_REJECTED' },
   'secret-grant-unattributable': { kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE' },
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
@@ -79,12 +84,13 @@ export const REPORT_ERROR_DETAILS = {
  * @param location - The report scope, including a case identifier when needed.
  * @returns The stable report error corresponding to the classified failure.
  * @throws {Error} If the error kind has no report-code correspondence, or if
- * interruption is requested at case scope. The latter guard keeps batch
- * cancellation from inflating case-error accounting.
+ * interruption or prompt-path-invalid is requested at case scope. Interruption
+ * describes an incomplete batch, while prompt-path-invalid is always raised
+ * before any case begins, so both remain run-only.
  *
  * @remarks
  * A string `error.details.hint` is copied for every report scope and code.
- * The six diagnostic codes construct strict `details` values from normalized
+ * The seven diagnostic codes construct strict `details` values from normalized
  * producer context; `UNEXPECTED_CRASH` alone reads `error.cause`, never
  * `error.details`. A malformed or unexpected producer details shape is
  * omitted defensively rather than causing report construction to throw.
@@ -107,6 +113,9 @@ export function reportError(
   if (error.kind === 'interrupted' && location.scope === 'case') {
     throw new Error('Error kind interrupted cannot be serialized at case scope.');
   }
+  if (error.kind === 'prompt-path-invalid' && location.scope === 'case') {
+    throw new Error('Error kind prompt-path-invalid cannot be serialized at case scope.');
+  }
 
   const hint = readRecordField(error.details, 'hint');
   const hintField = typeof hint === 'string' ? { hint } : {};
@@ -122,6 +131,11 @@ export function reportError(
         path: readRecordField(sourceDetails, 'path'),
         ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
       })
+      : error.kind === 'prompt-path-invalid'
+        ? PromptPathInvalidDetails.safeParse({
+          path: readRecordField(sourceDetails, 'path'),
+          reason: readRecordField(sourceDetails, 'reason'),
+        })
       : error.kind === 'secret-grant-unattributable'
         ? SecretGrantUnattributableDetails.safeParse({
           reason: readRecordField(sourceDetails, 'reason'),

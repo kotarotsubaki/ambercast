@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FsIoError } from '#core/errors/fs-io-error.js';
+import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import type { AmbercastError } from '#core/errors/types.js';
 import { CheckResult, ReportEnvelope } from '#report/schema.js';
@@ -80,7 +81,7 @@ describe('buildCheckReport', () => {
     const output = report({ outcome: { noTestsFound: false, results, errors: [] } });
 
     expect(ReportEnvelope.parse(output.envelope)).toEqual({
-      schemaVersion: '3.1',
+      schemaVersion: '3.2',
       command: 'check',
       startedAt: BASE.startedAt,
       durationMs: BASE.durationMs,
@@ -143,6 +144,14 @@ describe('buildCheckReport', () => {
     }]);
   });
 
+  it('maps PROMPT_PATH_INVALID into an empty run-scoped report', () => {
+    const output = report({ error: new PromptPathInvalidError('invalid prompt path', { path: '/workspace/tests/login.md', reason: 'not-test-md' }) });
+
+    expect(output.envelope.results).toEqual([]);
+    expect(output.envelope.summary.total).toBe(0);
+    expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'PROMPT_PATH_INVALID' })]);
+  });
+
   it.each([
     ['all fresh', 0, { noTestsFound: false, results: [result('fresh')], errors: [] }, BASE.options],
     ['a non-fresh result', 4, { noTestsFound: false, results: [result('stale')], errors: [] }, BASE.options],
@@ -198,7 +207,7 @@ describe('buildCheckReport v3 interruption accounting', () => {
     } } as unknown as Omit<CheckReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.1');
+    expect(output.envelope.schemaVersion).toBe('3.2');
     expect(output.envelope.summary).toEqual({ total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));
   });

@@ -3,6 +3,7 @@ import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
+import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
@@ -109,6 +110,14 @@ describe('buildGenerateReport', () => {
       code: 'TARGET_UNRESOLVED',
       message: 'target missing',
     }]);
+  });
+
+  it('maps PROMPT_PATH_INVALID into an empty run-scoped report', () => {
+    const output = report({ error: new PromptPathInvalidError('invalid prompt path', { path: '/workspace/tests/login.md', reason: 'not-test-md' }) });
+
+    expect(output.envelope.results).toEqual([]);
+    expect(output.envelope.summary.total).toBe(0);
+    expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'PROMPT_PATH_INVALID' })]);
   });
 
   it('gives a top-level error precedence over genuinely competing completed-outcome conditions', () => {
@@ -302,7 +311,7 @@ describe('buildGenerateReport v3 interruption accounting', () => {
     } } as unknown as Omit<GenerateReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.1');
+    expect(output.envelope.schemaVersion).toBe('3.2');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' })]);
     expect(output.envelope.results[1]).toEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });

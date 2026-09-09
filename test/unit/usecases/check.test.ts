@@ -4,6 +4,7 @@ import type { ResolvedConfig } from '#core/config/schema.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
+import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
@@ -135,6 +136,85 @@ async function captureTargetFailure(operation: Promise<unknown>): Promise<Target
 }
 
 describe('check', () => {
+  it.each([
+    ['outside the test directory', '/workspace/outside.test.md', 'outside-test-dir'],
+    ['inside the test directory without the test suffix', `${TEST_DIR}/login.md`, 'not-test-md'],
+    ['anonymous inside the test directory', `${TEST_DIR}/.test.md`, 'no-name'],
+  ] as const)('rejects a literal prompt path %s before inspection work begins', async (_description, path, reason) => {
+    const { deps } = createScenario();
+
+    await expect(check(deps, { ...OPTIONS, files: [path] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      exitCode: 2,
+      details: { path, reason },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('keeps list mode lenient for an ineligible literal prompt path', async () => {
+    const { deps } = createScenario();
+    const path = '/workspace/outside.test.md';
+
+    await expect(check(deps, { ...OPTIONS, files: [path], list: true })).resolves.toEqual({
+      results: [{ id: path, file: path, status: 'listed' }],
+      errors: [],
+      noTestsFound: false,
+      interrupted: false,
+    });
+  });
+
+  it('preflights the whole selection before probing an eligible first prompt', async () => {
+    const { storage, layout, deps } = createScenario();
+    const eligiblePath = `${TEST_DIR}/eligible.test.md`;
+    const exists = vi.spyOn(storage, 'exists');
+    const readText = vi.spyOn(storage, 'readText');
+    const writeText = vi.spyOn(storage, 'writeText');
+    const ineligiblePath = `${TEST_DIR}/ineligible.md`;
+
+    await expect(check(deps, { ...OPTIONS, files: [eligiblePath, ineligiblePath] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path: ineligiblePath, reason: 'not-test-md' },
+    } satisfies Partial<PromptPathInvalidError>);
+    expect(exists).not.toHaveBeenCalledWith(layout.planPathFor(eligiblePath));
+    expect(readText).not.toHaveBeenCalledWith(eligiblePath);
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ineligible path before observing an already-aborted signal', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled before selection'));
+    const { deps } = createScenario({ signal: controller.signal });
+    const path = `${TEST_DIR}/ineligible.md`;
+
+    await expect(check(deps, { ...OPTIONS, files: [path] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path, reason: 'not-test-md' },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('reports the first ineligible file reason in document order', async () => {
+    const { deps } = createScenario();
+    const firstPath = `${TEST_DIR}/.test.md`;
+    const secondPath = '/workspace/outside.test.md';
+
+    await expect(check(deps, { ...OPTIONS, files: [firstPath, secondPath] })).rejects.toMatchObject({
+      kind: 'prompt-path-invalid',
+      details: { path: firstPath, reason: 'no-name' },
+    } satisfies Partial<PromptPathInvalidError>);
+  });
+
+  it('keeps an unresolvable explicit target ahead of prompt-path eligibility', async () => {
+    const { deps } = createScenario();
+
+    await expect(check(deps, {
+      ...OPTIONS,
+      target: 'unconfigured',
+      files: [`${TEST_DIR}/ineligible.md`],
+    })).rejects.toMatchObject({
+      kind: 'target-unresolved',
+      exitCode: 2,
+    } satisfies Partial<TargetUnresolvedError>);
+  });
+
   it('reports a schema-valid Plan v2 with impossible committed instruction provenance as stale', async () => {
     const { storage, layout, deps } = createScenario();
     const testPath = `${TEST_DIR}/invalid-coverage.test.md`;

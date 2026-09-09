@@ -51,13 +51,13 @@ function input(overrides: Partial<HealCommandInput> = {}): HealCommandInput {
   return { files: [], dryRun: false, yes: false, allowEmpty: false, list: false, cwd: '/workspace', ...overrides };
 }
 function report(exitCode: HealCommandOutput['exitCode']): HealCommandOutput {
-  return { exitCode, envelope: { schemaVersion: '3.1', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
+  return { exitCode, envelope: { schemaVersion: '3.2', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
 }
 function reportWithExecutionEvidence(root: string): HealCommandOutput {
   return {
     exitCode: 1,
     envelope: {
-      schemaVersion: '3.1', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
+      schemaVersion: '3.2', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
       summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
       errors: [{
         scope: 'case', kind: 'environment', code: 'FS_IO_ERROR',
@@ -132,12 +132,17 @@ beforeEach(async () => {
 });
 
 describe('runHealCommand', () => {
-  it.each([false, true])('rejects a stateful target before work for --dry-run=%s', async (dryRun) => {
+  it.each([false, true])('rejects a stateful target before an ineligible prompt can call heal for --dry-run=%s', async (dryRun) => {
     configure({ config: { ...CONFIG, targets: { web: { ...CONFIG.targets.web!, healReplayIsolation: 'stateful' } } }, built: report(2) });
 
-    await expect(runHealCommand(input({ dryRun }))).resolves.toMatchObject({ exitCode: 2 });
+    await expect(runHealCommand(input({ dryRun, files: ['tests/ineligible.md'] }))).resolves.toMatchObject({ exitCode: 2 });
     expect(mocks.heal).not.toHaveBeenCalled();
-    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(ConfigInvalidError) }));
+    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.objectContaining({
+        kind: 'config-invalid',
+        message: 'Healing requires the selected target to set healReplayIsolation to idempotent.',
+      }),
+    }));
   });
 
   it('permits an idempotent target and leaves --list outside the isolation gate', async () => {
@@ -229,14 +234,19 @@ describe('runHealCommand', () => {
     expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({ outcome: listed.outcome }));
   });
 
-  it('refuses a non-list CI invocation when ci.heal is disabled without calling heal', async () => {
+  it('refuses a non-list CI invocation when ci.heal is disabled before an ineligible prompt can call heal', async () => {
     const readConfirmationAnswer = vi.fn(async () => 'authorized' as const);
     configure({ isCI: true, readConfirmationAnswer, config: { ...CONFIG, ci: { ...CONFIG.ci, heal: false } }, built: report(2) });
-    await expect(runHealCommand(input())).resolves.toMatchObject({ exitCode: 2 });
+    await expect(runHealCommand(input({ files: ['tests/ineligible.md'] }))).resolves.toMatchObject({ exitCode: 2 });
     expect(mocks.heal).not.toHaveBeenCalled();
     expect(mocks.createTtyInteractivityCheck).not.toHaveBeenCalled();
     expect(readConfirmationAnswer).not.toHaveBeenCalled();
-    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(ConfigInvalidError) }));
+    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.objectContaining({
+        kind: 'config-invalid',
+        message: 'Healing is disabled in CI; set ci.heal to true to enable it.',
+      }),
+    }));
   });
 
   it.each([

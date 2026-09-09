@@ -41,6 +41,7 @@ import {
   type TrustedPlan,
 } from './heal-provider-context.js';
 import { createHealAiDispatchBudget } from './heal-ai-dispatch-budget.js';
+import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 
 /**
  * Selection and write-intent choices for one healing batch.
@@ -1224,7 +1225,9 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
  * Each case accumulates candidate artifacts in a private overlay across its
  * ordered attempts. The returned closures are the only route to real artifact
  * writes, allowing the runtime to confirm or discard every candidate after it
- * has enough information to describe the decision to a user.
+ * has enough information to describe the decision to a user. The batch throws
+ * `PromptPathInvalidError` before per-case work when any selected path is
+ * ineligible.
  */
 export async function heal(
   deps: HealDeps,
@@ -1247,6 +1250,8 @@ export async function heal(
         commits: new Map(),
       };
     }
+
+    assertPromptPathsEligible(deps.layout, files);
 
     for (const file of files) tracker.addDiscovered(file, file);
     const results: HealCaseOutcome[] = [];

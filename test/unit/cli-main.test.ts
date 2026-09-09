@@ -918,6 +918,21 @@ describe('main()', () => {
       expect(rendered).toBe('error AI_EXECUTOR_UNAVAILABLE: message\n');
     });
 
+    it.each([
+      'constructor',
+      'toString',
+      'valueOf',
+      'hasOwnProperty',
+      '__proto__',
+    ])('ignores inherited registry key %s when rendering details', (code) => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{ scope: 'run', kind: 'environment', code, message: 'message', details: { unexpected: 'value' } }],
+      } as never, false);
+
+      expect(rendered).toBe(`error ${code}: message\n`);
+    });
+
     it('registers every ReportError code that declares a details branch', () => {
       const detailsCodes = new Set<string>();
       const walkSchema = (node: unknown): void => {

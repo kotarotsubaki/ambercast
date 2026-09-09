@@ -236,7 +236,9 @@ function formatErrorDetails(code: unknown, details: unknown): string {
   }
 
   const detailRecord = details as Record<string, unknown>;
-  const fields = ERROR_DETAILS_KEY_ORDER[typeof code === 'string' ? code : ''] ?? [];
+  const fields = typeof code === 'string' && Object.hasOwn(ERROR_DETAILS_KEY_ORDER, code)
+    ? ERROR_DETAILS_KEY_ORDER[code]!
+    : [];
 
   return fields
     .filter((key) => Object.hasOwn(detailRecord, key))

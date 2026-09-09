@@ -8,6 +8,7 @@ import {
   Observed,
   ReportEnvelope,
   ReportError,
+  REPORT_SCHEMA_VERSION,
   ReviewResult,
   RunResult,
   StepResult,
@@ -126,7 +127,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.2',
+    schemaVersion: '3.3',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -357,11 +358,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.2', () => {
+  it('requires schema version 3.3', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.2' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.3' });
   });
 });
 
@@ -641,6 +642,143 @@ describe('heal result status branches', () => {
   it('rejects an unrecognized heal status', () => {
     expectRejected(HealResult, { ...HEAL_RESULT, status: 'not-healed' });
   });
+});
+
+describe('report schema 3.3 AI accounting fields', () => {
+  const generateBranches = [
+    ['generated', GENERATE_RESULT],
+    ['would-generate', { ...GENERATE_RESULT, status: 'would-generate', dryRun: true }],
+    ['skipped-fresh', {
+      id: GENERATE_RESULT.id,
+      file: GENERATE_RESULT.file,
+      planFile: GENERATE_RESULT.planFile,
+      status: 'skipped-fresh',
+      dryRun: false,
+    }],
+    ['failed', {
+      id: GENERATE_RESULT.id,
+      file: GENERATE_RESULT.file,
+      status: 'failed',
+      dryRun: false,
+    }],
+  ] as const;
+  const executedBranches = [
+    ['run', RunResult, RUN_RESULT],
+    ['heal', HealResult, HEAL_RESULT],
+  ] as const;
+  const forbiddenMetricBranches: ReadonlyArray<readonly [
+    string,
+    SchemaUnderTest,
+    Record<string, unknown>,
+  ]> = [
+    ['generate/listed', GenerateResult, {
+      id: GENERATE_RESULT.id,
+      file: GENERATE_RESULT.file,
+      status: 'listed',
+      dryRun: false,
+    }],
+    ['generate/skipped', GenerateResult, {
+      id: GENERATE_RESULT.id,
+      file: GENERATE_RESULT.file,
+      status: 'skipped',
+    }],
+    ['run/listed', RunResult, LISTED_RUN_RESULT],
+    ['run/skipped', RunResult, {
+      id: RUN_RESULT.id,
+      file: RUN_RESULT.file,
+      status: 'skipped',
+    }],
+    ['heal/listed', HealResult, {
+      id: HEAL_RESULT.id,
+      file: HEAL_RESULT.file,
+      status: 'listed',
+    }],
+    ['heal/skipped', HealResult, {
+      id: HEAL_RESULT.id,
+      file: HEAL_RESULT.file,
+      status: 'skipped',
+    }],
+    ['check/completed', CheckResult, CHECK_RESULT],
+    ['check/listed', CheckResult, {
+      id: CHECK_RESULT.id,
+      file: CHECK_RESULT.file,
+      status: 'listed',
+    }],
+    ['check/skipped', CheckResult, {
+      id: CHECK_RESULT.id,
+      file: CHECK_RESULT.file,
+      status: 'skipped',
+    }],
+    ['review/completed', ReviewResult, REVIEW_RESULT],
+    ['review/skipped', ReviewResult, {
+      id: REVIEW_RESULT.id,
+      file: REVIEW_RESULT.file,
+      status: 'skipped',
+    }],
+  ];
+
+  it('exports the exact schema version used by every report envelope', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.3');
+  });
+
+  it.each(generateBranches)(
+    'accepts independently optional durationMs and aiCalls on generate/%s',
+    (_status, result) => {
+      expectAccepted(GenerateResult, result);
+      expectAccepted(GenerateResult, { ...result, durationMs: 0 });
+      expectAccepted(GenerateResult, { ...result, aiCalls: 0 });
+      expectAccepted(GenerateResult, { ...result, durationMs: 17, aiCalls: 2 });
+    },
+  );
+
+  it.each(executedBranches)(
+    'accepts independently optional aiCalls on executed %s rows',
+    (_command, schema, result) => {
+      expectAccepted(schema, result);
+      expectAccepted(schema, { ...result, aiCalls: 0 });
+      expectAccepted(schema, { ...result, aiCalls: 3 });
+    },
+  );
+
+  it.each([0, 1, Number.MAX_SAFE_INTEGER])(
+    'accepts nonnegative integer boundary %s for every new metric field',
+    (value) => {
+      for (const [, result] of generateBranches) {
+        expectAccepted(GenerateResult, { ...result, durationMs: value, aiCalls: value });
+      }
+      for (const [, schema, result] of executedBranches) {
+        expectAccepted(schema, { ...result, aiCalls: value });
+      }
+    },
+  );
+
+  it.each([
+    ['negative', -1],
+    ['fractional', 0.5],
+    ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+    ['NaN', Number.NaN],
+    ['positive infinity', Number.POSITIVE_INFINITY],
+    ['negative infinity', Number.NEGATIVE_INFINITY],
+    ['numeric string', '1'],
+    ['null', null],
+  ] as const)('rejects %s values for every new metric field', (_name, value) => {
+    for (const [, result] of generateBranches) {
+      expectRejected(GenerateResult, { ...result, durationMs: value });
+      expectRejected(GenerateResult, { ...result, aiCalls: value });
+    }
+    for (const [, schema, result] of executedBranches) {
+      expectRejected(schema, { ...result, aiCalls: value });
+    }
+  });
+
+  it.each(forbiddenMetricBranches)(
+    'rejects durationMs and aiCalls as extra evidence on %s',
+    (_branch, schema, result) => {
+      expectRejected(schema, { ...result, durationMs: 0 });
+      expectRejected(schema, { ...result, aiCalls: 0 });
+      expectRejected(schema, { ...result, durationMs: 0, aiCalls: 0 });
+    },
+  );
 });
 
 describe('nested strict object boundaries', () => {

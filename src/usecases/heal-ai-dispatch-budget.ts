@@ -48,6 +48,7 @@ class DispatchProtocolError extends Error {
 type OpenPhase = {
   kind: DispatchBudgetPhaseKind;
   deniedReason?: DispatchBudgetDenialReason;
+  deniedCallIds: Set<string>;
   pendingAiCall?: Extract<RunEvent, { type: 'ai-call' }> | undefined;
   deferredRejection?: Extract<RunEvent, { type: 'heal-stage2-rejected' }>;
   /**
@@ -117,6 +118,15 @@ export type DispatchBudgetPhaseOutcome<T> =
  */
 export interface HealAiDispatchBudget {
   /**
+   * Number of provider dispatches admitted for this healing case.
+   *
+   * The count includes incremental and Stage 3 calls and is independent from
+   * the incremental-only allowance counter. Reading it at terminal outcome
+   * time avoids reconstructing provider work from lossy event delivery.
+   */
+  readonly aiCalls: number;
+
+  /**
    * Runs one repair phase and returns its settled admission outcome.
    *
    * The controller checks the deadline before invoking `work`; a
@@ -176,9 +186,34 @@ export interface HealAiDispatchBudget {
    *   const outcome = await budget.runPhase('incremental', async (phaseDeps) => {
    *     // Provider resolution may take arbitrarily long, so complete it first.
    *     const executor = await phaseDeps.resolveAiExecutor();
+   *     const request = buildRepairRequest();
+   *     const callId = allocateCallId();
    *     // No await may separate this event from the dispatch it names.
-   *     phaseDeps.events.emit({ type: 'ai-call', stepId: 'repair-step' });
-   *     return executor.execute(request);
+   *     phaseDeps.events.emit({
+   *       type: 'ai-call',
+   *       callId,
+   *       file: '/project/tests/repair.test.md',
+   *       attempt: 1,
+   *       attemptLimit: 1,
+   *       stepId: 'repair-step',
+   *     });
+   *     const startedMs = clock.monotonicMs();
+   *     let providerOutcome: 'ok' | 'error' = 'error';
+   *     try {
+   *       const value = await executor.execute(request);
+   *       providerOutcome = 'ok';
+   *       return value;
+   *     } catch (error) {
+   *       // Admission denial is private to the budget; phase work never inspects it.
+   *       throw error;
+   *     } finally {
+   *       phaseDeps.events.emit({
+   *         type: 'ai-result',
+   *         callId,
+   *         durationMs: Math.max(0, Math.round(clock.monotonicMs() - startedMs)),
+   *         outcome: providerOutcome,
+   *       });
+   *     }
    *   });
    *
    *   switch (outcome.status) {
@@ -228,10 +263,13 @@ export interface HealAiDispatchPhaseDeps {
    * through this proxy so the budget can hold an `ai-call` until its named
    * dispatch is admitted and defer `heal-stage2-rejected` until the phase
    * settles. The deferred rejection becomes visible only when the phase has
-   * `completed` status and a successful result; every other event passes
-   * through to the real sink unchanged. The proxy rejects a duplicate
-   * `ai-call` before the decorated executor consumes it and rejects reuse
-   * after settlement.
+   * `completed` status and a successful result. Once admission denial is
+   * latched, the proxy also discards the matching caller-owned `ai-result`
+   * emitted from `finally`, preventing a result event for a dispatch that
+   * never reached the provider. A phase may make multiple dispatches, so the
+   * proxy correlates suppression with the denied call ID. Other events pass through to the
+   * real sink unchanged. The proxy rejects a duplicate `ai-call` before the
+   * decorated executor consumes it and rejects reuse after settlement.
    */
   readonly events: EventSink;
 }
@@ -250,10 +288,12 @@ export interface HealAiDispatchPhaseDeps {
  *
  * The phase-local event proxy keeps each caller-owned `ai-call` pending until
  * its dispatch is admitted, defers `heal-stage2-rejected` until the phase
- * settles, and passes every other `RunEvent` straight to the real sink. It
- * retains those slots on the per-phase record and checks that record's
- * identity against `openPhase`, so a proxy retained beyond settlement cannot
- * affect a later phase. After work settles, its own first-latched protocol
+ * settles, and suppresses the matching `ai-result` after a denial. The latter
+ * closes the caller-owned `finally` path without publishing a result for an
+ * unadmitted dispatch. It records denied call IDs on the per-phase record and checks that
+ * record's identity against `openPhase`, so a proxy retained beyond settlement
+ * cannot affect a later phase. All other events pass through unchanged. After
+ * work settles, its own first-latched protocol
  * violation rejects first; an unconsumed pending `ai-call` becomes and
  * latches a fresh protocol violation next; a thrown
  * `IntegrityViolationError` follows; a latched denial follows that; and all
@@ -306,6 +346,7 @@ export function createHealAiDispatchBudget(params: {
 
   let openPhase: OpenPhase | undefined;
   let dispatches = 0;
+  let aiCalls = 0;
   let decoratedExecutor: InstructionCoveredAiExecutor | undefined;
 
   const denyDispatch = (): never => {
@@ -326,6 +367,7 @@ export function createHealAiDispatchBudget(params: {
       if (dispatches >= params.maxDispatches) denyDispatch();
       dispatches += 1;
     }
+    aiCalls += 1;
   };
 
   /**
@@ -341,7 +383,12 @@ export function createHealAiDispatchBudget(params: {
     // for settle-time arbitration even when an intermediate caller catches it.
     if (event === undefined) throw recordProtocolViolation(phase, 'missing-pending-ai-call');
     phase.pendingAiCall = undefined;
-    admitDispatch();
+    try {
+      admitDispatch();
+    } catch (error) {
+      phase.deniedCallIds.add(event.callId);
+      throw error;
+    }
     params.events.emit(event);
     return perform();
   };
@@ -363,11 +410,14 @@ export function createHealAiDispatchBudget(params: {
   };
 
   return {
+    get aiCalls(): number {
+      return aiCalls;
+    },
     async runPhase<T>(kind: DispatchBudgetPhaseKind, work: (deps: HealAiDispatchPhaseDeps) => Promise<T>): Promise<DispatchBudgetPhaseOutcome<T>> {
       if (openPhase !== undefined) throw new Error('A dispatch-budget phase is already open.');
       if (params.clock.monotonicMs() >= params.deadlineMs) return { status: 'denied', deniedReason: 'deadline' };
 
-      const phase: OpenPhase = { kind };
+      const phase: OpenPhase = { kind, deniedCallIds: new Set() };
       openPhase = phase;
       let result: { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown };
       try {
@@ -391,6 +441,11 @@ export function createHealAiDispatchBudget(params: {
                   // failure for this phase's settle sequence.
                   if (phase.pendingAiCall !== undefined) throw recordProtocolViolation(phase, 'duplicate-pending-ai-call');
                   phase.pendingAiCall = event;
+                  return;
+                }
+                if (event.type === 'ai-result' && phase.deniedCallIds.has(event.callId)) {
+                  // A caller-owned finally runs after a denied dispatch; discard
+                  // only that orphaned result, preserving other in-flight calls.
                   return;
                 }
                 if (event.type === 'heal-stage2-rejected') {

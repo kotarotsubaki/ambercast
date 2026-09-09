@@ -25,7 +25,7 @@ function healed(
   return {
     id: 'login.test.md', file: 'login.test.md', planFile: 'login.ambercast.plan.json', repairOutcome,
     application: repairOutcome === 'unresolved' ? 'no-artifact-change' : repairOutcome === 'no-changes-needed' ? 'no-artifact-change' : 'applied', stopReason: 'settled',
-    steps: [], explanation: `The case is ${repairOutcome}.`, durationMs: 4,
+    steps: [], explanation: `The case is ${repairOutcome}.`, durationMs: 4, aiCalls: 3,
     baselineFirstFailureIndex: 0, finalFirstFailureIndex: repairOutcome === 'healed' ? 1 : 0,
     stage3Error: error, finalReplayError: undefined,
   };
@@ -44,9 +44,17 @@ describe('buildHealReport', () => {
     const output = report({ outcome: outcome() });
 
     expect(output.exitCode).toBe(0);
-    expect(output.envelope.results).toEqual([expect.objectContaining({ status: 'completed', repairOutcome: 'healed', application: 'applied' })]);
+    expect(output.envelope.results).toEqual([expect.objectContaining({ status: 'completed', repairOutcome: 'healed', application: 'applied', aiCalls: 3 })]);
     expect(JSON.stringify(output.envelope)).not.toContain('ReachedIndex');
     expect(JSON.stringify(output.envelope)).not.toContain('stage3');
+  });
+
+  it.each([0, 1, 7])('passes through the case-scoped admitted provider count %i without deriving it from nested rows', (aiCalls) => {
+    const output = report({ outcome: outcome({ results: [{ ...healed(), aiCalls }] }) });
+
+    expect(output.envelope.results).toEqual([
+      expect.objectContaining({ status: 'completed', aiCalls }),
+    ]);
   });
 
   it.each(['partially-healed', 'unresolved'] as const)('classifies %s as an unconditional exit-1 healing failure', (repairOutcome) => {

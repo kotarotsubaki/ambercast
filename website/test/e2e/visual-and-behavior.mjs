@@ -1404,6 +1404,13 @@ async function openDocumentationMenu(page) {
   await page.locator('.sidebar-pane').waitFor({ state: 'visible' });
 }
 
+/**
+ * Treats planned badges as a property of each page's own sidebar link rather than of the page
+ * as a whole. The custom sidebar renders the complete navigation tree identically on every page,
+ * with no per-page collapse, so a bare `.sl-badge` selector cannot distinguish that page's badge
+ * state from any badge elsewhere on the site; each check instead anchors to the current
+ * page's own navigation entry before evaluating its badge state.
+ */
 async function assertIssue295DocumentationContracts(browser) {
   const locales = [
     { prefix: '', root: '/', docs: '/ambercast/introduction/', tutorial: '/ambercast/tutorials/quick-start/' },
@@ -1421,13 +1428,13 @@ async function assertIssue295DocumentationContracts(browser) {
 
       for (const plannedPage of PLANNED_PAGES) {
         await page.goto(pageUrl(`/${locale.prefix}${plannedPage}/`), { waitUntil: 'networkidle' });
-        const badges = page.locator('.sl-badge');
+        const badges = page.locator(`.sidebar-pane a[href$="/${locale.prefix}${plannedPage}/"] .sl-badge`);
         assert.ok(await badges.count() > 0, `${locale.prefix}${plannedPage} must expose its planned badge.`);
         assert.ok((await badges.allTextContents()).some((text) => /planned/i.test(text)), `${locale.prefix}${plannedPage} must retain its Planned badge text.`);
       }
 
       await page.goto(pageUrl(`/${locale.prefix}agents/overview/`), { waitUntil: 'networkidle' });
-      assert.equal(await page.locator('.sl-badge').count(), 0, `${locale.prefix}agents/overview must remain available without a planned badge.`);
+      assert.equal(await page.locator(`.sidebar-pane a[href$="/${locale.prefix}agents/overview/"] .sl-badge`).count(), 0, `${locale.prefix}agents/overview must remain available without a planned badge.`);
     } finally {
       await context.close();
     }
@@ -1454,12 +1461,12 @@ async function assertIssue295DocumentationContracts(browser) {
       await page.goto(pageUrl('/ja/reference/cli/run/'), { waitUntil: 'networkidle' });
       let tocPermalinks;
       if (viewport.width < 800) {
-        const tocToggle = page.locator('starlight-toc button, .mobile-starlight-toc button').first();
+        const tocToggle = page.locator('mobile-starlight-toc summary').first();
         await tocToggle.waitFor({ state: 'visible' });
         await tocToggle.click();
-        const mobileTocPermalinks = page.locator('starlight-toc a[href^="#"], .mobile-starlight-toc a[href^="#"]').first();
+        const mobileTocPermalinks = page.locator('mobile-starlight-toc a[href^="#"]').first();
         await mobileTocPermalinks.waitFor({ state: 'visible' });
-        tocPermalinks = await page.locator('starlight-toc a[href^="#"], .mobile-starlight-toc a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
+        tocPermalinks = await page.locator('mobile-starlight-toc a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
       } else {
         tocPermalinks = await page.locator('.right-sidebar-container a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
       }
@@ -1467,7 +1474,7 @@ async function assertIssue295DocumentationContracts(browser) {
       assert.deepEqual(ids, RUN_H2_IDS, `${viewport.width}px run page must preserve the specified h2 ids.`);
       const headingPermalinks = await page.locator('.sl-heading-wrapper.level-h2 a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
       assert.deepEqual(headingPermalinks, RUN_H2_IDS, `${viewport.width}px heading permalinks must match the specified ids.`);
-      assert.deepEqual(tocPermalinks, RUN_H2_IDS, `${viewport.width}px TOC permalinks must match the specified ids.`);
+      assert.deepEqual(tocPermalinks, ['_top', ...RUN_H2_IDS], `${viewport.width}px TOC permalinks must match the specified ids.`);
     } finally {
       await context.close();
     }

@@ -32,7 +32,7 @@ description: 本页定义了配置键及其解析逻辑。
 | `defaultTarget` | string | `web-user` | 必须解析为一个目标 | generate、run、check、heal 目标选择 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；绝不用于 heal Stage 3 |
-| `ai.timeoutMs` | positive integer | `120000` | 正数 | generate；run 兜底；heal |
+| `ai.timeoutMs` | positive integer | `600000` | 正数 | generate；run 兜底；heal |
 | `viewer.port` | integer | `4600` | 1–65535；viewer 命令处于计划中 | 仅用于计划中的 `view` |
 | `ci.heal` | boolean | `false` | 在 CI 中选择开启非 list 的 heal | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI 回写选择启用项 | run |
@@ -40,6 +40,12 @@ description: 本页定义了配置键及其解析逻辑。
 | `grounding.localWriteBack` | `auto|explicit` | `auto` | 在 CI 中被忽略 | run |
 | `heal.maxStepRepairs` | positive integer | absent | 仅限制向真实提供商发起的增量分发次数 | heal |
 | `heal.caseTimeoutMs` | positive integer | `300000` | 用例准入截止时间 | heal |
+
+## AI 配置 {#ai}
+
+`ai.maxGenerateAttempts`：当本地验证器拒绝响应时，generate 针对每个提示词允许的提供商最大尝试次数。取值范围为 1 至 5，默认值为 2。绝不用于 heal 修复。
+
+`ai.timeoutMs`：单次提供商分发的截止时间（毫秒）。适用于 generate、run 和 heal 的每次分发。heal 用例截止时间仅是准入边界，因此已准入的分发仍可继续运行，最长不超过此值。默认值为 600000。
 
 ## 自愈配置 {#heal}
 

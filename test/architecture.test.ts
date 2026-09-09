@@ -215,13 +215,24 @@ function valueImportBindings(
   return bindings;
 }
 
-function scanGeneratorExecutePrompts(sourceFile: ts.SourceFile): readonly GeneratorExecutePromptSite[] {
+function scanGeneratorExecutePrompts(program: ts.Program, sourceFile: ts.SourceFile): readonly GeneratorExecutePromptSite[] {
+  const checker = program.getTypeChecker();
   const importedBindings = valueImportBindings(
     sourceFile,
     PROMPT_ENVELOPE_SPECIFIER,
     new Set(['buildGeneratorTask']),
   );
   const sites: GeneratorExecutePromptSite[] = [];
+  function resolveRequest(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
+    if (ts.isObjectLiteralExpression(expression)) return expression;
+    if (!ts.isIdentifier(expression)) return undefined;
+    const symbol = checker.getSymbolAtLocation(expression);
+    const resolved = symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    const declaration = resolved?.declarations?.find(ts.isVariableDeclaration);
+    return declaration?.initializer !== undefined && ts.isObjectLiteralExpression(declaration.initializer)
+      ? declaration.initializer
+      : undefined;
+  }
 
   function visit(node: ts.Node): void {
     if (
@@ -229,9 +240,12 @@ function scanGeneratorExecutePrompts(sourceFile: ts.SourceFile): readonly Genera
       && ts.isPropertyAccessExpression(node.expression)
       && node.expression.name.text === 'execute'
       && node.arguments[0] !== undefined
-      && ts.isObjectLiteralExpression(node.arguments[0])
     ) {
-      const promptProperty = node.arguments[0].properties.find((property): property is ts.PropertyAssignment => (
+      const request = resolveRequest(node.arguments[0]);
+      if (request === undefined) {
+        throw new Error(`Unresolvable execute request at line ${sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1}.`);
+      }
+      const promptProperty = request?.properties.find((property): property is ts.PropertyAssignment => (
         ts.isPropertyAssignment(property) && propertyNameText(property.name) === 'prompt'
       ));
       const initializer = promptProperty?.initializer;
@@ -257,6 +271,17 @@ function scanGeneratorTaskInstructions(program: ts.Program, sourceFile: ts.Sourc
   const composerBindings = valueImportBindings(sourceFile, PROMPT_ENVELOPE_SPECIFIER, new Set(['buildGeneratorTask']));
   const instructions: string[] = [];
 
+  function resolveRequest(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
+    if (ts.isObjectLiteralExpression(expression)) return expression;
+    if (!ts.isIdentifier(expression)) return undefined;
+    const symbol = checker.getSymbolAtLocation(expression);
+    const resolved = symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    const declaration = resolved?.declarations?.find(ts.isVariableDeclaration);
+    return declaration?.initializer !== undefined && ts.isObjectLiteralExpression(declaration.initializer)
+      ? declaration.initializer
+      : undefined;
+  }
+
   function resolveInstruction(expression: ts.Expression): string | undefined {
     if (ts.isStringLiteral(expression)) return expression.text;
     if (!ts.isIdentifier(expression)) return undefined;
@@ -270,8 +295,8 @@ function scanGeneratorTaskInstructions(program: ts.Program, sourceFile: ts.Sourc
 
   function visit(node: ts.Node): void {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'execute') {
-      const request = node.arguments[0];
-      const prompt = request !== undefined && ts.isObjectLiteralExpression(request)
+      const request = node.arguments[0] === undefined ? undefined : resolveRequest(node.arguments[0]);
+      const prompt = request !== undefined
         ? request.properties.find((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && propertyNameText(property.name) === 'prompt')?.initializer
         : undefined;
       if (prompt !== undefined && ts.isCallExpression(prompt) && ts.isIdentifier(prompt.expression) && composerBindings.get(prompt.expression.text) === 'buildGeneratorTask') {
@@ -727,50 +752,79 @@ describe('architecture guardrails', () => {
   });
 
   test('routes the generated AI request through the shared generator task composer', async () => {
-    const composedRequest = ts.createSourceFile(
+    const createPromptProgram = (fileName: string, source: string): { readonly program: ts.Program; readonly sourceFile: ts.SourceFile } => {
+      const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2023, true);
+      const host = ts.createCompilerHost({ noEmit: true, target: ts.ScriptTarget.ES2023 });
+      const originalGetSourceFile = host.getSourceFile.bind(host);
+      host.getSourceFile = (requestedFileName, languageVersion) => (
+        requestedFileName === fileName ? sourceFile : originalGetSourceFile(requestedFileName, languageVersion)
+      );
+      const program = ts.createProgram({ rootNames: [fileName], options: { noEmit: true, target: ts.ScriptTarget.ES2023 }, host });
+      const programSource = program.getSourceFile(fileName);
+      if (programSource === undefined) throw new Error(`Architecture program must include ${fileName}.`);
+      return { program, sourceFile: programSource };
+    };
+    const composedRequest = createPromptProgram(
       '/virtual/composed-generator-request.ts',
       [
         "import { buildGeneratorTask as composeTask } from '#core/ai/prompt-envelope.js';",
         "executor.execute({ prompt: composeTask('Generate a deterministic plan.') });",
       ].join('\n'),
-      ts.ScriptTarget.ES2023,
-      true,
     );
-    const uncomposedThenComposed = ts.createSourceFile(
+    const uncomposedThenComposed = createPromptProgram(
       '/virtual/uncomposed-then-composed-generator-request.ts',
       [
         "import { buildGeneratorTask as composeTask } from '#core/ai/prompt-envelope.js';",
         "executor.execute({ prompt: 'Generate without the shared policy.' });",
         "executor.execute({ prompt: composeTask('Generate a deterministic plan.') });",
       ].join('\n'),
-      ts.ScriptTarget.ES2023,
-      true,
     );
-    const composedThenUncomposed = ts.createSourceFile(
+    const composedThenUncomposed = createPromptProgram(
       '/virtual/composed-then-uncomposed-generator-request.ts',
       [
         "import { buildGeneratorTask as composeTask } from '#core/ai/prompt-envelope.js';",
         "executor.execute({ prompt: composeTask('Generate a deterministic plan.') });",
         "executor.execute({ prompt: 'Generate without the shared policy.' });",
       ].join('\n'),
-      ts.ScriptTarget.ES2023,
-      true,
+    );
+    const composedBeforeDispatch = createPromptProgram(
+      '/virtual/precomposed-generator-request.ts',
+      [
+        "import { buildGeneratorTask as composeTask } from '#core/ai/prompt-envelope.js';",
+        "const request = { prompt: composeTask('Generate a deterministic plan.') };",
+        'executor.execute(request);',
+      ].join('\n'),
     );
 
-    expect(scanGeneratorExecutePrompts(composedRequest).map(({ usesSharedComposer }) => usesSharedComposer))
+    expect(scanGeneratorExecutePrompts(composedRequest.program, composedRequest.sourceFile).map(({ usesSharedComposer }) => usesSharedComposer))
       .toEqual([true]);
-    expect(scanGeneratorExecutePrompts(uncomposedThenComposed).map(({ usesSharedComposer }) => usesSharedComposer))
+    expect(scanGeneratorExecutePrompts(uncomposedThenComposed.program, uncomposedThenComposed.sourceFile).map(({ usesSharedComposer }) => usesSharedComposer))
       .toEqual([false, true]);
-    expect(scanGeneratorExecutePrompts(composedThenUncomposed).map(({ usesSharedComposer }) => usesSharedComposer))
+    expect(scanGeneratorExecutePrompts(composedThenUncomposed.program, composedThenUncomposed.sourceFile).map(({ usesSharedComposer }) => usesSharedComposer))
       .toEqual([true, false]);
+    expect(scanGeneratorExecutePrompts(composedBeforeDispatch.program, composedBeforeDispatch.sourceFile).map(({ usesSharedComposer }) => usesSharedComposer))
+      .toEqual([true]);
 
-    const generateModule = ts.createSourceFile(
-      GENERATE_MODULE_FILE,
-      await readFile(GENERATE_MODULE_FILE, 'utf8'),
-      ts.ScriptTarget.ES2023,
-      true,
+    const siblingScopedRequest = createPromptProgram(
+      '/virtual/sibling-scoped-generator-request.ts',
+      [
+        "import { buildGeneratorTask as composeTask } from '#core/ai/prompt-envelope.js';",
+        "function unrelated(): void { const request = { prompt: 'Generate without the shared policy.' }; void request; }",
+        "function real(): void { const request = { prompt: composeTask('Generate a deterministic plan.') }; executor.execute(request); }",
+        'unrelated(); real();',
+      ].join('\n'),
     );
-    const actualSites = scanGeneratorExecutePrompts(generateModule);
+    expect(scanGeneratorExecutePrompts(siblingScopedRequest.program, siblingScopedRequest.sourceFile)
+      .map(({ usesSharedComposer }) => usesSharedComposer)).toEqual([true]);
+
+    const tsconfigFileName = ts.sys.resolvePath('tsconfig.json');
+    const config = ts.readConfigFile(tsconfigFileName, ts.sys.readFile);
+    if (config.error !== undefined) throw new Error(`Could not read ${tsconfigFileName}.`);
+    const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(tsconfigFileName));
+    const program = ts.createProgram({ rootNames: [GENERATE_MODULE_FILE, PROMPT_ENVELOPE_MODULE_FILE], options: { ...parsed.options, noEmit: true } });
+    const generateModule = program.getSourceFile(GENERATE_MODULE_FILE);
+    if (generateModule === undefined) throw new Error('Architecture program must include generate.ts.');
+    const actualSites = scanGeneratorExecutePrompts(program, generateModule);
     expect(actualSites.length).toBeGreaterThan(0);
     expect(actualSites.every(({ usesSharedComposer }) => usesSharedComposer)).toBe(true);
   });

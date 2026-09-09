@@ -42,7 +42,7 @@ import { joinPath } from '#core/paths.js';
 import { resolveTarget } from '#core/target/resolve.js';
 import type { AiExecutor } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
-import type { EventSink } from '#ports/system.js';
+import type { Clock, EventSink } from '#ports/system.js';
 import { REPORT_ERROR_DETAILS } from '#report/error-mapping.js';
 import type { ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
@@ -297,6 +297,23 @@ export interface GenerateDeps {
   readonly events: EventSink;
 
   /**
+   * Monotonic clock reserved for provider and selected-occurrence durations.
+   *
+   * The implementation measures only the bare executor call for an
+   * event result and separately measures selected occurrence processing for
+   * report rows, so wall-clock corrections cannot affect either value.
+   */
+  readonly clock: Clock;
+
+  /**
+   * Allocates one command-wide ID for each real provider dispatch.
+   *
+   * Runtime owns this closure so nested heal generation cannot restart the
+   * sequence with a second local counter.
+   */
+  readonly allocateCallId: () => string;
+
+  /**
    * Configured prompt discovery injected from runtime.
    *
    * This structural callback mirrors runtime's `TestFileDiscovery` without a
@@ -352,6 +369,17 @@ export interface GenerateFileOutcome {
 
   /** Classified per-file failure retained only for a failed result. */
   readonly error?: AmbercastError;
+
+  /**
+   * Terminal rows retain this selected-occurrence interval so reports can
+   * distinguish work that reached a final decision from listing or interruption
+   * identities. `GenerateDeps.clock` measures processing start through that
+   * decision; listed and interruption-skipped rows intentionally omit it.
+   */
+  readonly durationMs?: number;
+
+  /** Counts provider calls admitted after local request construction, not retries that fail before dispatch. */
+  readonly aiCalls?: number;
 }
 
 /**
@@ -587,296 +615,315 @@ export interface GenerateOutcome {
 export async function generate(deps: GenerateDeps, options: GenerateOptions): Promise<GenerateOutcome> {
   const tracker = new BatchInterruptionTracker(deps.signal);
   try {
-  const discovered = options.files.length === 0
-    ? (await deps.discoverTestFiles({
-      testDir: deps.config.testDir,
-      testMatch: deps.config.testMatch,
-      testIgnore: deps.config.testIgnore,
-    })).map((path) => joinPath(deps.config.testDir, path))
-    : [...options.files];
+    const discovered = options.files.length === 0
+      ? (await deps.discoverTestFiles({
+        testDir: deps.config.testDir,
+        testMatch: deps.config.testMatch,
+        testIgnore: deps.config.testIgnore,
+      })).map((path) => joinPath(deps.config.testDir, path))
+      : [...options.files];
 
-  if (discovered.length === 0) {
-    return { results: [], noTestsFound: true, interrupted: false };
-  }
-
-  if (options.list) {
-    return {
-      results: discovered.map((file) => ({ file, status: 'listed' })),
-      noTestsFound: false,
-      interrupted: false,
-    };
-  }
-
-  assertPromptPathsEligible(deps.layout, discovered);
-
-  let aiExecutorPromise: Promise<AiExecutor> | undefined;
-  for (const [index, file] of discovered.entries()) tracker.addDiscovered(`generate:${index}:${file}`, file);
-  const results: GenerateFileOutcome[] = [];
-  for (const [index, file] of discovered.entries()) {
-    const workKey = `generate:${index}:${file}`;
-    let interruptedDuringAi = false;
-    if (tracker.interrupted) {
-      break;
-    }
-    try {
-
-    let testMd: string;
-    try {
-      testMd = await deps.storage.readText(file);
-    } catch (error) {
-      results.push({ file, status: 'failed', error: fsIoError('The test prompt could not be read.', error) });
-      continue;
+    if (discovered.length === 0) {
+      return { results: [], noTestsFound: true, interrupted: false };
     }
 
-    const targetSelection = resolveTarget({
-      targets: deps.config.targets,
-      defaultTarget: deps.config.defaultTarget,
-      explicitTarget: options.target,
-    });
-    if (targetSelection instanceof TargetUnresolvedError) {
-      results.push({ file, status: 'failed', error: targetSelection });
-      continue;
-    }
-    const resolvedTargets = targetSelection.definitions;
-
-    const normalizedTestMd = normalizeTestMd(testMd);
-    const provenance = deriveCurrentPlanInputProvenance({
-      normalizedTestMd,
-      targetDefinitions: resolvedTargets,
-    });
-    const { inputsDigest, producerBundleFingerprint, producerBundleInputs } = provenance;
-    const planPath = deps.layout.planPathFor(file);
-    const groundingPath = deps.layout.groundingPathFor(file);
-
-    let existingPlan: PlanDocumentType | undefined;
-    try {
-      existingPlan = await freshPlan(deps.storage, planPath, inputsDigest, normalizedTestMd);
-    } catch (error) {
-      results.push({ file, status: 'failed', error: fsIoError('The existing plan could not be read.', error) });
-      continue;
-    }
-
-    if (existingPlan !== undefined && !options.force) {
-      try {
-        if (!options.dryRun) {
-          await repairGroundingIfNeeded(deps.storage, groundingPath, existingPlan);
-        }
-        results.push({ file, status: 'skipped-fresh', planFile: planPath });
-      } catch (error) {
-        results.push({ file, status: 'failed', error: fsIoError('The grounding cache could not be repaired.', error) });
-      }
-      continue;
-    }
-
-    aiExecutorPromise ??= deps.resolveAiExecutor(deps.signal);
-    const aiExecutor = await aiExecutorPromise;
-
-    /**
-     * Executes one provider attempt using the per-file state captured by this
-     * scope.
-     *
-     * Caller cancellation interrupts an `execute()` rejection only when it is
-     * not this request's timeout. Response and final-Plan schema mismatches,
-     * plus retryable coverage failures, retain the classified error and
-     * feedback needed by the file-level controller. Literal-secret and
-     * artifact-write failures are terminal. The outer `fileFailure()` boundary
-     * around `prepareInstructionCoveredSteps` keeps unexpected inspection
-     * errors isolated to this file rather than rejecting the batch.
-     */
-    async function attemptGeneration(
-      attempt: number,
-      previousAttempts: readonly PreviousAttemptContext[],
-    ): Promise<AttemptOutcome> {
-      const outcomeForError = (error: AmbercastError): AttemptOutcome => {
-        if (!isRetryable(error)) return { kind: 'terminal', error };
-        if (error instanceof AiResponseInvalidError) {
-          return {
-            kind: 'retryable',
-            error,
-            record: { attempt, code: 'AI_RESPONSE_INVALID', issues: responseIssues(error) },
-          };
-        }
-        if (error instanceof SecretGrantUnattributableError) {
-          const details = error.details as { readonly reason: string; readonly stepId?: string };
-          return {
-            kind: 'retryable',
-            error,
-            record: details.stepId === undefined
-              ? { attempt, code: 'SECRET_GRANT_UNATTRIBUTABLE', reason: details.reason }
-              : {
-                attempt,
-                code: 'SECRET_GRANT_UNATTRIBUTABLE',
-                reason: details.reason,
-                stepId: details.stepId,
-              },
-          };
-        }
-        return { kind: 'terminal', error };
+    if (options.list) {
+      return {
+        results: discovered.map((file) => ({ file, status: 'listed' })),
+        noTestsFound: false,
+        interrupted: false,
       };
+    }
 
-      const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
-      let response;
+    assertPromptPathsEligible(deps.layout, discovered);
+
+    let aiExecutorPromise: Promise<AiExecutor> | undefined;
+    for (const [index, file] of discovered.entries()) tracker.addDiscovered(`generate:${index}:${file}`, file);
+    const results: GenerateFileOutcome[] = [];
+    for (const [index, file] of discovered.entries()) {
+      const workKey = `generate:${index}:${file}`;
+      let interruptedDuringAi = false;
+      if (tracker.interrupted) {
+        break;
+      }
+      const processingStartedMs = deps.clock.monotonicMs();
+      let aiCalls = 0;
+      const metrics = () => ({
+        durationMs: Math.max(0, Math.round(deps.clock.monotonicMs() - processingStartedMs)),
+        aiCalls,
+      });
       try {
-        deps.events.emit({ type: 'ai-call' });
-        response = await aiExecutor.execute({
-          prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
-          responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
-          context: (attempt === 1
-            ? { testMd: normalizedTestMd, targets: resolvedTargets }
-            : { testMd: normalizedTestMd, targets: resolvedTargets, previousAttempts }) as unknown as JsonValueT,
-          signal: deadline.signal,
+
+        let testMd: string;
+        try {
+          testMd = await deps.storage.readText(file);
+        } catch (error) {
+          results.push({ file, status: 'failed', error: fsIoError('The test prompt could not be read.', error), ...metrics() });
+          continue;
+        }
+
+        const targetSelection = resolveTarget({
+          targets: deps.config.targets,
+          defaultTarget: deps.config.defaultTarget,
+          explicitTarget: options.target,
         });
-      } catch (error) {
-        const isTimeout = isAiDeadlineTimeout(deadline, error);
-        if (!isTimeout && deps.signal?.aborted) return { kind: 'interrupted' };
-        return outcomeForError(aiFailure(error, isTimeout));
-      }
+        if (targetSelection instanceof TargetUnresolvedError) {
+          results.push({ file, status: 'failed', error: targetSelection, ...metrics() });
+          continue;
+        }
+        const resolvedTargets = targetSelection.definitions;
 
-      if (tracker.interrupted) return { kind: 'interrupted' };
+        const normalizedTestMd = normalizeTestMd(testMd);
+        const provenance = deriveCurrentPlanInputProvenance({
+          normalizedTestMd,
+          targetDefinitions: resolvedTargets,
+        });
+        const { inputsDigest, producerBundleFingerprint, producerBundleInputs } = provenance;
+        const planPath = deps.layout.planPathFor(file);
+        const groundingPath = deps.layout.groundingPathFor(file);
 
-      // Parsed-value traversal keeps dynamic provider data non-disclosive even
-      // where generated-schema structure cannot identify the true container.
-      const parsedResponse = GeneratedPlanResponseForPolicy.safeParse(response.data);
-      if (!parsedResponse.success) {
-        return outcomeForError(new AiResponseInvalidError(
-          'The AI provider response did not match the generation contract.',
-          {
-            raw: response.raw,
-            issues: parsedResponse.error.issues.map((issue) => ({
-              code: 'schema-mismatch',
-              path: redactDynamicPathSegments(response.data, issue.path),
-            })),
-          },
-        ));
-      }
+        let existingPlan: PlanDocumentType | undefined;
+        try {
+          existingPlan = await freshPlan(deps.storage, planPath, inputsDigest, normalizedTestMd);
+        } catch (error) {
+          results.push({ file, status: 'failed', error: fsIoError('The existing plan could not be read.', error), ...metrics() });
+          continue;
+        }
 
-      let prepared: PrepareInstructionCoveredStepsResult;
-      try {
-        prepared = prepareInstructionCoveredSteps(parsedResponse.data, normalizedTestMd);
-      } catch (error) {
-        return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
-      }
-      if (!prepared.success) {
-        // Internal context retains raw provider output for diagnostics, while
-        // the public report projection excludes it and exposes only safe issue
-        // fields.
-        return outcomeForError(new AiResponseInvalidError(
-          'The AI provider response contains invalid instruction coverage.',
-          {
-            raw: response.raw,
-            issues: prepared.issues.map((issue) => ({
-              code: issue.code,
-              path: issue.code === 'intent-id-missing'
-                ? [...issue.path.slice(0, -1), REDACTED_ISSUE_PATH_SEGMENT]
-                : issue.path,
-              ...(prepared.stepId === undefined ? {} : { stepId: prepared.stepId }),
-            })),
-          },
-        ));
-      }
+        if (existingPlan !== undefined && !options.force) {
+          try {
+            if (!options.dryRun) {
+              await repairGroundingIfNeeded(deps.storage, groundingPath, existingPlan);
+            }
+            results.push({ file, status: 'skipped-fresh', planFile: planPath, ...metrics() });
+          } catch (error) {
+            results.push({ file, status: 'failed', error: fsIoError('The grounding cache could not be repaired.', error), ...metrics() });
+          }
+          continue;
+        }
 
-      const normalizedSteps = normalizeAiStepSecretGrants(prepared.data);
-      const candidate = {
-        schemaVersion: PLAN_SCHEMA_VERSION,
-        source: { inputsDigest },
-        generatorMeta: {
-          ...(response.data.generatorMeta ?? {}),
-          planProducerBundle: {
-            fingerprint: producerBundleFingerprint,
-            components: planProducerBundleComponentDiagnostics(producerBundleInputs),
-          },
-        },
-        targets: resolvedTargets,
-        steps: normalizedSteps,
-      };
-      // Candidate-value traversal preserves the same non-disclosure invariant
-      // for dynamic target namespaces after assembly.
-      const parsedPlan = PlanDocument.safeParse(candidate);
-      if (!parsedPlan.success) {
-        return outcomeForError(new AiResponseInvalidError(
-          'The AI provider response could not form a valid plan.',
-          {
-            raw: response.raw,
-            issues: parsedPlan.error.issues.map((issue) => ({
-              code: 'schema-mismatch',
-              path: redactDynamicPathSegments(candidate, issue.path),
-            })),
-          },
-        ));
-      }
+        aiExecutorPromise ??= deps.resolveAiExecutor(deps.signal);
+        const aiExecutor = await aiExecutorPromise;
 
-      try {
-        assertNoLiteralSecrets(parsedPlan.data);
-      } catch (error) {
-        return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
-      }
+        /**
+         * Executes one provider attempt using the per-file state captured by this
+         * scope.
+         *
+         * Caller cancellation interrupts an `execute()` rejection only when it is
+         * not this request's timeout. Response and final-Plan schema mismatches,
+         * plus retryable coverage failures, retain the classified error and
+         * feedback needed by the file-level controller. Literal-secret and
+         * artifact-write failures are terminal. The outer `fileFailure()` boundary
+         * around `prepareInstructionCoveredSteps` keeps unexpected inspection
+         * errors isolated to this file rather than rejecting the batch.
+         */
+        async function attemptGeneration(
+          attempt: number,
+          previousAttempts: readonly PreviousAttemptContext[],
+        ): Promise<AttemptOutcome> {
+          const outcomeForError = (error: AmbercastError): AttemptOutcome => {
+            if (!isRetryable(error)) return { kind: 'terminal', error };
+            if (error instanceof AiResponseInvalidError) {
+              return {
+                kind: 'retryable',
+                error,
+                record: { attempt, code: 'AI_RESPONSE_INVALID', issues: responseIssues(error) },
+              };
+            }
+            if (error instanceof SecretGrantUnattributableError) {
+              const details = error.details as { readonly reason: string; readonly stepId?: string };
+              return {
+                kind: 'retryable',
+                error,
+                record: details.stepId === undefined
+                  ? { attempt, code: 'SECRET_GRANT_UNATTRIBUTABLE', reason: details.reason }
+                  : {
+                    attempt,
+                    code: 'SECRET_GRANT_UNATTRIBUTABLE',
+                    reason: details.reason,
+                    stepId: details.stepId,
+                  },
+              };
+            }
+            return { kind: 'terminal', error };
+          };
 
-      try {
-        assertNoLiteralSecrets(response.data.ambiguities);
-      } catch (error) {
-        return outcomeForError(fileFailure(error, 'The generated ambiguities could not be inspected.'));
-      }
+          const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
+          const request = {
+            prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
+            responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
+            context: (attempt === 1
+              ? { testMd: normalizedTestMd, targets: resolvedTargets }
+              : { testMd: normalizedTestMd, targets: resolvedTargets, previousAttempts }) as unknown as JsonValueT,
+            signal: deadline.signal,
+          };
+          const callId = deps.allocateCallId();
+          deps.events.emit({ type: 'ai-call', callId, file, attempt, attemptLimit: options.maxAttempts });
+          aiCalls += 1;
+          const startedMs = deps.clock.monotonicMs();
+          let providerOutcome: 'ok' | 'error' = 'error';
+          let response;
+          try {
+            response = await aiExecutor.execute(request);
+            providerOutcome = 'ok';
+          } catch (error) {
+            const isTimeout = isAiDeadlineTimeout(deadline, error);
+            if (!isTimeout && deps.signal?.aborted) return { kind: 'interrupted' };
+            return outcomeForError(aiFailure(error, isTimeout));
+          } finally {
+            deps.events.emit({
+              type: 'ai-result',
+              callId,
+              durationMs: Math.max(0, Math.round(deps.clock.monotonicMs() - startedMs)),
+              outcome: providerOutcome,
+            });
+          }
 
-      if (options.dryRun) {
-        return {
-          kind: 'success',
-          outcome: { file, status: 'would-generate', planFile: planPath, ambiguities: response.data.ambiguities },
-        };
-      }
+          if (tracker.interrupted) return { kind: 'interrupted' };
 
-      try {
-        await deps.storage.writeText(planPath, asArtifactText(parsedPlan.data as unknown as JsonValueT));
-        await deps.storage.writeText(groundingPath, asArtifactText(emptyGrounding(parsedPlan.data) as unknown as JsonValueT));
-        return {
-          kind: 'success',
-          outcome: { file, status: 'generated', planFile: planPath, ambiguities: response.data.ambiguities },
-        };
-      } catch (error) {
-        return outcomeForError(fsIoError('The generated artifacts could not be written.', error));
+          // Parsed-value traversal keeps dynamic provider data non-disclosive even
+          // where generated-schema structure cannot identify the true container.
+          const parsedResponse = GeneratedPlanResponseForPolicy.safeParse(response.data);
+          if (!parsedResponse.success) {
+            return outcomeForError(new AiResponseInvalidError(
+              'The AI provider response did not match the generation contract.',
+              {
+                raw: response.raw,
+                issues: parsedResponse.error.issues.map((issue) => ({
+                  code: 'schema-mismatch',
+                  path: redactDynamicPathSegments(response.data, issue.path),
+                })),
+              },
+            ));
+          }
+
+          let prepared: PrepareInstructionCoveredStepsResult;
+          try {
+            prepared = prepareInstructionCoveredSteps(parsedResponse.data, normalizedTestMd);
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
+          }
+          if (!prepared.success) {
+            // Internal context retains raw provider output for diagnostics, while
+            // the public report projection excludes it and exposes only safe issue
+            // fields.
+            return outcomeForError(new AiResponseInvalidError(
+              'The AI provider response contains invalid instruction coverage.',
+              {
+                raw: response.raw,
+                issues: prepared.issues.map((issue) => ({
+                  code: issue.code,
+                  path: issue.code === 'intent-id-missing'
+                    ? [...issue.path.slice(0, -1), REDACTED_ISSUE_PATH_SEGMENT]
+                    : issue.path,
+                  ...(prepared.stepId === undefined ? {} : { stepId: prepared.stepId }),
+                })),
+              },
+            ));
+          }
+
+          const normalizedSteps = normalizeAiStepSecretGrants(prepared.data);
+          const candidate = {
+            schemaVersion: PLAN_SCHEMA_VERSION,
+            source: { inputsDigest },
+            generatorMeta: {
+              ...(response.data.generatorMeta ?? {}),
+              planProducerBundle: {
+                fingerprint: producerBundleFingerprint,
+                components: planProducerBundleComponentDiagnostics(producerBundleInputs),
+              },
+            },
+            targets: resolvedTargets,
+            steps: normalizedSteps,
+          };
+          // Candidate-value traversal preserves the same non-disclosure invariant
+          // for dynamic target namespaces after assembly.
+          const parsedPlan = PlanDocument.safeParse(candidate);
+          if (!parsedPlan.success) {
+            return outcomeForError(new AiResponseInvalidError(
+              'The AI provider response could not form a valid plan.',
+              {
+                raw: response.raw,
+                issues: parsedPlan.error.issues.map((issue) => ({
+                  code: 'schema-mismatch',
+                  path: redactDynamicPathSegments(candidate, issue.path),
+                })),
+              },
+            ));
+          }
+
+          try {
+            assertNoLiteralSecrets(parsedPlan.data);
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
+          }
+
+          try {
+            assertNoLiteralSecrets(response.data.ambiguities);
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated ambiguities could not be inspected.'));
+          }
+
+          if (options.dryRun) {
+            return {
+              kind: 'success',
+              outcome: { file, status: 'would-generate', planFile: planPath, ambiguities: response.data.ambiguities },
+            };
+          }
+
+          try {
+            await deps.storage.writeText(planPath, asArtifactText(parsedPlan.data as unknown as JsonValueT));
+            await deps.storage.writeText(groundingPath, asArtifactText(emptyGrounding(parsedPlan.data) as unknown as JsonValueT));
+            return {
+              kind: 'success',
+              outcome: { file, status: 'generated', planFile: planPath, ambiguities: response.data.ambiguities },
+            };
+          } catch (error) {
+            return outcomeForError(fsIoError('The generated artifacts could not be written.', error));
+          }
+        }
+
+        const history: { attempt: number; code: ReportErrorCode }[] = [];
+        let previousAttempts: PreviousAttemptContext[] = [];
+        let outcome: GenerateFileOutcome | undefined;
+        for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
+          if (attempt > 1 && deps.signal?.aborted) {
+            interruptedDuringAi = true;
+            break;
+          }
+
+          const attemptResult = await attemptGeneration(attempt, previousAttempts);
+          if (attemptResult.kind === 'interrupted') {
+            interruptedDuringAi = true;
+            break;
+          }
+          if (attemptResult.kind === 'success') {
+            outcome = attemptResult.outcome;
+            break;
+          }
+
+          const code = reportCodeFor(attemptResult.error);
+          if (code !== undefined) history.push({ attempt, code });
+          const isFinal = attemptResult.kind === 'terminal' || attempt === options.maxAttempts;
+          if (isFinal) {
+            const error = code !== undefined && ATTEMPTS_ELIGIBLE_CODES.has(code)
+              ? attachAttemptsHistory(attemptResult.error, history)
+              : attemptResult.error;
+            outcome = { file, status: 'failed', error };
+            break;
+          }
+          previousAttempts = [...previousAttempts, attemptResult.record];
+        }
+
+        if (outcome !== undefined) results.push({ ...outcome, ...metrics() });
+        if (interruptedDuringAi) break;
+      } finally {
+        if (!interruptedDuringAi) tracker.markTerminal(workKey);
       }
     }
 
-    const history: { attempt: number; code: ReportErrorCode }[] = [];
-    let previousAttempts: PreviousAttemptContext[] = [];
-    let outcome: GenerateFileOutcome | undefined;
-    for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
-      if (attempt > 1 && deps.signal?.aborted) {
-        interruptedDuringAi = true;
-        break;
-      }
-
-      const attemptResult = await attemptGeneration(attempt, previousAttempts);
-      if (attemptResult.kind === 'interrupted') {
-        interruptedDuringAi = true;
-        break;
-      }
-      if (attemptResult.kind === 'success') {
-        outcome = attemptResult.outcome;
-        break;
-      }
-
-      const code = reportCodeFor(attemptResult.error);
-      if (code !== undefined) history.push({ attempt, code });
-      const isFinal = attemptResult.kind === 'terminal' || attempt === options.maxAttempts;
-      if (isFinal) {
-        const error = code !== undefined && ATTEMPTS_ELIGIBLE_CODES.has(code)
-          ? attachAttemptsHistory(attemptResult.error, history)
-          : attemptResult.error;
-        outcome = { file, status: 'failed', error };
-        break;
-      }
-      previousAttempts = [...previousAttempts, attemptResult.record];
-    }
-
-    if (outcome !== undefined) results.push(outcome);
-    if (interruptedDuringAi) break;
-    } finally {
-      if (!interruptedDuringAi) tracker.markTerminal(workKey);
-    }
-  }
-
-  if (tracker.interrupted) results.push(...tracker.pendingIdentities.map((file) => ({ file, status: 'skipped' as const })));
-  return { results, noTestsFound: false, interrupted: tracker.interrupted };
+    if (tracker.interrupted) results.push(...tracker.pendingIdentities.map((file) => ({ file, status: 'skipped' as const })));
+    return { results, noTestsFound: false, interrupted: tracker.interrupted };
   } finally {
     tracker.dispose();
   }

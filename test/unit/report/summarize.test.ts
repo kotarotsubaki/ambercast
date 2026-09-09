@@ -38,6 +38,34 @@ function healSummary(repairOutcome: 'healed' | 'partially-healed' | 'unresolved'
 
 describe('summarizeReport', () => {
   it.each([
+    ['generate', {
+      id: 'generate-case', file: 'generate-case.test.md', planFile: 'generate-case.ambercast.plan.json',
+      status: 'generated', dryRun: false, ambiguities: [], durationMs: 0, aiCalls: 0,
+    }],
+    ['run', {
+      id: 'run-case', file: 'run-case.test.md', planFile: 'run-case.ambercast.plan.json',
+      status: 'passed', durationMs: 1, aiCalls: 2, steps: [], explanation: 'completed',
+    }],
+    ['heal', {
+      id: 'heal-case', file: 'heal-case.test.md', planFile: 'heal-case.ambercast.plan.json',
+      status: 'completed', repairOutcome: 'healed', application: 'applied', stopReason: 'settled',
+      durationMs: 1, aiCalls: 3, steps: [], explanation: 'completed',
+    }],
+  ] as const)('ignores %s AI accounting metrics when classifying a passed result', (command, result) => {
+    expect(summarizeReport({
+      command,
+      results: [result],
+      errors: [],
+    } as unknown as ReportSummaryInput)).toEqual({
+      total: 1,
+      passed: 1,
+      failed: 0,
+      errored: 0,
+      skipped: 0,
+    });
+  });
+
+  it.each([
     ['generate', 'generated', 'passed'],
     ['generate', 'would-generate', 'passed'],
     ['generate', 'skipped-fresh', 'passed'],

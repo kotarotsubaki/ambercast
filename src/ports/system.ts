@@ -106,11 +106,13 @@ export interface EnvironmentInfo {
  * A lifecycle event emitted while a use case generates or replays a plan.
  *
  * @remarks
- * Replay events always identify the affected step. A generation-wide provider
- * invocation happens before a plan supplies any step identity, so its
- * `ai-call` event may omit `stepId`. The variants intentionally carry only
- * that available identity and, for results, the resolution path, keeping the
- * reporting boundary narrow while allowing richer payloads when needed. A
+ * Step-lifecycle events always identify the affected step. AI lifecycle events
+ * instead pair their start and terminal result through a command-scoped call
+ * ID; a replay `ai-call` may additionally identify its step, while a
+ * generation-wide invocation happens before a plan supplies one. Every
+ * provider invocation also carries an absolute source path and logical attempt
+ * series so progress reporting can pair exactly one terminal result with one
+ * admitted dispatch. A
  * rejected Stage 2 candidate is emitted only after its overlay snapshot is
  * restored, once per normal rejection; interruption is not a rejection event.
  */
@@ -121,7 +123,20 @@ export type RunEvent =
       readonly stepId: StepId;
       readonly via: 'grounding' | 'ai-resolve' | 'trace-replay';
     }
-  | { readonly type: 'ai-call'; readonly stepId?: StepId }
+  | {
+      readonly type: 'ai-call';
+      readonly callId: string;
+      readonly file: string;
+      readonly attempt: number;
+      readonly attemptLimit: number;
+      readonly stepId?: StepId;
+    }
+  | {
+      readonly type: 'ai-result';
+      readonly callId: string;
+      readonly durationMs: number;
+      readonly outcome: 'ok' | 'error';
+    }
   | {
       readonly type: 'heal-stage2-rejected';
       readonly stepId: StepId;

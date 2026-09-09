@@ -64,6 +64,73 @@ describe('buildGenerateReport', () => {
     ]);
   });
 
+  it('projects durationMs and aiCalls onto every K6 terminal generate row without adding them to evidence-free rows', () => {
+    const output = report({
+      outcome: {
+        noTestsFound: false,
+        results: [
+          {
+            file: 'generated.test.md',
+            status: 'generated',
+            planFile: 'generated.ambercast.plan.json',
+            ambiguities: [],
+            durationMs: 11,
+            aiCalls: 1,
+          },
+          {
+            file: 'preview.test.md',
+            status: 'would-generate',
+            planFile: 'preview.ambercast.plan.json',
+            ambiguities: [],
+            durationMs: 22,
+            aiCalls: 2,
+          },
+          {
+            file: 'fresh.test.md',
+            status: 'skipped-fresh',
+            planFile: 'fresh.ambercast.plan.json',
+            durationMs: 0,
+            aiCalls: 0,
+          },
+          {
+            file: 'failed.test.md',
+            status: 'failed',
+            error: new FsIoError('read failed'),
+            durationMs: 44,
+            aiCalls: 3,
+          },
+          { file: 'listed.test.md', status: 'listed' },
+          { file: 'interrupted.test.md', status: 'skipped' },
+        ],
+      },
+    });
+
+    expect(output.envelope.results).toEqual([
+      expect.objectContaining({ id: 'generated.test.md', durationMs: 11, aiCalls: 1 }),
+      expect.objectContaining({ id: 'preview.test.md', durationMs: 22, aiCalls: 2 }),
+      expect.objectContaining({ id: 'fresh.test.md', durationMs: 0, aiCalls: 0 }),
+      expect.objectContaining({ id: 'failed.test.md', durationMs: 44, aiCalls: 3 }),
+      { id: 'listed.test.md', file: 'listed.test.md', status: 'listed', dryRun: false },
+      { id: 'interrupted.test.md', file: 'interrupted.test.md', status: 'skipped' },
+    ]);
+  });
+
+  it.each(['generated', 'would-generate', 'skipped-fresh', 'failed'] as const)(
+    'keeps K6 metrics optional when projecting a legacy-compatible %s outcome',
+    (status) => {
+      const result = status === 'generated' || status === 'would-generate'
+        ? { file: 'case.test.md', status, planFile: 'case.plan.json', ambiguities: [] }
+        : status === 'skipped-fresh'
+          ? { file: 'case.test.md', status, planFile: 'case.plan.json' }
+          : { file: 'case.test.md', status, error: new FsIoError('failed') };
+
+      const output = report({ outcome: { noTestsFound: false, results: [result] } });
+
+      expect(output.envelope.results[0]).not.toHaveProperty('durationMs');
+      expect(output.envelope.results[0]).not.toHaveProperty('aiCalls');
+    },
+  );
+
   it.each(GENERATION_ERROR_MAPPINGS)(
     'maps generation-reachable $0.kind errors to %s',
     (error, code, kind, exitCode) => {
@@ -311,7 +378,7 @@ describe('buildGenerateReport v3 interruption accounting', () => {
     } } as unknown as Omit<GenerateReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.2');
+    expect(output.envelope.schemaVersion).toBe('3.3');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' })]);
     expect(output.envelope.results[1]).toEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });

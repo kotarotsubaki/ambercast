@@ -10,7 +10,12 @@ interface Props {
 
 const { copy, locale } = Astro.props;
 const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
-const primaryCtaHref = `${base}tutorials/quick-start/`;
+const quickStartByLocale = {
+  ja: `${base}ja/tutorials/quick-start/`,
+  'zh-cn': `${base}zh-cn/tutorials/quick-start/`,
+  en: `${base}tutorials/quick-start/`,
+};
+const primaryCtaHref = quickStartByLocale[locale] ?? quickStartByLocale.en;
 const mark = `${base}ambercast-mark.svg`;
 const { lead: healLead, tail: healTail } = splitHealNote(copy.figureOne.healPill);
 // The tokenizer treats only ASCII letters and digits as word characters: underscores and CJK

@@ -4,7 +4,20 @@ import { createRecordingEventSink } from '../../doubles/create-recording-event-s
 
 const START: RunEvent = { type: 'step-start', stepId: 'open-page' };
 const RESULT: RunEvent = { type: 'step-result', stepId: 'open-page', via: 'grounding' };
-const AI_CALL: RunEvent = { type: 'ai-call', stepId: 'resolve-form' };
+const AI_CALL: RunEvent = {
+  type: 'ai-call',
+  callId: 'ai-1',
+  file: '/workspace/tests/form.test.md',
+  attempt: 1,
+  attemptLimit: 1,
+  stepId: 'resolve-form',
+};
+const AI_RESULT: RunEvent = {
+  type: 'ai-result',
+  callId: 'ai-1',
+  durationMs: 2_500,
+  outcome: 'ok',
+};
 
 describe('createRecordingEventSink', () => {
   it('starts with no recorded events', () => {
@@ -19,8 +32,9 @@ describe('createRecordingEventSink', () => {
 
     recording.sink.emit(RESULT);
     recording.sink.emit(AI_CALL);
+    recording.sink.emit(AI_RESULT);
 
-    expect(recording.emitted()).toEqual([START, RESULT, AI_CALL]);
+    expect(recording.emitted()).toEqual([START, RESULT, AI_CALL, AI_RESULT]);
   });
 
   it('does not deduplicate repeated event objects', () => {

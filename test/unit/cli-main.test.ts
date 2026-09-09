@@ -34,7 +34,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -44,7 +44,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -55,7 +55,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -80,7 +80,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.2' as const,
+  schemaVersion: '3.3' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -130,7 +130,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.2', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.3', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -151,7 +151,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.2', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.3', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -743,7 +743,9 @@ describe('main()', () => {
 
     expect(longForm).toMatchObject({ yes: true });
     expect(shortForm).toMatchObject({ yes: true });
-    expect({ ...shortForm, signal: undefined }).toEqual({ ...longForm, signal: undefined });
+    const { signal: _longSignal, stderr: _longStderr, ...longComparable } = longForm;
+    const { signal: _shortSignal, stderr: _shortStderr, ...shortComparable } = shortForm;
+    expect(shortComparable).toEqual(longComparable);
   });
 
   it('passes literal heal paths and option-shaped paths after -- to runtime', async () => {
@@ -842,6 +844,28 @@ describe('main()', () => {
     } as never, true);
 
     expect(rendered).toContain(`\u001B[${color}mcompleted\u001B[0m login.test.md`);
+  });
+
+  it.each([
+    ['generate', runGenerateCommand, ENVELOPE, 'generate login.test.md: ai call 1/2\n'],
+    ['run', runRunCommand, RUN_ENVELOPE, 'run login.test.md [step-1]: ai call 1/1\n'],
+    ['heal', runHealCommand, HEAL_ENVELOPE, 'heal login.test.md [step-1]: ai call 1/1\n'],
+    ['check', runCheckCommand, CHECK_ENVELOPE, ''],
+  ] as const)('threads the identical stderr reference into %s while keeping JSON stdout isolated', async (command, runtimeCommand, envelope, progress) => {
+    const stdout = new MemoryWritable();
+    const stderr = new MemoryWritable();
+    runtimeCommand.mockImplementation(async (commandInput: { readonly stderr: NodeJS.WritableStream }) => {
+      if (progress !== '') commandInput.stderr.write(progress);
+      return { exitCode: 0, envelope };
+    });
+
+    await main([command, '--json'], stdout, stderr);
+
+    expect(runtimeCommand).toHaveBeenCalledOnce();
+    expect(runtimeCommand.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ stderr }));
+    expect(runtimeCommand.mock.calls[0]?.[0]?.stderr).toBe(stderr);
+    expect(stdout.text).toBe(`${JSON.stringify(envelope)}\n`);
+    expect(stderr.text).toBe(progress);
   });
 
   describe('renderHumanReport', () => {

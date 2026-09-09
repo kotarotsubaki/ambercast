@@ -40,7 +40,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `defaultTarget` | string | `web-user` | ターゲットへと解決される必要あり | generate、run、check、heal のターゲット選択 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |
 | `ai.maxGenerateAttempts` | 正の整数 | `2` | 1〜5。ファイルごとの生成試行回数 | generate のみ。heal Stage 3 には適用しない |
-| `ai.timeoutMs` | 正の整数 | `120000` | 正の値 | generate、run のフォールバック、heal |
+| `ai.timeoutMs` | 正の整数 | `600000` | 正の値 | generate、run のフォールバック、heal |
 | `viewer.port` | 整数 | `4600` | 1〜65535。viewer コマンドは計画段階です | 計画されている `view` のみ |
 | `ci.heal` | boolean | `false` | CI におけるリスト表示以外の heal のオプトイン | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI での書き戻しのオプトイン | run |
@@ -48,6 +48,12 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `grounding.localWriteBack` | `auto|explicit` | `auto` | CI では無視される | run |
 | `heal.maxStepRepairs` | 正の整数 | なし | 実際のプロバイダーへの増分ディスパッチのみを制限 | heal |
 | `heal.caseTimeoutMs` | 正の整数 | `300000` | ケース受付のデッドライン | heal |
+
+## AI 設定 {#ai}
+
+`ai.maxGenerateAttempts`：ローカル検証で応答が拒否された場合に、generate がプロンプトごとに行うプロバイダー試行の最大回数です。1〜5 の範囲で指定でき、既定値は 2 です。heal の修復には適用されません。
+
+`ai.timeoutMs`：1 回のプロバイダーディスパッチに対する期限（ミリ秒）です。generate、run、heal のすべてのディスパッチに適用されます。heal のケース期限は受付境界にすぎないため、受付済みのディスパッチはこの値まで実行を継続できます。既定値は 600000 です。
 
 ## 自己修復設定 {#heal}
 

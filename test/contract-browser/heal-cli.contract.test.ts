@@ -142,7 +142,7 @@ describe('heal confirmation gate through the built CLI', () => {
       expect(result.exitCode).toBe(2);
       expect(result.signalCode).toBeNull();
       expect(invocation.terminated()).toBe(true);
-      expect(result.stderr.toString('utf8')).toBe('');
+      expect(result.stderr.toString('utf8')).toBe('heal tests/heal-confirmation.test.md [click-submit]: ai call 1/1\n');
       const envelope = JSON.parse(result.stdout.toString('utf8')) as unknown;
       expect(ReportEnvelope.safeParse(envelope).success).toBe(true);
       expect((envelope as { errors: unknown[] }).errors).toHaveLength(1);

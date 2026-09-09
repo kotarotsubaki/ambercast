@@ -130,6 +130,24 @@ const USAGE = renderUsage(CLI_MANIFEST);
 const HEALTHY_REPORT_STATUSES = new Set(['generated', 'skipped-fresh', 'listed', 'fresh', 'fresh-without-grounding', 'passed']);
 
 /**
+ * Maps ReportError codes to the details fields the human renderer shows in
+ * schema declaration order. It is the human renderer's internal registry and
+ * test seam rather than a schema authority. Every ReportError code that
+ * declares a `details` branch in `src/report/schema.ts` needs an entry because
+ * the renderer uses this table to choose its renderable fields; without one,
+ * no fields are renderable for that error.
+ */
+export const ERROR_DETAILS_KEY_ORDER: Readonly<Record<string, readonly string[]>> = {
+  PROMPT_PATH_INVALID: ['path', 'reason'],
+  AI_RESPONSE_INVALID: ['issues', 'attempts'],
+  SECRET_LITERAL_REJECTED: ['detector', 'path', 'attempts'],
+  SECRET_GRANT_UNATTRIBUTABLE: ['reason', 'secretRef', 'stepId', 'sourceSpan', 'attempts'],
+  AI_EXECUTOR_UNAVAILABLE: ['attempts'],
+  UNEXPECTED_CRASH: ['cause'],
+  FS_IO_ERROR: ['partiallyWritten'],
+};
+
+/**
  * Fixed warning that `main()` writes to stderr exactly once when a run
  * envelope's `reportPersistence` is `'failed'`, in both JSON and human-rendered
  * modes.
@@ -217,16 +235,8 @@ function formatErrorDetails(code: unknown, details: unknown): string {
     return '';
   }
 
-  const keyOrder: Record<string, readonly string[]> = {
-    AI_RESPONSE_INVALID: ['issues', 'attempts'],
-    SECRET_LITERAL_REJECTED: ['detector', 'path', 'attempts'],
-    SECRET_GRANT_UNATTRIBUTABLE: ['reason', 'secretRef', 'stepId', 'sourceSpan', 'attempts'],
-    AI_EXECUTOR_UNAVAILABLE: ['attempts'],
-    UNEXPECTED_CRASH: ['cause'],
-    FS_IO_ERROR: ['partiallyWritten'],
-  };
   const detailRecord = details as Record<string, unknown>;
-  const fields = keyOrder[typeof code === 'string' ? code : ''] ?? [];
+  const fields = ERROR_DETAILS_KEY_ORDER[typeof code === 'string' ? code : ''] ?? [];
 
   return fields
     .filter((key) => Object.hasOwn(detailRecord, key))
@@ -338,8 +348,13 @@ export function renderHumanReport(
     if (typeof item.hint === 'string') {
       lines.push(`  hint: ${escapeControlChars(item.hint)}`);
     }
+    // A details object does not guarantee renderable diagnostics; an empty label
+    // would misleadingly suggest that no diagnostic information exists.
     if (item.details !== undefined) {
-      lines.push(`  details: ${formatErrorDetails(code, item.details)}`);
+      const formattedDetails = formatErrorDetails(code, item.details);
+      if (formattedDetails.length > 0) {
+        lines.push(`  details: ${formattedDetails}`);
+      }
     }
   }
 

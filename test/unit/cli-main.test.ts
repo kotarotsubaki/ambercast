@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ReportEnvelope } from '#report/schema.js';
+import { z } from 'zod';
+import { ReportEnvelope, ReportError } from '#report/schema.js';
 import type { GenerateCommandInput, GenerateCommandOutput } from '#runtime/generate-command.js';
 import type { CheckCommandInput } from '#runtime/check-command.js';
 import type { HealCommandInput } from '#runtime/heal-command.js';
@@ -15,7 +16,7 @@ vi.mock('#runtime/run-command.js', () => ({ runRunCommand }));
 vi.mock('#runtime/check-command.js', () => ({ runCheckCommand }));
 vi.mock('#runtime/heal-command.js', () => ({ runHealCommand }));
 
-import { main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
+import { ERROR_DETAILS_KEY_ORDER, main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
 
 const expectedUsage = readFileSync(new URL('../fixtures/cli-usage.txt', import.meta.url), 'utf8');
@@ -891,18 +892,81 @@ describe('main()', () => {
     });
 
     it.each([
-      ['SECRET_LITERAL_REJECTED', { detector: 'credential-prefix-sk', path: 'generatorMeta.key', attempts: [] }, 'detector=credential-prefix-sk; path=generatorMeta.key; attempts=[]'],
-      ['SECRET_GRANT_UNATTRIBUTABLE', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', attempts: [] }, 'reason=citation-not-found; secretRef={{secrets.API_TOKEN}}; stepId=step-a; attempts=[]'],
-      ['AI_EXECUTOR_UNAVAILABLE', { attempts: [] }, 'attempts=[]'],
-      ['UNEXPECTED_CRASH', { cause: { name: 'AbortError' } }, 'cause={"name":"AbortError"}'],
-      ['FS_IO_ERROR', { partiallyWritten: ['plan', 'grounding'] }, 'partiallyWritten=["plan","grounding"]'],
-    ] as const)('renders ordered details for %s', (code, details, expected) => {
+      ['SECRET_LITERAL_REJECTED', 'usage', { detector: 'credential-prefix-sk', path: 'generatorMeta.key', attempts: [] }, 'detector=credential-prefix-sk; path=generatorMeta.key; attempts=[]'],
+      ['SECRET_GRANT_UNATTRIBUTABLE', 'usage', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', attempts: [] }, 'reason=citation-not-found; secretRef={{secrets.API_TOKEN}}; stepId=step-a; attempts=[]'],
+      ['AI_EXECUTOR_UNAVAILABLE', 'environment', { attempts: [] }, 'attempts=[]'],
+      ['UNEXPECTED_CRASH', 'environment', { cause: { name: 'AbortError' } }, 'cause={"name":"AbortError"}'],
+      ['FS_IO_ERROR', 'environment', { partiallyWritten: ['plan', 'grounding'] }, 'partiallyWritten=["plan","grounding"]'],
+      ['PROMPT_PATH_INVALID', 'usage', { path: 'other/foo.md', reason: 'outside-test-dir' }, 'path=other/foo.md; reason=outside-test-dir'],
+      ['PROMPT_PATH_INVALID', 'usage', { path: 'other/foo.md', reason: 'not-test-md' }, 'path=other/foo.md; reason=not-test-md'],
+      ['PROMPT_PATH_INVALID', 'usage', { path: 'unsafe\u001bname.test.md', reason: 'no-name' }, 'path=unsafe\\u001bname.test.md; reason=no-name'],
+    ] as const)('renders ordered details for %s', (code, kind, details, expected) => {
       const rendered = renderHumanReport({
         ...RUN_ENVELOPE,
-        errors: [{ scope: 'run', kind: code.startsWith('SECRET_') ? 'usage' : 'environment', code, message: 'message', details }],
+        errors: [{ scope: 'run', kind, code, message: 'message', details }],
       } as never, false);
 
       expect(rendered).toBe(`error ${code}: message\n  details: ${expected}\n`);
+    });
+
+    it('omits the details line entirely when formatting yields no content', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{ scope: 'run', kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE', message: 'message', details: {} }],
+      } as never, false);
+
+      expect(rendered).toBe('error AI_EXECUTOR_UNAVAILABLE: message\n');
+    });
+
+    it('registers every ReportError code that declares a details branch', () => {
+      const detailsCodes = new Set<string>();
+      const walkSchema = (node: unknown): void => {
+        if (node === null || typeof node !== 'object' || Array.isArray(node)) {
+          throw new Error(`Unrecognized JSON Schema shape: ${JSON.stringify(node)}`);
+        }
+
+        const schema = node as Record<string, unknown>;
+        if (Object.hasOwn(schema, 'allOf') || Object.hasOwn(schema, '$ref')) {
+          throw new Error(`Unsupported JSON Schema composition: ${JSON.stringify(schema)}`);
+        }
+
+        const alternatives = schema.anyOf ?? schema.oneOf;
+        if (alternatives !== undefined) {
+          if (Object.hasOwn(schema, 'anyOf') && Object.hasOwn(schema, 'oneOf')) {
+            throw new Error(`Unrecognized JSON Schema shape: ${JSON.stringify(schema)}`);
+          }
+          if (!Array.isArray(alternatives)) {
+            throw new Error(`Unrecognized JSON Schema shape: ${JSON.stringify(schema)}`);
+          }
+          alternatives.forEach(walkSchema);
+          return;
+        }
+
+        const properties = schema.properties;
+        if (properties === null || typeof properties !== 'object' || Array.isArray(properties)) {
+          throw new Error(`Unrecognized JSON Schema shape: ${JSON.stringify(schema)}`);
+        }
+
+        const fields = properties as Record<string, unknown>;
+        const code = fields.code;
+        if (
+          code === null || typeof code !== 'object' || Array.isArray(code)
+          || typeof (code as Record<string, unknown>).const !== 'string'
+          || !Object.hasOwn(fields, 'scope')
+          || !Object.hasOwn(fields, 'kind')
+          || !Object.hasOwn(fields, 'message')
+        ) {
+          throw new Error(`Unrecognized JSON Schema shape: ${JSON.stringify(schema)}`);
+        }
+
+        if (Object.hasOwn(fields, 'details')) {
+          detailsCodes.add((code as { const: string }).const);
+        }
+      };
+
+      walkSchema(z.toJSONSchema(ReportError));
+
+      expect(detailsCodes).toEqual(new Set(Object.keys(ERROR_DETAILS_KEY_ORDER)));
     });
 
     it('renders a case-scope error with an escaped case ID and hint only', () => {

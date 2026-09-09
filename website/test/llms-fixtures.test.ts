@@ -145,9 +145,12 @@ describe('golden fixtures', () => {
     const fixtureText = readFileSync(join(fixturesDirectory.pathname, 'llms-full.txt'), 'utf8');
     const expected = expectedFixtureContents('llms-full.txt', fixtureText, '9.9.9-regression-probe');
 
+    const frozenLink = fixtureText.match(/blob\/v[^/]+\//)?.[0];
+    expect(frozenLink).toBeDefined();
+
     expect(expected).not.toBe(fixtureText);
     expect(expected).toContain('blob/v9.9.9-regression-probe/');
-    expect(expected).not.toContain('blob/v0.3.1/');
+    expect(expected).not.toContain(frozenLink!);
   });
 
   it('does not rewrite an untracked locale fixture', () => {

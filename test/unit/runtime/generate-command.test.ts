@@ -69,7 +69,7 @@ function reportOutput(
   const output = {
     exitCode,
     envelope: {
-      schemaVersion: '3.1' as const,
+      schemaVersion: '3.2' as const,
       command: 'generate',
       startedAt: '2026-08-08T00:00:00Z',
       durationMs: 1,
@@ -160,7 +160,7 @@ describe('runGenerateCommand', () => {
     const cwd = `${projectRoot}/nested-cwd`;
     const rawEnvelope = {
       ...output.envelope,
-      schemaVersion: '3.1',
+      schemaVersion: '3.2',
       results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }],
       summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
     } as unknown as GenerateCommandOutput['envelope'];
@@ -204,7 +204,7 @@ describe('runGenerateCommand', () => {
     const { output } = arrangeSuccessfulCommand('codex', 'codex');
     const cwd = '/workspace/no-config-project';
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
-    const rawEnvelope = { ...output.envelope, schemaVersion: '3.1', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
+    const rawEnvelope = { ...output.envelope, schemaVersion: '3.2', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
     mocks.loadConfig.mockResolvedValue(config);
     mocks.buildGenerateReport.mockReturnValue({ ...output, envelope: rawEnvelope });
 

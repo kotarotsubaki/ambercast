@@ -6,6 +6,7 @@ import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
+import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
@@ -220,6 +221,14 @@ describe('buildRunReport', () => {
     }]);
   });
 
+  it('maps PROMPT_PATH_INVALID into an empty run-scoped report', () => {
+    const output = report({ error: new PromptPathInvalidError('invalid prompt path', { path: '/workspace/tests/login.md', reason: 'not-test-md' }) });
+
+    expect(output.envelope.results).toEqual([]);
+    expect(output.envelope.summary.total).toBe(0);
+    expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'PROMPT_PATH_INVALID' })]);
+  });
+
   it('selects exit 0 for an all-pass batch', () => {
     const output = report({
       outcome: {
@@ -340,7 +349,7 @@ describe('buildRunReport v3 interruption accounting', () => {
     } } as unknown as Omit<RunReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(2);
-    expect(output.envelope.schemaVersion).toBe('3.1');
+    expect(output.envelope.schemaVersion).toBe('3.2');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 0, failed: 0, errored: 1, skipped: 1 });
     expect(output.envelope.results).toContainEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));

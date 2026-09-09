@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
+import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import type { AmbercastError } from '#core/errors/types.js';
 import {
   buildHealReport,
@@ -120,5 +121,13 @@ describe('buildHealReport', () => {
     expect(output.exitCode).toBe(3);
     expect(output.envelope.results).toEqual([]);
     expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'FS_IO_ERROR' })]);
+  });
+
+  it('maps PROMPT_PATH_INVALID into an empty run-scoped report', () => {
+    const output = report({ error: new PromptPathInvalidError('invalid prompt path', { path: '/workspace/tests/login.md', reason: 'not-test-md' }) });
+
+    expect(output.envelope.results).toEqual([]);
+    expect(output.envelope.summary.total).toBe(0);
+    expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'PROMPT_PATH_INVALID' })]);
   });
 });

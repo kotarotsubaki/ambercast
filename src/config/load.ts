@@ -89,9 +89,11 @@ export interface LoadConfigOptions {
  * @throws {import('#core/errors/config-invalid-error.js').ConfigInvalidError} When an explicit option or environment path
  *   names no file; selected text is malformed JSON; a present document fails
  *   RawConfig validation; a supplied targets record is empty; the captured AI
- *   provider is unsupported; a supplied default target does not name a
- *   resolved target; a nonempty explicit path is malformed; or either resolved
- *   path is malformed or contains a dot segment. A JSON parse failure retains
+ *   provider is unsupported; a supplied `testMatch` pattern does not end in
+ *   `.test.md` after RawConfig parsing succeeds and before target validation;
+ *   a supplied default target does not name a resolved target; a nonempty
+ *   explicit path is malformed; or either resolved path is malformed or
+ *   contains a dot segment. A JSON parse failure retains
  *   its original `SyntaxError` as this error's `cause`, while RawConfig schema
  *   validation retains the failing Zod issue path or paths in this error's
  *   diagnostic details so callers can identify the invalid key. The loader
@@ -161,6 +163,12 @@ export async function loadConfig(options: LoadConfigOptions): Promise<ResolvedCo
     const parsedOverrides = { ...result.data } as ConfigOverrides & { $schema?: string };
     delete parsedOverrides.$schema;
     overrides = parsedOverrides;
+    // Defaults are trusted literals; only supplied patterns require validation.
+    for (const pattern of overrides.testMatch ?? []) {
+      if (!pattern.endsWith('.test.md')) {
+        throw new ConfigInvalidError('Every testMatch pattern must end with .test.md.');
+      }
+    }
     configRoot = dirnamePath(selectedPath);
   }
 

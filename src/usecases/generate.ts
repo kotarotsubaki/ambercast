@@ -55,6 +55,7 @@ import {
   type InstructionCoverageResult,
 } from './instruction-coverage-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
+import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 
 const GENERATED_PLAN_RESPONSE_SCHEMA = typedJsonSchema(GeneratedPlanResponseRequest);
 
@@ -386,6 +387,9 @@ export interface GenerateOutcome {
  * attached to its file and stops that case before digest computation, existing
  * plan inspection, provider invocation, or artifact writes. Later prompts
  * retain the same isolation as other generation failures.
+ * A separate batch-level prompt-path preflight runs before that per-file
+ * boundary, so no selected case begins when any selected path is ineligible.
+ * It throws `PromptPathInvalidError` before per-file work in that case.
  *
  * The caller signal is distinct from the per-call timeout. A synchronous
  * tracker records discovered work keys and their public identities. A work key
@@ -423,6 +427,8 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       interrupted: false,
     };
   }
+
+  assertPromptPathsEligible(deps.layout, discovered);
 
   let aiExecutorPromise: Promise<AiExecutor> | undefined;
   for (const [index, file] of discovered.entries()) tracker.addDiscovered(`generate:${index}:${file}`, file);

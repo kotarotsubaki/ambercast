@@ -37,6 +37,7 @@ export const ERROR_EXIT_CODES = {
   'config-invalid': 2,
   'secret-unresolved': 2,
   'target-unresolved': 2,
+  'prompt-path-invalid': 2,
   'secret-literal-rejected': 2,
   'secret-grant-unattributable': 2,
   'missing-plan': 4,

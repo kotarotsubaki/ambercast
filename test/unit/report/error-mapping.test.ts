@@ -15,6 +15,7 @@ const EXPECTED_REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
   'secret-unresolved': { kind: 'usage', code: 'SECRET_UNRESOLVED' },
   'target-unresolved': { kind: 'usage', code: 'TARGET_UNRESOLVED' },
+  'prompt-path-invalid': { kind: 'usage', code: 'PROMPT_PATH_INVALID' },
   'secret-literal-rejected': { kind: 'usage', code: 'SECRET_LITERAL_REJECTED' },
   'secret-grant-unattributable': { kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE' },
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
@@ -51,7 +52,7 @@ describe('REPORT_ERROR_DETAILS', () => {
 });
 
 describe('reportError', () => {
-  it.each(REPORTABLE_ERROR_DETAILS.filter(([kind]) => kind !== 'interrupted'))('serializes a %s classified error at case scope', (kind, details) => {
+  it.each(REPORTABLE_ERROR_DETAILS.filter(([kind]) => kind !== 'interrupted' && kind !== 'prompt-path-invalid'))('serializes a %s classified error at case scope', (kind, details) => {
     const error = new ClassifiedError(kind as ErrorKind, `The ${kind} failure occurred.`);
 
     expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login-succeeds' })).toEqual({
@@ -86,6 +87,15 @@ describe('reportError', () => {
 
     expect(errorMapping.reportError(error, { scope: 'run' })).toMatchObject({
       scope: 'run', kind: 'environment', code: 'INTERRUPTED',
+    });
+    expect(() => errorMapping.reportError(error, { scope: 'case', caseId: 'case-a' })).toThrow();
+  });
+
+  it('serializes prompt-path-invalid only at run scope', () => {
+    const error = new ClassifiedError('prompt-path-invalid', 'The selected prompt path is not an eligible .test.md file.');
+
+    expect(errorMapping.reportError(error, { scope: 'run' })).toMatchObject({
+      scope: 'run', kind: 'usage', code: 'PROMPT_PATH_INVALID',
     });
     expect(() => errorMapping.reportError(error, { scope: 'case', caseId: 'case-a' })).toThrow();
   });
@@ -164,7 +174,7 @@ describe('reportError', () => {
 
   it.each(REPORTABLE_ERROR_DETAILS)('copies a string hint for every reportable %s scope and code', (kind) => {
     const error = new ClassifiedError(kind, 'failed', { hint: 'Use the documented remediation.' });
-    const location = kind === 'interrupted' ? { scope: 'run' as const } : { scope: 'case' as const, caseId: 'case-a' };
+    const location = kind === 'interrupted' || kind === 'prompt-path-invalid' ? { scope: 'run' as const } : { scope: 'case' as const, caseId: 'case-a' };
 
     expect(errorMapping.reportError(error, location as never)).toMatchObject({ hint: 'Use the documented remediation.' });
   });
@@ -174,6 +184,7 @@ describe('reportError', () => {
     [new ClassifiedError('secret-literal-rejected', 'literal', { detector: 'credential-prefix-sk', path: 'generatorMeta.apiKey', attempts: [] }), { detector: 'credential-prefix-sk', path: 'generatorMeta.apiKey', attempts: [] }],
     [new SecretGrantUnattributableError('grant', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', hint: 'repair' }), { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a' }],
     [new AiExecutorUnavailableError('unavailable', { attempts: [] }), { attempts: [] }],
+    [new ClassifiedError('prompt-path-invalid', 'invalid path', { path: '/abs/outside.md', reason: 'outside-test-dir' }), { path: '/abs/outside.md', reason: 'outside-test-dir' }],
   ] as const)('projects normalized details for %s', (error, details) => {
     const report = errorMapping.reportError(error, { scope: 'run' });
     expect(report).toMatchObject({ details });

@@ -3,6 +3,12 @@
 ## [0.4.0](https://github.com/kotarotsubaki/ambercast/compare/v0.3.1...v0.4.0) (2026-09-09)
 
 
+### ⚠ BREAKING CHANGES
+
+* **secrets:** Existing plans become stale and must be regenerated with `ambercast generate`. The `generatorSecretPolicy` producer-bundle revision advances from 2 to 3 ([#315](https://github.com/kotarotsubaki/ambercast/issues/315))
+* **secrets:** Existing plans become stale and must be regenerated with `ambercast generate`. The `generatorSecretPolicy` producer-bundle revision advances from 3 to 4 ([#319](https://github.com/kotarotsubaki/ambercast/issues/319))
+* **generate:** Existing plans become stale and must be regenerated with `ambercast generate`. The `instructionCoveragePolicy` producer-bundle revision advances from 1 to 2 ([#318](https://github.com/kotarotsubaki/ambercast/issues/318))
+
 ### Features
 
 * **cli:** CLI manifest as the single source for --help/parsers, report JSON Schema, schema metadata, capabilities.json and site publication (SPEC-D) ([#314](https://github.com/kotarotsubaki/ambercast/issues/314)) ([51006d4](https://github.com/kotarotsubaki/ambercast/commit/51006d485344e0063e5e145a62a8015808dd125f))

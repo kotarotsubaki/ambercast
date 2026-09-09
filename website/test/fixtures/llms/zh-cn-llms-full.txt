@@ -306,6 +306,10 @@ Prompt 文件名必须严格以 `.test.md` 结尾，才能建立有效的伴生�
 ## 操作步骤 {#steps}
 
 1. **创建测试文件**：创建 `tests/ambercast/checkout.test.md`，在文件中包含一个 H1 标题、用例所需的前置准备（setup），并在每个句子中表达一个可观察到的结果（observable outcome）。这些约定属于便于代码审查的编写建议，并非解析器的语法限制。
+
+   成功条件应描述到达页面后可见的标题、消息或元素，而不能只说明已到达某个 URL。
+
+   > …I reach the dashboard and see the heading "Welcome back".
 2. **保持用例聚焦**：若存在不相关的用户预期结果，请拆分至独立的 `<name>.test.md` 文件中。
 3. **按需声明密钥授权**：仅在确实需要时，使用单独成行的 `@ambercast-secret {{secrets.name}}`。解析器仅会识别位于代码块之外、独立成行的完整授权语句。一行授权仅授权一次使用；同一机密需要多次使用时，每次使用都重复一行。关于具体的语法定义，请查阅 [提示词文件格式](/ambercast/zh-cn/reference/prompt-format/) 与 [计划中的机密](/ambercast/zh-cn/spec/secrets/)。
 4. **运行生成预检**：
@@ -759,6 +763,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal 要求所选目标必须为 `idempotent` | heal |
 | `defaultTarget` | string | `web-user` | 必须解析为一个目标 | generate、run、check、heal 目标选择 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |
+| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；绝不用于 heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `120000` | 正数 | generate；run 兜底；heal |
 | `viewer.port` | integer | `4600` | 1–65535；viewer 命令处于计划中 | 仅用于计划中的 `view` |
 | `ci.heal` | boolean | `false` | 在 CI 中选择开启非 list 的 heal | heal |
@@ -834,6 +839,12 @@ new RegExp(`^[ \\t]*@ambercast-secret[ \\t]+(${SECRET_REF_SOURCE})[ \\t]*$`)
 | `SECRET_REF_PATTERN` | `new RegExp(\`^${SECRET_REF_SOURCE}$\`)` | 承载机密的模式字段仅接受该引用作为其完整值。 |
 
 合法的机密引用形如 `{{secrets.name}}`。`SecretRef` 不接受外围文字（surrounding prose）；通过 `SECRET_REF_PATTERN` 的全值锚定，确保承载机密的字段始终明确无歧义。
+
+## 终端断言与指令覆盖 {#terminal-assertions-and-instruction-coverage}
+
+每个终端成功断言都必须由其指令覆盖。仅到达 URL 不是终端证明；请描述在目标页面可见的标题、消息或元素。
+
+> …I reach the dashboard and see the heading "Welcome back".
 
 ## 明文机密拒绝 {#literal-secret-rejection}
 

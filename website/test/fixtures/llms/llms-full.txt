@@ -300,6 +300,10 @@ Focused test prompts keep test cases clear and make plan review straightforward.
 ## Steps {#steps}
 
 1. Create `tests/ambercast/checkout.test.md` with one H1, setup needed for the case, and one observable outcome per sentence. Treat these as recommendations for focused review, not parser syntax.
+
+   A success criterion should name something visible at the destination—a heading, message, or element—not only that a URL was reached.
+
+   > …I reach the dashboard and see the heading "Welcome back".
 2. Split unrelated user outcomes into separate `<name>.test.md` files to keep cases focused.
 3. Use a standalone `@ambercast-secret {{secrets.name}}` line only when needed. The parser identifies only complete grant lines outside code. One grant line authorizes exactly one use, so repeat the line once per use when the same secret is used more than once.
 4. Run `npx ambercast generate tests/ambercast/checkout.test.md --dry-run`. A valid preview result has status `would-generate` and `dryRun: true`; it does not claim a committed write.
@@ -765,6 +769,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires selected `idempotent` target | heal |
 | `defaultTarget` | string | `web-user` | must resolve to a target | generate, run, check, heal target selection |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
+| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `120000` | positive | generate; run fallback; heal |
 | `viewer.port` | integer | `4600` | 1–65535; viewer command is planned | planned `view` only |
 | `ci.heal` | boolean | `false` | opt-in to non-list heal in CI | heal |
@@ -834,6 +839,12 @@ Secret references identify credential slots within secret grants and schema fiel
 | `SECRET_REF_PATTERN` | `new RegExp(\`^${SECRET_REF_SOURCE}$\`)` | A secret-bearing schema field accepts the reference only as its entire value. |
 
 Surrounding prose is not accepted by `SecretRef`; whole-value anchoring enforced by `SECRET_REF_PATTERN` keeps secret-bearing fields unambiguous. A valid reference such as `{{secrets.name}}` must occupy the entire field value rather than being embedded alongside prose.
+
+## Terminal assertions and instruction coverage {#terminal-assertions-and-instruction-coverage}
+
+Each terminal success assertion must be covered by its instruction. URL arrival alone is not terminal proof; state a heading, message, or element that is visible at the destination.
+
+> …I reach the dashboard and see the heading "Welcome back".
 
 ## Literal-secret rejection {#literal-secret-rejection}
 

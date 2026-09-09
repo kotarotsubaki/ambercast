@@ -4,6 +4,7 @@ import mdx from '@astrojs/mdx';
 import { defineConfig } from 'astro/config';
 import remarkHeadingId from './scripts/lib/remark-heading-id.mjs';
 import { sidebar } from './src/sidebar.mjs';
+import { siteDescriptions } from './src/data/site-descriptions.mjs';
 import { codeThemes } from './src/styles/code-themes';
 
 const site = 'https://kotarotsubaki.github.io';
@@ -13,6 +14,7 @@ const assetUrl = (asset) => new URL(`${base}/${asset}`, site).href;
 export default defineConfig({
   site,
   base,
+  trailingSlash: 'always',
   markdown: {
     // The local plugin preserves explicit heading anchors while avoiding the upstream
     // remark-custom-heading-id package; entering this pipeline at all still requires
@@ -22,6 +24,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'ambercast',
+      description: siteDescriptions.en,
       defaultLocale: 'root',
       locales: {
         root: { label: 'English', lang: 'en' },

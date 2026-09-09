@@ -12,6 +12,7 @@
     "dev": "astro dev",
     "prebuild": "npm run sync",
     "build": "astro build",
+    "postbuild": "node scripts/build-llms.mjs",
     "preview": "astro preview",
     "precheck": "npm run sync",
     "check": "node scripts/check-parity.mjs && node scripts/check-reference.mjs"

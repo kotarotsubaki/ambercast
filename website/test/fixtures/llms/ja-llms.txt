@@ -1,0 +1,79 @@
+# ambercast
+
+> プロンプトネイティブな E2E テスト。
+
+## START HERE
+- [はじめに](https://kotarotsubaki.github.io/ambercast/ja/introduction/): 自然言語テストプロンプトからプランとグラウンディングを生成し、プロバイダーの解決を行わないリプレイとUIドリフトに対する意図的な修復サイクルを提供するambercastの概要です。
+- [設計思想](https://kotarotsubaki.github.io/ambercast/ja/philosophy/): ambercastが自然言語プロンプトをテスト資産とし、再現性と変更への耐性を両立させるための基本理念と設計判断を解説します。
+
+## TUTORIALS
+- [5分で動かす最初のテスト](https://kotarotsubaki.github.io/ambercast/ja/tutorials/quick-start/): ambercast で最初のテストプロンプトを作成し、生成から実行までを5分でガイドします。
+- [最初の plan と grounding の読み込み](https://kotarotsubaki.github.io/ambercast/ja/tutorials/review-your-first-plan/): テストプロンプトから解決される plan と grounding のファイル配置を確認し、freshness を検証します。
+- [UI変更後にテストを修復する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/repair-your-first-drift/): UI変更によって失敗したテストに対し、ターゲットのhealReplayIsolationを設定して安全に修復する手順を学びます。
+- [GitHub Actions で ambercast を実行する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/github-actions/): GitHub Actions の CI ワークフローで ambercast を実行するための、移植性の高い標準的な手順を解説します。
+
+## HOW-TO GUIDES
+- [効果的なプロンプトの作成](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/): レビューしやすく焦点の定まったテストプロンプトを作成し、ドライランで検証する手順を説明します。
+- [シークレットの管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/): プロンプト内でシークレットを安全に作成し、テスト生成および実行時に適切に解決するための手順を説明します。
+- [ターゲットの設定](https://kotarotsubaki.github.io/ambercast/ja/how-to/configure-targets/): ambercastの設定ファイルでターゲット環境、自己修復のリプレイ分離、およびシークレット送信先オリジンを構成します。
+- [AIプロバイダーの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/choose-ai-provider/): ambercast.config.json、環境変数、または --ai オプションを使用してAIプロバイダーを選択・指定する手順を説明します。
+- [実行するテストの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/select-tests/): 実行対象とするテストプロンプトを選択・フィルタリングするための手順です。
+- [グラウンディングのライトバック制御](https://kotarotsubaki.github.io/ambercast/ja/how-to/control-grounding-writeback/): ローカル環境やCI環境において、テスト実行後に変更されたグラウンディングキャッシュを書き戻す動作を制御する手順を説明します。
+- [生成された差分のレビュー](https://kotarotsubaki.github.io/ambercast/ja/how-to/review-generated-diffs/): 生成された差分を実践的な順序でレビューし、整合性を検証する手順を説明します。
+- [Gitでの成果物の管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/): ambercast の成果物をリポジトリポリシーや実行ディレクトリの設定に合わせて Git でバージョン管理する手順を説明します。
+- [他のCIプラットフォームでの実行](https://kotarotsubaki.github.io/ambercast/ja/how-to/run-on-other-ci/): GitLab CIや汎用ランナー環境でambercastを実行するためのポータブルなCI設定手順です。
+- [stale（古くなった状態）のアーティファクトの復旧](https://kotarotsubaki.github.io/ambercast/ja/how-to/recover-stale-artifacts/): check のステータスに応じたアーティファクトの復旧手順と期待される結果を説明します。
+- [バージョン間のアップグレード](https://kotarotsubaki.github.io/ambercast/ja/how-to/upgrade/): ambercast のバージョン間を安全にアップグレードし、プランの整合性を確認する手順です。
+- [一般的な障害のトラブルシューティング](https://kotarotsubaki.github.io/ambercast/ja/how-to/troubleshoot/): 発生した症状から原因を特定し、次の対応アクションを実行するための手順を説明します。
+- [貢献ガイド](https://kotarotsubaki.github.io/ambercast/ja/how-to/contribute/): リポジトリへの貢献手順について説明します。
+
+## REFERENCE
+- [設定](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/): ambercast の設定キーと設定解決に関する仕様です。
+- [プロンプトファイルのフォーマット](https://kotarotsubaki.github.io/ambercast/ja/reference/prompt-format/): ambercast 0.3.1 が規定するテストプロンプトファイルの構文規則、テキスト正規化、およびシークレット参照仕様。
+- [ディスカバリーパターン](https://kotarotsubaki.github.io/ambercast/ja/reference/discovery-patterns/): 設定されたテスト検出パターンの構文規則、選択仕様、デフォルト値、および評価例を定義します。
+- [レポート](https://kotarotsubaki.github.io/ambercast/ja/reference/reports/): ambercast が出力する構造化レポートのスキーマおよび各コマンド固有の結果形式に関するリファレンスです。
+- [エラーコード](https://kotarotsubaki.github.io/ambercast/ja/reference/error-codes/): ambercastのエラーコード体系、種別、スコープ、および終了コードのリファレンスです。
+- [終了コード](https://kotarotsubaki.github.io/ambercast/ja/reference/exit-codes/): ambercast がプロセス終了ステータスとして返す終了コードと、その集約優先順位のリファレンスです。
+- [環境変数](https://kotarotsubaki.github.io/ambercast/ja/reference/environment-variables/): Ambercastが読み取る環境変数と、AIプロバイダーの子プロセスに対するフィルタリング境界のリファレンスです。
+- [ファイルレイアウト](https://kotarotsubaki.github.io/ambercast/ja/reference/file-layout/): パス計算、成果物の生成タイミング、および実装に基づくリポジトリポリシーを定義します。
+- [JSON スキーマ](https://kotarotsubaki.github.io/ambercast/ja/reference/json-schemas/): Ambercast におけるスキーマ再構築時の公開規約を定義し、現在生成されている JSON Schema アーティファクトの一覧を提示します。
+- [互換性と再生成](https://kotarotsubaki.github.io/ambercast/ja/reference/compatibility/): ambercast におけるアーティファクト形式のバージョン互換性と、変更に伴う再生成の要件について定義します。
+- [変更履歴](https://kotarotsubaki.github.io/ambercast/ja/reference/changelog/): ambercast のユーザーから見える製品の動作変更および公開コントラクトの変更履歴です。
+- [セキュリティポリシー](https://kotarotsubaki.github.io/ambercast/ja/reference/security-policy/): ambercast のサポート対象バージョンと脆弱性報告の手順に関するリファレンスです。
+- [用語集](https://kotarotsubaki.github.io/ambercast/ja/reference/glossary/): ambercast全体で使用される用語の規範的定義と、翻訳時に保持すべき不変トークンのレジストリを提供します。
+
+### CLI
+- [CLIの概要](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/): ambercast CLI のパーサー全体の仕様、コマンド体系、および自動探索の既定動作を解説します。
+- [ambercast generate](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/): ambercast generate コマンドのフラグ仕様および成果物生成に関するリファレンスです。
+- [ambercast run](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/): ambercast run コマンドのフラグ仕様、リプレイパス、および実行時の書き込み動作について説明します。
+- [ambercast check](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/): CLIにおけるアーティファクトの検査ステータスと検証結果の仕様を解説します。
+- [ambercast heal](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/): ambercast heal コマンドのフラグ、修復モデル、制限事項、認可境界、および副作用に関するリファレンス。
+
+## PLAN SPECIFICATION
+- [Ambercast Plan 仕様](https://kotarotsubaki.github.io/ambercast/ja/spec/overview/): 本仕様は、ambercast 0.3.1 が受け付けるアーティファクトについて記述する。
+- [計画ドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/plan-document/): `PlanDocument` は厳格なオブジェクトである。
+- [ステップ](https://kotarotsubaki.github.io/ambercast/ja/spec/steps/): コミットされたすべてのステップは、`kind` によって判別される `Step` の厳格なブランチであり、すべてのブランチは `id: StepId` を持つ。
+- [値型](https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/): 他のすべての章は、それらの形状を再記述するのではなく、これらの定義を使用しなければならない（MUST）。
+- [グラウンディングドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/): `GroundingDocument` は、厳密に1つの Plan ダイジェストにバインドされた厳格なオブジェクトである。
+- [要素フィンガープリント](https://kotarotsubaki.github.io/ambercast/ja/spec/fingerprint/): `Fingerprint.
+- [鮮度とダイジェスト](https://kotarotsubaki.github.io/ambercast/ja/spec/freshness/): `inputsDigest` は、正確にこれら5つのメンバー（`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint`、および `targetDefinitions`）を持つ新規に構築されたオブジェクトの正規JSONに対する、小文字のSHA-256でなければならない（MUST）。
+- [正準 JSON](https://kotarotsubaki.github.io/ambercast/ja/spec/canonical-json/): ダイジェスト入力は、トークン間の空白を含まず、UTF-8 でエンコードされたコンパクトな RFC 8785 互換 JSON を使用しなければならない（MUST）。
+- [プランにおけるシークレット](https://kotarotsubaki.github.io/ambercast/ja/spec/secrets/): プランはシークレット値を 値型 `SecretRef` のみによって表現しなければならず（MUST）、連続する `{{secrets.
+- [適合性](https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/): Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、構成、および report の JSON Schema を導出しなければならない（MUST）。
+- [仕様変更履歴](https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/): アーティファクトのバージョン受け入れは、リリース番号の直感ではなく、Ambercast Plan 仕様 に従わなければならない（MUST）。
+
+## EXPLANATION
+- [プランのライフサイクルと鮮度](https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/): アーティファクトがリプレイ可能かどうかを判断するための来歴と鮮度判定の仕組みを解説します。
+- [リプレイとグラウンディング](https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grounding/): リプレイの実行パスと、キャッシュされたグラウンディングが提供する安全性境界の仕組みを解説します。
+- [ヒーリングモデル](https://kotarotsubaki.github.io/ambercast/ja/explanation/healing-model/): 制限付きのエスカレーションと人間による制御に基づく自己修復モデルの仕組みを解説します。
+- [トラストとセキュリティ](https://kotarotsubaki.github.io/ambercast/ja/explanation/trust-and-security/): ambercastにおける信頼境界とフェイルクローズな設計選択について説明します。
+- [CIにおける決定性](https://kotarotsubaki.github.io/ambercast/ja/explanation/determinism-in-ci/): CI環境における動作の背後にある信頼境界について解説します。
+- [ambercastの比較](https://kotarotsubaki.github.io/ambercast/ja/explanation/comparison/): コード生成、Record & Replay、自律型エージェントとの設計モデルの違いと、ambercastが導出されたプランを採用する理由を解説します。
+- [ステータスとロードマップ](https://kotarotsubaki.github.io/ambercast/ja/explanation/status-and-roadmap/): ambercastの現在の実装境界、今後の計画、およびバージョン方針について解説します。
+
+## FOR AI AGENTS
+- [AIエージェントからのambercastの利用](https://kotarotsubaki.github.io/ambercast/ja/agents/overview/): AIエージェントがテストアセットを変更・操作する際の読む順序と安全な実行ループを定めます。
+- [オペレーション規約](https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/): エージェントが安全にコマンドを実行・判断するためのアクション境界、禁止事項、およびプロセス終了時やエラー発生時の次の安全なアクションを定めます。
+- [セットアッププロンプト](https://kotarotsubaki.github.io/ambercast/ja/agents/setup-prompt/): 依頼されたテストを扱うエージェントに対し、レビューを最優先とする境界を規定するセットアッププロンプトを提供します。
+- [構造化出力の読み取り](https://kotarotsubaki.github.io/ambercast/ja/agents/reading-structured-output/): エージェントがレポートエンベロープに基づいて安全な順序で分岐処理を行い、実行結果を正しく判定するための手順を解説します。
+- [機械可読リソース](https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-resources/): ambercast で公開されている機械可読リソースと、その提供ルールについて説明します。

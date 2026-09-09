@@ -2,15 +2,16 @@
 
 ## Structural validation {#structural-validation}
 
-Ambercast's publication pipeline MUST derive Plan, Grounding, and configuration JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema. [repo:src/core/ir/schema.ts:5] [repo:src/core/config/schema.ts:1] The build tool serializes the following projections and package exports expose their generated files. [repo:src/build-tools/generate-json-schema.ts:29-50] [repo:package.json:23-35]
+Ambercast's publication pipeline MUST derive Plan, Grounding, configuration, and report JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema. [repo:src/core/ir/schema.ts:5] [repo:src/core/config/schema.ts:1] [repo:src/report/schema.ts:788] The build tool serializes the following projections and package exports expose their generated files. [repo:src/build-tools/generate-json-schema.ts:29-50] [repo:package.json:23-35]
 
 | Zod projection | JSON Schema getter | generated file | package export |
 | --- | --- | --- | --- |
 | `PlanDocument` | `getPlanJsonSchema()` | `plan.schema.json` | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `GroundingDocument` | `getGroundingJsonSchema()` | `grounding.schema.json` | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
+| `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-The Plan and Grounding getters derive their values from `PlanDocument` and `GroundingDocument`; the configuration getter derives its value from `RawConfig`. [repo:src/core/ir/json-schema.ts:15-37] [repo:src/core/config/json-schema.ts:7-24] An external consumer conforms when it validates the published structural and semantic contract; it need not use Zod or reproduce Ambercast's publication pipeline.
+The Plan and Grounding getters derive their values from `PlanDocument` and `GroundingDocument`; the configuration getter derives its value from `RawConfig`; the report getter derives its value from `ReportEnvelope`. [repo:src/core/ir/json-schema.ts:15-37] [repo:src/core/config/json-schema.ts:7-24] [repo:src/report/json-schema.ts:23-29] An external consumer conforms when it validates the published structural and semantic contract; it need not use Zod or reproduce Ambercast's publication pipeline.
 
 ## Semantic validation {#semantic-validation}
 

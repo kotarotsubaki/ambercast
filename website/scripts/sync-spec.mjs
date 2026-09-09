@@ -11,11 +11,11 @@ import { transformSpec } from './lib/spec-transform.mjs';
  * distinct problem without merging or truncation; any violation produces a non-zero exit
  * status and no partial writes.
  *
+ * @param {{ websiteRoot?: string }} options Invocation-specific website root for programmatic callers.
  * @returns {Promise<void>} Resolves after all generated pages are written atomically or
  * after every detected violation has been reported.
  */
-export async function main() {
-  const websiteRoot = process.cwd();
+export async function main({ websiteRoot = process.cwd() } = {}) {
   const repositoryRoot = join(websiteRoot, '..');
   const sourceRoot = join(repositoryRoot, 'docs/spec');
   const contentRoot = join(websiteRoot, 'src/content/docs');

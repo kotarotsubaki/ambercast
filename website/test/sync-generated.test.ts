@@ -23,9 +23,9 @@ const requiredSources = {
 
 const publications: ReadonlyArray<readonly [string, string]> = [
   ['dist/schema/config.schema.json', 'website/public/schemas/config.schema.json'],
-  ['dist/schema/plan.schema.json', 'website/public/schemas/plan.schema.json'],
-  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.schema.json'],
-  ['dist/schema/report.schema.json', 'website/public/schemas/report.schema.json'],
+  ['dist/schema/plan.schema.json', 'website/public/schemas/plan.v2.schema.json'],
+  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.v1.schema.json'],
+  ['dist/schema/report.schema.json', 'website/public/schemas/report.v3.schema.json'],
   ['dist/manifest/capabilities.json', 'website/public/capabilities.json'],
   ['dist/manifest/cli.json', 'website/public/manifest/cli.json'],
 ];

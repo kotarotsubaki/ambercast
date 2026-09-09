@@ -1,10 +1,11 @@
 import type { LandingCopy } from './en-landing.ts';
 import { npmVersion } from '../data/site-meta.ts';
+import { siteDescriptions } from '../data/site-descriptions.mjs';
 
 export const jaLanding = {
   hero: {
     eyebrow: 'CAST ONCE · REPLAY · 0 AI CALLS',
-    title: 'プロンプトネイティブな E2E テスト。',
+    title: siteDescriptions.ja,
     summary: '一度鋳込み、意図をそのまま保つ。テストを Markdown プロンプトとして書き、プランを一度だけ生成し、決定的にリプレイする。キャッシュが命中する限り AI 呼び出しは 0 回。',
     primaryCta: 'はじめる',
     installCommand: 'npm install -D ambercast',

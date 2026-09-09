@@ -35,7 +35,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 
 ## 構造上の境界 {#structural-boundary}
 
-Plan、Grounding、config の各 JSON Schema は、個別の手書き定義として保守されるのではなく、Zod から導出されています。
+Plan、Grounding、config、report の各 JSON Schema は、個別の手書き定義として保守されるのではなく、Zod から導出されています。
 
 Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、JSON Schema 2020-12 では項目間・プロパティ間の制約を表現できないため、Zod のみによる意味論的リファインメントとなっています。
 

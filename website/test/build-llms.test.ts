@@ -181,6 +181,14 @@ describe('renderLlmsTxt', () => {
   it('renders the empty-input edge case with exactly one trailing newline', () => {
     expect(renderLlmsTxt([], 'Description')).toBe('# ambercast\n\n> Description\n');
   });
+
+  it('omits an undefined description without a suffix or undefined text', () => {
+    const rendered = renderLlmsTxt([page({ description: undefined })], 'Description');
+
+    expect(rendered).toBe('# ambercast\n\n> Description\n\n## REFERENCE\n- [Configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/)\n');
+    expect(rendered).not.toContain('): ');
+    expect(rendered).not.toContain('undefined');
+  });
 });
 
 describe('renderLlmsFullTxt', () => {
@@ -228,6 +236,14 @@ describe('renderLlmsPlannedTxt', () => {
 
   it('renders no planned records surviving filtering as exactly one newline', () => {
     expect(renderLlmsPlannedTxt([page()])).toBe('\n');
+  });
+
+  it('omits an undefined description without a suffix or undefined text', () => {
+    const rendered = renderLlmsPlannedTxt([page({ description: undefined, status: 'planned' })]);
+
+    expect(rendered).toBe('- [Configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/)\n');
+    expect(rendered).not.toContain('): ');
+    expect(rendered).not.toContain('undefined');
   });
 });
 

@@ -1242,7 +1242,7 @@ For specifications defining the underlying structure of these documents, see [Pl
 
 ## Structural boundary {#structural-boundary}
 
-Plan, Grounding, and config JSON Schemas are derived from Zod rather than maintained as separate handwritten definitions.
+Plan, Grounding, config, and report JSON Schemas are derived from Zod rather than maintained as separate handwritten definitions.
 
 Duplicate Plan step IDs and `SourceSpan.endLine >= startLine` are Zod-only semantic refinements because JSON Schema 2020-12 cannot express those cross-item/cross-property constraints.
 
@@ -1278,7 +1278,7 @@ Plan version 1 is regenerated or reported stale rather than migrated in place. F
 | Replay-relevant Plan content | `planDigest` recorded by Grounding | Regenerate or replace Grounding; `generatorMeta` alone does not enter `planDigest`. |
 | Accepted element fingerprint algorithm or preimage | Existing element-grounding entries | In `run`, an unusable source is a cache miss when it is absent, invalid JSON, stale provenance, or fails strict parsing without a coverage claim. Once a current-provenance source makes a coverage claim, its structural or canonical failure is an integrity failure and does not fall back. In `check`, grounding inspection classifies JSON/schema failure and a claimed non-canonical source as `invalid` and a stale `planDigest` as `stale`; the public report status is derived per repository policy in [Freshness and digests](/ambercast/spec/freshness/#freshness-consequences). |
 | Report schema version or field contract | Structured-output consumers and persisted run reports | Consumer migration and report-regeneration obligations are not yet confirmed (not defined by 0.2.0 code); the implementation only pins the emitted envelope version. |
-| Plan, Grounding, or config Zod schema | Published npm schema artifacts | Run the package build so the four JSON Schemas are regenerated from their Zod sources. |
+| Plan, Grounding, config, or report Zod schema | Published npm schema artifacts | Run the package build so the four JSON Schemas are regenerated from their Zod sources. |
 
 The `inputsDigest` hashes exactly the five declared inputs—the normalized prompt, the Plan schema version, the generator-template fingerprint, the producer-bundle fingerprint, and named target definitions—through canonical JSON and SHA-256.
 
@@ -2459,7 +2459,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/conformance/
 
 ## Structural validation {#structural-validation}
 
-Ambercast's publication pipeline MUST derive Plan, Grounding, and configuration JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema. [src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) The build tool serializes the following projections and package exports expose their generated files. [src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
+Ambercast's publication pipeline MUST derive Plan, Grounding, configuration, and report JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema. [src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) [src/report/schema.ts:788](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L788) The build tool serializes the following projections and package exports expose their generated files. [src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
 
 | Zod projection | JSON Schema getter | generated file | package export |
 | --- | --- | --- | --- |
@@ -2468,7 +2468,7 @@ Ambercast's publication pipeline MUST derive Plan, Grounding, and configuration 
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-The Plan and Grounding getters derive their values from `PlanDocument` and `GroundingDocument`; the configuration getter derives its value from `RawConfig`. [src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) An external consumer conforms when it validates the published structural and semantic contract; it need not use Zod or reproduce Ambercast's publication pipeline.
+The Plan and Grounding getters derive their values from `PlanDocument` and `GroundingDocument`; the configuration getter derives its value from `RawConfig`; the report getter derives its value from `ReportEnvelope`. [src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) [src/report/json-schema.ts:23-29](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/json-schema.ts#L23-L29) An external consumer conforms when it validates the published structural and semantic contract; it need not use Zod or reproduce Ambercast's publication pipeline.
 
 ## Semantic validation {#semantic-validation}
 

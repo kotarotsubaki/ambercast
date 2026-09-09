@@ -33,7 +33,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 
 ## 结构约束边界 {#structural-boundary}
 
-- Plan、Grounding 以及 config 的 JSON Schema 均派生自 Zod，而非作为独立的手写定义进行维护。
+- Plan、Grounding、config 以及 report 的 JSON Schema 均派生自 Zod，而非作为独立的手写定义进行维护。
 - 重复的 Plan 步骤 ID 以及 `SourceSpan.endLine >= startLine` 属于仅在 Zod 中生效的语义细化约束，因为 JSON Schema 2020-12 无法表达这些跨项或跨属性约束。
 - 仅验证生成的 Plan JSON Schema 并不能确立重复步骤 ID 的唯一性或 `SourceSpan` 的行号顺序约束；[符合性](/ambercast/zh-cn/spec/conformance/) 记录了这一组合约束边界。
 

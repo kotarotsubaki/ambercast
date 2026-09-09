@@ -59,7 +59,7 @@
 - [Freshness and digests](https://kotarotsubaki.github.io/ambercast/spec/freshness/): `inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`.
 - [Canonical JSON](https://kotarotsubaki.github.io/ambercast/spec/canonical-json/): Digest inputs MUST use compact RFC 8785-compatible JSON encoded as UTF-8, with no inter-token whitespace.
 - [Secrets in plans](https://kotarotsubaki.github.io/ambercast/spec/secrets/): Plans MUST represent secret values only with Value types `SecretRef`; the contiguous `{{secrets.
-- [Conformance](https://kotarotsubaki.github.io/ambercast/spec/conformance/): Ambercast's publication pipeline MUST derive Plan, Grounding, and configuration JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema.
+- [Conformance](https://kotarotsubaki.github.io/ambercast/spec/conformance/): Ambercast's publication pipeline MUST derive Plan, Grounding, configuration, and report JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema.
 - [Specification changelog](https://kotarotsubaki.github.io/ambercast/spec/changelog/): Artifact version acceptance MUST follow Ambercast Plan Specification, not release-number intuition.
 
 ## EXPLANATION

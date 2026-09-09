@@ -59,7 +59,7 @@
 - [新鲜度与摘要](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/): `inputsDigest` 必须（MUST）是对新构建对象的规范 JSON（canonical JSON）计算得出的小写 SHA-256，该对象精确包含以下五个成员：`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint` 和 `targetDefinitions`。
 - [规范 JSON](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/canonical-json/): 摘要输入必须（MUST）使用以 UTF-8 编码且不含标记间空白的紧凑 RFC 8785 兼容 JSON。
 - [计划中的机密](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/secrets/): 计划必须（MUST）仅使用 值类型 `SecretRef` 来表示机密值；连续的 `{{secrets.
-- [符合性](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/conformance/): Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding 和配置 JSON Schema，而不是维护手写的并行模式。
+- [符合性](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/conformance/): Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding、配置和 report 的 JSON Schema，而不是维护手写的并行模式。
 - [规范变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/): 工件版本的接受必须（MUST）遵循 Ambercast 计划规范，而非凭借发布版本号的直觉。
 
 ## EXPLANATION

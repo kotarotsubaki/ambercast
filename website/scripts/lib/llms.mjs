@@ -40,7 +40,7 @@ export function renderLlmsTxt(pages, siteDescription) {
       if (page.subgroupLabel !== null) lines.push('', `### ${page.subgroupLabel}`);
       currentSubgroup = page.subgroupLabel;
     }
-    lines.push(`- [${page.title}](${page.url}): ${page.description}`);
+    lines.push(`- [${page.title}](${page.url})${page.description === undefined ? '' : `: ${page.description}`}`);
   }
 
   return `${lines.join('\n')}\n`;
@@ -73,7 +73,7 @@ export function renderLlmsFullTxt(pages) {
 export function renderLlmsPlannedTxt(pages) {
   return `${pages
     .filter((page) => page.status === 'planned')
-    .map((page) => `- [${page.title}](${page.url}): ${page.description}`)
+    .map((page) => `- [${page.title}](${page.url})${page.description === undefined ? '' : `: ${page.description}`}`)
     .join('\n')}\n`;
 }
 

@@ -37,7 +37,7 @@ For specifications defining the underlying structure of these documents, see [Pl
 
 ## Structural boundary {#structural-boundary}
 
-Plan, Grounding, and config JSON Schemas are derived from Zod rather than maintained as separate handwritten definitions.
+Plan, Grounding, config, and report JSON Schemas are derived from Zod rather than maintained as separate handwritten definitions.
 
 Duplicate Plan step IDs and `SourceSpan.endLine >= startLine` are Zod-only semantic refinements because JSON Schema 2020-12 cannot express those cross-item/cross-property constraints.
 

@@ -1254,7 +1254,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 
 ## 構造上の境界 {#structural-boundary}
 
-Plan、Grounding、config の各 JSON Schema は、個別の手書き定義として保守されるのではなく、Zod から導出されています。
+Plan、Grounding、config、report の各 JSON Schema は、個別の手書き定義として保守されるのではなく、Zod から導出されています。
 
 Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、JSON Schema 2020-12 では項目間・プロパティ間の制約を表現できないため、Zod のみによる意味論的リファインメントとなっています。
 
@@ -1296,7 +1296,7 @@ ambercast が生成する Plan や Grounding などのアーティファクト�
 | リプレイに関連する Plan の内容 | Grounding に記録された `planDigest` | Grounding を再生成または置換します。`generatorMeta` のみの変更は `planDigest` に含まれません。 |
 | 受け入れ対象の要素フィンガープリントアルゴリズムまたはプリイメージ | 既存の要素グラウンディングエントリ | `run` では、利用不能なソースは、存在しない場合、無効な JSON の場合、stale な provenance の場合、またはカバレッジの主張がないまま厳密なパースに失敗した場合はキャッシュミスとして扱われます。現行の provenance を持つソースが一度カバレッジを主張した場合、その構造的または正規化の失敗は整合性エラー（integrity failure）となり、フォールバックは行われません。`check` では、グラウンディングの検査において JSON やスキーマの不備、および主張された非正規ソースは `invalid` として分類され、古い `planDigest` は `stale` として分類されます。公開レポートのステータスは [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences) のリポジトリポリシーに従って導出されます。 |
 | レポートのスキーマバージョンまたはフィールド規約 | 構造化出力のコンシューマおよび永続化された実行レポート | （未確認）コンシューマの移行およびレポート再生成の義務は 0.2.0 のコードでは定義されていません。実装では出力されるエンベロープのバージョンのみが固定されています。 |
-| Plan、Grounding、または設定の Zod スキーマ | 公開された npm スキーマアーティファクト | パッケージのビルドを実行し、それぞれの Zod ソースから 4 つの JSON Schema を再生成します。 |
+| Plan、Grounding、設定、または report の Zod スキーマ | 公開された npm スキーマアーティファクト | パッケージのビルドを実行し、それぞれの Zod ソースから 4 つの JSON Schema を再生成します。 |
 
 `inputsDigest` は、正規化されたプロンプト、Plan スキーマバージョン、ジェネレータテンプレートのフィンガープリント、プロデューサバンドルのフィンガープリント（`producerBundleFingerprint`）、および名前付きターゲット定義という 5 つの入力値のみを対象に、正規 JSON（canonical JSON）および SHA-256 を介して厳密にハッシュ値を算出します。
 
@@ -2488,7 +2488,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/
 
 ## 構造検証 {#structural-validation}
 
-Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、および構成の JSON Schema を導出しなければならない（MUST）。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) ビルドツールは以下のプロジェクションをシリアライズし、パッケージエクスポートがそれらの生成ファイルを公開する。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
+Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、構成、および report の JSON Schema を導出しなければならない（MUST）。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) [src/report/schema.ts:788](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L788) ビルドツールは以下のプロジェクションをシリアライズし、パッケージエクスポートがそれらの生成ファイルを公開する。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
 
 | Zod プロジェクション | JSON Schema ゲッター | 生成ファイル | パッケージエクスポート |
 | --- | --- | --- | --- |
@@ -2497,7 +2497,7 @@ Ambercast の公開パイプラインは、手書きの並行スキーマを維�
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-Plan および Grounding のゲッターはそれらの値を `PlanDocument` および `GroundingDocument` から導出し、構成のゲッターはその値を `RawConfig` から導出する。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) 外部のコンシューマは、公開された構造的および意味的規約を検証するときに適合し、Zod を使用したり Ambercast の公開パイプラインを再現したりする必要はない。
+Plan および Grounding のゲッターはそれらの値を `PlanDocument` および `GroundingDocument` から導出し、構成のゲッターはその値を `RawConfig` から導出し、report のゲッターはその値を `ReportEnvelope` から導出する。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) [src/report/json-schema.ts:23-29](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/json-schema.ts#L23-L29) 外部のコンシューマは、公開された構造的および意味的規約を検証するときに適合し、Zod を使用したり Ambercast の公開パイプラインを再現したりする必要はない。
 
 ## 意味検証 {#semantic-validation}
 

@@ -1,11 +1,11 @@
 ---
 title: "適合性"
-description: "Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、および構成の JSON Schema を導出しなければならない（MUST）。"
+description: "Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、構成、および report の JSON Schema を導出しなければならない（MUST）。"
 ---
 
 ## 構造検証 {#structural-validation}
 
-Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、および構成の JSON Schema を導出しなければならない（MUST）。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) ビルドツールは以下のプロジェクションをシリアライズし、パッケージエクスポートがそれらの生成ファイルを公開する。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
+Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、構成、および report の JSON Schema を導出しなければならない（MUST）。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) [src/report/schema.ts:788](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L788) ビルドツールは以下のプロジェクションをシリアライズし、パッケージエクスポートがそれらの生成ファイルを公開する。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
 
 | Zod プロジェクション | JSON Schema ゲッター | 生成ファイル | パッケージエクスポート |
 | --- | --- | --- | --- |
@@ -14,7 +14,7 @@ Ambercast の公開パイプラインは、手書きの並行スキーマを維�
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-Plan および Grounding のゲッターはそれらの値を `PlanDocument` および `GroundingDocument` から導出し、構成のゲッターはその値を `RawConfig` から導出する。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) 外部のコンシューマは、公開された構造的および意味的規約を検証するときに適合し、Zod を使用したり Ambercast の公開パイプラインを再現したりする必要はない。
+Plan および Grounding のゲッターはそれらの値を `PlanDocument` および `GroundingDocument` から導出し、構成のゲッターはその値を `RawConfig` から導出し、report のゲッターはその値を `ReportEnvelope` から導出する。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) [src/report/json-schema.ts:23-29](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/json-schema.ts#L23-L29) 外部のコンシューマは、公開された構造的および意味的規約を検証するときに適合し、Zod を使用したり Ambercast の公開パイプラインを再現したりする必要はない。
 
 ## 意味検証 {#semantic-validation}
 

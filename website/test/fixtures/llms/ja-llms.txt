@@ -59,7 +59,7 @@
 - [鮮度とダイジェスト](https://kotarotsubaki.github.io/ambercast/ja/spec/freshness/): `inputsDigest` は、正確にこれら5つのメンバー（`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint`、および `targetDefinitions`）を持つ新規に構築されたオブジェクトの正規JSONに対する、小文字のSHA-256でなければならない（MUST）。
 - [正準 JSON](https://kotarotsubaki.github.io/ambercast/ja/spec/canonical-json/): ダイジェスト入力は、トークン間の空白を含まず、UTF-8 でエンコードされたコンパクトな RFC 8785 互換 JSON を使用しなければならない（MUST）。
 - [プランにおけるシークレット](https://kotarotsubaki.github.io/ambercast/ja/spec/secrets/): プランはシークレット値を 値型 `SecretRef` のみによって表現しなければならず（MUST）、連続する `{{secrets.
-- [適合性](https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/): Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、および構成の JSON Schema を導出しなければならない（MUST）。
+- [適合性](https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/): Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、構成、および report の JSON Schema を導出しなければならない（MUST）。
 - [仕様変更履歴](https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/): アーティファクトのバージョン受け入れは、リリース番号の直感ではなく、Ambercast Plan 仕様 に従わなければならない（MUST）。
 
 ## EXPLANATION

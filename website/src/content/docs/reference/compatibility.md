@@ -24,7 +24,7 @@ Plan version 1 is regenerated or reported stale rather than migrated in place. F
 | Replay-relevant Plan content | `planDigest` recorded by Grounding | Regenerate or replace Grounding; `generatorMeta` alone does not enter `planDigest`. |
 | Accepted element fingerprint algorithm or preimage | Existing element-grounding entries | In `run`, an unusable source is a cache miss when it is absent, invalid JSON, stale provenance, or fails strict parsing without a coverage claim. Once a current-provenance source makes a coverage claim, its structural or canonical failure is an integrity failure and does not fall back. In `check`, grounding inspection classifies JSON/schema failure and a claimed non-canonical source as `invalid` and a stale `planDigest` as `stale`; the public report status is derived per repository policy in [Freshness and digests](/ambercast/spec/freshness/#freshness-consequences). |
 | Report schema version or field contract | Structured-output consumers and persisted run reports | Consumer migration and report-regeneration obligations are not yet confirmed (not defined by 0.2.0 code); the implementation only pins the emitted envelope version. |
-| Plan, Grounding, or config Zod schema | Published npm schema artifacts | Run the package build so the three JSON Schemas are regenerated from their Zod sources. |
+| Plan, Grounding, config, or report Zod schema | Published npm schema artifacts | Run the package build so the four JSON Schemas are regenerated from their Zod sources. |
 
 The `inputsDigest` hashes exactly the five declared inputs—the normalized prompt, the Plan schema version, the generator-template fingerprint, the producer-bundle fingerprint, and named target definitions—through canonical JSON and SHA-256.
 

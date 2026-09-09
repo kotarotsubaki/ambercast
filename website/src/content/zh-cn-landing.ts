@@ -1,10 +1,11 @@
 import type { LandingCopy } from './en-landing.ts';
 import { npmVersion } from '../data/site-meta.ts';
+import { siteDescriptions } from '../data/site-descriptions.mjs';
 
 export const zhCnLanding = {
   hero: {
     eyebrow: 'CAST ONCE · REPLAY · 0 AI CALLS',
-    title: '提示词原生的 E2E 测试。',
+    title: siteDescriptions['zh-cn'],
     summary: '铸造一次，意图完整保留。用 Markdown 提示词编写测试，只生成一次执行计划，然后确定性地回放：只要缓存命中，AI 调用为 0。',
     primaryCta: '快速开始',
     installCommand: 'npm install -D ambercast',

@@ -81,9 +81,9 @@ async function hasBuildDirectory(distRoot) {
 async function preflightPublications(distRoot, publicRoot) {
   const publications = [
     ['schema/config.schema.json', 'schemas/config.schema.json'],
-    ['schema/plan.schema.json', 'schemas/plan.schema.json'],
-    ['schema/grounding.schema.json', 'schemas/grounding.schema.json'],
-    ['schema/report.schema.json', 'schemas/report.schema.json'],
+    ['schema/plan.schema.json', 'schemas/plan.v2.schema.json'],
+    ['schema/grounding.schema.json', 'schemas/grounding.v1.schema.json'],
+    ['schema/report.schema.json', 'schemas/report.v3.schema.json'],
     ['manifest/capabilities.json', 'capabilities.json'],
     ['manifest/cli.json', 'manifest/cli.json'],
   ].map(([source, destination]) => ({ source: join(distRoot, source), destination: join(publicRoot, destination) }));

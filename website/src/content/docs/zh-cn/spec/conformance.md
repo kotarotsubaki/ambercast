@@ -1,19 +1,20 @@
 ---
 title: "符合性"
-description: "Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding 和配置 JSON Schema，而不是维护手写的并行模式。"
+description: "Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding、配置和 report 的 JSON Schema，而不是维护手写的并行模式。"
 ---
 
 ## 结构验证 {#structural-validation}
 
-Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding 和配置 JSON Schema，而不是维护手写的并行模式。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) 构建工具对以下投影进行序列化，且包导出公开其生成的文件。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
+Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding、配置和 report 的 JSON Schema，而不是维护手写的并行模式。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) [src/report/schema.ts:788](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L788) 构建工具对以下投影进行序列化，且包导出公开其生成的文件。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
 
 | Zod 投影 | JSON Schema 获取器 | 生成的文件 | 包导出 |
 | --- | --- | --- | --- |
 | `PlanDocument` | `getPlanJsonSchema()` | `plan.schema.json` | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `GroundingDocument` | `getGroundingJsonSchema()` | `grounding.schema.json` | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
+| `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其值；配置获取器从 `RawConfig` 派生其值。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) 外部使用者只要验证已发布的结构与语义契约即符合规范；它不需要使用 Zod 或重现 Ambercast 的发布流水线。
+Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其值；配置获取器从 `RawConfig` 派生其值；report 获取器从 `ReportEnvelope` 派生其值。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) [src/report/json-schema.ts:23-29](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/json-schema.ts#L23-L29) 外部使用者只要验证已发布的结构与语义契约即符合规范；它不需要使用 Zod 或重现 Ambercast 的发布流水线。
 
 ## 语义验证 {#semantic-validation}
 

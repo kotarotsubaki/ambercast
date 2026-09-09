@@ -46,7 +46,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 
 | 不変トークン | 規範的定義 | 所有者 | 混同しやすい概念 |
 | --- | --- | --- | --- |
-| `$id` | `$id` はJSON Schemaの識別子用として予約されていますが、生成される0.3.1のスキーマでは設定されていません。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata) | 設定の `$schema` |
+| `$id` | `$id` は、生成される各スキーマに公開される JSON Schema の識別子です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata) | 設定の `$schema` |
 | `$schema` | `$schema` は設定ファイルが存在する場合の必須識別子フィールドであり、生成されるスキーマにおけるDraft宣言です。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#key-table) | `$id` |
 | `**` | `**` はパス区切り文字をまたぐ検出用ワイルドカードです。 | マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language) | 1セグメントの `*` |
 | `--` | `--` はオプション解析を終了し、後続のトークンをリテラルパスとして扱います。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--` で始まるファイル名 |

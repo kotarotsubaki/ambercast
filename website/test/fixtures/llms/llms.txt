@@ -1,0 +1,79 @@
+# ambercast
+
+> Prompt-native end-to-end testing.
+
+## START HERE
+- [Introduction](https://kotarotsubaki.github.io/ambercast/introduction/): Understand ambercast's prompt-driven workflow, generating deterministic test plans and grounding artifacts that replay with 0 AI calls and repair deliberate UI drift.
+- [Philosophy](https://kotarotsubaki.github.io/ambercast/philosophy/): Explains the durable rationale and architectural principles behind ambercast.
+
+## TUTORIALS
+- [Your first test in 5 minutes](https://kotarotsubaki.github.io/ambercast/tutorials/quick-start/): Guide your first generated test from prompt creation through generation, replay, and review.
+- [Reading your first plan and grounding](https://kotarotsubaki.github.io/ambercast/tutorials/review-your-first-plan/): Learn how to locate generated plan and grounding files and check their freshness.
+- [Healing a test after a UI change](https://kotarotsubaki.github.io/ambercast/tutorials/repair-your-first-drift/): Repair an existing ambercast test on a disposable practice application after a locator-affecting UI change by configuring idempotent replay isolation.
+- [Running ambercast in GitHub Actions](https://kotarotsubaki.github.io/ambercast/tutorials/github-actions/): Set up a portable GitHub Actions workflow to run ambercast with check and run commands.
+
+## HOW-TO GUIDES
+- [Write effective prompts](https://kotarotsubaki.github.io/ambercast/how-to/write-effective-prompts/): Author focused test prompts with clear outcomes and verify plan generation with a dry run.
+- [Manage secrets](https://kotarotsubaki.github.io/ambercast/how-to/manage-secrets/): Follow the safe authoring path to declare secrets in prompts and resolve them from environment variables.
+- [Configure targets](https://kotarotsubaki.github.io/ambercast/how-to/configure-targets/): Configure targets, replay isolation, and secret sink origins in ambercast.
+- [Choose an AI provider](https://kotarotsubaki.github.io/ambercast/how-to/choose-ai-provider/): Configure ambercast to use Claude, Codex, or automatic provider resolution for test generation.
+- [Select which tests run](https://kotarotsubaki.github.io/ambercast/how-to/select-tests/): Selection recipes to choose which test prompts run.
+- [Control grounding write-back](https://kotarotsubaki.github.io/ambercast/how-to/control-grounding-writeback/): Configure how Ambercast writes back changed grounding caches locally and in CI.
+- [Review generated diffs](https://kotarotsubaki.github.io/ambercast/how-to/review-generated-diffs/): Follow a practical review order to inspect generated diffs across prompts and their companion files.
+- [Manage artifacts in git](https://kotarotsubaki.github.io/ambercast/how-to/manage-artifacts-in-git/): Configure git tracking and ignore rules for ambercast plan, grounding, and run artifacts.
+- [Run on other CI platforms](https://kotarotsubaki.github.io/ambercast/how-to/run-on-other-ci/): Portable CI recipes for GitLab and generic runners.
+- [Recover stale artifacts](https://kotarotsubaki.github.io/ambercast/how-to/recover-stale-artifacts/): Resolve stale, missing, or orphaned artifacts based on their check status.
+- [Upgrade between versions](https://kotarotsubaki.github.io/ambercast/how-to/upgrade/): Release-safety procedure for upgrading ambercast and regenerating stale plans.
+- [Troubleshoot common failures](https://kotarotsubaki.github.io/ambercast/how-to/troubleshoot/): Look up troubleshooting actions by observed symptoms to resolve ambercast failures.
+- [Contribute](https://kotarotsubaki.github.io/ambercast/how-to/contribute/): Repository contribution recipe for submitting changes and reporting vulnerabilities.
+
+## REFERENCE
+- [Configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/): Configuration keys and resolution rules for ambercast.
+- [Prompt file format](https://kotarotsubaki.github.io/ambercast/reference/prompt-format/): Exact file identity, normalization rules, secret grant extraction, and secret reference syntax for ambercast test prompts.
+- [Discovery patterns](https://kotarotsubaki.github.io/ambercast/reference/discovery-patterns/): Configured test file discovery matching rules, pattern grammar, and ordering.
+- [Reports](https://kotarotsubaki.github.io/ambercast/reference/reports/): Reference for ambercast structured report schemas, envelope properties, command result shapes, and error structures.
+- [Error codes](https://kotarotsubaki.github.io/ambercast/reference/error-codes/): Reference vocabulary of stable error codes, execution scopes, and exit codes for ambercast.
+- [Exit codes](https://kotarotsubaki.github.io/ambercast/reference/exit-codes/): Process exit codes and aggregation priority for machine-facing status in ambercast.
+- [Environment variables](https://kotarotsubaki.github.io/ambercast/reference/environment-variables/): Exhaustive reference of environment variables read by Ambercast and the filtering boundary for AI-provider child processes.
+- [File layout](https://kotarotsubaki.github.io/ambercast/reference/file-layout/): Reference for Ambercast path arithmetic, artifact producers, timing, and implementation-backed repository policies.
+- [JSON Schemas](https://kotarotsubaki.github.io/ambercast/reference/json-schemas/): Publication contract and inventory of generated JSON Schemas for Ambercast configuration, plan, grounding, and report artifacts.
+- [Compatibility](https://kotarotsubaki.github.io/ambercast/reference/compatibility/): Artifact-format compatibility across package versions and provenance-driven regeneration rules for plans, groundings, and reports.
+- [Changelog](https://kotarotsubaki.github.io/ambercast/reference/changelog/): User-visible product behavior and public-contract changes across ambercast releases, with breaking changes listed first.
+- [Security policy](https://kotarotsubaki.github.io/ambercast/reference/security-policy/): Supported versions and vulnerability reporting procedures for ambercast.
+- [Glossary](https://kotarotsubaki.github.io/ambercast/reference/glossary/): Normative site-wide terminology and index of literal translation-invariant tokens for Ambercast.
+
+### CLI
+- [CLI overview](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/): Reference for parser-wide CLI behavior, command-flag dispatch, and discovery defaults in ambercast.
+- [ambercast generate](https://kotarotsubaki.github.io/ambercast/reference/cli/generate/): Reference for ambercast generate flags, provider executor resolution, companion file artifacts, and exit statuses.
+- [ambercast run](https://kotarotsubaki.github.io/ambercast/reference/cli/run/): Reference for the ambercast run command, covering CLI flags, replay paths, AI provider fallback, cache-only execution, grounding write-back, and report persistence.
+- [ambercast check](https://kotarotsubaki.github.io/ambercast/reference/cli/check/): Inspect the freshness and validity of Ambercast test plans and grounding artifacts from the CLI.
+- [ambercast heal](https://kotarotsubaki.github.io/ambercast/reference/cli/heal/): Command-line reference for ambercast heal, defining flags, repair execution boundaries, authorization, and side effects.
+
+## PLAN SPECIFICATION
+- [Ambercast Plan Specification](https://kotarotsubaki.github.io/ambercast/spec/overview/): This specification describes the artifacts accepted by ambercast 0.3.1.
+- [Plan document](https://kotarotsubaki.github.io/ambercast/spec/plan-document/): `PlanDocument` is a strict object.
+- [Steps](https://kotarotsubaki.github.io/ambercast/spec/steps/): Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId`.
+- [Value types](https://kotarotsubaki.github.io/ambercast/spec/value-types/): All other chapters MUST use these definitions rather than restating their shapes.
+- [Grounding document](https://kotarotsubaki.github.io/ambercast/spec/grounding-document/): `GroundingDocument` is a strict object bound to exactly one Plan digest.
+- [Element fingerprint](https://kotarotsubaki.github.io/ambercast/spec/fingerprint/): `Fingerprint.
+- [Freshness and digests](https://kotarotsubaki.github.io/ambercast/spec/freshness/): `inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`.
+- [Canonical JSON](https://kotarotsubaki.github.io/ambercast/spec/canonical-json/): Digest inputs MUST use compact RFC 8785-compatible JSON encoded as UTF-8, with no inter-token whitespace.
+- [Secrets in plans](https://kotarotsubaki.github.io/ambercast/spec/secrets/): Plans MUST represent secret values only with Value types `SecretRef`; the contiguous `{{secrets.
+- [Conformance](https://kotarotsubaki.github.io/ambercast/spec/conformance/): Ambercast's publication pipeline MUST derive Plan, Grounding, configuration, and report JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema.
+- [Specification changelog](https://kotarotsubaki.github.io/ambercast/spec/changelog/): Artifact version acceptance MUST follow Ambercast Plan Specification, not release-number intuition.
+
+## EXPLANATION
+- [Plan lifecycle and freshness](https://kotarotsubaki.github.io/ambercast/explanation/plan-lifecycle/): Understand artifact provenance, plan freshness decisions, and grounding companion bindings when evaluating whether an artifact can be replayed.
+- [Replay and grounding](https://kotarotsubaki.github.io/ambercast/explanation/replay-and-grounding/): Explain replay paths and their safety boundary.
+- [Healing model](https://kotarotsubaki.github.io/ambercast/explanation/healing-model/): Understand bounded escalation and human control in ambercast's self-healing workflow.
+- [Trust and security](https://kotarotsubaki.github.io/ambercast/explanation/trust-and-security/): Trust boundaries and fail-closed architectural choices across plan validation, page observations, evidence collection, and secret handling.
+- [Determinism in CI](https://kotarotsubaki.github.io/ambercast/explanation/determinism-in-ci/): Explains the trust boundaries and structural isolation governing Ambercast execution in CI environments.
+- [How ambercast compares](https://kotarotsubaki.github.io/ambercast/explanation/comparison/): A comparison of ambercast's design model with code generation, record-and-replay frameworks, and direct-driving agents.
+- [Status and roadmap](https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/): Track the implemented command boundary of ambercast 0.3.1, planned capabilities, and the pre-1.0 version policy.
+
+## FOR AI AGENTS
+- [Using ambercast from an AI agent](https://kotarotsubaki.github.io/ambercast/agents/overview/): Operational reading order and bounded execution loop for AI agents using ambercast.
+- [Operating contract](https://kotarotsubaki.github.io/ambercast/agents/operating-contract/): Action boundaries, command preconditions, prohibitions, and next safe actions for invoking ambercast commands.
+- [Setup prompt](https://kotarotsubaki.github.io/ambercast/agents/setup-prompt/): Complete copy-pasteable operating prompt providing a thin, review-first boundary for an agent working on a requested test.
+- [Reading structured output](https://kotarotsubaki.github.io/ambercast/agents/reading-structured-output/): Branch on the report envelope, inspect reportPersistence and errors, and evaluate command-specific result statuses in ambercast.
+- [Machine-readable resources](https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/): Published machine-readable documentation artifacts and their availability rules for AI agents.

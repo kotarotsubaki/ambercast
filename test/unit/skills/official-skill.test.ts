@@ -105,6 +105,29 @@ function extractFlagTokens(text: string): string[] {
   return text.match(/(?<![\w-])--[a-z][a-z-]*(?![\w-])/g) ?? [];
 }
 
+/**
+ * Removes package.json's version line so SPEC-2's hash pins only the bytes a
+ * release should change deliberately (files, bin, the absence of agents, and
+ * every other package.json field) rather than the version bump every release
+ * PR performs by design. The hash removes the entire matched line — not just
+ * the version's own quoted characters — so future edits (a longer
+ * pre-release identifier, say) do not shift the pinned byte length in a way
+ * that would otherwise look like a metadata-relevant change. The regex assumes
+ * package.json's current 2-space-indented, LF-terminated
+ * formatting and throws when it finds anything other than exactly one match,
+ * so a future reformat (or a stray second "version"-shaped line) fails the
+ * test loudly instead of silently hashing bytes SPEC-2 no longer intends.
+ */
+function stripVersionField(bytes: Buffer): Buffer {
+  const text = bytes.toString('utf8');
+  const versionLine = /^ {2}"version": "[^"]*",\n/m;
+  const matches = text.match(new RegExp(versionLine.source, 'gm'));
+  if (matches?.length !== 1) {
+    throw new Error(`expected exactly one package.json version line, found ${matches?.length ?? 0}`);
+  }
+  return Buffer.from(text.replace(versionLine, ''), 'utf8');
+}
+
 describe('official ambercast skill', () => {
   it('SPEC-1 keeps the skill last in verify-pack required files', () => {
     const verifyPack = readFileSync(new URL('../../../scripts/verify-pack.mjs', import.meta.url), 'utf8');
@@ -181,7 +204,20 @@ describe('official ambercast skill', () => {
     const pkg = JSON.parse(packageBytes.toString('utf8'));
 
     expect(pkg.files).toStrictEqual(['bin', 'dist', 'skills']);
-    expect(createHash('sha256').update(packageBytes).digest('hex')).toBe('06990114b613f02b039dd3f083ed4b6bebe771295cc49a74b3b3091b90eb7c12');
+    expect(createHash('sha256').update(stripVersionField(packageBytes)).digest('hex')).toBe('47dd466d90d01066e79433719d3a2d378479ac91fcf0f5fc39abfc56fe605dc5');
+  });
+
+  it('SPEC-2 keeps the publication-metadata pin independent of the released version', () => {
+    const packageBytes = readFileSync(new URL('../../../package.json', import.meta.url));
+    const pinnedHash = createHash('sha256').update(stripVersionField(packageBytes)).digest('hex');
+
+    const mutatedBytes = Buffer.from(
+      packageBytes.toString('utf8').replace(/"version": "[^"]*"/, '"version": "999.999.999-regression-probe"'),
+      'utf8',
+    );
+    const mutatedHash = createHash('sha256').update(stripVersionField(mutatedBytes)).digest('hex');
+
+    expect(mutatedHash).toBe(pinnedHash);
   });
 
   it('SPEC-3 keeps the skill directory intentionally small', () => {

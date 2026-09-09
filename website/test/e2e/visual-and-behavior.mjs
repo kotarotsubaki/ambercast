@@ -1454,12 +1454,12 @@ async function assertIssue295DocumentationContracts(browser) {
       await page.goto(pageUrl('/ja/reference/cli/run/'), { waitUntil: 'networkidle' });
       let tocPermalinks;
       if (viewport.width < 800) {
-        const tocToggle = page.locator('starlight-toc button, .mobile-starlight-toc button').first();
+        const tocToggle = page.locator('mobile-starlight-toc summary').first();
         await tocToggle.waitFor({ state: 'visible' });
         await tocToggle.click();
-        const mobileTocPermalinks = page.locator('starlight-toc a[href^="#"], .mobile-starlight-toc a[href^="#"]').first();
+        const mobileTocPermalinks = page.locator('mobile-starlight-toc a[href^="#"]').first();
         await mobileTocPermalinks.waitFor({ state: 'visible' });
-        tocPermalinks = await page.locator('starlight-toc a[href^="#"], .mobile-starlight-toc a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
+        tocPermalinks = await page.locator('mobile-starlight-toc a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
       } else {
         tocPermalinks = await page.locator('.right-sidebar-container a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
       }
@@ -1467,7 +1467,7 @@ async function assertIssue295DocumentationContracts(browser) {
       assert.deepEqual(ids, RUN_H2_IDS, `${viewport.width}px run page must preserve the specified h2 ids.`);
       const headingPermalinks = await page.locator('.sl-heading-wrapper.level-h2 a[href^="#"]').evaluateAll((anchors) => [...new Set(anchors.map((anchor) => anchor.getAttribute('href')?.slice(1)).filter(Boolean))]);
       assert.deepEqual(headingPermalinks, RUN_H2_IDS, `${viewport.width}px heading permalinks must match the specified ids.`);
-      assert.deepEqual(tocPermalinks, RUN_H2_IDS, `${viewport.width}px TOC permalinks must match the specified ids.`);
+      assert.deepEqual(tocPermalinks, ['_top', ...RUN_H2_IDS], `${viewport.width}px TOC permalinks must match the specified ids.`);
     } finally {
       await context.close();
     }

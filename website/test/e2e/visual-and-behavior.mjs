@@ -18,6 +18,9 @@ let origin = `http://${HOST}:${port}`;
 const BASE_PATH = '/ambercast/';
 const STARTUP_TIMEOUT_MS = 15_000;
 const INTERACTION_TIMEOUT_MS = 8_000;
+const CLOCK_EPOCH = new Date('2026-01-01T00:00:00Z');
+const CLOCK_PAUSE_OFFSET_MS = 5_000;
+const CLOCK_GUARD_REAL_WAIT_MS = 50;
 const TYPING_TIMEOUT_MS = 2_000;
 const KEYBOARD_ACTIVATION_KEYS = ['Enter', 'Space'];
 const LIVE_REGION_ROLES = ['alert', 'log', 'marquee', 'status', 'timer'];
@@ -525,12 +528,34 @@ async function assertLightThemeFlat(browser) {
   }
 }
 
+/**
+ * Installing a Playwright page clock fakes the page's timer APIs but does not
+ * stop those timers from advancing with real time; pausing the clock is a
+ * separate state transition. The helper uses a fixed epoch so rendering
+ * derived from Date remains deterministic across runs, and gives pauseAt() a
+ * target ahead of the installed time because it needs a future point before
+ * it can leave the clock paused.
+ *
+ * The helper verifies that the paused state survives a real-time wait from
+ * outside the page. This guard makes a regression to an unpaused clock fail
+ * at the helper itself, instead of letting a downstream boundary assertion
+ * pass or fail by luck based on the runner's speed.
+ */
+async function installPausedClock(page) {
+  await page.clock.install({ time: CLOCK_EPOCH });
+  await page.clock.pauseAt(new Date(CLOCK_EPOCH.getTime() + CLOCK_PAUSE_OFFSET_MS));
+  const before = await page.evaluate(() => Date.now());
+  await new Promise((resolve) => setTimeout(resolve, CLOCK_GUARD_REAL_WAIT_MS));
+  const after = await page.evaluate(() => Date.now());
+  assert.equal(after, before, 'page.clock must stay paused across a real-time wait.');
+}
+
 async function assertGenerationFrameTiming(browser) {
   const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
   const page = await context.newPage();
   try {
     await page.goto(pageUrl('/'), { waitUntil: 'networkidle' });
-    await page.clock.install();
+    await installPausedClock(page);
     const { generate, status } = demoControls(page);
     await generate.click();
     const lines = page.locator('#demo-plan-panel .demo-plan-line');
@@ -652,7 +677,7 @@ async function captureBoundaryAndPhaseScreenshots(browser) {
   }
   const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
   try {
-    await page.goto(pageUrl('/'), { waitUntil: 'networkidle' }); await waitForFonts(page); await page.clock.install();
+    await page.goto(pageUrl('/'), { waitUntil: 'networkidle' }); await waitForFonts(page); await installPausedClock(page);
     const { generate, run, status, demo } = demoControls(page);
     const captures = [['gen', generate, /generate/i, 'plan', 0], ['cast', null, /cast/i, 'plan', 2500], ['run', run, /replay/i, 'browser', 0], ['done', null, /exit 0/i, 'browser', 2500]];
     for (const [name, action, text, lit, advance] of captures) {
@@ -968,7 +993,7 @@ async function assertResetCancelsGeneration(browser) {
   const { context, page, generate, reset, counter, status } = await openDemoPage(browser);
 
   try {
-    await page.clock.install();
+    await installPausedClock(page);
     const foreignRequests = watchForeignRequests(context);
     const statusNode = await status.elementHandle();
     assert.ok(statusNode, '#demo-status must render a DOM node.');
@@ -990,7 +1015,7 @@ async function assertResetCancelsRun(browser) {
   const { context, page, generate, run, reset, counter, status } = await openDemoPage(browser);
 
   try {
-    await page.clock.install();
+    await installPausedClock(page);
     const foreignRequests = watchForeignRequests(context);
     const statusNode = await status.elementHandle();
     assert.ok(statusNode, '#demo-status must render a DOM node.');

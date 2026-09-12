@@ -137,11 +137,26 @@ describe('buildRunReport', () => {
         code,
         caseId: 'login.test.md',
         message: error.message,
+        ...(_errorKind === 'browser-launch-failed' ? { hint: 'Install Chromium by running `npx playwright install chromium`, then retry.' } : {}),
         ...(_errorKind === 'unexpected-crash' ? { details: { cause: { name: 'Error' } } } : {}),
       }]);
       expect(output.envelope.reportPersistence).toBe('not-attempted');
     },
   );
+
+  it('projects a case browser-launch engine into report details', () => {
+    const error = new BrowserLaunchFailedError('browser did not launch', {
+      reason: 'executable-missing', engine: 'chromium',
+    });
+    const outcome = { ...caseOutcome('error', 'login.test.md', error), engine: 'chromium' as const };
+    const output = report({ outcome: { noTestsFound: false, results: [outcome], listed: [] } });
+
+    expect(output.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', caseId: 'login.test.md',
+      message: 'browser did not launch', hint: 'Install Chromium by running `npx playwright install chromium`, then retry.',
+      details: { reason: 'executable-missing', engine: 'chromium' },
+    }]);
+  });
 
   it.each(REPORTABLE_CASE_ERROR_MAPPINGS)(
     'marks a top-level %s error as not attempted for persistence',
@@ -374,7 +389,7 @@ describe('buildRunReport v3 interruption accounting', () => {
     } } as unknown as Omit<RunReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(2);
-    expect(output.envelope.schemaVersion).toBe('3.3');
+    expect(output.envelope.schemaVersion).toBe('3.4');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 0, failed: 0, errored: 1, skipped: 1 });
     expect(output.envelope.results).toContainEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));

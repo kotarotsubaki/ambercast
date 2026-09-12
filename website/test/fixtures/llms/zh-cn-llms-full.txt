@@ -1003,7 +1003,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.3` |
+| `schemaVersion` | 字面量 `3.4` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -1088,13 +1088,14 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下七个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下八个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任一 instruction-coverage issue code、"invalid-json" 或 "schema-mismatch"; path: Array<string 或非负整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token 或 embedded-secret-reference; path: 非空白字符串; attempts?: ... }` |
 | `SECRET_GRANT_UNATTRIBUTABLE` | `{ reason: "uncovered-grant", secretRef: SecretRef, sourceSpan: { startLine: 正整数, endLine: 不小于 startLine 的正整数 }, attempts?: ... }`，或 `{ reason: citation-not-found、citation-not-unique、citation-missing-ref、citation-unresolved、multiply-attributed-grant 或 stale-grant-span; secretRef: SecretRef; stepId?: StepId; attempts?: ... }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"engine-unregistered" 或 "launch-failed"; engine: 非空白字符串 }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
@@ -1110,16 +1111,16 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
 ```json
-{"schemaVersion":"3.3","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.4","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.3","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.4","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.3","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.4","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.3","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.4","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}
@@ -1157,7 +1158,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 
 使用错误（usage）与环境错误（environment）拥有相互独立的报告词汇表；每个错误代码到类别的映射关系均集中在 `REPORT_ERROR_DETAILS` 中定义。
 
-在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_GRANT_UNATTRIBUTABLE` 的 details 包含原因和安全的授权位置；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
+在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_GRANT_UNATTRIBUTABLE` 的 details 包含原因和安全的授权位置；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing`、`engine-unregistered` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
 
 ## 相关链接
 
@@ -1298,7 +1299,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 完整的 `PlanDocument`，包含来源出处（provenance）、目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.3"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.4"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
 
 - 每个 `$id` 均与其公开路径 URL 完全一致；内容完全一致（byte-identical）的 Schema 文件已发布至文档站点以及 npm 的 `schemas/` 导出。
 - 当前 Astro 配置将 `site` 设定为主机 `https://kotarotsubaki.github.io`，基路径为 `/ambercast`；上述发布 URL 均基于该主机。
@@ -1310,7 +1311,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | `plan.schema.json` | 包含 Plan `schemaVersion` 2、来源出处（provenance source）、目标（targets）与步骤（steps）的完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 包含 Grounding `schemaVersion` 1、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | 当前存在的配置文档，其 `$schema` 为必填项，其余声明的设置项均为可选项。 | Zod `RawConfig` 转换为 JSON Schema 2020-12。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | 包含 Report `schemaVersion` 3.3 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | 包含 Report `schemaVersion` 3.4 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 - 执行 `npm run build` 会先编译软件包，随后运行 `node dist/schema-gen.js`；该命令会以递归方式创建 Schema 目录，并精确写入上述四个文件。
 - 已校验的生成文件通过 `$schema` 声明了 JSON Schema draft 2020-12，并且包含发布元数据中所示的 `$id`。
@@ -1323,7 +1324,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.3 的结构化报告外层信封（envelope）及其命令专属结果。
+`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.4 的结构化报告外层信封（envelope）及其命令专属结果。
 
 ## 相关链接
 
@@ -1560,7 +1561,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生工件 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 工件 Schema 版本 |
-| `0.3.1` | `0.3.1` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.1` |
+| `0.3.1` | `0.3.1` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.4` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
 | `@ambercast-secret` | `@ambercast-secret` 用于在 CommonMark 代码范围之外开启一个完整的授权行。 | 授权提取器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization-and-grants) | 密钥引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -1915,7 +1916,7 @@ flowchart LR
 | Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
 | 指纹算法 | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.3` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| Report `schemaVersion` | `3.4` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 阅读顺序 {#reading-order}
 
@@ -2597,6 +2598,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 | report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report 消费者必须（MUST）接受当前的 `3.1` 契约（包括可选的结构化错误诊断），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.2` 契约（包括可选的 `PROMPT_PATH_INVALID` details 分支），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.3` 契约（包括可选的 AI 调用计量字段），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.4` 契约（包括可选的 `BROWSER_LAUNCH_FAILED` details 分支），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 兼容性策略 {#compatibility-policy}
 

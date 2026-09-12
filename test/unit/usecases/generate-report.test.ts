@@ -378,7 +378,7 @@ describe('buildGenerateReport v3 interruption accounting', () => {
     } } as unknown as Omit<GenerateReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.3');
+    expect(output.envelope.schemaVersion).toBe('3.4');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' })]);
     expect(output.envelope.results[1]).toEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });

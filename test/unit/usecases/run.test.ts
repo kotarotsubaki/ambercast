@@ -44,7 +44,7 @@ import type { BrowserDriver, BrowserEngine, BrowserSession, PerformableAction } 
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
 import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
-import { PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
+import { classifyBrowserLaunchFailure, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { buildRunReport } from '#usecases/run-report.js';
@@ -148,6 +148,54 @@ const GENERATE_OPTIONS: GenerateOptions = {
 const AI_TIMEOUT_MESSAGE = 'The AI provider did not respond within the configured timeout.';
 const GENERIC_ABORT_EXPLANATION = 'The browser session could not complete this case and no deterministic fallback is available.';
 const HIGH_ENTROPY_TOKEN_LITERAL = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea';
+
+describe('classifyBrowserLaunchFailure', () => {
+  const engine: BrowserEngine = 'chromium';
+
+  it.each([
+    ['detects the executable-missing needle at the start', new Error("Executable doesn't exist at /path/to/chromium"), 'executable-missing'],
+    ['detects the executable-missing needle in the middle of a message', new Error("Host system is missing dependencies.\nExecutable doesn't exist at /path"), 'executable-missing'],
+    ['rejects a case-mismatched executable-missing needle', new Error("executable doesn't exist at /path"), 'launch-failed'],
+    ['rejects alternate executable-missing wording', new Error('Executable does not exist at /path'), 'launch-failed'],
+    ['requires the trailing space in the executable-missing needle', new Error("Executable doesn't exist at"), 'launch-failed'],
+  ] as const)('%s', (_name, error, reason) => {
+    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason, engine });
+  });
+
+  it.each([
+    'Executable doesn\'t exist at /path',
+    {},
+    undefined,
+    { message: "Executable doesn't exist at /path" },
+  ])('falls back for a non-Error thrown value: %j', (error) => {
+    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+  });
+
+  it('falls back when an Error message is not a string', () => {
+    const error = Object.defineProperty(new Error('ignored'), 'message', { value: 42 });
+    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+  });
+
+  it('falls back when an Error message getter throws', () => {
+    class HostileMessageError extends Error {
+      constructor() {
+        super('ignored');
+        Object.defineProperty(this, 'message', { get() { throw new Error('hostile message getter'); } });
+      }
+    }
+    expect(classifyBrowserLaunchFailure(new HostileMessageError(), engine)).toEqual({ reason: 'launch-failed', engine });
+  });
+
+  it('falls back when the Error instanceof check throws', () => {
+    const error = new Proxy({}, { getPrototypeOf() { throw new Error('hostile prototype getter'); } });
+    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+  });
+
+  it('does not inspect a cause chain', () => {
+    const error = new Error('generic launch failure', { cause: new Error("Executable doesn't exist at /path") });
+    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+  });
+});
 const CREDENTIAL_LITERALS = [
   ['an sk prefix', 'sk-live-secret-value', 'credential-prefix-sk'],
   ['a GitHub token prefix', 'ghp_secret-value', 'credential-prefix-ghp'],
@@ -1753,6 +1801,22 @@ describe('run', () => {
     expect(sessionFactory).not.toHaveBeenCalled();
   });
 
+  it('classifies a generic browser-launch rejection and retains the resolved engine', async () => {
+    const driver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    vi.spyOn(driver, 'launch').mockRejectedValue(new Error("Executable doesn't exist at /path/to/chromium"));
+    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => driver) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'open-home', kind: 'action', action: 'navigate', url: '/' }]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'browser-launch-failed',
+      details: { reason: 'executable-missing', engine: 'chromium' },
+    });
+    expect(outcome.results[0]?.engine).toBe('chromium');
+  });
+
   it('uses the unclassified case-abort stopgap for a cold AI step in cache-only mode and closes the session', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(new Map(), { onClose: closed });
@@ -1942,6 +2006,29 @@ describe('run', () => {
     expect(outcome.results.map(({ result }) => result.status)).toEqual(['error', 'passed']);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'browser-launch-failed' });
     expect(secondClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues a sibling case after a generic browser-launch rejection with classified details', async () => {
+    const firstDriver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    vi.spyOn(firstDriver, 'launch').mockRejectedValue(new Error('generic launch failure'));
+    const secondDriver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    const drivers = [firstDriver, secondDriver];
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn<(engine: BrowserEngine) => BrowserDriver>(() => drivers.shift()!),
+      discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
+    });
+    const firstPath = await writePrompt(recordingStorage.storage, 'first.test.md');
+    const secondPath = await writePrompt(recordingStorage.storage, 'second.test.md');
+    await seedFreshArtifacts(recordingStorage.storage, firstPath, [{ id: 'open-first', kind: 'action', action: 'navigate', url: '/first' }]);
+    await seedFreshArtifacts(recordingStorage.storage, secondPath, [{ id: 'open-second', kind: 'action', action: 'navigate', url: '/second' }]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results.map(({ result }) => result.status)).toEqual(['error', 'passed']);
+    expect(outcome.results[0]).toMatchObject({
+      engine: 'chromium',
+      error: { kind: 'browser-launch-failed', details: { reason: 'launch-failed', engine: 'chromium' } },
+    });
   });
 
   it('stops scheduling later cases after caller cancellation while retaining a completed case', async () => {

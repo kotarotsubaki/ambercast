@@ -27,7 +27,7 @@ const SourceSpan = z.strictObject({
 }); // JSON Schema omits this sibling-value ordering constraint, as it does for the core schema.
 
 /** Version shared by every structured report envelope. */
-export const REPORT_SCHEMA_VERSION = '3.3' as const;
+export const REPORT_SCHEMA_VERSION = '3.4' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -172,6 +172,20 @@ export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAtt
 /** Projects an unexpected failure to a stable cause name rather than arbitrary error details. */
 export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ name: CauseName }) });
 
+/**
+ * Stable browser-launch evidence accepted by the report contract.
+ *
+ * @remarks
+ * The remediation reason uses a closed vocabulary, while externally authored
+ * reports may omit this evidence. The strict object admits only the reason
+ * and a non-whitespace informational engine, keeping future engine additions
+ * independent from the closed reason vocabulary.
+ */
+export const BrowserLaunchFailedDetails = z.strictObject({
+  reason: z.enum(['executable-missing', 'engine-unregistered', 'launch-failed']),
+  engine: NonWhitespaceString,
+});
+
 const ReportErrorMessageFields = {
   message: z.string(),
   hint: z.string().optional(),
@@ -213,7 +227,7 @@ const RunUsageReportError = z.discriminatedUnion('code', [
 ]);
 
 const RunEnvironmentReportError = z.discriminatedUnion('code', [
-  RunEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED') }),
+  RunEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED'), details: BrowserLaunchFailedDetails.optional() }),
   RunEnvironmentErrorBase.extend({ code: z.literal('AI_EXECUTOR_UNAVAILABLE'), details: AiExecutorUnavailableDetails.optional() }),
   RunEnvironmentErrorBase.extend({ code: z.literal('AI_RESPONSE_INVALID'), details: AiResponseInvalidDetails.optional() }),
   RunEnvironmentErrorBase.extend({ code: z.literal('FS_IO_ERROR') }),
@@ -233,7 +247,7 @@ const CaseUsageReportError = z.discriminatedUnion('code', [
 ]);
 
 const CaseOtherEnvironmentReportError = z.discriminatedUnion('code', [
-  CaseEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED') }),
+  CaseEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED'), details: BrowserLaunchFailedDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('AI_EXECUTOR_UNAVAILABLE'), details: AiExecutorUnavailableDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('AI_RESPONSE_INVALID'), details: AiResponseInvalidDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('UNEXPECTED_CRASH'), details: UnexpectedCrashDetails.optional() }),

@@ -40,6 +40,10 @@ function report(input: { readonly outcome?: SettledHealOutcome; readonly error?:
 }
 
 describe('buildHealReport', () => {
+  it('emits the shared 3.4 schema version', () => {
+    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.4');
+  });
+
   it('serializes a completed healed candidate without exposing internal stages or progress indices', () => {
     const output = report({ outcome: outcome() });
 

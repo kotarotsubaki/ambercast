@@ -35,7 +35,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.3' as const,
+  schemaVersion: '3.4' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -45,7 +45,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.3' as const,
+  schemaVersion: '3.4' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -56,7 +56,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.3' as const,
+  schemaVersion: '3.4' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -81,7 +81,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.3' as const,
+  schemaVersion: '3.4' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -131,7 +131,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.3', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.4', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -152,7 +152,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.3', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.4', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -1003,6 +1003,31 @@ describe('main()', () => {
       } as never, false);
 
       expect(rendered).toBe('error FS_IO_ERROR [write-plan]: write failed\n  details: partiallyWritten=["plan"]\n');
+    });
+
+    it('renders a browser-launch error with its fixed hint and ordered details', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', caseId: 'launch', message: 'browser failed',
+          hint: 'Install Chromium by running `npx playwright install chromium`, then retry.',
+          details: { engine: 'chromium', reason: 'executable-missing' },
+        }],
+      } as never, false);
+
+      expect(rendered).toBe('error BROWSER_LAUNCH_FAILED [launch]: browser failed\n  hint: Install Chromium by running `npx playwright install chromium`, then retry.\n  details: reason=executable-missing; engine=chromium\n');
+    });
+
+    it('renders a browser-launch error with its fixed hint and no details', () => {
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'run', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', message: 'browser failed',
+          hint: 'Install Chromium by running `npx playwright install chromium`, then retry.',
+        }],
+      } as never, false);
+
+      expect(rendered).toBe('error BROWSER_LAUNCH_FAILED: browser failed\n  hint: Install Chromium by running `npx playwright install chromium`, then retry.\n');
     });
 
     it('renders an empty issue collection as an exact details field', () => {

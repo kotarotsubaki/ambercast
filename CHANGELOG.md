@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/kotarotsubaki/ambercast/compare/v0.4.0...v0.4.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **generate:** retry provider responses rejected for an embedded secret reference, and document grant line placement ([#356](https://github.com/kotarotsubaki/ambercast/issues/356)) ([33cb998](https://github.com/kotarotsubaki/ambercast/commit/33cb998dd543587bad4a412e2345e6fcaf710af5))
+
 ## [0.4.0](https://github.com/kotarotsubaki/ambercast/compare/v0.3.1...v0.4.0) (2026-09-09)
 
 

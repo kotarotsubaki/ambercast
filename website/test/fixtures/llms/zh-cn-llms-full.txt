@@ -1,130 +1,200 @@
-# 介绍
+# 为什么我要做 ambercast
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/introduction/
 
-ambercast 是一个提示词原生的端到端测试工具。通过它，您可以将自然语言编写的测试提示词转换为可重放的计划与 grounding 伴生文件，并在发生预期漂移时完成受控修复。
+我是独立开发者。每次发布前，我都要做一遍点击测试：把每个功能都手动点一遍，确认没有问题。我很讨厌这件事。页面越多，花的时间越长，而且每次做的都是同一套动作。
 
-## ambercast 保留的内容 \{#what-ambercast-preserves}
+Playwright MCP 出现之后，这项工作可以交给 AI 了。我只要让 Claude Code 登录、录入数据、在统计页面核对数字，它就会打开浏览器真的去做。发布前的全功能检查，逐渐变成由 AI 完成的点击测试。
 
-为了保证测试的出处追溯性，提示词规范化仅修改前导的单个 BOM 以及 CR/CRLF 行尾换行符，其余所有内容均予以保留。
+## 传统 E2E 测试太容易坏 {#e2e-broke}
 
-对于已提交的计划与 grounding 产物，运行时以 Zod IR 模式作为权威基准，JSON Schema 则直接由此派生。
+差不多同一时期，我的开发流程几乎变成了一个 AI 循环：给出需求，AI 实现，跑测试，再修复。用 Playwright 写的传统 E2E 测试跟不上这个速度。
 
-## 生成、运行与修复循环 \{#generate-run-heal-cycle}
+AI 会随手改动 UI：按钮位置、文案、DOM 结构。每次改动都会让选择器失效，测试随之变红。修复也交给了 AI，可 E2E 的修复从来不是一次就能搞定：修好、跑一遍，又有别的地方坏了。这个循环消耗了大量时间和 token，测试反而成了实现速度的瓶颈。
 
-该工作流展示了测试从输入到重放及修复的完整生命周期：由提示词输入开始，生成伴生文件，随后在重放中执行；若检测到需要修复，则由经确认的 heal 命令完成更新。面板采用带边框容器与状态标签展示，琥珀色代表激活提供商的节点，铜绿色代表重放成功。
+与此相对，让 AI 去点击的测试却不会这样坏。AI 是靠看屏幕去找"登录按钮"的，它不在乎选择器变了没有。
 
-一个有向循环：提示词转化为计划与 grounding 伴生文件；在 grounding hit 时，运行过程无需解析提供商即可直接重放它们；若发生失败，则允许用户显式选择独立的 heal 命令；经授权的修复会更新伴生文件。
+于是我想到：如果能把 AI 驱动的点击测试变成资产，也许可以大幅压缩传统 E2E 测试的规模。
 
-- `prompt` — SIGN-IN.TEST.MD · PROMPT: 规范化后的提示词作为生成输入。
-- `generate` — GENERATE · AI WHEN NEEDED: 生成过程组合了一个惰性 AI 执行器。
-- `artifacts` — PLAN + GROUNDING: 伴生文件路径由 `.test.md` 路径派生。
-- `run` — RUN · REPLAY: 完全 grounding 的重放不需要可用的提供商。
-- `replay` — GROUNDING HIT · 0 AI CALLS: 运行仅通过其回退端口解析提供商。
-- `heal` — HEAL · APPROVAL BEFORE WRITE: 修复运行时负责确认与提交组合。
+## 但每次都让 AI 重新点击，并不是资产 {#not-an-asset}
 
-- `prompt → generate` (`ambercast generate`)
-- `generate → artifacts` (`write companions`)
-- `artifacts → run` (`ambercast run`)
-- `run → replay` (`grounding hit`)
-- `run → heal` (`repair needed`)
-- `heal → artifacts` (`authorized update`)
+真正试过之后，又出现了另一个问题。
 
-## 三个文件 \{#three-files}
+- 每次都要重新打提示词，连自己上次让它做了什么都记不清
+- 每次都要从功能探索重新开始，AI 忘记了上次学到的东西
+- 耗时又消耗 token，一旦覆盖全部功能，成本就无法忽视
+- 即使指令相同，每次执行的结果也会有出入
 
-ambercast 的文件组织以您编写的测试提示词为核心，派生出成对的结构化伴生文件，用于确定性记录执行计划与元素定位信息。
+不容易坏，却没有可重复性。成本低，却无法积累。这不是资产，只是每次都要重做一遍的劳动。
 
-一个编写的提示词分支为两个相邻的派生 JSON 伴生文件：计划与 grounding。
+## 意图留在文字里，执行留在计划里 {#intent-and-plan}
 
-- `prompt-file` — PROMPT · <name>.test.md: 仅精确以 `.test.md` 结尾的路径才具有伴生文件映射关系。
-- `plan-file` — PLAN · <name>.ambercast.plan.json: 计划文件后缀为 `.ambercast.plan.json`。
-- `grounding-file` — GROUNDING · <name>.ambercast.grounding.json: grounding 文件后缀为 `.ambercast.grounding.json`。
+在为这个工具做调研时，我看到一种说法：AI 驱动的测试存在可重现性问题。就在那时，我想到了 SQL 的执行计划。
 
-- `prompt-file → plan-file` (`generate`)
-- `prompt-file → grounding-file` (`generate`)
-- `plan-file ↔ grounding-file` (`paired derived artifacts`)
+SQL 里，你写的是"想要什么"，数据库负责生成"怎么取"的执行计划。计划会被复用，表结构变了就重新生成。没有人会手写执行计划。
 
-## AI 调用账本 \{#ai-call-ledger}
+测试也可以采用同样的结构。测试用自然语言写下"想确认什么"，AI 只读取一次，生成一份执行计划。首次执行会记录每一步与页面的对应关系，从第二次开始，只要这些记录仍然命中，就直接回放这份计划，不再调用 AI。只有当 UI 变化导致计划失效时，AI 才会去修复计划或记录，再由人来批准。
 
-该账本明确了各环节中提供商调用的发生边界：AI 提供商仅在生成阶段按需介入，完全 grounding 的重放无需调用提供商，而修复阶段则遵循显式确认机制。
+意图像琥珀一样凝固成文字，执行则可以反复从这个模具中浇铸出来。这就是 ambercast 这个名字的由来。
 
-展示了生成期间的提供商工作、完全 grounding 重放时的零提供商调用，以及修复过程中的显式确认。
+## 这是为谁而做 {#who-for}
 
-- `generate` — GENERATE · PROVIDER AS NEEDED: 生成接收一个惰性 AI 执行器解析器。
-- `replay` — REPLAY · 0 AI CALLS WHEN GROUNDED: 运行仅通过其回退端口解析提供商。
-- `heal` — HEAL · EXPLICIT REPAIR: 修复具有独立的确认与持久化组合。
+我是工程师，所以首先是为自己做的。同时，我也希望被称为 vibe coder 的这群人能看到测试的价值。越是让 AI 写代码的人，越需要一种方式去察觉 AI 弄坏了什么。如果测试是自然语言，它就能被读懂、被编写、也能被 AI 修复。
 
-- `generate → replay` (`committed companions`)
-- `replay → heal` (`repair needed`)
-- `heal → replay` (`authorized update`)
-
-## 下一步 \{#next}
-
-相关链接：
-- [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)
-- [设计哲学](/ambercast/zh-cn/philosophy/)
-- [文件布局](/ambercast/zh-cn/reference/file-layout/)
-- [ambercast generate](/ambercast/zh-cn/reference/cli/generate/)
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/)
-- [ambercast heal](/ambercast/zh-cn/reference/cli/heal/)
+[支撑这个答案的思路，将在下一篇设计哲学中说明。](/ambercast/zh-cn/philosophy/)
 
 ---
 
 # 设计哲学
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/philosophy/
 
-继 [介绍](/ambercast/zh-cn/introduction/) 之后，本页阐释 ambercast 架构与设计抉择背后的持久理念。在测试实践中，测试用例以自然语言 Markdown prompt 形式编写，使测试资产独立于具体的执行工具。正是随着 AI 技术的进步，这种自然语言资产模型才具备了工程上的可行性。
+正如上一页所说，ambercast 的出发点只有一个：把 AI 驱动的点击测试变成资产。本页按顺序说明，由这一点推导出的各项设计决策。
 
-## 测试是不受工具绑定的资产 {#tests-without-lock-in}
+## 测试必须是资产 {#tests-as-assets}
 
-在 ambercast 中，测试用例以自然语言 Markdown prompt 的形式编写。该设计期望将测试构建为独立于任何特定执行工具的长久资产。过去，端到端测试往往深度绑定特定的驱动代码或测试框架，一旦技术栈迁移便需要承担巨大的重写代价。得益于 AI 技术的长足进步，直接将自然语言作为测试资产的模型才得以在工程实践中真正成立，使业务意图与底层执行工具实现解耦。
+所谓资产，是指写完之后价值不会随时间衰减的东西。测试要成为资产，需要满足三个条件：不容易坏、可以被读懂、不被绑定在特定工具上。
 
-## prompt 为本，plan 为衍生 {#prompt-primary-plan-derived}
+传统 E2E 测试三个条件都不满足：选择器一变就坏，代码只有作者本人能读懂，换一个框架就要重写。ambercast 的每一项决策，都是为了满足这三个条件。
 
-ambercast 将 prompt 确立为单一事实来源，而生成的 plan 始终处于从属地位。这一设计类似于现代项目的包管理机制：prompt 所表达的测试意图对应于 `package.json`，而从中衍生出的、用于保障重现性的 plan 则类似于 lockfile。为了让 prompt 意图的演变清晰可见，规范化（normalization）处理刻意避免了修剪（trimming）和宽泛的清理，从而让每一次对 prompt 有意义的修改都在版本差异中一览无余。
+## prompt 为本，实现细节为末 {#intent-primary}
 
-## plan 生来即可被废弃与重建 {#scrap-and-build}
+测试中能长期保有价值的是意图，也就是"想确认什么"，而不是"点击哪个元素"这类实现细节。因此在 ambercast 中，用自然语言写成的 prompt 是唯一的事实来源，AI 生成的执行计划只是它的衍生物。
 
-在 AI Agent 驱动的代码实现循环中，前端界面的频繁变更是一项既定假定。因此，plan 从一开始就被设计为允许随时废弃与重新生成的中间产物。在此演进模式下，ambercast 允许引入破坏性的 plan 格式变更，也允许次版本发布时要求重新生成 plan。
+这种关系类似于 package.json 与锁文件：prompt 声明意图，plan 固定可重现性。人只编辑前者，后者由系统生成。
 
-例如，CHANGELOG 0.2.0 中记录了一项破坏性的生成器指纹（producer-fingerprint）变更，该变更导致 0.1.0 版本的 plan 变为 `stale`（已过期），并要求运行 `ambercast generate` 或添加 `--force` 选项重新生成。
+prompt 几乎不做任何加工，既不整理空白，也不规范措辞，为的是让对意图的任何修改都能在差异对比中清晰可见。
 
-相关链接：[在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)、[变更日志](/ambercast/zh-cn/reference/changelog/)、[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/)。
+## plan 生来可以废弃重建 {#plans-are-disposable}
 
-## 指引决策的五大痛点 {#five-pains}
+既然 plan 是衍生物，过时的 plan 就可以直接丢弃。ambercast 不把 plan 当作需要长期维护的产物：UI 一旦变化，就重新生成。plan 格式可以引入破坏性变更，需要重新生成的版本发布也被允许。
 
-ambercast 的各项设计决策，始终围绕端到端测试领域的五大顶层痛点展开：
+把需要守护的东西和可以舍弃的东西分开，才能把真正需要守护的东西，也就是 prompt 的稳定性，维护到最大程度。
 
-一是端到端测试本身脆弱易碎；二是测试代码往往晦涩难懂；三是编写与维护测试需要投入繁重的人工交互成本；四是测试资产复用性较差；五是对依靠直觉交互写代码的开发者（vibe coders）而言，端到端测试存在极高的编写难度。
+## 表面简单，内里严谨 {#simple-surface-rigorous-core}
 
-## 保注意图，降级实现细节 {#preserve-intent}
+资产必须可读。所以日常接触到的只有三样东西：自然语言 prompt、截图、执行结果。目标是让非工程师读完也能明白测试在确认什么。
 
-项目名称“ambercast”本身传达了其核心意象：如同琥珀（amber）定格形态，并浇铸（cast）持久的意图。为了在页面结构调整时保持 prompt 意图的稳定性，已解析的实现细节被抽离并隔离至独立的 grounding 缓存中。
+与此同时，可重现性、每次执行的波动、AI 调用成本这类难题，交给下层的结构化层去处理。中间生成的 plan 是人类可读的 JSON，但不需要读它也能使用。它只保证一种"想读就能读懂"的透明度，而不要求你必须去读。
 
-在代码库结构上，严格的模式边界将已提交的代码仓库产物（包括 plan 与 grounding 产物）同运行时的 AI 生成器与重放执行器隔离开来，确保核心意图不被易变的底层细节所扰乱。
+## 最需要警惕的是错误通过 {#wrong-pass}
 
-## 面向非工程师力求简明，面向工程师恪守严谨 {#simple-and-rigorous}
+把测试交给 AI 时，最危险的情况是"明明坏了却通过"的测试。人们普遍观察到，AI 擅长让测试通过，却不擅长保持测试本身的意义。让 AI 去修复失败的测试时，它可能会削弱断言的力度，只为了让测试通过。
 
-在面向非工程师用户时，ambercast 期望呈现的交互表面仅包含自然语言 prompt 以及直观的屏幕截图与测试结果。
+因此 ambercast 把断言质量放在最优先的位置，CI 中默认不进行自动修复。测试坏了就应当失败，是否修复由人来决定。修复必须显式执行，且改写要经过批准才会被应用。
 
-与此同时，工程层面的严谨性并未被妥协：测试的可重现性、AI 执行中的非确定性以及模型调用成本，全部由结构化层负责承载与控制。作为中间表示的 IR 虽然兼具良好的可读性，但它并不被设定为日常使用中的必读内容，而是在需要深入审查时提供清晰的透明度。
+## 人与 AI 都是读者 {#humans-and-agents}
 
-## 错误通过是最大的风险 {#wrong-pass}
+资产的读者不只是人类。Claude Code、Codex 这类编码代理，也会在实现、测试、修复的循环中读写测试。ambercast 把代理当作第一等用户对待，除 CLI 之外还提供官方 skill，并计划推出 MCP。
 
-在测试体系中，测试发生错误通过（wrong pass）被视为最大的风险。为了降低错误通过的风险，系统优先保障断言质量。
+不会为代理另写一份规范。同一份文档，要让人类和代理都能读懂。
 
-出于相同的审慎考量，CI 默认失败而非自动修复。在无人值守的自动化集成环境中，直接暴露故障远比通过不可预测的自动修复来掩盖潜在问题更为安全。
+## 资产留在本地 {#assets-stay-local}
 
-## 将编码 Agent 视为一等用户 {#agents-first-class}
+既然称之为资产，它就必须属于用户。在 ambercast 中，prompt 和执行计划放在用户自己的代码仓库里，由 git 管理。截图和执行记录也留在用户本地。没有任何东西是由 ambercast 托管的。
 
-ambercast 将编码 Agent 视为一等用户。为了让 Agent 能够顺畅融入自动化循环，CLI、MCP 以及官方 skill 被规划为核心的交互接口。
+执行 AI 时，使用的是用户自己已经拥有的 Claude 或 Codex 协议。ambercast 既不托管密钥，也不代付 AI 的使用费用。CLI 是开源的，完全在本地闭环运行。
 
-在技术文档与规范的规划中，AI Agent 用户群体拥有专属的阅读顺序与分支流程，而非通过复制多份冗余的规范文档来实现支持，从而在避免规范漂移的同时为 Agent 提供连贯的指引。
+未来计划提供云端版本，用于团队共享和分担繁重的计算。即便如此，资产的正本仍然在本地代码仓库中。云端只是建在其上的功能，而不是资产的存放之处。
 
-## BYOK 与本地执行 {#byok-and-local}
+## 拿不准时的判断标准 {#five-pains}
 
-ambercast 采用本地执行与 BYOK（Bring Your Own Key）模型。所有 AI 执行均依赖于您自有的 Claude 或 Codex 协议，工具自身绝不持有或保留任何凭据。
+这些原则是为了解决五个问题而选择的：脆弱的 E2E 测试、难以读懂的测试代码、手动点击测试的人力消耗、把测试变成资产的困难，以及 vibe coder 面临的测试难题。每当难以判断是否要新增某项功能时，ambercast 都会回到这五个问题上重新权衡。
 
-在自动选择 AI 提供商时，系统会优先探测 Claude，随后再探测 Codex。同时，作为在本地运行的开源 CLI，ambercast 本身定位于可完全免费运行，为开发者保留完整的掌控权与透明度。
+[下一页会说明这些原则在生成、回放、修复的循环中具体如何运作。](/ambercast/zh-cn/how-it-works/)
+
+---
+
+# 工作原理
+Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-it-works/
+
+ambercast 的运作方式可以用三个文件和 generate、run、heal 三个命令来说明。此外还有一个只读的 check，用于 CI。这里以一个测试 `login.test.md` 为例，追踪从生成到修复的全过程。
+
+## 编写测试 \{#write-a-test}
+
+测试用自然语言写在一个 Markdown 文件里。
+
+```markdown
+# Login
+
+@ambercast-secret {{secrets.password}}
+
+Go to /login.
+Fill in the email "mika@example.com" and the password {{secrets.password}}.
+Click "Sign in".
+Expect to land on the dashboard and see a "Welcome" heading.
+```
+
+prompt 可以用你自己的语言书写。密码的值不会写出来，只会放一个 `{{secrets.password}}` 引用。
+
+这里没有选择器，没有等待逻辑，也没有测试代码。写在这里的只有"想确认什么"。这个文件就是唯一的正本。
+
+## generate：AI 只生成一次执行计划 \{#generate}
+
+```bash
+ambercast generate
+```
+
+AI 读取 prompt，生成一份执行计划。浏览器此时还不会运行。此时会诞生两个衍生文件。
+
+```
+login.test.md
+login.ambercast.plan.json
+login.ambercast.grounding.json
+```
+
+plan 是一串确定性的步骤，比如"在输入框中填值""点击按钮""核对文案"；定位缓存则记录了某一步实际对应到了哪个元素。定位缓存一开始是空的，此时只有你写下的意图和 AI 生成的执行计划有内容。默认情况下，这三个文件会一并提交到代码仓库中。
+
+AI 的工作是生成执行计划，通常只需要 1 次调用。
+
+循环图：从 prompt 出发，generate 生成 plan 和空的定位缓存，run 执行 plan 并积累记录，命中时不调用 AI 直接回放，只有出现问题时 heal 才会在批准后更新 plan、定位缓存或两者。
+
+- `prompt` — login.test.md · PROMPT: 你写下的意图
+- `generate` — GENERATE · AI: AI 根据 prompt 生成 plan（通常只需一次调用）
+- `artifacts` — PLAN + GROUNDING: 随之诞生的两个衍生文件
+- `run` — RUN · 0 AI CALLS ON HIT: 记录命中时不调用 AI 直接回放
+- `heal` — HEAL · AI · APPROVE BEFORE WRITE: 只有出现问题时才修复，且需先批准
+
+- `prompt → generate` (`ambercast generate`)
+- `generate → artifacts` (`write plan + grounding`)
+- `artifacts → run` (`ambercast run`)
+- `run → heal` (`repair needed`)
+- `heal → artifacts` (`authorized update`)
+
+## run：不调用 AI 进行回放 \{#run}
+
+```bash
+ambercast run
+```
+
+首次 run 会在浏览器中执行执行计划，同时把用到元素的步骤所对应的页面元素记录进定位缓存。只有拿不准的步骤才会请 AI 确认。从第二次开始，只要定位缓存命中，就不会调用 AI。因此速度更快、没有 AI 成本，结果也不会波动。本地环境下，定位缓存的更新会自动保存；CI 中默认不保存。
+
+只有当 UI 发生细微变化、导致某一步定位缓存失效时，AI 才会对那一步提供一次辅助。如果这样仍无法修复，测试就会被报告为失败。
+
+在 CI 中，会先用 `ambercast check` 确认执行计划是否已经过期，再用 `ambercast run` 进行回放。check 是一项只读检查，既不调用 AI，也不启动浏览器；run 遇到问题也不会自作主张地去修复。
+
+## heal：先批准，再修复 \{#heal}
+
+当 UI 真的发生了变化，比如按钮文案从"Sign in"变成了"Log in"，回放就会失败。此时才会执行修复。
+
+```bash
+ambercast heal
+```
+
+AI 从失败的那一步开始生成修复方案，并给出要修改内容的摘要。是否应用由人来决定。未经批准，任何内容都不会被改写。一旦批准，plan、定位缓存或两者就会被更新，下一次 run 又会回到不调用 AI 的状态。heal 只对配置中声明为幂等的目标生效，也就是无论回放多少次状态都不会变化的目标。
+
+由于意图并没有改变，`login.test.md` 不会有一个字被改动，改变的只是衍生文件。
+
+## 小结 \{#summary}
+
+| 阶段 | 命令 | AI 调用 | 会被改写的内容 |
+| --- | --- | --- | --- |
+| 生成 | `ambercast generate` | 有 | 创建 plan 与定位缓存 |
+| 回放 | `ambercast run` | 无（定位缓存命中时） | 定位缓存（本地默认保存；命中时无变化） |
+| CI 前置检查 | `ambercast check` | 无 | 无（也不启动浏览器） |
+| 修复 | `ambercast heal` | 有（经批准后应用） | 更新 plan、定位缓存或两者 |
+
+意图一旦写下就会留存，plan 只在需要时才会重建。这就是把 AI 驱动的点击测试变成资产的机制。
+
+[接下来，用 5 分钟运行你的第一个测试。](/ambercast/zh-cn/tutorials/quick-start/)
 
 ---
 

@@ -52,7 +52,8 @@ export function renderLlmsTxt(pages, siteDescription) {
  * internal whitespace; the page separators and trailing newline are byte-stable.
  *
  * @param {Array<{ title: string, status: 'available' | 'planned', url: string, body: string }>} pages
- * Ordered page records, with introduction bodies already re-inflated when applicable.
+ * Ordered locale page records, with any page-specific inflation, such as the how-it-works cycle
+ * figure, already applied.
  * @returns {string} `llms-full.txt` content with byte-stable page separators.
  */
 export function renderLlmsFullTxt(pages) {
@@ -78,75 +79,87 @@ export function renderLlmsPlannedTxt(pages) {
 }
 
 /**
- * Replaces the introduction's three MDX figure components with accessible Markdown reconstructed
- * from locale JSON. Required imports and component tags each occur exactly once in prose regions;
- * code regions remain untouched so literal imports and JSX-like examples survive unchanged.
+ * Converts the how-it-works cycle component in an MDX page to accessible Markdown for llms
+ * artifacts.
  *
- * Each replacement retains the figure's alt text, nodes, and edges in a readable Markdown form.
- * Bidirectional edges use `↔`, preserving direction without relying on the original visual
- * component.
+ * @remarks
+ * The implementation preserves a fail-loud, locale-inference-then-round-trip-validation
+ * pattern. It inspects prose regions only, requiring
+ * exactly the two locale-correct imports—one for `CycleFigure.astro` and one for the locale JSON—
+ * and exactly one `<CycleFigure {...figure.cycle} />` tag. Imports and tags inside fenced or inline
+ * code remain untouched. After inferring the locale from the data import (defaulting to
+ * English when no localized JSON path is present), it requires both expected import statements
+ * to use the exact English `../../` depth or localized `../../../` depth and the inferred data
+ * filename. Missing, duplicated, or cross-locale forms therefore fail instead of silently
+ * producing an incomplete artifact.
  *
- * @param {string} mdxSource Introduction MDX source.
- * @param {{ cycle: { alt: string, nodes: Array<{ id: string, label: string, text: string }>, edges: Array<{ from: string, to: string, label: string, direction?: 'forward' | 'bidirectional' }> }, files: { alt: string, nodes: Array<{ id: string, label: string, text: string }>, edges: Array<{ from: string, to: string, label: string, direction?: 'forward' | 'bidirectional' }> }, ledger: { alt: string, nodes: Array<{ id: string, label: string, text: string }>, edges: Array<{ from: string, to: string, label: string, direction?: 'forward' | 'bidirectional' }> } }} introJson
- * Locale-specific figure data keyed by component name.
- * @returns {string} Markdown-only introduction source suitable for llms artifacts.
- * @throws {Error} If required imports or tags are absent or duplicated, or figure data is incomplete.
+ * The replacement contains the alt text as a paragraph, a blank line, node bullets in JSON
+ * array order, another blank line, and edge bullets in JSON array order, with no heading. Node
+ * bullets use ``- `id` — label: text`` and edge bullets use ``- `from → to` (`label`)``. No
+ * bidirectional-arrow branch is needed because the governing figure schema permits only
+ * `direction: 'forward'`; the replacement inherits the matched tag line's trailing newline.
+ *
+ * @param {string} mdxSource How-it-works MDX source containing the two locale-correct imports and
+ * one cycle component tag outside code regions.
+ * @param {{ cycle: { caption: string | null, alt: string, nodes: Array<{ id: string, label: string, text: string }>, edges: Array<{ from: string, to: string, label: string, direction: 'forward' }> } }} figureJson
+ * Locale-specific cycle data whose node and edge order is preserved.
+ * @returns {string} Markdown-only how-it-works source with the cycle expanded and all other bytes
+ * preserved apart from the matched import lines with their trailing newlines and the component
+ * tag.
+ * @throws {Error} If an expected import or the component tag is missing or duplicated, the
+ * inferred locale does not round-trip to the exact expected imports, or required cycle data is
+ * incomplete or malformed.
+ * @example
+ * ```js
+ * const markdown = inflateHowItWorks(mdxSource, figureJson);
+ * ```
  */
-export function inflateIntroduction(mdxSource, introJson) {
+export function inflateHowItWorks(mdxSource, figureJson) {
+  const regions = splitByCodeRegions(mdxSource);
+  const prose = regions.filter((region) => !region.isCode).map((region) => region.text).join('');
   const expectedImports = [
-    "import IntroCycle from '../../components/intro/IntroCycle.astro';",
-    "import IntroFiles from '../../components/intro/IntroFiles.astro';",
-    "import IntroLedger from '../../components/intro/IntroLedger.astro';",
-    "import introData from '../../data/intro/en.json';",
+    "import CycleFigure from '../../components/how-it-works/CycleFigure.astro';",
+    "import figure from '../../data/how-it-works/en.json';",
   ];
-  const locale = /intro\/(ja|zh-cn)\.json/.exec(mdxSource)?.[1];
+  const locale = /how-it-works\/(ja|zh-cn)\.json/.exec(prose)?.[1];
   if (locale) {
     const parent = '../../../';
-    expectedImports.splice(0, 4,
-      `import IntroCycle from '${parent}components/intro/IntroCycle.astro';`,
-      `import IntroFiles from '${parent}components/intro/IntroFiles.astro';`,
-      `import IntroLedger from '${parent}components/intro/IntroLedger.astro';`,
-      `import introData from '${parent}data/intro/${locale}.json';`);
+    expectedImports.splice(0, 2,
+      `import CycleFigure from '${parent}components/how-it-works/CycleFigure.astro';`,
+      `import figure from '${parent}data/how-it-works/${locale}.json';`);
   }
-  const figures = [
-    ['IntroCycle', 'cycle'],
-    ['IntroFiles', 'files'],
-    ['IntroLedger', 'ledger'],
-  ];
-  const prose = splitByCodeRegions(mdxSource).filter((region) => !region.isCode).map((region) => region.text).join('');
+  const importLines = [...prose.matchAll(/^(import (?:CycleFigure from|figure from) '[^']+';)\r?$/gm)].map((match) => match[1]);
+  if (importLines.length !== 2) throw new Error('Expected exactly one import for CycleFigure and figure data');
 
-  const importMatcher = (statement) => new RegExp(`${escapeRegExp(statement)}(?:\\r?\\n|$)`, 'g');
   for (const statement of expectedImports) {
-    const count = [...prose.matchAll(importMatcher(statement))].length;
+    const count = importLines.filter((line) => line === statement).length;
     if (count !== 1) throw new Error(`Expected exactly one import: ${statement}`);
   }
-  for (const [component] of figures) {
-    const count = [...prose.matchAll(new RegExp(`<${component}\\b[^>]*\\/>`, 'g'))].length;
-    if (count !== 1) throw new Error(`Expected exactly one ${component} tag`);
+
+  const tagMatcher = /^<CycleFigure \{\.\.\.figure\.cycle\} \/>\r?$/gm;
+  if ([...prose.matchAll(tagMatcher)].length !== 1) throw new Error('Expected exactly one CycleFigure tag');
+
+  const figure = figureJson?.cycle;
+  if (!figure || typeof figure.alt !== 'string' || !Array.isArray(figure.nodes) || !Array.isArray(figure.edges)) {
+    throw new Error('Incomplete how-it-works cycle data');
   }
+  const nodes = figure.nodes.map((node) => {
+    const { id, label, text } = node ?? {};
+    if (![id, label, text].every((value) => typeof value === 'string')) throw new Error('Invalid node in cycle');
+    return `- \`${id}\` — ${label}: ${text}`;
+  });
+  const edges = figure.edges.map((edge) => {
+    const { from, to, label } = edge ?? {};
+    if (![from, to, label].every((value) => typeof value === 'string')) throw new Error('Invalid edge in cycle');
+    return `- \`${from} → ${to}\` (\`${label}\`)`;
+  });
+  const replacement = `${figure.alt}\n\n${nodes.join('\n')}\n\n${edges.join('\n')}`;
 
-  const replacementFor = (key) => {
-    const figure = introJson?.[key];
-    if (!figure || typeof figure.alt !== 'string' || !Array.isArray(figure.nodes) || !Array.isArray(figure.edges)) {
-      throw new Error(`Incomplete introduction data for ${key}`);
-    }
-    const nodes = figure.nodes.map(({ id, label, text }) => {
-      if (![id, label, text].every((value) => typeof value === 'string')) throw new Error(`Invalid node in ${key}`);
-      return `- \`${id}\` — ${label}: ${text}`;
-    });
-    const edges = figure.edges.map(({ from, to, label, direction }) => {
-      if (![from, to, label].every((value) => typeof value === 'string')) throw new Error(`Invalid edge in ${key}`);
-      return `- \`${from} ${direction === 'bidirectional' ? '↔' : '→'} ${to}\` (\`${label}\`)`;
-    });
-    return `${figure.alt}\n\n${nodes.join('\n')}\n\n${edges.join('\n')}`;
-  };
-
-  return splitByCodeRegions(mdxSource).map((region) => {
+  return regions.map((region) => {
     if (region.isCode) return region.text;
     let output = region.text;
-    for (const statement of expectedImports) output = output.replace(importMatcher(statement), '');
-    for (const [component, key] of figures) output = output.replace(new RegExp(`<${component}\\b[^>]*\\/>`), replacementFor(key));
-    return output;
+    for (const statement of expectedImports) output = output.replace(new RegExp(`^${escapeRegExp(statement)}\\r?(?:\\n|$)`, 'gm'), '');
+    return output.replace(/^<CycleFigure \{\.\.\.figure\.cycle\} \/>\r?$/m, replacement);
   }).join('');
 }
 

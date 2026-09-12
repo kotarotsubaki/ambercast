@@ -8,7 +8,7 @@ import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
 import { main as syncSpec } from '../scripts/sync-spec.mjs';
 import {
   buildPageUrl,
-  inflateIntroduction,
+  inflateHowItWorks,
   renderLlmsFullTxt,
   renderLlmsPlannedTxt,
   renderLlmsTxt,
@@ -112,10 +112,10 @@ function sourcePath(locale: 'en' | 'ja' | 'zh-cn', slug: string) {
 function recordsFor(locale: 'en' | 'ja' | 'zh-cn') {
   return orderedPages.map((page) => {
     const parsed = parseFrontmatter(readFileSync(sourcePath(locale, page.slug), 'utf8'));
-    const body = page.slug === 'introduction'
-      ? inflateIntroduction(
+    const body = page.slug === 'how-it-works'
+      ? inflateHowItWorks(
         parsed.body,
-        JSON.parse(readFileSync(new URL(`../src/data/intro/${locale}.json`, import.meta.url), 'utf8')),
+        JSON.parse(readFileSync(new URL(`../src/data/how-it-works/${locale}.json`, import.meta.url), 'utf8')),
       )
       : parsed.body;
     return { ...page, ...parsed, body, url: buildPageUrl(locale, page.slug) };

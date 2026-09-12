@@ -1,0 +1,65 @@
+{
+  "cycle": {
+    "caption": null,
+    "alt": "循环图：从 prompt 出发，generate 生成 plan 和空的定位缓存，run 执行 plan 并积累记录，命中时不调用 AI 直接回放，只有出现问题时 heal 才会在批准后更新 plan、定位缓存或两者。",
+    "nodes": [
+      {
+        "id": "prompt",
+        "label": "login.test.md · PROMPT",
+        "text": "你写下的意图"
+      },
+      {
+        "id": "generate",
+        "label": "GENERATE · AI",
+        "text": "AI 根据 prompt 生成 plan（通常只需一次调用）"
+      },
+      {
+        "id": "artifacts",
+        "label": "PLAN + GROUNDING",
+        "text": "随之诞生的两个衍生文件"
+      },
+      {
+        "id": "run",
+        "label": "RUN · 0 AI CALLS ON HIT",
+        "text": "记录命中时不调用 AI 直接回放"
+      },
+      {
+        "id": "heal",
+        "label": "HEAL · AI · APPROVE BEFORE WRITE",
+        "text": "只有出现问题时才修复，且需先批准"
+      }
+    ],
+    "edges": [
+      {
+        "from": "prompt",
+        "to": "generate",
+        "label": "ambercast generate",
+        "direction": "forward"
+      },
+      {
+        "from": "generate",
+        "to": "artifacts",
+        "label": "write plan + grounding",
+        "direction": "forward"
+      },
+      {
+        "from": "artifacts",
+        "to": "run",
+        "label": "ambercast run",
+        "direction": "forward"
+      },
+      {
+        "from": "run",
+        "to": "heal",
+        "label": "repair needed",
+        "direction": "forward"
+      },
+      {
+        "from": "heal",
+        "to": "artifacts",
+        "label": "authorized update",
+        "direction": "forward"
+      }
+    ]
+  }
+}

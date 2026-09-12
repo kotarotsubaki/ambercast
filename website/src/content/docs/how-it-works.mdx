@@ -1,0 +1,85 @@
+---
+title: How it works
+description: Follow generate, run, and heal through three files and three commands, using login.test.md as the example.
+---
+
+import CycleFigure from '../../components/how-it-works/CycleFigure.astro';
+import figure from '../../data/how-it-works/en.json';
+
+ambercast's behavior can be explained with three files and three commands: generate, run, and heal. There is one more, a read-only check, for CI. This page follows a single test, `login.test.md`, from generation through healing.
+
+## Write a test \{#write-a-test}
+
+A test is written in natural language, in a Markdown file.
+
+```markdown
+# Login
+
+@ambercast-secret {{secrets.password}}
+
+Go to /login.
+Fill in the email "mika@example.com" and the password {{secrets.password}}.
+Click "Sign in".
+Expect to land on the dashboard and see a "Welcome" heading.
+```
+
+You can write the prompt in your own language. The password's value is never written; only the reference `{{secrets.password}}` is.
+
+There are no selectors, no waits, and no test code. All you write here is what you want to verify. This file is the single source of truth.
+
+## generate: AI builds the plan once \{#generate}
+
+```bash
+ambercast generate
+```
+
+AI reads the prompt and builds a plan. The browser does not run yet. This is where two derived files are born.
+
+```
+login.test.md
+login.ambercast.plan.json
+login.ambercast.grounding.json
+```
+
+The plan is a sequence of deterministic steps, such as filling in a field, clicking a button, or checking for text. The grounding records what element a step actually resolved to. The grounding starts out empty; only the intent you wrote and the plan AI built have content at this point. By default, all three files are committed to the repository side by side.
+
+AI's job is to build the plan, and that usually takes just one call.
+
+<CycleFigure {...figure.cycle} />
+
+## run: replay without calling AI \{#run}
+
+```bash
+ambercast run
+```
+
+The first run executes the plan in a browser while recording, in the grounding, which on-screen element each element-using step maps to. Only a step it is unsure about gets AI's confirmation. From the second time on, AI is not called as long as the grounding hits. That makes it fast, free of AI cost, and free of run-to-run variance. Locally, updated grounding is saved automatically; in CI, it is not saved by default.
+
+Only a step whose grounding drifted because of a small UI change gets a single step of AI assistance. If that still cannot fix it, the test is reported as failed.
+
+In CI, `ambercast check` first confirms the plan has not gone stale, and then `ambercast run` replays it. check is a read-only inspection that calls neither AI nor a browser, and run never fixes a break on its own.
+
+## heal: fix it only after approval \{#heal}
+
+When the UI genuinely changes, for example when a button's label changes from "Sign in" to "Log in", the replay fails. Only then does healing run.
+
+```bash
+ambercast heal
+```
+
+AI builds a fix starting from the failed step and presents a summary of what it would change. Whether to apply it is a human decision. Nothing is rewritten without approval. Once approved, the plan, the grounding, or both are updated, and the next run goes back to calling no AI. heal only runs against targets declared idempotent in the config, meaning replaying them any number of times leaves the same state.
+
+Since the intent has not changed, `login.test.md` does not change by a single character. Only the derived files change.
+
+## Summary \{#summary}
+
+| Phase | Command | AI calls | What changes |
+| --- | --- | --- | --- |
+| Generate | `ambercast generate` | Yes | Creates plan and grounding |
+| Replay | `ambercast run` | No (on a grounding hit) | Grounding (local by default; nothing on a hit) |
+| CI pre-check | `ambercast check` | No | Nothing (calls no browser either) |
+| Heal | `ambercast heal` | Yes (applied after approval) | Updates plan, grounding, or both |
+
+Intent, once written, stays put. The plan is rebuilt only when it needs to be. That is the mechanism that turns AI-driven click-through testing into an asset.
+
+[Next, get your first test running in 5 minutes.](/ambercast/tutorials/quick-start/)

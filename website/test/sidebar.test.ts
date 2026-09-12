@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getPageLocation, orderedPages, sidebar } from '../src/sidebar.mjs';
 
 const expectedSidebar = [
-  { label: 'START HERE', items: [{ slug: 'introduction' }, { slug: 'philosophy' }] },
+  { label: 'START HERE', items: [{ slug: 'introduction' }, { slug: 'philosophy' }, { slug: 'how-it-works' }] },
   { label: 'TUTORIALS', items: [{ slug: 'tutorials/quick-start' }, { slug: 'tutorials/review-your-first-plan' }, { slug: 'tutorials/repair-your-first-drift' }, { slug: 'tutorials/github-actions' }] },
   { label: 'HOW-TO GUIDES', items: [{ slug: 'how-to/write-effective-prompts' }, { slug: 'how-to/manage-secrets' }, { slug: 'how-to/configure-targets' }, { slug: 'how-to/choose-ai-provider' }, { slug: 'how-to/select-tests' }, { slug: 'how-to/control-grounding-writeback' }, { slug: 'how-to/review-generated-diffs' }, { slug: 'how-to/manage-artifacts-in-git' }, { slug: 'how-to/run-on-other-ci' }, { slug: 'how-to/recover-stale-artifacts' }, { slug: 'how-to/upgrade' }, { slug: 'how-to/troubleshoot' }, { slug: 'how-to/contribute' }] },
   { label: 'REFERENCE', items: [{ slug: 'reference/configuration' }, { slug: 'reference/prompt-format' }, { slug: 'reference/discovery-patterns' }, { slug: 'reference/reports' }, { slug: 'reference/error-codes' }, { slug: 'reference/exit-codes' }, { slug: 'reference/environment-variables' }, { slug: 'reference/file-layout' }, { slug: 'reference/json-schemas' }, { slug: 'reference/compatibility' }, { slug: 'reference/changelog' }, { slug: 'reference/security-policy' }, { slug: 'reference/glossary' }, { slug: 'reference/mcp-tools' }, { label: 'CLI', items: [{ slug: 'reference/cli/overview' }, { slug: 'reference/cli/generate' }, { slug: 'reference/cli/run' }, { slug: 'reference/cli/check' }, { slug: 'reference/cli/heal' }, { slug: 'reference/cli/init' }, { slug: 'reference/cli/view' }, { slug: 'reference/cli/review' }, { slug: 'reference/cli/mcp' }, { slug: 'reference/cli/baseline-restore' }] }] },
@@ -38,6 +38,7 @@ describe('documentation sidebar', () => {
   it('numbers pages one-based and resets for every displayed group and subgroup', () => {
     expect(getPageLocation('introduction')).toEqual({ groupLabel: 'START HERE', indexInGroup: 1 });
     expect(getPageLocation('philosophy')).toEqual({ groupLabel: 'START HERE', indexInGroup: 2 });
+    expect(getPageLocation('how-it-works')).toEqual({ groupLabel: 'START HERE', indexInGroup: 3 });
     expect(getPageLocation('reference/configuration')).toEqual({ groupLabel: 'REFERENCE', indexInGroup: 1 });
     expect(getPageLocation('reference/cli/overview')).toEqual({ groupLabel: 'REFERENCE · CLI', indexInGroup: 1 });
     expect(getPageLocation('spec/changelog')).toEqual({ groupLabel: 'PLAN SPECIFICATION', indexInGroup: 11 });

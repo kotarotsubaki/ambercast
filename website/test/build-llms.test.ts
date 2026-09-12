@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import assert from 'node:assert/strict';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -9,7 +8,7 @@ import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
 import { main as syncSpec } from '../scripts/sync-spec.mjs';
 import {
   buildPageUrl,
-  inflateIntroduction,
+  inflateHowItWorks,
   renderLlmsFullTxt,
   renderLlmsPlannedTxt,
   renderLlmsTxt,
@@ -25,9 +24,6 @@ const PLANNED_SLUGS = [
   'agents/official-skill',
   'agents/mcp-server',
 ];
-
-const introSource = readFileSync(new URL('../src/content/docs/introduction.mdx', import.meta.url), 'utf8');
-const introData = JSON.parse(readFileSync(new URL('../src/data/intro/en.json', import.meta.url), 'utf8'));
 
 const docsDirectory = new URL('../src/content/docs/', import.meta.url);
 const specDirectory = new URL('../src/content/docs/spec/', import.meta.url);
@@ -75,10 +71,10 @@ function sourcePath(locale: Locale, slug: string) {
 function recordsFor(locale: Locale) {
   return orderedPages.map((page) => {
     const parsed = parseFrontmatter(readFileSync(sourcePath(locale, page.slug), 'utf8'));
-    const body = page.slug === 'introduction'
-      ? inflateIntroduction(
+    const body = page.slug === 'how-it-works'
+      ? inflateHowItWorks(
         parsed.body,
-        JSON.parse(readFileSync(new URL(`../src/data/intro/${locale}.json`, import.meta.url), 'utf8')),
+        JSON.parse(readFileSync(new URL(`../src/data/how-it-works/${locale}.json`, import.meta.url), 'utf8')),
       )
       : parsed.body;
     return { ...page, ...parsed, body, url: buildPageUrl(locale, page.slug) };
@@ -107,9 +103,9 @@ describe('llms artifact completeness oracles', () => {
       const orderedPlannedSlugs = orderedPages.filter(({ slug }) => discoveredPlannedSlugs.includes(slug)).map(({ slug }) => slug).sort();
 
       expect(discoveredPlannedSlugs).toEqual([...PLANNED_SLUGS].sort());
-      expect(discoveredAvailableSlugs.filter((slug) => !slug.startsWith('spec/'))).toHaveLength(49);
+      expect(discoveredAvailableSlugs.filter((slug) => !slug.startsWith('spec/'))).toHaveLength(50);
       expect(discoveredAvailableSlugs.filter((slug) => slug.startsWith('spec/'))).toHaveLength(11);
-      expect(discoveredAvailableSlugs).toHaveLength(60);
+      expect(discoveredAvailableSlugs).toHaveLength(61);
       expect(orderedAvailableSlugs).toEqual(discoveredAvailableSlugs);
       expect(orderedPlannedSlugs).toEqual(discoveredPlannedSlugs);
     });
@@ -126,7 +122,7 @@ describe('cross-locale real-document integrity oracle', () => {
       const sourceUrls = [...full.matchAll(/^Source: (.+)$/gm)].map((match) => match[1]);
 
       expect(sourceUrls).toEqual(indexUrls);
-      for (const record of records.filter(({ slug }) => slug !== 'introduction')) {
+      for (const record of records.filter(({ slug }) => slug !== 'how-it-works')) {
         expect(full).toContain(`# ${record.title}\nSource: ${record.url}\n\n${record.body.trim()}`);
       }
     });
@@ -247,49 +243,155 @@ describe('renderLlmsPlannedTxt', () => {
   });
 });
 
-describe('inflateIntroduction', () => {
-  it('re-inflates real forward and bidirectional edges and removes the four imports and three figure tags', () => {
-    const inflated = inflateIntroduction(introSource, introData);
+describe('inflateHowItWorks', () => {
+  const componentImport = "import CycleFigure from '../../../components/how-it-works/CycleFigure.astro';";
+  const dataImport = "import figure from '../../../data/how-it-works/ja.json';";
+  const tag = '<CycleFigure {...figure.cycle} />';
+  const figureData = {
+    cycle: {
+      caption: null,
+      alt: 'A prompt becomes a replayable test cycle.',
+      nodes: [
+        { id: 'prompt', label: 'PROMPT', text: 'Describe the intent.' },
+        { id: 'run', label: 'RUN', text: 'Replay without AI.' },
+      ],
+      edges: [
+        { from: 'prompt', to: 'run', label: 'ambercast run', direction: 'forward' },
+        { from: 'run', to: 'prompt', label: 'repair needed', direction: 'forward' },
+      ],
+    },
+  };
+  const source = (overrides: { componentImport?: string, dataImport?: string, tag?: string } = {}) => [
+    '---',
+    'title: How it works',
+    '---',
+    overrides.componentImport ?? componentImport,
+    overrides.dataImport ?? dataImport,
+    '',
+    'Before diagram.',
+    '',
+    overrides.tag ?? tag,
+    '',
+    'After diagram.',
+    '',
+  ].join('\n');
 
-    expect(inflated).toContain(`- \`plan-file ↔ grounding-file\` (\`paired derived artifacts\`)`);
-    expect(inflated).toContain(`- \`prompt → generate\` (\`ambercast generate\`)`);
-    for (const marker of ['import IntroCycle', 'import IntroFiles', 'import IntroLedger', 'import introData', '<IntroCycle', '<IntroFiles', '<IntroLedger']) {
-      expect(inflated).not.toContain(marker);
-    }
+  it('removes the required imports from a CRLF source', () => {
+    const inflated = inflateHowItWorks(source().replace(/\n/g, '\r\n'), figureData);
+
+    expect(inflated).not.toContain(componentImport);
+    expect(inflated).not.toContain(dataImport);
   });
 
-  it('removes required imports from a CRLF introduction source', () => {
-    const inflated = inflateIntroduction(introSource.replace(/\n/g, '\r\n'), introData);
+  it('preserves import-like and tag-like text inside a fenced code region', () => {
+    const inflated = inflateHowItWorks(`${source()}\n\`\`\`mdx\n${componentImport}\n${tag}\n\`\`\`\n`, figureData);
 
-    for (const marker of ['import IntroCycle', 'import IntroFiles', 'import IntroLedger', 'import introData']) {
-      expect(inflated).not.toContain(marker);
-    }
+    expect(inflated).toContain(componentImport);
+    expect(inflated).toContain(tag);
   });
 
-  it('preserves import-like and tag-like text inside fenced and inline code regions', () => {
-    const source = `${introSource}\n\n\`<IntroCycle {...introData.cycle} />\`\n\n\`\`\`mdx\nimport IntroCycle from '../../components/intro/IntroCycle.astro';\n<IntroLedger {...introData.ledger} />\n\`\`\`\n`;
-    const inflated = inflateIntroduction(source, introData);
+  it('infers English from prose when a fenced example names Japanese data', () => {
+    const englishComponentImport = "import CycleFigure from '../../components/how-it-works/CycleFigure.astro';";
+    const englishDataImport = "import figure from '../../data/how-it-works/en.json';";
+    const japaneseDataImport = "import figure from '../../../data/how-it-works/ja.json';";
 
-    expect(inflated).toContain('`<IntroCycle {...introData.cycle} />`');
-    expect(inflated).toContain("import IntroCycle from '../../components/intro/IntroCycle.astro';");
-    expect(inflated).toContain('<IntroLedger {...introData.ledger} />');
+    const inflated = inflateHowItWorks(
+      `${source({ componentImport: englishComponentImport, dataImport: englishDataImport })}\n\`\`\`mdx\n${japaneseDataImport}\n\`\`\`\n`,
+      figureData,
+    );
+
+    expect(inflated).not.toContain(englishComponentImport);
+    expect(inflated).not.toContain(englishDataImport);
+    expect(inflated).toContain(japaneseDataImport);
   });
 
-  it('fails loudly when one required import is missing', () => {
-    expect(() => inflateIntroduction(introSource.replace("import IntroFiles from '../../components/intro/IntroFiles.astro';\n", ''), introData)).toThrow(/IntroFiles|import/i);
+  it('fails loudly when the CycleFigure component import is missing', () => {
+    expect(() => inflateHowItWorks(source({ componentImport: '' }), figureData)).toThrow(/exactly one import/i);
   });
 
-  it('fails loudly when a figure tag is duplicated', () => {
-    expect(() => inflateIntroduction(introSource.replace('<IntroLedger {...introData.ledger} />', '<IntroLedger {...introData.ledger} />\n<IntroLedger {...introData.ledger} />'), introData)).toThrow(/IntroLedger|duplicate/i);
+  it('fails loudly when the CycleFigure component import is duplicated', () => {
+    expect(() => inflateHowItWorks(source({ componentImport: `${componentImport}\n${componentImport}` }), figureData)).toThrow(/exactly one import/i);
   });
 
-  for (const figure of ['cycle', 'files', 'ledger']) {
-    for (const field of ['nodes', 'edges', 'alt']) {
-      it(`fails loudly for malformed introduction JSON missing ${figure}.${field}`, () => {
-        const malformed = { ...introData, [figure]: { ...introData[figure], [field]: undefined } };
+  it('fails loudly when the figure data import is missing', () => {
+    expect(() => inflateHowItWorks(source({ dataImport: '' }), figureData)).toThrow(/exactly one import/i);
+  });
 
-        assert.throws(() => inflateIntroduction(introSource, malformed), new RegExp(`${figure}|${field}`, 'i'));
-      });
-    }
-  }
+  it('fails loudly when the figure data import is duplicated', () => {
+    expect(() => inflateHowItWorks(source({ dataImport: `${dataImport}\n${dataImport}` }), figureData)).toThrow(/exactly one import/i);
+  });
+
+  it('fails loudly when the CycleFigure tag is missing', () => {
+    expect(() => inflateHowItWorks(source({ tag: '' }), figureData)).toThrow(/exactly one.*CycleFigure.*tag/i);
+  });
+
+  it('fails loudly when the CycleFigure tag is duplicated', () => {
+    expect(() => inflateHowItWorks(source({ tag: `${tag}\n${tag}` }), figureData)).toThrow(/exactly one.*CycleFigure.*tag/i);
+  });
+
+  it('fails loudly when the CycleFigure tag has different props', () => {
+    expect(() => inflateHowItWorks(source({ tag: '<CycleFigure wrong={true} />' }), figureData)).toThrow(/exactly one.*CycleFigure.*tag/i);
+  });
+
+  it('fails loudly when the component import has English depth in a Japanese source', () => {
+    expect(() => inflateHowItWorks(source({ componentImport: "import CycleFigure from '../../components/how-it-works/CycleFigure.astro';" }), figureData)).toThrow(/import|locale/i);
+  });
+
+  it('fails loudly when the data import has English depth in a Japanese source', () => {
+    expect(() => inflateHowItWorks(source({ dataImport: "import figure from '../../data/how-it-works/ja.json';" }), figureData)).toThrow(/import|locale/i);
+  });
+
+  it('fails loudly when a Japanese source also imports English figure data', () => {
+    expect(() => inflateHowItWorks(
+      source({ dataImport: `${dataImport}\nimport figure from '../../data/how-it-works/en.json';` }),
+      figureData,
+    )).toThrow(/exactly.*import/i);
+  });
+
+  it('fails loudly when a required import is not a complete line', () => {
+    expect(() => inflateHowItWorks(source({ componentImport: `prefix${componentImport}` }), figureData)).toThrow(/exactly.*import/i);
+  });
+
+  it('fails loudly when cycle.alt is missing', () => {
+    expect(() => inflateHowItWorks(source(), { cycle: { ...figureData.cycle, alt: undefined } })).toThrow(/cycle|alt|data/i);
+  });
+
+  it.each([undefined, {}])('fails loudly when cycle.nodes is missing or not an array', (nodes) => {
+    expect(() => inflateHowItWorks(source(), { cycle: { ...figureData.cycle, nodes } })).toThrow(/cycle|node|data/i);
+  });
+
+  it.each([undefined, {}])('fails loudly when cycle.edges is missing or not an array', (edges) => {
+    expect(() => inflateHowItWorks(source(), { cycle: { ...figureData.cycle, edges } })).toThrow(/cycle|edge|data/i);
+  });
+
+  it('fails loudly for a malformed node', () => {
+    expect(() => inflateHowItWorks(source(), { cycle: { ...figureData.cycle, nodes: [{ id: 'prompt', text: 'Describe the intent.' }] } })).toThrow(/node/i);
+  });
+
+  it('fails loudly for a malformed edge', () => {
+    expect(() => inflateHowItWorks(source(), { cycle: { ...figureData.cycle, edges: [{ from: 'prompt', to: 'run', direction: 'forward' }] } })).toThrow(/edge/i);
+  });
+
+  it('replaces the tag with the exact accessible Markdown while preserving all other source bytes', () => {
+    const inflated = inflateHowItWorks(source(), figureData);
+
+    expect(inflated).toBe([
+      '---',
+      'title: How it works',
+      '---',
+      '',
+      'Before diagram.',
+      '',
+      'A prompt becomes a replayable test cycle.',
+      '',
+      '- `prompt` — PROMPT: Describe the intent.',
+      '- `run` — RUN: Replay without AI.',
+      '',
+      '- `prompt → run` (`ambercast run`)',
+      '- `run → prompt` (`repair needed`)',
+      '',
+      'After diagram.',
+      '',
+    ].join('\n'));
+  });
 });

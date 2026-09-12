@@ -333,7 +333,7 @@ Follow this safe authoring path to declare secret references in your test prompt
 
 ## Steps {#steps}
 
-1. Put exactly `@ambercast-secret {{secrets.password}}` on its own non-code prompt line. The grant parser accepts a complete matching line and excludes fenced, indented, and inline code. One grant line authorizes exactly one use, so repeat the line once per use when the same secret is used more than once—for example, to sign in, sign out, and sign in again. Placing each grant line immediately before the instruction that describes its corresponding use is not a requirement (see the [grant origin rules](/ambercast/spec/secrets/#grant-origin)), but doing so SHOULD make that one-to-one attribution obvious to the provider and helps avoid an unresolved citation.
+1. Put exactly `@ambercast-secret {{secrets.password}}` on its own non-code prompt line. The grant parser accepts a complete matching line and excludes fenced, indented, and inline code. One grant line authorizes exactly one use, so repeat the line once per use when the same secret is used more than once—for example, to sign in, sign out, and sign in again. Placing each grant line immediately before the instruction that describes its corresponding use is not a requirement (see the [grant origin rules](/ambercast/spec/secrets/#grant-origin)), but doing so tends to make that one-to-one attribution obvious to the provider and helps avoid an unresolved citation.
 
    ```
    @ambercast-secret {{secrets.password}}

@@ -372,6 +372,15 @@ describe('inflateHowItWorks', () => {
     expect(() => inflateHowItWorks(source(), { cycle: { ...figureData.cycle, edges: [{ from: 'prompt', to: 'run', direction: 'forward' }] } })).toThrow(/edge/i);
   });
 
+  it('fails loudly for an edge with a non-forward direction', () => {
+    expect(() => inflateHowItWorks(source(), {
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], direction: 'bidirectional' }],
+      },
+    })).toThrow(/edge/i);
+  });
+
   it('replaces the tag with the exact accessible Markdown while preserving all other source bytes', () => {
     const inflated = inflateHowItWorks(source(), figureData);
 

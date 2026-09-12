@@ -529,6 +529,17 @@ describe('checkParity', () => {
     ]);
   });
 
+  it('reports only an English baseline shape violation when its figure JSON is empty', async () => {
+    const violations = await parity(tree(page('# Guide')), figureTree({}, figureData, figureData));
+
+    expect(violations).toEqual([
+      expect.objectContaining({ locale: 'en', page: 'data/how-it-works/en', rule: 'figure-json-shape' }),
+    ]);
+    expect(violations.some(({ locale, rule }) => (
+      ['ja', 'zh-cn'].includes(locale) && ['figure-json-keys', 'figure-json-nodes', 'figure-json-edges'].includes(rule)
+    ))).toBe(false);
+  });
+
   it('reports a renamed figure key', async () => {
     const ja = { renamed: figureData.cycle };
 

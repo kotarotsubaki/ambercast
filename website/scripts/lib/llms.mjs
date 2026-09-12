@@ -150,7 +150,7 @@ export function inflateHowItWorks(mdxSource, figureJson) {
   });
   const edges = figure.edges.map((edge) => {
     const { from, to, label } = edge ?? {};
-    if (![from, to, label].every((value) => typeof value === 'string')) throw new Error('Invalid edge in cycle');
+    if (![from, to, label].every((value) => typeof value === 'string') || edge.direction !== 'forward') throw new Error('Invalid edge in cycle');
     return `- \`${from} → ${to}\` (\`${label}\`)`;
   });
   const replacement = `${figure.alt}\n\n${nodes.join('\n')}\n\n${edges.join('\n')}`;

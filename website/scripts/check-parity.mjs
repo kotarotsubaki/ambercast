@@ -194,7 +194,7 @@ async function readIntroData(path) {
 /**
  * Determines whether every figure value satisfies the complete how-it-works data schema.
  *
- * The validator requires a plain top-level object while leaving its key set to
+ * The validator requires a non-empty plain top-level object while leaving its key set to
  * `figure-json-keys`. Each figure requires `caption` to be null or a string, a non-empty string
  * `alt`, node records whose `id`, `label`, and `text` are strings with unique ids, and edge records
  * whose `from`, `to`, and `label` are strings and whose direction is exactly `forward`. Every edge
@@ -206,7 +206,7 @@ async function readIntroData(path) {
  * @returns {boolean} Whether the complete file shape is safe for structural comparison.
  */
 function isIntroData(data) {
-  return isPlainObject(data) && Object.values(data).every((figure) => {
+  return isPlainObject(data) && Object.keys(data).length > 0 && Object.values(data).every((figure) => {
     if (!isPlainObject(figure) || (figure.caption !== null && typeof figure.caption !== 'string') || typeof figure.alt !== 'string' || figure.alt.length === 0 || !Array.isArray(figure.nodes) || !Array.isArray(figure.edges)) return false;
 
     const nodeIds = new Set();

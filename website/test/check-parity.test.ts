@@ -11,32 +11,30 @@ const tree = (en: string, ja = en, zh = en) => ({
   'website/src/content/docs/ja/guide.md': ja,
   'website/src/content/docs/zh-cn/guide.md': zh,
 });
-const introData = {
+const figureData = {
   cycle: {
-    nodes: [{ id: 'cycle-start' }, { id: 'cycle-end' }],
-    edges: [{ from: 'cycle-start', to: 'cycle-end', direction: 'forward' }],
-  },
-  files: {
-    nodes: [{ id: 'files-start' }, { id: 'files-end' }],
-    edges: [{ from: 'files-start', to: 'files-end', direction: 'forward' }],
-  },
-  ledger: {
-    nodes: [{ id: 'ledger-start' }, { id: 'ledger-end' }],
-    edges: [{ from: 'ledger-start', to: 'ledger-end', direction: 'forward' }],
+    caption: null,
+    alt: 'A cycle from start to end.',
+    nodes: [
+      { id: 'cycle-start', label: 'START', text: 'Start the cycle.' },
+      { id: 'cycle-end', label: 'END', text: 'End the cycle.' },
+      { id: 'cycle-note', label: 'NOTE', text: 'An unconnected note.' },
+    ],
+    edges: [{ from: 'cycle-start', to: 'cycle-end', label: 'continue', direction: 'forward' }],
   },
 };
-const introTree = (en = introData, ja = en, zh = en) => ({
-  'website/src/data/intro/en.json': `${JSON.stringify(en)}\n`,
-  'website/src/data/intro/ja.json': `${JSON.stringify(ja)}\n`,
-  'website/src/data/intro/zh-cn.json': `${JSON.stringify(zh)}\n`,
+const figureTree = (en: unknown = figureData, ja: unknown = en, zh: unknown = en): Record<string, string> => ({
+  'website/src/data/how-it-works/en.json': `${JSON.stringify(en)}\n`,
+  'website/src/data/how-it-works/ja.json': `${JSON.stringify(ja)}\n`,
+  'website/src/data/how-it-works/zh-cn.json': `${JSON.stringify(zh)}\n`,
 });
-const parity = async (files: Record<string, string>, dataFiles = introTree()) => {
+const parity = async (files: Record<string, string>, dataFiles = figureTree()) => {
   const fixture = createDocsFixture({ ...dataFiles, ...files });
   fixtures.push(fixture);
   return checkParity({
     docsRoot: `${fixture.website}/src/content/docs`,
     specRoot: `${fixture.root}/docs/spec`,
-    dataRoot: `${fixture.website}/src/data/intro`,
+    dataRoot: `${fixture.website}/src/data/how-it-works`,
   });
 };
 
@@ -150,139 +148,505 @@ describe('checkParity', () => {
     ]);
   });
 
-  it('accepts matching introduction JSON structures via dataRoot', async () => {
-    expect(await parity(tree(page('# Guide')))).toEqual([]);
-  });
-
-  it('reports a locale missing an introduction node id', async () => {
+  it('accepts matching figure JSON structures and null-or-string captions via dataRoot', async () => {
     const ja = {
-      ...introData,
-      cycle: { ...introData.cycle, nodes: [introData.cycle.nodes[0]] },
+      ...figureData,
+      cycle: { ...figureData.cycle, caption: 'A localized caption.' },
     };
 
-    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
-      expect.objectContaining({ locale: 'ja', page: 'data/intro/cycle', rule: 'intro-json-nodes' }),
-    ]);
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([]);
   });
 
-  it('reports a locale with an extra introduction node id', async () => {
-    const ja = {
-      ...introData,
+  it('accepts a single-node, single-edge figure', async () => {
+    const single = {
       cycle: {
-        ...introData.cycle,
-        nodes: [...introData.cycle.nodes, { id: 'cycle-extra' }],
+        caption: null,
+        alt: 'A self-looping cycle.',
+        nodes: [{ id: 'only', label: 'ONLY', text: 'The only node.' }],
+        edges: [{ from: 'only', to: 'only', label: 'again', direction: 'forward' }],
       },
     };
 
-    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
-      expect.objectContaining({ locale: 'ja', page: 'data/intro/cycle', rule: 'intro-json-nodes' }),
-    ]);
+    expect(await parity(tree(page('# Guide')), figureTree(single))).toEqual([]);
   });
 
-  it('reports a locale with a flipped introduction edge direction', async () => {
-    const zh = {
-      ...introData,
-      cycle: {
-        ...introData.cycle,
-        edges: [{ ...introData.cycle.edges[0], direction: 'bidirectional' }],
-      },
+  it('reports a locale missing a figure node id', async () => {
+    const ja = {
+      ...figureData,
+      cycle: { ...figureData.cycle, nodes: figureData.cycle.nodes.slice(0, 2) },
     };
 
-    expect(await parity(tree(page('# Guide')), introTree(introData, introData, zh))).toEqual([
-      expect.objectContaining({ locale: 'zh-cn', page: 'data/intro/cycle', rule: 'intro-json-edges' }),
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/cycle', rule: 'figure-json-nodes' }),
     ]);
   });
 
-  it('reports a locale with an extra introduction edge triple', async () => {
-    const zh = {
-      ...introData,
+  it('reports a locale with an extra figure node id', async () => {
+    const ja = {
+      ...figureData,
       cycle: {
-        ...introData.cycle,
-        edges: [
-          ...introData.cycle.edges,
-          { from: 'cycle-end', to: 'cycle-start', direction: 'forward' },
+        ...figureData.cycle,
+        nodes: [
+          ...figureData.cycle.nodes,
+          { id: 'cycle-extra', label: 'EXTRA', text: 'An extra node.' },
         ],
       },
     };
 
-    expect(await parity(tree(page('# Guide')), introTree(introData, introData, zh))).toEqual([
-      expect.objectContaining({ locale: 'zh-cn', page: 'data/intro/cycle', rule: 'intro-json-edges' }),
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/cycle', rule: 'figure-json-nodes' }),
     ]);
   });
 
-  it('reports a missing localized introduction JSON file', async () => {
-    const dataFiles = introTree();
-    delete dataFiles['website/src/data/intro/ja.json'];
+  it('reports a locale with an extra figure edge triple', async () => {
+    const zh = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [
+          ...figureData.cycle.edges,
+          { from: 'cycle-end', to: 'cycle-start', label: 'return', direction: 'forward' },
+        ],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, figureData, zh))).toEqual([
+      expect.objectContaining({ locale: 'zh-cn', page: 'data/how-it-works/cycle', rule: 'figure-json-edges' }),
+    ]);
+  });
+
+  it('reports an empty figure alt as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: { ...figureData.cycle, alt: '' },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-string figure alt as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: { ...figureData.cycle, alt: 42 },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-string, non-null caption as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: { ...figureData.cycle, caption: 42 },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it.each([
+    ['a missing figure caption', () => ({
+      ...figureData,
+      cycle: {
+        alt: figureData.cycle.alt,
+        nodes: figureData.cycle.nodes,
+        edges: figureData.cycle.edges,
+      },
+    })],
+    ['a missing figure alt', () => ({
+      ...figureData,
+      cycle: {
+        caption: figureData.cycle.caption,
+        nodes: figureData.cycle.nodes,
+        edges: figureData.cycle.edges,
+      },
+    })],
+    ['a node missing its id', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [{ label: 'START', text: 'Start the cycle.' }, ...figureData.cycle.nodes.slice(1)],
+      },
+    })],
+    ['a non-string node id', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [{ ...figureData.cycle.nodes[0], id: 42 }, ...figureData.cycle.nodes.slice(1)],
+      },
+    })],
+    ['a node missing its label', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [{ id: 'cycle-start', text: 'Start the cycle.' }, ...figureData.cycle.nodes.slice(1)],
+      },
+    })],
+    ['a non-string node label', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [{ ...figureData.cycle.nodes[0], label: 42 }, ...figureData.cycle.nodes.slice(1)],
+      },
+    })],
+    ['an edge missing its from endpoint', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ to: 'cycle-end', label: 'continue', direction: 'forward' }],
+      },
+    })],
+    ['a non-string edge from endpoint', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], from: 42 }],
+      },
+    })],
+    ['an edge missing its to endpoint', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ from: 'cycle-start', label: 'continue', direction: 'forward' }],
+      },
+    })],
+    ['a non-string edge to endpoint', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], to: 42 }],
+      },
+    })],
+    ['an edge missing its direction', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ from: 'cycle-start', to: 'cycle-end', label: 'continue' }],
+      },
+    })],
+    ['a non-string edge direction', () => ({
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], direction: 42 }],
+      },
+    })],
+  ])('reports %s as exactly one shape violation', async (_description, createInvalidJa) => {
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, createInvalidJa()))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-object figure value as a shape violation', async () => {
+    const ja = { cycle: null };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-object top-level value as a shape violation', async () => {
+    const ja = [figureData.cycle];
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-array nodes field as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: { ...figureData.cycle, nodes: 'not an array' },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a node missing a required field as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [
+          { id: 'cycle-start', label: 'START' },
+          ...figureData.cycle.nodes.slice(1),
+        ],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-string node field as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [
+          { ...figureData.cycle.nodes[0], text: 42 },
+          ...figureData.cycle.nodes.slice(1),
+        ],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a duplicate node id as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [...figureData.cycle.nodes, { ...figureData.cycle.nodes[0] }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-array edges field as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: { ...figureData.cycle, edges: 'not an array' },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports an edge missing a required field as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ from: 'cycle-start', to: 'cycle-end', direction: 'forward' }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-string edge field as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], label: 42 }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports an edge with a dangling from id as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], from: 'missing-node' }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports an edge with a dangling to id as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], to: 'missing-node' }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a duplicate edge triple as a shape violation', async () => {
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [...figureData.cycle.edges, { ...figureData.cycle.edges[0], label: 'duplicate' }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a non-forward direction as a shape violation', async () => {
+    const zh = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        edges: [{ ...figureData.cycle.edges[0], direction: 'bidirectional' }],
+      },
+    };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, figureData, zh))).toEqual([
+      expect.objectContaining({ locale: 'zh-cn', page: 'data/how-it-works/zh-cn', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports a missing localized figure JSON file as a read violation', async () => {
+    const dataFiles = figureTree();
+    delete dataFiles['website/src/data/how-it-works/ja.json'];
 
     expect(await parity(tree(page('# Guide')), dataFiles)).toEqual([
-      expect.objectContaining({ locale: 'ja', page: 'data/intro/ja', rule: 'intro-json-read' }),
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-read' }),
     ]);
   });
 
-  it('reports an extra or renamed introduction figure key', async () => {
+  it('reports a missing English figure JSON file as a shape violation', async () => {
+    const dataFiles = figureTree();
+    delete dataFiles['website/src/data/how-it-works/en.json'];
+
+    expect(await parity(tree(page('# Guide')), dataFiles)).toEqual([
+      expect.objectContaining({ locale: 'en', page: 'data/how-it-works/en', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('reports only an English baseline shape violation when its figure JSON is empty', async () => {
+    const violations = await parity(tree(page('# Guide')), figureTree({}, figureData, figureData));
+
+    expect(violations).toEqual([
+      expect.objectContaining({ locale: 'en', page: 'data/how-it-works/en', rule: 'figure-json-shape' }),
+    ]);
+    expect(violations.some(({ locale, rule }) => (
+      ['ja', 'zh-cn'].includes(locale) && ['figure-json-keys', 'figure-json-nodes', 'figure-json-edges'].includes(rule)
+    ))).toBe(false);
+  });
+
+  it('reports a renamed figure key', async () => {
+    const ja = { renamed: figureData.cycle };
+
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/cycle', rule: 'figure-json-keys' }),
+    ]);
+  });
+
+  it('reports a locale with an extra figure key', async () => {
     const ja = {
-      cycle: introData.cycle,
-      documents: introData.files,
-      ledger: introData.ledger,
+      ...figureData,
+      extra: figureData.cycle,
     };
 
-    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
-      expect.objectContaining({ locale: 'ja', page: 'data/intro/files', rule: 'intro-json-keys' }),
+    expect(await parity(tree(page('# Guide')), figureTree(figureData, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/extra', rule: 'figure-json-keys' }),
     ]);
   });
 
-  it('reports a locale with an extra introduction figure key', async () => {
-    const ja = {
-      ...introData,
-      extra: introData.files,
-    };
-
-    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
-      expect.objectContaining({ locale: 'ja', page: 'data/intro/extra', rule: 'intro-json-keys' }),
-    ]);
-  });
-
-  it('reports a malformed localized introduction JSON file without affecting the other locale', async () => {
-    const ja = {
-      ...introData,
-      files: { ...introData.files, edges: 'not an array' },
-    };
-
-    expect(await parity(tree(page('# Guide')), introTree(introData, ja))).toEqual([
-      expect.objectContaining({ locale: 'ja', page: 'data/intro/ja', rule: 'intro-json-shape' }),
-    ]);
-  });
-
-  it('reports an unparsable localized introduction JSON file as one shape violation', async () => {
+  it('reports an unparsable localized figure JSON file as one shape violation', async () => {
     const dataFiles = {
-      ...introTree(),
-      'website/src/data/intro/ja.json': '{"cycle":',
+      ...figureTree(),
+      'website/src/data/how-it-works/ja.json': '{"cycle":',
     };
 
     expect(await parity(tree(page('# Guide')), dataFiles)).toEqual([
-      expect.objectContaining({ locale: 'ja', page: 'data/intro/ja', rule: 'intro-json-shape' }),
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/ja', rule: 'figure-json-shape' }),
     ]);
   });
 
-  it('reports only an English baseline shape violation when its introduction JSON is malformed', async () => {
+  it('skips set comparisons when only the English baseline shape is invalid', async () => {
     const en = {
-      ...introData,
-      ledger: null,
+      ...figureData,
+      cycle: { ...figureData.cycle, alt: '' },
+    };
+    const ja = {
+      ...figureData,
+      cycle: {
+        ...figureData.cycle,
+        nodes: [
+          ...figureData.cycle.nodes,
+          { id: 'cycle-extra', label: 'EXTRA', text: 'An extra node.' },
+        ],
+        edges: [
+          ...figureData.cycle.edges,
+          { from: 'cycle-end', to: 'cycle-start', label: 'return', direction: 'forward' },
+        ],
+      },
+      extra: figureData.cycle,
     };
 
-    expect(await parity(tree(page('# Guide')), introTree(en, introData, introData))).toEqual([
-      expect.objectContaining({ locale: 'en', page: 'data/intro/en', rule: 'intro-json-shape' }),
+    const violations = await parity(tree(page('# Guide')), figureTree(en, ja));
+    expect(violations).toEqual([
+      expect.objectContaining({ locale: 'en', page: 'data/how-it-works/en', rule: 'figure-json-shape' }),
     ]);
+    expect(violations.some(({ locale, rule }) => (
+      locale === 'ja' && ['figure-json-keys', 'figure-json-nodes', 'figure-json-edges'].includes(rule)
+    ))).toBe(false);
   });
 
-  it('reports only an English baseline shape violation when its introduction JSON is unparsable', async () => {
+  it('reports only an English baseline shape violation when its figure JSON is unparsable', async () => {
     const dataFiles = {
-      ...introTree(),
-      'website/src/data/intro/en.json': '{"cycle":',
+      ...figureTree(),
+      'website/src/data/how-it-works/en.json': '{"cycle":',
     };
 
     expect(await parity(tree(page('# Guide')), dataFiles)).toEqual([
-      expect.objectContaining({ locale: 'en', page: 'data/intro/en', rule: 'intro-json-shape' }),
+      expect.objectContaining({ locale: 'en', page: 'data/how-it-works/en', rule: 'figure-json-shape' }),
+    ]);
+  });
+
+  it('distinguishes node-id sets that collide under newline joining', async () => {
+    const collisionFigure = (ids: string[]) => ({
+      cycle: {
+        caption: null,
+        alt: 'Two nodes with delimiter-bearing ids.',
+        nodes: ids.map((id) => ({ id, label: 'NODE', text: 'A node.' })),
+        edges: [],
+      },
+    });
+    const en = collisionFigure(['a\nb', 'c']);
+    const ja = collisionFigure(['a', 'b\nc']);
+
+    expect(await parity(tree(page('# Guide')), figureTree(en, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/cycle', rule: 'figure-json-nodes' }),
+    ]);
+  });
+
+  it('distinguishes edge triples that collide under delimiter joining', async () => {
+    const collisionFigure = (edge: { from: string; to: string }) => ({
+      cycle: {
+        caption: null,
+        alt: 'Two edges with delimiter-bearing endpoints.',
+        nodes: [
+          { id: 'a|b', label: 'FIRST', text: 'The first endpoint.' },
+          { id: 'c', label: 'SECOND', text: 'The second endpoint.' },
+          { id: 'a', label: 'THIRD', text: 'The third endpoint.' },
+          { id: 'b|c', label: 'FOURTH', text: 'The fourth endpoint.' },
+        ],
+        edges: [{ ...edge, label: 'continue', direction: 'forward' }],
+      },
+    });
+    const en = collisionFigure({ from: 'a|b', to: 'c' });
+    const ja = collisionFigure({ from: 'a', to: 'b|c' });
+
+    expect(await parity(tree(page('# Guide')), figureTree(en, ja))).toEqual([
+      expect.objectContaining({ locale: 'ja', page: 'data/how-it-works/cycle', rule: 'figure-json-edges' }),
     ]);
   });
 });
@@ -292,7 +656,7 @@ describe('check-parity CLI entry point', () => {
     const matchingPage = page('## Same {#same}\n\n```txt\nshared\n```\n\n| Code | Meaning |\n| --- | --- |\n| `E_ONE` | one |');
     const matchingSpec = '## Same {#same}\n\n```txt\nshared\n```\n\n| A | B |\n| --- | --- |\n| one | two |\n';
     const fixture = createDocsFixture({
-      ...introTree(),
+      ...figureTree(),
       ...tree(matchingPage),
       'docs/spec/overview.md': matchingSpec,
       'website/src/content/docs/ja/spec/overview.md': matchingSpec,
@@ -309,7 +673,7 @@ describe('check-parity CLI entry point', () => {
 
   it('prints every violation, exits non-zero, and does not modify its failing input tree', () => {
     const fixture = createDocsFixture({
-      ...introTree(),
+      ...figureTree(),
       ...tree(page('## First {#first}'), page('## Second {#second}')),
       'website/src/content/docs/zh-cn/extra.md': page('# Extra'),
     });

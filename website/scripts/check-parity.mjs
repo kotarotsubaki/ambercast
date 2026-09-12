@@ -10,13 +10,14 @@ import { splitByCodeRegions } from './lib/wikilinks.mjs';
  * setup-prompt URL-only carve-out); `status` and sidebar badges; reference-table identifiers
  * (inline-code content only, except for two anchor-scoped identifier tables that use their full
  * first cell); and the specification chapters'
- * anchors, code blocks, and table-row counts, plus introduction-figure JSON structure. A
- * violation is `{ locale, page, rule, expected, actual }`, sorted by rule, page, then locale
- * before output so runs are deterministic.
+ * anchors, code blocks, and table-row counts, plus how-it-works figure JSON structure. A violation
+ * is `{ locale, page, rule, expected, actual }`, sorted by rule, page, then locale before
+ * output so runs are deterministic.
  *
  * One checker owns these related invariants because they require the same page, anchor, fence,
  * and table extraction primitives; separate checkers would duplicate boundary-sensitive parsing.
- * A read or parse failure never changes the documentation tree.
+ * The how-it-works figure JSON checks validate each locale before comparing its structure,
+ * and a read or parse failure never changes the documentation tree.
  *
  * @typedef {{ locale: string, page: string, rule: string, expected: string, actual: string }} Violation
  */
@@ -24,38 +25,41 @@ import { splitByCodeRegions } from './lib/wikilinks.mjs';
 /**
  * Collects every structural parity violation without formatting it for a terminal.
  *
- * The comparison reads the locale trees and introduction-figure JSON selected by `options` and
- * returns violations sorted by rule, page, then locale. Intro JSON violations use `intro-json-shape` and
- * `intro-json-read` with `data/intro/<locale>` pages, and `intro-json-keys`,
- * `intro-json-nodes`, and `intro-json-edges` with `data/intro/<figureKey>` pages. A malformed
- * English baseline produces one `intro-json-shape` violation for `data/intro/en`, rather than
- * one per locale, and ends intro JSON comparison for both localized files because neither locale
- * has a valid baseline.
+ * The comparison reads the locale trees and how-it-works figure JSON selected by `options`
+ * and returns violations sorted by rule, page, then locale. Figure JSON violations use
+ * `figure-json-shape` and `figure-json-read` with `data/how-it-works/<locale>` pages, and
+ * `figure-json-keys`, `figure-json-nodes`, and `figure-json-edges` with
+ * `data/how-it-works/<figureKey>` pages. Any number of schema defects in one file collapses to
+ * one `figure-json-shape` violation for that locale. A malformed or missing English baseline
+ * produces that single shape violation for `data/how-it-works/en`, rather than one per locale, and
+ * ends figure comparison because neither localized file has a valid baseline.
  *
  * @example
  * const violations = await checkParity({ docsRoot, specRoot, dataRoot });
  *
  * @remarks
  * Keeping this boundary separate lets callers assert the stable structured result while the CLI
- * remains responsible only for presentation and its non-zero status. Missing localized intro JSON
- * is an `intro-json-read` violation, while a missing English baseline is an `intro-json-shape`
- * violation. Any other I/O failure while reading documentation or intro JSON rejects instead of
- * becoming a violation.
+ * remains responsible only for presentation and its non-zero status. Missing localized figure
+ * JSON is a `figure-json-read` violation, while a missing English baseline is a
+ * `figure-json-shape` violation. Cross-locale key, node-id, and edge-triple rules run only
+ * after the English baseline and the compared locale independently pass shape validation. Any
+ * other I/O failure while reading documentation or figure JSON rejects instead of becoming a
+ * violation.
  *
  * @param {object} [options] Input locations and comparison options for the documentation trees.
  * @param {string} [options.docsRoot=resolve(process.cwd(), 'src/content/docs')] Root directory
  * for the English and localized documentation trees.
  * @param {string} [options.specRoot=resolve(process.cwd(), '../docs/spec')] Root directory for
  * the English specification tree.
- * @param {string} [options.dataRoot=resolve(process.cwd(), 'src/data/intro')] Root directory for
- * the English and localized introduction-figure JSON files.
- * @returns {Promise<Violation[]>} Every documentation and introduction-JSON violation in
+ * @param {string} [options.dataRoot] Root directory for the English and localized how-it-works
+ * figure JSON files. The default resolves to `src/data/how-it-works`.
+ * @returns {Promise<Violation[]>} Every documentation and figure-JSON violation in
  * deterministic order.
  */
 export async function checkParity(options = {}) {
   const docsRoot = options.docsRoot ?? resolve(process.cwd(), 'src/content/docs');
   const specRoot = options.specRoot ?? resolve(process.cwd(), '../docs/spec');
-  const dataRoot = options.dataRoot ?? resolve(process.cwd(), 'src/data/intro');
+  const dataRoot = options.dataRoot ?? resolve(process.cwd(), 'src/data/how-it-works');
   const rootPages = await readPages(docsRoot, (page) => !page.startsWith('ja/') && !page.startsWith('zh-cn/') && !page.startsWith('spec/'));
   const violations = [];
 
@@ -96,16 +100,16 @@ export async function checkParity(options = {}) {
   // supplies the single baseline, so no localized comparison is meaningful without it.
   const englishIntro = await readIntroData(join(dataRoot, 'en.json'));
   if (englishIntro.status !== 'valid') {
-    introViolation(violations, 'en', 'intro-json-shape', 'valid', 'invalid');
+    introViolation(violations, 'en', 'figure-json-shape', 'valid', 'invalid');
   } else {
     for (const locale of ['ja', 'zh-cn']) {
       const localizedIntro = await readIntroData(join(dataRoot, `${locale}.json`));
       if (localizedIntro.status === 'missing') {
-        introViolation(violations, locale, 'intro-json-read', 'present', 'absent');
+        introViolation(violations, locale, 'figure-json-read', 'present', 'absent');
         continue;
       }
       if (localizedIntro.status !== 'valid') {
-        introViolation(violations, locale, 'intro-json-shape', 'valid', 'invalid');
+        introViolation(violations, locale, 'figure-json-shape', 'valid', 'invalid');
         continue;
       }
       compareIntroData(violations, locale, englishIntro.data, localizedIntro.data);
@@ -156,6 +160,20 @@ function compare(violations, locale, page, rule, expected, actual) {
   if (expectedText !== actualText) violations.push({ locale, page, rule, expected: expectedText, actual: actualText });
 }
 
+/**
+ * Reads and validates one locale's how-it-works figure file without leaking parser detail into the
+ * parity result.
+ *
+ * A missing file remains distinguishable from invalid JSON or an invalid figure shape so the
+ * caller can preserve the asymmetric baseline contract: missing localized data becomes
+ * `figure-json-read`, while a missing English baseline becomes `figure-json-shape`. Parse failure
+ * and every schema defect returns the same invalid status, allowing the caller to emit exactly
+ * one shape violation for the locale; unrelated file-system failures still reject.
+ *
+ * @param {string} path Absolute or caller-resolved path to one locale JSON file.
+ * @returns {Promise<{ status: 'missing' } | { status: 'invalid' } | { status: 'valid', data: object }>}
+ * The file's normalized read/validation state.
+ */
 async function readIntroData(path) {
   let source;
   try {
@@ -173,26 +191,88 @@ async function readIntroData(path) {
   }
 }
 
+/**
+ * Determines whether every figure value satisfies the complete how-it-works data schema.
+ *
+ * The validator requires a non-empty plain top-level object while leaving its key set to
+ * `figure-json-keys`. Each figure requires `caption` to be null or a string, a non-empty string
+ * `alt`, node records whose `id`, `label`, and `text` are strings with unique ids, and edge records
+ * whose `from`, `to`, and `label` are strings and whose direction is exactly `forward`. Every edge
+ * endpoint references a declared node id, and each `(from, to, direction)` triple is unique.
+ * Returning one boolean for the whole file is deliberate: the caller collapses one
+ * or many defects into a single `figure-json-shape` violation for that locale.
+ *
+ * @param {unknown} data Parsed JSON value.
+ * @returns {boolean} Whether the complete file shape is safe for structural comparison.
+ */
 function isIntroData(data) {
-  return isPlainObject(data) && Object.values(data).every((figure) => (
-    isPlainObject(figure) && Array.isArray(figure.nodes) && Array.isArray(figure.edges)
-  ));
+  return isPlainObject(data) && Object.keys(data).length > 0 && Object.values(data).every((figure) => {
+    if (!isPlainObject(figure) || (figure.caption !== null && typeof figure.caption !== 'string') || typeof figure.alt !== 'string' || figure.alt.length === 0 || !Array.isArray(figure.nodes) || !Array.isArray(figure.edges)) return false;
+
+    const nodeIds = new Set();
+    for (const node of figure.nodes) {
+      if (!isPlainObject(node) || ![node.id, node.label, node.text].every((value) => typeof value === 'string') || nodeIds.has(node.id)) return false;
+      nodeIds.add(node.id);
+    }
+
+    const edgeTriples = new Set();
+    for (const edge of figure.edges) {
+      if (!isPlainObject(edge) || ![edge.from, edge.to, edge.label].every((value) => typeof value === 'string') || edge.direction !== 'forward' || !nodeIds.has(edge.from) || !nodeIds.has(edge.to)) return false;
+      const triple = JSON.stringify([edge.from, edge.to, edge.direction]);
+      if (edgeTriples.has(triple)) return false;
+      edgeTriples.add(triple);
+    }
+
+    return true;
+  });
 }
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
 }
 
+/**
+ * Appends one locale-level how-it-works figure violation using the stable public page namespace.
+ *
+ * Centralizing this projection keeps missing/invalid file reporting at one violation per
+ * locale even when validation detects multiple defects, while comparison-specific violations use
+ * their figure-key pages separately.
+ *
+ * @param {Violation[]} violations Mutable result accumulator.
+ * @param {string} locale Locale whose figure file failed reading or shape validation.
+ * @param {string} rule `figure-json-read` or `figure-json-shape`.
+ * @param {string} expected Stable expected-value description.
+ * @param {string} actual Stable observed-value description.
+ * @returns {void}
+ */
 function introViolation(violations, locale, rule, expected, actual) {
-  violations.push({ locale, page: `data/intro/${locale}`, rule, expected, actual });
+  violations.push({ locale, page: `data/how-it-works/${locale}`, rule, expected, actual });
 }
 
+/**
+ * Compares one independently shape-valid locale with the independently shape-valid English
+ * how-it-works figure baseline.
+ *
+ * The comparison reports top-level key, node-id, and `(from, to, direction)` set drift through
+ * `figure-json-keys`, `figure-json-nodes`, and `figure-json-edges`. Node ids use
+ * `JSON.stringify(id)`, and edge triples use `JSON.stringify([from, to, direction])`, before
+ * the existing sorting and newline-joined comparison. Unlike delimiter-joined keys, this
+ * representation cannot confuse distinct arbitrary-string fields containing `|` or newlines.
+ * The caller enforces the two-valid-input precondition so no structural drift rule fires for
+ * data whose shape is already unsafe to inspect.
+ *
+ * @param {Violation[]} violations Mutable result accumulator.
+ * @param {string} locale Compared locale.
+ * @param {object} expectedData Shape-valid English figure data.
+ * @param {object} actualData Shape-valid localized figure data.
+ * @returns {void}
+ */
 function compareIntroData(violations, locale, expectedData, actualData) {
   const expectedKeys = sortedSet(Object.keys(expectedData));
   const actualKeys = sortedSet(Object.keys(actualData));
   const keyDifference = firstSetDifference(expectedKeys, actualKeys);
   if (keyDifference !== undefined) {
-    compare(violations, locale, `data/intro/${keyDifference}`, 'intro-json-keys', expectedKeys, actualKeys);
+    compare(violations, locale, `data/how-it-works/${keyDifference}`, 'figure-json-keys', expectedKeys, actualKeys);
   }
 
   const actualKeySet = new Set(actualKeys);
@@ -201,18 +281,18 @@ function compareIntroData(violations, locale, expectedData, actualData) {
     compare(
       violations,
       locale,
-      `data/intro/${key}`,
-      'intro-json-nodes',
-      sortedSet(expectedData[key].nodes.map((node) => node?.id)),
-      sortedSet(actualData[key].nodes.map((node) => node?.id)),
+      `data/how-it-works/${key}`,
+      'figure-json-nodes',
+      sortedSet(expectedData[key].nodes.map((node) => JSON.stringify(node.id))),
+      sortedSet(actualData[key].nodes.map((node) => JSON.stringify(node.id))),
     );
     compare(
       violations,
       locale,
-      `data/intro/${key}`,
-      'intro-json-edges',
-      sortedSet(expectedData[key].edges.map(edgeTriple)),
-      sortedSet(actualData[key].edges.map(edgeTriple)),
+      `data/how-it-works/${key}`,
+      'figure-json-edges',
+      sortedSet(expectedData[key].edges.map((edge) => JSON.stringify([edge.from, edge.to, edge.direction]))),
+      sortedSet(actualData[key].edges.map((edge) => JSON.stringify([edge.from, edge.to, edge.direction]))),
     );
   }
 }
@@ -225,10 +305,6 @@ function firstSetDifference(expected, actual) {
 
 function sortedSet(values) {
   return [...new Set(values)].sort();
-}
-
-function edgeTriple(edge) {
-  return `${edge?.from}|${edge?.to}|${edge?.direction}`;
 }
 
 function anchors(markdown) {

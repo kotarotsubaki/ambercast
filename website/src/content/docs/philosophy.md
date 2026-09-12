@@ -1,60 +1,58 @@
 ---
 title: Philosophy
-description: Explains the durable rationale and architectural principles behind ambercast.
+description: The design decisions that follow from treating tests as assets, laid out in the order they build on each other.
 ---
 
-This page explains the durable rationale behind ambercast. Tests are authored as natural-language Markdown prompts, establishing test assets that are independent of a particular execution tool. Ongoing AI progress is the reason this natural-language asset model is practical.
+As the previous page explained, ambercast started from a single point: turning AI-driven click-through testing into an asset. This page walks through the design decisions that follow from that point, in order.
 
-## Tests are assets without lock-in {#tests-without-lock-in}
+## Tests must be assets {#tests-as-assets}
 
-Tests in ambercast are authored as natural-language Markdown prompts rather than script code. Under this approach, the intended test asset is independent of a particular execution tool. Rapid AI progress is the stated reason this natural-language asset model is practical, allowing test assets to remain durable and decoupled from underlying execution runners.
+An asset is something that keeps its value after it is written. For a test to be an asset, it needs three properties: it resists breaking, it can be read, and it is not locked to a particular tool.
 
-## The prompt is primary and the plan is derived {#prompt-primary-plan-derived}
+Traditional E2E tests fail all three. They break when a selector changes, the code is readable only to whoever wrote it, and switching frameworks means rewriting everything. Every decision in ambercast exists to satisfy these three properties.
 
-The prompt is the source of truth, and the plan is subordinate. This architecture compares prompt intent to `package.json` and derived reproducibility to a lockfile: the prompt defines what you intend to verify, while the plan provides a concrete, repeatable execution path.
+## The prompt is primary, implementation detail is secondary {#intent-primary}
 
-To keep this relationship transparent, normalization avoids trimming and broad cleanup so meaningful prompt changes remain visible during inspection and code review.
+What holds lasting value in a test is the intent, what you want to verify, not the implementation detail of which element gets clicked. So in ambercast, the prompt written in natural language is the single source of truth, and the plan AI generates is derived from it.
 
-## Plans are meant to be scrapped and rebuilt {#scrap-and-build}
+This relationship resembles `package.json` and a lockfile: the prompt declares intent, the plan pins down repeatability. A human edits only the former; the latter is generated.
 
-The ambercast model assumes frequent UI change in an AI-agent implementation loop. When coding agents update interfaces rapidly, plans should be discarded and regenerated rather than manually preserved.
+The prompt is left almost untouched. There is no whitespace normalization and no rewording, so that any change to intent shows up as a clear diff.
 
-Destructive plan-format changes and minor releases that require regeneration are explicitly permitted. For example, CHANGELOG 0.2.0 records a BREAKING producer-fingerprint change that made 0.1.0 plans stale and requires `ambercast generate` or `--force`. Rebuilding derived plans is the normal operational response when generator requirements update.
+## Plans are meant to be thrown away and rebuilt {#plans-are-disposable}
 
-Links: [Upgrade between versions](/ambercast/how-to/upgrade/), [Changelog](/ambercast/reference/changelog/), [Freshness and digests](/ambercast/spec/freshness/).
+If the plan is derived, an outdated plan can simply be discarded. ambercast does not protect plans as permanent artifacts: when the UI changes, the plan is rebuilt. Breaking changes to the plan format, and releases that require regeneration, are both acceptable.
 
-## Five pains guide decisions {#five-pains}
+Separating what must be protected from what can be discarded keeps the thing that matters, the stability of the prompt, as stable as possible.
 
-Five top-level pains guide architectural decisions:
+## Simple on the surface, rigorous underneath {#simple-surface-rigorous-core}
 
-1. Fragile E2E tests.
-2. Hard-to-understand test code.
-3. Manual interaction effort.
-4. Poor asset reuse.
-5. Testing difficulty for vibe coders.
+An asset has to be readable. So the surface you see day to day is limited to three things: the natural-language prompt, screenshots, and run results. The goal is for a non-engineer to read those and understand what is being verified.
 
-Focusing on these five pains keeps ambercast centered on reducing maintenance overhead and supporting developer workflows.
+Underneath, the harder problems, repeatability, run-to-run variance, and the cost of AI calls, belong to the structured layer below. The plan generated in between is human-readable JSON, but you do not need to read it to use it. It guarantees transparency you can reach for when you want it, not transparency you must consume.
 
-## Preserve intent and demote implementation detail {#preserve-intent}
+## The greatest risk is a wrong pass {#wrong-pass}
 
-The name ambercast evokes amber preserving form and casting intent.
+When you hand testing to AI, the greatest danger is a test that passes even though something is broken. AI is widely observed to be good at making tests pass but bad at keeping them meaningful. When you let AI fix a failing test, it can quietly weaken the assertion just to make it pass.
 
-Resolved implementation details are separated into grounding caches so prompt meaning can remain stable even as layout and DOM structures shift. At the architecture level, the repository schema boundary separates committed plan and grounding artifacts from an AI generator and replay runtime.
+That is why ambercast prioritizes assertion quality above everything else, and why CI does not heal automatically by default. A break should fail loudly, and a human decides whether to fix it. Healing is run explicitly, and any rewrite is applied only after approval.
 
-## Simple for non-engineers, rigorous for engineers {#simple-and-rigorous}
+## Both humans and AI are readers {#humans-and-agents}
 
-The intended visible surface is natural language and screenshots/results, keeping authoring and review approachable for non-engineers.
+An asset's readers are not only human. Coding agents such as Claude Code and Codex read and write tests inside their own loop of implementing, testing, and fixing. ambercast treats agents as first-class users, and ships an official skill alongside the CLI, with an MCP server planned.
 
-Behind that surface, concerns such as reproducibility, nondeterminism, and cost belong to the structured layer where engineers can inspect and measure them. The intermediate representation (IR) is intended to be readable without being required reading.
+There is no separate specification written for agents. The same documentation is kept readable by both humans and agents.
 
-## Wrong passes are the greatest risk {#wrong-pass}
+## Assets stay on your own machine {#assets-stay-local}
 
-A test passing incorrectly is the greatest risk in this testing model. Assertion quality is prioritized to reduce that risk. For the same reason, CI defaults to failing rather than automatically healing.
+If something is called an asset, it has to belong to the user. In ambercast, the prompt and the plan live inside the user's own repository, managed by git. Screenshots and run records also stay on the user's own machine. There is nothing ambercast holds on to.
 
-## Coding agents are first-class users {#agents-first-class}
+Running AI uses the Claude or Codex agreement the user already has. ambercast never holds credentials, and it never covers the cost of AI usage on the user's behalf. The CLI is open source and runs entirely on the local machine.
 
-Coding agents are first-class users in ambercast. The CLI, MCP, and an official skill are the planned loop interfaces. Rather than duplicating specifications across different tools, the AI-agent group owns reading order and branching rather than duplicated specifications.
+There is a plan to offer a cloud version in the future, for team sharing and for offloading heavy work. Even then, the source of truth for these assets stays in the local repository. The cloud would be a feature built on top of it, not where the assets live.
 
-## BYOK and local execution {#byok-and-local}
+## The standard for hard calls {#five-pains}
 
-AI execution follows a BYOK approach: it uses your Claude or Codex agreement and does not hold credentials. Automatic provider selection probes Claude before Codex. The local open-source CLI is positioned as free to run.
+These principles were chosen to solve five problems: fragile E2E tests, unreadable test code, the effort of manual click-through testing, the difficulty of turning that effort into an asset, and how hard testing is for vibe coders. Whenever it is unclear whether to add a feature, ambercast returns to these five.
+
+[The next page walks through how these principles actually play out, across the generate, run, and heal cycle.](/ambercast/how-it-works/)

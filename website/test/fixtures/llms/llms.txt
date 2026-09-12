@@ -3,8 +3,9 @@
 > Prompt-native end-to-end testing.
 
 ## START HERE
-- [Introduction](https://kotarotsubaki.github.io/ambercast/introduction/): Understand ambercast's prompt-driven workflow, generating deterministic test plans and grounding artifacts that replay with 0 AI calls and repair deliberate UI drift.
-- [Philosophy](https://kotarotsubaki.github.io/ambercast/philosophy/): Explains the durable rationale and architectural principles behind ambercast.
+- [Why I built ambercast](https://kotarotsubaki.github.io/ambercast/introduction/): The story of how I went from hating manual click-through testing to turning AI-driven click-through testing into an asset.
+- [Philosophy](https://kotarotsubaki.github.io/ambercast/philosophy/): The design decisions that follow from treating tests as assets, laid out in the order they build on each other.
+- [How it works](https://kotarotsubaki.github.io/ambercast/how-it-works/): Follow generate, run, and heal through three files and three commands, using login.test.md as the example.
 
 ## TUTORIALS
 - [Your first test in 5 minutes](https://kotarotsubaki.github.io/ambercast/tutorials/quick-start/): Guide your first generated test from prompt creation through generation, replay, and review.

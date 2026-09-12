@@ -1,39 +1,74 @@
 ---
-import IntroFigure from './IntroFigure.astro';
+import Figure from './Figure.astro';
 import { NODE_EMPHASIS } from './emphasis.mjs';
 
-interface IntroNode {
+/**
+ * Describes one localized node in the fixed five-node cycle. The `run` record carries the
+ * replay-on-hit, zero-AI meaning in its own label and text, avoiding a sixth `replay` node or a new
+ * component prop solely for presentation.
+ */
+interface CycleNode {
   id: string;
   label: string;
   text: string;
 }
 
-interface IntroEdge {
+/**
+ * Describes one of the five directed relationships in the cycle. The data contract permits only
+ * forward edges, so the renderer does not need a bidirectional rendering branch.
+ */
+interface CycleEdge {
   from: string;
   to: string;
   label: string;
-  direction: 'forward' | 'bidirectional';
+  direction: 'forward';
 }
 
+/**
+ * Supplies the localized data and accessible description for the fixed five-node cycle figure.
+ *
+ * The component deliberately retains the `.intro-*` selector names because visual restyling and
+ * selector renaming are outside its contract. Its five-node, five-edge graph is the accepted
+ * functional scope rather than a smaller or incomplete rendering.
+ */
 interface Props {
-  nodes: IntroNode[];
-  edges: IntroEdge[];
+  nodes: CycleNode[];
+  edges: CycleEdge[];
   alt: string;
   caption: string | null;
 }
 
 const { nodes, edges, alt, caption } = Astro.props;
 
-// The full-width branch note keeps the healed return tied to artifacts rather than implying a
-// vertical edge to run. Resolving the fixed graph shape before rendering makes incomplete data
-// fail visibly instead of presenting a plausible but partial flow.
-function getNode(id: string): IntroNode {
+/**
+ * Resolves a required node before the fixed graph is rendered.
+ *
+ * Returning an optional value would let incomplete locale data produce a plausible but partial
+ * cycle. The implementation instead fails loudly when a required id is absent.
+ *
+ * @param id Required node id.
+ * @returns The matching cycle node.
+ * @throws If the fixed graph does not contain the requested node.
+ */
+function getNode(id: string): CycleNode {
   const node = nodes.find((candidate) => candidate.id === id);
   if (!node) throw new Error(`Missing cycle node: ${id}`);
   return node;
 }
 
-function getEdge(from: string, to: string, direction: IntroEdge['direction']): IntroEdge {
+/**
+ * Resolves a required directed edge before the fixed graph is rendered.
+ *
+ * The implementation deliberately throws for a missing relationship so malformed data cannot
+ * silently erase part of the generate-run-heal cycle while leaving the rest apparently valid.
+ *
+ * @param from Required source node id.
+ * @param to Required destination node id.
+ * @param direction Required edge direction.
+ * @returns The matching cycle edge.
+ * @throws If the fixed graph does not contain the requested edge.
+ */
+function getEdge(from: string, to: string, direction: CycleEdge['direction']): CycleEdge {
   const edge = edges.find(
     (candidate) => candidate.from === from && candidate.to === to && candidate.direction === direction,
   );
@@ -41,7 +76,7 @@ function getEdge(from: string, to: string, direction: IntroEdge['direction']): I
   return edge;
 }
 
-function nodeClass(node: IntroNode): string {
+function nodeClass(node: CycleNode): string {
   const emphasis = NODE_EMPHASIS[node.id as keyof typeof NODE_EMPHASIS];
   return emphasis ? `intro-node intro-node-${emphasis}` : 'intro-node';
 }
@@ -50,17 +85,15 @@ const prompt = getNode('prompt');
 const generate = getNode('generate');
 const artifacts = getNode('artifacts');
 const run = getNode('run');
-const replay = getNode('replay');
 const heal = getNode('heal');
 const promptToGenerate = getEdge('prompt', 'generate', 'forward');
 const generateToArtifacts = getEdge('generate', 'artifacts', 'forward');
 const artifactsToRun = getEdge('artifacts', 'run', 'forward');
-const runToReplay = getEdge('run', 'replay', 'forward');
 const runToHeal = getEdge('run', 'heal', 'forward');
 const healToArtifacts = getEdge('heal', 'artifacts', 'forward');
 ---
 
-<IntroFigure alt={alt} caption={caption}>
+<Figure alt={alt} caption={caption}>
   <div class="intro-cycle-flow">
     <div class={nodeClass(prompt)} style="grid-area: prompt">
       <strong>{prompt.label}</strong>
@@ -81,11 +114,6 @@ const healToArtifacts = getEdge('heal', 'artifacts', 'forward');
       <strong>{run.label}</strong>
       <span>{run.text}</span>
     </div>
-    <div class="intro-arrow" style="grid-area: run-to-replay">→ {runToReplay.label}</div>
-    <div class={nodeClass(replay)} style="grid-area: replay">
-      <strong>{replay.label}</strong>
-      <span>{replay.text}</span>
-    </div>
     <div style="grid-area: heal-note">
       <div class={nodeClass(heal)}>
         <strong>{heal.label}</strong>
@@ -95,4 +123,4 @@ const healToArtifacts = getEdge('heal', 'artifacts', 'forward');
       <div class="intro-arrow">{heal.label} → {artifacts.label} · {healToArtifacts.label}</div>
     </div>
   </div>
-</IntroFigure>
+</Figure>

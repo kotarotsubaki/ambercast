@@ -3,8 +3,9 @@
 > プロンプトネイティブな E2E テスト。
 
 ## START HERE
-- [はじめに](https://kotarotsubaki.github.io/ambercast/ja/introduction/): 自然言語テストプロンプトからプランとグラウンディングを生成し、プロバイダーの解決を行わないリプレイとUIドリフトに対する意図的な修復サイクルを提供するambercastの概要です。
-- [設計思想](https://kotarotsubaki.github.io/ambercast/ja/philosophy/): ambercastが自然言語プロンプトをテスト資産とし、再現性と変更への耐性を両立させるための基本理念と設計判断を解説します。
+- [なぜ ambercast を作ったか](https://kotarotsubaki.github.io/ambercast/ja/introduction/): 打鍵テストが嫌いだったところから、AI による打鍵テストを資産にするという発想に至るまでの経緯を一人称で語る。
+- [設計思想](https://kotarotsubaki.github.io/ambercast/ja/philosophy/): テストは資産であるという一点から、ambercast の設計判断を順番に導く。
+- [どう動くか](https://kotarotsubaki.github.io/ambercast/ja/how-it-works/): login.test.md を例に、generate・run・heal の 3 コマンドと 3 ファイルで生成から修復までを追う。
 
 ## TUTORIALS
 - [5分で動かす最初のテスト](https://kotarotsubaki.github.io/ambercast/ja/tutorials/quick-start/): ambercast で最初のテストプロンプトを作成し、生成から実行までを5分でガイドします。

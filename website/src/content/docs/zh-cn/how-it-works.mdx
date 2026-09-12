@@ -1,0 +1,85 @@
+---
+title: 工作原理
+description: 以 login.test.md 为例，用 3 个文件和 generate、run、heal 3 个命令追踪从生成到修复的全过程。
+---
+
+import CycleFigure from '../../../components/how-it-works/CycleFigure.astro';
+import figure from '../../../data/how-it-works/zh-cn.json';
+
+ambercast 的运作方式可以用三个文件和 generate、run、heal 三个命令来说明。此外还有一个只读的 check，用于 CI。这里以一个测试 `login.test.md` 为例，追踪从生成到修复的全过程。
+
+## 编写测试 \{#write-a-test}
+
+测试用自然语言写在一个 Markdown 文件里。
+
+```markdown
+# Login
+
+@ambercast-secret {{secrets.password}}
+
+Go to /login.
+Fill in the email "mika@example.com" and the password {{secrets.password}}.
+Click "Sign in".
+Expect to land on the dashboard and see a "Welcome" heading.
+```
+
+prompt 可以用你自己的语言书写。密码的值不会写出来，只会放一个 `{{secrets.password}}` 引用。
+
+这里没有选择器，没有等待逻辑，也没有测试代码。写在这里的只有"想确认什么"。这个文件就是唯一的正本。
+
+## generate：AI 只生成一次执行计划 \{#generate}
+
+```bash
+ambercast generate
+```
+
+AI 读取 prompt，生成一份执行计划。浏览器此时还不会运行。此时会诞生两个衍生文件。
+
+```
+login.test.md
+login.ambercast.plan.json
+login.ambercast.grounding.json
+```
+
+plan 是一串确定性的步骤，比如"在输入框中填值""点击按钮""核对文案"；定位缓存则记录了某一步实际对应到了哪个元素。定位缓存一开始是空的，此时只有你写下的意图和 AI 生成的执行计划有内容。默认情况下，这三个文件会一并提交到代码仓库中。
+
+AI 的工作是生成执行计划，通常只需要 1 次调用。
+
+<CycleFigure {...figure.cycle} />
+
+## run：不调用 AI 进行回放 \{#run}
+
+```bash
+ambercast run
+```
+
+首次 run 会在浏览器中执行执行计划，同时把用到元素的步骤所对应的页面元素记录进定位缓存。只有拿不准的步骤才会请 AI 确认。从第二次开始，只要定位缓存命中，就不会调用 AI。因此速度更快、没有 AI 成本，结果也不会波动。本地环境下，定位缓存的更新会自动保存；CI 中默认不保存。
+
+只有当 UI 发生细微变化、导致某一步定位缓存失效时，AI 才会对那一步提供一次辅助。如果这样仍无法修复，测试就会被报告为失败。
+
+在 CI 中，会先用 `ambercast check` 确认执行计划是否已经过期，再用 `ambercast run` 进行回放。check 是一项只读检查，既不调用 AI，也不启动浏览器；run 遇到问题也不会自作主张地去修复。
+
+## heal：先批准，再修复 \{#heal}
+
+当 UI 真的发生了变化，比如按钮文案从"Sign in"变成了"Log in"，回放就会失败。此时才会执行修复。
+
+```bash
+ambercast heal
+```
+
+AI 从失败的那一步开始生成修复方案，并给出要修改内容的摘要。是否应用由人来决定。未经批准，任何内容都不会被改写。一旦批准，plan、定位缓存或两者就会被更新，下一次 run 又会回到不调用 AI 的状态。heal 只对配置中声明为幂等的目标生效，也就是无论回放多少次状态都不会变化的目标。
+
+由于意图并没有改变，`login.test.md` 不会有一个字被改动，改变的只是衍生文件。
+
+## 小结 \{#summary}
+
+| 阶段 | 命令 | AI 调用 | 会被改写的内容 |
+| --- | --- | --- | --- |
+| 生成 | `ambercast generate` | 有 | 创建 plan 与定位缓存 |
+| 回放 | `ambercast run` | 无（定位缓存命中时） | 定位缓存（本地默认保存；命中时无变化） |
+| CI 前置检查 | `ambercast check` | 无 | 无（也不启动浏览器） |
+| 修复 | `ambercast heal` | 有（经批准后应用） | 更新 plan、定位缓存或两者 |
+
+意图一旦写下就会留存，plan 只在需要时才会重建。这就是把 AI 驱动的点击测试变成资产的机制。
+
+[接下来，用 5 分钟运行你的第一个测试。](/ambercast/zh-cn/tutorials/quick-start/)

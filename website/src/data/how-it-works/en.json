@@ -1,0 +1,65 @@
+{
+  "cycle": {
+    "caption": null,
+    "alt": "A cycle diagram: from a prompt, generate builds a plan and empty grounding, run executes the plan while accumulating records and replays without AI on a hit, and only when something breaks does heal update the plan, the grounding, or both after approval.",
+    "nodes": [
+      {
+        "id": "prompt",
+        "label": "login.test.md · PROMPT",
+        "text": "The intent you wrote"
+      },
+      {
+        "id": "generate",
+        "label": "GENERATE · AI",
+        "text": "AI builds a plan from the prompt (usually one call)"
+      },
+      {
+        "id": "artifacts",
+        "label": "PLAN + GROUNDING",
+        "text": "Two derived files appear alongside it"
+      },
+      {
+        "id": "run",
+        "label": "RUN · 0 AI CALLS ON HIT",
+        "text": "Replays without AI once records hit"
+      },
+      {
+        "id": "heal",
+        "label": "HEAL · AI · APPROVE BEFORE WRITE",
+        "text": "Fixes it only after approval, only when broken"
+      }
+    ],
+    "edges": [
+      {
+        "from": "prompt",
+        "to": "generate",
+        "label": "ambercast generate",
+        "direction": "forward"
+      },
+      {
+        "from": "generate",
+        "to": "artifacts",
+        "label": "write plan + grounding",
+        "direction": "forward"
+      },
+      {
+        "from": "artifacts",
+        "to": "run",
+        "label": "ambercast run",
+        "direction": "forward"
+      },
+      {
+        "from": "run",
+        "to": "heal",
+        "label": "repair needed",
+        "direction": "forward"
+      },
+      {
+        "from": "heal",
+        "to": "artifacts",
+        "label": "authorized update",
+        "direction": "forward"
+      }
+    ]
+  }
+}

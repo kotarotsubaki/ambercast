@@ -1,4 +1,12 @@
 ---
+/**
+ * Supplies the figure's accessible description and optional visible caption.
+ *
+ * The outer figure owns `alt` as its spoken description so repeated labels inside the visual
+ * flow do not compete with it. The flow is hidden from assistive technology, while a non-null
+ * caption remains a direct `figcaption` child of the figure to preserve their semantic and
+ * visual relationship.
+ */
 interface Props {
   alt: string;
   caption: string | null;

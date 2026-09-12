@@ -84,15 +84,15 @@ const SCREENSHOTS = [
   { name: 'guide-390-light', path: '/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
   { name: 'guide-zh-cn-dark', path: '/zh-cn/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
   { name: 'reference-390-dark', path: '/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-1440-dark', path: '/ja/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-1440-light', path: '/ja/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'introduction-ja-390-dark', path: '/ja/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-390-light', path: '/ja/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'introduction-zh-cn-1440-dark', path: '/zh-cn/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-zh-cn-1440-light', path: '/zh-cn/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'introduction-zh-cn-390-dark', path: '/zh-cn/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'introduction-zh-cn-390-light', path: '/zh-cn/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'introduction-ja-2000-dark', path: '/ja/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-ja-1440-dark', path: '/ja/how-it-works/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-ja-1440-light', path: '/ja/how-it-works/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'how-it-works-ja-390-dark', path: '/ja/how-it-works/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'how-it-works-ja-390-light', path: '/ja/how-it-works/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'how-it-works-zh-cn-1440-dark', path: '/zh-cn/how-it-works/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-zh-cn-1440-light', path: '/zh-cn/how-it-works/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'how-it-works-zh-cn-390-dark', path: '/zh-cn/how-it-works/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'how-it-works-zh-cn-390-light', path: '/zh-cn/how-it-works/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'how-it-works-ja-2000-dark', path: '/ja/how-it-works/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
   { name: 'guide-ja-1440-light', path: '/ja/tutorials/quick-start/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
   { name: 'guide-ja-390-dark', path: '/ja/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
   { name: 'guide-ja-390-light', path: '/ja/tutorials/quick-start/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
@@ -104,15 +104,21 @@ const SCREENSHOTS = [
   { name: 'reference-ja-390-dark', path: '/ja/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
   { name: 'reference-ja-390-light', path: '/ja/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
   { name: 'reference-390-light', path: '/reference/cli/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'how-it-works-en-1440-dark', path: '/how-it-works/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-en-1440-light', path: '/how-it-works/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'how-it-works-en-390-dark', path: '/how-it-works/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'how-it-works-en-390-light', path: '/how-it-works/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'how-it-works-en-2000-dark', path: '/how-it-works/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-en-1151-dark', path: '/how-it-works/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-en-1152-dark', path: '/how-it-works/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-ja-1151-dark', path: '/ja/how-it-works/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
+  { name: 'how-it-works-ja-1152-dark', path: '/ja/how-it-works/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
   { name: 'introduction-en-1440-dark', path: '/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-en-1440-light', path: '/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
-  { name: 'introduction-en-390-dark', path: '/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'introduction-en-390-light', path: '/introduction/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
-  { name: 'introduction-en-2000-dark', path: '/introduction/', viewport: { width: 2000, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-en-1151-dark', path: '/introduction/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-en-1152-dark', path: '/introduction/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-1151-dark', path: '/ja/introduction/', viewport: { width: 1151, height: 1100 }, colorScheme: 'dark' },
-  { name: 'introduction-ja-1152-dark', path: '/ja/introduction/', viewport: { width: 1152, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-ja-1440-dark', path: '/ja/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'introduction-zh-cn-1440-dark', path: '/zh-cn/introduction/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'philosophy-en-1440-dark', path: '/philosophy/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'philosophy-ja-1440-dark', path: '/ja/philosophy/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'philosophy-zh-cn-1440-dark', path: '/zh-cn/philosophy/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
 ];
 
 function sleep(milliseconds) {
@@ -1410,7 +1416,7 @@ async function assertCodeBlockScroll(browser) {
  * the 1440px and 2000px acceptance widths.
  */
 async function assertDocumentColumnSymmetry(browser) {
-  for (const scenario of SCREENSHOTS.filter((entry) => ['/introduction/', '/ja/introduction/'].includes(entry.path))) {
+  for (const scenario of SCREENSHOTS.filter((entry) => ['/how-it-works/', '/ja/how-it-works/'].includes(entry.path))) {
     const { viewport } = scenario; const context = await browser.newContext({ colorScheme: scenario.colorScheme, viewport }); const page = await context.newPage();
     try { await page.goto(pageUrl(scenario.path), { waitUntil: 'networkidle' }); const geometry = await page.evaluate(() => { const sidebar = document.querySelector('.sidebar-pane'); const contents = [...document.querySelectorAll('.main-pane .content-panel .sl-container')]; const toc = document.querySelector('.right-sidebar-container'); const inner = document.querySelector('.right-sidebar-panel .sl-container'); if (!sidebar || !toc || !inner || contents.length === 0) throw new Error('The three-column document layout is incomplete.'); return { sidebarRight: sidebar.getBoundingClientRect().right, content: contents.map((entry) => { const rect = entry.getBoundingClientRect(); return { left: rect.left, right: rect.right }; }), toc: toc.getBoundingClientRect().toJSON(), innerRight: inner.getBoundingClientRect().right, clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }; }); assert.ok(geometry.scrollWidth <= geometry.clientWidth + 1); if (viewport.width >= 1152) { for (const content of geometry.content) { assertWithinTolerance(content.left, geometry.content[0].left, 1, 'All content columns share a left edge'); assertWithinTolerance(content.right, geometry.content[0].right, 1, 'All content columns share a right edge'); } const content = geometry.content[0]; assertWithinTolerance((content.left - geometry.sidebarRight) - (geometry.toc.left - content.right), 0, 2, 'Document gutters must be symmetric'); assertWithinTolerance(geometry.toc.right, geometry.clientWidth, 1, 'TOC right edge'); assertWithinTolerance(geometry.toc.width, 272, 1, 'TOC width'); assert.ok(geometry.innerRight <= geometry.clientWidth); if (viewport.width >= 1440) assert.ok(geometry.toc.left - content.right >= 48); } else assert.notEqual(Math.round(geometry.toc.width), 272); } finally { await context.close(); }
   }
@@ -1507,46 +1513,39 @@ async function assertIssue295DocumentationContracts(browser) {
 }
 
 async function assertIssue297IntroFigures(browser) {
-  const figureKeys = ['cycle', 'files', 'ledger'];
   const locales = [
-    { path: '/introduction/', dataFile: 'en' },
-    { path: '/ja/introduction/', dataFile: 'ja' },
-    { path: '/zh-cn/introduction/', dataFile: 'zh-cn' },
+    { path: '/how-it-works/', dataFile: 'en' },
+    { path: '/ja/how-it-works/', dataFile: 'ja' },
+    { path: '/zh-cn/how-it-works/', dataFile: 'zh-cn' },
   ];
 
   for (const locale of locales) {
-    const introData = JSON.parse(readFileSync(new URL(`../../src/data/intro/${locale.dataFile}.json`, import.meta.url), 'utf8'));
+    const figureData = JSON.parse(readFileSync(new URL(`../../src/data/how-it-works/${locale.dataFile}.json`, import.meta.url), 'utf8'));
     const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
     const page = await context.newPage();
     try {
       await page.goto(pageUrl(locale.path), { waitUntil: 'networkidle' });
       const figures = page.locator('figure[role="img"]');
-      assert.equal(await figures.count(), 3, `${locale.path} must render exactly three introduction figures.`);
+      assert.equal(await figures.count(), 1, `${locale.path} must render exactly one how-it-works figure.`);
       // This production-JSON oracle verifies DOM wiring; independent fixture unit tests own translated-content accuracy.
       assert.deepEqual(await figures.evaluateAll((elements) => elements.map((figure) => ({
         ariaLabel: figure.getAttribute('aria-label'),
         introFlowAriaHidden: figure.querySelector(':scope > .intro-flow')?.getAttribute('aria-hidden'),
-      }))), [
-        { ariaLabel: introData.cycle.alt, introFlowAriaHidden: 'true' },
-        { ariaLabel: introData.files.alt, introFlowAriaHidden: 'true' },
-        { ariaLabel: introData.ledger.alt, introFlowAriaHidden: 'true' },
-      ], `${locale.path} figures must preserve JSON-backed labels and hide their flow markup.`);
+      }))), [{ ariaLabel: figureData.cycle.alt, introFlowAriaHidden: 'true' }], `${locale.path} figure must preserve its JSON-backed label and hide its flow markup.`);
 
-      for (const [index, figureKey] of figureKeys.entries()) {
-        const figcaption = figures.nth(index).locator(':scope > figcaption');
-        if (introData[figureKey].caption === null) {
-          assert.equal(await figcaption.count(), 0, `${locale.path} ${figureKey} must omit a figcaption when its JSON caption is null.`);
-          continue;
-        }
-        assert.equal(await figcaption.count(), 1, `${locale.path} ${figureKey} must render its JSON-backed figcaption as a direct figure child.`);
-        assert.equal(await figcaption.getAttribute('aria-hidden'), 'true', `${locale.path} ${figureKey} figcaption must be hidden from the accessibility tree.`);
+      const figcaption = figures.first().locator(':scope > figcaption');
+      if (figureData.cycle.caption === null) {
+        assert.equal(await figcaption.count(), 0, `${locale.path} cycle must omit a figcaption when its JSON caption is null.`);
+      } else {
+        assert.equal(await figcaption.count(), 1, `${locale.path} cycle must render its JSON-backed figcaption as a direct figure child.`);
+        assert.equal(await figcaption.getAttribute('aria-hidden'), 'true', `${locale.path} cycle figcaption must be hidden from the accessibility tree.`);
       }
 
       await page.setViewportSize({ width: 390, height: 844 });
       const hasHorizontalOverflow = await page.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
       );
-      assert.equal(hasHorizontalOverflow, false, `${locale.path} introduction figures must not overflow horizontally at 390px.`);
+      assert.equal(hasHorizontalOverflow, false, `${locale.path} how-it-works figure must not overflow horizontally at 390px.`);
     } finally {
       await context.close();
     }

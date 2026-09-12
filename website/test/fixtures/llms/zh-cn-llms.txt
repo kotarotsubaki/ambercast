@@ -3,8 +3,9 @@
 > 提示词原生的 E2E 测试。
 
 ## START HERE
-- [介绍](https://kotarotsubaki.github.io/ambercast/zh-cn/introduction/): 了解 ambercast 如何将自然语言测试提示词转换为计划与 grounding 伴生文件，并在发生预期漂移时完成受控修复。
-- [设计哲学](https://kotarotsubaki.github.io/ambercast/zh-cn/philosophy/): 阐述 ambercast 核心设计决策背后的持久理念与基本考量。
+- [为什么我要做 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/introduction/): 从厌恶手动点击测试，到把 AI 驱动的点击测试变成资产,这段经历的第一人称叙述。
+- [设计哲学](https://kotarotsubaki.github.io/ambercast/zh-cn/philosophy/): 从"测试是资产"这一起点出发，按顺序推导出 ambercast 的各项设计决策。
+- [工作原理](https://kotarotsubaki.github.io/ambercast/zh-cn/how-it-works/): 以 login.test.md 为例，用 3 个文件和 generate、run、heal 3 个命令追踪从生成到修复的全过程。
 
 ## TUTORIALS
 - [5 分钟完成您的首个测试](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/): 引导您生成并运行首个 ambercast 测试。

@@ -6,7 +6,7 @@
  * here rather than in `lib/llms.mjs`, keeping the renderers pure and independently testable.
  *
  * Locale records follow `orderedPages`, which keeps the published indexes aligned with reader
- * navigation. Introduction figures are inflated from their locale data before full-corpus
+ * navigation. How-it-works figures are inflated from their locale data before full-corpus
  * rendering so machine-readable output retains their information. Missing sources and invalid
  * publication states fail the build rather than silently omitting a published page.
  */
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { orderedPages } from '../src/sidebar.mjs';
 import { siteDescriptions } from '../src/data/site-descriptions.mjs';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
-import { buildPageUrl, inflateIntroduction, renderLlmsFullTxt, renderLlmsPlannedTxt, renderLlmsTxt } from './lib/llms.mjs';
+import { buildPageUrl, inflateHowItWorks, renderLlmsFullTxt, renderLlmsPlannedTxt, renderLlmsTxt } from './lib/llms.mjs';
 
 const websiteRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const locales = ['en', 'ja', 'zh-cn'];
@@ -38,8 +38,8 @@ function recordsFor(locale) {
   return orderedPages.map((page) => {
     const source = readFileSync(sourcePath(locale, page.slug), 'utf8');
     const parsed = parseFrontmatter(source);
-    const body = page.slug === 'introduction'
-      ? inflateIntroduction(parsed.body, JSON.parse(readFileSync(join(websiteRoot, 'src', 'data', 'intro', `${locale}.json`), 'utf8')))
+    const body = page.slug === 'how-it-works'
+      ? inflateHowItWorks(parsed.body, JSON.parse(readFileSync(join(websiteRoot, 'src', 'data', 'how-it-works', `${locale}.json`), 'utf8')))
       : parsed.body;
     return { ...page, ...parsed, body, url: buildPageUrl(locale, page.slug) };
   });

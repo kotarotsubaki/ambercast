@@ -5,7 +5,7 @@
 // a peer top-level group. Numbering is one-based and resets within each displayed group or
 // subgroup, keeping the page-title ordinal aligned with the navigation list the reader sees.
 const groups = [
-  ['START HERE', ['introduction', 'philosophy']],
+  ['START HERE', ['introduction', 'philosophy', 'how-it-works']],
   ['TUTORIALS', ['tutorials/quick-start', 'tutorials/review-your-first-plan', 'tutorials/repair-your-first-drift', 'tutorials/github-actions']],
   ['HOW-TO GUIDES', ['how-to/write-effective-prompts', 'how-to/manage-secrets', 'how-to/configure-targets', 'how-to/choose-ai-provider', 'how-to/select-tests', 'how-to/control-grounding-writeback', 'how-to/review-generated-diffs', 'how-to/manage-artifacts-in-git', 'how-to/run-on-other-ci', 'how-to/recover-stale-artifacts', 'how-to/upgrade', 'how-to/troubleshoot', 'how-to/contribute']],
   ['REFERENCE', [

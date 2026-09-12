@@ -3,6 +3,7 @@ import { AmbercastError, type ErrorKind } from '#core/errors/types.js';
 import * as errorMapping from '#report/error-mapping.js';
 import { InterruptedError } from '#core/errors/interrupted-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
+import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
@@ -10,6 +11,8 @@ import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { assertNoLiteralSecrets } from '#usecases/generator-secret-policy.js';
 import { ReportError } from '#report/schema.js';
 import { CAUSE_NAMES } from './cause-name-fixtures.js';
+
+const BROWSER_LAUNCH_FAILED_HINT = 'Install Chromium by running `npx playwright install chromium`, then retry.';
 
 const EXPECTED_REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
@@ -21,7 +24,7 @@ const EXPECTED_REPORT_ERROR_DETAILS = {
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
   'stale-ir': { kind: 'usage', code: 'STALE_PLAN' },
   'integrity-violation': { kind: 'usage', code: 'INTEGRITY_VIOLATION' },
-  'browser-launch-failed': { kind: 'environment', code: 'BROWSER_LAUNCH_FAILED' },
+  'browser-launch-failed': { kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', hint: BROWSER_LAUNCH_FAILED_HINT },
   'ai-executor-unavailable': { kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE' },
   'ai-response-invalid': { kind: 'environment', code: 'AI_RESPONSE_INVALID' },
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
@@ -60,6 +63,7 @@ describe('reportError', () => {
       ...details,
       caseId: 'login-succeeds',
       message: error.message,
+      ...(kind === 'browser-launch-failed' ? { hint: BROWSER_LAUNCH_FAILED_HINT } : {}),
       ...(kind === 'unexpected-crash' ? { details: { cause: { name: 'Error' } } } : {}),
     });
   });
@@ -72,6 +76,7 @@ describe('reportError', () => {
       kind: 'environment',
       code: 'BROWSER_LAUNCH_FAILED',
       message: 'Chromium could not launch.',
+      hint: BROWSER_LAUNCH_FAILED_HINT,
     });
   });
 
@@ -159,16 +164,16 @@ describe('reportError', () => {
   });
 
   it('never adds details to a non-fs-io error even if its runtime shape carries them', () => {
-    const error = new ClassifiedError('browser-launch-failed', 'browser failed', {
+    const error = new ClassifiedError('config-invalid', 'configuration failed', {
       partiallyWritten: ['plan'],
     });
 
     expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login-succeeds' })).toEqual({
       scope: 'case',
-      kind: 'environment',
-      code: 'BROWSER_LAUNCH_FAILED',
+      kind: 'usage',
+      code: 'CONFIG_INVALID',
       caseId: 'login-succeeds',
-      message: 'browser failed',
+      message: 'configuration failed',
     });
   });
 
@@ -176,7 +181,54 @@ describe('reportError', () => {
     const error = new ClassifiedError(kind, 'failed', { hint: 'Use the documented remediation.' });
     const location = kind === 'interrupted' || kind === 'prompt-path-invalid' ? { scope: 'run' as const } : { scope: 'case' as const, caseId: 'case-a' };
 
-    expect(errorMapping.reportError(error, location as never)).toMatchObject({ hint: 'Use the documented remediation.' });
+    expect(errorMapping.reportError(error, location as never)).toMatchObject({
+      hint: kind === 'browser-launch-failed' ? BROWSER_LAUNCH_FAILED_HINT : 'Use the documented remediation.',
+    });
+  });
+
+  it.each(['executable-missing', 'engine-unregistered', 'launch-failed'] as const)('projects matching browser-launch %s reason and engine unchanged', (reason) => {
+    const error = new BrowserLaunchFailedError('browser failed', {
+      reason, engine: 'chromium', ignored: 'not reportable',
+    });
+
+    expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login-succeeds', engine: 'chromium' })).toEqual({
+      scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', caseId: 'login-succeeds',
+      message: 'browser failed', hint: BROWSER_LAUNCH_FAILED_HINT,
+      details: { reason, engine: 'chromium' },
+    });
+  });
+
+  it.each([
+    [{ reason: 'other', engine: 'chromium' }, 'an unrecognized reason'],
+    [{ reason: 'executable-missing', engine: 'firefox' }, 'a mismatched engine'],
+  ] as const)('falls back to launch-failed for browser-launch details with %s', (sourceDetails, _description) => {
+    const error = new ClassifiedError('browser-launch-failed', 'browser failed', sourceDetails);
+
+    expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login-succeeds', engine: 'chromium' })).toEqual({
+      scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', caseId: 'login-succeeds',
+      message: 'browser failed', hint: BROWSER_LAUNCH_FAILED_HINT,
+      details: { reason: 'launch-failed', engine: 'chromium' },
+    });
+  });
+
+  it('omits browser-launch details but retains the fixed hint without a resolved engine', () => {
+    const error = new ClassifiedError('browser-launch-failed', 'browser failed', { reason: 'executable-missing', engine: 'chromium' });
+
+    expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login-succeeds' })).toEqual({
+      scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', caseId: 'login-succeeds',
+      message: 'browser failed', hint: BROWSER_LAUNCH_FAILED_HINT,
+    });
+  });
+
+  it.each([
+    { scope: 'run' as const },
+    { scope: 'case' as const, caseId: 'login-succeeds', engine: 'chromium' },
+  ])('uses the byte-fixed browser-launch hint at every scope even when the error supplies its own hint', (location) => {
+    const error = new ClassifiedError('browser-launch-failed', 'browser failed', {
+      reason: 'launch-failed', engine: 'chromium', hint: 'instance hint must not win',
+    });
+
+    expect(errorMapping.reportError(error, location as never).hint).toBe(BROWSER_LAUNCH_FAILED_HINT);
   });
 
   it.each([

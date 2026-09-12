@@ -138,6 +138,7 @@ const HEALTHY_REPORT_STATUSES = new Set(['generated', 'skipped-fresh', 'listed',
  * no fields are renderable for that error.
  */
 export const ERROR_DETAILS_KEY_ORDER: Readonly<Record<string, readonly string[]>> = {
+  BROWSER_LAUNCH_FAILED: ['reason', 'engine'],
   PROMPT_PATH_INVALID: ['path', 'reason'],
   AI_RESPONSE_INVALID: ['issues', 'attempts'],
   SECRET_LITERAL_REJECTED: ['detector', 'path', 'attempts'],

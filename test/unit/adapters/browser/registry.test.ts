@@ -46,5 +46,8 @@ describe('createBrowserDriverResolver()', () => {
     const unregisteredEngine = 'firefox' as unknown as BrowserEngine;
 
     expect(() => resolver(unregisteredEngine)).toThrow(BrowserLaunchFailedError);
+    expect(() => resolver(unregisteredEngine)).toThrow(expect.objectContaining({
+      details: { reason: 'engine-unregistered', engine: unregisteredEngine },
+    }));
   });
 });

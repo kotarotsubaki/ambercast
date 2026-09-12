@@ -67,6 +67,7 @@ import type {
   AssertOutcome,
   AccessibilityCapture,
   BoundElement,
+  BrowserEngine,
   BrowserSession,
   GroundingMissReason,
   PerformableAction,
@@ -3017,6 +3018,17 @@ export interface RunCaseOutcome {
    */
   readonly result: ExecutedRunResult;
 
+  /**
+   * The browser engine resolved for this replayed case, when execution reached
+   * target selection.
+   *
+   * Launch diagnostics retain the resolved engine without making non-browser
+   * outcomes invent one. The report handoff uses this optional
+   * boundary value only when it exists, preserving the execution-derived
+   * evidence invariant.
+   */
+  readonly engine?: BrowserEngine;
+
   /** The first classified failure that aborted this case, when one exists. */
   readonly error?: AmbercastError;
 }
@@ -3171,6 +3183,34 @@ export async function run(deps: RunDeps, options: RunOptions): Promise<RunOutcom
 }
 
 /**
+ * Classifies a directly caught browser-launch failure for the
+ * `BROWSER_LAUNCH_FAILED` diagnostic.
+ *
+ * @remarks
+ * Distinguishes a missing browser executable from every other launch failure
+ * without letting nested causes or hostile thrown values alter the public
+ * result. The classifier inspects only the directly caught value,
+ * never walks `.cause`, and treats any unsafe inspection as `launch-failed`.
+ */
+export function classifyBrowserLaunchFailure(
+  error: unknown,
+  engine: BrowserEngine,
+): { readonly reason: 'executable-missing' | 'launch-failed'; readonly engine: BrowserEngine } {
+  let reason: 'executable-missing' | 'launch-failed' = 'launch-failed';
+
+  try {
+    const message = error instanceof Error ? error.message : undefined;
+    if (typeof message === 'string' && message.includes("Executable doesn't exist at ")) {
+      reason = 'executable-missing';
+    }
+  } catch {
+    // Unsafe inspection retains the conservative launch-failed classification.
+  }
+
+  return { reason, engine };
+}
+
+/**
  * Replays one prompt while its browser session is still available for failure
  * diagnostics.
  *
@@ -3196,6 +3236,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   let resolvedSecrets: Map<string, Set<string>> | undefined;
   let runState: Map<RunVariableName, string> | undefined;
   let context: DispatchContext | undefined;
+  let engine: BrowserEngine | undefined;
 
   try {
     let testMd: string;
@@ -3214,6 +3255,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       throw targetSelection;
     }
     const resolvedTargets = targetSelection.definitions;
+    const target = targetSelection.definition;
+    engine = target.browser;
 
     const normalizedTestMd = normalizeTestMd(testMd);
     const inputsDigest = deriveCurrentPlanInputProvenance({
@@ -3237,8 +3280,6 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     groundingPath = deps.layout.groundingPathFor(file);
     const loadedGrounding = await readUsableGrounding(deps.storage, groundingPath, plan);
     grounding = loadedGrounding;
-    const target = targetSelection.definition;
-
     resolvedSecrets = new Map<string, Set<string>>();
     const preflightAllowedRunRefs = new Set<RunVariableName>();
     const preflightRunState = new Map<RunVariableName, string>();
@@ -3299,7 +3340,11 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         throw error;
       }
 
-      throw new BrowserLaunchFailedError('The browser session could not be launched.', undefined, { cause: error });
+      throw new BrowserLaunchFailedError(
+        'The browser session could not be launched.',
+        classifyBrowserLaunchFailure(error, target.browser),
+        { cause: error },
+      );
     }
 
     const allowedRunRefs = new Set<RunVariableName>();
@@ -3533,6 +3578,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   const durationMs = deps.clock.monotonicMs() - startedAt;
   return {
     result: { ...result!, durationMs, aiCalls: context?.aiCalls ?? 0 },
+    ...(engine === undefined ? {} : { engine }),
     ...(classifiedError === undefined ? {} : { error: classifiedError }),
   };
 }

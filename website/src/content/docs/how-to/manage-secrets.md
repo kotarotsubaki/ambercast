@@ -11,12 +11,14 @@ Follow this safe authoring path to declare secret references in your test prompt
 
 ## Steps {#steps}
 
-1. Put exactly `@ambercast-secret {{secrets.password}}` on its own non-code prompt line. The grant parser accepts a complete matching line and excludes fenced, indented, and inline code. One grant line authorizes exactly one use, so repeat the line once per use when the same secret is used more than once—for example, to sign in, sign out, and sign in again.
+1. Put exactly `@ambercast-secret {{secrets.password}}` on its own non-code prompt line. The grant parser accepts a complete matching line and excludes fenced, indented, and inline code. One grant line authorizes exactly one use, so repeat the line once per use when the same secret is used more than once—for example, to sign in, sign out, and sign in again. Placing each grant line immediately before the instruction that describes its corresponding use is not a requirement (see the [grant origin rules](/ambercast/spec/secrets/#grant-origin)), but doing so SHOULD make that one-to-one attribution obvious to the provider and helps avoid an unresolved citation.
 
    ```
    @ambercast-secret {{secrets.password}}
-   ...sign in, then sign out...
+   Sign in with the password.
+   Sign out.
    @ambercast-secret {{secrets.password}}
+   Sign in again with the same password.
    ```
 2. Before the first `npx ambercast generate tests/ambercast/<name>.test.md`, have a human or an approved scanner confirm that the entire prompt contains no literal secret outside a SecretRef grant. `generate` sends the normalized prompt in its AI-provider context before it performs the literal-secret check; that check cannot protect a secret already sent in the prompt.
 3. Set `AMBERCAST_SECRET_PASSWORD` in the command environment, then run `npx ambercast generate tests/ambercast/<name>.test.md`. Generation authorizes the prompt grant but does not construct a secrets provider or resolve its value.

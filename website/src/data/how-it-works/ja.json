@@ -1,0 +1,65 @@
+{
+  "cycle": {
+    "caption": null,
+    "alt": "プロンプトから generate が計画と空のグラウンディングを作り、run が計画を実行して記録を蓄積し命中すれば AI なしで再生し、壊れたときだけ heal が承認を経て計画かグラウンディング、あるいは両方を更新する循環図。",
+    "nodes": [
+      {
+        "id": "prompt",
+        "label": "login.test.md · PROMPT",
+        "text": "あなたが書いた意図"
+      },
+      {
+        "id": "generate",
+        "label": "GENERATE · AI",
+        "text": "AI がプロンプトから計画を作る（通常 1 回）"
+      },
+      {
+        "id": "artifacts",
+        "label": "PLAN + GROUNDING",
+        "text": "隣に生まれる 2 つの派生ファイル"
+      },
+      {
+        "id": "run",
+        "label": "RUN · 0 AI CALLS ON HIT",
+        "text": "記録が命中すれば AI なしで再生する"
+      },
+      {
+        "id": "heal",
+        "label": "HEAL · AI · APPROVE BEFORE WRITE",
+        "text": "壊れたときだけ、承認してから直す"
+      }
+    ],
+    "edges": [
+      {
+        "from": "prompt",
+        "to": "generate",
+        "label": "ambercast generate",
+        "direction": "forward"
+      },
+      {
+        "from": "generate",
+        "to": "artifacts",
+        "label": "write plan + grounding",
+        "direction": "forward"
+      },
+      {
+        "from": "artifacts",
+        "to": "run",
+        "label": "ambercast run",
+        "direction": "forward"
+      },
+      {
+        "from": "run",
+        "to": "heal",
+        "label": "repair needed",
+        "direction": "forward"
+      },
+      {
+        "from": "heal",
+        "to": "artifacts",
+        "label": "authorized update",
+        "direction": "forward"
+      }
+    ]
+  }
+}

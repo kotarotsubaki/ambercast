@@ -1,0 +1,85 @@
+---
+title: どう動くか
+description: login.test.md を例に、generate・run・heal の 3 コマンドと 3 ファイルで生成から修復までを追う。
+---
+
+import CycleFigure from '../../../components/how-it-works/CycleFigure.astro';
+import figure from '../../../data/how-it-works/ja.json';
+
+ambercast の動きは、三つのファイルと、generate・run・heal の三つのコマンドで説明できる。CI 用に読み取り専用の check がもう一つある。ここでは `login.test.md` という一本のテストを例に、生成から修復までを追う。
+
+## テストを書く \{#write-a-test}
+
+テストは Markdown のファイルに、自然言語で書く。
+
+```markdown
+# Login
+
+@ambercast-secret {{secrets.password}}
+
+Go to /login.
+Fill in the email "mika@example.com" and the password {{secrets.password}}.
+Click "Sign in".
+Expect to land on the dashboard and see a "Welcome" heading.
+```
+
+プロンプトは日本語で書いてもよい。パスワードの値は書かず、`{{secrets.password}}` という参照だけを置く。
+
+セレクタも、待機処理も、テストコードもない。ここに書くのは「何を確かめたいか」だけだ。このファイルが唯一の正本になる。
+
+## generate: AI が一度だけ計画を作る \{#generate}
+
+```bash
+ambercast generate
+```
+
+AI がプロンプトを読み、実行計画を作る。ブラウザはまだ動かない。このとき生まれるのが二つの派生ファイルだ。
+
+```
+login.test.md
+login.ambercast.plan.json
+login.ambercast.grounding.json
+```
+
+計画は「入力欄に値を入れる」「ボタンを押す」「文言を確認する」といった決定的なステップの列で、グラウンディングはステップが実際にどの要素に対応したかの記録だ。グラウンディングは最初は空で、あなたが書いた意図と AI が作った計画だけが中身を持つ。既定では、三つのファイルを並べてリポジトリにコミットする。
+
+AI の仕事は計画を作ることで、通常は 1 回で終わる。
+
+<CycleFigure {...figure.cycle} />
+
+## run: AI を呼ばずに再生する \{#run}
+
+```bash
+ambercast run
+```
+
+初回の run はブラウザで計画を実行しながら、要素を使うステップについて、画面のどの要素に対応したかをグラウンディングに記録する。迷ったステップだけ AI が確認する。二度目からは記録が命中する限り AI は呼ばれない。だから速く、コストがゼロで、結果が揺れない。ローカルでは記録の更新が自動で保存され、CI では既定で保存しない。
+
+UI が少し変わって記録が外れたステップだけ、AI が一段階だけ補助する。それでも直らなければ、テストは失敗として報告される。
+
+CI では、まず `ambercast check` で計画が古くなっていないかを確かめ、それから `ambercast run` で再生する。check は AI もブラウザも動かさない読み取り専用の検査で、run は壊れても勝手に直さない。
+
+## heal: 壊れたら、承認してから直す \{#heal}
+
+UI が本当に変わったとき、たとえばボタンの文言が「Sign in」から「Log in」になったときは、再生が失敗する。そこで初めて修復を実行する。
+
+```bash
+ambercast heal
+```
+
+AI が失敗したステップから修復案を作り、何を直すかの要約を提示する。適用するかどうかは人が決める。承認しなければ何も書き換わらない。承認すれば計画かグラウンディング、あるいは両方が更新され、次の run はまた AI なしで回る。heal は、何度再生しても状態が変わらないと設定で宣言したターゲットでだけ動く。
+
+意図が変わったわけではないので、`login.test.md` は一文字も変わらない。変わるのは派生ファイルだけだ。
+
+## まとめ \{#summary}
+
+| フェーズ | コマンド | AI 呼び出し | 書き換わるもの |
+| --- | --- | --- | --- |
+| 生成 | `ambercast generate` | あり | plan と grounding を作成 |
+| 再生 | `ambercast run` | なし（記録の命中時） | グラウンディング（ローカル既定。命中時はなし） |
+| CI の事前検査 | `ambercast check` | なし | なし（ブラウザも動かさない） |
+| 修復 | `ambercast heal` | あり（承認後に適用） | plan か grounding、または両方を更新 |
+
+意図は一度書けば残り、計画は必要なときだけ作り直される。これが、AI による打鍵テストを資産にするための仕組みだ。
+
+[次は、5 分で最初のテストを動かす。](/ambercast/ja/tutorials/quick-start/)

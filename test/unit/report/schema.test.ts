@@ -127,7 +127,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.3',
+    schemaVersion: '3.4',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -358,11 +358,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.3', () => {
+  it('requires schema version 3.4', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.3' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.4' });
   });
 });
 
@@ -644,7 +644,7 @@ describe('heal result status branches', () => {
   });
 });
 
-describe('report schema 3.3 AI accounting fields', () => {
+describe('report schema 3.4 AI accounting fields', () => {
   const generateBranches = [
     ['generated', GENERATE_RESULT],
     ['would-generate', { ...GENERATE_RESULT, status: 'would-generate', dryRun: true }],
@@ -718,7 +718,7 @@ describe('report schema 3.3 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.3');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.4');
   });
 
   it.each(generateBranches)(
@@ -927,6 +927,38 @@ describe('ReportError', () => {
 
   it('parses a valid optional hint', () => {
     expectAccepted(ReportError, CASE_USAGE_ERROR);
+  });
+
+  it.each([
+    { scope: 'run', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', message: 'The browser could not launch.' },
+    { scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', message: 'The browser could not launch.', caseId: 'login-succeeds' },
+  ] as const)('accepts browser-launch details at $scope scope', (error) => {
+    for (const reason of ['executable-missing', 'engine-unregistered', 'launch-failed'] as const) {
+      expectAccepted(ReportError, {
+        ...error,
+        details: { reason, engine: 'chromium' },
+      });
+    }
+  });
+
+  it.each([
+    { scope: 'run', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', message: 'The browser could not launch.' },
+    { scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', message: 'The browser could not launch.', caseId: 'login-succeeds' },
+  ] as const)('accepts browser-launch errors without optional details at $scope scope', (error) => {
+    expectAccepted(ReportError, error);
+  });
+
+  it.each([
+    { reason: 'unknown', engine: 'chromium' },
+    { reason: 'launch-failed', engine: 'chromium', unexpected: true },
+    { reason: 'launch-failed', engine: 1 },
+    { reason: 'launch-failed', engine: '' },
+    { reason: 'launch-failed', engine: '   ' },
+  ])('rejects malformed browser-launch details %j', (details) => {
+    expectRejected(ReportError, {
+      scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED',
+      message: 'The browser could not launch.', caseId: 'login-succeeds', details,
+    });
   });
 
   it.each(REPORT_ERROR_BRANCHES)('rejects an unknown property in the $scope/$kind branch', (error) => {

@@ -2,6 +2,7 @@ import type { AmbercastError, ErrorKind } from '#core/errors/types.js';
 import {
   AiExecutorUnavailableDetails,
   AiResponseInvalidDetails,
+  BrowserLaunchFailedDetails,
   CauseName,
   PromptPathInvalidDetails,
   SecretGrantUnattributableDetails,
@@ -68,13 +69,21 @@ export const REPORT_ERROR_DETAILS = {
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
   'stale-ir': { kind: 'usage', code: 'STALE_PLAN' },
   'integrity-violation': { kind: 'usage', code: 'INTEGRITY_VIOLATION' },
-  'browser-launch-failed': { kind: 'environment', code: 'BROWSER_LAUNCH_FAILED' },
+  'browser-launch-failed': {
+    kind: 'environment',
+    code: 'BROWSER_LAUNCH_FAILED',
+    hint: 'Install Chromium by running `npx playwright install chromium`, then retry.',
+  },
   'ai-executor-unavailable': { kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE' },
   'ai-response-invalid': { kind: 'environment', code: 'AI_RESPONSE_INVALID' },
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
   'unexpected-crash': { kind: 'environment', code: 'UNEXPECTED_CRASH' },
   interrupted: { kind: 'environment', code: 'INTERRUPTED' },
-} as const satisfies Partial<Record<ErrorKind, { readonly kind: 'usage' | 'environment'; readonly code: ReportErrorCode }>>;
+} as const satisfies Partial<Record<ErrorKind, {
+  readonly kind: 'usage' | 'environment';
+  readonly code: ReportErrorCode;
+  readonly hint?: string;
+}>>;
 
 /**
  * Converts a classified error into a serializable run- or case-scoped report
@@ -89,11 +98,26 @@ export const REPORT_ERROR_DETAILS = {
  * before any case begins, so both remain run-only.
  *
  * @remarks
- * A string `error.details.hint` is copied for every report scope and code.
- * The seven diagnostic codes construct strict `details` values from normalized
+ * For diagnostics without a table-defined hint, a string
+ * `error.details.hint` is copied for every report scope and code. The seven
+ * existing diagnostic codes construct strict `details` values from normalized
  * producer context; `UNEXPECTED_CRASH` alone reads `error.cause`, never
- * `error.details`. A malformed or unexpected producer details shape is
- * omitted defensively rather than causing report construction to throw.
+ * `error.details`. `BROWSER_LAUNCH_FAILED` projects `{ reason, engine }`
+ * from source details, validating the reason against its closed three-value
+ * vocabulary and the engine against the resolved engine passed through the
+ * case location.
+ *
+ * Unlike every other code, `BROWSER_LAUNCH_FAILED` has a table-defined
+ * hint in `REPORT_ERROR_DETAILS`. That hint is authoritative over an
+ * instance-level `error.details.hint`; other codes retain the instance-level
+ * hint precedence described above. If no resolved engine reaches the
+ * location, the browser-launch projection omits `details` defensively, just
+ * as it does for malformed producer details, while the table-defined hint
+ * still appears. The case location keeps `engine` as a string so this
+ * report-layer boundary does not depend on the browser-port vocabulary.
+ *
+ * A malformed or unexpected producer details shape is omitted defensively
+ * rather than causing report construction to throw.
  *
  * `partiallyWritten` is extracted only for a case-scoped `FS_IO_ERROR`.
  * Report schemas reject that field on every other branch, and this conversion
@@ -101,10 +125,10 @@ export const REPORT_ERROR_DETAILS = {
  * evidence here is required rather than optional metadata.
  */
 export function reportError(error: AmbercastError, location: { readonly scope: 'run' }): ReportError;
-export function reportError(error: AmbercastError, location: { readonly scope: 'case'; readonly caseId: string }): ReportError;
+export function reportError(error: AmbercastError, location: { readonly scope: 'case'; readonly caseId: string; readonly engine?: string }): ReportError;
 export function reportError(
   error: AmbercastError,
-  location: { readonly scope: 'run' } | { readonly scope: 'case'; readonly caseId: string },
+  location: { readonly scope: 'run' } | { readonly scope: 'case'; readonly caseId: string; readonly engine?: string },
 ): ReportError {
   const details = REPORT_ERROR_DETAILS[error.kind as keyof typeof REPORT_ERROR_DETAILS];
   if (details === undefined) {
@@ -117,9 +141,24 @@ export function reportError(
     throw new Error('Error kind prompt-path-invalid cannot be serialized at case scope.');
   }
 
-  const hint = readRecordField(error.details, 'hint');
-  const hintField = typeof hint === 'string' ? { hint } : {};
+  const tableHint = 'hint' in details ? details.hint : undefined;
+  const instanceHint = readRecordField(error.details, 'hint');
+  const hint = tableHint ?? (typeof instanceHint === 'string' ? instanceHint : undefined);
+  const hintField = hint === undefined ? {} : { hint };
   const sourceDetails = error.details;
+  const browserLaunchDetails = error.kind === 'browser-launch-failed'
+    && location.scope === 'case'
+    && location.engine !== undefined
+    ? (() => {
+      const candidate = BrowserLaunchFailedDetails.safeParse({
+        reason: readRecordField(sourceDetails, 'reason'),
+        engine: readRecordField(sourceDetails, 'engine'),
+      });
+      return candidate.success && candidate.data.engine === location.engine
+        ? candidate
+        : BrowserLaunchFailedDetails.safeParse({ reason: 'launch-failed', engine: location.engine });
+    })()
+    : undefined;
   const detailsByCode = error.kind === 'ai-response-invalid' && readRecordField(sourceDetails, 'issues') !== undefined
     ? AiResponseInvalidDetails.safeParse({
       issues: readRecordField(sourceDetails, 'issues'),
@@ -151,6 +190,8 @@ export function reportError(
           })
           : error.kind === 'unexpected-crash'
             ? UnexpectedCrashDetails.safeParse({ cause: { name: projectCauseName(error.cause) } })
+            : error.kind === 'browser-launch-failed'
+              ? browserLaunchDetails
             : undefined;
   const diagnosticDetails = detailsByCode?.success ? { details: detailsByCode.data } : {};
 

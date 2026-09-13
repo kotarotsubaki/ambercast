@@ -23,23 +23,23 @@ ambercastのリプレイ実行において、グラウンディングは実行�
 
 関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#replay), [CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
 
-## リプレイパス: フォールバックを伴うミス {#miss-with-ai-fallback}
+## リプレイパス: 明示的な解決を伴うミス {#miss-with-explicit-resolution}
 
-キャッシュから有効なグラウンディングが得られない場合、実行パスはフォールバックを伴う分岐へと進みます。グラウンディングの不在、stale（古くなった状態）なプロベナンス（provenance）、無効なJSON、およびキャッシュミスは、遅延エージェントフォールバックの前に分類されます。
+キャッシュから有効なグラウンディングが得られない場合、実行パスはミスの分岐へと進みます。グラウンディングの不在、stale（古くなった状態）なプロベナンス（provenance）、無効なJSON、およびキャッシュミスは、ライブ AI 解決の前に分類されます。解決は `--resolve` を指定した場合にのみ、ミスパスの後で開始されます。
 
-cache-onlyモードが有効になっていない場合、要素グラウンディングのミスが発生してもライブで解決（resolve live）を行い、解決された要素フィンガープリントでグラウンディングエントリを更新できます。
+`--resolve` を指定した場合、要素グラウンディングのミスはライブで解決（resolve live）でき、解決された要素フィンガープリントでグラウンディングエントリを更新できます。
 
-フォールバック処理はミスパスを経た後にのみ開始されます。グラウンディングヒットの経路では、AI呼び出しイベント（AI-call event）は発行されません。
+グラウンディングヒットの経路では、AI呼び出しイベント（AI-call event）は発行されません。
 
 関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back), [グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
 
-## リプレイパス: cache-only ミス {#cache-only-miss}
+## リプレイパス: 未解決のミス {#unresolved-miss}
 
-厳格なリプレイ境界を維持する経路では、フォールバックの発生そのものが拒否されます。`--cache-only` は、コールドスタートおよび回復可能なミスの双方において、AIフォールバックを抑制します。
+`--resolve` を指定しない場合、run はコールドスタートおよび回復可能なミスの双方でライブ解決を抑制します。AI-directed replay で使用可能なトレースがない AI ディレクテッドステップは、`grounding-unresolved`（終了コード 4）としてフェイルクローズし、`--resolve` を使うよう案内します。
 
-AI-directed replay において、使用可能なトレースが存在しないAIディレクテッドステップ（AI-directed step）は、cache-onlyモードが有効な場合に中断（abort）します。同様に、要素グラウンディングのミスが発生した際も、要素をライブで解決するのではなく、cache-onlyモードでは処理を中断します。
+要素グラウンディングのミスも、要素をライブで解決するのではなく、フェイルクローズします。
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#cache-only), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#resolve), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
 
 ## ドリフトのハンドオフ {#drift-handoff}
 
@@ -47,6 +47,6 @@ UIの変更などによってリプレイが単純なキャッシュ判定にと
 
 `fingerprint-mismatch` は、マッチしたノードの現在のアクセシビリティフィンガープリントが、保存されているフィンガープリントと異なることを意味します。`run` のユースケースでは、`fingerprint-mismatch` をグラウンディング解決が成功した場合とは明確に異なる分類ケースとして記録します。
 
-ヒーリング処理はまず cache-only のベースラインリプレイから開始され、そこで失敗が残る場合にグラウンディングの修復を試行できます。
+ヒーリング処理はまずフェイルクローズのベースラインリプレイから開始され、そこで失敗が残る場合にグラウンディングの修復を試行できます。
 
 関連情報: [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages), [UI変更後にテストを修復する](/ambercast/ja/tutorials/repair-your-first-drift/)

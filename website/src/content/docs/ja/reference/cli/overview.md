@@ -21,8 +21,8 @@ Generate options:
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
-  --grep <pattern>  --target <name>  --headed  --cache-only  --update-cache  --allow-empty  --list
-  --stale <fail>  --json  --no-color
+  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list
+  --stale <fail>  --ai <claude|codex>  --json  --no-color
 
 Check options:
   --target <name>  --allow-empty  --list  --json  --config <path>  --no-color
@@ -35,7 +35,7 @@ AI configuration:
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
 
 Heal configuration:
-  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
+  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the fail-closed baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
@@ -48,7 +48,7 @@ Heal configuration:
 | コマンド | 位置引数 | 受け付けるオプション | 設定ファイルの探索優先順位 |
 | --- | --- | --- | --- |
 | generate | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`cache-only`（キャッシュのみ）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 | check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
 | heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 

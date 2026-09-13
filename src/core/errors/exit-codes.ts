@@ -43,6 +43,7 @@ export const ERROR_EXIT_CODES = {
   'missing-plan': 4,
   'stale-ir': 4,
   'integrity-violation': 4,
+  'grounding-unresolved': 4,
   'browser-launch-failed': 3,
   'ai-executor-unavailable': 3,
   'ai-response-invalid': 3,

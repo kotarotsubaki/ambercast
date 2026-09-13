@@ -7,7 +7,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { abortReason, rejectOnAbort } from '#core/ai/reject-on-abort.js';
+import { rejectOnAbort } from '#core/ai/reject-on-abort.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { buildStructuredPrompt } from '#adapters/ai/shared/prompt-envelope.js';
@@ -16,6 +16,11 @@ import {
   createSpawnCommandRunner,
   type CommandRunner,
 } from '#adapters/ai/shared/command-runner.js';
+import {
+  executeAgentic,
+  type BuildInvocation,
+} from '#adapters/ai/agentic/agentic-executor.js';
+import { buildCodexInvocation } from '#adapters/ai/agentic/codex-invocation.js';
 import type {
   AiAgenticResult,
   AiExecuteRequest,
@@ -52,17 +57,19 @@ import type {
  * at the first 1,000 UTF-16 code units; the field is omitted when stderr is
  * empty. `codex --version` probes never throw.
  *
-     * Its `executeAgentic` method gives an already-aborted signal precedence,
-     * then rejects before spawning because this adapter has no browser session to
-     * direct. Runtime composition supplies the environment-filtered runner; the
-     * fail-closed fallback prevents an incomplete composition from inheriting
-     * ambient credentials. Injected runners leave the protocol deterministic
-     * under test.
+     * Its `executeAgentic` method delegates browser-directed work to the shared
+     * loopback-MCP executor. Runtime composition supplies the environment-filtered
+     * runner, while this adapter owns only Codex-specific invocation resources.
+     * Injected runners leave the protocol deterministic under test.
  */
 export function createCodexCliExecutor(
-  deps: { readonly run?: CommandRunner } = {},
+  deps: {
+    readonly run?: CommandRunner;
+    readonly buildInvocation?: BuildInvocation;
+  } = {},
 ): InstructionCoveredAiExecutor {
   const run = deps.run ?? createSpawnCommandRunner();
+  const buildInvocation = deps.buildInvocation ?? buildCodexInvocation;
 
   return {
     name: 'codex-cli',
@@ -134,11 +141,7 @@ export function createCodexCliExecutor(
       });
     },
     async executeAgentic(request: InstructionCoveredAiAgenticRequest): Promise<AiAgenticResult> {
-      if (request.signal?.aborted) {
-        throw abortReason(request.signal);
-      }
-
-      throw new AiExecutorUnavailableError('Agentic browser-directed execution is unavailable for the Codex CLI adapter.');
+      return rejectOnAbort(request.signal, () => executeAgentic(request, run, buildInvocation));
     },
     async isAvailable(signal?: AbortSignal): Promise<boolean> {
       try {

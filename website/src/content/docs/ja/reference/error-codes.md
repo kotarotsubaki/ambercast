@@ -16,6 +16,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
+| GROUNDING_UNRESOLVED | usage | case | 4 | `--resolve` なしのグラウンディングミス |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | grant cannot be attributed |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | browser launch fails |

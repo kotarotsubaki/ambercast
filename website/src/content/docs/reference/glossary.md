@@ -52,7 +52,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--` | `--` ends option parsing and leaves following tokens as literal paths. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | a filename beginning `--` |
 | `--allow-empty` | `--allow-empty` makes an empty selection permissible for commands that parse it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` is planned-only and has no accepted 0.3.1 parser semantics. | [ambercast view](/ambercast/reference/cli/view/#planned-interface) | implemented `--headed` |
-| `--cache-only` | `--cache-only` makes run reject grounding misses instead of invoking AI fallback. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
+| `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
 | `--clear` | `--clear` is planned-only and has no accepted 0.3.1 baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
 | `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` is planned-only and has no accepted 0.3.1 init parser semantics. | [ambercast init](/ambercast/reference/cli/init/#planned-interface) | config `testDir` |

@@ -46,7 +46,7 @@
 ### CLI
 - [CLI overview](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/): Reference for parser-wide CLI behavior, command-flag dispatch, and discovery defaults in ambercast.
 - [ambercast generate](https://kotarotsubaki.github.io/ambercast/reference/cli/generate/): Reference for ambercast generate flags, provider executor resolution, companion file artifacts, and exit statuses.
-- [ambercast run](https://kotarotsubaki.github.io/ambercast/reference/cli/run/): Reference for the ambercast run command, covering CLI flags, replay paths, AI provider fallback, cache-only execution, grounding write-back, and report persistence.
+- [ambercast run](https://kotarotsubaki.github.io/ambercast/reference/cli/run/): Reference for the ambercast run command, covering CLI flags, replay paths, explicit AI resolution, grounding write-back, and report persistence.
 - [ambercast check](https://kotarotsubaki.github.io/ambercast/reference/cli/check/): Inspect the freshness and validity of Ambercast test plans and grounding artifacts from the CLI.
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/reference/cli/heal/): Command-line reference for ambercast heal, defining flags, repair execution boundaries, authorization, and side effects.
 

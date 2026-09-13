@@ -53,11 +53,30 @@ export interface CommandRunOptions {
   /** Text written to stdin before it closes; omission closes stdin immediately. */
   readonly input?: string;
 
+  /**
+   * Per-invocation environment additions.
+   *
+   * The runner merges these additions with its base environment and
+   * filters the combined result afterwards. Filtering before the merge would
+   * let a caller reintroduce an Ambercast secret namespace through this seam.
+   */
+  readonly env?: Readonly<Record<string, string>>;
+
   /** Cancellation that kills the child and rejects the returned promise. */
   readonly signal?: AbortSignal;
 
   /** Working directory of the child; omission inherits this process's cwd. */
   readonly cwd?: string;
+
+  /**
+   * Observes the child's actual terminal event once, independently of promise settlement.
+   *
+   * Abort rejects the command promise as soon as cleanup starts, but does not
+   * mean the child has closed. The callback therefore remains independent of
+   * that rejection so a caller can wait for real termination before closing a
+   * dependent transport such as the per-invocation MCP server.
+   */
+  readonly onChildSettled?: (outcome: CommandRunResult | { readonly outcome: 'errored'; readonly error: unknown }) => void;
 }
 
 /**
@@ -65,7 +84,11 @@ export interface CommandRunOptions {
  *
  * @param command - The executable name or path.
  * @param args - Positional command arguments.
- * @param options - Optional stdin text and abort signal.
+ * @param options - Optional stdin, cancellation, working-directory, and
+ * per-call environment controls; the runner merges that environment with its
+ * base environment before filtering the combined result. Its child-settled
+ * observer fires once for the real terminal event even when abort has already
+ * rejected the returned promise.
  * @returns The completed non-abort process outcome.
  * @throws If spawning fails or the supplied signal aborts the call.
  * @remarks
@@ -141,13 +164,14 @@ export function createSpawnCommandRunner(deps: { readonly env?: NodeJS.ProcessEn
   return (command, args, options) => rejectOnAbort(options?.signal, () => new Promise<CommandRunResult>((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: stripDeniedEnv(deps.env ?? {}),
+      env: stripDeniedEnv({ ...deps.env, ...options?.env }),
       ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
     });
     const signal = options?.signal;
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let childSettlementObserved = false;
     let abortKillTimer: ReturnType<typeof setTimeout> | undefined;
 
     const cancelAbortKillTimer = (): void => {
@@ -165,6 +189,11 @@ export function createSpawnCommandRunner(deps: { readonly env?: NodeJS.ProcessEn
       settled = true;
       signal?.removeEventListener('abort', onAbort);
       settle();
+    };
+    const observeChildSettlement = (outcome: CommandRunResult | { readonly outcome: 'errored'; readonly error: unknown }): void => {
+      if (childSettlementObserved) return;
+      childSettlementObserved = true;
+      options?.onChildSettled?.(outcome);
     };
     /**
      * The abort path begins cooperative cleanup with `SIGTERM`, then schedules
@@ -195,17 +224,17 @@ export function createSpawnCommandRunner(deps: { readonly env?: NodeJS.ProcessEn
     });
     child.stdin?.on('error', () => undefined);
     child.once('error', (error) => {
+      observeChildSettlement({ outcome: 'errored', error });
       finish(() => reject(error));
     });
     child.once('close', (exitCode, terminationSignal) => {
       cancelAbortKillTimer();
+      const result: CommandRunResult = terminationSignal !== null
+        ? { outcome: 'signaled', stdout, stderr, signal: terminationSignal }
+        : { outcome: 'exited', stdout, stderr, exitCode: exitCode ?? 1 };
+      observeChildSettlement(result);
       finish(() => {
-        if (terminationSignal !== null) {
-          resolve({ outcome: 'signaled', stdout, stderr, signal: terminationSignal });
-          return;
-        }
-
-        resolve({ outcome: 'exited', stdout, stderr, exitCode: exitCode ?? 1 });
+        resolve(result);
       });
     });
 

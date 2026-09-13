@@ -21,8 +21,8 @@ Generate options:
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
-  --grep <pattern>  --target <name>  --headed  --cache-only  --update-cache  --allow-empty  --list
-  --stale <fail>  --json  --no-color
+  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list
+  --stale <fail>  --ai <claude|codex>  --json  --no-color
 
 Check options:
   --target <name>  --allow-empty  --list  --json  --config <path>  --no-color
@@ -35,7 +35,7 @@ AI configuration:
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
 
 Heal configuration:
-  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
+  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the fail-closed baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
@@ -48,7 +48,7 @@ ambercast 当前已实现的命令包括 generate、run、check 以及 heal。
 | 命令 | 位置参数 | 支持的选项 | 配置路径 |
 | --- | --- | --- | --- |
 | generate | 字面路径；未指定路径则执行发现 | strict, force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| run | 字面路径；未指定路径则执行发现 | grep, target, headed, cache-only, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| run | 字面路径；未指定路径则执行发现 | grep, target, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | 字面路径；未指定路径则执行发现 | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 

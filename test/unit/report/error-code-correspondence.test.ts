@@ -26,6 +26,7 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'missing-plan', reportCode: 'MISSING_PLAN', exitCode: 4, reportKind: 'usage' },
   { errorKind: 'stale-ir', reportCode: 'STALE_PLAN', exitCode: 4, reportKind: 'usage' },
   { errorKind: 'integrity-violation', reportCode: 'INTEGRITY_VIOLATION', exitCode: 4, reportKind: 'usage' },
+  { errorKind: 'grounding-unresolved', reportCode: 'GROUNDING_UNRESOLVED', exitCode: 4, reportKind: 'usage' },
   { errorKind: 'browser-launch-failed', reportCode: 'BROWSER_LAUNCH_FAILED', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'ai-executor-unavailable', reportCode: 'AI_EXECUTOR_UNAVAILABLE', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'ai-response-invalid', reportCode: 'AI_RESPONSE_INVALID', exitCode: 3, reportKind: 'environment' },
@@ -44,6 +45,7 @@ const REPORTABLE_ERROR_KINDS = [
   'missing-plan',
   'stale-ir',
   'integrity-violation',
+  'grounding-unresolved',
   'browser-launch-failed',
   'ai-executor-unavailable',
   'ai-response-invalid',
@@ -78,7 +80,7 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     expect(new Set(mappedKinds)).toStrictEqual(new Set(REPORTABLE_ERROR_KINDS));
   });
 
-  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind }) => errorKind !== 'interrupted' && errorKind !== 'prompt-path-invalid'))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
+  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind }) => errorKind !== 'interrupted' && errorKind !== 'prompt-path-invalid' && errorKind !== 'grounding-unresolved'))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
     expectAccepted(ReportError, {
       scope: 'run',
       kind: reportKind,
@@ -92,6 +94,15 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
       message: 'The test case encountered a classified error.',
       caseId: 'login-succeeds',
     });
+  });
+
+  it('accepts GROUNDING_UNRESOLVED only as a case-scoped usage error', () => {
+    expectAccepted(ReportError, {
+      scope: 'case', kind: 'usage', code: 'GROUNDING_UNRESOLVED', message: 'No cached grounding is available.', caseId: 'case-a',
+    });
+    expect(ReportError.safeParse({
+      scope: 'run', kind: 'usage', code: 'GROUNDING_UNRESOLVED', message: 'No cached grounding is available.',
+    }).success).toBe(false);
   });
 
   it('accepts INTERRUPTED only as a run-scoped environment error', () => {

@@ -27,7 +27,7 @@ Heal first repairs Grounding, then attempts single-step or tail repair, and fina
 
 ## Limits {#limits}
 
-- `heal.maxStepRepairs`, when set, is a positive hard limit on real incremental repair provider dispatches, including element confirmation and excluding cache-only baseline and Stage 3.
+- `heal.maxStepRepairs`, when set, is a positive hard limit on real incremental repair provider dispatches, including element confirmation and excluding the fail-closed baseline and Stage 3.
 - `heal.caseTimeoutMs` is a positive case-wide admission deadline; its resolved default is 300000 ms.
 
 ## Confirmation {#confirmation}

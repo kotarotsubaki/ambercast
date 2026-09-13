@@ -548,6 +548,21 @@ describe('architecture guardrails', () => {
       [
         {
           "className": "IntegrityViolationError",
+          "fileName": "adapters/ai/agentic/mcp-server.ts",
+          "functionName": "startAgenticMcpServer",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "adapters/ai/agentic/mcp-server.ts",
+          "functionName": "startAgenticMcpServer",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "adapters/ai/agentic/mcp-server.ts",
+          "functionName": "startAgenticMcpServer",
+        },
+        {
+          "className": "IntegrityViolationError",
           "fileName": "adapters/browser/chromium.ts",
           "functionName": "assertSecretSinkOrigin",
         },

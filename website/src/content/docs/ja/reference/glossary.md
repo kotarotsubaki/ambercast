@@ -52,7 +52,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `--` | `--` はオプション解析を終了し、後続のトークンをリテラルパスとして扱います。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--` で始まるファイル名 |
 | `--allow-empty` | `--allow-empty` は、このフラグを解析するコマンドにおいて空の選択を許容します。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1パーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#planned-interface) | 実装済みの `--headed` |
-| `--cache-only` | `--cache-only` は、runの実行時にグラウンディングのミスが発生した場合にAIフォールバックを呼び出さず拒絶させます。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
+| `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可します。指定しない場合、run はミスを拒絶します。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
 | `--clear` | `--clear` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1ベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
 | `--config` | `--config` はコマンドローカルのフラグであり、generateとcheckでのみ解析されます。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 initパーサーセマンティクスはありません。 | [ambercast init](/ambercast/ja/reference/cli/init/#planned-interface) | 設定の `testDir` |

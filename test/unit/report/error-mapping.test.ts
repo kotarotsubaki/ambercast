@@ -7,6 +7,7 @@ import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-err
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
+import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { assertNoLiteralSecrets } from '#usecases/generator-secret-policy.js';
 import { ReportError } from '#report/schema.js';
@@ -24,6 +25,7 @@ const EXPECTED_REPORT_ERROR_DETAILS = {
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
   'stale-ir': { kind: 'usage', code: 'STALE_PLAN' },
   'integrity-violation': { kind: 'usage', code: 'INTEGRITY_VIOLATION' },
+  'grounding-unresolved': { kind: 'usage', code: 'GROUNDING_UNRESOLVED', hint: 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.' },
   'browser-launch-failed': { kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', hint: BROWSER_LAUNCH_FAILED_HINT },
   'ai-executor-unavailable': { kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE' },
   'ai-response-invalid': { kind: 'environment', code: 'AI_RESPONSE_INVALID' },
@@ -55,6 +57,17 @@ describe('REPORT_ERROR_DETAILS', () => {
 });
 
 describe('reportError', () => {
+  it('round-trips case-scoped grounding-unresolved details through the report schema', () => {
+    const error = new GroundingUnresolvedError('No cached grounding is available.', {
+      stepId: 'sign-in', reason: 'recoverable-miss',
+    });
+
+    expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login' })).toEqual({
+      scope: 'case', kind: 'usage', code: 'GROUNDING_UNRESOLVED', caseId: 'login',
+      message: error.message, hint: 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.',
+      details: { stepId: 'sign-in', reason: 'recoverable-miss' },
+    });
+  });
   it.each(REPORTABLE_ERROR_DETAILS.filter(([kind]) => kind !== 'interrupted' && kind !== 'prompt-path-invalid'))('serializes a %s classified error at case scope', (kind, details) => {
     const error = new ClassifiedError(kind as ErrorKind, `The ${kind} failure occurred.`);
 
@@ -63,6 +76,7 @@ describe('reportError', () => {
       ...details,
       caseId: 'login-succeeds',
       message: error.message,
+      ...(kind === 'grounding-unresolved' ? { hint: 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.' } : {}),
       ...(kind === 'browser-launch-failed' ? { hint: BROWSER_LAUNCH_FAILED_HINT } : {}),
       ...(kind === 'unexpected-crash' ? { details: { cause: { name: 'Error' } } } : {}),
     });
@@ -182,7 +196,9 @@ describe('reportError', () => {
     const location = kind === 'interrupted' || kind === 'prompt-path-invalid' ? { scope: 'run' as const } : { scope: 'case' as const, caseId: 'case-a' };
 
     expect(errorMapping.reportError(error, location as never)).toMatchObject({
-      hint: kind === 'browser-launch-failed' ? BROWSER_LAUNCH_FAILED_HINT : 'Use the documented remediation.',
+      hint: kind === 'grounding-unresolved'
+        ? 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.'
+        : kind === 'browser-launch-failed' ? BROWSER_LAUNCH_FAILED_HINT : 'Use the documented remediation.',
     });
   });
 

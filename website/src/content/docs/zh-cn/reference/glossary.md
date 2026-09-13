@@ -47,7 +47,7 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `--` | `--` 终止选项解析，并将其后的词元保留为字面量路径。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | 以 `--` 开头的文件名 |
 | `--allow-empty` | `--allow-empty` 使得解析该选项的命令在选择集为空时仍被允许执行。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 解析器语义。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#planned-interface) | 已实现的 `--headed` |
-| `--cache-only` | `--cache-only` 使 run 命令在 Grounding 未命中时直接拒绝，而不是调用 AI 回退。 | `ambercast run`；[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags) | 离线测试发现 |
+| `--resolve` | `--resolve` 会在 grounding 缺失时显式允许 run 使用实时 AI 解析；未传入时，run 会拒绝该未命中。 | `ambercast run`；[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags) | 离线测试发现 |
 | `--clear` | `--clear` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 baseline 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | 当前命令执行的文件删除 |
 | `--config` | `--config` 是命令局部选项，仅由 generate 和 check 命令解析。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 init 解析器语义。 | [ambercast init](/ambercast/zh-cn/reference/cli/init/#planned-interface) | 配置 `testDir` |

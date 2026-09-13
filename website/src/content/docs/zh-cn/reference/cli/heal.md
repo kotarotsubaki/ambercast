@@ -27,7 +27,7 @@ description: 规定 ambercast heal 命令的授权机制与运行时副作用，
 
 ## 限制 {#limits}
 
-若设置了 `heal.maxStepRepairs`，该项是对真实增量修复提供商调度的正整数硬性限制，包含元素确认，但不包含仅使用缓存的基线与 Stage 3。
+若设置了 `heal.maxStepRepairs`，该项是对真实增量修复提供商调度的正整数硬性限制，包含元素确认，但不包含失败关闭基线与 Stage 3。
 
 `heal.caseTimeoutMs` 是针对整个用例的正整数准入截止时间；其解析后的默认值为 300000 ms。
 

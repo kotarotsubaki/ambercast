@@ -10,6 +10,7 @@ import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-err
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
+import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
@@ -17,6 +18,7 @@ import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
+import { ERROR_EXIT_CODES } from '#core/errors/exit-codes.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
@@ -130,7 +132,7 @@ const PASSWORD: ElementRef = { strategy: 'accessibility', role: 'textbox', name:
 const SUBMIT: ElementRef = { strategy: 'accessibility', role: 'button', name: 'Submit' };
 const DEFAULT_OPTIONS: RunOptions = {
   files: [],
-  cacheOnly: false,
+  resolve: true,
   updateCache: false,
   allowEmpty: false,
   list: false,
@@ -1817,7 +1819,7 @@ describe('run', () => {
     expect(outcome.results[0]?.engine).toBe('chromium');
   });
 
-  it('uses the unclassified case-abort stopgap for a cold AI step in cache-only mode and closes the session', async () => {
+  it('reports a grounding-unresolved error for a cold AI step in cache-only mode and closes the session', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(new Map(), { onClose: closed });
     const { deps, events, recordingStorage } = createScenario({
@@ -1836,20 +1838,129 @@ describe('run', () => {
     ];
     await seedFreshArtifacts(recordingStorage.storage, testPath, steps);
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, cacheOnly: true });
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
-    expectStopgapOutcome(outcome, 'recorded-ai', 'after-ai', 'before-ai');
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      details: { stepId: 'recorded-ai', reason: 'missing' },
+    });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [
+        { id: 'before-ai', status: 'passed' },
+        { id: 'recorded-ai', status: 'error', kind: 'environment' },
+        { id: 'after-ai', status: 'skipped' },
+      ],
+    });
     expect(outcome.results[0]?.result.aiCalls).toBe(0);
     expect(aiCalls(events)).toEqual([]);
     expect(aiResults(events)).toEqual([]);
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a missing preflight miss for the first leading AI step before browser startup', async () => {
+    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('first-ai')]);
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      details: { stepId: 'first-ai', reason: 'missing' },
+    });
+    expect(browserDriver).not.toHaveBeenCalled();
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('attributes a leading preflight miss to the first AI step when later AI steps also miss', async () => {
+    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(
+      recordingStorage.storage,
+      testPath,
+      [aiStep('first-ai'), aiStep('second-ai')],
+      { 'second-ai': { kind: 'ai', trace: legacyTrace([], [passingText('Cached dashboard')]) } },
+    );
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      details: { stepId: 'first-ai', reason: 'missing' },
+    });
+    expect(browserDriver).not.toHaveBeenCalled();
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['no grounding entry', {} as GroundingDocument['entries'], 'missing'],
+    ['a legacy cache miss', aiGrounding(legacyTrace([], [passingText('Cached dashboard')])), 'recoverable-miss'],
+    ['a post-replay miss', aiGrounding(coveredTrace([], [passingText('Cached dashboard')])), 'recoverable-miss'],
+  ] as const)('reports a case-scoped grounding-unresolved error for %s when resolve is false', async (_description, entries, reason) => {
+    const session = createFakeBrowserSession(new Map(), {
+      assertOutcome: { passed: false, message: 'Cached dashboard is absent.' },
+    });
+    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    const steps: TestStep[] = [
+      { id: 'before-ai', kind: 'action', action: 'navigate', url: '/before' },
+      aiStep(),
+      { id: 'after-ai', kind: 'action', action: 'navigate', url: '/after' },
+    ];
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, entries);
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      exitCode: ERROR_EXIT_CODES['grounding-unresolved'],
+      details: { stepId: 'recorded-ai', reason },
+    });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [
+        { id: 'before-ai', status: 'passed' },
+        { id: 'recorded-ai', status: 'error', kind: 'environment' },
+        { id: 'after-ai', status: 'skipped' },
+      ],
+    });
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+    expect(aiCalls(events)).toEqual([]);
+  });
+
+  it('uses agentic fallback for a grounding miss when resolve is true', async () => {
+    const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: true } });
+    const executor = createFakeAiExecutor({
+      async executeAgentic(request) {
+        await request.controller.evaluateAssert(passingText('Dashboard'), 'dashboard-reached');
+        return { outcome: 'success' };
+      },
+    });
+    const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      resolveAiExecutor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: true });
+
+    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(resolveAiExecutor).toHaveBeenCalledOnce();
+    expect(executor.agenticRequests).toHaveLength(1);
+  });
+
   it.each([
     ['an absent grounding entry', {} as GroundingDocument['entries'], new Map<string, FakeBrowserSessionEntry>(), false],
     ['an element-not-found grounding miss', elementGrounding(['click-submit']), new Map<string, FakeBrowserSessionEntry>(), true],
     ['a fingerprint-mismatch grounding miss', elementGrounding(['click-submit']), liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), true],
-  ] as const)('uses the unclassified case-abort stopgap for %s in cache-only mode and closes the session', async (_description, entries, live, resolvesGrounding) => {
+  ] as const)('keeps element grounding on the existing CaseAbort recovery mode for %s when resolve is false', async (_description, entries, live, resolvesGrounding) => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(live, { onClose: closed });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
@@ -1864,7 +1975,7 @@ describe('run', () => {
     ];
     await seedFreshArtifacts(recordingStorage.storage, testPath, steps, entries);
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, cacheOnly: true });
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
     expectStopgapOutcome(outcome, 'click-submit', 'after-grounding', 'before-grounding');
     if (resolvesGrounding) {
@@ -1909,7 +2020,7 @@ describe('run', () => {
     ];
     await arrangeGrounding(recordingStorage.storage, testPath, steps);
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, cacheOnly: true });
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
     expectStopgapOutcome(outcome, 'click-submit', 'after-grounding', 'before-grounding');
     expect(resolveGrounded).not.toHaveBeenCalled();
@@ -3312,7 +3423,7 @@ describe('run agentic fallback pipeline', () => {
     ]);
   });
 
-  it('suppresses a behavioral trace fallback in cache-only mode without resolving an AI executor', async () => {
+  it('reports a grounding-unresolved error for a behavioral trace fallback in cache-only mode', async () => {
     const session = createFakeBrowserSession(new Map(), {
       assertOutcome: { passed: false, message: 'The cached page changed.' },
     });
@@ -3327,9 +3438,12 @@ describe('run agentic fallback pipeline', () => {
       aiGrounding(coveredTrace([], [passingText('Cached dashboard')])),
     );
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, cacheOnly: true });
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      details: { stepId: 'recorded-ai', reason: 'recoverable-miss' },
+    });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
@@ -3889,7 +4003,7 @@ describe('run path-B element recovery', () => {
       { 'click-submit': { kind: 'element', fingerprint: FINGERPRINT } },
     );
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, cacheOnly: true });
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
     expect(outcome.results[0]?.result.status).toBe('error');
     expect(resolveAiExecutor).not.toHaveBeenCalled();
@@ -3937,7 +4051,7 @@ describe('run path-B element recovery', () => {
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }],
     );
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, cacheOnly: true });
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(outcome.results[0]?.result.status).toBe('error');
@@ -6094,7 +6208,7 @@ describe('run failure evidence', () => {
         discoverTestFiles: async () => [],
         config: { testDir, testMatch: ['**/*.test.md'], testIgnore: ['**/.runs/**'], targets: RESOLVED_TARGETS, defaultTarget: 'web', ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 }, ci: { heal: false, updateGroundingCache: false }, grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' } },
         isCI: false,
-      }, { files: [testPath], cacheOnly: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail' });
+      }, { files: [testPath], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' });
       const result = outcome.results[0]?.result;
       const step = result?.steps[0];
       const screenshotPath = join(runsDir, runId, 'login', 'assert-dashboard.png');

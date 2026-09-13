@@ -90,10 +90,10 @@ npx ambercast run --json tests/ambercast/sign-in.test.md
 ```
 
 - `generate` calls the AI provider once per prompt that has no fresh plan and writes the plan and grounding files next to the prompt. It skips prompts whose plan is already fresh. Use `--force` only when the user explicitly asks for a regeneration.
-- `run` replays the plan in Chromium with no AI calls as long as the cached grounding still matches the page. On a grounding miss it falls back to AI for that step only. To prove a zero-AI replay, or in CI, add `--cache-only` so a miss fails instead of falling back:
+- `run` replays the plan in Chromium with no AI calls as long as the cached grounding still matches the page. On a grounding miss it fails by default. Add `--resolve` to allow AI fallback for that step:
 
 ```bash
-npx ambercast run --cache-only --json tests/ambercast/sign-in.test.md
+npx ambercast run --resolve --json tests/ambercast/sign-in.test.md
 ```
 
 - Grounding changes found during a local run are persisted when `grounding.localWriteBack` is `auto` (the default). When it is `explicit`, pass `--update-cache`. In CI they are persisted only with `--update-cache` or with `ci.updateGroundingCache` set to true.
@@ -150,7 +150,7 @@ Never edit plan or grounding files by hand. Change the prompt and regenerate, or
 - Never put a literal secret value in a prompt, a plan, a command line, a report, or a chat message. Use a `{{secrets.name}}` reference with a grant line and provide the value through the environment.
 - Never run `heal` in CI. The CLI refuses with exit code 2 unless `ci.heal` is true, and even then an agent must not start it there.
 - Never edit `.ambercast.plan.json` or `.ambercast.grounding.json` by hand.
-- Never hide a failure: do not drop `--cache-only` to make a CI run pass, and do not use `--force` to regenerate a plan just to get past a red result.
+- Never hide a failure: do not add `--resolve` to make a CI run pass, and do not use `--force` to regenerate a plan just to get past a red result.
 - Never use `--yes` as a substitute for the user's approval of a repair.
 
 ## Learn more

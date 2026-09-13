@@ -7,7 +7,7 @@ This guide provides portable CI recipes for running ambercast on GitLab CI and g
 
 ## Prerequisites {#prerequisites}
 
-- `run` accepts `--cache-only`, `--update-cache`, `--allow-empty`, and `--list`; it has no `--config` option.
+- `run` accepts `--resolve`, `--update-cache`, `--allow-empty`, and `--list`; it has no `--config` option. Its default grounding-miss behavior is already fail-closed, so CI needs no flag to suppress AI resolution.
 
 ## Steps {#steps}
 

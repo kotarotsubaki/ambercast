@@ -62,7 +62,7 @@ const GENERATE_OPTIONS: GenerateOptions = {
   allowEmpty: false,
   list: false,
 };
-const RUN_OPTIONS: RunOptions = { files: [TEST_PATH], cacheOnly: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
+const RUN_OPTIONS: RunOptions = { files: [TEST_PATH], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 const CHECK_OPTIONS: CheckOptions = { files: [TEST_PATH], allowEmpty: false, list: false };
 const SUCCESS_CITATION = 'When I submit valid credentials, I reach the dashboard.';
 const SUCCESS_INTENT = {

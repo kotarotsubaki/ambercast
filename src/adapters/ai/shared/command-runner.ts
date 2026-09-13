@@ -69,12 +69,14 @@ export interface CommandRunOptions {
   readonly cwd?: string;
 
   /**
-   * Observes the child's actual terminal event once, independently of promise settlement.
+   * Observes this call's terminal outcome exactly once, independently of promise settlement.
    *
    * Abort rejects the command promise as soon as cleanup starts, but does not
    * mean the child has closed. The callback therefore remains independent of
    * that rejection so a caller can wait for real termination before closing a
-   * dependent transport such as the per-invocation MCP server.
+   * dependent transport such as the per-invocation MCP server. It also fires
+   * when an already-aborted signal or a synchronous spawn failure prevents a
+   * child process from being created.
    */
   readonly onChildSettled?: (outcome: CommandRunResult | { readonly outcome: 'errored'; readonly error: unknown }) => void;
 }
@@ -87,8 +89,9 @@ export interface CommandRunOptions {
  * @param options - Optional stdin, cancellation, working-directory, and
  * per-call environment controls; the runner merges that environment with its
  * base environment before filtering the combined result. Its child-settled
- * observer fires once for the real terminal event even when abort has already
- * rejected the returned promise.
+ * observer fires once for every call, including failures before a child exists;
+ * for a real child, it remains tied to that child's terminal event even when
+ * abort has already rejected the returned promise.
  * @returns The completed non-abort process outcome.
  * @throws If spawning fails or the supplied signal aborts the call.
  * @remarks
@@ -161,12 +164,24 @@ export function stripDeniedEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
  * secret-bearing ambient environment.
  */
 export function createSpawnCommandRunner(deps: { readonly env?: NodeJS.ProcessEnv } = {}): CommandRunner {
-  return (command, args, options) => rejectOnAbort(options?.signal, () => new Promise<CommandRunResult>((resolve, reject) => {
-    const child = spawn(command, args, {
+  return (command, args, options) => {
+    if (options?.signal?.aborted) {
+      options.onChildSettled?.({ outcome: 'errored', error: abortReason(options.signal) });
+    }
+
+    return rejectOnAbort(options?.signal, () => new Promise<CommandRunResult>((resolve, reject) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: stripDeniedEnv({ ...deps.env, ...options?.env }),
       ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
-    });
+      });
+    } catch (error) {
+      options?.onChildSettled?.({ outcome: 'errored', error });
+      reject(error);
+      return;
+    }
     const signal = options?.signal;
     let stdout = '';
     let stderr = '';
@@ -239,5 +254,6 @@ export function createSpawnCommandRunner(deps: { readonly env?: NodeJS.ProcessEn
     });
 
     child.stdin?.end(options?.input);
-  }));
+    }));
+  };
 }

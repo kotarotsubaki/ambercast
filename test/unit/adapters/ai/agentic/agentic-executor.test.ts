@@ -91,6 +91,23 @@ describe('executeAgentic', () => {
     expect(order).toEqual(['cleanup', 'close']);
   });
 
+  it('settles a no-child runner failure after its errored settlement callback', async () => {
+    const order: string[] = [];
+    const failure = new Error('provider failed before creating a child');
+    mcp.start.mockResolvedValue({ url: 'http://127.0.0.1:1', token: 'token', awaitDrain: async () => undefined, peekLatchedError: () => undefined, close: async () => { order.push('close'); } });
+    const run: CommandRunner = async (_command, _args, options) => {
+      options?.onChildSettled?.({ outcome: 'errored', error: failure });
+      throw failure;
+    };
+    const execution = executeAgentic(request(), run, invocation(order, async () => ({ outcome: 'success' })));
+    const timeout = new Promise<Error>((resolve) => {
+      setTimeout(() => resolve(new Error('execution did not settle after an errored child settlement')), 100);
+    });
+
+    await expect(Promise.race([execution, timeout])).rejects.toBe(failure);
+    expect(order).toEqual(['cleanup', 'close']);
+  });
+
   it('passes the instruction-covered prompt to provider stdin and reads the final outcome before disposal', async () => {
     const order: string[] = [];
     mcp.start.mockResolvedValue({ url: 'http://127.0.0.1:1', token: 'token', awaitDrain: async () => undefined, peekLatchedError: () => undefined, close: async () => { order.push('close'); } });

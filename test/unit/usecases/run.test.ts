@@ -1873,21 +1873,33 @@ describe('run', () => {
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
-  it('attributes a leading preflight miss to the first AI step when later AI steps also miss', async () => {
+  it('attributes a leading legacy preflight miss to its own step after later resolvable AI steps', async () => {
     const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
-      [aiStep('first-ai'), aiStep('second-ai')],
-      { 'second-ai': { kind: 'ai', trace: legacyTrace([], [passingText('Cached dashboard')]) } },
+      [aiStep('first-ai'), aiStep('second-ai'), aiStep('third-ai')],
+      {
+        'first-ai': { kind: 'ai', trace: legacyTrace([], [passingText('Cached dashboard')]) },
+        'second-ai': { kind: 'ai', trace: coveredTrace([], [passingText('Cached dashboard')]) },
+        'third-ai': { kind: 'ai', trace: coveredTrace([], [passingText('Cached dashboard')]) },
+      },
     );
 
     const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
     expect(outcome.results[0]?.error).toMatchObject({
       kind: 'grounding-unresolved',
-      details: { stepId: 'first-ai', reason: 'missing' },
+      details: { stepId: 'first-ai', reason: 'recoverable-miss' },
+    });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [
+        { id: 'first-ai', status: 'error', kind: 'environment' },
+        { id: 'second-ai', status: 'skipped' },
+        { id: 'third-ai', status: 'skipped' },
+      ],
     });
     expect(browserDriver).not.toHaveBeenCalled();
     expect(resolveAiExecutor).not.toHaveBeenCalled();

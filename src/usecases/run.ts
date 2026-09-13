@@ -3298,6 +3298,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     const preflightAllowedRunRefs = new Set<RunVariableName>();
     const preflightRunState = new Map<RunVariableName, string>();
     let firstPreflightAiMiss: { readonly stepId: Step['id']; readonly reason: 'missing' | 'recoverable-miss' } | undefined;
+    let firstPreflightAiMissStep: Step | undefined;
     let hasPriorExecutableStep = false;
     for (const step of plan.steps) {
       if (step.kind === 'capture') {
@@ -3315,6 +3316,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       if (entry?.kind !== 'ai') {
         if (!options.resolve && !hasPriorExecutableStep && firstPreflightAiMiss === undefined) {
           firstPreflightAiMiss = { stepId: step.id, reason: 'missing' };
+          firstPreflightAiMissStep = step;
         }
         continue;
       }
@@ -3341,10 +3343,12 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       }
       if (classified.data.kind === 'legacy-cache-miss' && !options.resolve && !hasPriorExecutableStep && firstPreflightAiMiss === undefined) {
         firstPreflightAiMiss = { stepId: step.id, reason: 'recoverable-miss' };
+        firstPreflightAiMissStep = step;
       }
       hasPriorExecutableStep = true;
     }
     if (firstPreflightAiMiss !== undefined) {
+      currentStep = firstPreflightAiMissStep;
       throw new GroundingUnresolvedError(
         'AI-directed replay has no covered trace because AI resolution is not permitted. Pass --resolve to permit resolution.',
         firstPreflightAiMiss,

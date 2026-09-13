@@ -27,9 +27,12 @@ interface CycleEdge {
 /**
  * Supplies the localized data and accessible description for the fixed five-node cycle figure.
  *
- * The component deliberately retains the `.intro-*` selector names because visual restyling and
- * selector renaming are outside its contract. Its five-node, five-edge graph is the accepted
- * functional scope rather than a smaller or incomplete rendering.
+ * @remarks
+ * The component keeps the `.intro-*` selector family rather than renaming it: the classes are an
+ * already-styled, stable naming scheme shared by `Figure.astro`, and renaming them for this
+ * visual-only change would ripple into markup-coupled tests for no rendering benefit. Its
+ * five-node, five-edge graph remains the accepted functional scope; only how those five nodes and
+ * edges are arranged and drawn changes here.
  */
 interface Props {
   nodes: CycleNode[];
@@ -93,6 +96,20 @@ const runToHeal = getEdge('run', 'heal', 'forward');
 const healToArtifacts = getEdge('heal', 'artifacts', 'forward');
 ---
 
+<!--
+  Layout intent (grid-area names below map onto `.intro-cycle-flow`'s grid-template-areas in
+  custom.css): `artifacts` is the hub both directed paths pass through, so it receives an arrow
+  from `generate` above and, on the return leg, from `heal` below, while feeding `run` to its
+  right. Sharing one node between the forward and return paths is what makes the cycle read as one
+  connected loop rather than a row of boxes with a caption underneath.
+
+  Exactly one edge has endpoints that are not grid-adjacent at any given breakpoint — `run`→`heal`
+  on this (desktop) layout, `heal`→`artifacts` once the column collapses at ≤26rem, since a single
+  column no longer has room to loop back. That one edge renders as a single spanning element
+  (`.intro-cycle-return`, styled in custom.css to draw both segments of the turn) rather than two
+  independent arrow cells, so the corner reads as one continuous line and `runToHeal.label` is
+  never read twice.
+-->
 <Figure alt={alt} caption={caption}>
   <div class="intro-cycle-flow">
     <div class={nodeClass(prompt)} style="grid-area: prompt">
@@ -104,7 +121,7 @@ const healToArtifacts = getEdge('heal', 'artifacts', 'forward');
       <strong>{generate.label}</strong>
       <span>{generate.text}</span>
     </div>
-    <div class="intro-arrow" style="grid-area: generate-to-artifacts">→ {generateToArtifacts.label}</div>
+    <div class="intro-arrow" style="grid-area: generate-to-artifacts">↓ {generateToArtifacts.label}</div>
     <div class={nodeClass(artifacts)} style="grid-area: artifacts">
       <strong>{artifacts.label}</strong>
       <span>{artifacts.text}</span>
@@ -114,13 +131,33 @@ const healToArtifacts = getEdge('heal', 'artifacts', 'forward');
       <strong>{run.label}</strong>
       <span>{run.text}</span>
     </div>
-    <div style="grid-area: heal-note">
-      <div class={nodeClass(heal)}>
-        <strong>{heal.label}</strong>
-        <span>{heal.text}</span>
-      </div>
-      <div class="intro-arrow">{run.label} → {heal.label} · {runToHeal.label}</div>
-      <div class="intro-arrow">{heal.label} → {artifacts.label} · {healToArtifacts.label}</div>
+    <!--
+      The one non-adjacent edge (see the layout-intent note above): a single element spans both
+      grid tracks it needs to cross, and custom.css draws its corner (a vertical drop from `run`,
+      then a horizontal run into `heal`) as an actual pair of border lines on the element itself
+      rather than relying on arrow glyphs alone — text a few rows away from either node it names
+      does not read as "connected" without a visible line joining them. At the ≤26rem breakpoint
+      the element collapses back to a single adjacent grid cell like any other arrow, where
+      custom.css removes the corner lines rather than drawing a corner with nothing to turn. Two
+      glyph spans (rather than one glyph swapped by breakpoint) match the direction each layout
+      actually draws: `←` for the corner's final, horizontal leg into `heal` on the desktop hub,
+      `↓` for the plain vertical step down to `heal` once the column collapses — the same
+      direction-matches-glyph convention `generate`→`artifacts`'s `↓` and `heal`→`artifacts`'s `↑`
+      already use elsewhere in this figure.
+    -->
+    <div class="intro-cycle-return" style="grid-area: run-to-heal">
+      <span class="intro-cycle-return-glyph-wide">←</span><span class="intro-cycle-return-glyph-narrow">↓</span> {runToHeal.label}
     </div>
+    <div class={nodeClass(heal)} style="grid-area: heal">
+      <strong>{heal.label}</strong>
+      <span>{heal.text}</span>
+    </div>
+    <!--
+      Adjacent (straight vertical arrow) at the desktop hub layout; custom.css reshapes this same
+      element into the spanning return connector at ≤26rem, where it is `run`→`heal` that becomes
+      adjacent instead. One element serves both roles so the DOM/accessible tree never duplicates
+      an edge just because its visual treatment differs per breakpoint.
+    -->
+    <div class="intro-arrow intro-cycle-return-at-narrow" style="grid-area: heal-to-artifacts">↑ {healToArtifacts.label}</div>
   </div>
 </Figure>

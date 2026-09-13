@@ -273,11 +273,14 @@ describe('dependency-cruiser architecture rules', () => {
       'node:child_process',
       'node:crypto',
       'node:fs/promises',
+      'node:http',
       'node:os',
       'node:path',
+      '@modelcontextprotocol/sdk',
       'ajv',
       'ajv-formats',
       'playwright-core',
+      'zod',
     ].sort());
   });
 

@@ -2908,10 +2908,10 @@ describe('generate', () => {
       expect(execute).toHaveBeenCalledOnce();
     });
 
-    it('stops a literal secret found by the plan safety policy after one attempt without dropping diagnostics', async () => {
+    it('retries and exhausts a literal secret found by the plan safety policy without dropping diagnostics', async () => {
       const literal = 'sk-live-secret-in-provider-ambiguity';
       const response: GeneratedPlanResponse = { steps: [], ambiguities: [literal] };
-      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({ data: response, raw: JSON.stringify(response) }));
       const { deps, events, recordingStorage } = createScenario({
         resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
       });
@@ -2924,11 +2924,89 @@ describe('generate', () => {
       expect(outcome.results[0]?.error?.details).toMatchObject({
         detector: 'credential-prefix-sk',
         path: '[0]',
-        attempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }],
       });
-      expect(execute).toHaveBeenCalledOnce();
-      expect(aiCallEvents(events.emitted())).toHaveLength(1);
-      expect(aiEvents(events.emitted())).toHaveLength(2);
+      expect(outcome.results[0]?.error?.details?.attempts).toEqual([
+        { attempt: 1, code: 'SECRET_LITERAL_REJECTED' },
+        { attempt: 2, code: 'SECRET_LITERAL_REJECTED' },
+        { attempt: 3, code: 'SECRET_LITERAL_REJECTED' },
+      ]);
+      expect(execute).toHaveBeenCalledTimes(3);
+      expect(aiCallEvents(events.emitted())).toHaveLength(3);
+      expect(aiEvents(events.emitted())).toHaveLength(6);
+      const secondPreviousAttempts = requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context);
+      const thirdPreviousAttempts = requireRawPreviousAttempts(execute.mock.calls[2]?.[0].context);
+      expect(secondPreviousAttempts).toEqual([{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }]);
+      expect(thirdPreviousAttempts).toEqual([
+        { attempt: 1, code: 'SECRET_LITERAL_REJECTED' },
+        { attempt: 2, code: 'SECRET_LITERAL_REJECTED' },
+      ]);
+      expect(Object.keys(requireRawObject(secondPreviousAttempts[0], 'the second dispatch first previous attempt')))
+        .toEqual(['attempt', 'code']);
+      expect(Object.keys(requireRawObject(thirdPreviousAttempts[0], 'the third dispatch first previous attempt')))
+        .toEqual(['attempt', 'code']);
+      expect(Object.keys(requireRawObject(thirdPreviousAttempts[1], 'the third dispatch second previous attempt')))
+        .toEqual(['attempt', 'code']);
+    });
+
+    it('retries a literal-secret rejection with projected feedback and succeeds on the next response', async () => {
+      const literal = 'sk-live-secret-in-provider-ambiguity';
+      const rejected: GeneratedPlanResponse = { steps: [], ambiguities: [literal] };
+      const responses = [rejected, RESPONSE] as const;
+      let index = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        const response = responses[index++];
+        if (response === undefined) throw new Error('Unexpected retry dispatch.');
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+      const secondContext = execute.mock.calls[1]?.[0].context as Record<string, unknown>;
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'previousAttempts']);
+      expect(secondContext).toEqual({
+        testMd: normalizeTestMd(PROMPT),
+        targets: TARGETS,
+        previousAttempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }],
+      });
+    });
+
+    it('uses one whole-prompt retry budget across alternating retryable codes', async () => {
+      const literal = 'sk-live-secret-in-provider-ambiguity';
+      const literalRejected: GeneratedPlanResponse = { steps: [], ambiguities: [literal] };
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        if (dispatch++ === 0) throw new AiResponseInvalidError('Invalid provider response.', { issues: [] });
+        if (dispatch === 2) return { data: literalRejected, raw: JSON.stringify(literalRejected) };
+        if (dispatch === 3) throw new AiResponseInvalidError('Invalid provider response.', { issues: [] });
+        throw new Error('Unexpected fourth retry dispatch.');
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, maxAttempts: 3 });
+
+      expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+      expect(outcome.results[0]?.error?.details?.attempts).toEqual([
+        { attempt: 1, code: 'AI_RESPONSE_INVALID' },
+        { attempt: 2, code: 'SECRET_LITERAL_REJECTED' },
+        { attempt: 3, code: 'AI_RESPONSE_INVALID' },
+      ]);
+      expect(execute).toHaveBeenCalledTimes(3);
+      const thirdContext = execute.mock.calls[2]?.[0].context as Record<string, unknown>;
+      expect(thirdContext.previousAttempts).toEqual([
+        { attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [] },
+        { attempt: 2, code: 'SECRET_LITERAL_REJECTED' },
+      ]);
     });
 
     it('preserves an unmapped classified terminal error without attaching retry history', async () => {

@@ -54,7 +54,10 @@ export function createBrowserDriverResolver(
     const factory = BROWSER_DRIVER_FACTORIES[engine];
 
     if (factory === undefined) {
-      throw new BrowserLaunchFailedError(`No browser driver is registered for engine: ${engine}`);
+      throw new BrowserLaunchFailedError(`No browser driver is registered for engine: ${engine}`, {
+        reason: 'engine-unregistered',
+        engine,
+      });
     }
 
     return factory(options);

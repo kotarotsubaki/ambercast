@@ -85,7 +85,7 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['generate', 'run', 'check', 'heal'],
           planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
-          schemaVersions: { plan: 2, grounding: 1, report: '3.3' },
+          schemaVersions: { plan: 2, grounding: 1, report: '3.4' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
@@ -145,7 +145,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['generate', 'run', 'check', 'heal'],
       planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
-      schemaVersions: { plan: 2, grounding: 1, report: '3.3' },
+      schemaVersions: { plan: 2, grounding: 1, report: '3.4' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,

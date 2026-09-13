@@ -27,7 +27,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 
 使用错误（usage）与环境错误（environment）拥有相互独立的报告词汇表；每个错误代码到类别的映射关系均集中在 `REPORT_ERROR_DETAILS` 中定义。
 
-在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_GRANT_UNATTRIBUTABLE` 的 details 包含原因和安全的授权位置；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
+在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_GRANT_UNATTRIBUTABLE` 的 details 包含原因和安全的授权位置；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing`、`engine-unregistered` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
 
 ## 相关链接
 

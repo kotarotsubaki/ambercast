@@ -399,12 +399,11 @@ type GenerateResponseIssue = {
 /**
  * Records the safe feedback from one rejected provider attempt.
  *
- * A discriminated two-variant union prevents unrelated diagnostic fields from
+ * A discriminated three-variant union prevents unrelated diagnostic fields from
  * crossing back into provider context and rules out a bag of optional fields
- * that could describe no real failure. The retry loop creates
- * only these two retryable records, each with the information needed to avoid
- * the prior rejection and no raw provider text, secret reference, hint, or
- * detector data.
+ * that could describe no real failure. Each retryable record carries only the
+ * information needed to avoid the prior rejection and no raw provider text,
+ * secret reference, hint, or detector data.
  */
 type PreviousAttemptContext =
   | {
@@ -417,6 +416,10 @@ type PreviousAttemptContext =
     readonly code: 'SECRET_GRANT_UNATTRIBUTABLE';
     readonly reason: string;
     readonly stepId?: string;
+  }
+  | {
+    readonly attempt: number;
+    readonly code: 'SECRET_LITERAL_REJECTED';
   };
 
 /**
@@ -459,15 +462,20 @@ function responseIssues(error: AiResponseInvalidError): readonly GenerateRespons
 /**
  * Decides whether a classified generation failure merits another attempt.
  *
- * The policy allows only invalid responses and unattributable
- * secret grants. An invalid response with no projected issues remains
- * retryable, while a non-empty issue list containing only the terminal URL
+ * The policy allows invalid responses, unattributable secret grants, and
+ * literal-secret rejections. Because every literal-secret detector raises the
+ * same error, its retry decision applies uniformly rather than only to the
+ * embedded-reference case. Retry records omit diagnostic payloads to extend
+ * the existing
+ * non-disclosure boundary used by the other variants. An invalid
+ * response with no projected issues remains retryable, while a non-empty issue list containing only the terminal URL
  * prohibition is terminal: that carve-out guarantees generation does not
  * spend another provider call on a prompt condition the provider cannot infer
  * a valid destination assertion for.
  */
 function isRetryable(error: AmbercastError): boolean {
   if (error instanceof SecretGrantUnattributableError) return true;
+  if (error instanceof SecretLiteralRejectedError) return true;
   if (!(error instanceof AiResponseInvalidError)) return false;
 
   const issues = responseIssues(error);
@@ -712,8 +720,9 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
          * Caller cancellation interrupts an `execute()` rejection only when it is
          * not this request's timeout. Response and final-Plan schema mismatches,
          * plus retryable coverage failures, retain the classified error and
-         * feedback needed by the file-level controller. Literal-secret and
-         * artifact-write failures are terminal. The outer `fileFailure()` boundary
+         * feedback needed by the file-level controller. Literal-secret rejection
+         * is retryable, while artifact-write failures remain terminal.
+         * The outer `fileFailure()` boundary
          * around `prepareInstructionCoveredSteps` keeps unexpected inspection
          * errors isolated to this file rather than rejecting the batch.
          */
@@ -743,6 +752,13 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
                     reason: details.reason,
                     stepId: details.stepId,
                   },
+              };
+            }
+            if (error instanceof SecretLiteralRejectedError) {
+              return {
+                kind: 'retryable',
+                error,
+                record: { attempt, code: 'SECRET_LITERAL_REJECTED' },
               };
             }
             return { kind: 'terminal', error };

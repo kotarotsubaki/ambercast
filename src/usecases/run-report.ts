@@ -144,8 +144,12 @@ export function buildRunReport(input: RunReportInput): RunReportOutput {
     ...outcome.skipped
       .map(({ file }): RunResult => ({ id: file, file, status: 'skipped' })),
   ];
-  const errors = outcome.results.flatMap(({ result, error }) => (
-    error === undefined ? [] : [reportError(error, { scope: 'case', caseId: result.id })]
+  const errors = outcome.results.flatMap(({ result, error, engine }) => (
+    error === undefined ? [] : [reportError(error, {
+      scope: 'case',
+      caseId: result.id,
+      ...(engine === undefined ? {} : { engine }),
+    })]
   ));
   const interrupted = outcome.interrupted;
   if (interrupted) errors.push(reportError(new InterruptedError(), { scope: 'run' }));

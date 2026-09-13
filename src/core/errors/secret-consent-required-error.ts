@@ -19,6 +19,7 @@ export interface SecretConsentRequiredDetails {
     readonly envVar: string;
     readonly reason: string;
   }[];
+  readonly hint: string;
 }
 
 /**

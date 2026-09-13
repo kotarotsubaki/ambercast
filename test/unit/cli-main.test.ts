@@ -894,7 +894,7 @@ describe('main()', () => {
 
     it.each([
       ['SECRET_LITERAL_REJECTED', 'usage', { detector: 'credential-prefix-sk', path: 'generatorMeta.key', attempts: [] }, 'detector=credential-prefix-sk; path=generatorMeta.key; attempts=[]'],
-      ['SECRET_ENV_VAR_COLLISION', 'usage', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}'] }, 'envVar=AMBERCAST_SECRET_API_TOKEN; refs=["{{secrets.API_TOKEN}}"]'],
+      ['SECRET_ENV_VAR_COLLISION', 'usage', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }, 'envVar=AMBERCAST_SECRET_API_TOKEN; refs=["{{secrets.API_TOKEN}}","{{secrets.api_token}}"]'],
       ['SECRET_CONSENT_REQUIRED', 'usage', { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }, 'reason=consent-required; secrets=[{"name":"API_TOKEN","stepId":"step-a","envVar":"AMBERCAST_SECRET_API_TOKEN","reason":"required"}]'],
       ['SECRET_SYNTAX_REJECTED', 'usage', { occurrences: [{ kind: 'reference', line: 2, column: 8 }] }, 'occurrences=[{"kind":"reference","line":2,"column":8}]'],
       ['AI_EXECUTOR_UNAVAILABLE', 'environment', { attempts: [] }, 'attempts=[]'],

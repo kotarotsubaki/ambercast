@@ -25,10 +25,10 @@ Every digest path MUST use [[spec/canonical-json#digest-form]]. `inputsDigest` b
 
 | Artifact | Accepted value | Evidence |
 | --- | --- | --- |
-| Plan `schemaVersion` | `2` | repo:src/core/ir/schema.ts:57 |
+| Plan `schemaVersion` | `3` | repo:src/core/ir/schema.ts:58 |
 | Grounding `schemaVersion` | `1` | repo:src/core/ir/schema.ts:64 |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:221 |
-| Report `schemaVersion` | `3.4` | repo:src/report/schema.ts:30 |
+| Report `schemaVersion` | `3.5` | repo:src/report/schema.ts:42 |
 
 ## Reading order {#reading-order}
 

@@ -527,7 +527,7 @@ describe('SPEC-K5 report error details', () => {
   });
 
   it.each([
-    [SecretEnvVarCollisionDetails, { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}'] }, { envVar: '', refs: ['{{secrets.API_TOKEN}}'] }],
+    [SecretEnvVarCollisionDetails, { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }, { envVar: '', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }],
     [SecretConsentRequiredDetails, { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'API_TOKEN requires consent.' }] }, { reason: 'other', secrets: [] }],
     [SecretSyntaxRejectedDetails, { occurrences: [{ kind: 'reference', line: 2, column: 8 }] }, { occurrences: [{ kind: 'reference', line: 0, column: 8 }] }],
   ] as const)('accepts and rejects the golden shape for each new secret-policy details schema', (schema, valid, invalid) => {
@@ -536,8 +536,12 @@ describe('SPEC-K5 report error details', () => {
     expectRejected(schema, { ...valid, unexpected: true });
   });
 
+  it('rejects an environment-variable collision details payload with fewer than two refs', () => {
+    expectRejected(SecretEnvVarCollisionDetails, { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}'] });
+  });
+
   it.each([
-    ['SECRET_ENV_VAR_COLLISION', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}'] }],
+    ['SECRET_ENV_VAR_COLLISION', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }],
     ['SECRET_CONSENT_REQUIRED', { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'API_TOKEN requires consent.' }] }],
     ['SECRET_SYNTAX_REJECTED', { occurrences: [{ kind: 'grant-line', line: 1, column: 1 }] }],
   ] as const)('accepts %s details only at case scope', (code, details) => {
@@ -710,7 +714,7 @@ describe('report-local IR scalar equivalence', () => {
       expect(SecretConsentRequiredDetails.safeParse({ reason: 'consent-required', secrets: [{ name, stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }).success).toBe(CoreSecretName.safeParse(name).success);
     }
     for (const ref of values.ref) {
-      expect(SecretEnvVarCollisionDetails.safeParse({ envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: [ref] }).success).toBe(CoreSecretRef.safeParse(ref).success);
+      expect(SecretEnvVarCollisionDetails.safeParse({ envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: [ref, ref] }).success).toBe(CoreSecretRef.safeParse(ref).success);
     }
     for (const stepId of values.stepId) {
       expect(SecretConsentRequiredDetails.safeParse({ reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId, envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }).success).toBe(CoreStepId.safeParse(stepId).success);

@@ -185,7 +185,7 @@ export const PromptPathInvalidDetails = z.strictObject({
  * references. The reference array, rather than values, makes the collision
  * actionable without ever serializing a secret.
  */
-export const SecretEnvVarCollisionDetails = z.strictObject({ envVar: NonWhitespaceString, refs: z.array(SecretRef) });
+export const SecretEnvVarCollisionDetails = z.strictObject({ envVar: NonWhitespaceString, refs: z.array(SecretRef).min(2) });
 /**
  * Carries the consent decision and every denied plan use.
  *

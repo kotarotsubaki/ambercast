@@ -2,8 +2,6 @@ import type { PlanDocument } from '../../../src/core/ir/schema.ts';
 
 export const demoPrompt = `# Login
 
-@ambercast-secret {{secrets.password}}
-
 Go to /login.
 Fill in the email "mika@example.com" and the password {{secrets.password}}.
 Click "Sign in".

@@ -77,6 +77,16 @@ const generateRunObserver = vi.hoisted(() => ({
   options: undefined as undefined | Parameters<typeof import('#usecases/generate.js').generate>[1],
 }));
 
+const obligationFingerprintObserver = vi.hoisted(() => ({ forceMatch: false }));
+
+vi.mock('#core/ir/obligation-fingerprint.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#core/ir/obligation-fingerprint.js')>();
+  return {
+    ...actual,
+    obligationFingerprintMatches: (...args: Parameters<typeof actual.obligationFingerprintMatches>) => obligationFingerprintObserver.forceMatch || actual.obligationFingerprintMatches(...args),
+  };
+});
+
 vi.mock('#usecases/run.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('#usecases/run.js')>();
   return {
@@ -128,6 +138,7 @@ afterEach(() => {
   generateRunObserver.beforeGenerate = undefined;
   generateRunObserver.afterGenerate = undefined;
   generateRunObserver.options = undefined;
+  obligationFingerprintObserver.forceMatch = false;
 });
 
 const PLAN = '/workspace/tests/login.ambercast.plan.json';
@@ -1570,26 +1581,17 @@ describe('heal state-machine contract', () => {
 
   it('rejects a Stage-2 replacement whose secret is outside the allowlist', async () => {
     const events = createRecordingEventSink();
-    const response = { steps: [{ id: 'repair-me', kind: 'action', action: 'fill-secret', target: PASSWORD }], ambiguities: [] };
-    let stageTwoExecuted = false;
-    let postExecuteSecretReads = 0;
+    const rejectedTarget = { strategy: 'accessibility' as const, role: 'textbox', name: 'Session Token' };
+    const response = { steps: [{ id: 'repair-me', kind: 'action', action: 'fill-secret', target: rejectedTarget }], ambiguities: [] };
     const scenario = await createScenario({
       steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.password}}' })],
       grounding: {},
-      aiExecutor: createFakeAiExecutor({ execute: async () => {
-        stageTwoExecuted = true;
-        postExecuteSecretReads = 0;
-        return { data: response, raw: JSON.stringify(response) };
-      } }),
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: response, raw: JSON.stringify(response) }) }),
     });
-    const config = {
-      ...scenario.deps.config,
-      get secrets() {
-        return { allow: !stageTwoExecuted || postExecuteSecretReads++ === 0 ? ['password'] : [] };
-      },
-    };
 
-    await heal({ ...scenario.deps, config, events: events.sink }, OPTIONS);
+    obligationFingerprintObserver.forceMatch = true;
+
+    await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['password'] } }, events: events.sink }, OPTIONS);
 
     expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-attribution' });
   });
@@ -1600,20 +1602,16 @@ describe('heal state-machine contract', () => {
     const response = { steps: [{ id: 'repair-me', kind: 'action', action: 'fill-secret', target: secretTarget }], ambiguities: [] };
     const scenario = await createScenario({
       steps: [
-        Step.parse({ id: 'repair-me', kind: 'action', action: 'fill-secret', target: secretTarget, secretRef: '{{secrets.foo_bar}}' }),
-        Step.parse({ id: 'retained', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.unrelated}}' }),
+        Step.parse({ id: 'repair-me', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.unrelated}}' }),
+        Step.parse({ id: 'retained', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.foo.bar}}' }),
       ],
       grounding: {},
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        const steps = (request.context as {
-          readonly trustedInputs: { readonly currentPlan: { readonly steps: Array<{ secretRef?: string }> } };
-        }).trustedInputs.currentPlan.steps;
-        steps[1]!.secretRef = '{{secrets.foo.bar}}';
-        return { data: response, raw: JSON.stringify(response) };
-      } }),
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: response, raw: JSON.stringify(response) }) }),
     });
 
-    await heal({ ...scenario.deps, events: events.sink }, OPTIONS);
+    obligationFingerprintObserver.forceMatch = true;
+
+    await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['unrelated', 'foo.bar', 'foo_bar'] } }, events: events.sink }, OPTIONS);
 
     expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-attribution' });
   });

@@ -51,7 +51,6 @@ export async function startAgenticMcpServer(
   const token = randomBytes(32).toString('base64url');
   const latch: LatchState = {};
   let activeRequests = 0;
-  let closed = false;
   let closePromise: Promise<void> | undefined;
   let resolveDrain: (() => void) | undefined;
   let drainPromise: Promise<void> = Promise.resolve();
@@ -213,7 +212,6 @@ export async function startAgenticMcpServer(
     peekLatchedError: () => latch.error,
     close: () => {
       if (closePromise !== undefined) return closePromise;
-      closed = true;
       closePromise = (async () => {
         await drainPromise;
         await new Promise<void>((resolve, reject) => {

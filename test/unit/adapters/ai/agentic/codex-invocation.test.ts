@@ -1,4 +1,4 @@
-import { access, readFile, stat, writeFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

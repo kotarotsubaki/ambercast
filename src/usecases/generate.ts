@@ -17,7 +17,6 @@ import type { ResolvedConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
-import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
@@ -32,10 +31,12 @@ import {
   PLAN_SCHEMA_VERSION,
   PlanDocument,
   type GroundingDocument as GroundingDocumentType,
-  type GeneratedInstructionCoveredPlanResponse,
-  type InstructionCoveredStep,
+  type InstructionAttributedSteps,
   type JsonValueT,
   type PlanDocument as PlanDocumentType,
+  type SecretName,
+  type SecretRef,
+  type StepId,
 } from '#core/ir/schema.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
 import { joinPath } from '#core/paths.js';
@@ -47,28 +48,29 @@ import { REPORT_ERROR_DETAILS } from '#report/error-mapping.js';
 import type { ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
-  assertCommittedSecretAttributionSound,
   assertNoLiteralSecrets,
-  attributeSecretGrants,
+  assertSecretUsesAllowed,
+  enumerateSecretUses,
   InstructionCoverageAttributionError,
-  type InstructionPolicyGeneratedStep,
-  normalizeAiStepSecretGrants,
 } from './generator-secret-policy.js';
 import {
+  compareSecretWarnings,
+  deriveSecretNames,
+  normalizeAiStepSecretUses,
+  type SecretWarning,
+} from './secret-naming.js';
+import {
   validateCommittedInstructionCoverage,
+  validateGeneratedInstructionCoverage,
   type InstructionCoverageIssue,
 } from './instruction-coverage-policy.js';
+import { assertNoEnvVarCollision, envVarNameFor } from '#core/secrets/env-var-name.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 
 const GENERATED_PLAN_RESPONSE_SCHEMA = typedJsonSchema(GeneratedPlanResponseRequest);
 
-type GeneratedPlanResponseForPolicyType = Omit<
-  GeneratedInstructionCoveredPlanResponse,
-  'steps'
-> & {
-  readonly steps: readonly InstructionPolicyGeneratedStep[];
-};
+type GeneratedPlanResponseForPolicyType = ReturnType<typeof GeneratedPlanResponseForPolicy.parse>;
 
 /**
  * Keeps generation-only step provenance beside instruction-coverage failures.
@@ -80,7 +82,7 @@ type GeneratedPlanResponseForPolicyType = Omit<
  * policy module's general contract.
  */
 type PrepareInstructionCoveredStepsResult =
-  | { readonly success: true; readonly data: InstructionCoveredStep[] }
+  | { readonly success: true; readonly data: InstructionAttributedSteps }
   | { readonly success: false; readonly issues: readonly InstructionCoverageIssue[]; readonly stepId: string };
 
 /**
@@ -88,28 +90,28 @@ type PrepareInstructionCoveredStepsResult =
  *
  * @param response - Strict provider response with citations and full intents.
  * @param normalizedTestMd - Canonical prompt used for local attribution.
- * @param alreadyClaimedOffsets - Prompt-grant offsets already owned by
- * committed steps outside this provider response.
  * @returns Committed-shape steps without citation or intent data, or the
  * complete deterministic provider issue list and its generated step identity.
  * @remarks
- * Generation composes this phase with secret attribution, but neither policy
- * grants authority to the other. Instruction validation runs
+ * Instruction validation runs
  * for every AI step, requires exact step-local success/intent bijections, and
  * discards transient fields before Plan construction. On failure, generation
  * maps the returned raw provider output and affected step to
  * `AiResponseInvalidError`, then performs no artifact write. The default empty
- * set keeps whole-response generation unchanged; replacement-tail callers seed
- * prefix-owned grants so the same prompt-wide secret policy does not mistake
- * them for uncovered.
  */
 export function prepareInstructionCoveredSteps(
   response: GeneratedPlanResponseForPolicyType,
   normalizedTestMd: NormalizedTestMd,
-  alreadyClaimedOffsets: ReadonlySet<number> = new Set(),
 ): PrepareInstructionCoveredStepsResult {
   try {
-    return { success: true, data: attributeSecretGrants(response.steps, normalizedTestMd, alreadyClaimedOffsets) };
+    const steps = response.steps.map((step) => {
+      if (step.kind !== 'ai') return step;
+      const coverage = validateGeneratedInstructionCoverage(step, normalizedTestMd);
+      if (!coverage.success) throw new InstructionCoverageAttributionError(coverage.issues, step.id);
+      const { verificationIntent: _verificationIntent, instructionCoverage: _instructionCoverage, ...attributed } = step;
+      return { ...attributed, instructionCoverage: coverage.data };
+    }) as unknown as InstructionAttributedSteps;
+    return { success: true, data: steps };
   } catch (error) {
     if (error instanceof InstructionCoverageAttributionError) {
       return { success: false, issues: error.issues, stepId: error.stepId };
@@ -133,8 +135,7 @@ function fileFailure(error: unknown, message: string): AmbercastErrorType {
 /**
  * Treats committed provenance failure as not fresh so generation regenerates.
  *
- * The instruction-coverage implementation composes local span re-extraction
- * with the existing secret check here. A Plan-v2 artifact is reusable only
+ * A committed plan artifact is reusable only
  * when strict schema, canonical bytes, input digest, and every committed AI
  * criterion agree with the current normalized prompt.
  */
@@ -153,7 +154,6 @@ function validFreshPlan(
       return undefined;
     }
 
-    assertCommittedSecretAttributionSound(parsed.data, normalizedTestMd);
     for (const step of parsed.data.steps) {
       if (step.kind === 'ai'
         && !validateCommittedInstructionCoverage(step.instructionCoverage, normalizedTestMd).success) {
@@ -330,7 +330,10 @@ export interface GenerateDeps {
   readonly config: Pick<
     ResolvedConfig,
     'testDir' | 'testMatch' | 'testIgnore' | 'targets' | 'defaultTarget' | 'ai'
-  >;
+  > & Partial<Pick<ResolvedConfig, 'secrets' | 'projectRoot'>>;
+
+  /** Selected configuration provenance retained for later consent diagnostics. */
+  readonly configSource?: { readonly path: string | null };
 
   /**
    * Caller cancellation observed at the sequential per-file scheduling boundary.
@@ -380,7 +383,21 @@ export interface GenerateFileOutcome {
 
   /** Counts provider calls admitted after local request construction, not retries that fail before dispatch. */
   readonly aiCalls?: number;
+
+  /** Resolved secret-use evidence retained only on reportable generation rows. */
+  readonly secrets?: readonly GenerateSecretOutcome[];
+
+  /** Non-fatal secret naming warnings retained with secret-use evidence. */
+  readonly warnings?: readonly SecretWarning[];
 }
+
+type GenerateSecretOutcome = {
+  readonly name: SecretName;
+  readonly stepId: StepId;
+  readonly envVar: string;
+  readonly allowed: boolean;
+  readonly selectionSource: 'allowed-name' | 'target-slug' | 'hint' | 'ordinal' | 'existing-plan' | 'interactive-rename';
+};
 
 /**
  * Represents one report-safe provider or instruction-coverage issue.
@@ -413,12 +430,6 @@ type PreviousAttemptContext =
   }
   | {
     readonly attempt: number;
-    readonly code: 'SECRET_GRANT_UNATTRIBUTABLE';
-    readonly reason: string;
-    readonly stepId?: string;
-  }
-  | {
-    readonly attempt: number;
     readonly code: 'SECRET_LITERAL_REJECTED';
   };
 
@@ -439,7 +450,6 @@ type AttemptOutcome =
 
 const ATTEMPTS_ELIGIBLE_CODES = new Set<ReportErrorCode>([
   'AI_RESPONSE_INVALID',
-  'SECRET_GRANT_UNATTRIBUTABLE',
   'SECRET_LITERAL_REJECTED',
   'AI_EXECUTOR_UNAVAILABLE',
 ]);
@@ -474,7 +484,6 @@ function responseIssues(error: AiResponseInvalidError): readonly GenerateRespons
  * a valid destination assertion for.
  */
 function isRetryable(error: AmbercastError): boolean {
-  if (error instanceof SecretGrantUnattributableError) return true;
   if (error instanceof SecretLiteralRejectedError) return true;
   if (!(error instanceof AiResponseInvalidError)) return false;
 
@@ -520,12 +529,6 @@ function attachAttemptsHistory(
       attempts: history,
     }, { cause: error.cause });
   }
-  if (error instanceof SecretGrantUnattributableError) {
-    return new SecretGrantUnattributableError(error.message, {
-      ...error.details,
-      attempts: history,
-    }, { cause: error.cause });
-  }
   if (error instanceof SecretLiteralRejectedError) {
     return new SecretLiteralRejectedError(error.message, {
       ...error.details,
@@ -539,6 +542,42 @@ function attachAttemptsHistory(
     }, { cause: error.cause });
   }
   return error;
+}
+
+function secretNameFor(ref: SecretRef): SecretName {
+  return ref.slice('{{secrets.'.length, -'}}'.length) as SecretName;
+}
+
+function secretRowsForPlan(
+  plan: PlanDocumentType,
+  allow: readonly SecretName[] | '*',
+  namedUses?: readonly ({ readonly ref: SecretRef; readonly name: SecretName; readonly stepId: StepId; readonly selectionSource: GenerateSecretOutcome['selectionSource'] })[],
+): GenerateSecretOutcome[] {
+  const allowed = allow === '*' ? undefined : new Set(allow);
+  return enumerateSecretUses(plan).map(({ ref, stepId }) => {
+    const name = secretNameFor(ref);
+    const named = namedUses?.find((use) => use.stepId === stepId && use.ref === ref);
+    return {
+      name,
+      stepId,
+      envVar: envVarNameFor(ref),
+      allowed: allowed === undefined || allowed.has(name),
+      selectionSource: named?.selectionSource ?? 'existing-plan',
+    };
+  });
+}
+
+function existingPlanWarnings(plan: PlanDocumentType): SecretWarning[] {
+  const groups = new Map<SecretName, { readonly stepId: StepId; readonly target: string }[]>();
+  for (const step of plan.steps) {
+    if (step.kind !== 'action' || step.action !== 'fill-secret') continue;
+    const name = secretNameFor(step.secretRef);
+    groups.set(name, [...(groups.get(name) ?? []), { stepId: step.id, target: JSON.stringify(step.target) }]);
+  }
+  return [...groups.entries()]
+    .filter(([, uses]) => new Set(uses.map(({ target }) => target)).size > 1)
+    .map(([name, uses]) => ({ kind: 'secret-name-reused-across-targets' as const, name, stepIds: uses.map(({ stepId }) => stepId) }))
+    .sort(compareSecretWarnings);
 }
 
 /**
@@ -680,6 +719,7 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
           continue;
         }
         const resolvedTargets = targetSelection.definitions;
+        const secretAllow = deps.config.secrets?.allow ?? [];
 
         const normalizedTestMd = normalizeTestMd(testMd);
         const provenance = deriveCurrentPlanInputProvenance({
@@ -703,7 +743,19 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             if (!options.dryRun) {
               await repairGroundingIfNeeded(deps.storage, groundingPath, existingPlan);
             }
-            results.push({ file, status: 'skipped-fresh', planFile: planPath, ...metrics() });
+            results.push({
+              file,
+              status: 'skipped-fresh',
+              planFile: planPath,
+              ...(options.dryRun
+                ? {
+                  dryRun: true,
+                  secrets: secretRowsForPlan(existingPlan, secretAllow),
+                  ...(existingPlanWarnings(existingPlan).length === 0 ? {} : { warnings: existingPlanWarnings(existingPlan) }),
+                }
+                : {}),
+              ...metrics(),
+            });
           } catch (error) {
             results.push({ file, status: 'failed', error: fsIoError('The grounding cache could not be repaired.', error), ...metrics() });
           }
@@ -739,21 +791,6 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
                 record: { attempt, code: 'AI_RESPONSE_INVALID', issues: responseIssues(error) },
               };
             }
-            if (error instanceof SecretGrantUnattributableError) {
-              const details = error.details as { readonly reason: string; readonly stepId?: string };
-              return {
-                kind: 'retryable',
-                error,
-                record: details.stepId === undefined
-                  ? { attempt, code: 'SECRET_GRANT_UNATTRIBUTABLE', reason: details.reason }
-                  : {
-                    attempt,
-                    code: 'SECRET_GRANT_UNATTRIBUTABLE',
-                    reason: details.reason,
-                    stepId: details.stepId,
-                  },
-              };
-            }
             if (error instanceof SecretLiteralRejectedError) {
               return {
                 kind: 'retryable',
@@ -769,8 +806,8 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
             responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
             context: (attempt === 1
-              ? { testMd: normalizedTestMd, targets: resolvedTargets }
-              : { testMd: normalizedTestMd, targets: resolvedTargets, previousAttempts }) as unknown as JsonValueT,
+              ? { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: [] }
+              : { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: [], previousAttempts }) as unknown as JsonValueT,
             signal: deadline.signal,
           };
           const callId = deps.allocateCallId();
@@ -838,7 +875,19 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             ));
           }
 
-          const normalizedSteps = normalizeAiStepSecretGrants(prepared.data);
+          let named;
+          try {
+            named = deriveSecretNames(prepared.data, { projected: [], allowlist: secretAllow });
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated secret names could not be derived.'));
+          }
+
+          let normalizedSteps;
+          try {
+            normalizedSteps = normalizeAiStepSecretUses(named.steps);
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated secret uses could not be normalized.'));
+          }
           const candidate = {
             schemaVersion: PLAN_SCHEMA_VERSION,
             source: { inputsDigest },
@@ -869,6 +918,12 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
           }
 
           try {
+            assertNoEnvVarCollision(enumerateSecretUses(parsedPlan.data).map(({ ref }) => ref));
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated secret environment variables could not be inspected.'));
+          }
+
+          try {
             assertNoLiteralSecrets(parsedPlan.data);
           } catch (error) {
             return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
@@ -880,10 +935,22 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             return outcomeForError(fileFailure(error, 'The generated ambiguities could not be inspected.'));
           }
 
+          try {
+            assertSecretUsesAllowed(parsedPlan.data, secretAllow, {
+              configPath: deps.configSource?.path ?? null,
+              cwd: deps.config.projectRoot ?? '',
+            });
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated secret uses are not allowed.'));
+          }
+
+          const secrets = secretRowsForPlan(parsedPlan.data, secretAllow, named.uses);
+          const warnings = named.warnings;
+
           if (options.dryRun) {
             return {
               kind: 'success',
-              outcome: { file, status: 'would-generate', planFile: planPath, ambiguities: response.data.ambiguities },
+              outcome: { file, status: 'would-generate', planFile: planPath, ambiguities: response.data.ambiguities, secrets, ...(warnings.length === 0 ? {} : { warnings }) },
             };
           }
 
@@ -892,7 +959,7 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             await deps.storage.writeText(groundingPath, asArtifactText(emptyGrounding(parsedPlan.data) as unknown as JsonValueT));
             return {
               kind: 'success',
-              outcome: { file, status: 'generated', planFile: planPath, ambiguities: response.data.ambiguities },
+              outcome: { file, status: 'generated', planFile: planPath, ambiguities: response.data.ambiguities, secrets, ...(warnings.length === 0 ? {} : { warnings }) },
             };
           } catch (error) {
             return outcomeForError(fsIoError('The generated artifacts could not be written.', error));

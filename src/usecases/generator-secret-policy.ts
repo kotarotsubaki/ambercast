@@ -1,34 +1,19 @@
 /**
- * Defines the secret-policy boundary shared by generated and replayed plans.
+ * Defines the secret-policy boundary shared by generation and live execution
+ * (SPEC-C1-6).
  *
- * This module keeps reviewable artifacts free of literal secrets while
- * requiring each permitted secret use to trace to one explicit prompt grant.
- * Local attribution keeps provider citations transient and gives generation
- * and replay the same authorization boundary before a plan can rely on an
- * externally resolved value.
+ * This module keeps reviewable artifacts free of literal secrets and gives
+ * every committed secret use one canonical enumeration order that consent
+ * checking, error reporting, and env-var collision detection all reuse rather
+ * than each re-deriving their own plan walk. Authorization is defined by the
+ * `secrets.allow` configuration allowlist and checked live against the
+ * committed plan by {@link assertSecretUsesAllowed}.
  */
-
-import {
-  SecretRef,
-  type AiStepSecretGrant,
-  type GeneratedAiStep,
-  type GeneratedStep,
-  type PlanDocument as PlanDocumentType,
-  type Step,
-} from '#core/ir/schema.js';
-import {
-  validateGeneratedInstructionCoverage,
-  type GeneratedInstructionCoverage,
-  type InstructionCoverageIssue,
-} from './instruction-coverage-policy.js';
-import type { NormalizedTestMd } from '#core/ir/normalize.js';
-import { extractSecretGrants, type SecretGrant } from '#core/ir/secret-grant-source.js';
+import type { PlanDocument, SecretName, SecretRef, StepId } from '#core/ir/schema.js';
+import { SecretRef as SecretRefSchema } from '#core/ir/schema.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
-import {
-  type SecretGrantUnattributableDetails,
-  type SecretGrantUnattributableReason,
-  SecretGrantUnattributableError,
-} from '#core/errors/secret-grant-unattributable-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
+import { envVarNameFor } from '#core/secrets/env-var-name.js';
 
 /** Names credential-shaped literal detectors returned by the shared classifier; deliberately excludes walk-only structural detection. */
 export type CredentialShapeDetector =
@@ -41,140 +26,6 @@ export type CredentialShapeDetector =
 export type WalkSecretDetector = CredentialShapeDetector | 'embedded-secret-reference';
 
 /**
- * Identifies one committed secret-use claim without deciding whether it is
- * valid against the current prompt.
- *
- * Shared enumeration lets repair seed ownership and committed-plan validation
- * recognize the same persisted claim shapes. Verification deliberately stays
- * in {@link assertCommittedSecretAttributionSound}: it must preserve the
- * deterministic stale-then-duplicate-then-uncovered priority and retain the
- * truthful `ref` and `stepId` diagnostics that a flattened offset set loses.
- */
-export interface SecretGrantClaimCandidate {
-  readonly ref: string;
-  readonly sourceSpan: { readonly startLine: number; readonly endLine: number };
-  readonly stepId: string;
-}
-
-/**
- * Enumerates committed secret-use claim candidates from the supplied steps.
- *
- * Repair callers remove the replaced step before invoking this helper so
- * the generic policy boundary never learns a repair-only index sentinel. The
- * resulting candidates retain complete spans and identities for callers that
- * need either diagnostics or an exact local grant lookup.
- *
- * @param steps - Committed plan steps whose persisted secret uses are examined.
- * @returns Candidates in the supplied step and secret-use order.
- *
- * @example
- * const claims = enumerateSecretGrantClaims(plan.steps);
- * const passwordClaim = claims.find((claim) => claim.ref === '{{secrets.password}}');
- */
-export function enumerateSecretGrantClaims(
-  steps: readonly PlanDocumentType['steps'][number][],
-): readonly SecretGrantClaimCandidate[] {
-  return steps.flatMap((step): readonly SecretGrantClaimCandidate[] => {
-    if (step.kind === 'action' && step.action === 'fill-secret') {
-      return [{ ref: step.secretRef, sourceSpan: step.secretGrantSpan, stepId: step.id }];
-    }
-    if (step.kind === 'ai') {
-      return (step.secrets ?? []).map((secret) => ({
-        ref: secret.ref,
-        sourceSpan: secret.sourceSpan,
-        stepId: step.id,
-      }));
-    }
-    return [];
-  });
-}
-
-const REDACTED_KEY_PATH_SEGMENT = '[redacted-key]';
-
-/**
- * Supplies self-correcting diagnostics for each failed grant-attribution
- * reason.
- *
- * Centralizing the text keeps every generation and replay failure actionable
- * without making error wording depend on an individual throw site. Hints stay
- * in diagnostic details rather than the structured-report contract.
- */
-export const SECRET_GRANT_UNATTRIBUTABLE_HINTS: Record<
-  SecretGrantUnattributableReason,
-  (ref: string) => string
-> = {
-  'citation-not-found': (ref) =>
-    `If the secret use is intended, cite an exact, unique prompt excerpt containing one complete @ambercast-secret ${ref} grant line, adding that line if it is absent; otherwise remove the secret use.`,
-  'citation-not-unique': (ref) =>
-    `If the secret use is intended, include enough prompt text for the citation to identify exactly one complete @ambercast-secret ${ref} grant line, adding that line if it is absent; otherwise remove the secret use.`,
-  'citation-missing-ref': (ref) =>
-    `If the secret use is intended, cite one complete @ambercast-secret ${ref} grant line including the literal ${ref} token, adding that line if it is absent; otherwise remove the secret use.`,
-  'citation-unresolved': (ref) =>
-    `If the secret use is intended, cite exactly one complete @ambercast-secret ${ref} grant line outside Markdown code, narrowing the citation or adding that line as needed; otherwise remove the secret use.`,
-  'multiply-attributed-grant': (ref) =>
-    `Remove the duplicate secret use, or give each intended use of ${ref} a distinct @ambercast-secret grant line, cite each line during generation, and regenerate the plan before replay.`,
-  'uncovered-grant': (ref) =>
-    `Use the @ambercast-secret ${ref} grant for one intended secret use and cite it during generation, or remove the unused grant line.`,
-  'stale-grant-span': (ref) =>
-    `If the secret use remains intended, restore its matching @ambercast-secret ${ref} grant line and regenerate the plan; otherwise remove the use and regenerate the plan.`,
-};
-
-/**
- * Attributes provider-authored secret citations to locally parsed prompt
- * grants and returns committed plan steps.
- *
- * This function treats its input as immutable, returns a new array, and
- * passes non-secret branches through by reference. It walks steps and AI-step
- * grant entries in source order, stopping at the first failure so a provider
- * response has one deterministic correction target. Verified citations become
- * local source spans before the response can be persisted.
- *
- * Each citation resolves to an ordered list of candidate grants. `claim`
- * consumes the first candidate whose offset is not already claimed, so
- * repeated complete grant lines can authorize separate uses without changing
- * the one grant per use rule. For a single-candidate citation, an already
- * claimed candidate reports `multiply-attributed-grant`. A multi-candidate
- * citation reports that reason only after every candidate is claimed.
- *
- * Claimed occurrences use `grant.offsetStart`, which remains unique when two
- * complete grant lines have identical text. Citation and duplicate-claim
- * failures therefore take precedence over the final document-order scan for
- * an uncovered grant elsewhere in the prompt.
- *
- * Each citation failure and `multiply-attributed-grant` uses
- * `SecretGrantUsageDetails`, with `reason`, `secretRef`, `stepId`, and `hint`.
- * The final uncovered-grant scan instead uses `SecretGrantUncoveredDetails`,
- * with `reason: 'uncovered-grant'`, `secretRef`, `sourceSpan`, and `hint`,
- * because an unused grant has no truthful step identifier.
- *
- * @param steps - Schema-validated provider steps whose secret uses still carry
- * verbatim prompt citations.
- * @param normalizedTestMd - Canonical prompt from which grants and persisted
- * line spans are derived.
- * @returns Committed-shape plan steps with citations replaced by source spans.
- * @throws {SecretGrantUnattributableError} When a citation is absent,
- * ambiguous, missing its reference, unresolved to exactly one grant, claims a
- * grant twice, or leaves a declared grant uncovered.
- * @remarks
- * Attribution is usecase policy rather than schema validation because it
- * requires the complete prompt, citation occurrence counts, and a plan-wide
- * claimed-grant map. Encoding it as a refinement would hide the contract from
- * generated JSON Schema and still could not express its document-wide state.
- */
-/** Provider steps accepted by local instruction policy after transport parsing. */
-export type InstructionPolicyGeneratedStep =
-  | Exclude<GeneratedStep, GeneratedAiStep>
-  | (Omit<GeneratedAiStep, 'verificationIntent'> & GeneratedInstructionCoverage);
-
-/** Provider steps after secret citations are attributed but before instruction attribution. */
-type SecretAttributedGeneratedStep =
-  | Exclude<GeneratedStep, GeneratedAiStep | Extract<GeneratedStep, { action: 'fill-secret' }>>
-  | Extract<Step, { kind: 'action'; action: 'fill-secret' }>
-  | (Omit<Extract<InstructionPolicyGeneratedStep, { kind: 'ai' }>, 'secrets'> & {
-    readonly secrets?: AiStepSecretGrant[];
-  });
-
-/**
  * Signals instruction-coverage feedback that belongs to one generated AI step.
  *
  * Catchers can use `stepId` to scope corrective response feedback to the
@@ -183,7 +34,9 @@ type SecretAttributedGeneratedStep =
  * @remarks
  * Keeping this context on the attribution error avoids widening the shared
  * instruction-policy result's general contract for callers that do not have a
- * truthful generated-step identity.
+ * truthful generated-step identity. Instruction-coverage attribution is
+ * independent of secret naming, so this error and its callers retain their
+ * contract through the naming/allowlist rework.
  */
 export class InstructionCoverageAttributionError extends Error {
   /**
@@ -193,7 +46,7 @@ export class InstructionCoverageAttributionError extends Error {
    * @param stepId - Identifier of the generated AI step that produced them.
    */
   constructor(
-    readonly issues: readonly InstructionCoverageIssue[],
+    readonly issues: readonly import('./instruction-coverage-policy.js').InstructionCoverageIssue[],
     readonly stepId: string,
   ) {
     super('Generated instruction coverage could not be attributed.');
@@ -201,326 +54,63 @@ export class InstructionCoverageAttributionError extends Error {
 }
 
 /**
- * Converts provider secret citations into committed prompt-grant spans.
+ * Enumerates committed secret uses in the canonical cross-feature order.
  *
- * @param steps - Provider-shaped steps whose secret citations need attribution.
- * @param normalizedTestMd - Canonical prompt containing every declared grant.
- * @param alreadyClaimedOffsets - Grant offsets owned by committed steps outside
- * the supplied provider subset.
- * @returns Committed-shape steps whose declared grants are covered exactly once.
- * @throws {SecretGrantUsageError} When a citation is ambiguous, invalid, or
- * reuses a claimed grant.
- * @throws {SecretGrantUncoveredError} When the supplied and seeded ownership
- * does not cover every prompt grant.
- * @remarks
- * Fresh generation supplies the whole provider response and uses the default
- * empty seed, preserving its established validation exactly. Partial repair
- * supplies only a tail of replacement steps; offsets already owned by an
- * untouched prefix are seeded so prompt-wide coverage remains valid without
- * reconstructing provider citations from committed line spans.
+ * The walk follows plan-step order, yielding a fill-secret action
+ * once and each AI `secrets` entry in its stored array order. `useIndex` is
+ * omitted for fills because there is no repeated-use dimension, but retained
+ * for AI diagnostics and report joins that need to distinguish original
+ * entries. Consent errors and report rows rely on this one ordering rather
+ * than reimplementing their own traversal.
  */
-export function attributeSecretGrants(
-  steps: readonly InstructionPolicyGeneratedStep[],
-  normalizedTestMd: NormalizedTestMd,
-  alreadyClaimedOffsets: ReadonlySet<number> = new Set(),
-): Step[] {
-  const grants = extractSecretGrants(normalizedTestMd);
-  const claimed = new Set<number>(alreadyClaimedOffsets);
-  // Candidate order preserves prompt order, so repeated citations keep
-  // byte-identical grant lines as distinct authorization occurrences.
-  const claim = (candidates: readonly SecretGrant[], ref: string, stepId: string) => {
-    const grant = candidates.find((candidate) => !claimed.has(candidate.offsetStart));
-    if (grant === undefined) {
-      throwSecretGrantUsageError('multiply-attributed-grant', ref, stepId);
-    }
-
-    claimed.add(grant.offsetStart);
-    return { startLine: grant.startLine, endLine: grant.endLine };
-  };
-
-  const attributed = steps.map((step): SecretAttributedGeneratedStep => {
-    if (step.kind === 'action') {
-      if (step.action !== 'fill-secret') {
-        return step;
-      }
-
-      const candidates = resolveCitation(step.citation, step.secretRef, step.id, normalizedTestMd, grants);
-      const { citation: _citation, ...fillSecret } = step;
-      return {
-        ...fillSecret,
-        secretGrantSpan: claim(candidates, step.secretRef, step.id),
-      };
-    }
-
-    if (step.kind !== 'ai') {
-      return step;
-    }
-
-    const { secrets, ...aiStep } = step;
-    if (secrets === undefined) {
-      return aiStep;
-    }
-
-    return {
-      ...aiStep,
-      secrets: secrets.map(({ ref, citation }) => {
-        const candidates = resolveCitation(citation, ref, step.id, normalizedTestMd, grants);
-        return { ref, sourceSpan: claim(candidates, ref, step.id) };
-      }),
-    };
-  });
-
-  const uncoveredGrant = grants.find((grant) => !claimed.has(grant.offsetStart));
-  if (uncoveredGrant !== undefined) {
-    throwSecretGrantUncoveredError(uncoveredGrant);
-  }
-
-  return attributed.map((step): Step => {
-    if (step.kind !== 'ai') return step;
-    const result = validateGeneratedInstructionCoverage({
-      instructionCoverage: step.instructionCoverage,
-      verificationIntent: step.verificationIntent,
-    }, normalizedTestMd);
-    if (!result.success) {
-      throw new InstructionCoverageAttributionError(result.issues, step.id);
-    }
-    const { verificationIntent: _intent, instructionCoverage: _coverage, ...committed } = step;
-    return { ...committed, instructionCoverage: [...result.data] };
+export function enumerateSecretUses(plan: PlanDocument): readonly { ref: SecretRef; stepId: StepId; useIndex?: number }[] {
+  return plan.steps.flatMap((step) => {
+    if (step.kind === 'action' && step.action === 'fill-secret') return [{ ref: step.secretRef, stepId: step.id }];
+    if (step.kind === 'ai') return (step.secrets ?? []).map(({ ref }, useIndex) => ({ ref, stepId: step.id, useIndex }));
+    return [];
   });
 }
 
 /**
- * Resolves one provider citation to ordered matching prompt-grant candidates.
+ * Enforces the current execution consent set for every committed secret use.
  *
- * The overlap-counting `indexOf` scan considers every citation occurrence,
- * keeping self-overlapping excerpts visible. A single occurrence requires the
- * literal reference and exactly one matching grant.
- *
- * Two or more occurrences resolve only when every occurrence brackets exactly
- * one matching-reference grant. `citation-not-unique` covers an occurrence
- * with no matching grant, an occurrence with multiple matching grants, and
- * multiple occurrences that resolve to the grant sharing an `offsetStart`.
- * Candidates follow document order. Offset identity keeps byte-identical grant
- * lines as separate authorization occurrences.
- *
- * The multi-occurrence branch omits the single-occurrence
- * `citation.includes(ref)` check because a contained matching grant already
- * proves that the occurrence contains its reference. A failed per-occurrence
- * match therefore captures an absent reference structurally.
- *
- * @param citation - The schema-validated non-empty provider excerpt.
- * @param ref - The literal secret reference that the excerpt must contain.
- * @param stepId - The secret-using step retained in a failure's diagnostics.
- * @param testMd - Canonical prompt in which the excerpt is resolved.
- * @param grants - Locally extracted grants in the same prompt.
- * @returns Candidate prompt grants in document order for `claim` to consume.
- * @throws {SecretGrantUnattributableError} When no citation occurs, a single
- * occurrence cannot authorize exactly one matching grant, or multiple
- * occurrences do not each identify distinct matching grants.
- * @remarks
- * The step identifier enters at this low level so all citation failures name
- * the actual use that needs correction rather than an arbitrary caller.
+ * `'*'` authorizes every name immediately; an explicit allowlist is compared
+ * against the plain name inside each reference. The implementation
+ * accumulates every unauthorized use in {@link enumerateSecretUses} order and
+ * throws one `SecretConsentRequiredError` with fixed `reason:
+ * 'consent-required'` and `details.secrets` rows of `{ name, stepId, envVar,
+ * reason }`. Its hint uses deduplicated first-occurrence-order names in the
+ * fixed form “`<path>` の `secrets.allow` に <names> を追加するか `"*"` を設定。値は
+ * `AMBERCAST_SECRET_<NAME>` に置く”, where `<path>` is `configPath` or
+ * `<cwd>/ambercast.config.json` when it is null. `location.configPath` and
+ * `location.cwd` make that hint point to the effective policy source without
+ * coupling this pure policy to configuration loading. It does not infer
+ * provider intent or rename uses: consent is a live operation preflight,
+ * intentionally independent of the projected-name selection used during
+ * generation.
  */
-function resolveCitation(
-  citation: string,
-  ref: string,
-  stepId: string,
-  testMd: NormalizedTestMd,
-  grants: readonly SecretGrant[],
-): readonly SecretGrant[] {
-  const occurrences: number[] = [];
-
-  for (let fromIndex = 0; ; ) {
-    const offset = testMd.indexOf(citation, fromIndex);
-    if (offset === -1) {
-      break;
-    }
-
-    occurrences.push(offset);
-    fromIndex = offset + 1;
-  }
-
-  if (occurrences.length === 0) {
-    throwSecretGrantUsageError('citation-not-found', ref, stepId);
-  }
-
-  if (occurrences.length === 1) {
-    if (!citation.includes(ref)) {
-      throwSecretGrantUsageError('citation-missing-ref', ref, stepId);
-    }
-
-    const [offset] = occurrences;
-    const citationEnd = offset! + citation.length;
-    const matchingGrants = grants.filter((grant) => (
-      grant.ref === ref
-      && grant.offsetStart >= offset!
-      && grant.offsetEnd <= citationEnd
-    ));
-    if (matchingGrants.length !== 1) {
-      throwSecretGrantUsageError('citation-unresolved', ref, stepId);
-    }
-
-    return matchingGrants;
-  }
-
-  const candidates = occurrences.map((offset) => {
-    const citationEnd = offset + citation.length;
-    const matchingGrants = grants.filter((grant) => (
-      grant.ref === ref
-      && grant.offsetStart >= offset
-      && grant.offsetEnd <= citationEnd
-    ));
-    if (matchingGrants.length !== 1) {
-      throwSecretGrantUsageError('citation-not-unique', ref, stepId);
-    }
-
-    return matchingGrants[0]!;
-  });
-  if (new Set(candidates.map((candidate) => candidate.offsetStart)).size !== candidates.length) {
-    throwSecretGrantUsageError('citation-not-unique', ref, stepId);
-  }
-
-  return candidates;
-}
-
-/**
- * Asserts that a committed plan's secret grants remain sound against the
- * current normalized prompt.
- *
- * Generation uses this boundary when deciding whether a digest-fresh plan can
- * be reused, while replay uses it before opening a browser. Both call sites
- * need the same authorization result even though generation can regenerate an
- * unsound plan and replay must report the failure. The check only reads the
- * plan, preserving replay's lack of an AI dependency at this trust boundary.
- *
- * A claim uses the resolved grant's `startLine`, because the supported grammar
- * makes every grant exactly one physical line. Stale-span validation precedes
- * the duplicate check, and the coverage scan follows the complete
- * step walk. This preserves deterministic precedence from stale provenance to
- * a duplicate claim to an uncovered grant. Stale and duplicate failures use
- * `SecretGrantUsageDetails`; an uncovered grant uses its source span because
- * it has no truthful step identifier.
- *
- * @param plan - The schema-validated committed plan to verify without
- * mutation.
- * @param normalizedTestMd - Canonical current prompt from which grants are
- * re-extracted.
- * @throws {SecretGrantUnattributableError} When a persisted span is stale, one
- * grant span is claimed by more than one step, or a declared grant remains
- * unclaimed.
- * @remarks
- * Prompt edits without regeneration are rejected by the complete prompt digest
- * check. This independent boundary covers hand-edited plans whose digest still
- * matches but whose stored uses no longer have valid one-to-one grants.
- * Attribution proves that a secret use has authorization, not that the field
- * receiving the secret is semantically intended; that residual judgment stays
- * with the validated plan and human review.
- */
-export function assertCommittedSecretAttributionSound(
-  plan: PlanDocumentType,
-  normalizedTestMd: NormalizedTestMd,
+export function assertSecretUsesAllowed(
+  plan: PlanDocument,
+  allow: readonly SecretName[] | '*',
+  location: { configPath: string | null; cwd: string },
 ): void {
-  const grants = extractSecretGrants(normalizedTestMd);
-  const grantsByStartLine = new Map(
-    grants.map((grant) => [grant.startLine, grant]),
-  );
-  const claimed = new Set<number>();
-  const verifyGrant = (
-    ref: string,
-    sourceSpan: { readonly startLine: number; readonly endLine: number },
-    stepId: string,
-  ): void => {
-    const grant = grantsByStartLine.get(sourceSpan.startLine);
-    if (grant === undefined || grant.ref !== ref || grant.endLine !== sourceSpan.endLine) {
-      throwSecretGrantUsageError('stale-grant-span', ref, stepId);
-    }
-    if (claimed.has(grant.startLine)) {
-      throwSecretGrantUsageError('multiply-attributed-grant', ref, stepId);
-    }
-
-    claimed.add(grant.startLine);
-  };
-
-  for (const claim of enumerateSecretGrantClaims(plan.steps)) {
-    verifyGrant(claim.ref, claim.sourceSpan, claim.stepId);
-  }
-
-  const uncoveredGrant = grants.find((grant) => !claimed.has(grant.startLine));
-  if (uncoveredGrant !== undefined) {
-    throwSecretGrantUncoveredError(uncoveredGrant);
-  }
-}
-
-/**
- * Canonicalizes verified secret grants on committed AI steps.
- *
- * @param steps - Committed-shape steps whose secret grants already passed
- * attribution.
- * @returns New step-array storage with AI grants ordered by reference, start
- * line, and end line, and with explicit empty grant lists omitted.
- * @remarks
- * Duplicate removal is deliberately absent. Equal references at different
- * spans are separate verified authorizations, while equal references at the
- * same span would already have failed the claimed-grant check before this
- * function runs. All three comparison keys make canonical JSON independent of
- * the provider's response order; reference-only sorting would preserve an
- * unstable order for distinct grants of the same secret. Secret references use
- * an ASCII-only schema, so direct lexical comparison produces the required
- * deterministic ASCII order without locale-dependent collation.
- */
-export function normalizeAiStepSecretGrants(steps: readonly Step[]): Step[] {
-  return steps.map((step): Step => {
-    if (step.kind !== 'ai') {
-      return step;
-    }
-
-    if (step.secrets === undefined) {
-      return step;
-    }
-
-    if (step.secrets.length === 0) {
-      const { secrets: _secrets, ...aiStep } = step;
-      return aiStep;
-    }
-
-    return {
-      ...step,
-      secrets: [...step.secrets].sort((left, right) => (
-        (left.ref < right.ref ? -1 : left.ref > right.ref ? 1 : 0)
-        || left.sourceSpan.startLine - right.sourceSpan.startLine
-        || left.sourceSpan.endLine - right.sourceSpan.endLine
-      )),
-    };
+  if (allow === '*') return;
+  const allowed = new Set(allow);
+  const rejected = enumerateSecretUses(plan).flatMap(({ ref, stepId }) => {
+    const name = ref.slice('{{secrets.'.length, -'}}'.length) as SecretName;
+    return allowed.has(name) ? [] : [{ name, stepId, envVar: envVarNameFor(ref), reason: 'not included in secrets.allow' }];
+  });
+  if (rejected.length === 0) return;
+  const names = [...new Set(rejected.map(({ name }) => name))];
+  const path = location.configPath ?? `${location.cwd}/ambercast.config.json`;
+  throw new SecretConsentRequiredError('Secret consent is required.', {
+    reason: 'consent-required',
+    secrets: rejected,
+    hint: `${path} の secrets.allow に ${names.join(', ')} を追加するか "*" を設定。値は AMBERCAST_SECRET_<NAME> に置く`,
   });
 }
 
-function throwSecretGrantUsageError(
-  reason: Exclude<SecretGrantUnattributableReason, 'uncovered-grant'>,
-  secretRef: string,
-  stepId: string,
-): never {
-  throw new SecretGrantUnattributableError(
-    'A secret use could not be attributed to exactly one prompt grant.',
-    {
-      reason,
-      secretRef,
-      stepId,
-      hint: SECRET_GRANT_UNATTRIBUTABLE_HINTS[reason](secretRef),
-    } satisfies SecretGrantUnattributableDetails,
-  );
-}
-
-function throwSecretGrantUncoveredError(grant: SecretGrant): never {
-  throw new SecretGrantUnattributableError(
-    'A declared secret grant is not used by the generated plan.',
-    {
-      reason: 'uncovered-grant',
-      secretRef: grant.ref,
-      sourceSpan: { startLine: grant.startLine, endLine: grant.endLine },
-      hint: SECRET_GRANT_UNATTRIBUTABLE_HINTS['uncovered-grant'](grant.ref),
-    } satisfies SecretGrantUnattributableDetails,
-  );
-}
+const REDACTED_KEY_PATH_SEGMENT = '[redacted-key]';
 
 /**
  * Provides the token-shape gate that {@link hasHighEntropy} requires before
@@ -537,21 +127,13 @@ function isTokenShaped(value: string): boolean {
 }
 
 function hasHighEntropy(value: string): boolean {
-  if (!isTokenShaped(value)) {
-    return false;
-  }
-
+  if (!isTokenShaped(value)) return false;
   const counts = new Map<string, number>();
-  for (const character of value) {
-    counts.set(character, (counts.get(character) ?? 0) + 1);
-  }
-
-  const entropy = [...counts.values()].reduce((total, count) => {
+  for (const character of value) counts.set(character, (counts.get(character) ?? 0) + 1);
+  return [...counts.values()].reduce((total, count) => {
     const probability = count / value.length;
     return total - probability * Math.log2(probability);
-  }, 0);
-
-  return entropy >= 4;
+  }, 0) >= 4;
 }
 
 /**
@@ -568,20 +150,10 @@ function hasHighEntropy(value: string): boolean {
  * matches.
  */
 export function detectSecretLiteral(value: string): CredentialShapeDetector | undefined {
-  if (value.startsWith('sk-')) {
-    return 'credential-prefix-sk';
-  }
-  if (value.startsWith('ghp_')) {
-    return 'credential-prefix-ghp';
-  }
-  if (value.startsWith('AKIA')) {
-    return 'credential-prefix-aws-access-key';
-  }
-  if (hasHighEntropy(value)) {
-    return 'high-entropy-token';
-  }
-
-  return undefined;
+  if (value.startsWith('sk-')) return 'credential-prefix-sk';
+  if (value.startsWith('ghp_')) return 'credential-prefix-ghp';
+  if (value.startsWith('AKIA')) return 'credential-prefix-aws-access-key';
+  return hasHighEntropy(value) ? 'high-entropy-token' : undefined;
 }
 
 /**
@@ -632,16 +204,9 @@ export function detectSecretLiteral(value: string): CredentialShapeDetector | un
  * cannot be confused with a deeper or shallower path by string matching.
  */
 export function assertNoLiteralSecrets(value: unknown): void {
-  const visit = (
-    nextValue: unknown,
-    path: string,
-    segments: readonly (string | number)[],
-  ): void => {
+  const visit = (nextValue: unknown, path: string, segments: readonly (string | number)[]): void => {
     if (typeof nextValue === 'string') {
-      if (path === 'source.inputsDigest' || SecretRef.safeParse(nextValue).success) {
-        return;
-      }
-
+      if (path === 'source.inputsDigest' || SecretRefSchema.safeParse(nextValue).success) return;
       const detector: WalkSecretDetector | undefined = nextValue.includes('{{secrets.')
         ? 'embedded-secret-reference'
         : detectSecretLiteral(nextValue);
@@ -650,46 +215,30 @@ export function assertNoLiteralSecrets(value: unknown): void {
       }
       return;
     }
-
     if (Array.isArray(nextValue)) {
-      nextValue.forEach((item, index) => {
-        visit(item, `${path}[${index}]`, [...segments, index]);
-      });
+      nextValue.forEach((item, index) => visit(item, `${path}[${index}]`, [...segments, index]));
       return;
     }
-
     if (nextValue !== null && typeof nextValue === 'object') {
       const record = nextValue as Record<string, unknown>;
       for (const key of Object.keys(record).sort()) {
-        const detector: WalkSecretDetector | undefined = SecretRef.safeParse(key).success
+        const detector: WalkSecretDetector | undefined = SecretRefSchema.safeParse(key).success
           ? undefined
-          : key.includes('{{secrets.')
-            ? 'embedded-secret-reference'
-            : detectSecretLiteral(key);
-        const childPath = detector === undefined
-          ? (path === '' ? key : `${path}.${key}`)
-          : `${path}${REDACTED_KEY_PATH_SEGMENT}`;
-
+          : key.includes('{{secrets.') ? 'embedded-secret-reference' : detectSecretLiteral(key);
+        const childPath = detector === undefined ? (path === '' ? key : `${path}.${key}`) : `${path}${REDACTED_KEY_PATH_SEGMENT}`;
         if (detector !== undefined) {
           throw new SecretLiteralRejectedError('The generated plan contains a literal secret.', { detector, path: childPath });
         }
-
         visit(record[key], childPath, [...segments, key]);
       }
     }
   };
-
   visit(value, '', []);
 }
 
 function isHighEntropyTokenExempt(segments: readonly (string | number)[]): boolean {
-  if (segments.length !== 3) {
-    return false;
-  }
-
+  if (segments.length !== 3) return false;
   const [root, middle, leaf] = segments;
-  if (root === 'steps' && typeof middle === 'number') {
-    return leaf === 'url' || leaf === 'pattern';
-  }
+  if (root === 'steps' && typeof middle === 'number') return leaf === 'url' || leaf === 'pattern';
   return root === 'targets' && typeof middle === 'string' && leaf === 'baseUrl';
 }

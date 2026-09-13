@@ -5,7 +5,6 @@ import { FsIoError } from '#core/errors/fs-io-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
-import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import type { AmbercastError } from '#core/errors/types.js';
 import { buildGenerateReport, type GenerateReportInput } from '#usecases/generate-report.js';
@@ -31,12 +30,6 @@ function report(input: {
 const GENERATION_ERROR_MAPPINGS = [
   [new TargetUnresolvedError('target missing'), 'TARGET_UNRESOLVED', 'usage', 2],
   [new SecretLiteralRejectedError('literal secret'), 'SECRET_LITERAL_REJECTED', 'usage', 2],
-  [new SecretGrantUnattributableError('unattributable secret grant', {
-    reason: 'citation-not-found',
-    secretRef: '{{secrets.PAYMENT_TOKEN}}',
-    stepId: 'complete-payment',
-    hint: 'Correct the prompt citation.',
-  }), 'SECRET_GRANT_UNATTRIBUTABLE', 'usage', 2],
   [new AiExecutorUnavailableError('provider unavailable'), 'AI_EXECUTOR_UNAVAILABLE', 'environment', 3],
   [new AiResponseInvalidError('invalid response'), 'AI_RESPONSE_INVALID', 'environment', 3],
   [new FsIoError('storage failed'), 'FS_IO_ERROR', 'environment', 3],
@@ -148,14 +141,6 @@ describe('buildGenerateReport', () => {
         code,
         caseId: 'login.test.md',
         message: error.message,
-        ...(error instanceof SecretGrantUnattributableError ? {
-          hint: 'Correct the prompt citation.',
-          details: {
-            reason: 'citation-not-found',
-            secretRef: '{{secrets.PAYMENT_TOKEN}}',
-            stepId: 'complete-payment',
-          },
-        } : {}),
       }]);
       expect(output.envelope.results[0]).toEqual({
         id: 'login.test.md',
@@ -273,30 +258,6 @@ describe('buildGenerateReport', () => {
     expect(reversedOutput.exitCode).toBe(3);
   });
 
-  it('surfaces an unattributable secret grant from the first failed file with exit code 2', () => {
-    const output = report({
-      outcome: {
-        noTestsFound: false,
-        interrupted: false,
-        results: [
-          {
-            file: 'first.test.md',
-            status: 'failed',
-            error: new SecretGrantUnattributableError('unattributable grant', {
-              reason: 'citation-not-found',
-              secretRef: '{{secrets.PAYMENT_TOKEN}}',
-              stepId: 'complete-payment',
-              hint: 'Correct the prompt citation.',
-            }),
-          },
-          { file: 'second.test.md', status: 'failed', error: new AiResponseInvalidError('invalid response') },
-        ],
-      },
-    });
-
-    expect(output.exitCode).toBe(2);
-  });
-
   it('uses unexpected-crash when a failed outcome has no classified error', () => {
     const output = report({
       outcome: {
@@ -369,6 +330,37 @@ describe('buildGenerateReport', () => {
   });
 });
 
+describe('buildGenerateReport secret projection', () => {
+  const secrets = [{ name: 'LOGIN_PASSWORD', stepId: 'fill-password', envVar: 'AMBERCAST_SECRET_LOGIN_PASSWORD', allowed: true, selectionSource: 'target-slug' }] as const;
+  const warnings = [{ kind: 'secret-name-reused-across-targets', name: 'LOGIN_PASSWORD', stepIds: ['fill-password', 'fill-confirmation'] }] as const;
+
+  it.each(['generated', 'would-generate'] as const)('projects secrets and warnings for %s', (status) => {
+    const output = report({ outcome: { noTestsFound: false, results: [{ file: 'login.test.md', status, planFile: 'login.plan.json', ambiguities: [], secrets, warnings }] } as unknown as GenerateOutcome });
+    expect(output.envelope.results[0]).toMatchObject({ status, secrets, warnings });
+  });
+
+  it('keeps matching secret refs from separate steps as distinct projected rows', () => {
+    const repeatedRefSecrets = [
+      { name: 'password', stepId: 'fill-password', envVar: 'AMBERCAST_SECRET_PASSWORD', allowed: true, selectionSource: 'target-slug' },
+      { name: 'password', stepId: 'verify-account', envVar: 'AMBERCAST_SECRET_PASSWORD', allowed: true, selectionSource: 'target-slug' },
+    ] as const;
+
+    const output = report({ outcome: { noTestsFound: false, results: [{
+      file: 'login.test.md', status: 'generated', planFile: 'login.plan.json', ambiguities: [], secrets: repeatedRefSecrets, warnings: [],
+    }] } as unknown as GenerateOutcome });
+
+    expect(output.envelope.results[0]).toMatchObject({ secrets: repeatedRefSecrets });
+  });
+
+  it('projects reconstructed secret evidence only for dry-run skipped-fresh', () => {
+    const dryRun = report({ options: { ...BASE.options, dryRun: true }, outcome: { noTestsFound: false, results: [{ file: 'dry.test.md', status: 'skipped-fresh', planFile: 'dry.plan.json', secrets, warnings }] } as unknown as GenerateOutcome });
+    const normal = report({ outcome: { noTestsFound: false, results: [{ file: 'normal.test.md', status: 'skipped-fresh', planFile: 'normal.plan.json' }] } as unknown as GenerateOutcome });
+    expect(dryRun.envelope.results[0]).toMatchObject({ status: 'skipped-fresh', dryRun: true, secrets, warnings });
+    expect(normal.envelope.results[0]).not.toHaveProperty('secrets');
+    expect(normal.envelope.results[0]).not.toHaveProperty('warnings');
+  });
+});
+
 describe('buildGenerateReport v3 interruption accounting', () => {
   it('adds one run-scoped interruption error, identity-only skipped rows, and exit 3 without inflating errored', () => {
     const output = report({ outcome: {
@@ -378,7 +370,7 @@ describe('buildGenerateReport v3 interruption accounting', () => {
     } } as unknown as Omit<GenerateReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.4');
+    expect(output.envelope.schemaVersion).toBe('3.5');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' })]);
     expect(output.envelope.results[1]).toEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });

@@ -114,7 +114,7 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
   });
 
   try {
-    const config = await loadConfig({
+    const { resolved: config, source } = await loadConfig({
       cwd: input.cwd,
       storage: createFsStorage(),
       configEnv: readConfigEnvironment(),
@@ -146,6 +146,7 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
         allocateCallId,
         discoverTestFiles: ambercast.discoverTestFiles,
         config,
+        configSource: source,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       }, {
         files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),

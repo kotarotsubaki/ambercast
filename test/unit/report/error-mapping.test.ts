@@ -6,7 +6,6 @@ import { FsIoError } from '#core/errors/fs-io-error.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
-import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { assertNoLiteralSecrets } from '#usecases/generator-secret-policy.js';
 import { ReportError } from '#report/schema.js';
@@ -20,7 +19,9 @@ const EXPECTED_REPORT_ERROR_DETAILS = {
   'target-unresolved': { kind: 'usage', code: 'TARGET_UNRESOLVED' },
   'prompt-path-invalid': { kind: 'usage', code: 'PROMPT_PATH_INVALID' },
   'secret-literal-rejected': { kind: 'usage', code: 'SECRET_LITERAL_REJECTED' },
-  'secret-grant-unattributable': { kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE' },
+  'secret-env-var-collision': { kind: 'usage', code: 'SECRET_ENV_VAR_COLLISION' },
+  'secret-consent-required': { kind: 'usage', code: 'SECRET_CONSENT_REQUIRED' },
+  'secret-syntax-rejected': { kind: 'usage', code: 'SECRET_SYNTAX_REJECTED' },
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
   'stale-ir': { kind: 'usage', code: 'STALE_PLAN' },
   'integrity-violation': { kind: 'usage', code: 'INTEGRITY_VIOLATION' },
@@ -234,13 +235,24 @@ describe('reportError', () => {
   it.each([
     [new AiResponseInvalidError('invalid response', { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] }), { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] }],
     [new ClassifiedError('secret-literal-rejected', 'literal', { detector: 'credential-prefix-sk', path: 'generatorMeta.apiKey', attempts: [] }), { detector: 'credential-prefix-sk', path: 'generatorMeta.apiKey', attempts: [] }],
-    [new SecretGrantUnattributableError('grant', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', hint: 'repair' }), { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a' }],
     [new AiExecutorUnavailableError('unavailable', { attempts: [] }), { attempts: [] }],
     [new ClassifiedError('prompt-path-invalid', 'invalid path', { path: '/abs/outside.md', reason: 'outside-test-dir' }), { path: '/abs/outside.md', reason: 'outside-test-dir' }],
   ] as const)('projects normalized details for %s', (error, details) => {
     const report = errorMapping.reportError(error, { scope: 'run' });
     expect(report).toMatchObject({ details });
     expect(ReportError.safeParse(report).success).toBe(true);
+  });
+
+  it.each([
+    ['secret-env-var-collision', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }],
+    ['secret-consent-required', { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'API_TOKEN requires consent.' }] }],
+    ['secret-syntax-rejected', { occurrences: [{ kind: 'reference', line: 2, column: 8 }] }],
+  ] as const)('projects valid %s details at case scope', (kind, details) => {
+    const report = errorMapping.reportError(new ClassifiedError(kind, 'secret policy rejected', details), { scope: 'case', caseId: 'case-a' });
+
+    expect(report).toMatchObject({ details });
+    expect(ReportError.safeParse(report).success).toBe(true);
+    expect(() => errorMapping.reportError(new ClassifiedError(kind, 'secret policy rejected', details), { scope: 'run' })).toThrow();
   });
 
   it('projects an unexpected crash cause name from error.cause rather than details', () => {

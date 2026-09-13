@@ -21,13 +21,16 @@ import { GroundingDocument, PlanDocument } from './schema.js';
  * compilation; the build tool alone owns file serialization. Cross-step ID
  * uniqueness remains zod-only because JSON Schema cannot express it. The
  * getter attaches the plan's published schema identifier, title, and
- * description.
+ * description. Those public metadata fields are set here rather than in the
+ * Zod authority so a Plan IR version change updates the published identity
+ * together with the derived structure, without creating a handwritten schema
+ * fork.
  */
 export function getPlanJsonSchema(): z.core.JSONSchema.BaseSchema {
   return {
     ...z.toJSONSchema(PlanDocument),
-    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json',
-    title: 'ambercast plan schema v2',
+    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json',
+    title: 'ambercast plan schema v3',
     description: 'Validates the complete generated plan document that is reviewed and committed beside its source test prompt.',
   };
 }

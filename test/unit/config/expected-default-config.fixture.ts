@@ -13,6 +13,9 @@ export const EXPECTED_DEFAULT_CONFIG = {
     },
   },
   defaultTarget: 'web-user',
+  secrets: {
+    allow: [],
+  },
   ai: {
     provider: 'auto',
     timeoutMs: 600_000,

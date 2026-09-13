@@ -24,7 +24,10 @@ import {
   groundingRecoveryModeForStep,
 } from '#core/ir/grounding-recovery-mode.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
+import { scanLegacySecretSyntax } from '#core/ir/secret-syntax-scan.js';
 import { isSnapshotInvalid } from '#core/ir/aria-snapshot.js';
+import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-error.js';
+import { assertNoEnvVarCollision } from '#core/secrets/env-var-name.js';
 import {
   isAllowedSecretSinkOrigin,
   resolveSecretSinkPolicy,
@@ -78,8 +81,9 @@ import type { Clock, EventSink, SecretsProvider } from '#ports/system.js';
 import { OBSERVED_NOTE, type ExecutedRunResult, type Observed, type StepResult } from '#report/schema.js';
 import { z } from 'zod';
 import {
-  assertCommittedSecretAttributionSound,
+  assertSecretUsesAllowed,
   detectSecretLiteral,
+  enumerateSecretUses,
   type CredentialShapeDetector,
 } from './generator-secret-policy.js';
 import type {
@@ -2950,7 +2954,10 @@ export interface RunDeps {
   readonly config: Pick<
     ResolvedConfig,
     'testDir' | 'testMatch' | 'testIgnore' | 'targets' | 'defaultTarget' | 'ai' | 'ci' | 'grounding'
-  >;
+  > & Partial<Pick<ResolvedConfig, 'secrets' | 'projectRoot'>>;
+
+  /** Selected configuration provenance retained for later consent diagnostics. */
+  readonly configSource?: { readonly path: string | null };
 
   /*
    * Runtime supplies this environment fact once per invocation. It belongs
@@ -3246,6 +3253,15 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       throw fsIoError('The test prompt could not be read.', error);
     }
 
+    const normalizedTestMd = normalizeTestMd(testMd);
+    const legacySecretSyntax = scanLegacySecretSyntax(normalizedTestMd);
+    if (legacySecretSyntax.length > 0) {
+      throw new SecretSyntaxRejectedError('Legacy secret syntax is not supported.', {
+        occurrences: legacySecretSyntax,
+        hint: 'Delete the offending line(s) and re-run `ambercast generate`.',
+      });
+    }
+
     const targetSelection = resolveTarget({
       targets: deps.config.targets,
       defaultTarget: deps.config.defaultTarget,
@@ -3258,7 +3274,6 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     const target = targetSelection.definition;
     engine = target.browser;
 
-    const normalizedTestMd = normalizeTestMd(testMd);
     const inputsDigest = deriveCurrentPlanInputProvenance({
       normalizedTestMd,
       targetDefinitions: resolvedTargets,
@@ -3270,12 +3285,11 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       normalizedTestMd,
     );
     const plan = trustedPlan.plan;
-    /*
-     * Re-attributing persisted grant spans before opening a browser ensures
-     * every declared grant is consumed exactly once, rejecting hand-edited
-     * plans that redirect a secret use or leave a grant uncovered.
-     */
-    assertCommittedSecretAttributionSound(plan, normalizedTestMd);
+    assertSecretUsesAllowed(plan, deps.config.secrets?.allow ?? [], {
+      configPath: deps.configSource?.path ?? null,
+      cwd: deps.config.projectRoot ?? '',
+    });
+    assertNoEnvVarCollision([...new Set(enumerateSecretUses(plan).map(({ ref }) => ref))]);
     planSteps = plan.steps;
     groundingPath = deps.layout.groundingPathFor(file);
     const loadedGrounding = await readUsableGrounding(deps.storage, groundingPath, plan);

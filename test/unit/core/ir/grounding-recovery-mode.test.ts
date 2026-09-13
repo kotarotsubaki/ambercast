@@ -13,7 +13,7 @@ function actionFixture(action: keyof typeof ACTION_GROUNDING_MODE) {
     : action === 'navigate' ? { id: 'navigate', kind: 'action', action, url: '/dashboard' }
       : action === 'press' ? { id: 'press', kind: 'action', action, target: TARGET, key: 'Enter' }
         : action === 'fill' ? { id: 'fill', kind: 'action', action, target: TARGET, value: 'value' }
-          : { id: 'fill-secret', kind: 'action', action, target: TARGET, secretRef: '{{secrets.PASSWORD}}', secretGrantSpan: { startLine: 1, endLine: 1 } };
+          : { id: 'fill-secret', kind: 'action', action, target: TARGET, secretRef: '{{secrets.PASSWORD}}' };
 }
 
 function assertFixture(check: keyof typeof ASSERT_GROUNDING_MODE) {

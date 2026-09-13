@@ -465,7 +465,7 @@ export async function runHealCommand(
 
   try {
     const storage = createFsStorage();
-    const config = await loadConfig({
+    const { resolved: config, source } = await loadConfig({
       cwd: input.cwd,
       storage,
       configEnv: readConfigEnvironment(),
@@ -502,6 +502,7 @@ export async function runHealCommand(
         events,
         discoverTestFiles: ambercast.discoverTestFiles,
         config,
+        configSource: source,
         isCI,
         resolveAiExecutor: (signal) => resolveAiProvider(
           config.ai.provider,

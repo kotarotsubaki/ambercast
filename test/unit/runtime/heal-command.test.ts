@@ -39,6 +39,7 @@ const CONFIG: ResolvedConfig = {
   testDir: '/workspace/tests', runsDir: '/workspace/tests/.runs', projectRoot: '/workspace',
   testMatch: ['**/*.test.md'], testIgnore: ['**/.runs/**'],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'idempotent' } }, defaultTarget: 'web',
+  secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 }, viewer: { port: 4600 },
   ci: { heal: true, updateGroundingCache: false }, grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
   heal: { caseTimeoutMs: 300_000 },
@@ -55,13 +56,13 @@ function input(overrides: Partial<HealCommandInput> = {}): HealCommandInput {
   return { files: [], dryRun: false, yes: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides };
 }
 function report(exitCode: HealCommandOutput['exitCode']): HealCommandOutput {
-  return { exitCode, envelope: { schemaVersion: '3.4', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
+  return { exitCode, envelope: { schemaVersion: '3.5', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
 }
 function reportWithExecutionEvidence(root: string): HealCommandOutput {
   return {
     exitCode: 1,
     envelope: {
-      schemaVersion: '3.4', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
+      schemaVersion: '3.5', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
       summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
       errors: [{
         scope: 'case', kind: 'environment', code: 'FS_IO_ERROR',
@@ -115,7 +116,7 @@ function configure({ result = batch(), isCI = false, interactive = false, readCo
   mocks.createStderrProgressSink.mockReturnValue({ emit: vi.fn(), close: mocks.closeProgressSink });
   mocks.createTtyInteractivityCheck.mockReturnValue(vi.fn(() => interactive));
   mocks.createConfirmationAnswerReader.mockReturnValue(readConfirmationAnswer);
-  mocks.loadConfig.mockResolvedValue(config);
+  mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
   mocks.createAmbercast.mockReturnValue({ storage, layout: {}, clock: createFixedClock(new Date('2026-08-25T00:00:00.000Z'), 1), discoverTestFiles: vi.fn(async () => []) });
   mocks.heal.mockResolvedValue(result);
   mocks.buildHealReport.mockReturnValue(built);
@@ -137,6 +138,15 @@ beforeEach(async () => {
 });
 
 describe('runHealCommand', () => {
+  it('threads the loaded configuration source path into heal dependencies', async () => {
+    const configSource = { path: '/workspace/ambercast.config.json' };
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: configSource });
+
+    await runHealCommand(input());
+
+    expect(mocks.heal).toHaveBeenCalledWith(expect.objectContaining({ configSource }), expect.any(Object));
+  });
+
   it.each([false, true])('rejects a stateful target before an ineligible prompt can call heal for --dry-run=%s', async (dryRun) => {
     configure({ config: { ...CONFIG, targets: { web: { ...CONFIG.targets.web!, healReplayIsolation: 'stateful' } } }, built: report(2) });
 

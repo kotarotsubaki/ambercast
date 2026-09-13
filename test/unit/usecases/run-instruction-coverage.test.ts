@@ -103,11 +103,11 @@ const DEFAULT_CRITERIA: readonly Criterion[] = [{
 
 function coveredPlan(criteria: readonly Criterion[] = DEFAULT_CRITERIA): PlanDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions: TARGETS,

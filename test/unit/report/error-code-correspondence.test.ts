@@ -22,7 +22,9 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'target-unresolved', reportCode: 'TARGET_UNRESOLVED', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'prompt-path-invalid', reportCode: 'PROMPT_PATH_INVALID', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'secret-literal-rejected', reportCode: 'SECRET_LITERAL_REJECTED', exitCode: 2, reportKind: 'usage' },
-  { errorKind: 'secret-grant-unattributable', reportCode: 'SECRET_GRANT_UNATTRIBUTABLE', exitCode: 2, reportKind: 'usage' },
+  { errorKind: 'secret-env-var-collision', reportCode: 'SECRET_ENV_VAR_COLLISION', exitCode: 2, reportKind: 'usage' },
+  { errorKind: 'secret-consent-required', reportCode: 'SECRET_CONSENT_REQUIRED', exitCode: 2, reportKind: 'usage' },
+  { errorKind: 'secret-syntax-rejected', reportCode: 'SECRET_SYNTAX_REJECTED', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'missing-plan', reportCode: 'MISSING_PLAN', exitCode: 4, reportKind: 'usage' },
   { errorKind: 'stale-ir', reportCode: 'STALE_PLAN', exitCode: 4, reportKind: 'usage' },
   { errorKind: 'integrity-violation', reportCode: 'INTEGRITY_VIOLATION', exitCode: 4, reportKind: 'usage' },
@@ -34,13 +36,18 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'interrupted', reportCode: 'INTERRUPTED', exitCode: 3, reportKind: 'environment' },
 ] as const satisfies readonly ErrorCodeCorrespondence[];
 
+const LEGACY_ERROR_CODES_WITHOUT_KIND = ['SECRET_GRANT_UNATTRIBUTABLE'] as const;
+const CASE_SCOPE_ONLY_CODES = ['SECRET_ENV_VAR_COLLISION', 'SECRET_CONSENT_REQUIRED', 'SECRET_SYNTAX_REJECTED'] as const;
+
 const REPORTABLE_ERROR_KINDS = [
   'config-invalid',
   'secret-unresolved',
   'target-unresolved',
   'prompt-path-invalid',
   'secret-literal-rejected',
-  'secret-grant-unattributable',
+  'secret-env-var-collision',
+  'secret-consent-required',
+  'secret-syntax-rejected',
   'missing-plan',
   'stale-ir',
   'integrity-violation',
@@ -73,12 +80,12 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     const mappedKinds = ERROR_CODE_CORRESPONDENCE.map(({ errorKind }) => errorKind);
 
     expect(new Set(mappedCodes).size).toBe(ERROR_CODE_CORRESPONDENCE.length);
-    expect(new Set(mappedCodes)).toStrictEqual(new Set(ReportErrorCode.options));
+    expect(new Set(ReportErrorCode.options)).toStrictEqual(new Set([...mappedCodes, ...LEGACY_ERROR_CODES_WITHOUT_KIND]));
     expect(new Set(mappedKinds).size).toBe(REPORTABLE_ERROR_KINDS.length);
     expect(new Set(mappedKinds)).toStrictEqual(new Set(REPORTABLE_ERROR_KINDS));
   });
 
-  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind }) => errorKind !== 'interrupted' && errorKind !== 'prompt-path-invalid'))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
+  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind, reportCode }) => errorKind !== 'interrupted' && errorKind !== 'prompt-path-invalid' && !CASE_SCOPE_ONLY_CODES.includes(reportCode as (typeof CASE_SCOPE_ONLY_CODES)[number])))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
     expectAccepted(ReportError, {
       scope: 'run',
       kind: reportKind,
@@ -109,6 +116,15 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     });
     expect(ReportError.safeParse({
       scope: 'case', kind: 'usage', code: 'PROMPT_PATH_INVALID', message: 'The selected prompt path is invalid.', caseId: 'case-a',
+    }).success).toBe(false);
+  });
+
+  it.each(CASE_SCOPE_ONLY_CODES)('accepts %s only as a case-scoped usage error', (code) => {
+    expectAccepted(ReportError, {
+      scope: 'case', kind: 'usage', code, message: 'The test case encountered a secret-policy error.', caseId: 'case-a',
+    });
+    expect(ReportError.safeParse({
+      scope: 'run', kind: 'usage', code, message: 'The command encountered a secret-policy error.',
     }).success).toBe(false);
   });
 });

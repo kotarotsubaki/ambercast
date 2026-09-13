@@ -51,6 +51,7 @@ const CONFIG: ResolvedConfig = {
   testIgnore: ['**/.runs/**'],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful' } },
   defaultTarget: 'web',
+  secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 },
   viewer: { port: 4600 },
   ci: { heal: false, updateGroundingCache: false },
@@ -92,10 +93,10 @@ describe('runCheckCommand', () => {
     const cwd = `${projectRoot}/nested-cwd`;
     const output = {
       exitCode: 5 as const,
-      envelope: { schemaVersion: '3.4' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] },
+      envelope: { schemaVersion: '3.5' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] },
     };
     mocks.createFsReadStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue({ ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` });
+    mocks.loadConfig.mockResolvedValue({ resolved: { ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` }, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
     mocks.check.mockResolvedValue({ results: [], errors: [], noTestsFound: true });
     mocks.buildCheckReport.mockReturnValue(output);
@@ -115,9 +116,9 @@ describe('runCheckCommand', () => {
     const storage = createInMemoryStorage();
     const cwd = '/workspace/no-config-project';
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
-    const output = { exitCode: 0 as const, envelope: { schemaVersion: '3.4', command: 'check', startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] } };
+    const output = { exitCode: 0 as const, envelope: { schemaVersion: '3.5', command: 'check', startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] } };
     mocks.createFsReadStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(config);
+    mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
     mocks.check.mockResolvedValue({ results: [], errors: [], noTestsFound: false });
     mocks.buildCheckReport.mockReturnValue(output);
@@ -156,11 +157,11 @@ describe('runCheckCommand', () => {
     const testPath = `${CONFIG.testDir}/login.test.md`;
     const prompt = '# Sign in\n\nI reach the dashboard.\n';
     const plan = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       source: {
         inputsDigest: computeInputsDigest({
           normalizedTestMd: normalizeTestMd(prompt),
-          schemaVersion: 2,
+          schemaVersion: 3,
           generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
           planProducerBundleFingerprint: planProducerBundleFingerprint(),
           targetDefinitions: { web: { baseUrl: CONFIG.targets.web!.baseUrl, browser: CONFIG.targets.web!.browser } },
@@ -177,7 +178,7 @@ describe('runCheckCommand', () => {
       entries: {},
     }));
     mocks.createFsReadStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
 
     const output = await runCheckCommand(input({ files: ['tests/login.test.md'] }));
@@ -213,7 +214,7 @@ describe('runCheckCommand', () => {
     const report = {
       exitCode: 0 as const,
       envelope: {
-        schemaVersion: '3.4' as const,
+        schemaVersion: '3.5' as const,
         command: 'check' as const,
         startedAt: '2026-08-17T00:00:00Z',
         durationMs: 0,
@@ -223,7 +224,7 @@ describe('runCheckCommand', () => {
       },
     };
     mocks.createFsReadStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(config);
+    mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(discoverTestFiles);
     mocks.check.mockResolvedValue(outcome);
     mocks.buildCheckReport.mockReturnValue(report);
@@ -262,7 +263,7 @@ describe('runCheckCommand', () => {
   it('wraps an unclassified composition failure as an unexpected-crash report', async () => {
     await useRealCheckComposition();
     mocks.createFsReadStorage.mockReturnValue(createInMemoryStorage());
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
     mocks.check.mockRejectedValue(new Error('unclassified failure'));
 
@@ -282,10 +283,10 @@ describe('runCheckCommand', () => {
     } as unknown as NodeJS.WritableStream;
     const completed = {
       exitCode: 0 as const,
-      envelope: { schemaVersion: '3.4' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
+      envelope: { schemaVersion: '3.5' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
     };
     mocks.createFsReadStorage.mockReturnValue(createInMemoryStorage());
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
     mocks.check.mockResolvedValue({ results: [], errors: [], noTestsFound: false });
     mocks.buildCheckReport.mockReturnValue(completed);
@@ -298,10 +299,10 @@ describe('runCheckCommand', () => {
   it('finalizes both completed and error reports at the runtime boundary', async () => {
     const completed = {
       exitCode: 0 as const,
-      envelope: { schemaVersion: '3.4' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
+      envelope: { schemaVersion: '3.5' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
     };
     mocks.createFsReadStorage.mockReturnValue(createInMemoryStorage());
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
     mocks.check.mockResolvedValue({ results: [], errors: [], noTestsFound: false });
     mocks.buildCheckReport.mockReturnValue(completed);
@@ -322,10 +323,10 @@ describe('runCheckCommand', () => {
   it.each(['completed', 'error'] as const)('forces exit 3 when %s finalization returns the emergency singleton', async (branch) => {
     const built = {
       exitCode: 0 as const,
-      envelope: { schemaVersion: '3.4' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
+      envelope: { schemaVersion: '3.5' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
     };
     mocks.createFsReadStorage.mockReturnValue(createInMemoryStorage());
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
     mocks.check.mockResolvedValue({ results: [], errors: [], noTestsFound: false });
     mocks.buildCheckReport.mockReturnValue(built);

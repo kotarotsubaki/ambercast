@@ -41,6 +41,9 @@ const EXPECTED_REPORT_ERROR_CODES = [
   'INTEGRITY_VIOLATION',
   'SECRET_LITERAL_REJECTED',
   'SECRET_GRANT_UNATTRIBUTABLE',
+  'SECRET_ENV_VAR_COLLISION',
+  'SECRET_CONSENT_REQUIRED',
+  'SECRET_SYNTAX_REJECTED',
   'BROWSER_LAUNCH_FAILED',
   'AI_EXECUTOR_UNAVAILABLE',
   'AI_RESPONSE_INVALID',
@@ -85,7 +88,7 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['generate', 'run', 'check', 'heal'],
           planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
-          schemaVersions: { plan: 2, grounding: 1, report: '3.4' },
+          schemaVersions: { plan: 3, grounding: 1, report: '3.5' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
@@ -102,6 +105,7 @@ describe('writeGeneratedArtifacts', () => {
           'targets.web-user.browser': 'chromium',
           'targets.web-user.healReplayIsolation': 'stateful',
           defaultTarget: 'web-user',
+          'secrets.allow': [],
           'ai.provider': 'auto',
           'ai.timeoutMs': 600_000,
           'ai.maxGenerateAttempts': 2,
@@ -145,7 +149,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['generate', 'run', 'check', 'heal'],
       planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
-      schemaVersions: { plan: 2, grounding: 1, report: '3.4' },
+      schemaVersions: { plan: 3, grounding: 1, report: '3.5' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,
@@ -179,6 +183,7 @@ describe('writeGeneratedArtifacts', () => {
       'targets.web-user.browser': 'chromium',
       'targets.web-user.healReplayIsolation': 'stateful',
       defaultTarget: 'web-user',
+      'secrets.allow': [],
       'ai.provider': 'auto',
       'ai.timeoutMs': 600_000,
       'ai.maxGenerateAttempts': 2,
@@ -211,7 +216,7 @@ describe('writeGeneratedArtifacts', () => {
     });
   });
 
-  it('emits Plan-v2 required coverage and additive Grounding-v1 coverage fields', () => {
+  it('emits Plan-v3 required coverage and additive Grounding-v1 coverage fields', () => {
     const writes = captureGeneratedArtifactWrites();
     const planText = artifactContent(writes, 'schema/plan.schema.json');
     const groundingText = artifactContent(writes, 'schema/grounding.schema.json');
@@ -220,7 +225,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(planText).toContain('sourceSpan');
     expect(planText).toContain('startColumn');
     expect(planText).toContain('endColumn');
-    expect(planText).toMatch(/"const":2/);
+    expect(planText).toMatch(/"const":3/);
     expect(groundingText).toContain('verificationCoverage');
     expect(groundingText).toMatch(/"const":1/);
   });

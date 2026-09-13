@@ -78,13 +78,13 @@ registerUsecaseEmitsEventsContract([
       const events = createRecordingEventSink();
       const inputsDigest = computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions: TARGETS,
       });
       const plan = PlanDocument.parse({
-        schemaVersion: 2,
+        schemaVersion: 3,
         source: { inputsDigest },
         targets: TARGETS,
         steps: [{ id: 'navigate-home', kind: 'action', action: 'navigate', url: '/' }],

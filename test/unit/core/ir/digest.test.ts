@@ -23,7 +23,7 @@ function asNormalizedTestMd(value: string): NormalizedTestMd {
 function createInputs(overrides: Partial<DigestInputs> = {}): DigestInputs {
   return {
     normalizedTestMd: asNormalizedTestMd('# Smoke\n'),
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatorPromptTemplateFingerprint: 'generator-template-v2',
     planProducerBundleFingerprint: 'producer-bundle-v1',
     targetDefinitions: { app: targetDefinition() },
@@ -43,7 +43,7 @@ function createPlan({
   generatorMeta?: Record<string, JsonValueT>;
 } = {}): PlanDocument {
   return PlanDocument.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { inputsDigest },
     ...(generatorMeta === undefined ? {} : { generatorMeta }),
     targets: { app: targetDefinition(targetBaseUrl) },
@@ -86,10 +86,10 @@ describe('computeInputsDigest', () => {
   });
 
   // The expected SHA-256 was calculated without calling the implementation.
-  // Its exact JCS preimage is {"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":2,"targetDefinitions":{"app":{"baseUrl":"https://example.test","browser":"chromium"}}}.
-  // Command: printf '%s' '{"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":2,"targetDefinitions":{"app":{"baseUrl":"https://example.test","browser":"chromium"}}}' | shasum -a 256
+  // Its exact JCS preimage is {"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":3,"targetDefinitions":{"app":{"baseUrl":"https://example.test","browser":"chromium"}}}.
+  // Command: printf '%s' '{"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":3,"targetDefinitions":{"app":{"baseUrl":"https://example.test","browser":"chromium"}}}' | shasum -a 256
   it('matches the independently derived SHA-256 oracle for the fixed preimage', () => {
-    expect(computeInputsDigest(createInputs())).toBe('7500082d9b70d1e2186bb1043b80538395d38de0a37a112ca70f2125de647385');
+    expect(computeInputsDigest(createInputs())).toBe('e0832090f6b1ec5529df5c702ea594767d1bee3a1842606624373f7cca42b9d2');
   });
 
   // The `-?` modifier prevents a future optional DigestInputs field from silently evading this completeness check.

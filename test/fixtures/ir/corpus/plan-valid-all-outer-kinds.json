@@ -2,7 +2,7 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-    "schemaVersion": 2,
+  "schemaVersion": 3,
     "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     "generatorMeta": { "model": "test-model", "attempt": 1, "nested": [true, null] },
     "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },

@@ -29,8 +29,11 @@ export type ErrorExitCode = Exclude<ExitCode, 0>;
  * @remarks
  * The groups distinguish assertion outcomes, caller-correctable usage,
  * execution-environment failures, and untrustworthy plan or grounding
- * artifacts. The zero-match outcome remains distinct so an empty invocation
- * cannot be mistaken for an assertion failure or invalid input.
+ * artifacts. Secret syntax, consent, and environment-key collisions share
+ * caller-correctable usage status because they are rejected before a browser
+ * or provider performs work. The zero-match outcome remains distinct so an
+ * empty invocation cannot be mistaken for an assertion failure or invalid
+ * input.
  */
 export const ERROR_EXIT_CODES = {
   'assertion-failed': 1,
@@ -39,7 +42,9 @@ export const ERROR_EXIT_CODES = {
   'target-unresolved': 2,
   'prompt-path-invalid': 2,
   'secret-literal-rejected': 2,
-  'secret-grant-unattributable': 2,
+  'secret-consent-required': 2,
+  'secret-env-var-collision': 2,
+  'secret-syntax-rejected': 2,
   'missing-plan': 4,
   'stale-ir': 4,
   'integrity-violation': 4,

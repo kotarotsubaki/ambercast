@@ -21,7 +21,10 @@ export type ExitCode = 0 | 1 | 2 | 3 | 4 | 5;
  * The classification, rather than a message string or a concrete subclass
  * name, is the contract used to select handling policy and a process exit
  * status. `prompt-path-invalid` identifies a selected path that lies outside
- * the eligible prompt-file domain before any individual case starts.
+ * the eligible prompt-file domain before any individual case starts. The
+ * three secret-policy kinds remain distinct because syntax migration,
+ * environment-name ambiguity, and absent consent have different remediation
+ * paths even though each is caller-correctable.
  */
 export type ErrorKind =
   | 'assertion-failed'
@@ -30,7 +33,9 @@ export type ErrorKind =
   | 'target-unresolved'
   | 'prompt-path-invalid'
   | 'secret-literal-rejected'
-  | 'secret-grant-unattributable'
+  | 'secret-consent-required'
+  | 'secret-env-var-collision'
+  | 'secret-syntax-rejected'
   | 'missing-plan'
   | 'stale-ir'
   | 'integrity-violation'

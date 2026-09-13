@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE,
+  GENERATOR_SECRET_POLICY_TEMPLATE,
   promptTemplateFingerprint,
 } from '#core/ai/prompt-envelope.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
@@ -20,7 +21,8 @@ import { createLayoutResolver } from '#core/layout/resolve.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
-import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
+import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError } from '#core/errors/types.js';
@@ -35,6 +37,46 @@ import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 
+const envVarNameMocks = vi.hoisted(() => ({
+  assertNoEnvVarCollision: vi.fn(),
+  actualAssertNoEnvVarCollision: undefined as
+    | typeof import('#core/secrets/env-var-name.js')['assertNoEnvVarCollision']
+    | undefined,
+}));
+
+vi.mock('#core/secrets/env-var-name.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#core/secrets/env-var-name.js')>();
+  envVarNameMocks.actualAssertNoEnvVarCollision = actual.assertNoEnvVarCollision;
+  envVarNameMocks.assertNoEnvVarCollision.mockImplementation(actual.assertNoEnvVarCollision);
+  return { ...actual, assertNoEnvVarCollision: envVarNameMocks.assertNoEnvVarCollision };
+});
+
+const secretNamingMocks = vi.hoisted(() => ({
+  deriveSecretNames: vi.fn(),
+  actualDeriveSecretNames: undefined as
+    | typeof import('#usecases/secret-naming.js')['deriveSecretNames']
+    | undefined,
+}));
+
+vi.mock('#usecases/secret-naming.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#usecases/secret-naming.js')>();
+  secretNamingMocks.actualDeriveSecretNames = actual.deriveSecretNames;
+  secretNamingMocks.deriveSecretNames.mockImplementation(actual.deriveSecretNames);
+  return { ...actual, deriveSecretNames: secretNamingMocks.deriveSecretNames };
+});
+
+afterEach(() => {
+  const actualAssertNoEnvVarCollision = envVarNameMocks.actualAssertNoEnvVarCollision;
+  const actualDeriveSecretNames = secretNamingMocks.actualDeriveSecretNames;
+  if (actualAssertNoEnvVarCollision === undefined || actualDeriveSecretNames === undefined) {
+    throw new Error('Expected module mock passthrough implementations to be initialized.');
+  }
+  envVarNameMocks.assertNoEnvVarCollision.mockReset();
+  envVarNameMocks.assertNoEnvVarCollision.mockImplementation(actualAssertNoEnvVarCollision);
+  secretNamingMocks.deriveSecretNames.mockReset();
+  secretNamingMocks.deriveSecretNames.mockImplementation(actualDeriveSecretNames);
+});
+
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
@@ -42,93 +84,25 @@ const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
-const SECOND_SECRET_REF = '{{secrets.BAR}}';
 const PASSWORD_TARGET = { strategy: 'accessibility', role: 'textbox', name: 'Password' } as const;
-
-const SECRET_GRANT_CITATION_FAILURES = [
-  [
-    'citation not found',
-    {
-      steps: [{
-        id: 'fill-password',
-        kind: 'action',
-        action: 'fill-secret',
-        target: PASSWORD_TARGET,
-        secretRef: FIRST_SECRET_REF,
-        citation: 'This text does not occur in the prompt.',
-      }],
-      ambiguities: [],
-    },
-    `${PROMPT}\n@ambercast-secret ${FIRST_SECRET_REF}\n`,
-    'citation-not-found',
-  ],
-  [
-    'citation missing its reference',
-    {
-      steps: [
-        {
-          id: 'fill-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: FIRST_SECRET_REF,
-          citation: `@ambercast-secret ${SECOND_SECRET_REF}`,
-        },
-      ],
-      ambiguities: [],
-    },
-    `${PROMPT}\n@ambercast-secret ${SECOND_SECRET_REF}\n`,
-    'citation-missing-ref',
-  ],
-  [
-    'citation unresolved to a grant',
-    {
-      steps: [{
-        id: 'fill-password',
-        kind: 'action',
-        action: 'fill-secret',
-        target: PASSWORD_TARGET,
-        secretRef: FIRST_SECRET_REF,
-        citation: `Use ${FIRST_SECRET_REF} only as prose.`,
-      }],
-      ambiguities: [],
-    },
-    `${PROMPT}\nUse ${FIRST_SECRET_REF} only as prose.\n`,
-    'citation-unresolved',
-  ],
-  [
-    'multiply attributed grant',
-    {
-      steps: [
-        {
-          id: 'first-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: FIRST_SECRET_REF,
-          citation: `@ambercast-secret ${FIRST_SECRET_REF}`,
-        },
-        {
-          id: 'second-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: FIRST_SECRET_REF,
-          citation: `@ambercast-secret ${FIRST_SECRET_REF}`,
-        },
-      ],
-      ambiguities: [],
-    },
-    `${PROMPT}\n@ambercast-secret ${FIRST_SECRET_REF}\n`,
-    'multiply-attributed-grant',
-  ],
-  [
-    'uncovered grant',
-    { steps: [], ambiguities: [] },
-    `${PROMPT}\n@ambercast-secret ${FIRST_SECRET_REF}\n`,
-    'uncovered-grant',
-  ],
-] as const satisfies readonly (readonly [string, GeneratedPlanResponse, string, string])[];
+const INSTRUCTION_PROOF_FIELD = ['cita', 'tion'].join('');
+const coveredResponse = {
+  steps: [{
+    id: 'reach-dashboard',
+    kind: 'ai',
+    instruction: 'Reach the dashboard.',
+    instructionCoverage: [{
+      id: 'dashboard-reached',
+      kind: 'success',
+      [INSTRUCTION_PROOF_FIELD]: 'When I submit valid credentials, I reach the dashboard.',
+    }],
+    verificationIntent: [{
+      criterionId: 'dashboard-reached',
+      assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' },
+    }],
+  }],
+  ambiguities: [],
+} as unknown as GeneratedPlanResponse;
 
 const DEFAULT_OPTIONS: GenerateOptions = {
   files: [],
@@ -218,6 +192,14 @@ function createScenario(overrides: Partial<GenerateDeps> = {}) {
   return { deps, events, execute, recordingStorage };
 }
 
+function withSecretConfig(deps: GenerateDeps, allow: readonly string[] | '*'): GenerateDeps {
+  return {
+    ...deps,
+    config: { ...deps.config, secrets: { allow }, projectRoot: '/workspace' } as unknown as GenerateDeps['config'],
+    configSource: { path: '/workspace/ambercast.config.json' },
+  } as unknown as GenerateDeps;
+}
+
 function sequenceClock(readings: readonly number[]): Clock {
   let index = 0;
   return {
@@ -299,13 +281,13 @@ async function createFreshPlan(
   const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundle.planProducerBundleFingerprint(),
     targetDefinitions,
   });
   const plan = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { inputsDigest },
     targets: targetDefinitions,
     steps: [...steps],
@@ -332,23 +314,6 @@ async function seedFreshArtifacts(
 }
 
 describe('generate', () => {
-  const coveredResponse = {
-    steps: [{
-      id: 'reach-dashboard',
-      kind: 'ai',
-      instruction: 'Reach the dashboard.',
-      instructionCoverage: [{
-        id: 'dashboard-reached',
-        kind: 'success',
-        citation: 'When I submit valid credentials, I reach the dashboard.',
-      }],
-      verificationIntent: [{
-        criterionId: 'dashboard-reached',
-        assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' },
-      }],
-    }],
-    ambiguities: [],
-  } as unknown as GeneratedPlanResponse;
 
   it('keeps the generated success-span fixture locally re-extractable from its prompt', () => {
     const result = validateCommittedInstructionCoverage([{
@@ -389,7 +354,7 @@ describe('generate', () => {
       const planText = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
       const plan = JSON.parse(planText) as Record<string, unknown>;
       expect(plan).toMatchObject({
-        schemaVersion: 2,
+        schemaVersion: 3,
         steps: [{
           id: 'reach-dashboard',
           kind: 'ai',
@@ -400,7 +365,7 @@ describe('generate', () => {
           }],
         }],
       });
-      expect(planText).not.toContain('citation');
+      expect(planText).not.toContain(INSTRUCTION_PROOF_FIELD);
       expect(planText).not.toContain('verificationIntent');
       expect(planText).not.toContain('When I submit valid credentials');
     },
@@ -462,8 +427,8 @@ describe('generate', () => {
       steps: [{
         ...coveredResponse.steps[0],
         instructionCoverage: [
-          { id: 'first-ready', kind: 'success', citation: 'First success criterion.' },
-          { id: 'second-ready', kind: 'success', citation: 'Second success criterion.' },
+          { id: 'first-ready', kind: 'success', [INSTRUCTION_PROOF_FIELD]: 'First success criterion.' },
+          { id: 'second-ready', kind: 'success', [INSTRUCTION_PROOF_FIELD]: 'Second success criterion.' },
         ],
         verificationIntent: [{
           criterionId: 'unknown-ready',
@@ -553,9 +518,9 @@ describe('generate', () => {
           {
             id: 'dashboard-reached',
             kind: 'success',
-            citation: 'When I submit valid credentials, I reach the dashboard.',
+            [INSTRUCTION_PROOF_FIELD]: 'When I submit valid credentials, I reach the dashboard.',
           },
-          { id: 'sign-in-action', kind: 'action', citation: '# Sign in' },
+          { id: 'sign-in-action', kind: 'action', [INSTRUCTION_PROOF_FIELD]: '# Sign in' },
         ],
         verificationIntent: [
           {
@@ -592,7 +557,7 @@ describe('generate', () => {
       ...coveredResponse,
       steps: [{
         ...coveredResponse.steps[0],
-        instructionCoverage: [{ id: 'sign-in-action', kind: 'action', citation: '# Sign in' }],
+        instructionCoverage: [{ id: 'sign-in-action', kind: 'action', [INSTRUCTION_PROOF_FIELD]: '# Sign in' }],
         verificationIntent: [],
       }],
     } as unknown as GeneratedPlanResponse;
@@ -619,14 +584,14 @@ describe('generate', () => {
   });
 
   it.each([
-    ['missing', 'This citation is absent.', PROMPT],
+    ['missing', 'This proof is absent.', PROMPT],
     ['ambiguous', 'When I submit valid credentials, I reach the dashboard.', `${PROMPT}When I submit valid credentials, I reach the dashboard.\n`],
-  ] as const)('rejects a %s instruction citation with raw/path evidence and zero writes', async (_name, citation, prompt) => {
+  ] as const)('rejects a %s instruction proof with raw/path evidence and zero writes', async (_name, proof, prompt) => {
     const response = {
       ...coveredResponse,
       steps: [{
         ...coveredResponse.steps[0],
-        instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', citation }],
+        instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', [INSTRUCTION_PROOF_FIELD]: proof }],
       }],
     } as unknown as GeneratedPlanResponse;
     const raw = `RAW:${JSON.stringify(response)}`;
@@ -643,7 +608,7 @@ describe('generate', () => {
       details: {
         raw,
         issues: expect.arrayContaining([expect.objectContaining({
-          path: ['instructionCoverage', 0, 'citation'],
+          path: ['instructionCoverage', 0, INSTRUCTION_PROOF_FIELD],
         })]),
       },
     });
@@ -654,13 +619,13 @@ describe('generate', () => {
     ['lone high surrogate', '\uD83D'],
     ['lone low surrogate', '\uDE00'],
   ] as const)(
-    'rejects a %s provider citation against emoji text with raw/path evidence and zero writes',
-    async (_name, citation) => {
+    'rejects a %s provider proof against emoji text with raw/path evidence and zero writes',
+    async (_name, proof) => {
       const response = {
         ...coveredResponse,
         steps: [{
           ...coveredResponse.steps[0],
-          instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', citation }],
+          instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', [INSTRUCTION_PROOF_FIELD]: proof }],
         }],
       } as unknown as GeneratedPlanResponse;
       const raw = `RAW:${JSON.stringify(response)}`;
@@ -677,7 +642,7 @@ describe('generate', () => {
         details: {
           raw,
           issues: expect.arrayContaining([expect.objectContaining({
-            path: ['instructionCoverage', 0, 'citation'],
+            path: ['instructionCoverage', 0, INSTRUCTION_PROOF_FIELD],
           })]),
         },
       });
@@ -723,11 +688,12 @@ describe('generate', () => {
     await generate(deps, DEFAULT_OPTIONS);
 
     expect(request?.prompt).toBe(
-      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan.`,
+      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan.`,
     );
     expect(request?.context).toEqual({
       testMd: normalizeTestMd(PROMPT),
       targets: TARGETS,
+      allowedSecretNames: [], // SPEC-C1 C1-10
     });
     expect(request?.responseSchema).toMatchObject({
       type: 'object',
@@ -1315,49 +1281,69 @@ describe('generate', () => {
     },
   );
 
-  it('regenerates an otherwise fresh plan with an uncovered secret grant', async () => {
+  it.each([
+    [false, { dryRun: false }],
+    [true, { dryRun: true }],
+  ] as const)('keeps an unauthorized fresh plan without calling AI in dry-run=%s', async (dryRun, options) => {
     const secretRef = FIRST_SECRET_REF;
-    const regeneratedResponse: GeneratedPlanResponse = {
-      steps: [{
-        id: 'fill-password',
-        kind: 'action',
-        action: 'fill-secret',
-        target: PASSWORD_TARGET,
-        secretRef,
-        citation: `@ambercast-secret ${secretRef}`,
-      }],
-      ambiguities: [],
-    };
-    const execute = vi.fn(async () => ({ data: regeneratedResponse, raw: JSON.stringify(regeneratedResponse) }));
-    const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
-    });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `@ambercast-secret ${secretRef}\n`);
-    await seedFreshArtifacts(recordingStorage.storage, testPath);
-    recordingStorage.reset();
-
-    await expect(generate(deps, DEFAULT_OPTIONS)).resolves.toMatchObject({
-      results: [{ file: testPath, status: 'generated' }],
-    });
-    expect(execute).toHaveBeenCalledOnce();
-  });
-
-  it('keeps a fresh plan with a fully consumed secret grant without calling AI', async () => {
-    const secretRef = FIRST_SECRET_REF;
-    const { deps, execute, recordingStorage } = createScenario();
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `@ambercast-secret ${secretRef}\n`);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{
+    const scenario = createScenario();
+    const deps = withSecretConfig(scenario.deps, []);
+    const testPath = await writePrompt(scenario.recordingStorage.storage);
+    await seedFreshArtifacts(scenario.recordingStorage.storage, testPath, [{
       id: 'fill-password',
       kind: 'action',
       action: 'fill-secret',
       target: PASSWORD_TARGET,
       secretRef,
-      secretGrantSpan: { startLine: 1, endLine: 1 },
     }]);
+    scenario.recordingStorage.reset();
+
+    const outcome = await generate(deps, { ...DEFAULT_OPTIONS, ...options });
+
+    if (dryRun) {
+      expect(outcome.results).toMatchObject([{
+        file: testPath,
+        status: 'skipped-fresh',
+        planFile: `${TEST_DIR}/login.ambercast.plan.json`,
+        secrets: [{
+          name: 'FOO',
+          stepId: 'fill-password',
+          envVar: 'AMBERCAST_SECRET_FOO',
+          allowed: false,
+          selectionSource: 'existing-plan',
+        }],
+        durationMs: expect.any(Number),
+        aiCalls: 0,
+      }]);
+    } else {
+      expect(outcome.results).toMatchObject([{
+        file: testPath,
+        status: 'skipped-fresh',
+      }]);
+      expect(Object.hasOwn(outcome.results[0] ?? {}, 'secrets')).toBe(false);
+    }
+    expect(scenario.execute).not.toHaveBeenCalled();
+  });
+
+  it('sorts skipped-fresh reuse warnings by UTF-16 code units rather than host locale order', async () => {
+    const { deps, recordingStorage, execute } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'z-first', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Z first' }, secretRef: '{{secrets.Z}}' },
+      { id: 'z-second', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Z second' }, secretRef: '{{secrets.Z}}' },
+      { id: 'a-first', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'A first' }, secretRef: '{{secrets.a}}' },
+      { id: 'a-second', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'A second' }, secretRef: '{{secrets.a}}' },
+    ] as unknown as Step[]);
     recordingStorage.reset();
 
-    await expect(generate(deps, DEFAULT_OPTIONS)).resolves.toMatchObject({
-      results: [{ file: testPath, status: 'skipped-fresh' }],
+    const outcome = await generate(deps, { ...DEFAULT_OPTIONS, dryRun: true });
+
+    expect(outcome.results[0]).toMatchObject({
+      status: 'skipped-fresh',
+      warnings: [
+        { kind: 'secret-name-reused-across-targets', name: 'Z', stepIds: ['z-first', 'z-second'] },
+        { kind: 'secret-name-reused-across-targets', name: 'a', stepIds: ['a-first', 'a-second'] },
+      ],
     });
     expect(execute).not.toHaveBeenCalled();
   });
@@ -1766,7 +1752,7 @@ describe('generate', () => {
     await writePrompt(recordingStorage.storage, 'first.test.md', 'first');
     await writePrompt(recordingStorage.storage, 'second.test.md', 'second');
 
-    const outcome = await generate(deps, DEFAULT_OPTIONS);
+    const outcome = await generate(withSecretConfig(deps, '*'), DEFAULT_OPTIONS);
     expect(outcome).toMatchObject({
       results: [
         { file: `${TEST_DIR}/first.test.md`, status: 'failed', error: { kind } },
@@ -2156,213 +2142,6 @@ describe('generate', () => {
     expect(recordingStorage.writes.map(({ path }) => path)).not.toContain(`${TEST_DIR}/unsafe.ambercast.grounding.json`);
   });
 
-  it('continues to the next file when secret-grant attribution fails for one generated response', async () => {
-    const [, unattributableResponse, secretPrompt, reason] = SECRET_GRANT_CITATION_FAILURES[0];
-    const attributableResponse: GeneratedPlanResponse = {
-      steps: [{
-        id: 'fill-password',
-        kind: 'action',
-        action: 'fill-secret',
-        target: PASSWORD_TARGET,
-        secretRef: FIRST_SECRET_REF,
-        citation: `@ambercast-secret ${FIRST_SECRET_REF}`,
-      }],
-      ambiguities: [],
-    };
-    const responses: readonly GeneratedPlanResponse[] = [unattributableResponse, attributableResponse, RESPONSE];
-    let responseIndex = 0;
-    const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
-      const response = responses[responseIndex];
-      responseIndex += 1;
-      if (response === undefined) {
-        throw new Error('The batch fixture received an unexpected extra AI call.');
-      }
-      return { data: response, raw: JSON.stringify(response) };
-    });
-    const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
-      discoverTestFiles: async () => ['unattributable.test.md', 'valid.test.md'],
-    });
-    await writePrompt(recordingStorage.storage, 'unattributable.test.md', secretPrompt);
-    await writePrompt(recordingStorage.storage, 'valid.test.md', 'A prompt without secret grants.\n');
-    recordingStorage.reset();
-
-    const outcome = await generate(deps, DEFAULT_OPTIONS);
-
-    expect(outcome.results).toMatchObject([
-      { file: `${TEST_DIR}/unattributable.test.md`, status: 'generated' },
-      { file: `${TEST_DIR}/valid.test.md`, status: 'generated' },
-    ]);
-    expect(execute).toHaveBeenCalledTimes(3);
-    expect(execute.mock.calls[1]?.[0].context).toEqual({
-      testMd: normalizeTestMd(secretPrompt),
-      targets: TARGETS,
-      previousAttempts: [{
-        attempt: 1,
-        code: 'SECRET_GRANT_UNATTRIBUTABLE',
-        reason,
-        stepId: 'fill-password',
-      }],
-    });
-  });
-
-  it.each(SECRET_GRANT_CITATION_FAILURES)(
-    'rejects %s before writing generated artifacts',
-    async (_description, response, testMd, reason) => {
-      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
-      const { deps, recordingStorage } = createScenario({
-        resolveAiExecutor: async () => createFakeAiExecutor({
-          execute,
-        }),
-      });
-      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', testMd);
-      recordingStorage.reset();
-
-      const outcome = await generate(deps, DEFAULT_OPTIONS);
-
-      expect(outcome.results[0]).toMatchObject({ file: testPath, status: 'failed' });
-      expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-      expect(outcome.results[0]?.error).toMatchObject({ details: {
-        reason,
-        attempts: [{ attempt: 1, code: 'SECRET_GRANT_UNATTRIBUTABLE' }, { attempt: 2, code: 'SECRET_GRANT_UNATTRIBUTABLE' }],
-      } });
-      expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
-      expect(recordingStorage.writes).toEqual([]);
-    },
-  );
-
-  it.each(SECRET_GRANT_CITATION_FAILURES)(
-    'rejects %s through the --dry-run path without writing artifacts',
-    async (_description, response, testMd, reason) => {
-      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
-      const { deps, recordingStorage } = createScenario({
-        resolveAiExecutor: async () => createFakeAiExecutor({
-          execute,
-        }),
-      });
-      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', testMd);
-      recordingStorage.reset();
-
-      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, dryRun: true });
-
-      expect(outcome.results[0]).toMatchObject({ file: testPath, status: 'failed' });
-      expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-      expect(outcome.results[0]?.error).toMatchObject({ details: {
-        reason,
-        attempts: [{ attempt: 1, code: 'SECRET_GRANT_UNATTRIBUTABLE' }, { attempt: 2, code: 'SECRET_GRANT_UNATTRIBUTABLE' }],
-      } });
-      expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
-      expect(recordingStorage.writes).toEqual([]);
-    },
-  );
-
-  it.each([
-    ['generated', DEFAULT_OPTIONS, 'generated'],
-    ['dry-run', { ...DEFAULT_OPTIONS, dryRun: true }, 'would-generate'],
-  ] as const)('keeps grounded secret usage on the existing %s path', async (_mode, options, status) => {
-    const declaredSecretRef = '{{secrets.LOGIN_PASSWORD}}';
-    const secondDeclaredSecretRef = '{{secrets.PAYMENT_TOKEN}}';
-    const response = {
-      steps: [
-        {
-          id: 'fill-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: declaredSecretRef,
-          citation: `@ambercast-secret ${declaredSecretRef}`,
-        },
-        {
-          id: 'complete-sign-in',
-          kind: 'ai',
-          instruction: 'Complete the sign-in flow.',
-          instructionCoverage: [{
-            id: 'dashboard-reached',
-            kind: 'success',
-            citation: 'When I submit valid credentials, I reach the dashboard.',
-          }],
-          verificationIntent: [{
-            criterionId: 'dashboard-reached',
-            assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' },
-          }],
-          secrets: [{ ref: secondDeclaredSecretRef, citation: `@ambercast-secret ${secondDeclaredSecretRef}` }],
-        },
-      ],
-      ambiguities: [],
-    } as unknown as GeneratedPlanResponse;
-    const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({
-        execute: async () => ({ data: response, raw: JSON.stringify(response) }),
-      }),
-    });
-    const testPath = await writePrompt(
-      recordingStorage.storage,
-      'login.test.md',
-      `${PROMPT}\n@ambercast-secret ${declaredSecretRef}\n@ambercast-secret ${secondDeclaredSecretRef}\n`,
-    );
-    recordingStorage.reset();
-
-    const outcome = await generate(deps, options);
-
-    expect(outcome.results[0]).toMatchObject({ file: testPath, status });
-    expect(recordingStorage.writes).toHaveLength(options.dryRun ? 0 : 2);
-  });
-
-  it.each([
-    ['generated', DEFAULT_OPTIONS, 'generated'],
-    ['dry-run', { ...DEFAULT_OPTIONS, dryRun: true }, 'would-generate'],
-  ] as const)('attributes repeated identical grant citations on the %s path', async (_mode, options, status) => {
-    const repeatedSecretRef = FIRST_SECRET_REF;
-    const response: GeneratedPlanResponse = {
-      steps: [
-        {
-          id: 'first-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: repeatedSecretRef,
-          citation: `@ambercast-secret ${repeatedSecretRef}`,
-        },
-        {
-          id: 'second-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: repeatedSecretRef,
-          citation: `@ambercast-secret ${repeatedSecretRef}`,
-        },
-      ],
-      ambiguities: [],
-    };
-    const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({
-        execute: async () => ({ data: response, raw: JSON.stringify(response) }),
-      }),
-    });
-    const testPath = await writePrompt(
-      recordingStorage.storage,
-      'login.test.md',
-      `${PROMPT}\n@ambercast-secret ${repeatedSecretRef}\n@ambercast-secret ${repeatedSecretRef}\n`,
-    );
-    recordingStorage.reset();
-
-    const outcome = await generate(deps, options);
-
-    expect(outcome.results[0]).toMatchObject({ file: testPath, status });
-    expect(recordingStorage.writes).toHaveLength(options.dryRun ? 0 : 2);
-    if (options.dryRun) {
-      return;
-    }
-
-    const artifact = PlanDocument.parse(JSON.parse(
-      await recordingStorage.storage.readText(deps.layout.planPathFor(testPath)),
-    ));
-    expect(artifact.steps).toMatchObject([
-      { id: 'first-password', secretGrantSpan: { startLine: 5, endLine: 5 } },
-      { id: 'second-password', secretGrantSpan: { startLine: 6, endLine: 6 } },
-    ]);
-  });
-
   it('classifies duplicate assembled plan step IDs as a final PlanDocument validation failure', async () => {
     const duplicateResponse: GeneratedPlanResponse = {
       steps: [
@@ -2386,15 +2165,13 @@ describe('generate', () => {
   });
 
   it('round-trips a generated secret-bearing plan with byte-identical artifact text', async () => {
-    const secretRef = '{{secrets.LOGIN_PASSWORD}}';
     const response: GeneratedPlanResponse = {
       steps: [{
         id: 'fill-password',
         kind: 'action',
         action: 'fill-secret',
         target: PASSWORD_TARGET,
-        secretRef,
-        citation: `@ambercast-secret ${secretRef}`,
+        secret: { nameHint: 'login_password' },
       }],
       ambiguities: [],
     };
@@ -2403,9 +2180,9 @@ describe('generate', () => {
         execute: async () => ({ data: response, raw: JSON.stringify(response) }),
       }),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n@ambercast-secret ${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage);
 
-    const outcome = await generate(deps, DEFAULT_OPTIONS);
+    const outcome = await generate(withSecretConfig(deps, '*'), DEFAULT_OPTIONS);
     const text = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
     const parsed = PlanDocument.parse(JSON.parse(text));
 
@@ -2473,7 +2250,7 @@ describe('generate', () => {
       });
       expect(artifact.source.inputsDigest).toBe(computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: firstFingerprint,
         targetDefinitions: TARGETS,
@@ -2626,6 +2403,7 @@ describe('generate', () => {
         ambiguities: [],
         durationMs: 15,
         aiCalls: 1,
+        secrets: [], // SPEC-C1 C1-8
       }]);
       expect(events.emitted()).toEqual([
         { type: 'ai-call', callId: 'ai-1', file, attempt: 1, attemptLimit: 2 },
@@ -2757,11 +2535,12 @@ describe('generate', () => {
       expect(execute).toHaveBeenCalledTimes(2);
       expect(aiCallEvents(events.emitted())).toHaveLength(2);
       expect(aiEvents(events.emitted())).toHaveLength(4);
-      expect(Object.keys(firstContext)).toEqual(['testMd', 'targets']);
-      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'previousAttempts']);
+      expect(Object.keys(firstContext)).toEqual(['testMd', 'targets', 'allowedSecretNames']); // SPEC-C1 C1-10
+      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'allowedSecretNames', 'previousAttempts']); // SPEC-C1 C1-10
       expect(secondContext).toEqual({
         testMd: normalizeTestMd(PROMPT),
         targets: TARGETS,
+        allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [{
           attempt: 1,
           code: 'AI_RESPONSE_INVALID',
@@ -2801,6 +2580,7 @@ describe('generate', () => {
       expect(thirdContext).toEqual({
         testMd: normalizeTestMd(PROMPT),
         targets: TARGETS,
+        allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [
           {
             attempt: 1,
@@ -2969,10 +2749,11 @@ describe('generate', () => {
 
       expect(outcome.results).toMatchObject([{ status: 'generated' }]);
       expect(execute).toHaveBeenCalledTimes(2);
-      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'previousAttempts']);
+      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'allowedSecretNames', 'previousAttempts']); // SPEC-C1 C1-10
       expect(secondContext).toEqual({
         testMd: normalizeTestMd(PROMPT),
         targets: TARGETS,
+        allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }],
       });
     });
@@ -3048,20 +2829,6 @@ describe('generate', () => {
         (cause: Error) => new SecretLiteralRejectedError(
           'Literal secret rejected.',
           { detector: 'credential-prefix-sk', path: 'generatorMeta.token' },
-          { cause },
-        ),
-      ],
-      [
-        'an unattributable secret grant',
-        'SECRET_GRANT_UNATTRIBUTABLE',
-        (cause: Error) => new SecretGrantUnattributableError(
-          'Secret grant rejected.',
-          {
-            reason: 'citation-not-found',
-            secretRef: FIRST_SECRET_REF,
-            stepId: 'fill-password',
-            hint: 'Use an exact prompt citation.',
-          },
           { cause },
         ),
       ],
@@ -3145,38 +2912,6 @@ describe('generate', () => {
           ]),
         }],
       });
-    });
-
-    it('retries an unattributable secret grant and preserves its terminal diagnostic details after exhaustion', async () => {
-      const response: GeneratedPlanResponse = {
-        steps: [{
-          id: 'fill-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: FIRST_SECRET_REF,
-          citation: 'This citation is absent from the prompt.',
-        }],
-        ambiguities: [],
-      };
-      const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
-      const { deps, recordingStorage } = createScenario({
-        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
-      });
-      await writePrompt(recordingStorage.storage, 'secret.test.md', `@ambercast-secret ${FIRST_SECRET_REF}\n`);
-      recordingStorage.reset();
-
-      const outcome = await generate(deps, { ...DEFAULT_OPTIONS, files: [`${TEST_DIR}/secret.test.md`] });
-
-      expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-      expect(outcome.results[0]?.error?.details).toMatchObject({
-        reason: 'citation-not-found',
-        secretRef: FIRST_SECRET_REF,
-        stepId: 'fill-password',
-        hint: expect.any(String),
-        attempts: [{ attempt: 1, code: 'SECRET_GRANT_UNATTRIBUTABLE' }, { attempt: 2, code: 'SECRET_GRANT_UNATTRIBUTABLE' }],
-      });
-      expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
     });
 
     it('stops an unavailable executor after an earlier retryable failure and retains both attempts', async () => {
@@ -3272,81 +3007,6 @@ describe('generate', () => {
         && !Object.hasOwn(issue, 'stepId'))).toBe(true);
     });
 
-    it('omits an uncovered secret-grant step ID from raw retry feedback instead of assigning undefined', async () => {
-      const uncoveredResponse: GeneratedPlanResponse = { steps: [], ambiguities: [] };
-      const attributableResponse: GeneratedPlanResponse = {
-        steps: [{
-          id: 'fill-password',
-          kind: 'action',
-          action: 'fill-secret',
-          target: PASSWORD_TARGET,
-          secretRef: FIRST_SECRET_REF,
-          citation: `@ambercast-secret ${FIRST_SECRET_REF}`,
-        }],
-        ambiguities: [],
-      };
-      let dispatch = 0;
-      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
-        const response = dispatch++ === 0 ? uncoveredResponse : attributableResponse;
-        return { data: response, raw: JSON.stringify(response) };
-      });
-      const { deps, recordingStorage } = createScenario({
-        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
-      });
-      await writePrompt(
-        recordingStorage.storage,
-        'uncovered-grant-retry.test.md',
-        `@ambercast-secret ${FIRST_SECRET_REF}\n`,
-      );
-      recordingStorage.reset();
-
-      const outcome = await generate(deps, {
-        ...DEFAULT_OPTIONS,
-        files: [`${TEST_DIR}/uncovered-grant-retry.test.md`],
-      });
-      const rawPreviousAttempts = requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context);
-      const rawFirstAttempt = requireRawObject(rawPreviousAttempts[0], 'the first previous attempt');
-
-      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
-      expect(execute).toHaveBeenCalledTimes(2);
-      expect(rawFirstAttempt).toMatchObject({
-        attempt: 1,
-        code: 'SECRET_GRANT_UNATTRIBUTABLE',
-        reason: 'uncovered-grant',
-      });
-      expect(Object.hasOwn(rawFirstAttempt, 'stepId')).toBe(false);
-    });
-
-    it('stops before a retry dispatch when cancellation occurs while retry feedback is projected', async () => {
-      const controller = new AbortController();
-      const details: Record<string, unknown> = {
-        secretRef: FIRST_SECRET_REF,
-        stepId: 'fill-password',
-        hint: 'Fix the citation.',
-      };
-      Object.defineProperty(details, 'reason', {
-        enumerable: true,
-        get: () => {
-          controller.abort(new Error('abort before retry'));
-          return 'citation-not-found';
-        },
-      });
-      const execute = vi.fn(async () => {
-        throw new SecretGrantUnattributableError('Unattributable secret grant.', details);
-      });
-      const { deps, recordingStorage } = createScenario({
-        signal: controller.signal,
-        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
-      });
-      const testPath = await writePrompt(recordingStorage.storage);
-      recordingStorage.reset();
-
-      const outcome = await generate(deps, DEFAULT_OPTIONS);
-
-      expect(outcome).toMatchObject({ interrupted: true, results: [{ file: testPath, status: 'skipped' }] });
-      expect(execute).toHaveBeenCalledOnce();
-    });
-
     it.each(['provider rejection', 'post-response interruption'] as const)(
       'turns the current and pending files into skipped rows at the %s checkpoint without further dispatch',
       async (checkpoint) => {
@@ -3383,6 +3043,216 @@ describe('generate', () => {
         expect(execute).toHaveBeenCalledOnce();
       },
     );
+  });
+});
+
+describe('generate secret naming and consent boundaries', () => {
+  const namedResponse = (secret: unknown): GeneratedPlanResponse => ({
+    steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD_TARGET, ...(secret === undefined ? {} : { secret }) }],
+    ambiguities: [],
+  } as unknown as GeneratedPlanResponse);
+
+  it('retries provider naming violation secret-allowed-name-not-projected as AI_RESPONSE_INVALID', async () => {
+    let dispatch = 0;
+    const execute = vi.fn(async () => {
+      const response = dispatch++ === 0 ? namedResponse({ allowedName: 'LOGIN_PASSWORD' }) : RESPONSE;
+      return { data: response, raw: JSON.stringify(response) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const deps = withSecretConfig(scenario.deps, '*');
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect((execute.mock.calls as unknown as Array<[{ readonly context: unknown }]>)[1]?.[0].context).toMatchObject({
+      allowedSecretNames: [],
+      previousAttempts: [{
+        attempt: 1,
+        code: 'AI_RESPONSE_INVALID',
+        issues: [expect.objectContaining({ code: 'secret-allowed-name-not-projected' })],
+      }],
+    });
+  });
+
+  // SPEC-C1 C1-4: generate passes projected: []; explicit allowedName is thus rejected first,
+  // so an end-to-end response cannot reach the target-name conflict; mock the boundary to verify retry wiring.
+  it('retries provider naming violation secret-conflicting-target-names as AI_RESPONSE_INVALID', async () => {
+    const conflictingResponse = {
+      steps: [
+        { id: 'first-name', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Account' } },
+        { id: 'other-target', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Password' } },
+        {
+          id: 'conflicting-later',
+          kind: 'action',
+          action: 'fill-secret',
+          target: { ...PASSWORD_TARGET, name: 'Account' },
+          secret: { allowedName: 'password' },
+        },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    let dispatch = 0;
+    const execute = vi.fn(async () => {
+      const response = dispatch++ === 0 ? conflictingResponse : RESPONSE;
+      return { data: response, raw: JSON.stringify(response) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+    secretNamingMocks.deriveSecretNames.mockImplementationOnce(() => {
+      throw new AiResponseInvalidError('Generated secret names conflict for one target.', {
+        issues: [{
+          code: 'secret-conflicting-target-names',
+          path: 'steps[2].secret',
+          stepId: 'conflicting-later',
+        }],
+      });
+    });
+
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), DEFAULT_OPTIONS);
+
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(secretNamingMocks.deriveSecretNames).toHaveBeenCalledTimes(2);
+    expect((execute.mock.calls as unknown as Array<[{ readonly context: unknown }]>)[1]?.[0].context).toMatchObject({
+      allowedSecretNames: [],
+      previousAttempts: [{
+        attempt: 1,
+        code: 'AI_RESPONSE_INVALID',
+        issues: [{
+          code: 'secret-conflicting-target-names',
+          path: 'steps[2].secret',
+          stepId: 'conflicting-later',
+        }],
+      }],
+    });
+  });
+
+  it('includes an empty allowedSecretNames projection in both attempt context shapes', async () => {
+    let dispatch = 0;
+    const rejected = { ...coveredResponse, steps: [{ ...coveredResponse.steps[0], verificationIntent: [] }] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => {
+      const response = dispatch++ === 0 ? rejected : RESPONSE;
+      return { data: response, raw: JSON.stringify(response) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    await generate(withSecretConfig(scenario.deps, '*'), DEFAULT_OPTIONS);
+    expect((execute.mock.calls as unknown as Array<[{ readonly context: unknown }]>).map(([request]) => request.context)).toEqual([
+      expect.objectContaining({ allowedSecretNames: [] }),
+      expect.objectContaining({ allowedSecretNames: [] }),
+    ]);
+  });
+
+  it.each([false, true])('fails unauthorized fresh secret before persistence in %s dry-run mode', async (dryRun) => {
+    const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+    const outcome = await generate(withSecretConfig(scenario.deps, []), { ...DEFAULT_OPTIONS, dryRun });
+    expect(outcome.results[0]).toMatchObject({ file, status: 'failed' });
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('treats environment-name collisions as terminal and omits them from retry feedback', async () => {
+    const response = { steps: [
+      { id: 'fill-one', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Token one' }, secret: { nameHint: 'token_one' } },
+      { id: 'fill-two', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Token two' }, secret: { nameHint: 'token_two' } },
+    ], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: response, raw: 'collision' }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    envVarNameMocks.assertNoEnvVarCollision.mockClear();
+    envVarNameMocks.assertNoEnvVarCollision.mockImplementationOnce(() => {
+      throw new SecretEnvVarCollisionError('Forced collision for generate wiring.', {
+        envVar: 'AMBERCAST_SECRET_TOKEN',
+        refs: ['{{secrets.token_one}}', '{{secrets.token_two}}'],
+      });
+    });
+
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretEnvVarCollisionError);
+    expect(envVarNameMocks.assertNoEnvVarCollision).toHaveBeenCalledWith([
+      '{{secrets.token_one}}',
+      '{{secrets.token_two}}',
+    ]);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('projects one AI secret row after duplicate provider choices normalize to one ref', async () => {
+    const response = {
+      steps: [{
+        ...coveredResponse.steps[0],
+        id: 'complete-sign-in',
+        kind: 'ai',
+        instruction: 'Complete the sign-in flow.',
+        secrets: [{ nameHint: 'otp' }, { nameHint: 'otp' }],
+      }],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({
+        execute: async () => ({ data: response, raw: JSON.stringify(response) }),
+      }),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    const outcome = await generate(withSecretConfig(scenario.deps, ['otp']), DEFAULT_OPTIONS);
+    const result = outcome.results[0] as unknown as { readonly secrets: readonly unknown[] };
+
+    expect(outcome.results[0]).toMatchObject({ file, status: 'generated' });
+    expect(result.secrets).toEqual([{
+      name: 'otp',
+      stepId: 'complete-sign-in',
+      envVar: 'AMBERCAST_SECRET_OTP',
+      allowed: true,
+      selectionSource: 'hint',
+    }]);
+  });
+
+  it('projects secret rows in normalized plan-step order rather than provider-use order', async () => {
+    const response = {
+      steps: [
+        {
+          ...coveredResponse.steps[0],
+          id: 'complete-sign-in',
+          kind: 'ai',
+          instruction: 'Complete the sign-in flow.',
+          secrets: [{ nameHint: 'zeta' }, { nameHint: 'alpha' }],
+        },
+        {
+          id: 'fill-password',
+          kind: 'action',
+          action: 'fill-secret',
+          target: PASSWORD_TARGET,
+          secret: { nameHint: 'password' },
+        },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({
+        execute: async () => ({ data: response, raw: JSON.stringify(response) }),
+      }),
+    });
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    const outcome = await generate(withSecretConfig(scenario.deps, ['alpha', 'password', 'zeta']), DEFAULT_OPTIONS);
+    const result = outcome.results[0] as unknown as { readonly secrets: readonly { readonly name: string; readonly stepId: string }[] };
+
+    expect(result.secrets.map(({ name, stepId }) => ({ name, stepId }))).toEqual([
+      { name: 'alpha', stepId: 'complete-sign-in' },
+      { name: 'zeta', stepId: 'complete-sign-in' },
+      { name: 'password', stepId: 'fill-password' },
+    ]);
   });
 });
 

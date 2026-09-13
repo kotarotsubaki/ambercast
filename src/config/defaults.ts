@@ -42,6 +42,12 @@ export const DEFAULT_RAW_CONFIG = {
     },
   },
   defaultTarget: 'web-user',
+  // No secret is consented merely because a project omitted configuration.
+  // The empty resolved policy makes secret-bearing plans fail before external
+  // work until their author explicitly grants a name or all names.
+  secrets: {
+    allow: [],
+  },
   ai: {
     provider: 'auto',
     timeoutMs: 600_000,

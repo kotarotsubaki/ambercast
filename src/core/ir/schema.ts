@@ -10,14 +10,12 @@
  * properties. Structural zod constructs preserve the same constraints across
  * both representations. Except for duplicate plan-step identifiers (which
  * JSON Schema 2020-12 cannot express as projected-field uniqueness across
- * array items) and SourceSpan's endLine/startLine ordering (which it cannot
- * express as a comparison between sibling property values), no `.refine()`
+ * array items), no `.refine()`
  * or `.superRefine()` may encode a constraint that would vanish when this
  * module is converted to JSON Schema.
  *
- * The exported schemas and inferred aliases include the two deliberate
- * JSON-Schema-inexpressible refinements: duplicate `PlanDocument` IDs and
- * `SourceSpan` endLine/startLine ordering.
+ * The exported schemas and inferred aliases include the deliberate
+ * JSON-Schema-inexpressible refinement for duplicate `PlanDocument` IDs.
  */
 import { z } from 'zod';
 
@@ -30,7 +28,8 @@ import { z } from 'zod';
  * larger text use it unanchored, while this module anchors it for whole-value
  * validation.
  */
-export const SECRET_REF_SOURCE = String.raw`\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}`;
+const SECRET_NAME_SOURCE = String.raw`[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*`;
+export const SECRET_REF_SOURCE = String.raw`\{\{secrets\.${SECRET_NAME_SOURCE}\}\}`;
 const SECRET_REF_PATTERN = new RegExp(`^${SECRET_REF_SOURCE}$`);
 const HEX_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 // This flag-independent pattern keeps zod's runtime validator and the generated public JSON Schema aligned: JSON Schema's `pattern` keyword carries no flags, and `z.toJSONSchema()` emits only a regex's source. It rejects a contiguous `{{secrets.` marker at the start of a multi-line string, immediately after an embedded newline, or anywhere later, while accepting a near-miss with a newline inside the marker such as `{{secrets\n.TOKEN}}` because the marker text is not contiguous.
@@ -47,14 +46,16 @@ const RUN_REF_PATTERN = /^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
  * contract.
  *
  * @remarks
- * Plan version 2 changes the plan input-digest preimage. Version 1 plans are
- * regenerated or reported stale at their existing command boundary; they are
- * not migrated in place. Grounding remains version 1 because coverage is an
- * additive optional field nested inside its trace record.
+ * Plan version 3 removes prompt-grant provenance from secret uses and makes
+ * deterministic local naming the boundary between provider intent and a
+ * committed reference. Earlier plans are regenerated or reported stale at
+ * their existing command boundary; they are never migrated in place.
+ * Grounding remains version 1 because this plan-shape change does not alter
+ * its trace-record contract.
  *
  * Every Plan schema and digest caller shares this literal.
  */
-export const PLAN_SCHEMA_VERSION = 2 as const;
+export const PLAN_SCHEMA_VERSION = 3 as const;
 
 /**
  * The unchanged Grounding IR version after trace coverage is added.
@@ -78,6 +79,40 @@ export const SecretRef = z.string().regex(SECRET_REF_PATTERN);
  * by parsing untrusted data through the schema rather than casting strings.
  */
 export type SecretRef = z.infer<typeof SecretRef>;
+
+/**
+ * Validates the logical name inside a secret reference.
+ *
+ * Separating this from {@link SecretRef} lets configuration and provider
+ * naming choices use the same dotted grammar without accepting interpolation
+ * syntax where a plain name is required.
+ */
+export const SecretName = z.string().regex(new RegExp(`^${SECRET_NAME_SOURCE}$`));
+/** A schema-validated logical secret name used by naming and consent policy. */
+export type SecretName = z.infer<typeof SecretName>;
+
+/**
+ * Validates the constrained provider hint admitted by deterministic naming.
+ *
+ * The compact lowercase-underscore grammar makes a hint usable directly as a
+ * stable reference component, avoiding later locale-sensitive normalization.
+ */
+export const SecretNameHint = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
+/** A provider-supplied fallback name candidate, not yet a committed reference. */
+export type SecretNameHint = z.infer<typeof SecretNameHint>;
+
+/**
+ * Accepts either an explicit projected name or a constrained local hint.
+ *
+ * These alternatives stay structurally exclusive so a provider cannot claim
+ * both precedence rungs at once; local policy decides whether an explicit
+ * name belongs to the projected set before it becomes committed.
+ */
+export const SecretNameChoice = z.union([
+  z.strictObject({ allowedName: SecretName }),
+  z.strictObject({ nameHint: SecretNameHint }),
+]);
+export type SecretNameChoice = z.infer<typeof SecretNameChoice>;
 
 /**
  * Validates one configuration-authored HTTP(S) origin permitted to receive a
@@ -249,63 +284,7 @@ export const StepId = z.string().regex(STEP_ID_PATTERN);
  */
 export type StepId = z.infer<typeof StepId>;
 
-/**
- * Validates the inclusive line range in the test prompt that authorizes a
- * secret use.
- *
- * The grant grammar uses one physical line, but a range rather than a bare
- * line number accommodates multi-line grant forms without a schema revision.
- * Replay locates the source afresh, so retaining line numbers rather than
- * offsets avoids persisting a second coordinate system that could disagree
- * with the parsed prompt.
- *
- * This is one of this module's two deliberate JSON-Schema-inexpressible
- * refinements: JSON Schema 2020-12 cannot compare sibling property values;
- * the other rejects duplicate `PlanDocument` IDs because it cannot enforce
- * projected-field uniqueness across array items.
- */
-export const SourceSpan = z.strictObject({
-  startLine: z.int().positive(),
-  endLine: z.int().positive(),
-}).refine((span) => span.endLine >= span.startLine, {
-  message: 'endLine must be greater than or equal to startLine',
-  path: ['endLine'],
-});
-
-/**
- * The validated source-location range recorded for secret-grant provenance.
- */
-export type SourceSpan = z.infer<typeof SourceSpan>;
-
-/**
- * Limits the provider-supplied citation used while attributing a secret grant.
- *
- * The bound contains the work required to inspect untrusted provider output;
- * it is not an authorization boundary. The locally parsed grant and its
- * persisted {@link SourceSpan} provide that authority instead.
- */
 const CITATION_MAX_LENGTH = 4096;
-
-/**
- * Validates the exact prompt excerpt a provider supplies for a secret grant.
- *
- * A citation is evidence that deterministic attribution can verify during
- * generation, not evidence replay trusts. Its generous length cap limits an
- * adversarial response's search work without attempting to solve the separate
- * absence of a length cap on {@link SecretRef}.
- */
-export const Citation = z.string().min(1).max(CITATION_MAX_LENGTH).describe(
-  'The exact, verbatim substring of the test prompt — copied character for ' +
-  'character, including whitespace — that shows the @ambercast-secret ' +
-  '{{secrets.X}} grant line authorizing this secret reference. Do not ' +
-  'paraphrase, summarize, or count lines; copy the text exactly as written.',
-);
-
-/**
- * The provider-supplied verbatim prompt excerpt used to locate one secret
- * grant during generation.
- */
-export type Citation = z.infer<typeof Citation>;
 
 /**
  * Identifies one instruction criterion within its containing AI step.
@@ -329,9 +308,6 @@ export type InstructionCriterionKind = 'success' | 'action';
  *
  * @remarks
  * Coordinates are one-based UTF-16 code-unit positions with an exclusive end.
- * This precise range is separate from the line-only {@link SourceSpan} used
- * for grammar-defined secret grants: multiple instruction clauses can share a
- * line and must remain independently re-extractable.
  *
  * A strict Zod object defines the public type. Cross-field coordinate,
  * prompt-boundary, and surrogate checks remain usecase policy because public
@@ -419,8 +395,8 @@ const PressFields = {
 const FillFields = { target: ElementRef, value: InterpolatableText };
 const FillSecretFields = { target: ElementRef, secretRef: SecretRef };
 // Provider-facing and committed AI steps share their execution contract; only
-// the provenance carried by each secret grant differs. One bundle prevents
-// those common fields from drifting across the two representations.
+// secret naming intent is unresolved on the provider-facing side. One bundle
+// prevents those common fields from drifting across the two representations.
 const AiStepFields = {
   ...StepBase,
   kind: z.literal('ai'),
@@ -515,17 +491,16 @@ export type FillAction = z.infer<typeof FillAction>;
  *
  * This dedicated branch is the central structural secret-safety rule: a
  * password cannot masquerade as a secret through a general text field, and a
- * literal or embedded token fails {@link SecretRef} validation. Its grant
- * span remains a flat field because the step already has exactly one secret
- * reference; AI steps need nested pairs to associate each of several
- * references with its own span.
+ * literal or embedded token fails {@link SecretRef} validation. A committed
+ * fill action stores exactly one already-resolved reference; naming intent is
+ * confined to the separate provider-facing shape so no source provenance or
+ * provider choice leaks into reviewed IR.
  */
 export const FillSecretAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('fill-secret'),
   ...FillSecretFields,
-  secretGrantSpan: SourceSpan,
 });
 
 /**
@@ -690,46 +665,40 @@ export const CaptureStep = z.strictObject({
 export type CaptureStep = z.infer<typeof CaptureStep>;
 
 /**
- * Validates one secret grant recorded on a committed AI step.
+ * Validates one resolved secret use recorded on a committed AI step.
  *
- * Each reference carries the locally derived prompt range that authorized it,
- * preserving distinct grants that happen to use the same secret reference.
+ * A committed use stores only its reference. Source authorization is no
+ * longer plan metadata: allowlist consent is evaluated at the operation
+ * boundary, while duplicate AI uses are normalized after deterministic naming.
  */
-export const AiStepSecretGrant = z.strictObject({
-  ref: SecretRef,
-  sourceSpan: SourceSpan,
-});
-
-/**
- * The persisted reference-and-provenance pair for one AI-step secret grant.
- */
-export type AiStepSecretGrant = z.infer<typeof AiStepSecretGrant>;
+export const AiStepSecretUse = z.strictObject({ ref: SecretRef });
+export type AiStepSecretUse = z.infer<typeof AiStepSecretUse>;
 
 /**
  * Validates an AI-directed step as a pure generation artifact.
  *
  * Keeping execution results outside the plan preserves digest stability. When
  * a previously replayed trace exists, it lives solely in
- * {@link GroundingDocument}. Secret grants are optional rather than defaulted:
- * omission and an explicit empty list both grant nothing at this boundary, but
+ * {@link GroundingDocument}. Secret uses are optional rather than defaulted:
+ * omission and an explicit empty list both express no use at this boundary but
  * remain distinct serialized values for deterministic digesting. Canonical
  * ordering and omission policy therefore belong before this schema is used to
  * persist a generated plan, not in validation.
  */
 export const AiStep = z.strictObject({
   ...AiStepFields,
-  secrets: z.array(AiStepSecretGrant).optional(),
+  secrets: z.array(AiStepSecretUse).optional(),
   instructionCoverage: z.array(InstructionCriterion).min(1),
 });
 
 /**
  * The parsed AI-step branch, preserving the distinction between omitted
- * secret grants and an explicitly empty list.
+ * secret uses and an explicitly empty list.
  */
 export type AiStep = z.infer<typeof AiStep>;
 
 /**
- * The Plan-v2 AI-step contract with required instruction coverage.
+ * The Plan IR AI-step contract with required instruction coverage.
  *
  * @remarks
  * This consumer-facing alias preserves the required non-empty field already
@@ -754,25 +723,70 @@ export const Step = z.discriminatedUnion('kind', [ActionStep, AssertStep, Captur
  */
 export type Step = z.infer<typeof Step>;
 
-/** The Plan-v2 step union with instruction-covered AI branches. */
+/** The Plan IR step union with instruction-covered AI branches. */
 export type InstructionCoveredStep = Step;
 
 /**
- * Validates a provider-authored `fill-secret` action before local attribution.
+ * Represents the intermediate steps after instruction coverage is attributed
+ * but before secret names become committed references.
  *
- * Providers supply a verbatim citation rather than a source span because only
- * local prompt parsing may establish the persisted authorization provenance.
+ * A discriminated union mirrors the final step vocabulary rather than using a
+ * broad `Omit` over the whole union. Only secret-bearing variants differ:
+ * fill-secret exposes an optional naming choice and AI exposes optional
+ * per-use choices, while every other branch is already safe to commit. This
+ * narrow gap lets instruction provenance and secret naming evolve
+ * independently without provider-only fields entering Plan IR.
+ */
+/** Fill-secret action after instruction attribution, before its secret name is resolved. */
+interface AttributedFillSecretAction {
+  readonly id: StepId;
+  readonly kind: 'action';
+  readonly action: 'fill-secret';
+  readonly target: ElementRef;
+  readonly secret?: SecretNameChoice;
+}
+
+/** AI step after instruction attribution, before its secret uses are named. */
+interface AttributedAiStep {
+  readonly id: StepId;
+  readonly kind: 'ai';
+  readonly instruction: InterpolatableText;
+  readonly secrets?: readonly GeneratedAiStepSecretUse[];
+  readonly instructionCoverage: readonly InstructionCriterion[];
+}
+
+export type InstructionAttributedSteps = readonly (
+  | ClickAction
+  | NavigateAction
+  | PressAction
+  | FillAction
+  | AttributedFillSecretAction
+  | TextVisibleCheck
+  | ElementVisibleCheck
+  | TextEqualsCheck
+  | UrlMatchesCheck
+  | ElementCountCheck
+  | CaptureStep
+  | AttributedAiStep
+)[];
+
+/**
+ * Validates a provider-authored `fill-secret` action before local naming.
+ *
+ * Providers may provide a naming choice while local naming resolves the final
+ * secret reference.
  */
 export const GeneratedFillSecretAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('fill-secret'),
-  ...FillSecretFields,
-  citation: Citation,
+  target: ElementRef,
+  secret: SecretNameChoice.optional(),
 });
 
 /**
- * The provider-facing `action/fill-secret` branch awaiting local attribution.
+ * The provider-facing `action/fill-secret` branch awaiting local name
+ * resolution.
  */
 export type GeneratedFillSecretAction = z.infer<typeof GeneratedFillSecretAction>;
 
@@ -780,8 +794,8 @@ export type GeneratedFillSecretAction = z.infer<typeof GeneratedFillSecretAction
  * Validates the action portion of a provider-authored step response.
  *
  * Non-secret branches already match their committed representations, while
- * the secret branch preserves its citation until local verification replaces
- * it with a source span.
+ * the secret branch carries only an optional naming choice until local policy
+ * resolves the final reference.
  */
 export const GeneratedActionStep = z.discriminatedUnion('action', [
   ClickAction,
@@ -797,37 +811,31 @@ export const GeneratedActionStep = z.discriminatedUnion('action', [
 export type GeneratedActionStep = z.infer<typeof GeneratedActionStep>;
 
 /**
- * Validates one provider-authored AI-step secret grant before local
- * attribution.
+ * Validates one provider-authored AI-step secret naming choice.
  *
- * The provider pairs its reference with the prompt text it copied, allowing
- * local code to reject an ambiguous or non-grant citation before persistence.
+ * An empty strict object deliberately means that the provider declines every
+ * optional naming rung. Local policy then supplies a deterministic ordinal,
+ * so the provider cannot manufacture an unconstrained reference.
  */
-export const GeneratedAiStepSecretGrant = z.strictObject({
-  ref: SecretRef,
-  citation: Citation,
-});
+export const GeneratedAiStepSecretUse = z.union([SecretNameChoice, z.strictObject({})]);
+export type GeneratedAiStepSecretUse = z.infer<typeof GeneratedAiStepSecretUse>;
 
 /**
- * The provider-facing reference-and-citation pair for one AI-step grant.
- */
-export type GeneratedAiStepSecretGrant = z.infer<typeof GeneratedAiStepSecretGrant>;
-
-/**
- * Validates a provider-authored AI step before local secret-grant attribution.
+ * Validates a provider-authored AI step before local secret-name resolution.
  *
  * The shared AI-step fields remain identical to the committed step, leaving
- * each secret entry's citation as the only provider-facing provenance.
+ * only optional secret-name choices to be resolved locally.
  */
 export const GeneratedAiStep = z.strictObject({
   ...AiStepFields,
-  secrets: z.array(GeneratedAiStepSecretGrant).optional(),
+  secrets: z.array(GeneratedAiStepSecretUse).optional(),
   instructionCoverage: z.array(GeneratedInstructionCriterion).min(1),
   verificationIntent: z.array(z.lazy(() => VerificationIntent)).min(1),
 });
 
 /**
- * The provider-facing AI-step branch awaiting local attribution.
+ * The provider-facing AI-step branch awaiting local instruction coverage and
+ * secret-name resolution.
  */
 export type GeneratedAiStep = z.infer<typeof GeneratedAiStep>;
 
@@ -874,8 +882,8 @@ export type GeneratedInstructionCoveredAiStep = GeneratedAiStep & {
  * Validates one complete provider-authored step before locally deterministic
  * fields are assembled into a committed plan.
  *
- * Assertions and captures require no secret provenance and therefore reuse
- * their committed shapes without a parallel schema branch.
+ * Assertions and captures require no secret-name resolution and therefore
+ * reuse their committed shapes without a parallel schema branch.
  */
 export const GeneratedStep = z.discriminatedUnion('kind', [
   GeneratedActionStep,
@@ -1190,9 +1198,9 @@ export const JsonValue: z.ZodType<JsonValueT> = z.lazy(() => z.union([
  * values. The refinement reports a duplicate at the later step's ID so the
  * generator can direct a repair to the offending location.
  *
- * The instruction-coverage implementation accepts and emits only literal
- * version 2. That version enters `inputsDigest`; version 1 is rejected rather
- * than retained as a compatibility union branch.
+ * This implementation accepts and emits only the current literal version.
+ * That version enters `inputsDigest`; older versions are rejected rather than
+ * retained as compatibility union branches.
  */
 export const PlanDocument = z.strictObject({
   schemaVersion: z.literal(PLAN_SCHEMA_VERSION),
@@ -1222,12 +1230,12 @@ export const PlanDocument = z.strictObject({
 export type PlanDocument = z.infer<typeof PlanDocument>;
 
 /**
- * Complete Plan-v2 shape at the instruction-coverage boundary.
+ * Complete current Plan IR shape at the instruction-coverage boundary.
  *
  * @remarks
- * {@link PlanDocument} itself uses literal version 2 and derives its static
- * type from Zod. Version 1 is not a union branch and therefore has no
- * compatibility path through Plan validation.
+ * {@link PlanDocument} itself uses the current literal version and derives its
+ * static type from Zod. Older versions are not union branches and therefore
+ * have no compatibility path through Plan validation.
  */
 export type InstructionCoveredPlanDocument = PlanDocument;
 
@@ -1370,7 +1378,7 @@ export type GeneratedInstructionCoveredPlanResponse = Omit<
  *
  * Grounding keeps literal version 1 when instruction coverage is installed.
  * Compatibility lives only in the optional nested trace mapping; it does not
- * introduce a second document version or weaken Plan-v2 freshness.
+ * introduce a second document version or weaken Plan IR freshness.
  */
 export const GroundingDocument = z.strictObject({
   schemaVersion: z.literal(GROUNDING_SCHEMA_VERSION),

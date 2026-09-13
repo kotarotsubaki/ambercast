@@ -48,6 +48,7 @@ function expectedDefaults(configRoot: string): ResolvedConfig {
       },
     },
     defaultTarget: 'web-user',
+    secrets: { allow: [] },
     ai: {
       provider: 'auto',
       timeoutMs: 600_000,
@@ -95,12 +96,18 @@ async function writeConfig(storage: StorageAdapter, path: string, content: Recor
 }
 
 async function load(storage: StorageAdapter, options: LoadOptions = {}): Promise<ResolvedConfig> {
-  return loadConfig({
+  const loaded: unknown = await loadConfig({
     cwd: options.cwd ?? CWD,
     storage,
     ...(options.configPathOverride === undefined ? {} : { configPathOverride: options.configPathOverride }),
     ...(options.configEnv === undefined ? {} : { configEnv: options.configEnv }),
   });
+
+  return isLoadedConfig(loaded) ? loaded.resolved : loaded as ResolvedConfig;
+}
+
+function isLoadedConfig(value: unknown): value is { readonly resolved: ResolvedConfig; readonly source: { readonly path: string | null } } {
+  return value !== null && typeof value === 'object' && 'resolved' in value && 'source' in value;
 }
 
 async function expectConfigInvalid(operation: Promise<unknown>): Promise<ConfigInvalidError> {
@@ -262,6 +269,25 @@ describe('loadConfig', () => {
       expect(config).toStrictEqual(expectedDefaults('/'));
     });
 
+    it('returns the selected configuration path with the resolved configuration', async () => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, ANCESTOR_CONFIG_PATH, {});
+
+      await expect(loadConfig({ cwd: CWD, storage })).resolves.toStrictEqual({
+        resolved: expectedDefaults('/workspace/project'),
+        source: { path: ANCESTOR_CONFIG_PATH },
+      });
+    });
+
+    it('returns a null source path when no configuration file exists', async () => {
+      const storage = createInMemoryStorage();
+
+      await expect(loadConfig({ cwd: CWD, storage })).resolves.toStrictEqual({
+        resolved: expectedDefaults(CWD),
+        source: { path: null },
+      });
+    });
+
     it('checks the root candidate before falling back to defaults', async () => {
       const storage = createInMemoryStorage();
       await writeConfig(storage, '/ambercast.config.json', { viewer: { port: 4_608 } });
@@ -339,6 +365,15 @@ describe('loadConfig', () => {
       expect(containsIssuePath(error.details, ['viewer', 'port'])).toBe(true);
     });
 
+    it('rejects a malformed secrets allowlist', async () => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { secrets: { allow: 'not-an-array-or-star' } });
+
+      const error = await expectConfigInvalid(load(storage));
+
+      expect(containsIssuePath(error.details, ['secrets', 'allow'])).toBe(true);
+    });
+
     it('retains every failing Zod issue path for schema-invalid content with multiple violations', async () => {
       const storage = createInMemoryStorage();
       await writeConfig(storage, `${CWD}/ambercast.config.json`, {
@@ -410,6 +445,31 @@ describe('loadConfig', () => {
   });
 
   describe('merging and target validation', () => {
+    it('deduplicates and UTF-16-sorts an explicit secret allowlist during resolution', async () => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, {
+        secrets: { allow: ['zeta', 'Alpha', 'zeta', 'account.password'] },
+      });
+
+      await expect(load(storage)).resolves.toMatchObject({
+        secrets: { allow: ['Alpha', 'account.password', 'zeta'] },
+      });
+    });
+
+    it('preserves an unrestricted secret allowlist during resolution', async () => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { secrets: { allow: '*' } });
+
+      await expect(load(storage)).resolves.toMatchObject({ secrets: { allow: '*' } });
+    });
+
+    it('uses an explicit secret allowlist instead of the empty default', async () => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { secrets: { allow: ['account.password'] } });
+
+      await expect(load(storage)).resolves.toMatchObject({ secrets: { allow: ['account.password'] } });
+    });
+
     it('replaces targets atomically and clears the built-in default target when the file omits it', async () => {
       const storage = createInMemoryStorage();
       await writeConfig(storage, `${CWD}/ambercast.config.json`, {

@@ -35,7 +35,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.4' as const,
+  schemaVersion: '3.5' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -45,7 +45,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.4' as const,
+  schemaVersion: '3.5' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -56,7 +56,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.4' as const,
+  schemaVersion: '3.5' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -81,7 +81,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.4' as const,
+  schemaVersion: '3.5' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -131,7 +131,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.4', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.5', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -152,7 +152,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.4', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.5', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -280,6 +280,7 @@ describe('main()', () => {
         dryRun: true,
         planFile: 'login.ambercast.plan.json',
         ambiguities: [],
+        secrets: [],
       }],
     };
     runGenerateCommand.mockResolvedValue({ exitCode: 1, envelope });
@@ -893,7 +894,9 @@ describe('main()', () => {
 
     it.each([
       ['SECRET_LITERAL_REJECTED', 'usage', { detector: 'credential-prefix-sk', path: 'generatorMeta.key', attempts: [] }, 'detector=credential-prefix-sk; path=generatorMeta.key; attempts=[]'],
-      ['SECRET_GRANT_UNATTRIBUTABLE', 'usage', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', attempts: [] }, 'reason=citation-not-found; secretRef={{secrets.API_TOKEN}}; stepId=step-a; attempts=[]'],
+      ['SECRET_ENV_VAR_COLLISION', 'usage', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}'] }, 'envVar=AMBERCAST_SECRET_API_TOKEN; refs=["{{secrets.API_TOKEN}}"]'],
+      ['SECRET_CONSENT_REQUIRED', 'usage', { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }, 'reason=consent-required; secrets=[{"name":"API_TOKEN","stepId":"step-a","envVar":"AMBERCAST_SECRET_API_TOKEN","reason":"required"}]'],
+      ['SECRET_SYNTAX_REJECTED', 'usage', { occurrences: [{ kind: 'reference', line: 2, column: 8 }] }, 'occurrences=[{"kind":"reference","line":2,"column":8}]'],
       ['AI_EXECUTOR_UNAVAILABLE', 'environment', { attempts: [] }, 'attempts=[]'],
       ['UNEXPECTED_CRASH', 'environment', { cause: { name: 'AbortError' } }, 'cause={"name":"AbortError"}'],
       ['FS_IO_ERROR', 'environment', { partiallyWritten: ['plan', 'grounding'] }, 'partiallyWritten=["plan","grounding"]'],
@@ -1058,16 +1061,15 @@ describe('main()', () => {
       const rendered = renderHumanReport({
         ...RUN_ENVELOPE,
         errors: [{
-          scope: 'run', kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE', message: 'message',
+          scope: 'case', kind: 'usage', code: 'SECRET_CONSENT_REQUIRED', caseId: 'case-a', message: 'message',
           details: {
-            reason: 'uncovered-grant',
-            secretRef: '{{secrets.API_TOKEN}}',
-            sourceSpan: { startLine: 'unsafe\u007f\u0080', endLine: 2 },
+            reason: 'consent-required',
+            secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'unsafe\u007f\u0080', reason: 'required' }],
           },
         }],
       } as never, false);
 
-      expect(rendered).toBe('error SECRET_GRANT_UNATTRIBUTABLE: message\n  details: reason=uncovered-grant; secretRef={{secrets.API_TOKEN}}; sourceSpan={"startLine":"unsafe\\u007f\\u0080","endLine":2}\n');
+      expect(rendered).toBe('error SECRET_CONSENT_REQUIRED [case-a]: message\n  details: reason=consent-required; secrets=[{"name":"API_TOKEN","stepId":"step-a","envVar":"unsafe\\u007f\\u0080","reason":"required"}]\n');
     });
 
     it('renders normal filesystem and error text as exact report lines', () => {

@@ -54,6 +54,41 @@ const validators = {
   grounding: ajv.compile(getGroundingJsonSchema()),
 };
 
+// SPEC-C1 C1-1
+interface InvalidPlanReason {
+  code: string;
+  path: readonly (string | number)[];
+  key?: string;
+}
+
+const INVALID_PLAN_REASONS = {
+  'plan-invalid-ai-embedded-secret-ref.json': { code: 'invalid_format', path: ['steps', 0, 'instruction'] },
+  'plan-invalid-ai-trace.json': { code: 'unrecognized_keys', path: ['steps', 0], key: 'trace' },
+  'plan-invalid-assert-embedded-secret-ref.json': { code: 'invalid_format', path: ['steps', 0, 'text'] },
+  'plan-invalid-assert-text-visible-multiline-embedded-secret-ref.json': { code: 'invalid_format', path: ['steps', 0, 'text'] },
+  'plan-invalid-fill-embedded-secret-ref.json': { code: 'invalid_format', path: ['steps', 0, 'value'] },
+  'plan-invalid-legacy-ai-secret-source-span.json': { code: 'unrecognized_keys', path: ['steps', 0, 'secrets', 0], key: 'sourceSpan' },
+  'plan-invalid-legacy-secret-grant-span.json': { code: 'unrecognized_keys', path: ['steps', 0], key: 'secretGrantSpan' },
+  'plan-invalid-literal-fill-secret.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
+  'plan-invalid-missing-action.json': { code: 'invalid_union', path: ['steps', 0, 'action'] },
+  'plan-invalid-missing-check.json': { code: 'invalid_union', path: ['steps', 0, 'check'] },
+  'plan-invalid-missing-kind.json': { code: 'invalid_union', path: ['steps', 0, 'kind'] },
+  'plan-invalid-missing-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'target', 'strategy'] },
+  'plan-invalid-secret-ref-embedded.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
+  'plan-invalid-secret-ref-invalid-character.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
+  'plan-invalid-secret-ref-missing-braces.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
+  'plan-invalid-secret-ref-singular-prefix.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
+  'plan-invalid-step-id-leading-digit.json': { code: 'invalid_format', path: ['steps', 0, 'id'] },
+  'plan-invalid-target-base-url-embedded-secret-ref.json': { code: 'invalid_format', path: ['targets', 'app', 'baseUrl'] },
+  'plan-invalid-unknown-action.json': { code: 'invalid_union', path: ['steps', 0, 'action'] },
+  'plan-invalid-unknown-check.json': { code: 'invalid_union', path: ['steps', 0, 'check'] },
+  'plan-invalid-unknown-kind.json': { code: 'invalid_union', path: ['steps', 0, 'kind'] },
+  'plan-invalid-unknown-plan-property.json': { code: 'unrecognized_keys', path: [], key: 'unexpected' },
+  'plan-invalid-unknown-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'target', 'strategy'] },
+  'plan-invalid-unknown-target-property.json': { code: 'unrecognized_keys', path: ['targets', 'app'], key: 'unexpected' },
+  'plan-invalid-wrong-field-type.json': { code: 'invalid_type', path: ['steps', 0, 'url'] },
+} as const satisfies Record<string, InvalidPlanReason>;
+
 describe('IR JSON Schema corpus equivalence', () => {
   it('contains valid and invalid fixtures for plan and grounding documents', () => {
     expect(corpus).not.toHaveLength(0);
@@ -75,6 +110,48 @@ describe('IR JSON Schema corpus equivalence', () => {
     expect.soft(ajvVerdict).toBe(expected);
     expect(ajvVerdict).toBe(zodVerdict);
   });
+
+  // SPEC-C1 C1-1
+  it.each(corpus.filter((fixture) => fixture.document === 'plan' && fixture.expected === 'invalid'))(
+    '$name remains invalid for a schema reason other than the retired schemaVersion literal',
+    (fixture) => {
+      const result = PlanDocument.safeParse(fixture.value);
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.issues.some((issue) => issue.path[0] !== 'schemaVersion')).toBe(true);
+    },
+  );
+
+  // SPEC-C1 C1-1
+  it('assigns every invalid plan fixture its own expected zod issue marker', () => {
+    const invalidFixtureNames = corpus
+      .filter((fixture) => fixture.document === 'plan' && fixture.expected === 'invalid')
+      .map((fixture) => fixture.name)
+      .sort();
+
+    expect(Object.keys(INVALID_PLAN_REASONS).sort()).toEqual(invalidFixtureNames);
+  });
+
+  // SPEC-C1 C1-1
+  it.each(Object.entries(INVALID_PLAN_REASONS))('%s fails for its named invalidity reason', (name, reason) => {
+    const fixture = corpus.find((candidate) => candidate.name === name);
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) return;
+
+    const result = PlanDocument.safeParse(fixture.value);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+
+    expect(result.error.issues.some((issue) => {
+      if (issue.code !== reason.code || !reason.path.every((segment, index) => issue.path[index] === segment)) {
+        return false;
+      }
+      if (!('key' in reason)) {
+        return true;
+      }
+      return issue.code === 'unrecognized_keys' && issue.keys.includes(reason.key);
+    })).toBe(true);
+  });
 });
 
 describe('IR JSON Schema documents', () => {
@@ -93,8 +170,9 @@ describe('IR JSON Schema documents', () => {
       'plan',
       getPlanJsonSchema,
       {
-        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json',
-        title: 'ambercast plan schema v2',
+        // SPEC-C1 C1-2
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json',
+        title: 'ambercast plan schema v3',
         description: 'Validates the complete generated plan document that is reviewed and committed beside its source test prompt.',
       },
     ],
@@ -115,9 +193,10 @@ describe('IR JSON Schema documents', () => {
     expect(schema.description).toBe(metadata.description);
   });
 
-  it('publishes Plan v2 instruction coverage and additive Grounding-v1 trace coverage', () => {
-    const planV2 = {
-      schemaVersion: 2,
+  // SPEC-C1 C1-2
+  it('publishes Plan v3 instruction coverage and additive Grounding-v1 trace coverage', () => {
+    const planV3 = {
+      schemaVersion: 3,
       source: { inputsDigest: 'a'.repeat(64) },
       targets: { app: { baseUrl: 'https://example.test', browser: 'chromium' } },
       steps: [{
@@ -146,14 +225,14 @@ describe('IR JSON Schema documents', () => {
       },
     };
 
-    expect(PlanDocument.safeParse(planV2).success).toBe(true);
-    expect(validators.plan(planV2)).toBe(true);
-    const { instructionCoverage: _coverage, ...aiStepWithoutCoverage } = planV2.steps[0]!;
-    const planWithoutCoverage = { ...planV2, steps: [aiStepWithoutCoverage] };
+    expect(PlanDocument.safeParse(planV3).success).toBe(true);
+    expect(validators.plan(planV3)).toBe(true);
+    const { instructionCoverage: _coverage, ...aiStepWithoutCoverage } = planV3.steps[0]!;
+    const planWithoutCoverage = { ...planV3, steps: [aiStepWithoutCoverage] };
     expect(PlanDocument.safeParse(planWithoutCoverage).success).toBe(false);
     expect(validators.plan(planWithoutCoverage)).toBe(false);
-    expect(PlanDocument.safeParse({ ...planV2, schemaVersion: 1 }).success).toBe(false);
-    expect(validators.plan({ ...planV2, schemaVersion: 1 })).toBe(false);
+    expect(PlanDocument.safeParse({ ...planV3, schemaVersion: 1 }).success).toBe(false);
+    expect(validators.plan({ ...planV3, schemaVersion: 1 })).toBe(false);
     expect(GroundingDocument.safeParse(coveredGroundingV1).success).toBe(true);
     expect(validators.grounding(coveredGroundingV1)).toBe(true);
   });

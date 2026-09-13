@@ -59,7 +59,6 @@ const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const SECRET_REF = '{{secrets.AMBERCAST_SECRET_DUMMY}}';
 const SECRET_VALUE = 'sk-AMBERCAST_SECRET_DUMMY';
-const SECRET_GRANT_SPAN = { startLine: 4, endLine: 4 } as const;
 const SUCCESS_CRITERION_ID = 'dashboard-reached';
 const SUCCESS_SOURCE_SPAN = { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 } as const;
 const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) };
@@ -128,11 +127,10 @@ function elementGrounding(stepIds: readonly string[]): GroundingDocument['entrie
 async function writePrompt(
   storage: StorageAdapter,
   contents = PROMPT,
-  includeSecretGrant = true,
+  _includeSecretGrant = true,
 ): Promise<string> {
   const path = `${TEST_DIR}/login.test.md`;
-  const grantSeparator = includeSecretGrant && !contents.endsWith('\n') ? '\n' : '';
-  await storage.writeText(path, `${contents}${includeSecretGrant ? `${grantSeparator}@ambercast-secret ${SECRET_REF}\n` : ''}`);
+  await storage.writeText(path, contents);
   return path;
 }
 
@@ -142,35 +140,16 @@ async function createFreshPlan(
   steps: readonly Step[],
 ): Promise<PlanDocument> {
   const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
-  const promptLines = normalizedTestMd.split('\n');
-  const grantSpanFor = (secretRef: string) => {
-    const grantLine = promptLines.findIndex((line) => line === `@ambercast-secret ${secretRef}`);
-    if (grantLine < 0) {
-      throw new Error(`The secret-sink fixture is missing the grant for ${secretRef}.`);
-    }
-    return { startLine: grantLine + 1, endLine: grantLine + 1 };
-  };
-  const committedSteps = steps.map((step) => {
-    if (step.kind === 'action' && step.action === 'fill-secret') {
-      return { ...step, secretGrantSpan: grantSpanFor(step.secretRef) };
-    }
-    if (step.kind === 'ai' && step.secrets !== undefined) {
-      return {
-        ...step,
-        secrets: step.secrets.map(({ ref }) => ({ ref, sourceSpan: grantSpanFor(ref) })),
-      };
-    }
-    return step;
-  });
+  const committedSteps = steps;
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundleFingerprint(),
     targetDefinitions: TARGETS,
   });
   const plan = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { inputsDigest },
     targets: TARGETS,
     steps: committedSteps,
@@ -202,7 +181,7 @@ function aiStep(): Extract<Step, { kind: 'ai' }> {
     kind: 'ai',
     instruction: 'Complete the sign-in flow and verify the dashboard.',
     instructionCoverage: [{ id: SUCCESS_CRITERION_ID, kind: 'success', sourceSpan: SUCCESS_SOURCE_SPAN }],
-    secrets: [{ ref: SECRET_REF, sourceSpan: SECRET_GRANT_SPAN }],
+    secrets: [{ ref: SECRET_REF }],
   } as unknown as Extract<Step, { kind: 'ai' }>;
 }
 
@@ -245,13 +224,14 @@ function createRunScenario(
         ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
+        secrets: { allow: '*' },
       },
     },
   };
 }
 
 describe('secret-sink instruction coverage fixture', () => {
-  it('re-extracts the line-three success criterion after the appended secret grant', async () => {
+  it('re-extracts the line-three success criterion with a v3 secret fixture', async () => {
     const storage = createInMemoryStorage();
     const testPath = await writePrompt(storage);
     const step = aiStep() as unknown as {
@@ -425,7 +405,7 @@ describe('run secret sinks', () => {
       },
     });
     const { deps, recordingStorage } = createRunScenario(session, executor, new Map([[SECRET_REF, SECRET_VALUE]]));
-    const testPath = await writePrompt(recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
     recordingStorage.writes.length = 0;
 
@@ -461,7 +441,7 @@ describe('run secret sinks', () => {
     });
     const { deps, recordingStorage } = createRunScenario(session, executor);
     const rotatingSecrets = createRotatingSecretsProvider(SECRET_REF, [preScanValue, materializationValue]);
-    const testPath = await writePrompt(recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     const priorTrace = {
       events: [{ type: 'fill-secret' as const, target: secretTaintedTarget, secretRef: SECRET_REF }],
       verification: [{ type: 'assert' as const, check: 'text-visible' as const, text: 'Cached dashboard' }],
@@ -505,7 +485,7 @@ describe('run secret sinks', () => {
       },
     });
     const { deps, recordingStorage } = createRunScenario(session, executor, new Map([[SECRET_REF, SECRET_VALUE]]));
-    const testPath = await writePrompt(recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
     recordingStorage.writes.length = 0;
 
@@ -551,7 +531,7 @@ describe('run secret sinks', () => {
     });
     const { deps, recordingStorage } = createRunScenario(session, executor);
     const rotatingSecrets = createRotatingSecretsProvider(SECRET_REF, [firstSecretValue, persistenceOnlySecret]);
-    const testPath = await writePrompt(recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
     recordingStorage.writes.length = 0;
 
@@ -596,7 +576,7 @@ describe('run secret sinks', () => {
     });
     const { deps, recordingStorage } = createRunScenario(session, executor);
     const rotatingSecrets = createRotatingSecretsProvider(SECRET_REF, [firstSecretValue, persistenceOnlySecret]);
-    const testPath = await writePrompt(recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       aiStep(),
       { id: 'later-ordinary-assertion', kind: 'assert', check: 'element-visible', target: SUBMIT },
@@ -629,14 +609,14 @@ describe('run secret sinks', () => {
       },
     });
     const { deps, recordingStorage } = createRunScenario(session, executor, new Map([[SECRET_REF, secretValue]]));
-    const testPath = await writePrompt(recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: authoredStepId,
       kind: 'ai',
       instruction: 'Complete the sign-in flow and verify the dashboard.',
       instructionCoverage: [{ id: SUCCESS_CRITERION_ID, kind: 'success', sourceSpan: SUCCESS_SOURCE_SPAN }],
-      secrets: [{ ref: SECRET_REF, sourceSpan: SECRET_GRANT_SPAN }],
-    } as unknown as Step]);
+      secrets: [{ ref: SECRET_REF }],
+    }]);
     recordingStorage.writes.length = 0;
 
     const outcome = await run(deps, RUN_OPTIONS);
@@ -678,9 +658,9 @@ describe('run secret sinks', () => {
       assertOutcome: { passed: false, message: `Expected text contained ${SECRET_VALUE}.` },
     });
     const failedScenario = createRunScenario(failedSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
-    const failedPath = await writePrompt(failedScenario.recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const failedPath = await writePrompt(failedScenario.recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(failedScenario.recordingStorage.storage, failedPath, [
-      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF, secretGrantSpan: SECRET_GRANT_SPAN },
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF },
       { id: 'secret-assertion', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Dashboard' },
     ], elementGrounding(['fill-secret', 'secret-assertion']));
     const failedOutcome = await run(failedScenario.deps, RUN_OPTIONS);
@@ -693,9 +673,9 @@ describe('run secret sinks', () => {
       },
     });
     const exceptionScenario = createRunScenario(exceptionSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
-    const exceptionPath = await writePrompt(exceptionScenario.recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const exceptionPath = await writePrompt(exceptionScenario.recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(exceptionScenario.recordingStorage.storage, exceptionPath, [
-      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF, secretGrantSpan: SECRET_GRANT_SPAN },
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF },
       { id: 'go-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
     ], elementGrounding(['fill-secret']));
     const exceptionOutcome = await run(exceptionScenario.deps, RUN_OPTIONS);
@@ -728,7 +708,7 @@ describe('run secret sinks', () => {
       },
     });
     const { deps, recordingStorage } = createRunScenario(session, executor, new Map([[SECRET_REF, SECRET_VALUE]]));
-    const testPath = await writePrompt(recordingStorage.storage, `${PROMPT}\n${SECRET_REF}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
 
     const outcome = await run(deps, RUN_OPTIONS);

@@ -38,8 +38,8 @@ describe('deriveCurrentPlanInputProvenance()', () => {
       planProducerBundleFingerprint: 'fixed-bundle-fingerprint',
       targetDefinitions: { web: { baseUrl: 'https://fixed.example.test', browser: 'chromium' } },
     };
-    const fixedCanonicalPreimage = '{"generatorPromptTemplateFingerprint":"fixed-template-fingerprint","normalizedTestMd":"# Fixed\\n","planProducerBundleFingerprint":"fixed-bundle-fingerprint","schemaVersion":2,"targetDefinitions":{"web":{"baseUrl":"https://fixed.example.test","browser":"chromium"}}}';
-    const fixedExpectedDigest = 'c40cd8e81d15e47927e020a517c2ccdd326d8cb010e4be60aea6777edcdb5b23';
+    const fixedCanonicalPreimage = '{"generatorPromptTemplateFingerprint":"fixed-template-fingerprint","normalizedTestMd":"# Fixed\\n","planProducerBundleFingerprint":"fixed-bundle-fingerprint","schemaVersion":3,"targetDefinitions":{"web":{"baseUrl":"https://fixed.example.test","browser":"chromium"}}}';
+    const fixedExpectedDigest = '9fb2520c30168f64f3bf5fb286b6a9bb0f4525ec8d1ed05cb653fe99d1ca6e9c';
 
     expect(sha256(fixedCanonicalPreimage)).toBe(fixedExpectedDigest);
     expect(computeInputsDigest(fixedInputs)).toBe(fixedExpectedDigest);

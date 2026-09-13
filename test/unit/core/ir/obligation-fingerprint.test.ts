@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { computeObligationFingerprint, obligationFingerprintMatches } from '#core/ir/obligation-fingerprint.js';
 import { Step } from '#core/ir/schema.js';
 
-const SPAN = { startLine: 2, endLine: 2 };
-const NEXT_SPAN = { startLine: 3, endLine: 3 };
 const COVERAGE_SPAN = { startLine: 2, startColumn: 1, endLine: 2, endColumn: 24 };
 const NEXT_COVERAGE_SPAN = { startLine: 3, startColumn: 1, endLine: 3, endColumn: 24 };
 const BUTTON = { strategy: 'accessibility' as const, role: 'button', name: 'Continue' };
@@ -11,7 +9,7 @@ const BUTTON = { strategy: 'accessibility' as const, role: 'button', name: 'Cont
 function ai(overrides: Record<string, unknown> = {}) {
   return Step.parse({
     id: 'agent-step', kind: 'ai', instruction: 'Open {{run.order.id}} then {{run.order.id}}',
-    secrets: [{ ref: '{{secrets.auth.token}}', sourceSpan: SPAN }],
+    secrets: [{ ref: '{{secrets.auth.token}}' }],
     instructionCoverage: [{ id: 'criterion-a', kind: 'action', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }],
     ...overrides,
   });
@@ -28,10 +26,9 @@ describe('obligation fingerprints', () => {
   it.each([
     ['an action opcode', Step.parse({ id: 'step', kind: 'action', action: 'click', target: BUTTON }), Step.parse({ id: 'step', kind: 'action', action: 'press', target: BUTTON, key: 'Enter' })],
     ['an assert opcode', Step.parse({ id: 'assertion', kind: 'assert', check: 'text-visible', text: 'Continue' }), Step.parse({ id: 'assertion', kind: 'assert', check: 'text-equals', target: BUTTON, text: 'Continue' })],
-    ['an AI secret reference', ai(), ai({ secrets: [{ ref: '{{secrets.auth.other}}', sourceSpan: SPAN }] })],
-    ['an AI secret source span', ai(), ai({ secrets: [{ ref: '{{secrets.auth.token}}', sourceSpan: NEXT_SPAN }] })],
-    ['a fill-secret reference', Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.token}}', secretGrantSpan: SPAN }), Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.other}}', secretGrantSpan: SPAN })],
-    ['a fill-secret source span', Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.token}}', secretGrantSpan: SPAN }), Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.token}}', secretGrantSpan: NEXT_SPAN })],
+    // SPEC-C1 C1-12
+    ['an AI secret reference', ai(), ai({ secrets: [{ ref: '{{secrets.auth.other}}' }] })],
+    ['a fill-secret reference', Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.token}}' }), Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.other}}' })],
     ['an instruction coverage id', ai(), ai({ instructionCoverage: [{ id: 'criterion-z', kind: 'action', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['an instruction coverage kind', ai(), ai({ instructionCoverage: [{ id: 'criterion-a', kind: 'success', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['an instruction coverage span', ai(), ai({ instructionCoverage: [{ id: 'criterion-a', kind: 'action', sourceSpan: NEXT_COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],

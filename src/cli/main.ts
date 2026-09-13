@@ -135,14 +135,18 @@ const HEALTHY_REPORT_STATUSES = new Set(['generated', 'skipped-fresh', 'listed',
  * test seam rather than a schema authority. Every ReportError code that
  * declares a `details` branch in `src/report/schema.ts` needs an entry because
  * the renderer uses this table to choose its renderable fields; without one,
- * no fields are renderable for that error.
+ * no fields are renderable for that error. The secret-policy entries retain
+ * names, locations, and environment spellings but never values, matching the
+ * report schemas' remediation-only evidence boundary.
  */
 export const ERROR_DETAILS_KEY_ORDER: Readonly<Record<string, readonly string[]>> = {
   BROWSER_LAUNCH_FAILED: ['reason', 'engine'],
   PROMPT_PATH_INVALID: ['path', 'reason'],
   AI_RESPONSE_INVALID: ['issues', 'attempts'],
   SECRET_LITERAL_REJECTED: ['detector', 'path', 'attempts'],
-  SECRET_GRANT_UNATTRIBUTABLE: ['reason', 'secretRef', 'stepId', 'sourceSpan', 'attempts'],
+  SECRET_ENV_VAR_COLLISION: ['envVar', 'refs'],
+  SECRET_CONSENT_REQUIRED: ['reason', 'secrets'],
+  SECRET_SYNTAX_REJECTED: ['occurrences'],
   AI_EXECUTOR_UNAVAILABLE: ['attempts'],
   UNEXPECTED_CRASH: ['cause'],
   FS_IO_ERROR: ['partiallyWritten'],

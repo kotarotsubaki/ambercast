@@ -27,7 +27,7 @@ function step(id: string, text = id) {
 
 function plan(steps = [step('first')], generatorMeta?: Record<string, JsonValueT>): TrustedPlan {
   return PlanDocument.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { inputsDigest: digest },
     ...(generatorMeta === undefined ? {} : { generatorMeta }),
     targets: { web: target },
@@ -76,7 +76,7 @@ describe('Stage 2 provider context', () => {
         testMd: '# Fixture\n',
         targets: { web: target },
         currentPlan: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           source: { inputsDigest: digest },
           targets: { web: target },
           steps: [step('first'), step('second')],

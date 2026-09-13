@@ -46,11 +46,11 @@ function createConfig(overrides: Partial<TestConfig> = {}): TestConfig {
 
 function freshPlan(prompt = PROMPT, targetDefinitions: Readonly<Record<string, TargetDefinition>> = TARGETS): PlanDocument {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(prompt),
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions,

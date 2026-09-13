@@ -12,6 +12,7 @@
 | report 3.1 → 3.2 | repo:src/report/schema.ts:30 | Report consumers MUST accept the current `3.2` contract, including the optional `PROMPT_PATH_INVALID` details branch, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:30] |
 | report 3.2 → 3.3 | repo:src/report/schema.ts:30 | Report consumers MUST accept the current `3.3` contract, including optional AI-call accounting fields, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:30] |
 | report 3.3 → 3.4 | repo:src/report/schema.ts:30 | Report consumers MUST accept the current `3.4` contract, including the optional `BROWSER_LAUNCH_FAILED` details branch, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:30] |
+| Plan v2 → v3 removes secret-grant provenance | repo:src/core/ir/schema.ts:58, repo:src/core/ir/schema.ts:674 | Producers and consumers MUST reject v2 and regenerate or report it stale; they MUST NOT migrate it in place. [repo:src/core/ir/schema.ts:49] |
 
 ## Compatibility policy {#compatibility-policy}
 

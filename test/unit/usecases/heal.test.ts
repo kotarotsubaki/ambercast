@@ -2322,6 +2322,274 @@ describe('heal state-machine contract', () => {
     expect(result.commits.has(OPTIONS.files[0]!)).toBe(true);
   });
 
+  it('preserves every retained secret ref while Stage 2 repairs a middle step', async () => {
+    const replacement: GeneratedPlanResponse = {
+      steps: [{ id: 'repair-middle', kind: 'action', action: 'fill-secret', target: PASSWORD }], ambiguities: [],
+    };
+    const retainedBefore = Step.parse({
+      id: 'retained-fill', kind: 'action', action: 'fill-secret', target: PASSWORD,
+      secretRef: '{{secrets.persisted.fill.ref}}',
+    });
+    const retainedAfter = Step.parse({
+      id: 'retained-ai', kind: 'ai', instruction: 'Confirm the dashboard is visible.',
+      instructionCoverage: [{ id: 'dashboard', kind: 'success', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 } }],
+      secrets: [{ ref: '{{secrets.persisted.ai.ref}}' }],
+    });
+    const executor = createFakeAiExecutor({
+      execute: async (request) => stage2Frontier(request) === undefined
+        ? { data: { steps: [], ambiguities: [] }, raw: '{}' }
+        : { data: replacement, raw: JSON.stringify(replacement) },
+      async executeAgentic(request) {
+        await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: 'Dashboard' }, 'dashboard');
+        return { outcome: 'success' };
+      },
+    });
+    const scenario = await createScenario({
+      steps: [
+        retainedBefore,
+        Step.parse({
+          id: 'repair-middle', kind: 'action', action: 'fill-secret', target: PASSWORD,
+          secretRef: '{{secrets.persisted.repair.ref}}',
+        }),
+        retainedAfter,
+      ],
+      grounding: {},
+      sessionEntries: liveEntries(PASSWORD),
+      secrets: new Map([
+        ['{{secrets.persisted.fill.ref}}', 'fill-value'],
+        ['{{secrets.persisted.ai.ref}}', 'ai-value'],
+      ]),
+      aiExecutor: executor,
+    });
+    let candidateRefs: readonly string[] | undefined;
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve !== true || candidateRefs !== undefined) return;
+      const candidate = PlanDocument.parse(JSON.parse(await storage.readText(PLAN)));
+      if (candidate.steps[1]?.kind !== 'action' || candidate.steps[1].action !== 'fill-secret') return;
+      candidateRefs = candidate.steps.flatMap((step) => step.kind === 'action' && step.action === 'fill-secret'
+        ? [step.secretRef]
+        : step.kind === 'ai'
+          ? (step.secrets ?? []).map(({ ref }) => ref)
+          : []);
+    };
+
+    obligationFingerprintObserver.forceMatch = true;
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(candidateRefs).toEqual([
+      '{{secrets.persisted.fill.ref}}',
+      '{{secrets.persisted.fill.ref}}',
+      '{{secrets.persisted.ai.ref}}',
+    ]);
+    expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed' });
+    const commit = result.commits.get(OPTIONS.files[0]!);
+    await expect(commit?.commit()).resolves.toEqual({ outcome: 'committed' });
+    const committed = PlanDocument.parse(JSON.parse(await scenario.storage.readText(PLAN)));
+    expect(committed.steps.flatMap((step) => step.kind === 'action' && step.action === 'fill-secret'
+      ? [step.secretRef]
+      : step.kind === 'ai'
+        ? (step.secrets ?? []).map(({ ref }) => ref)
+        : [])).toEqual([
+      '{{secrets.persisted.fill.ref}}',
+      '{{secrets.persisted.fill.ref}}',
+      '{{secrets.persisted.ai.ref}}',
+    ]);
+  });
+
+  it('discards an advancing Stage-2 candidate when Stage 3 rejects a changed secret set', async () => {
+    const stage2Repair: GeneratedPlanResponse = {
+      steps: [{ id: 'repair-first', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [],
+    };
+    const stage2Invalid: GeneratedPlanResponse = {
+      steps: [{ id: 'wrong-id', kind: 'action', action: 'click', target: AFTER_SUBMIT }], ambiguities: [],
+    };
+    const stage3ChangedSet: GeneratedPlanResponse = {
+      steps: [{
+        id: 'stage3-secret', kind: 'action', action: 'fill-secret', target: PASSWORD,
+        secret: { allowedName: 'newly_added_secret' },
+      }], ambiguities: [],
+    };
+    const scenario = await createScenario({
+      steps: [
+        Step.parse({ id: 'repair-first', kind: 'action', action: 'click', target: SUBMIT }),
+        Step.parse({ id: 'still-broken', kind: 'action', action: 'click', target: AFTER_SUBMIT }),
+      ],
+      grounding: {},
+      sessionEntries: new Map([
+        [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+        [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+        ...liveEntries(REPAIRED_SUBMIT),
+      ]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        const frontier = stage2Frontier(request);
+        const data = frontier === undefined
+          ? stage3ChangedSet
+          : frontier.index === 0
+            ? stage2Repair
+            : stage2Invalid;
+        return { data, raw: JSON.stringify(data) };
+      } }),
+    });
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]).toMatchObject({
+      repairOutcome: 'unresolved',
+      stage3Rejection: { reason: 'secret-set-changed', added: ['newly_added_secret'], removed: [] },
+    });
+    expect(result.commits.size).toBe(0);
+  });
+
+  it('writes no base or config artifact before confirmation, then commits exactly the staged Stage-3 pair', async () => {
+    const stage2Invalid: GeneratedPlanResponse = {
+      steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [],
+    };
+    const candidate: GeneratedPlanResponse = { steps: [{
+      id: 'candidate-secret', kind: 'action', action: 'fill-secret',
+      target: { strategy: 'accessibility', role: 'textbox', name: 'Moved password' }, secret: { allowedName: 'password' },
+    }], ambiguities: [] };
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), Step.parse({
+        id: 'committed-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.password}}',
+      })],
+      grounding: {},
+      secrets: new Map([['{{secrets.password}}', 'value']]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' }) }),
+    });
+    const updateTextExclusive = vi.fn(scenario.storage.updateTextExclusive);
+    let staged: { readonly plan: string; readonly grounding: string } | undefined;
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve === true) staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
+    };
+
+    const result = await heal({ ...scenario.deps, storage: { ...scenario.storage, updateTextExclusive } }, OPTIONS);
+
+    expect(scenario.textWrites).not.toHaveBeenCalled();
+    expect(updateTextExclusive).not.toHaveBeenCalled();
+    expect(staged).toBeDefined();
+    const commit = result.commits.get(OPTIONS.files[0]!);
+    await expect(commit?.commit()).resolves.toEqual({ outcome: 'committed' });
+    expect(scenario.textWrites.mock.calls).toEqual([
+      [PLAN, staged!.plan],
+      [GROUNDING, staged!.grounding],
+    ]);
+  });
+
+  it('treats Stage-3 candidate replay cancellation as interruption rather than retaining pre-Stage-3 progress', async () => {
+    const controller = new AbortController();
+    const stage2Repair: GeneratedPlanResponse = {
+      steps: [{ id: 'repair-first', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [],
+    };
+    const stage2Invalid: GeneratedPlanResponse = {
+      steps: [{ id: 'wrong-id', kind: 'action', action: 'click', target: AFTER_SUBMIT }], ambiguities: [],
+    };
+    const stage3Candidate: GeneratedPlanResponse = {
+      steps: [{ id: 'stage3-candidate', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [],
+    };
+    const scenario = await createScenario({
+      signal: controller.signal,
+      steps: [
+        Step.parse({ id: 'repair-first', kind: 'action', action: 'click', target: SUBMIT }),
+        Step.parse({ id: 'still-broken', kind: 'action', action: 'click', target: AFTER_SUBMIT }),
+      ],
+      grounding: {},
+      sessionEntries: new Map([
+        [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+        [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+        ...liveEntries(REPAIRED_SUBMIT),
+      ]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        const frontier = stage2Frontier(request);
+        const data = frontier === undefined ? stage3Candidate : frontier.index === 0 ? stage2Repair : stage2Invalid;
+        return { data, raw: JSON.stringify(data) };
+      } }),
+    });
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve !== true) return;
+      const candidate = await storage.readText(PLAN);
+      if (candidate.includes('stage3-candidate')) controller.abort();
+    };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome).toMatchObject({ interrupted: true, results: [], errors: [], skipped: [{ file: OPTIONS.files[0] }] });
+    expect(result.commits.size).toBe(0);
+  });
+
+  it.each([
+    {
+      title: 'marks the generation batch interrupted',
+      mutate(outcome: Awaited<ReturnType<typeof import('#usecases/generate.js').generate>>): void {
+        (outcome as { interrupted: boolean }).interrupted = true;
+      },
+    },
+    {
+      title: 'omits the generated item',
+      mutate(outcome: Awaited<ReturnType<typeof import('#usecases/generate.js').generate>>): void {
+        (outcome as unknown as { results: unknown[] }).results = [];
+      },
+    },
+  ])('preserves Stage-3 interruption when generation $title', async ({ mutate }) => {
+    const invalidStage2: GeneratedPlanResponse = {
+      steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [],
+    };
+    const candidate: GeneratedPlanResponse = {
+      steps: [{ id: 'stage3-candidate', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [],
+    };
+    const scenario = await createScenario({
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
+        data: stage2Frontier(request) === undefined ? candidate : invalidStage2,
+        raw: '{}',
+      }) }),
+    });
+    generateRunObserver.afterGenerate = mutate;
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome).toMatchObject({ interrupted: true, results: [], errors: [], skipped: [{ file: OPTIONS.files[0] }] });
+    expect(result.commits.size).toBe(0);
+  });
+
+  it('preserves a non-candidate Stage-3 item error, including its absent optional error value', async () => {
+    const invalidStage2: GeneratedPlanResponse = {
+      steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [],
+    };
+    const candidate: GeneratedPlanResponse = {
+      steps: [{ id: 'stage3-candidate', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [],
+    };
+    const scenario = await createScenario({
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
+        data: stage2Frontier(request) === undefined ? candidate : invalidStage2,
+        raw: '{}',
+      }) }),
+    });
+    generateRunObserver.afterGenerate = (outcome) => {
+      const mutable = outcome as unknown as { results: Array<{ status: string; error?: Error }> };
+      mutable.results[0] = { status: 'failed' };
+    };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved', stage3Error: undefined });
+    expect(result.commits.size).toBe(0);
+  });
+
+  it('lets cancellation win over a non-integrity Stage-3 generation failure', async () => {
+    const controller = new AbortController();
+    const scenario = await createScenario({ signal: controller.signal, grounding: {} });
+    generateRunObserver.beforeGenerate = () => {
+      controller.abort();
+      throw new Error('Stage-3 generation failed while cancellation was observed.');
+    };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome).toMatchObject({ interrupted: true, results: [], errors: [], skipped: [{ file: OPTIONS.files[0] }] });
+    expect(result.commits.size).toBe(0);
+  });
+
   it('keeps a no-changes-needed sibling artifacts write-isolated from a Stage-3 regeneration', async () => {
     const first = OPTIONS.files[0]!;
     const second = '/workspace/tests/second.test.md';
@@ -3119,6 +3387,7 @@ describe('heal state-machine contract', () => {
     const result = await heal(scenario.deps, OPTIONS);
     const outcome = result.outcome.results[0]!;
     expect({ repairOutcome: outcome.repairOutcome, stopReason: outcome.stopReason, finalFirstFailureIndex: outcome.finalFirstFailureIndex }).toEqual({ repairOutcome: 'partially-healed', stopReason: 'settled', finalFirstFailureIndex: 1 });
+    expect(outcome.stage3Rejection).toBeUndefined();
     expect(result.commits.has(OPTIONS.files[0]!)).toBe(true);
   });
 

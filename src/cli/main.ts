@@ -313,8 +313,8 @@ function projectCauseName(cause: unknown): string {
  * have C0, DEL, and C1 control characters replaced with a JSON-style
  * visible-escape form because they may originate in untrusted filesystem paths
  * or free text; literal backslashes are preserved unescaped. This does not
- * affect the `status` column or the JSON output path. The eventual Stage 3
- * secret-set rejection flow will add one result-local remediation line
+ * affect the `status` column or the JSON output path. Stage 3 secret-set
+ * rejection adds one result-local remediation line
  * immediately after its row, rather than entering the error channel: healing
  * must leave artifacts unchanged until regeneration receives fresh consent
  * (SPEC-C3-2).

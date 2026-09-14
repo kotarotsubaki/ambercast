@@ -157,6 +157,7 @@ const REPAIRED_SUBMIT = { strategy: 'accessibility' as const, role: 'button', na
 const AFTER_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Open dashboard' };
 const REPAIRED_AFTER_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Continue to dashboard' };
 const PASSWORD = { strategy: 'accessibility' as const, role: 'textbox', name: 'Password' };
+const REPAIRED_PASSWORD = { strategy: 'accessibility' as const, role: 'textbox', name: 'Continue password' };
 const GENERATED_INSTRUCTION_TEXT_FIELD = 'cita' + 'tion';
 const AI_STEP = Step.parse({
   id: 'ai-step',
@@ -193,7 +194,7 @@ function stage2Frontier(request: { readonly context?: unknown }): { readonly ind
  * model the existing-grounding verification path.
  */
 function healAccessibilityTree(entries: ReadonlyMap<string, FakeBrowserSessionEntry>): JsonValueT {
-  const targets = [PASSWORD, SUBMIT, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT];
+  const targets = [PASSWORD, REPAIRED_PASSWORD, SUBMIT, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT];
   return {
     role: 'root',
     name: '',
@@ -2288,15 +2289,17 @@ describe('heal state-machine contract', () => {
   });
 
   it.each([
-    ['adds names', ['alpha', 'zeta'], ['B', 'alpha', 'same'], ['B', 'same'], ['zeta']],
-    ['removes names', ['B', 'alpha', 'same'], ['alpha', 'same'], [], ['B']],
-    ['renames names with duplicated logical uses', ['alpha', 'alpha', 'zeta'], ['B', 'B', 'alpha', 'same'], ['B', 'same'], ['zeta']],
+    ['adds names', ['alpha', 'zeta'], ['beta', 'alpha', 'same'], ['beta', 'same'], ['zeta']],
+    ['removes names', ['beta', 'alpha', 'same'], ['alpha', 'same'], [], ['beta']],
+    ['renames names with duplicated logical uses', ['alpha', 'alpha', 'zeta'], ['beta', 'beta', 'alpha', 'same'], ['beta', 'same'], ['zeta']],
   ] as const)('rejects a Stage-3 candidate that %s without replaying or retaining artifacts', async (_title, beforeNames, afterNames, added, removed) => {
     const stage2Invalid: GeneratedPlanResponse = { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] };
     const candidate: GeneratedPlanResponse = {
       steps: afterNames.map((name, index) => ({
         id: `candidate-${index}`, kind: 'action' as const, action: 'fill-secret' as const,
-        target: { strategy: 'accessibility' as const, role: 'textbox' as const, name: '秘密' }, secret: { nameHint: name },
+        // A distinct non-ASCII target keeps the hint naming rung active without
+        // asking one target to own several logical secret names.
+        target: { strategy: 'accessibility' as const, role: 'textbox' as const, name: `秘密${name === 'beta' ? '' : '！'.repeat(index)}` }, secret: { nameHint: name },
       })),
       ambiguities: [],
     };
@@ -2331,13 +2334,16 @@ describe('heal state-machine contract', () => {
     const stage2Invalid: GeneratedPlanResponse = { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] };
     const candidate: GeneratedPlanResponse = { steps: [{
       id: 'candidate-secret', kind: 'action', action: 'fill-secret',
-      target: { strategy: 'accessibility', role: 'textbox', name: '秘密' }, secret: { nameHint: 'password' },
+      target: REPAIRED_PASSWORD, secret: { allowedName: 'password' },
     }], ambiguities: [] };
     const scenario = await createScenario({
       steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), Step.parse({
         id: 'committed-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.password}}',
       })], grounding: {}, secrets: new Map([['{{secrets.password}}', 'value']]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' }) }),
+      sessionEntries: liveEntries(REPAIRED_PASSWORD),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
+        ? { data: { confirmed: true }, raw: '{}' }
+        : { data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' } }),
     });
     let staged: { readonly plan: string; readonly grounding: string } | undefined;
     replayRunObserver.afterRun = async (_deps, storage, options) => {
@@ -2345,7 +2351,7 @@ describe('heal state-machine contract', () => {
         staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
       }
     };
-    const result = await heal(scenario.deps, OPTIONS);
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['password'] } } }, OPTIONS);
 
     expect(generateRunObserver.options).toMatchObject({ force: true, dryRun: false, consentMode: 'forbid' });
     expect(staged).toBeDefined();
@@ -2369,9 +2375,11 @@ describe('heal state-machine contract', () => {
       secrets: [{ ref: '{{secrets.persisted.ai.ref}}' }],
     });
     const executor = createFakeAiExecutor({
-      execute: async (request) => stage2Frontier(request) === undefined
-        ? { data: { steps: [], ambiguities: [] }, raw: '{}' }
-        : { data: replacement, raw: JSON.stringify(replacement) },
+      execute: async (request) => request.prompt.startsWith('Confirm whether')
+        ? { data: { confirmed: true }, raw: '{}' }
+        : stage2Frontier(request) === undefined
+          ? { data: { steps: [], ambiguities: [] }, raw: '{}' }
+          : { data: replacement, raw: JSON.stringify(replacement) },
       async executeAgentic(request) {
         await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: 'Dashboard' }, 'dashboard');
         return { outcome: 'success' };
@@ -2381,7 +2389,7 @@ describe('heal state-machine contract', () => {
       steps: [
         retainedBefore,
         Step.parse({
-          id: 'repair-middle', kind: 'action', action: 'fill-secret', target: PASSWORD,
+          id: 'repair-middle', kind: 'action', action: 'fill-secret', target: SUBMIT,
           secretRef: '{{secrets.persisted.repair.ref}}',
         }),
         retainedAfter,
@@ -2455,6 +2463,7 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
         const frontier = stage2Frontier(request);
         const data = frontier === undefined
           ? stage3ChangedSet
@@ -2477,6 +2486,7 @@ describe('heal state-machine contract', () => {
       }
     };
 
+    obligationFingerprintObserver.forceMatch = true;
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: [] } } }, OPTIONS);
 
     expect(generateRunObserver.options).toMatchObject({ force: true, dryRun: false, consentMode: 'forbid' });
@@ -2490,7 +2500,7 @@ describe('heal state-machine contract', () => {
       finalFirstFailureIndex: 1,
       steps: [
         expect.objectContaining({ id: 'repair-first', status: 'passed' }),
-        expect.objectContaining({ id: 'still-broken', status: 'failed' }),
+        expect.objectContaining({ id: 'still-broken', status: 'error', kind: 'environment' }),
       ],
       stage3Rejection: { reason: 'secret-set-changed', added: ['newly_added_secret'], removed: [] },
     });
@@ -2504,7 +2514,7 @@ describe('heal state-machine contract', () => {
     };
     const candidate: GeneratedPlanResponse = { steps: [{
       id: 'candidate-secret', kind: 'action', action: 'fill-secret',
-      target: { strategy: 'accessibility', role: 'textbox', name: '秘密' }, secret: { nameHint: 'password' },
+      target: REPAIRED_PASSWORD, secret: { allowedName: 'password' },
     }], ambiguities: [] };
     const scenario = await createScenario({
       steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), Step.parse({
@@ -2512,7 +2522,10 @@ describe('heal state-machine contract', () => {
       })],
       grounding: {},
       secrets: new Map([['{{secrets.password}}', 'value']]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' }) }),
+      sessionEntries: liveEntries(REPAIRED_PASSWORD),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
+        ? { data: { confirmed: true }, raw: '{}' }
+        : { data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' } }),
     });
     const updateTextExclusive = vi.fn(scenario.storage.updateTextExclusive);
     let staged: { readonly plan: string; readonly grounding: string } | undefined;
@@ -2522,7 +2535,7 @@ describe('heal state-machine contract', () => {
       }
     };
 
-    const result = await heal({ ...scenario.deps, storage: { ...scenario.storage, updateTextExclusive } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, storage: { ...scenario.storage, updateTextExclusive }, config: { ...scenario.deps.config, secrets: { allow: ['password'] } } }, OPTIONS);
 
     expect(scenario.textWrites).not.toHaveBeenCalled();
     expect(updateTextExclusive).not.toHaveBeenCalled();
@@ -2559,6 +2572,7 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
         const frontier = stage2Frontier(request);
         const data = frontier === undefined ? stage3Candidate : frontier.index === 0 ? stage2Repair : stage2Invalid;
         return { data, raw: JSON.stringify(data) };
@@ -2570,6 +2584,7 @@ describe('heal state-machine contract', () => {
       if (candidate.includes('stage3-candidate')) controller.abort();
     };
 
+    obligationFingerprintObserver.forceMatch = true;
     const result = await heal(scenario.deps, OPTIONS);
 
     expect(result.outcome).toMatchObject({ interrupted: true, results: [], errors: [], skipped: [{ file: OPTIONS.files[0] }] });

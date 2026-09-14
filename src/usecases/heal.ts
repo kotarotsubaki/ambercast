@@ -4,7 +4,7 @@ import type { FsIoError } from '#core/errors/fs-io-error.js';
 import type { StepResult } from '#report/schema.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { RunCaseOutcome, RunDeps } from './run.js';
-import { run, readTrustedInstructionCoveredPlan, validateTrustedInstructionCoveredPlanText } from './run.js';
+import { run, validateTrustedInstructionCoveredPlanText } from './run.js';
 import { generate, prepareInstructionCoveredSteps, projectAllowedNames } from './generate.js';
 import { inspectGroundingArtifactText } from './check-grounding.js';
 import { computePlanDigest } from '#core/ir/digest.js';
@@ -12,7 +12,7 @@ import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
-import { GROUNDING_SCHEMA_VERSION, PlanDocument, GeneratedPlanResponse, type GroundingDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
+import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, type GroundingDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
@@ -561,7 +561,7 @@ async function measureReplay(
   const batch = await run({ ...deps, storage: overlay.storage, layout: attemptScopedLayout(deps.layout, attemptOrdinal) }, replayOptions(file, options, resolve));
   const replay = batch.results[0];
   if (replay?.error instanceof IntegrityViolationError && !isRepairableNavigationFailure(replay.error)) throw replay.error;
-  if (batch.interrupted || replay === undefined) return { interrupted: true };
+  if (deps.signal?.aborted || batch.interrupted || replay === undefined) return { interrupted: true };
 
   return {
     interrupted: false,
@@ -921,7 +921,7 @@ async function trySingleStepRepair(
  * or a subclass, is rethrown unconditionally before restoration so it remains
  * fail-closed. Generation output is not a `RunCaseOutcome`; the
  * repairable-navigation allowlist applies only to replay-observed errors in
- * {@link measureReplay}. Before replay, the eventual flow compares logical
+ * {@link measureReplay}. Before replay, the flow compares logical
  * name sets and stages an equal-set plan with fresh empty grounding in the
  * overlay. Staging is required because nested replay reads artifacts through
  * overlay storage rather than accepting an in-memory candidate (SPEC-C3-2).
@@ -949,7 +949,7 @@ export type FullPlanRepairResult =
 /**
  * Attempts Stage 3 regeneration without granting it artifact or consent authority.
  *
- * Its eventual discriminated result keeps interrupted, failed, and
+ * Its discriminated result keeps interrupted, failed, and
  * secret-set-rejected branches from accidentally pairing a new plan with old
  * replay evidence. A changed set restores the snapshot before any staging or
  * replay; an equal set buffers the canonical candidate and fresh grounding

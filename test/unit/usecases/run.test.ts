@@ -573,7 +573,7 @@ describe('run', () => {
   });
 
   it('reports a missing plan as exit-4 failure before resolving a browser driver', async () => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const { deps, browserDriver, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage);
 
     const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: [] } } }, DEFAULT_OPTIONS);
@@ -665,7 +665,7 @@ describe('run', () => {
   });
 
   it('denies committed secret uses when the optional consent dependency is absent', async () => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const { deps, browserDriver, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',

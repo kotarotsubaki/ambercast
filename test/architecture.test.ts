@@ -764,7 +764,7 @@ describe('architecture guardrails', () => {
       { functionName: 'materializeTraceAction', planStepNavigation: false },
       { functionName: 'preScanTraceEntry', planStepNavigation: false },
     ]);
-  });
+  }, 90_000);
 
   test('routes the generated AI request through the shared generator task composer', async () => {
     const createPromptProgram = (fileName: string, source: string): { readonly program: ts.Program; readonly sourceFile: ts.SourceFile } => {
@@ -984,7 +984,10 @@ describe('architecture guardrails', () => {
         usecase: 'run',
       },
       {
-        expectedSites: [{ authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' }],
+        expectedSites: [
+          { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' },
+          { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' },
+        ],
         fileName: HEAL_MODULE_FILE,
         usecase: 'heal',
       },

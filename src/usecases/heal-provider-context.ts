@@ -116,7 +116,7 @@ export interface Stage2RepairContextInputs {
   /** The single bounded projection exposed to a replacement provider (SPEC-C3-2). */
   readonly allowedSecretNames: readonly SecretName[];
   readonly baseline: {
-    /** The case-start plan; future repair stages must never mutate it in place. */
+    /** The case-start plan; later repair stages never mutate it in place. */
     readonly plan: TrustedPlan;
     readonly measurement: ReplayMeasurement & { readonly interrupted: false };
   };

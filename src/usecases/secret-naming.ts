@@ -101,7 +101,7 @@ export interface Stage2ReplacementNamingOutput {
 /**
  * Derives a Stage 2 replacement without renaming its retained plan context.
  *
- * The eventual algorithm enumerates all non-replacement secret uses as fixed
+ * The algorithm enumerates all non-replacement secret uses as fixed
  * reservations, seeds the existing owner maps, runs the C1 naming machinery
  * at the replacement's original index, normalizes only its AI references, and
  * then parses the spliced whole-plan candidate (SPEC-C3-2). Reusing retained

@@ -770,7 +770,7 @@ ambercast で発生した症状から原因を特定し、次に取るべき対�
 | 設定の不備、未解決のシークレット、またはターゲットの不正 | 設定または呼び出し境界の修正が必要です。 | [エラーコード](/ambercast/ja/reference/error-codes/) を確認し、値を推測せずに指定された設定を修正します。 |
 | コンパニオンの欠落、stale（古くなった状態）、または信頼できないコンパニオン | コミットされた成果物を現在のエビデンスとして使用できません。 | [stale（古くなった状態）のアーティファクトの復旧](/ambercast/ja/how-to/recover-stale-artifacts/) の該当する行を参照して対応します。 |
 | `SECRET_CONSENT_REQUIRED` | 生成で許可リストにないシークレット名が検出され、同意が拒否されたか利用できませんでした。 | 名前をレビューして `secrets.allow` に追加するか、対話的に generate を再実行します。プロンプトにシークレット値を追加しないでください。 |
-| heal が `secret-set-changed` を報告する | Stage 3 の候補がシークレット名の集合全体を変更しました。heal はこれを黙って再帰属・同意できません。 | `ambercast generate --force <file>` を実行して同意を完了します: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| heal が `secret-set-changed` を報告する | Stage 3 の候補がシークレット名の集合全体を変更しました。heal はこれを黙って再帰属・同意できません。 | `ambercast generate --force <file>` を実行して同意を完了します。出荷済み CLI が逐語的に表示する日本語のヒント: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
 | リテラルシークレットまたは旧シークレット構文 | Protected IR がシークレット処理の境界を拒否しました。 | [シークレットの管理](/ambercast/ja/how-to/manage-secrets/) を参照してください。プロンプトにリテラルまたは旧グラント行を記述しないでください。 |
 | ブラウザ、プロバイダー、ストレージ、またはクラッシュ | 実行環境に障害が発生しました。 | JSON 出力を保存し、環境を修復した上で、最小限のコマンドを再実行します。 |
 | 中断された処理 | バッチ処理が完了していませんでした。 | 中断の原因が解決した後に再実行します。 |
@@ -1156,7 +1156,7 @@ Stage 3 が論理シークレット名セットの変更を理由に完全な Pl
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
 ```json
-{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
@@ -1378,9 +1378,9 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 
 Plan、Grounding、config、report の各 JSON Schema は、個別の手書き定義として保守されるのではなく、Zod から導出されています。
 
-Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、JSON Schema 2020-12 では項目間・プロパティ間の制約を表現できないため、Zod のみによる意味論的リファインメントとなっています。
+Plan の重複するステップ ID は、JSON Schema 2020-12 では配列項目間の射影フィールドの一意性を表現できないため、Zod のみによる意味論的リファインメントとなっています。
 
-生成された Plan の JSON Schema を検証するだけでは、重複ステップ ID の一意性や `SourceSpan` の行順序は担保されません。統合された検証境界については [適合性](/ambercast/ja/spec/conformance/) に記載されています。
+生成された Plan の JSON Schema を検証するだけでは、重複ステップ ID の一意性は担保されません。統合された検証境界については [適合性](/ambercast/ja/spec/conformance/) に記載されています。
 
 ## レポートスキーマ {#report-schema}
 
@@ -1960,7 +1960,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/
 
 修復はまず Grounding を修復し、次に単一ステップまたは末尾の修復を試行し、最後に必要に応じてプラン全体の修復を実行します。Stage 3 は AI エグゼキューターを解決して生成を呼び出すため、実際のプロバイダーをディスパッチできます。
 
-heal は新しいシークレット同意を決定しません。Stage 2 の候補に無効なシークレット名、許可リスト違反、または環境変数の衝突がある場合、その修復を `secret-name-invalid` として拒否します。Stage 3 の完全 Plan 候補が論理シークレット名の集合全体を変更した場合、heal は `stage3Rejection.reason: "secret-set-changed"` として拒否し、Plan または Grounding を更新せず、次のヒントを表示します。
+heal は新しいシークレット同意を決定しません。Stage 2 の候補に無効なシークレット名、許可リスト違反、または環境変数の衝突がある場合、その修復を `secret-name-invalid` として拒否します。Stage 3 の完全 Plan 候補が論理シークレット名の集合全体を変更した場合、heal は `stage3Rejection.reason: "secret-set-changed"` として拒否し、Plan または Grounding を更新せず、出荷済み CLI が逐語的に表示する次の日本語のヒントを表示します。
 
 `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
 
@@ -2342,7 +2342,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | 完全なシークレット参照。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L33), [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L74) |
-| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 同意と構成で使用する裸の論理名。 | [src/core/ir/schema.ts:31,83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31) |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 同意と構成で使用する裸の論理名。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L92) |
 | `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | プロバイダーのフォールバック命名候補であり、コミット済み参照ではない。 | [src/core/ir/schema.ts:94-102](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L94-L102) |
 | `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | HTTP(S)オリジンのみ。 | [src/core/ir/schema.ts:40](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L40), [src/core/ir/schema.ts:95-97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L95-L97) |
 | `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | テキストはrunの補間を含み得るが、シークレットトークンを含まない。 | [src/core/ir/schema.ts:37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37), [src/core/ir/schema.ts:125](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L125) |
@@ -2684,7 +2684,7 @@ JSON Schema の検証のみでは不十分である。適合するバリデー�
 | CON-22 | 新規エージェントアクション/アサートの具体化シークレット | 具体化の前に、すべての新規エージェントアクションおよびアサーションは、ケース内で観測された空でないすべての解決済みシークレットに対して、固定ボキャブラリ以外の値をスキャンしなければならない（MUST）。唯一の閉じたボキャブラリの除外対象は、`type`、`check`、`target.strategy`、`key`、および `secretRef` である。空でないすべてのシークレットについて完全一致は禁止され、シークレットが 3 UTF-16 コードユニット以上である場合は部分文字列一致が禁止される。一致は、ブラウザの実行、ジャーナル追記、Grounding 更新、または永続化の前の整合性の失敗（integrity failure）となる。 | 整合性の失敗（integrity failure） | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
 | CON-23 | 位置引数／ディスカバリー済みプロンプトパスの選択 | 選択されたプロンプトパスは `testDir` 内に解決され、厳密な `.test.md` サフィックスと空でない名前要素を持たなければならない（MUST）。この検査はファイル単位の作業を始める前に選択全体に対して一度だけ行い、`--list` には適用してはならない（MUST NOT）。 | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/prompt-path-eligibility.ts#L25) |
 
-CON-23 はファイル選択中に、他のすべての CON 項目より前に適用される。CON-02 から CON-06 および CON-10 は Plan 永続化前に適用される。CON-07 から CON-09 はコミットされた Plan に適用される。CON-11 から CON-22 は Grounding/リプレイ検証に適用される。Grounding/リプレイ検証は、ブラウザ操作が具体化された値を受け取る前に、トレースのシークレットマーカー、解決済みシークレット、認証情報リテラル、およびキャプチャ値の境界に加え、動的な `RunRef` の権限を検査する。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
+CON-23 はファイル選択中に、他のすべての CON 項目より前に適用される。CON-02 から CON-06、CON-09、および CON-10 は Plan 永続化前に適用される。CON-07 および CON-08 はコミットされた Plan に適用される。CON-11 から CON-22 は Grounding/リプレイ検証に適用される。Grounding/リプレイ検証は、ブラウザ操作が具体化された値を受け取る前に、トレースのシークレットマーカー、解決済みシークレット、認証情報リテラル、およびキャプチャ値の境界に加え、動的な `RunRef` の権限を検査する。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
 
 ## 検証手順 {#verification-procedure}
 
@@ -3217,7 +3217,7 @@ Assume the project's dev server is already running at the configured target base
 Run check before treating existing artifacts as trustworthy. Use the documented provider configuration or invocation contract if an operation needs AI; fully grounded replay may not need a provider.
 Treat generate, run, and heal as potentially side-effecting. Invoke `npx ambercast generate <requested.test.md>`, `npx ambercast run <requested.test.md>`, and `npx ambercast heal <requested.test.md>` only with the requested explicit `.test.md` path; use `npx ambercast check <requested.test.md>` with that same path. Before any unapproved artifact change, report the planned write scope. For heal, require explicit user approval; --yes only answers ambercast's confirmation prompt.
 The no-argument forms of generate, run, and heal operate on all discovered tests that match the configured discovery rules. Use a no-argument form only when the operator explicitly requests that all-discovered-tests scope, and restate that scope before executing it.
-Never place literal secrets, secret references, or legacy `@ambercast-secret` grant lines in prompts, artifacts, commands, reports, or messages. When generate proposes a secret name outside `secrets.allow`, obtain the operator's approval interactively or ask them to add a reviewed name to `secrets.allow`; never use `"*"` without explicit operator approval. Never run a real heal in CI unless the user has explicitly authorized the required configuration and action.
+Never place literal secret values in prompts, artifacts, commands, reports, or messages. Never write secret references or legacy `@ambercast-secret` grant lines in `.test.md` prompt text; a committed Plan or Grounding artifact may correctly contain a valid `secretRef` after local resolution and consent. When generate proposes a secret name outside `secrets.allow`, obtain the operator's approval interactively or ask them to add a reviewed name to `secrets.allow`; never use `"*"` without explicit operator approval. Never run a real heal in CI unless the user has explicitly authorized the required configuration and action.
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
@@ -3296,8 +3296,8 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-res
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 利用可能 |
 
-config、plan、grounding、および report 向けのスキーマアーティファクトは公開済みであり、サイト向けと npm 配布向けで同一のバイト列が生成されます。
+`schemas/plan.v2.schema.json` は、コミット済みの履歴スナップショットをサイトへコピーした凍結アーティファクトです。現在のビルドは config スキーマ、Plan v3 スキーマ、grounding スキーマ、report スキーマ、`capabilities.json`、および `manifest/cli.json` を生成し、サイト向けと npm 配布向けで同一のバイト列になります。
 
-本ドキュメントは、このリリースで公開されたビルド生成アーティファクトを扱います。
+本ドキュメントは、このリリースで公開されたアーティファクトを扱います。
 
 関連情報: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [JSON スキーマ](/ambercast/ja/reference/json-schemas/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)

@@ -40,7 +40,7 @@ export async function main() {
     throw new Error(`Generated artifacts are unavailable because ${distRoot} does not exist.`);
   }
 
-  await publishArtifacts(await preflightPublications(distRoot, publicRoot, frozenSchemaRoot));
+  await publishArtifacts(await preflightPublications(distRoot, publicRoot, frozenSchemaRoot), publicRoot);
 }
 
 /**
@@ -113,16 +113,23 @@ async function preflightPublications(distRoot, publicRoot, frozenSchemaRoot) {
 
 /**
  * Creates destination parents and copies a fully preflighted artifact set verbatim so producer
- * bytes, including whitespace and encoding, remain unchanged.
+ * bytes, including whitespace and encoding, remain unchanged. A copy failure removes the entire
+ * generated public surface before it propagates, preventing a partially published artifact set.
  *
  * @param {Publication[]} publications Complete source-to-destination copy plan from preflight.
+ * @param {string} publicRoot Absolute `website/public` directory containing generated outputs.
  * @returns {Promise<void>} Resolves after every artifact has been copied byte-for-byte.
  */
-async function publishArtifacts(publications) {
-  await Promise.all(publications.map(async ({ source, destination }) => {
-    await mkdir(dirname(destination), { recursive: true });
-    await copyFile(source, destination);
-  }));
+async function publishArtifacts(publications, publicRoot) {
+  try {
+    for (const { source, destination } of publications) {
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(source, destination);
+    }
+  } catch (error) {
+    await removePublishedOutputs(publicRoot);
+    throw error;
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

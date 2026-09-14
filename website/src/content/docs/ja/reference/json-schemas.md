@@ -38,9 +38,9 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 
 Plan、Grounding、config、report の各 JSON Schema は、個別の手書き定義として保守されるのではなく、Zod から導出されています。
 
-Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、JSON Schema 2020-12 では項目間・プロパティ間の制約を表現できないため、Zod のみによる意味論的リファインメントとなっています。
+Plan の重複するステップ ID は、JSON Schema 2020-12 では配列項目間の射影フィールドの一意性を表現できないため、Zod のみによる意味論的リファインメントとなっています。
 
-生成された Plan の JSON Schema を検証するだけでは、重複ステップ ID の一意性や `SourceSpan` の行順序は担保されません。統合された検証境界については [適合性](/ambercast/ja/spec/conformance/) に記載されています。
+生成された Plan の JSON Schema を検証するだけでは、重複ステップ ID の一意性は担保されません。統合された検証境界については [適合性](/ambercast/ja/spec/conformance/) に記載されています。
 
 ## レポートスキーマ {#report-schema}
 

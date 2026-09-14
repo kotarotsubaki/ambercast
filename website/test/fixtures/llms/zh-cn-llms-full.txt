@@ -771,7 +771,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/troubleshoot/
 | 无效配置、未解析的密钥或目标 | 需要修正配置或调用边界。 | 查阅 [错误代码](/ambercast/zh-cn/reference/error-codes/)，随后直接修正对应的配置项，切勿随意猜测其取值。 |
 | 缺失、`stale`（已过期）或不可信的伴生文件 | 已提交的工件无法作为当前有效凭据使用。 | 使用 [恢复 stale（已过期）产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/) 中对应的行。 |
 | `SECRET_CONSENT_REQUIRED` | 生成发现未列入许可列表的机密名称，且同意被拒绝或不可用。 | 审查名称，将其加入 `secrets.allow`，或以交互方式重新运行 generate；不要向提示词添加机密值。 |
-| heal 报告 `secret-set-changed` | Stage 3 候选改变了完整机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并完成同意：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| heal 报告 `secret-set-changed` | Stage 3 候选改变了完整机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并完成同意：已发布 CLI 会逐字呈现的日语提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
 | 明文机密或旧版机密语法 | 受保护的 IR 拒绝了机密处理边界。 | 查阅[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)；不要在提示词中放入明文或旧版授权行。 |
 | 浏览器、提供商、存储故障或崩溃 | 执行环境发生故障。 | 保留 JSON 输出，修复执行环境，随后重新运行最小受影响范围的命令。 |
 | 工作中断 | 批处理工作未完成。 | 待中断问题解决后重新运行。 |
@@ -1142,7 +1142,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
 ```json
-{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
 {"schemaVersion":"3.5","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
@@ -1355,8 +1355,8 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 ## 结构约束边界 {#structural-boundary}
 
 - Plan、Grounding、config 以及 report 的 JSON Schema 均派生自 Zod，而非作为独立的手写定义进行维护。
-- 重复的 Plan 步骤 ID 以及 `SourceSpan.endLine >= startLine` 属于仅在 Zod 中生效的语义细化约束，因为 JSON Schema 2020-12 无法表达这些跨项或跨属性约束。
-- 仅验证生成的 Plan JSON Schema 并不能确立重复步骤 ID 的唯一性或 `SourceSpan` 的行号顺序约束；[符合性](/ambercast/zh-cn/spec/conformance/) 记录了这一组合约束边界。
+- 重复的 Plan 步骤 ID 属于仅在 Zod 中生效的语义细化约束，因为 JSON Schema 2020-12 无法表达数组项之间投影字段的唯一性。
+- 仅验证生成的 Plan JSON Schema 并不能确立重复步骤 ID 的唯一性；[符合性](/ambercast/zh-cn/spec/conformance/) 记录了这一组合约束边界。
 
 ## 报告 Schema {#report-schema}
 
@@ -1908,7 +1908,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/
 
 修复流程首先修复 Grounding，随后尝试单步修复或尾部修复，并在必要时执行全计划修复；Stage 3 会解析 AI 执行器并调用生成逻辑，因此能够调度真实的提供商。
 
-heal 不会作出新的机密同意决定。若其 Stage 2 候选包含无效机密名称、许可列表失败或环境变量冲突，它会以 `secret-name-invalid` 拒绝该修复。若 Stage 3 全计划候选改变完整的逻辑机密名称集合，heal 会以 `stage3Rejection.reason: "secret-set-changed"` 拒绝它，不写入 Plan 或 Grounding 更新，并输出以下提示：
+heal 不会作出新的机密同意决定。若其 Stage 2 候选包含无效机密名称、许可列表失败或环境变量冲突，它会以 `secret-name-invalid` 拒绝该修复。若 Stage 3 全计划候选改变完整的逻辑机密名称集合，heal 会以 `stage3Rejection.reason: "secret-set-changed"` 拒绝它，不写入 Plan 或 Grounding 更新，并输出以下由已发布 CLI 逐字呈现的日语提示：
 
 `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
 
@@ -2295,7 +2295,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | 完整的 secret 引用。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L33), [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L74) |
-| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 供同意和配置使用的裸逻辑名称。 | [src/core/ir/schema.ts:31,83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31) |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 供同意和配置使用的裸逻辑名称。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L92) |
 | `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | provider 的回退命名候选，而非已提交引用。 | [src/core/ir/schema.ts:94-102](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L94-L102) |
 | `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | 仅限 HTTP(S) 源。 | [src/core/ir/schema.ts:40](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L40), [src/core/ir/schema.ts:95-97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L95-L97) |
 | `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | 文本可包含 run 插值，但不得包含 secret 令牌。 | [src/core/ir/schema.ts:37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37), [src/core/ir/schema.ts:125](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L125) |
@@ -2637,7 +2637,7 @@ Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其
 | CON-22 | 全新 agentic 操作/断言具体化机密 | 在具体化之前，每个全新的 agentic 操作和断言都必须根据（MUST）在该用例中观察到的每个非空已解析机密，对非固定词汇表的值进行扫描。仅有的封闭词汇表排除项为 `type`、`check`、`target.strategy`、`key` 和 `secretRef`。对任何非空机密都禁止完全相等；当机密至少为 3 个 UTF-16 代码单元时，禁止子字符串匹配。匹配项在浏览器执行、日志追加、Grounding 更新或持久化之前构成完整性失败。 | 完整性失败 | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
 | CON-23 | 位置参数／发现的 prompt 路径选择 | 所选 prompt 路径必须（MUST）解析到 `testDir` 内，具有精确的 `.test.md` 后缀及非空名称组成部分；此检查必须在任何逐文件工作开始前对整个选择仅执行一次，且不得（MUST NOT）应用于 `--list`。 | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/prompt-path-eligibility.ts#L25) |
 
-CON-23 在文件选择期间、所有其他 CON 项目之前适用。CON-02 至 CON-06 以及 CON-10 适用于 Plan 持久化之前；CON-07 至 CON-09 适用于已提交的 Plan；CON-11 至 CON-22 适用于 Grounding/重放验证。Grounding/重放验证在浏览器操作接收具体化值之前，检查 trace 机密标记、已解析机密、凭据字面量和捕获值边界，以及动态 `RunRef` 授权。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
+CON-23 在文件选择期间、所有其他 CON 项目之前适用。CON-02 至 CON-06、CON-09 以及 CON-10 适用于 Plan 持久化之前；CON-07 和 CON-08 适用于已提交的 Plan；CON-11 至 CON-22 适用于 Grounding/重放验证。Grounding/重放验证在浏览器操作接收具体化值之前，检查 trace 机密标记、已解析机密、凭据字面量和捕获值边界，以及动态 `RunRef` 授权。[src/usecases/instruction-coverage-policy.ts:337](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
 
 ## 验证规程 {#verification-procedure}
 
@@ -3071,7 +3071,7 @@ ambercast 解析器所公开实现的命令恰好为 `generate`、`run`、`check
 
 ## 按报告错误分类的后续动作 {#next-action-by-report-error}
 
-报告 schema 定义了八种用法代码与六种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
+报告 schema 定义了十三种用法代码与六种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
 
 | 错误类别 | 下一步安全动作 |
 | --- | --- |
@@ -3110,7 +3110,7 @@ Assume the project's dev server is already running at the configured target base
 Run check before treating existing artifacts as trustworthy. Use the documented provider configuration or invocation contract if an operation needs AI; fully grounded replay may not need a provider.
 Treat generate, run, and heal as potentially side-effecting. Invoke `npx ambercast generate <requested.test.md>`, `npx ambercast run <requested.test.md>`, and `npx ambercast heal <requested.test.md>` only with the requested explicit `.test.md` path; use `npx ambercast check <requested.test.md>` with that same path. Before any unapproved artifact change, report the planned write scope. For heal, require explicit user approval; --yes only answers ambercast's confirmation prompt.
 The no-argument forms of generate, run, and heal operate on all discovered tests that match the configured discovery rules. Use a no-argument form only when the operator explicitly requests that all-discovered-tests scope, and restate that scope before executing it.
-Never place literal secrets, secret references, or legacy `@ambercast-secret` grant lines in prompts, artifacts, commands, reports, or messages. When generate proposes a secret name outside `secrets.allow`, obtain the operator's approval interactively or ask them to add a reviewed name to `secrets.allow`; never use `"*"` without explicit operator approval. Never run a real heal in CI unless the user has explicitly authorized the required configuration and action.
+Never place literal secret values in prompts, artifacts, commands, reports, or messages. Never write secret references or legacy `@ambercast-secret` grant lines in `.test.md` prompt text; a committed Plan or Grounding artifact may correctly contain a valid `secretRef` after local resolution and consent. When generate proposes a secret name outside `secrets.allow`, obtain the operator's approval interactively or ask them to add a reviewed name to `secrets.allow`; never use `"*"` without explicit operator approval. Never run a real heal in CI unless the user has explicitly authorized the required configuration and action.
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
@@ -3195,8 +3195,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 可用 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 可用 |
 
-config、plan、grounding 与 report 的 Schema 产物均已发布，文档站点与 npm 分发包中所生成的字节完全一致。
+`schemas/plan.v2.schema.json` 是复制到文档站点的冻结、已提交历史快照。当前构建会生成 config Schema、Plan v3 Schema、grounding Schema、report Schema、`capabilities.json` 与 `manifest/cli.json`，其文档站点与 npm 分发包中的字节完全一致。
 
-本页面介绍在本次发布中已上线的构建生成产物。
+本页面介绍在本次发布中已上线的产物。
 
 相关链接：[在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)、[JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/)、[状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)

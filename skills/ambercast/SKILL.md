@@ -40,7 +40,7 @@ Rules:
 
 - Use `generate --list` for discovery. It has no side effects. `run --list` writes a report under `runsDir`, so do not use it for discovery.
 - Choosing a target: an explicit instruction from the user first, then `defaultTarget`, then the only target if exactly one exists. If several targets exist and none is selected, stop and ask the user which one to pass with `--target`.
-- Secret names are AI-proposed candidates that become available only after interactive consent or approval through `secrets.allow`. The environment variable `AMBERCAST_SECRET_<NAME>` only tells you whether a value is present. Never derive a logical secret name from an environment variable name; the mapping is not reversible.
+- Secret names are AI-proposed candidates that become available only after interactive consent or approval through `secrets.allow`. The value of the environment variable `AMBERCAST_SECRET_<NAME>` supplies the secret at run time, and the variable must be set whenever the corresponding secret is used. Never derive a logical secret name from an environment variable name; the mapping is not reversible.
 - When the config and this skill disagree, the config wins.
 
 ## Writing a prompt

@@ -47,7 +47,7 @@ ambercast 解析器所公开实现的命令恰好为 `generate`、`run`、`check
 
 ## 按报告错误分类的后续动作 {#next-action-by-report-error}
 
-报告 schema 定义了八种用法代码与六种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
+报告 schema 定义了十三种用法代码与六种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
 
 | 错误类别 | 下一步安全动作 |
 | --- | --- |

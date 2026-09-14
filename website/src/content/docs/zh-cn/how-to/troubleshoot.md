@@ -16,7 +16,7 @@ description: 按故障症状排查原因并执行对应的处置操作。
 | 无效配置、未解析的密钥或目标 | 需要修正配置或调用边界。 | 查阅 [错误代码](/ambercast/zh-cn/reference/error-codes/)，随后直接修正对应的配置项，切勿随意猜测其取值。 |
 | 缺失、`stale`（已过期）或不可信的伴生文件 | 已提交的工件无法作为当前有效凭据使用。 | 使用 [恢复 stale（已过期）产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/) 中对应的行。 |
 | `SECRET_CONSENT_REQUIRED` | 生成发现未列入许可列表的机密名称，且同意被拒绝或不可用。 | 审查名称，将其加入 `secrets.allow`，或以交互方式重新运行 generate；不要向提示词添加机密值。 |
-| heal 报告 `secret-set-changed` | Stage 3 候选改变了完整机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并完成同意：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| heal 报告 `secret-set-changed` | Stage 3 候选改变了完整机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并完成同意：已发布 CLI 会逐字呈现的日语提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
 | 明文机密或旧版机密语法 | 受保护的 IR 拒绝了机密处理边界。 | 查阅[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)；不要在提示词中放入明文或旧版授权行。 |
 | 浏览器、提供商、存储故障或崩溃 | 执行环境发生故障。 | 保留 JSON 输出，修复执行环境，随后重新运行最小受影响范围的命令。 |
 | 工作中断 | 批处理工作未完成。 | 待中断问题解决后重新运行。 |

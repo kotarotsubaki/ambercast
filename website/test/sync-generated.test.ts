@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createDocsFixture, runEntryPoint } from './cli-fixture.ts';
 
@@ -198,6 +198,18 @@ describe('sync-generated CLI entry point', () => {
     expect(result.status).not.toBe(0);
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('plan.schema.json');
+    expectNoPublishedOutputs(fixture.root);
+  });
+
+  it('removes every destination when a copy fails after earlier publications succeed', () => {
+    const fixture = fixtureFor({ ...requiredSources, ...frozenSchemaSource });
+    chmodSync(join(fixture.root, 'dist/schema/report.schema.json'), 0o000);
+
+    const result = runEntryPoint(new URL('../scripts/sync-generated.mjs', import.meta.url), fixture.website);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).not.toBe('');
     expectNoPublishedOutputs(fixture.root);
   });
 

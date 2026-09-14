@@ -119,7 +119,7 @@ describe('documentation prompt examples', () => {
 
   it('rejects legacy references in non-exempt fences outside an exception section', async () => {
     const violations = (await documentsUnderTest()).flatMap((document) => document.fences.flatMap((fence) => {
-      if (EXEMPT_NON_PROSE_LABELS.has(fence.info) || isExcepted(fence, document.exceptions)) return [];
+      if (!hasRuleBLegacyReferenceViolation(fence) || isExcepted(fence, document.exceptions)) return [];
       return occurrences(fence.content, legacyReference).map((offset) => {
         const location = locationAt(document.source, fence.contentStart + offset);
         return `${displayPath(document.path)}:${location.line}:${location.column}: info string ${JSON.stringify(fence.info)}`;
@@ -129,11 +129,40 @@ describe('documentation prompt examples', () => {
     expect(violations, `rule (b) legacy references in non-exempt fences:\n${violations.join('\n')}`).toEqual([]);
   });
 
+  it('treats up to three leading spaces before an H1 as markdown-shaped prompt content', () => {
+    const source = [
+      '```text',
+      '   # Three-space heading',
+      '```',
+      '',
+      '```text',
+      '    # Four-space indented code',
+      '```',
+    ].join('\n');
+    const [threeSpaceFence, fourSpaceFence] = fences(source);
+
+    expect(requiresMarkdownNormalization(threeSpaceFence)).toBe(true);
+    expect(requiresMarkdownNormalization(fourSpaceFence)).toBe(false);
+  });
+
+  it('requires a json fence with an indented H1 and legacy reference to use markdown', () => {
+    const source = [
+      '```json',
+      '   # Sign in',
+      '{{secrets.password}}',
+      '```',
+    ].join('\n');
+    const [fence] = fences(source);
+
+    expect(hasRuleBLegacyReferenceViolation(fence)).toBe(false);
+    expect(requiresMarkdownNormalization(fence)).toBe(true);
+  });
+
   it('normalizes every H1-shaped prompt fence to markdown outside an exception section', async () => {
     const violations = (await documentsUnderTest()).flatMap((document) => document.fences.flatMap((fence) => {
-      if (fence.info === 'markdown' || isExcepted(fence, document.exceptions)) return [];
+      if (!requiresMarkdownNormalization(fence) || isExcepted(fence, document.exceptions)) return [];
       const heading = firstNonBlankLine(fence.content);
-      if (heading === undefined || !/^#\s/.test(heading.text)) return [];
+      if (heading === undefined) return [];
       const location = locationAt(document.source, fence.contentStart + heading.offset);
       return [`${displayPath(document.path)}:${location.line}: info string ${JSON.stringify(fence.info)} must be "markdown" for an H1-shaped prompt fence`];
     }));
@@ -251,6 +280,19 @@ function lineMatches(source: string, pattern: RegExp): readonly { offset: number
     offset += line.length + 1;
   }
   return matches;
+}
+
+function isH1ShapedPromptFence(content: string): boolean {
+  const heading = firstNonBlankLine(content);
+  return heading !== undefined && /^ {0,3}#[ \t]/.test(heading.text);
+}
+
+function hasRuleBLegacyReferenceViolation(fence: Fence): boolean {
+  return !EXEMPT_NON_PROSE_LABELS.has(fence.info) && occurrences(fence.content, legacyReference).length > 0;
+}
+
+function requiresMarkdownNormalization(fence: Fence): boolean {
+  return fence.info !== 'markdown' && isH1ShapedPromptFence(fence.content);
 }
 
 function occurrences(source: string, needle: string): readonly number[] {

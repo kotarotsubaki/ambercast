@@ -39,6 +39,7 @@ import {
   type HealDeps,
   type HealOptions,
 } from '#usecases/heal.js';
+import type { GenerateDeps } from '#usecases/generate.js';
 import { PlanNavigationResolutionError, type RunOutcome } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
@@ -75,6 +76,7 @@ const generateRunObserver = vi.hoisted(() => ({
   beforeGenerate: undefined as undefined | (() => void | Promise<void>),
   afterGenerate: undefined as undefined | ((outcome: Awaited<ReturnType<typeof import('#usecases/generate.js').generate>>) => void | Promise<void>),
   options: undefined as undefined | Parameters<typeof import('#usecases/generate.js').generate>[1],
+  extraDeps: undefined as undefined | Pick<GenerateDeps, 'consent'>,
 }));
 
 const obligationFingerprintObserver = vi.hoisted(() => ({ forceMatch: false }));
@@ -122,7 +124,7 @@ vi.mock('#usecases/generate.js', async (importOriginal) => {
       await generateRunObserver.beforeGenerate?.();
       if (generateRunObserver.rejectWith !== undefined) throw generateRunObserver.rejectWith;
       generateRunObserver.options = args[1];
-      const outcome = await actual.generate(...args);
+      const outcome = await actual.generate({ ...args[0], ...generateRunObserver.extraDeps }, args[1]);
       await generateRunObserver.afterGenerate?.(outcome);
       return outcome;
     },
@@ -138,6 +140,7 @@ afterEach(() => {
   generateRunObserver.beforeGenerate = undefined;
   generateRunObserver.afterGenerate = undefined;
   generateRunObserver.options = undefined;
+  generateRunObserver.extraDeps = undefined;
   obligationFingerprintObserver.forceMatch = false;
 });
 
@@ -176,6 +179,7 @@ type Stage2RequestContext = {
   readonly trustedInputs?: {
     readonly frontier?: { readonly index: number; readonly stepId: string };
     readonly repairHistory?: unknown;
+    readonly allowedSecretNames?: readonly string[];
   };
 };
 
@@ -1239,6 +1243,32 @@ describe('heal state-machine contract', () => {
     expect(scenario.deps.browserDriver).toHaveBeenCalled();
   });
 
+  it('projects wildcard consent to an empty Stage-2 allowed-name context without exposing retained names', async () => {
+    const stageTwoContexts: Stage2RequestContext[] = [];
+    const replacement: GeneratedPlanResponse = {
+      steps: [{ id: 'repair-secret', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [],
+    };
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'repair-secret', kind: 'action', action: 'click', target: SUBMIT })],
+      grounding: {},
+      sessionEntries: new Map([
+        [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+        ...liveEntries(REPAIRED_SUBMIT),
+      ]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        if (stage2Frontier(request) !== undefined) stageTwoContexts.push(request.context as Stage2RequestContext);
+        return { data: replacement, raw: JSON.stringify(replacement) };
+      } }),
+    });
+
+    await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: '*' } } }, OPTIONS);
+
+    expect(stageTwoContexts).toHaveLength(1);
+    expect(stageTwoContexts[0]?.trustedInputs?.allowedSecretNames).toEqual([]);
+    expect(stageTwoContexts[0]).not.toHaveProperty('secrets');
+    expect(stageTwoContexts[0]?.trustedInputs).not.toHaveProperty('retainedSecretNames');
+  });
+
   it('rejects committed secret refs that collide in environment-variable space before browser or provider work', async () => {
     const scenario = await createScenario({
       steps: [
@@ -2260,7 +2290,7 @@ describe('heal state-machine contract', () => {
   it.each([
     ['adds names', ['alpha', 'zeta'], ['B', 'alpha', 'same'], ['B', 'same'], ['zeta']],
     ['removes names', ['B', 'alpha', 'same'], ['alpha', 'same'], [], ['B']],
-    ['renames names', ['alpha', 'zeta'], ['B', 'alpha', 'same'], ['B', 'same'], ['zeta']],
+    ['renames names with duplicated logical uses', ['alpha', 'alpha', 'zeta'], ['B', 'B', 'alpha', 'same'], ['B', 'same'], ['zeta']],
   ] as const)('rejects a Stage-3 candidate that %s without replaying or retaining artifacts', async (_title, beforeNames, afterNames, added, removed) => {
     const stage2Invalid: GeneratedPlanResponse = { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] };
     const candidate: GeneratedPlanResponse = {
@@ -2430,14 +2460,38 @@ describe('heal state-machine contract', () => {
         return { data, raw: JSON.stringify(data) };
       } }),
     });
+    const original = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    const consent = {
+      request: vi.fn(),
+      commitAllowlist: vi.fn(),
+    };
+    generateRunObserver.extraDeps = { consent };
+    let stage3CandidateReplay = false;
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve === true && (await storage.readText(PLAN)).includes('stage3-secret')) {
+        stage3CandidateReplay = true;
+      }
+    };
 
-    const result = await heal(scenario.deps, OPTIONS);
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: [] } } }, OPTIONS);
 
+    expect(generateRunObserver.options).toMatchObject({ force: true, dryRun: false, consentMode: 'forbid' });
+    expect(consent.request).not.toHaveBeenCalled();
+    expect(consent.commitAllowlist).not.toHaveBeenCalled();
+    expect(stage3CandidateReplay).toBe(false);
+    expect(scenario.textWrites).not.toHaveBeenCalled();
     expect(result.outcome.results[0]).toMatchObject({
       repairOutcome: 'unresolved',
+      baselineFirstFailureIndex: 0,
+      finalFirstFailureIndex: 1,
+      steps: [
+        expect.objectContaining({ id: 'repair-first', status: 'passed' }),
+        expect.objectContaining({ id: 'still-broken', status: 'failed' }),
+      ],
       stage3Rejection: { reason: 'secret-set-changed', added: ['newly_added_secret'], removed: [] },
     });
     expect(result.commits.size).toBe(0);
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(original);
   });
 
   it('writes no base or config artifact before confirmation, then commits exactly the staged Stage-3 pair', async () => {
@@ -2574,6 +2628,40 @@ describe('heal state-machine contract', () => {
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved', stage3Error: undefined });
     expect(result.commits.size).toBe(0);
+  });
+
+  it.each(['plan', 'secrets'] as const)('classifies a Stage-3 candidate missing %s evidence without replaying, staging, or committing', async (missing) => {
+    const invalidStage2: GeneratedPlanResponse = {
+      steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [],
+    };
+    const candidate: GeneratedPlanResponse = {
+      steps: [{ id: 'stage3-candidate', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [],
+    };
+    const scenario = await createScenario({
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
+        data: stage2Frontier(request) === undefined ? candidate : invalidStage2,
+        raw: '{}',
+      }) }),
+    });
+    const original = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    let candidateReplay = false;
+    replayRunObserver.afterRun = (_deps, _storage, options) => { if (options.resolve === true) candidateReplay = true; };
+    generateRunObserver.afterGenerate = (outcome) => {
+      const item = (outcome as unknown as { results: Array<{ plan?: unknown; secrets?: unknown }> }).results[0]!;
+      delete item[missing];
+    };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(candidateReplay).toBe(false);
+    expect(scenario.textWrites).not.toHaveBeenCalled();
+    expect(result.commits.size).toBe(0);
+    expect(result.outcome.results[0]).toMatchObject({
+      repairOutcome: 'unresolved',
+      stage3Error: expect.any(UnexpectedCrashError),
+    });
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(original);
   });
 
   it('lets cancellation win over a non-integrity Stage-3 generation failure', async () => {

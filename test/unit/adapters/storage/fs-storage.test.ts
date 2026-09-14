@@ -754,6 +754,7 @@ describe('createFsStorage()', () => {
     const contender = createFsStorage();
     const ownerUpdate = owner.updateTextExclusive(targetPath, (current) => `${current}A`);
     void ownerUpdate.catch(() => undefined);
+    vi.useFakeTimers();
 
     try {
       await waitForCheckpoint(
@@ -764,20 +765,22 @@ describe('createFsStorage()', () => {
       const ownerToken = fake.text(lockPath);
       expect(ownerToken).toMatch(new RegExp(`^${process.pid}-[0-9a-f]{16}$`, 'u'));
 
-      await expect(contender.updateTextExclusive(targetPath, (current) => `${current}B`))
-        .rejects.toBeInstanceOf(FsIoError);
+      const contenderUpdate = contender.updateTextExclusive(targetPath, (current) => `${current}B`);
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(contenderUpdate).rejects.toBeInstanceOf(FsIoError);
 
       const contenderRetries = fake.calls.filter((call) => (
         call.operation === 'writeFile' && call.path === lockPath && call.phase === 'before'
       ));
-      expect(contenderRetries.length).toBeGreaterThan(2);
+      expect(contenderRetries).toHaveLength(6);
       expect(fake.text(lockPath)).toBe(ownerToken);
-      expect(fake.calls.filter((call) => call.operation === 'unlink')).toEqual([]);
+      expect(fake.calls.filter((call) => call.operation === 'unlink' && call.path === lockPath)).toEqual([]);
 
       firstRead.release();
       await expect(ownerUpdate).resolves.toBeUndefined();
       expect(fake.has(lockPath)).toBe(false);
     } finally {
+      vi.useRealTimers();
       firstRead.release();
       await ownerUpdate.catch(() => undefined);
       restore();
@@ -817,8 +820,14 @@ describe('createFsStorage()', () => {
     const restore = installSharedFake(fake);
     try {
       vi.mocked(fsPromises.unlink).mockRejectedValueOnce(createFilesystemError('EACCES', 'release denied'));
-      await expect(createFsStorage().updateTextExclusive('/shared/config.json', () => { throw primary; }))
-        .rejects.toMatchObject({ cause: primary });
+      let thrown: unknown;
+      try {
+        await createFsStorage().updateTextExclusive('/shared/config.json', () => { throw primary; });
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(FsIoError);
+      expect(thrown instanceof FsIoError ? thrown.cause : undefined).toBe(primary);
     } finally {
       restore();
     }

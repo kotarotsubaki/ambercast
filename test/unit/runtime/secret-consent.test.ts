@@ -62,6 +62,32 @@ describe('createInteractiveSecretConsent', () => {
     expect(outputText).toContain('token\\x00');
   });
 
+  it.each(['y', 'yes'] as const)('accepts every remaining item globally for %s', async (answer) => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const captured = captureOutput(output);
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent(requestWithItems());
+    input.end(`${answer}\n`);
+
+    await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
+    expect(captured.text()).toContain('z.test.md');
+    expect(captured.text()).toContain('a.test.md');
+  });
+
+  it('enters individual edit mode and returns the accepted rename', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent(request());
+    input.end('i\nrenamed_token\n');
+
+    await expect(pending).resolves.toEqual({
+      kind: 'allowed',
+      renames: [{ file: 'a\\n.test.md', name: 'token\\u0000', newName: 'renamed_token' }],
+    });
+  });
+
   it('treats an uppercase N and EOF as declined decisions that discard edits', async () => {
     for (const answer of ['N\\n', '']) {
       const input = new PassThrough();
@@ -119,6 +145,16 @@ describe('createInteractiveSecretConsent', () => {
     const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
     const pending = consent(requestWithItems());
     input.end('replacement\n');
+
+    await expect(pending).resolves.toEqual({ kind: 'declined' });
+  });
+
+  it.each(['N\n', ''] as const)('discards all accepted edits after a later %s in individual mode', async (terminalAnswer) => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent(requestWithItems());
+    input.end(`i\nsecond_renamed\n${terminalAnswer}`);
 
     await expect(pending).resolves.toEqual({ kind: 'declined' });
   });

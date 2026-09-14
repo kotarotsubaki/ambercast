@@ -17,9 +17,9 @@ import type { ReadStorageAdapter } from '#ports/storage.js';
  * file existence probes.
  *
  * @remarks
- * The object contains exactly the two `ReadStorageAdapter`
- * members, rather than a cast or projection of a fuller adapter. This keeps
- * write methods absent at runtime as well as unavailable through the type.
+ * The object contains the read-only `ReadStorageAdapter` surface, rather than
+ * a cast or projection of a fuller adapter. This keeps write methods absent at
+ * runtime as well as unavailable through the type.
  */
 export function createFsReadStorage(): ReadStorageAdapter {
   return {

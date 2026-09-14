@@ -209,7 +209,6 @@ describe('runGenerateCommand', () => {
       return { results: [], noTestsFound: false };
     });
 
-    // Step 11 must wire the command-owned C2-5 renderer around this existing request call.
     await expect(runGenerateCommand(input({ stderr: captured.stream }))).resolves.toEqual(output);
 
     const text = captured.text();

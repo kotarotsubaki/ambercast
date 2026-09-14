@@ -1,4 +1,5 @@
 import { PassThrough } from 'node:stream';
+import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import { createInteractiveSecretConsent } from '#runtime/secret-consent.js';
 import type { ConsentRequest } from '#usecases/generate.js';
@@ -60,6 +61,24 @@ describe('createInteractiveSecretConsent', () => {
     await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
     expect(outputText).toContain('a\\x0A.test.md');
     expect(outputText).toContain('token\\x00');
+  });
+
+  it('renders a fill-secret target as its consent reason', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const captured = captureOutput(output);
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent({
+      ...request(),
+      items: [{
+        file: 'login.test.md',
+        uses: [{ name: 'password', stepId: 'fill-password', ref: '{{secrets.password}}', selectionSource: 'target-slug', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, envVar: 'PASSWORD' }],
+      }],
+    } as unknown as ConsentRequest);
+    input.end('y\n');
+
+    await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
+    expect(captured.text()).toContain('fill-secret → textbox "Password"');
   });
 
   it.each(['y', 'yes'] as const)('accepts every remaining item globally for %s', async (answer) => {
@@ -140,13 +159,34 @@ describe('createInteractiveSecretConsent', () => {
   });
 
   it('discards every prior edit when EOF occurs before the individual protocol completes', async () => {
-    const input = new PassThrough();
+    const input = new EventEmitter() as EventEmitter & { pause(): unknown; resume(): unknown };
+    input.pause = () => input;
+    input.resume = () => input;
     const output = new PassThrough();
-    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const consent = createInteractiveSecretConsent({ input: input as unknown as PassThrough, output, isInteractive: () => true });
     const pending = consent(requestWithItems());
-    input.end('replacement\n');
+    input.emit('data', Buffer.from('i\nsecond_renamed\n'));
+    input.emit('end');
 
     await expect(pending).resolves.toEqual({ kind: 'declined' });
+  });
+
+  it('replays fresh-derived read-only participants without offering a rename', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const captured = captureOutput(output);
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent({
+      ...request(),
+      items: [{
+        file: 'fresh.test.md',
+        uses: [{ name: 'token', stepId: 'fill-token', ref: '{{secrets.token}}', selectionSource: 'existing-plan', envVar: 'TOKEN' }],
+      }],
+    } as unknown as ConsentRequest);
+    input.end('i\nrenamed\n\n');
+
+    await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
+    expect(captured.text()).toContain('is read-only: keep (Enter) / n');
   });
 
   it.each(['N\n'] as const)('discards all accepted edits after a later %s in individual mode', async (terminalAnswer) => {

@@ -34,6 +34,7 @@ import {
   PLAN_SCHEMA_VERSION,
   PlanDocument,
   type GroundingDocument as GroundingDocumentType,
+  type ElementRef,
   type InstructionAttributedSteps,
   type JsonValueT,
   type PlanDocument as PlanDocumentType,
@@ -508,6 +509,8 @@ export interface GenerateFileOutcome {
 type GenerateSecretOutcome = {
   readonly name: SecretName;
   readonly stepId: StepId;
+  readonly useIndex?: number;
+  readonly target?: ElementRef;
   readonly envVar: string;
   readonly allowed: boolean;
   readonly selectionSource: 'allowed-name' | 'target-slug' | 'hint' | 'ordinal' | 'existing-plan' | 'interactive-rename';
@@ -701,18 +704,33 @@ function secretNameFor(ref: SecretRef): SecretName {
 function secretRowsForPlan(
   plan: PlanDocumentType,
   allow: readonly SecretName[] | '*',
-  namedUses?: readonly ({ readonly ref: SecretRef; readonly name: SecretName; readonly stepId: StepId; readonly selectionSource: GenerateSecretOutcome['selectionSource'] })[],
+  namedUses?: readonly SecretUse[],
 ): GenerateSecretOutcome[] {
   const allowed = allow === '*' ? undefined : new Set(allow);
-  return enumerateSecretUses(plan).map(({ ref, stepId }) => {
+  return enumerateSecretUses(plan).map(({ ref, stepId, useIndex }) => {
     const name = secretNameFor(ref);
-    const named = namedUses?.find((use) => use.stepId === stepId && use.ref === ref);
+    const named = namedUses?.find((use) => use.stepId === stepId && use.ref === ref && use.useIndex === useIndex);
     return {
       name,
       stepId,
       envVar: envVarNameFor(ref),
       allowed: allowed === undefined || allowed.has(name),
       selectionSource: named?.selectionSource ?? 'existing-plan',
+    };
+  });
+}
+
+function consentRowsForPlan(plan: PlanDocumentType, rows: readonly GenerateSecretOutcome[]): GenerateSecretOutcome[] {
+  const targets = new Map<StepId, ElementRef>();
+  for (const step of plan.steps) {
+    if (step.kind === 'action' && step.action === 'fill-secret') targets.set(step.id, step.target);
+  }
+  return enumerateSecretUses(plan).map(({ ref, stepId, useIndex }) => {
+    const row = rows.find((use) => use.stepId === stepId && use.name === secretNameFor(ref));
+    return {
+      ...(row ?? { name: secretNameFor(ref), stepId, envVar: envVarNameFor(ref), allowed: false, selectionSource: 'existing-plan' as const }),
+      ...(useIndex === undefined ? {} : { useIndex }),
+      ...(targets.get(stepId) === undefined ? {} : { target: targets.get(stepId)! }),
     };
   });
 }
@@ -728,6 +746,42 @@ function existingPlanWarnings(plan: PlanDocumentType): SecretWarning[] {
     .filter(([, uses]) => new Set(uses.map(({ target }) => target)).size > 1)
     .map(([name, uses]) => ({ kind: 'secret-name-reused-across-targets' as const, name, stepIds: uses.map(({ stepId }) => stepId) }))
     .sort(compareSecretWarnings);
+}
+
+function useOccurrenceKey(file: string, use: Pick<GenerateSecretOutcome, 'name' | 'stepId' | 'useIndex'>): string {
+  return `${file}\u0000${use.stepId}\u0000${use.useIndex ?? ''}\u0000${use.name}`;
+}
+
+function finalSecretRows(
+  candidate: PreparedCandidate,
+  plan: PlanDocumentType,
+  allowed: readonly SecretName[] | '*',
+  renamedSourceUses: ReadonlySet<string>,
+): GenerateSecretOutcome[] {
+  const permitted = allowed === '*' ? undefined : new Set(allowed);
+  return enumerateSecretUses(plan).map(({ ref, stepId, useIndex }) => {
+    const original = candidate.uses.find((use) => use.stepId === stepId && use.useIndex === useIndex);
+    const name = secretNameFor(ref);
+    const sourceKey = original === undefined ? undefined : useOccurrenceKey(candidate.file, original);
+    return {
+      name,
+      stepId,
+      ...(useIndex === undefined ? {} : { useIndex }),
+      ...(original?.target === undefined ? {} : { target: original.target }),
+      envVar: envVarNameFor(ref),
+      allowed: permitted === undefined || permitted.has(name),
+      selectionSource: sourceKey !== undefined && renamedSourceUses.has(sourceKey)
+        ? 'interactive-rename'
+        : original?.selectionSource ?? 'existing-plan',
+    };
+  });
+}
+
+function finalWarnings(candidate: PreparedCandidate, plan: PlanDocumentType): SecretWarning[] {
+  return [
+    ...existingPlanWarnings(plan),
+    ...candidate.warnings.filter((warning) => warning.kind !== 'secret-name-reused-across-targets'),
+  ].sort(compareSecretWarnings);
 }
 
 function projectAllowedNames(allow: readonly SecretName[] | '*'): { readonly names: readonly SecretName[]; readonly kept: number; readonly dropped: number } {
@@ -777,66 +831,7 @@ export interface GenerateOutcome {
   readonly interrupted: boolean;
 }
 
-/**
- * Generates or previews deterministic plan artifacts for resolved prompt files.
- *
- * @param deps - I/O, layout, deferred provider resolution, event delivery, discovery,
- * configuration, and optional cancellation dependencies.
- * @param options - Batch selection and generation policy.
- * @returns Ordered file outcomes, the zero-match fact, and whether cancellation
- * intersected incomplete discovered work.
- * @remarks
- * Literal paths retain caller order and discovered paths retain the injected
- * discovery order, including duplicate occurrences. Each occurrence receives
- * a key such as `generate:<index>:<file>`, so duplicate public identities keep
- * their existing visible result rows without sharing scheduling terminality.
- * List mode is an atomic boundary after selection: it returns every listed row
- * and `GenerateOutcome.interrupted` is false even when its caller signal is
- * already aborted. It does not read prompt files, invoke AI, emit lifecycle
- * events, or write artifacts. The deadline is constructed only after provider
- * resolution succeeds and before executor dispatch, so availability probing
- * does not consume the AI request budget. Every attempted
- * `aiExecutor.execute` dispatch emits one `ai-call`; resolution and paths
- * avoiding dispatch emit none. A resolver rejection emits no `ai-call`, never
- * becomes a file-level `failed` row, and propagates as a top-level rejection,
- * leaving grounding repairs already written for earlier fresh files intact
- * because the batch is non-transactional. Cancellation while resolution is pending
- * follows that rejection path rather than the tracker's per-file skipped rows.
- * Other files run sequentially, so a caller cancellation
- * prevents new work without discarding earlier terminal outcomes, while an
- * individual file failure does not block later files.
- *
- * Freshness requires both semantic validity and canonical artifact bytes,
- * preventing malformed or reformatted plans from skipping generation. A
- * non-dry-run fresh plan repairs only its grounding cache, while dry-run leaves
- * that cache untouched; `force` is the explicit opt-out from fresh-plan reuse.
- * The provider receives a smaller response contract than the committed plan:
- * the shared core resolver supplies one target while this use case owns
- * provenance, then validates the assembled plan and its duplicate-ID invariant
- * before the literal-secret policy permits persistence. Restricting the target
- * record to that selection prevents unrelated definitions from changing the
- * digest or entering provider context. A classified selection failure remains
- * attached to its file and stops that case before digest computation, existing
- * plan inspection, provider invocation, or artifact writes. Later prompts
- * retain the same isolation as other generation failures.
- * A separate batch-level prompt-path preflight runs before that per-file
- * boundary, so no selected case begins when any selected path is ineligible.
- * It throws `PromptPathInvalidError` before per-file work in that case.
- *
- * The caller signal is distinct from the per-call timeout. A synchronous
- * tracker records discovered work keys and their public identities. A work key
- * becomes terminal whenever its scheduled file processing completes,
- * independently of whether completion creates a public row. Cancellation
- * leaves every still-pending public identity as an ordered, deduplicated,
- * identity-only skipped row and latches even when in-flight work later
- * completes; the listener is disposed in `finally` on success or rejection.
- * This skipped-row behavior applies after resolution succeeds; cancellation
- * while resolution is pending rejects `generate()` at the top level. A timeout
- * instead fails only the current file as an unavailable executor. Plan
- * text precedes grounding text so a grounding write failure leaves a
- * repairable fresh plan rather than a partial plan. Cross-process generation
- * against the same prompt is undefined behavior.
- */
+/** Prepares one selected occurrence for the batch-level consent and settlement stages. */
 async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageTracker?: BatchInterruptionTracker; readonly occurrenceWorkKey?: string }, options: GenerateOptions): Promise<GenerateOutcome> {
   const tracker = deps.stageTracker ?? new BatchInterruptionTracker(deps.signal);
   const ownsTracker = deps.stageTracker === undefined;
@@ -1252,9 +1247,13 @@ function consentFailure(candidate: PreparedCandidate, reason: 'declined' | 'not-
 }
 
 /**
- * Prepares all occurrences before the single consent decision, then commits
- * accepted artifacts in occurrence order. Keeping those phases separate makes
- * consent and its allowlist update a linearization point for the whole batch.
+ * Generates deterministic plans for selected prompts.
+ *
+ * @param deps - Storage, configuration, provider, runtime, and optional consent dependencies.
+ * @param options - Selection, freshness, preview, and consent policy for this invocation.
+ * @returns Results in selected-occurrence order, including case-local failures and interruption state.
+ * @throws {@link UnexpectedCrashError} when a required consent capability is unavailable or the consent protocol is malformed.
+ * @remarks Generation prepares every occurrence before one consent decision. Accepted names are committed before ordered plan and grounding settlement; a failed artifact write is case-local and does not roll back earlier durable work. `consentMode: 'forbid'` returns candidates without consent or writes.
  */
 export async function generate(deps: GenerateDeps, options: GenerateOptions): Promise<GenerateOutcome> {
   const tracker = new BatchInterruptionTracker(deps.signal);
@@ -1299,7 +1298,11 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       },
     };
 
-    const results: GenerateFileOutcome[] = [];
+    const resultSlots: Array<GenerateFileOutcome | undefined> = Array.from({ length: discovered.length });
+    const record = (occurrenceIndex: number, result: GenerateFileOutcome): void => {
+      resultSlots[occurrenceIndex] = result;
+    };
+    const orderedResults = (): GenerateFileOutcome[] => resultSlots.filter((result): result is GenerateFileOutcome => result !== undefined);
     const candidates: PreparedCandidate[] = [];
     const started = new Set<string>();
     const terminal = new Set<string>();
@@ -1326,7 +1329,7 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       );
       const result = occurrence.results[0];
       if (result === undefined || result.status === 'failed' || result.status === 'skipped') {
-        if (result !== undefined) results.push(result);
+        if (result !== undefined) record(index, result);
         if (!tracker.interrupted) {
           tracker.markTerminal(workKey);
           terminal.add(workKey);
@@ -1339,7 +1342,7 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       try {
         assertNoEnvVarCollision(enumerateSecretUses(parsed).map(({ ref }) => ref));
       } catch (error) {
-        results.push({ file, status: 'failed', error: fileFailure(error, 'The generated secret environment variables could not be inspected.'), durationMs: result.durationMs ?? 0, aiCalls: result.aiCalls ?? 0 });
+        record(index, { file, status: 'failed', error: fileFailure(error, 'The generated secret environment variables could not be inspected.'), durationMs: result.durationMs ?? 0, aiCalls: result.aiCalls ?? 0 });
         tracker.markTerminal(workKey);
         terminal.add(workKey);
         continue;
@@ -1353,7 +1356,7 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         planPath,
         groundingPath: deps.layout.groundingPathFor(file),
         plan: parsed,
-        uses: result.secrets ?? secretRowsForPlan(parsed, allowSnapshot),
+        uses: consentRowsForPlan(parsed, result.secrets ?? secretRowsForPlan(parsed, allowSnapshot)),
         warnings: result.warnings ?? existingPlanWarnings(parsed),
         ambiguities: result.ambiguities ?? [],
         origin,
@@ -1365,14 +1368,14 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
     const interruptionResult = (): GenerateOutcome => {
       for (const candidate of candidates) {
         if (!terminal.has(candidate.workKey)) {
-          results.push({ file: candidate.file, status: 'skipped' });
+          record(candidate.occurrenceIndex, { file: candidate.file, status: 'skipped' });
           terminal.add(candidate.workKey);
         }
       }
       for (const [index, file] of discovered.entries()) {
         const workKey = `generate:${index}:${file}`;
         if (started.has(workKey) && !terminal.has(workKey)) {
-          results.push({ file, status: 'skipped' });
+          record(index, { file, status: 'skipped' });
           terminal.add(workKey);
         }
       }
@@ -1380,24 +1383,27 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       for (const [index, file] of discovered.entries()) {
         const workKey = `generate:${index}:${file}`;
         if (!started.has(workKey) && !untouched.has(file)) {
-          results.push({ file, status: 'skipped' });
+          record(index, { file, status: 'skipped' });
           untouched.add(file);
         }
       }
-      return { results, noTestsFound: false, interrupted: true };
+      return { results: orderedResults(), noTestsFound: false, interrupted: true };
     };
     if (tracker.interrupted) return interruptionResult();
 
     if (options.consentMode === 'forbid') {
-      return {
-        results: [...results, ...candidates.map((candidate) => ({
+      for (const candidate of candidates) {
+        record(candidate.occurrenceIndex, {
           file: candidate.file,
           status: 'candidate' as const,
           plan: candidate.plan,
           secrets: candidate.uses,
           ...(candidate.warnings.length === 0 ? {} : { warnings: candidate.warnings }),
           ...candidate.metrics,
-        }))],
+        });
+      }
+      return {
+        results: orderedResults(),
         noTestsFound: false,
         interrupted: false,
       };
@@ -1412,16 +1418,25 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         try {
           if (!Array.isArray(renames)) throw new Error('Malformed rename collection.');
           const requestedRenames: readonly SecretRename[] = renames;
-          const participant = new Set(neededItems.flatMap((item) => item.uses.map((use) => `${item.file}\u0000${use.name}`)));
-          if (requestedRenames.some((rename) => !participant.has(`${rename.file}\u0000${rename.name}`))) {
-            return { ok: false, failedKeys: requestedRenames.map(({ file, name }) => ({ file, name })) };
+          Array.from(requestedRenames);
+          const participantOrder = neededItems.flatMap((item) => item.uses.map((use) => ({ file: item.file, name: use.name })));
+          const participant = new Set(participantOrder.map(({ file, name }) => `${file}\u0000${name}`));
+          const requestedKeys = new Set<string>();
+          const malformed = requestedRenames.some((rename) => {
+            const key = `${rename.file}\u0000${rename.name}`;
+            if (!participant.has(key) || requestedKeys.has(key)) return true;
+            requestedKeys.add(key);
+            return false;
+          });
+          try {
+            const plans = candidates.map((candidate) => renamedPlan(candidate.plan, candidate.file, requestedRenames));
+            if (malformed || plans.some((plan) => !PlanDocument.safeParse(plan).success)) throw new Error('Invalid rename set.');
+            for (const plan of plans) assertNoEnvVarCollision(enumerateSecretUses(plan).map(({ ref }) => ref));
+          } catch {
+            const failedKeys = participantOrder.filter(({ file, name }) => requestedKeys.has(`${file}\u0000${name}`));
+            return { ok: false, failedKeys };
           }
-          const failedKeys: { file: string; name: SecretName }[] = [];
-          for (const rename of requestedRenames) {
-            const candidate = candidates.find((item) => item.file === rename.file);
-            if (candidate === undefined || !PlanDocument.safeParse(renamedPlan(candidate.plan, rename.file, [rename])).success) failedKeys.push({ file: rename.file, name: rename.name });
-          }
-          return failedKeys.length === 0 ? { ok: true } : { ok: false, failedKeys };
+          return { ok: true };
         } catch (error) {
           throw new UnexpectedCrashError('Secret rename validation crashed unexpectedly.', undefined, { cause: error });
         }
@@ -1438,17 +1453,17 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       if (decision.kind === 'allowed') {
         const validation = validateRenames(decision.renames);
         if (!validation.ok) throw new UnexpectedCrashError('Secret rename validation returned an invalid accepted decision.');
+        const renamedSourceUses = new Set(
+          candidates.flatMap((candidate) => candidate.uses.filter((use) => decision.renames.some((rename) => rename.file === candidate.file && rename.name === use.name)).map((use) => useOccurrenceKey(candidate.file, use))),
+        );
+        const finalAllowedNames = [...new Set(candidates.flatMap((candidate) => candidate.uses.map((use) => use.name)).concat(decision.renames.map((rename) => rename.newName)))];
         selected = candidates.map((candidate) => {
           const plan = renamedPlan(candidate.plan, candidate.file, decision.renames);
-          assertNoEnvVarCollision(enumerateSecretUses(plan).map(({ ref }) => ref));
-          const renamedNames = new Set(decision.renames.filter((rename) => rename.file === candidate.file).map((rename) => rename.newName));
           return {
             ...candidate,
             plan,
-            uses: secretRowsForPlan(plan, [...allowed, ...renamedNames]).map((use) => ({
-              ...use,
-              selectionSource: renamedNames.has(use.name) ? 'interactive-rename' as const : use.selectionSource,
-            })),
+            uses: finalSecretRows(candidate, plan, finalAllowedNames, renamedSourceUses),
+            warnings: finalWarnings(candidate, plan),
           };
         });
         const names = [...new Set(selected.flatMap((candidate) => candidate.uses.map((use) => use.name)))];
@@ -1458,7 +1473,7 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         const neededKeys = new Set(neededItems.flatMap((item) => item.uses.map((use) => `${item.file}\u0000${use.name}`)));
         for (const candidate of candidates) {
           if (candidate.uses.some((use) => neededKeys.has(`${candidate.file}\u0000${use.name}`))) {
-            results.push(consentFailure(candidate, decision.kind));
+            record(candidate.occurrenceIndex, consentFailure(candidate, decision.kind));
             tracker.markTerminal(candidate.workKey);
             terminal.add(candidate.workKey);
           }
@@ -1478,21 +1493,24 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             await repairGroundingIfNeeded(deps.storage, candidate.groundingPath, candidate.plan);
           }
         }
-        results.push({
+        record(candidate.occurrenceIndex, {
           file: candidate.file,
           status: candidate.origin === 'fresh' ? 'skipped-fresh' : options.dryRun ? 'would-generate' : 'generated',
           planFile: candidate.planPath,
-          ...((candidate.origin === 'generated' || options.dryRun) ? { ambiguities: candidate.ambiguities, secrets: candidate.uses } : {}),
+          ...((candidate.origin === 'generated' || options.dryRun) ? {
+            ambiguities: candidate.ambiguities,
+            secrets: candidate.uses.map(({ target: _target, useIndex: _useIndex, ...use }) => use),
+          } : {}),
           ...(candidate.warnings.length === 0 ? {} : { warnings: candidate.warnings }),
           ...candidate.metrics,
         });
       } catch (error) {
-        results.push({ file: candidate.file, status: 'failed', error: fileFailure(error, 'The generated artifacts could not be written.'), ...candidate.metrics });
+        record(candidate.occurrenceIndex, { file: candidate.file, status: 'failed', error: fileFailure(error, 'The generated artifacts could not be written.'), ...candidate.metrics });
       }
       tracker.markTerminal(candidate.workKey);
       terminal.add(candidate.workKey);
     }
-    return { results, noTestsFound: false, interrupted: false };
+    return { results: orderedResults(), noTestsFound: false, interrupted: false };
   } finally {
     tracker.dispose();
   }

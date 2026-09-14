@@ -3380,6 +3380,10 @@ describe('generate secret naming and consent boundaries', () => {
   it('applies an accepted rename by original file-and-name key, revalidates it, and commits the renamed name', async () => {
     const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
     const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
+      expect(input.items[0]?.uses[0]).toEqual(expect.objectContaining({
+        target: PASSWORD_TARGET,
+        stepId: 'fill-password',
+      }));
       const renames = [{ file: `${TEST_DIR}/login.test.md`, name: 'password', newName: 'account_password' }] as const;
       expect(input.validateRenames(renames)).toEqual({ ok: true });
       return { kind: 'allowed' as const, renames };

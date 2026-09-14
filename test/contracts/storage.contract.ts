@@ -78,6 +78,25 @@ export function registerStorageContract(harness: StorageContractHarness): void {
       });
     });
 
+    it('returns null for an absent optional text snapshot', async () => {
+      await withStorage(harness, async (storage) => {
+        await expect(storage.readTextSnapshotIfExists('missing.optional')).resolves.toBeNull();
+      });
+    });
+
+    it('serializes exclusive text updates and skips a null update', async () => {
+      await withStorage(harness, async (storage) => {
+        await storage.writeText('config.json', 'start');
+        await Promise.all([
+          storage.updateTextExclusive('config.json', async (current) => `${current}A`),
+          storage.updateTextExclusive('config.json', async (current) => `${current}B`),
+        ]);
+        await expect(storage.readText('config.json')).resolves.toMatch(/^start(?:AB|BA)$/);
+        await storage.updateTextExclusive('config.json', () => null);
+        await expect(storage.readText('config.json')).resolves.toMatch(/^start(?:AB|BA)$/);
+      });
+    });
+
     it('round-trips binary data', async () => {
       await withStorage(harness, async (storage) => {
         const bytes = new Uint8Array([0, 1, 255]);

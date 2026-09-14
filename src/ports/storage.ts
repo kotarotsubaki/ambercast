@@ -36,12 +36,26 @@ export interface ReadStorageAdapter {
   readText(path: string): Promise<string>;
 
   /**
-   * Reads one immutable UTF-8 text-and-byte snapshot when a regular file exists.
+   * Reads a regular file as one immutable UTF-8 snapshot when it exists.
    *
    * @param path - Opaque path of the file to read.
-   * @returns The decoded text and detached bytes, or `null` only when the path
-   * does not exist.
-   * @throws An `Error` when the path names a directory or cannot be read.
+   * @returns The decoded text and detached bytes, or `null` only for a missing
+   *   path.
+   * @throws An `Error` when the path names a directory or an I/O failure
+   *   prevents inspection.
+   *
+   * @example
+   * ```ts
+   * const previous = await storage.readTextSnapshotIfExists(planPath);
+   * if (previous !== null) compareTargets(previous.text);
+   * ```
+   *
+   * @remarks
+   * This is intentionally not `exists()` followed by `readTextSnapshot()`:
+   * that composition both observes two file versions and turns failures that
+   * callers must report into absence. Implementations perform one logical
+   * read, detach `bytes`, and reserve `null` exclusively for ENOENT so force
+   * generation can safely compare an optional prior artifact (SPEC-C2-12).
    */
   readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null>;
 
@@ -100,10 +114,28 @@ export interface StorageAdapter extends ReadStorageAdapter {
    * Updates UTF-8 text while holding the adapter's exclusive write boundary.
    *
    * @param path - Opaque path of the file to update.
-   * @param updater - Receives the current text, or `null` for a missing file.
-   * @param signal - Optional cancellation signal admitted before writing begins.
+   * @param updater - Receives current text, or `null` for a missing file, and
+   *   returns replacement text or `null` to leave the file unchanged.
+   * @param signal - Optional cancellation signal admitted before the write
+   *   begins.
    * @returns Resolves after a replacement is committed, or when the updater
    * returns `null` without writing.
+   * @throws An `Error` when locking, reading, updating, or replacement fails.
+   *
+   * @example
+   * ```ts
+   * await storage.updateTextExclusive(configPath, (current) =>
+   *   current === null ? initialConfig : mergeAllowlist(current),
+   * );
+   * ```
+   *
+   * @remarks
+   * The callback may be asynchronous because validation and policy decisions
+   * can require awaited work, but it runs inside the same exclusive region as
+   * the observed read and atomic replacement. This makes configuration
+   * allowlist merging linearizable across processes; `null` is a deliberate
+   * no-op so an already-authoritative allowlist does not churn its file
+   * (SPEC-C2-9, SPEC-C2-10).
    */
   updateTextExclusive(
     path: string,

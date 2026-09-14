@@ -61,6 +61,19 @@ export interface ConfirmationAnswerStreams {
   readonly stderr: Pick<NodeJS.WritableStream, 'write'>;
 }
 
+/**
+ * Escapes dynamic terminal text into one visibly bounded display line.
+ *
+ * @param value - Untrusted text selected for a terminal diagnostic.
+ * @returns Text whose controls cannot add terminal commands, lines, or an
+ *   ambiguous backslash escape.
+ *
+ * @remarks
+ * Consent prompts reuse this formatter so every dynamic filename, secret
+ * name, and summary has the same terminal-safety boundary. Escaping before
+ * callers assemble their lines prevents a value from changing their prompt's
+ * structure or impersonating a separate diagnostic (SPEC-C2-4, SPEC-C2-5).
+ */
 export function displayLine(value: string): string {
   return value.replace(/[\\\u0000-\u001F\u007F-\u009F]/g, (character) => {
     if (character === '\\') {

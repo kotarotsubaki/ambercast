@@ -29,6 +29,15 @@ import { createAmbercast } from './create-ambercast.js';
 import { resolveAiProvider } from './resolve-ai-provider.js';
 import { createInteractiveSecretConsent } from './secret-consent.js';
 
+/*
+ * This command composes both halves of the consent capability because it owns
+ * process streams, TTY policy, config-source identity, and the real storage
+ * boundary. Keeping the prompt factory and exclusive config writer out of the
+ * use case prevents CLI-specific I/O from crossing inward; the eventual
+ * non-interactive diagnostic is rendered here as well so JSON and text modes
+ * expose the same unmet-use remedy (SPEC-C2-3, SPEC-C2-5, SPEC-C2-9).
+ */
+
 function reportTimestamp(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
@@ -57,7 +66,7 @@ export interface GenerateCommandInput {
   readonly configPathOverride?: string;
   /** Current project directory used for configuration selection. */
   readonly cwd: string;
-  /** Stream injected by the CLI for progress only; the command never replaces it with process-global stderr. */
+  /** Stream for progress and consent diagnostics; injection keeps output ownership with the CLI. */
   readonly stderr: NodeJS.WritableStream;
   /** Optional caller cancellation propagated to generation. */
   readonly signal?: AbortSignal;

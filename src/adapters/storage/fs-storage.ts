@@ -127,6 +127,13 @@ export function createFsStorage(): StorageAdapter {
       return { text: new TextDecoder().decode(bytes), bytes: new Uint8Array(bytes) };
     },
     async readTextSnapshotIfExists(_path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+      /*
+       * Force generation needs to distinguish a genuinely absent prior plan
+       * from a plan that cannot be inspected. The eventual direct read keeps
+       * that distinction and returns detached text and bytes from one observed
+       * version; composing the existing probe and snapshot methods would both
+       * race and erase I/O failures (SPEC-C2-12).
+       */
       throw new Error('not implemented');
     },
     async updateTextExclusive(
@@ -134,6 +141,13 @@ export function createFsStorage(): StorageAdapter {
       _updater: (current: string | null) => string | null | Promise<string | null>,
       _signal?: AbortSignal,
     ): Promise<void> {
+      /*
+       * Consent must merge against the configuration observed while holding a
+       * cross-process boundary, otherwise two accepted batches can lose names.
+       * The eventual lock protects the read, asynchronous updater, and atomic
+       * replacement as one operation; a null result is an intentional no-op,
+       * not an empty-file write (SPEC-C2-9, SPEC-C2-10).
+       */
       throw new Error('not implemented');
     },
     async writeText(path: string, content: string): Promise<void> {

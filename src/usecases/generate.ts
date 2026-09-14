@@ -73,34 +73,91 @@ const GENERATED_PLAN_RESPONSE_SCHEMA = typedJsonSchema(GeneratedPlanResponseRequ
 
 type GeneratedPlanResponseForPolicyType = ReturnType<typeof GeneratedPlanResponseForPolicy.parse>;
 
+/**
+ * One accepted rename, addressed by its original file-and-name pair.
+ *
+ * An array makes the pair identity explicit and serializable. A native `Map`
+ * cannot compare independently created tuple keys by value, so it would not
+ * preserve the consent contract across the terminal and usecase boundary
+ * (SPEC-C2-3, SPEC-C2-4).
+ */
 export interface SecretRename {
+  /** Prompt whose original secret occurrence participates in the decision. */
   readonly file: string;
+  /** Pre-consent name used as the simultaneous-substitution key. */
   readonly name: SecretName;
+  /** Validated replacement for that original occurrence only. */
   readonly newName: SecretName;
 }
 
+/**
+ * The single terminal result of the batch consent gate.
+ *
+ * An allowed result retains an empty rename list for ordinary acceptance,
+ * avoiding a separate affirmative variant. Decline and non-interactive remain
+ * distinct because the runtime needs to render or classify unavailable input
+ * without treating it as an explicit user refusal (SPEC-C2-3, SPEC-C2-5).
+ */
 export type ConsentDecision =
   | { readonly kind: 'allowed'; readonly renames: readonly SecretRename[] }
   | { readonly kind: 'declined' }
   | { readonly kind: 'not-interactive' };
 
+/**
+ * Unmet secret uses for one prompt in consent presentation order.
+ *
+ * Grouping by file lets the terminal show each selection occurrence without
+ * leaking values, environment mappings, or sink origins. The contained order
+ * is the normalized use enumeration used later for validation (SPEC-C2-2,
+ * SPEC-C2-4).
+ */
 export interface ConsentRequestItem {
+  /** Selected prompt owning the listed unmet uses. */
   readonly file: string;
+  /** Names-only secret uses that require one consent decision. */
   readonly uses: readonly SecretUse[];
 }
 
+/**
+ * Result of checking a proposed simultaneous rename set.
+ *
+ * Failed keys identify only the participants that must be re-prompted; they
+ * do not reject unrelated edits or invoke the consent capability again. This
+ * keeps one gate request authoritative while preserving C1 naming invariants
+ * after every accepted substitution (SPEC-C2-3).
+ */
 export type RenameValidationResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly failedKeys: readonly { readonly file: string; readonly name: SecretName }[] };
 
+/**
+ * Inputs supplied to the single consent request for a generation batch.
+ *
+ * The validator is provided by the use case, not the terminal adapter, so it
+ * can enforce the final-plan collision and name rules without exposing plan
+ * internals to presentation code (SPEC-C2-3, SPEC-C2-4).
+ */
 export interface ConsentRequest {
+  /** Resolved configuration path for a user-facing remedy, when one was loaded. */
   readonly configPath: string | null;
+  /** Only uses absent from the invocation-start allowlist. */
   readonly items: readonly ConsentRequestItem[];
+  /** Validates rename participants without retrying the batch-level request. */
   readonly validateRenames: (renames: readonly SecretRename[]) => RenameValidationResult;
 }
 
+/**
+ * Runtime capability that obtains consent and durably records an acceptance.
+ *
+ * Generation depends on this narrow capability instead of terminal or config
+ * adapters directly, preserving the two-stage boundary: a decision and its
+ * allowlist commit happen before any plan or grounding artifact settles
+ * (SPEC-C2-3, SPEC-C2-11).
+ */
 export interface ConsentCapability {
+  /** Obtains the one batch decision for the supplied unmet uses. */
   readonly request: (req: ConsentRequest) => Promise<ConsentDecision>;
+  /** Persists names only after an allowed decision and before artifact writes. */
   readonly commitAllowlist: (configPath: string | null, names: readonly SecretName[], signal?: AbortSignal) => Promise<void>;
 }
 
@@ -267,6 +324,11 @@ function aiFailure(error: unknown, isTimeout: boolean): AmbercastErrorType {
 
 /**
  * Command policy for one generation batch.
+ *
+ * Consent mode is invocation policy rather than a dependency setting because
+ * C3 must reuse generation internally without allowing it to prompt or mutate
+ * configuration. Omission deliberately preserves ordinary CLI consent-gate
+ * behavior (SPEC-C2-3).
  */
 export interface GenerateOptions {
   /** Literal prompt paths, or an empty list to use configured discovery. */
@@ -278,6 +340,7 @@ export interface GenerateOptions {
   /** Whether a fresh existing plan still regenerates. */
   readonly force: boolean;
 
+  /** Prevents both consent interaction and allowlist persistence for internal callers. */
   readonly consentMode?: 'forbid';
 
   /**
@@ -305,11 +368,18 @@ export interface GenerateOptions {
 
 /**
  * Dependencies supplied at the generation application boundary.
+ *
+ * The consent capability is optional only to preserve the existing heal
+ * composition until C3 supplies `consentMode: 'forbid'`. Production runtime
+ * always injects it; if consent becomes necessary without it, generation must
+ * fail closed rather than silently writing artifacts or attempting a UI that
+ * does not exist (SPEC-C2-3).
  */
 export interface GenerateDeps {
   /** Artifact persistence for prompts, plans, and grounding documents. */
   readonly storage: StorageAdapter;
 
+  /** Batch consent and allowlist persistence supplied by interactive runtime composition. */
   readonly consent?: ConsentCapability;
 
   /** Deterministic companion-path arithmetic for discovered prompt paths. */
@@ -435,18 +505,39 @@ type GenerateSecretOutcome = {
   readonly selectionSource: 'allowed-name' | 'target-slug' | 'hint' | 'ordinal' | 'existing-plan' | 'interactive-rename';
 };
 
+/**
+ * A successfully prepared occurrence awaiting the consent gate and settlement.
+ *
+ * Each selected occurrence remains distinct even when it shares a file with a
+ * duplicate. Keeping its final plan, uses, diagnostics, and intended commit
+ * together lets Stage 1 be artifact-free while virtual freshness and ordered
+ * Stage 2 settlement preserve recovery after partial writes (SPEC-C2-2,
+ * SPEC-C2-3, SPEC-C2-11).
+ */
 export type PreparedCandidate = {
+  /** Occurrence-qualified identity used for interruption and finalization. */
   readonly workKey: string;
+  /** Selection position, retained so duplicate occurrences never collapse after starting. */
   readonly occurrenceIndex: number;
+  /** Prompt path associated with this occurrence. */
   readonly file: string;
+  /** Durable destination for the prepared plan. */
   readonly planPath: string;
+  /** Durable destination for the companion grounding artifact. */
   readonly groundingPath: string;
+  /** Final normalized plan from either virtual/durable freshness or generation. */
   readonly plan: PlanDocumentType;
+  /** Secret naming outcomes used to compute the batch-wide unmet set. */
   readonly uses: readonly GenerateSecretOutcome[];
+  /** Non-fatal naming diagnostics retained through reporting. */
   readonly warnings: readonly SecretWarning[];
+  /** Provider ambiguities retained for later strict-exit evaluation. */
   readonly ambiguities: readonly JsonValueT[];
+  /** Whether the final plan required generation or was already fresh. */
   readonly origin: 'generated' | 'fresh';
+  /** Metrics measured before consent so later settlement does not distort them. */
   readonly metrics: { readonly durationMs: number; readonly aiCalls: number };
+  /** Ordered artifact action needed if this occurrence reaches settlement. */
   readonly pendingCommit: 'write-plan-and-grounding' | 'repair-grounding-only';
 };
 

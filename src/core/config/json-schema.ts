@@ -8,7 +8,13 @@
 import { z } from 'zod';
 import { RawConfig } from './schema.js';
 
-/** Canonical identifier embedded in generated Ambercast configuration schemas. */
+/**
+ * Canonical identity for the generated configuration schema.
+ *
+ * The consent writer uses the same public identifier when it creates a new
+ * configuration, so a generated document and its published validation schema
+ * cannot disagree about their contract (SPEC-C2-1, SPEC-C2-9).
+ */
 export const CONFIG_SCHEMA_ID = 'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json';
 
 /**

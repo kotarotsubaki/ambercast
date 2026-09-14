@@ -31,6 +31,13 @@ export function createFsReadStorage(): ReadStorageAdapter {
       return readFile(path, 'utf8');
     },
     async readTextSnapshotIfExists(_path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+      /*
+       * The eventual implementation performs one binary read and derives text
+       * from that detached buffer. It handles only a missing path as an
+       * optional snapshot: using `exists()` first would convert permissions,
+       * directories, and other inspection failures into an indistinguishable
+       * absence, which would make force-generation unsafe (SPEC-C2-12).
+       */
       throw new Error('not implemented');
     },
     async exists(path: string): Promise<boolean> {

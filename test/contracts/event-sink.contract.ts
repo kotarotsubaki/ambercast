@@ -41,7 +41,7 @@ const AI_RESULT_ERROR_EVENT: RunEvent = {
   outcome: 'error',
 };
 const STAGE_TWO_REJECTED_EVENTS: readonly RunEvent[] = [
-  'provider-error', 'response-shape', 'id-mismatch', 'secret-attribution',
+  'provider-error', 'response-shape', 'id-mismatch', 'secret-name-invalid',
   'coverage-invalid', 'obligation-mismatch', 'literal-secret', 'no-advance',
 ].map((reason) => ({ type: 'heal-stage2-rejected', stepId: 'resolve-form', reason } as RunEvent));
 const STAGE_TWO_REJECTED_EVENT = STAGE_TWO_REJECTED_EVENTS[7]!;

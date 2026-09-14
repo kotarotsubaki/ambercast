@@ -25,6 +25,7 @@ import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computePlanDigest } from '#core/ir/digest.js';
+import { secretNameFor } from '#core/ir/secret-ref.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import {
   GeneratedPlanResponseRequest,
@@ -697,10 +698,6 @@ function attachAttemptsHistory(
   return error;
 }
 
-function secretNameFor(ref: SecretRef): SecretName {
-  return ref.slice('{{secrets.'.length, -'}}'.length) as SecretName;
-}
-
 function secretRowsForPlan(
   plan: PlanDocumentType,
   allow: readonly SecretName[] | '*',
@@ -784,7 +781,21 @@ function finalWarnings(candidate: PreparedCandidate, plan: PlanDocumentType): Se
   ].sort(compareSecretWarnings);
 }
 
-function projectAllowedNames(allow: readonly SecretName[] | '*'): { readonly names: readonly SecretName[]; readonly kept: number; readonly dropped: number } {
+/**
+ * Projects an execution allowlist into the bounded provider-visible name set.
+ *
+ * Generation and Stage 2 must use exactly one C2 projection so a provider
+ * cannot receive a differently ordered, oversized, or wildcard-derived view
+ * of the policy (SPEC-C3-2). The projection is deliberately not an
+ * authorization check: wildcard execution permission contributes no suggested
+ * names, while the counts let callers report truncation without retaining the
+ * omitted values.
+ *
+ * @param allow - The configured execution allowlist or its wildcard form.
+ * @returns A deterministic provider projection and its retained and omitted
+ * counts.
+ */
+export function projectAllowedNames(allow: readonly SecretName[] | '*'): { readonly names: readonly SecretName[]; readonly kept: number; readonly dropped: number } {
   if (allow === '*') return { names: [], kept: 0, dropped: 0 };
   const all = [...new Set(allow)].sort();
   const names = all.slice(0, 64);

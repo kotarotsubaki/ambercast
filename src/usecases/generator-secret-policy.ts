@@ -5,12 +5,15 @@
  * This module keeps reviewable artifacts free of literal secrets and gives
  * every committed secret use one canonical enumeration order that consent
  * checking, error reporting, and env-var collision detection all reuse rather
- * than each re-deriving their own plan walk. Authorization is defined by the
+ * than each re-deriving their own plan walk. Logical names are extracted
+ * through the shared validated-reference helper so Stage 2 and Stage 3 compare
+ * the same identity as the live boundary (SPEC-C3-2). Authorization is defined by the
  * `secrets.allow` configuration allowlist and checked live against the
  * committed plan by {@link assertSecretUsesAllowed}.
  */
 import type { PlanDocument, SecretName, SecretRef, StepId } from '#core/ir/schema.js';
 import { SecretRef as SecretRefSchema } from '#core/ir/schema.js';
+import { secretNameFor } from '#core/ir/secret-ref.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { envVarNameFor } from '#core/secrets/env-var-name.js';
@@ -97,7 +100,7 @@ export function assertSecretUsesAllowed(
   if (allow === '*') return;
   const allowed = new Set(allow);
   const rejected = enumerateSecretUses(plan).flatMap(({ ref, stepId }) => {
-    const name = ref.slice('{{secrets.'.length, -'}}'.length) as SecretName;
+    const name = secretNameFor(ref);
     return allowed.has(name) ? [] : [{ name, stepId, envVar: envVarNameFor(ref), reason: 'not included in secrets.allow' }];
   });
   if (rejected.length === 0) return;

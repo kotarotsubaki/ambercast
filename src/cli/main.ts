@@ -313,7 +313,11 @@ function projectCauseName(cause: unknown): string {
  * have C0, DEL, and C1 control characters replaced with a JSON-style
  * visible-escape form because they may originate in untrusted filesystem paths
  * or free text; literal backslashes are preserved unescaped. This does not
- * affect the `status` column or the JSON output path.
+ * affect the `status` column or the JSON output path. Stage 3 secret-set
+ * rejection adds one result-local remediation line
+ * immediately after its row, rather than entering the error channel: healing
+ * must leave artifacts unchanged until regeneration receives fresh consent
+ * (SPEC-C3-2).
  */
 export function renderHumanReport(
   envelope: Awaited<ReturnType<typeof runRunCommand>>['envelope'],
@@ -326,8 +330,10 @@ export function renderHumanReport(
   const report = envelope as Record<string, unknown>;
   const results = Array.isArray(report.results) ? report.results : [];
   const errors = Array.isArray(report.errors) ? report.errors : [];
-  const lines = results.map((result) => {
-    const item = result as Record<string, unknown>;
+  const lines = results.flatMap((result) => {
+    const item = result as Record<string, unknown> & {
+      readonly stage3Rejection?: { readonly reason?: unknown };
+    };
     const status = String(item.status ?? 'unknown');
     const healApplication = report.command === 'heal' && typeof item.application === 'string'
       ? item.application
@@ -342,7 +348,10 @@ export function renderHumanReport(
         && (healApplication === 'applied' || healApplication === 'preview-only' || healApplication === 'no-artifact-change');
     const statusColor = healthy ? '32' : status === 'would-generate' ? '33' : '31';
     const reason = typeof item.reason === 'string' ? `: ${escapeControlChars(item.reason)}` : '';
-    return `${colorize(status, statusColor, color)} ${escapeControlChars(String(item.file ?? item.id ?? ''))}${reason}`.trimEnd();
+    const row = `${colorize(status, statusColor, color)} ${escapeControlChars(String(item.file ?? item.id ?? ''))}${reason}`.trimEnd();
+    return item.stage3Rejection?.reason === 'secret-set-changed'
+      ? [row, `  hint: 秘匿値の構成が変わった。ambercast generate --force ${escapeControlChars(String(item.file ?? item.id ?? ''))} で再生成し同意を取り直す`]
+      : [row];
   });
 
   for (const error of errors) {

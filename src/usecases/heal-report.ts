@@ -17,7 +17,9 @@ import type { HealCaseOutcome, HealOptions, HealOutcome } from './heal.js';
  *
  * `application` and `stopReason` are mandatory here because report construction
  * must never receive an unreconciled measurement with an undecided persistence
- * outcome.
+ * outcome. In particular, a Stage 3 secret-set rejection settles as
+ * `no-artifact-change`, preserving its explicit unresolved evidence without
+ * exposing a commit capability (SPEC-C3-2).
  */
 export interface SettledHealCaseOutcome extends HealCaseOutcome {
   readonly application: HealApplication;
@@ -103,7 +105,10 @@ export interface HealReportOutput {
  * disallowed empty selection and interruption candidates are added alongside
  * them. Progress indices, buffered overlays, and commit capabilities remain
  * internal so a report cannot imply that an unconfirmed candidate was
- * persisted. Command composition normalizes elapsed duration with
+ * persisted. A Stage 3 secret-set rejection is forwarded as result-level
+ * evidence rather than synthesized as an error, so the CLI can direct a user
+ * to regeneration while the report still reflects no artifact change
+ * (SPEC-C3-2). Command composition normalizes elapsed duration with
  * `Math.max(0, Math.round(...))` before this boundary, matching other command
  * reports. It passes the command-normalized integer duration through unchanged.
  */
@@ -120,7 +125,19 @@ export function buildHealReport(input: HealReportInput): HealReportOutput {
     // The case-scoped budget supplies aiCalls once for all nested replay and
     // generation work, so this projection must pass it through without adding
     // nested outcome counters a second time.
-    ...outcome.results.map(({ baselineFirstFailureIndex: _baseline, finalFirstFailureIndex: _final, stage3Error: _stage3, finalReplayError: _replay, ...result }): HealResult => ({ ...result, status: 'completed', steps: [...result.steps] }) as HealResult),
+    ...outcome.results.map(({
+      baselineFirstFailureIndex: _baseline,
+      finalFirstFailureIndex: _final,
+      stage3Error: _stage3,
+      finalReplayError: _replay,
+      stage3Rejection,
+      ...result
+    }): HealResult => ({
+      ...result,
+      ...(stage3Rejection === undefined ? {} : { stage3Rejection }),
+      status: 'completed',
+      steps: [...result.steps],
+    }) as HealResult),
     ...outcome.listed.map(({ file }): HealResult => ({ id: file, file, status: 'listed' })),
     ...outcome.skipped.map(({ file }): HealResult => ({ id: file, file, status: 'skipped' })),
   ];

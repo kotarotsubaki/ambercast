@@ -56,6 +56,7 @@ function inputs(overrides: Partial<Stage2RepairContextInputs> = {}): Stage2Repai
   const currentPlan = plan([step('first'), step('second')]);
   return {
     normalizedTestMd: normalizeTestMd('# Fixture\n'),
+    allowedSecretNames: ['account.password'],
     baseline: { plan: currentPlan, measurement: measurement(0, 'baseline explanation') },
     current: { plan: currentPlan, measurement: measurement(0, 'current explanation') },
     repairHistory: [],
@@ -74,6 +75,7 @@ describe('Stage 2 provider context', () => {
     expect(result).toEqual({
       trustedInputs: {
         testMd: '# Fixture\n',
+        allowedSecretNames: ['account.password'],
         targets: { web: target },
         currentPlan: {
           schemaVersion: 3,
@@ -97,6 +99,13 @@ describe('Stage 2 provider context', () => {
 
     expect(JSON.stringify(result)).not.toContain('generatorMeta');
     expect(JSON.stringify(result)).not.toContain('providerTrace');
+  });
+
+  it('keeps the bounded allowlist projection in trusted inputs without placing it in replay evidence', () => {
+    const result = context(inputs({ allowedSecretNames: ['a', 'z'] }));
+
+    expect(result.trustedInputs.allowedSecretNames).toEqual(['a', 'z']);
+    expect(JSON.stringify(result.untrustedReplayEvidence)).not.toContain('allowedSecretNames');
   });
 
   it('reduces replay evidence to ordered provider-safe fields without mutating input', () => {
@@ -266,6 +275,7 @@ describe('Stage 2 provider context', () => {
   it('matches the checked-in full prompt-envelope golden fixture', () => {
     const result = buildPromptEnvelope('Repair fixture task.', buildStage2RepairContext(inputs({
       normalizedTestMd: normalizeTestMd('# Golden fixture\n'),
+      allowedSecretNames: ['account.password'],
       baseline: { plan: plan([step('first')]), measurement: measurement(0, 'baseline fixture') },
       current: { plan: plan([step('first')]), measurement: measurement(0, 'current fixture') },
     })));

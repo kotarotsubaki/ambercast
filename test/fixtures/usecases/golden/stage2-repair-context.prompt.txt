@@ -11,6 +11,9 @@ Repair fixture task.
 {
   "trustedInputs": {
     "testMd": "# Golden fixture\n",
+    "allowedSecretNames": [
+      "account.password"
+    ],
     "targets": {
       "web": {
         "baseUrl": "https://example.test",

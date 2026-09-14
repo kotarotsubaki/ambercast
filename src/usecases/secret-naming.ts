@@ -6,7 +6,9 @@ import type {
   Step,
   StepId,
 } from '#core/ir/schema.js';
+import { PlanDocument } from '#core/ir/schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { secretNameFor } from '#core/ir/secret-ref.js';
 
 /**
  * Records one pre-normalization secret use and the deterministic name chosen
@@ -45,6 +47,113 @@ export type SecretWarning =
   | { readonly kind: 'allowed-names-truncated'; readonly kept: number; readonly dropped: number };
 
 /**
+ * A fixed secret use retained while Stage 2 names only its frontier replacement.
+ *
+ * Retained plan uses seed the ordinary name-owner and canonical-target maps as
+ * reservations, rather than being merged into provider candidates or P. That
+ * preserves their committed references exactly, including under wildcard
+ * execution policy, while still making suffix and target ownership decisions
+ * see collisions at every original plan index (SPEC-C3-2).
+ */
+export interface ExistingPlanSecretReservation {
+  readonly stepIndex: number;
+  readonly stepId: StepId;
+  readonly useIndex?: number;
+  readonly ref: SecretRef;
+  readonly name: SecretName;
+  readonly target?: ElementRef;
+  readonly targetKey?: string;
+  readonly selectionSource: 'existing-plan';
+}
+
+/**
+ * Inputs for naming one attributed Stage 2 replacement against a committed plan.
+ *
+ * The full plan supplies immutable reservations, while only the replacement is
+ * provider-authored naming input. Keeping P separate from `allowlist` ensures
+ * an explicit replacement choice is checked against the bounded provider
+ * projection without retroactively validating or renaming retained uses
+ * (SPEC-C3-2).
+ */
+export interface Stage2ReplacementNamingInput {
+  readonly plan: import('#core/ir/schema.js').PlanDocument;
+  readonly replacementIndex: number;
+  readonly attributedReplacement: InstructionAttributedSteps[number];
+  readonly projected: readonly SecretName[];
+  readonly allowlist: readonly SecretName[] | '*';
+}
+
+/**
+ * The validated full candidate and replacement-scoped naming evidence.
+ *
+ * The candidate is parsed as a whole plan after only the replacement is
+ * materialized, so downstream obligation, allowlist, and replay gates observe
+ * the same artifact. `uses` and `warnings` remain replacement-scoped to avoid
+ * treating unchanged committed uses as fresh provider decisions (SPEC-C3-2).
+ */
+export interface Stage2ReplacementNamingOutput {
+  readonly candidate: import('#core/ir/schema.js').PlanDocument;
+  readonly replacement: Step;
+  readonly uses: readonly SecretUse[];
+  readonly warnings: readonly SecretWarning[];
+}
+
+/**
+ * Derives a Stage 2 replacement without renaming its retained plan context.
+ *
+ * The algorithm enumerates all non-replacement secret uses as fixed
+ * reservations, seeds the existing owner maps, runs the C1 naming machinery
+ * at the replacement's original index, normalizes only its AI references, and
+ * then parses the spliced whole-plan candidate (SPEC-C3-2). Reusing retained
+ * step objects is an invariant: no repair naming path may reconstruct or
+ * alter a committed reference merely because it participates in collision
+ * allocation.
+ *
+ * @param input - The committed plan, frontier replacement, and separated
+ * provider projection and execution policy.
+ * @returns The whole candidate plus replacement-only naming evidence.
+ * @throws {AiResponseInvalidError} When an explicit replacement name is outside
+ * the projection or fixed target ownership is inconsistent.
+ */
+export function deriveStage2ReplacementSecretNames(
+  input: Stage2ReplacementNamingInput,
+): Stage2ReplacementNamingOutput {
+  const reservations: ExistingPlanSecretReservation[] = [];
+  for (const [stepIndex, step] of input.plan.steps.entries()) {
+    if (stepIndex === input.replacementIndex) continue;
+    if (step.kind === 'action' && step.action === 'fill-secret') {
+      reservations.push({ stepIndex, stepId: step.id, ref: step.secretRef, name: secretNameFor(step.secretRef), target: step.target, targetKey: canonicalTargetKey(step.target), selectionSource: 'existing-plan' });
+    } else if (step.kind === 'ai') {
+      for (const [useIndex, { ref }] of (step.secrets ?? []).entries()) {
+        reservations.push({ stepIndex, stepId: step.id, useIndex, ref, name: secretNameFor(ref), selectionSource: 'existing-plan' });
+      }
+    }
+  }
+  const attributed = input.plan.steps.map((step, index) => index === input.replacementIndex ? input.attributedReplacement : step) as InstructionAttributedSteps;
+  const named = deriveSecretNames(attributed, {
+    projected: input.projected,
+    allowlist: input.allowlist,
+    reservations,
+    candidateStepIndexes: new Set([input.replacementIndex]),
+  });
+  const replacement = normalizeAiStepSecretUses([named.steps[input.replacementIndex]!])[0]!;
+  const parsedCandidate = PlanDocument.parse({
+    ...input.plan,
+    steps: [...input.plan.steps.slice(0, input.replacementIndex), replacement, ...input.plan.steps.slice(input.replacementIndex + 1)],
+  });
+  const candidate = {
+    ...input.plan,
+    steps: input.plan.steps.map((step, index) => index === input.replacementIndex ? parsedCandidate.steps[index]! : step),
+  } as PlanDocument;
+  return {
+    candidate,
+    replacement,
+    uses: named.uses.filter(({ stepId }) => stepId === replacement.id),
+    warnings: named.warnings.filter((warning) => warning.kind !== 'secret-name-reused-across-targets' || warning.stepIds.includes(replacement.id)),
+  };
+}
+
+/**
  * Resolves provider naming choices into committed secret references while
  * retaining a reportable account of every use (SPEC-C1-3, C1-4).
  *
@@ -80,7 +189,12 @@ export type SecretWarning =
  */
 export function deriveSecretNames(
   attributed: InstructionAttributedSteps,
-  sets: { readonly projected: readonly SecretName[]; readonly allowlist: readonly SecretName[] | '*' },
+  sets: {
+    readonly projected: readonly SecretName[];
+    readonly allowlist: readonly SecretName[] | '*';
+    readonly reservations?: readonly ExistingPlanSecretReservation[];
+    readonly candidateStepIndexes?: ReadonlySet<number>;
+  },
 ): { steps: Step[]; uses: SecretUse[]; warnings: SecretWarning[] } {
   type Candidate = {
     readonly step: Record<string, unknown>;
@@ -99,6 +213,7 @@ export function deriveSecretNames(
   const candidates: Candidate[] = [];
   const invalidIssues: { code: string; path: string; stepId: StepId }[] = [];
   for (const [stepIndex, step] of attributed.entries()) {
+    if (sets.candidateStepIndexes !== undefined && !sets.candidateStepIndexes.has(stepIndex)) continue;
     const current = step as unknown as Record<string, unknown>;
     if (current.kind === 'action' && current.action === 'fill-secret') {
       const choice = current.secret as { allowedName?: SecretName; nameHint?: SecretName } | undefined;
@@ -123,9 +238,20 @@ export function deriveSecretNames(
   }
   if (invalidIssues.length > 0) throw new AiResponseInvalidError('Generated secret names are not projected.', { issues: invalidIssues });
 
-  const owners = new Map<SecretName, Candidate>();
+  const owners = new Map<SecretName, { readonly source: SecretUse['selectionSource'] }>();
   const targetNames = new Map<string, SecretName>();
   const targetIssues: { code: string; path: string; stepId: StepId }[] = [];
+  for (const reservation of sets.reservations ?? []) {
+    if (!owners.has(reservation.name)) owners.set(reservation.name, { source: reservation.selectionSource });
+    if (reservation.targetKey === undefined) continue;
+    const establishedForTarget = targetNames.get(reservation.targetKey);
+    if (establishedForTarget !== undefined && establishedForTarget !== reservation.name) {
+      targetIssues.push({ code: 'secret-conflicting-target-names', path: `steps[${reservation.stepIndex}].secret`, stepId: reservation.stepId });
+      continue;
+    }
+    if (establishedForTarget === undefined) targetNames.set(reservation.targetKey, reservation.name);
+  }
+  if (targetIssues.length > 0) throw new AiResponseInvalidError('Generated secret names conflict for one target.', { issues: targetIssues });
   const isReserved = (candidate: Candidate): boolean => candidate.explicit || (sets.allowlist !== '*' && sets.allowlist.includes(candidate.candidate));
 
   // Pass 1: reserve every projected explicit or allowlist-promoted name before
@@ -134,7 +260,7 @@ export function deriveSecretNames(
     const owner = owners.get(candidate.candidate);
     candidate.name = candidate.candidate;
     candidate.source = owner?.source ?? candidate.selectionSource;
-    if (owner === undefined) owners.set(candidate.candidate, candidate);
+    if (owner === undefined) owners.set(candidate.candidate, { source: candidate.source ?? candidate.selectionSource });
 
     if (candidate.targetKey === undefined) continue;
     const establishedForTarget = targetNames.get(candidate.targetKey);
@@ -160,7 +286,7 @@ export function deriveSecretNames(
     const owner = owners.get(name);
     candidate.name = name;
     candidate.source = owner?.source ?? candidate.selectionSource;
-    if (owner === undefined) owners.set(name, candidate);
+    if (owner === undefined) owners.set(name, { source: candidate.source ?? candidate.selectionSource });
     if (candidate.targetKey !== undefined && establishedForTarget === undefined) targetNames.set(candidate.targetKey, name);
   }
 
@@ -168,6 +294,7 @@ export function deriveSecretNames(
   const byStep = new Map<number, typeof resolved>();
   for (const candidate of resolved) byStep.set(candidate.stepIndex, [...(byStep.get(candidate.stepIndex) ?? []), candidate]);
   const steps = attributed.map((step, stepIndex) => {
+    if (sets.candidateStepIndexes !== undefined && !sets.candidateStepIndexes.has(stepIndex)) return step;
     const stepCandidates = byStep.get(stepIndex) ?? [];
     const current = step as unknown as Record<string, unknown>;
     if (current.kind === 'action' && current.action === 'fill-secret') {

@@ -113,6 +113,20 @@ describe('buildHealReport', () => {
     expect(output.envelope.results[0]).toMatchObject({ status: 'completed', repairOutcome: 'healed', application: 'preview-only' });
   });
 
+  it('preserves a Stage 3 secret-set rejection on its completed unresolved row', () => {
+    const output = report({ outcome: outcome({ results: [{
+      ...healed('unresolved'),
+      application: 'no-artifact-change',
+      stage3Rejection: { reason: 'secret-set-changed', added: ['Z', 'a'], removed: ['OLD'] },
+    }] }) });
+
+    expect(output.envelope.results[0]).toMatchObject({
+      repairOutcome: 'unresolved',
+      application: 'no-artifact-change',
+      stage3Rejection: { reason: 'secret-set-changed', added: ['Z', 'a'], removed: ['OLD'] },
+    });
+  });
+
   it.each([
     ['healed', 'declined', 1],
     ['partially-healed', 'declined', 1],

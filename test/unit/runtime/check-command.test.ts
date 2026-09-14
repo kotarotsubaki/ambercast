@@ -199,6 +199,43 @@ describe('runCheckCommand', () => {
     expect(mocks.createFsTestFileDiscovery).toHaveBeenCalledOnce();
   });
 
+  it('reports a fresh plan without consulting secrets.allow membership', async () => {
+    await useRealCheckComposition();
+    const storage = createInMemoryStorage();
+    const config = { ...CONFIG, secrets: { allow: [] } };
+    const layout = createLayoutResolver(config);
+    const testPath = `${config.testDir}/login.test.md`;
+    const prompt = '# Sign in\n\nI reach the dashboard.\n';
+    const plan = {
+      schemaVersion: 3,
+      source: {
+        inputsDigest: computeInputsDigest({
+          normalizedTestMd: normalizeTestMd(prompt), schemaVersion: 3,
+          generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
+          planProducerBundleFingerprint: planProducerBundleFingerprint(),
+          targetDefinitions: { web: { baseUrl: config.targets.web!.baseUrl, browser: config.targets.web!.browser } },
+        }),
+      },
+      targets: { web: { baseUrl: config.targets.web!.baseUrl, browser: config.targets.web!.browser } },
+      steps: [{
+        id: 'fill-password', kind: 'action', action: 'fill-secret',
+        target: { strategy: 'accessibility', role: 'textbox', name: 'Password' },
+        secretRef: '{{secrets.login_password}}',
+      }],
+    } as unknown as PlanDocument;
+    await storage.writeText(testPath, prompt);
+    await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
+    await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({ schemaVersion: 1, planDigest: computePlanDigest(plan), entries: {} }));
+    mocks.createFsReadStorage.mockReturnValue(storage);
+    mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
+    mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
+
+    const output = await runCheckCommand(input({ files: ['tests/login.test.md'] }));
+
+    expect(output.exitCode).toBe(0);
+    expect(output.envelope.results).toEqual([expect.objectContaining({ status: 'fresh' })]);
+  });
+
   it('forwards check policies, target, cancellation, and configuration override through runtime composition', async () => {
     const storage = createInMemoryStorage();
     const discoverTestFiles = vi.fn(async () => []);

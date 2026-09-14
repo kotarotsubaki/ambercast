@@ -58,7 +58,7 @@ const RUN_EVENT_CASES: readonly { readonly description: string; readonly event: 
     description: 'a failed ai-result event at the zero-duration boundary',
     event: { type: 'ai-result', callId: 'ai-2', durationMs: 0, outcome: 'error' },
   },
-  ...(['provider-error', 'response-shape', 'id-mismatch', 'secret-attribution', 'coverage-invalid', 'obligation-mismatch', 'literal-secret', 'no-advance'] as const).map((reason) => ({
+  ...(['provider-error', 'response-shape', 'id-mismatch', 'secret-name-invalid', 'coverage-invalid', 'obligation-mismatch', 'literal-secret', 'no-advance'] as const).map((reason) => ({
     description: `a Stage 2 ${reason} rejection event`,
     event: { type: 'heal-stage2-rejected' as const, stepId: 'resolve-form', reason },
   })),

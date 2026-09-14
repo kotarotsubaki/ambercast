@@ -126,6 +126,16 @@ export function createFsStorage(): StorageAdapter {
       const bytes = new Uint8Array(await readFile(path));
       return { text: new TextDecoder().decode(bytes), bytes: new Uint8Array(bytes) };
     },
+    async readTextSnapshotIfExists(_path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+      throw new Error('not implemented');
+    },
+    async updateTextExclusive(
+      _path: string,
+      _updater: (current: string | null) => string | null | Promise<string | null>,
+      _signal?: AbortSignal,
+    ): Promise<void> {
+      throw new Error('not implemented');
+    },
     async writeText(path: string, content: string): Promise<void> {
       await ensureParentDirectory(path);
       await writeAtomic(path, async (temporaryPath) => {

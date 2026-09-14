@@ -36,6 +36,16 @@ export interface ReadStorageAdapter {
   readText(path: string): Promise<string>;
 
   /**
+   * Reads one immutable UTF-8 text-and-byte snapshot when a regular file exists.
+   *
+   * @param path - Opaque path of the file to read.
+   * @returns The decoded text and detached bytes, or `null` only when the path
+   * does not exist.
+   * @throws An `Error` when the path names a directory or cannot be read.
+   */
+  readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null>;
+
+  /**
    * Determines whether a path names an existing regular file.
    *
    * @param path - Opaque path to inspect.
@@ -85,6 +95,21 @@ export interface StorageAdapter extends ReadStorageAdapter {
    * cannot alter the other side of the contract.
    */
   readTextSnapshot(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array }>;
+
+  /**
+   * Updates UTF-8 text while holding the adapter's exclusive write boundary.
+   *
+   * @param path - Opaque path of the file to update.
+   * @param updater - Receives the current text, or `null` for a missing file.
+   * @param signal - Optional cancellation signal admitted before writing begins.
+   * @returns Resolves after a replacement is committed, or when the updater
+   * returns `null` without writing.
+   */
+  updateTextExclusive(
+    path: string,
+    updater: (current: string | null) => string | null | Promise<string | null>,
+    signal?: AbortSignal,
+  ): Promise<void>;
 
   /**
    * Writes UTF-8 text to a file with atomic visibility.

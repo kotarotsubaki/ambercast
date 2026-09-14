@@ -380,6 +380,12 @@ function createHealOverlayStorage(
       const bytes = buffered.has(path) ? bufferedBytes(path) : new Uint8Array(snapshotFor(path).bytes);
       return { text: buffered.has(path) ? buffered.get(path)! : snapshotFor(path).text, bytes };
     },
+    readTextSnapshotIfExists: async (_path) => {
+      throw new Error('not implemented');
+    },
+    updateTextExclusive: async (_path, _updater, _signal) => {
+      throw new FsIoErrorClass('Config updates not permitted during heal.');
+    },
     exists: async (path) => tracked(path) ? true : base.exists(path),
     writeText: async (path, text) => {
       if (tracked(path)) {

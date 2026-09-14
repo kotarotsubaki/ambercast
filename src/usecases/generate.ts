@@ -57,6 +57,7 @@ import {
   compareSecretWarnings,
   deriveSecretNames,
   normalizeAiStepSecretUses,
+  type SecretUse,
   type SecretWarning,
 } from './secret-naming.js';
 import {
@@ -71,6 +72,37 @@ import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 const GENERATED_PLAN_RESPONSE_SCHEMA = typedJsonSchema(GeneratedPlanResponseRequest);
 
 type GeneratedPlanResponseForPolicyType = ReturnType<typeof GeneratedPlanResponseForPolicy.parse>;
+
+export interface SecretRename {
+  readonly file: string;
+  readonly name: SecretName;
+  readonly newName: SecretName;
+}
+
+export type ConsentDecision =
+  | { readonly kind: 'allowed'; readonly renames: readonly SecretRename[] }
+  | { readonly kind: 'declined' }
+  | { readonly kind: 'not-interactive' };
+
+export interface ConsentRequestItem {
+  readonly file: string;
+  readonly uses: readonly SecretUse[];
+}
+
+export type RenameValidationResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly failedKeys: readonly { readonly file: string; readonly name: SecretName }[] };
+
+export interface ConsentRequest {
+  readonly configPath: string | null;
+  readonly items: readonly ConsentRequestItem[];
+  readonly validateRenames: (renames: readonly SecretRename[]) => RenameValidationResult;
+}
+
+export interface ConsentCapability {
+  readonly request: (req: ConsentRequest) => Promise<ConsentDecision>;
+  readonly commitAllowlist: (configPath: string | null, names: readonly SecretName[], signal?: AbortSignal) => Promise<void>;
+}
 
 /**
  * Keeps generation-only step provenance beside instruction-coverage failures.
@@ -246,6 +278,8 @@ export interface GenerateOptions {
   /** Whether a fresh existing plan still regenerates. */
   readonly force: boolean;
 
+  readonly consentMode?: 'forbid';
+
   /**
    * Limits provider attempts for one prompt during regular generation.
    *
@@ -275,6 +309,8 @@ export interface GenerateOptions {
 export interface GenerateDeps {
   /** Artifact persistence for prompts, plans, and grounding documents. */
   readonly storage: StorageAdapter;
+
+  readonly consent?: ConsentCapability;
 
   /** Deterministic companion-path arithmetic for discovered prompt paths. */
   readonly layout: LayoutResolver;
@@ -397,6 +433,21 @@ type GenerateSecretOutcome = {
   readonly envVar: string;
   readonly allowed: boolean;
   readonly selectionSource: 'allowed-name' | 'target-slug' | 'hint' | 'ordinal' | 'existing-plan' | 'interactive-rename';
+};
+
+export type PreparedCandidate = {
+  readonly workKey: string;
+  readonly occurrenceIndex: number;
+  readonly file: string;
+  readonly planPath: string;
+  readonly groundingPath: string;
+  readonly plan: PlanDocumentType;
+  readonly uses: readonly GenerateSecretOutcome[];
+  readonly warnings: readonly SecretWarning[];
+  readonly ambiguities: readonly JsonValueT[];
+  readonly origin: 'generated' | 'fresh';
+  readonly metrics: { readonly durationMs: number; readonly aiCalls: number };
+  readonly pendingCommit: 'write-plan-and-grounding' | 'repair-grounding-only';
 };
 
 /**

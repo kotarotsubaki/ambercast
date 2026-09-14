@@ -8,6 +8,9 @@
 import { z } from 'zod';
 import { RawConfig } from './schema.js';
 
+/** Canonical identifier embedded in generated Ambercast configuration schemas. */
+export const CONFIG_SCHEMA_ID = 'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json';
+
 /**
  * Returns a JSON Schema 2020-12 representation of the raw configuration
  * document.
@@ -23,7 +26,7 @@ import { RawConfig } from './schema.js';
 export function getConfigJsonSchema(): z.core.JSONSchema.BaseSchema {
   return {
     ...z.toJSONSchema(RawConfig),
-    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json',
+    $id: CONFIG_SCHEMA_ID,
     title: 'ambercast config schema',
     description: 'Validates the parsed contents of a present Ambercast configuration file.',
   };

@@ -30,6 +30,9 @@ export function createFsReadStorage(): ReadStorageAdapter {
 
       return readFile(path, 'utf8');
     },
+    async readTextSnapshotIfExists(_path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+      throw new Error('not implemented');
+    },
     async exists(path: string): Promise<boolean> {
       try {
         return (await stat(path)).isFile();

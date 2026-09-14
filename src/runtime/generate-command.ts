@@ -11,7 +11,9 @@ import { readCommandEnvironment } from '#adapters/system/process-command-environ
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
 import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
+import { createTtyInteractivityCheck } from '#adapters/system/tty-interactivity.js';
 import { loadConfig } from '#config/load.js';
+import { commitAllowlist } from '#config/write-secrets-allow.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError } from '#core/errors/types.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
@@ -25,6 +27,7 @@ import {
 } from '#usecases/generate-report.js';
 import { createAmbercast } from './create-ambercast.js';
 import { resolveAiProvider } from './resolve-ai-provider.js';
+import { createInteractiveSecretConsent } from './secret-consent.js';
 
 function reportTimestamp(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -133,6 +136,23 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
       const ambercast = createAmbercast({ config, events });
       const outcome = await generate({
         storage: ambercast.storage,
+        consent: {
+          request: createInteractiveSecretConsent({
+            input: process.stdin,
+            output: input.stderr,
+            isInteractive: createTtyInteractivityCheck(),
+            ...(input.signal === undefined ? {} : { signal: input.signal }),
+          }),
+          commitAllowlist: (_configPath, names, signal) => commitAllowlist(
+            ambercast.storage,
+            {
+              path: source.path ?? joinPath(input.cwd, 'ambercast.config.json'),
+              existedAtLoad: source.path !== null,
+            },
+            names,
+            signal,
+          ),
+        },
         layout: ambercast.layout,
         resolveAiExecutor: (signal) => resolveAiProvider(
           config.ai.provider,

@@ -27,7 +27,7 @@ const SourceSpan = z.strictObject({
 }); // JSON Schema omits this sibling-value ordering constraint, as it does for the core schema.
 
 /** Version shared by every structured report envelope. */
-export const REPORT_SCHEMA_VERSION = '3.4' as const;
+export const REPORT_SCHEMA_VERSION = '3.5' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -50,6 +50,7 @@ const USAGE_REPORT_ERROR_CODES = [
   'INTEGRITY_VIOLATION',
   'SECRET_LITERAL_REJECTED',
   'SECRET_GRANT_UNATTRIBUTABLE',
+  'GROUNDING_UNRESOLVED',
 ] as const;
 
 const ENVIRONMENT_REPORT_ERROR_CODES = [
@@ -169,6 +170,11 @@ export const SecretGrantUnattributableDetails = z.union([
 ]);
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
+/** Identifies the AI step whose fail-closed grounding miss can be resolved explicitly. */
+export const GroundingUnresolvedDetails = z.strictObject({
+  stepId: z.string(),
+  reason: z.enum(['missing', 'recoverable-miss']),
+});
 /** Projects an unexpected failure to a stable cause name rather than arbitrary error details. */
 export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ name: CauseName }) });
 
@@ -244,6 +250,7 @@ const CaseUsageReportError = z.discriminatedUnion('code', [
   CaseUsageErrorBase.extend({ code: z.literal('INTEGRITY_VIOLATION') }),
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_LITERAL_REJECTED'), details: SecretLiteralRejectedDetails.optional() }),
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_GRANT_UNATTRIBUTABLE'), details: SecretGrantUnattributableDetails.optional() }),
+  CaseUsageErrorBase.extend({ code: z.literal('GROUNDING_UNRESOLVED'), details: GroundingUnresolvedDetails.optional() }),
 ]);
 
 const CaseOtherEnvironmentReportError = z.discriminatedUnion('code', [

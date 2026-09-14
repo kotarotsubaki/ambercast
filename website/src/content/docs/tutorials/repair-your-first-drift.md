@@ -17,9 +17,9 @@ Preserve your existing configuration and change only the selected target's `heal
 
 The existing Plan remains fresh because its target name and digest-participating definition are unchanged; only its live healing policy changes. The file meets `RawConfig`'s required `$schema`, and the Schema URL is the published configuration Schema URL.
 
-2. Before the failing run, confirm the retention policy and the authorized readers of the runs directory, because a completed `run` attempts to persist `report.json` there and may persist a failure screenshot (best effort: omitted on secret detection, capture or storage failure). Then make a locator-affecting UI change and run `npx ambercast run --cache-only tests/ambercast/<name>.test.md`; observe the failed result before attempting repair.
+2. Before the failing run, confirm the retention policy and the authorized readers of the runs directory, because a completed `run` attempts to persist `report.json` there and may persist a failure screenshot (best effort: omitted on secret detection, capture or storage failure). Then make a locator-affecting UI change and run `npx ambercast run tests/ambercast/<name>.test.md`; observe the failed result before attempting repair.
 
-Running with `--cache-only` turns a grounding miss into a failure instead of an AI re-grounding, so the versioned grounding is not rewritten before the explicit heal approval (the default `grounding.localWriteBack: "auto"` would otherwise persist a re-resolved fingerprint and the run could pass).
+The default fail-closed behavior turns a grounding miss into a failure instead of an AI re-grounding, so the versioned grounding is not rewritten before the explicit heal approval. Pass `--resolve` only when live re-grounding is intentional; with the default `grounding.localWriteBack: "auto"`, it can persist a re-resolved fingerprint and the run can pass.
 
 3. Run `npx ambercast heal --dry-run tests/ambercast/<name>.test.md` and inspect the dry-run report (the runs-directory retention and readers were confirmed in step 2).
 

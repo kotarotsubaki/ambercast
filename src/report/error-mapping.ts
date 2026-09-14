@@ -4,6 +4,7 @@ import {
   AiResponseInvalidDetails,
   BrowserLaunchFailedDetails,
   CauseName,
+  GroundingUnresolvedDetails,
   PromptPathInvalidDetails,
   SecretGrantUnattributableDetails,
   SecretLiteralRejectedDetails,
@@ -69,6 +70,11 @@ export const REPORT_ERROR_DETAILS = {
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
   'stale-ir': { kind: 'usage', code: 'STALE_PLAN' },
   'integrity-violation': { kind: 'usage', code: 'INTEGRITY_VIOLATION' },
+  'grounding-unresolved': {
+    kind: 'usage',
+    code: 'GROUNDING_UNRESOLVED',
+    hint: 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.',
+  },
   'browser-launch-failed': {
     kind: 'environment',
     code: 'BROWSER_LAUNCH_FAILED',
@@ -184,6 +190,11 @@ export function reportError(
             : { sourceSpan: readRecordField(sourceDetails, 'sourceSpan') }),
           ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
         })
+        : error.kind === 'grounding-unresolved'
+          ? GroundingUnresolvedDetails.safeParse({
+            stepId: readRecordField(sourceDetails, 'stepId'),
+            reason: readRecordField(sourceDetails, 'reason'),
+          })
         : error.kind === 'ai-executor-unavailable' && readRecordField(sourceDetails, 'attempts') !== undefined
           ? AiExecutorUnavailableDetails.safeParse({
             ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),

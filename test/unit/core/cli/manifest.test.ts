@@ -226,7 +226,7 @@ describe('CLI manifest', () => {
           { name: 'grep', alias: null },
           { name: 'target', alias: null },
           { name: 'headed', alias: null },
-          { name: 'cache-only', alias: null },
+          { name: 'resolve', alias: null },
           { name: 'update-cache', alias: null },
           { name: 'allow-empty', alias: null },
           { name: 'list', alias: null },

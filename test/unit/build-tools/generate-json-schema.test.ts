@@ -41,6 +41,7 @@ const EXPECTED_REPORT_ERROR_CODES = [
   'INTEGRITY_VIOLATION',
   'SECRET_LITERAL_REJECTED',
   'SECRET_GRANT_UNATTRIBUTABLE',
+  'GROUNDING_UNRESOLVED',
   'BROWSER_LAUNCH_FAILED',
   'AI_EXECUTOR_UNAVAILABLE',
   'AI_RESPONSE_INVALID',
@@ -85,7 +86,7 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['generate', 'run', 'check', 'heal'],
           planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
-          schemaVersions: { plan: 2, grounding: 1, report: '3.4' },
+          schemaVersions: { plan: 2, grounding: 1, report: '3.5' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
@@ -145,7 +146,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['generate', 'run', 'check', 'heal'],
       planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
-      schemaVersions: { plan: 2, grounding: 1, report: '3.4' },
+      schemaVersions: { plan: 2, grounding: 1, report: '3.5' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,

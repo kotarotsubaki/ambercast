@@ -1,9 +1,9 @@
 ---
 title: ambercast run
-description: Reference for the ambercast run command, covering CLI flags, replay paths, AI provider fallback, cache-only execution, grounding write-back, and report persistence.
+description: Reference for the ambercast run command, covering CLI flags, replay paths, explicit AI resolution, grounding write-back, and report persistence.
 ---
 
-`ambercast run` executes test prompts against target environments, managing deterministic replay and run writes. Replay operates with zero AI calls only on a grounding hit; on a grounding miss, execution falls back to an AI provider unless `--cache-only` is set.
+`ambercast run` executes test prompts against target environments, managing deterministic replay and run writes. Replay makes zero AI calls by default: a grounding miss fails closed as `grounding-unresolved` with exit code 4 and a hint to use `--resolve`. Pass `--resolve` to opt into live AI resolution for misses.
 
 ## Flags {#flags}
 
@@ -13,10 +13,10 @@ description: Reference for the ambercast run command, covering CLI flags, replay
 | --grep | pattern | RegExp path filter | omitted |
 | --target | name | select target | omitted |
 | --headed | boolean | headed browser | false |
-| --cache-only | boolean | forbid AI fallback | false |
+| --resolve | boolean | opt into live AI resolution on a grounding miss | false |
 | --update-cache | boolean | request cache write | false |
 | --stale | fail\|regenerate | stale policy parser value | fail |
-| --ai | claude\|codex | fallback override | omitted |
+| --ai | claude\|codex | resolution provider override | omitted |
 | --allow-empty | boolean | allow empty selection | false |
 | --list | boolean | list without replay | false |
 | --json | boolean | JSON envelope | false |
@@ -29,18 +29,18 @@ description: Reference for the ambercast run command, covering CLI flags, replay
 | condition | AI provider | result path |
 | --- | --- | --- |
 | grounding hit | none for that replay | deterministic replay |
-| grounding miss, cache-only false | fallback resolver; --ai overrides | live AI fallback and possible write-back |
-| grounding miss, cache-only true | none | fails without fallback |
+| grounding miss, `--resolve` omitted | none | fails closed as `grounding-unresolved` (exit 4) |
+| grounding miss, `--resolve` passed | resolver; `--ai` overrides | live AI resolution and possible write-back |
 
-The runtime rejects `--stale=regenerate` before configuration or file I/O. During setup, the runtime composes the browser, secrets, configuration, and the fallback provider resolver.
+The runtime rejects `--stale=regenerate` before configuration or file I/O. During setup, the runtime composes the browser, secrets, configuration, and the provider resolver that `--resolve` can use.
 
 ## AI calls {#ai-calls}
 
-A provider resolver is passed to the run use case, so grounded replay can proceed without an available provider; a cache miss is the condition that may require its fallback.
+A provider resolver is passed to the run use case, so grounded replay can proceed without an available provider; a cache miss can use it only when `--resolve` is passed.
 
-## Cache only {#cache-only}
+## Resolve missing grounding {#resolve}
 
-`--cache-only` forbids the AI fallback path; a grounding miss then fails instead of dispatching a provider.
+`--resolve` opts into the AI resolution path. Without it, a grounding miss fails closed instead of dispatching a provider.
 
 ## Grounding write-back {#grounding-write-back}
 

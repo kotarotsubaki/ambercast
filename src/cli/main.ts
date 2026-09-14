@@ -71,7 +71,8 @@ interface ParsedRunCommand {
     readonly grep?: RegExp;
     readonly target?: string;
     readonly headed: boolean;
-    readonly cacheOnly: boolean;
+    /** Whether the caller explicitly permits AI resolution after a grounding miss. */
+    readonly resolve: boolean;
     readonly updateCache: boolean;
     /**
      * Whether a zero-match replay selection is an allowed empty outcome.
@@ -146,6 +147,7 @@ export const ERROR_DETAILS_KEY_ORDER: Readonly<Record<string, readonly string[]>
   AI_EXECUTOR_UNAVAILABLE: ['attempts'],
   UNEXPECTED_CRASH: ['cause'],
   FS_IO_ERROR: ['partiallyWritten'],
+  GROUNDING_UNRESOLVED: ['stepId', 'reason'],
 };
 
 /**
@@ -466,7 +468,8 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
 /**
  * `--grep` is compiled at the CLI boundary, so malformed expressions remain
  * argument-shape errors and use CLI usage reporting instead of becoming
- * runtime configuration failures.
+ * runtime configuration failures. `--resolve` is deliberately an explicit
+ * opt-in, so its absence reaches runtime as fail-closed replay policy.
  */
 function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunCommand | string {
   const separator = argv.indexOf('--');
@@ -479,7 +482,7 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
   let target: string | undefined;
   let headed = false;
   let json = false;
-  let cacheOnly = false;
+  let resolve = false;
   let updateCache = false;
   let allowEmpty = false;
   let list = false;
@@ -505,8 +508,8 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
           list = true;
         } else if (flag.name === 'json') {
           json = true;
-        } else if (flag.name === 'cache-only') {
-          cacheOnly = true;
+        } else if (flag.name === 'resolve') {
+          resolve = true;
         } else if (flag.name === 'update-cache') {
           updateCache = true;
         } else if (flag.name === 'no-color') {
@@ -553,7 +556,7 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
       ...(grep === undefined ? {} : { grep }),
       ...(target === undefined ? {} : { target }),
       headed,
-      cacheOnly,
+      resolve,
       updateCache,
       allowEmpty,
       list,

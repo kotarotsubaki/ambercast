@@ -26,7 +26,7 @@ description: 遵循安全编写路径在测试提示词中管理与使用机密�
 
 ## 验证 {#verification}
 
-- 生成完成后，请在命令环境中保留该变量的情况下，针对安全目标运行 `npx ambercast run tests/ambercast/<name>.test.md`。运行阶段会构建环境机密提供商；只有在实时源通过其 sink-policy 检查后，`fill-secret` 才会解析该命名变量。
+- 生成完成后，请在命令环境中保留该变量的情况下，针对安全目标运行 `npx ambercast run --resolve tests/ambercast/<name>.test.md`。运行阶段会构建环境机密提供商；只有在实时源通过其 sink-policy 检查后，`fill-secret` 才会解析该命名变量。
 - `npx ambercast generate --json tests/ambercast/<name>.test.md` 不得返回 `SECRET_LITERAL_REJECTED`。该拒绝逻辑会在持久化或报告序列化之前检查来自提供商的生成 JSON；它保护的是生成的响应，而非已发送给提供商的提示词。
 
 ## 相关链接 {#related}

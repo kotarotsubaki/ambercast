@@ -46,7 +46,7 @@
 ### CLI
 - [CLI 概览](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/): 介绍 ambercast 命令行界面的全局解析规则、核心命令集、命令与标志支持矩阵以及默认文件发现机制。
 - [ambercast generate](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/generate/): 详细参考 ambercast generate 的命令行参数、AI 提供商调用逻辑、伴生产物映射及退出状态。
-- [ambercast run](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/): 规范 ambercast run 的回放路径与运行写入行为。
+- [ambercast run](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/): 规范 ambercast run 的标志、回放路径、显式 AI 解析与运行写入行为。
 - [ambercast check](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/check/): 为 CLI 用户汇总检查状态。
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/): 规定 ambercast heal 命令的授权机制与运行时副作用，并提供选项、修复模型、限制及运行时行为的完整参考。
 

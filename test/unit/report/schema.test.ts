@@ -127,7 +127,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.4',
+    schemaVersion: '3.5',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -358,11 +358,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.4', () => {
+  it('requires schema version 3.5', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.4' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.5' });
   });
 });
 
@@ -644,7 +644,7 @@ describe('heal result status branches', () => {
   });
 });
 
-describe('report schema 3.4 AI accounting fields', () => {
+describe('report schema 3.5 AI accounting fields', () => {
   const generateBranches = [
     ['generated', GENERATE_RESULT],
     ['would-generate', { ...GENERATE_RESULT, status: 'would-generate', dryRun: true }],
@@ -718,7 +718,7 @@ describe('report schema 3.4 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.4');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.5');
   });
 
   it.each(generateBranches)(

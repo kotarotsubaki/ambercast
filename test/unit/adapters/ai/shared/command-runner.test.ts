@@ -265,6 +265,42 @@ describe('createSpawnCommandRunner', () => {
     }
   });
 
+  it('observes a pre-aborted invocation without spawning a child', async () => {
+    const spawnSpy = vi.mocked(childProcess.spawn);
+    spawnSpy.mockClear();
+    const runner = createSpawnCommandRunner();
+    const controller = new AbortController();
+    const reason = new Error('abort before spawn');
+    const settlements: unknown[] = [];
+    controller.abort(reason);
+
+    const running = runner(process.execPath, ['-e', 'throw new Error("must not run")'], {
+      signal: controller.signal,
+      onChildSettled: (outcome) => settlements.push(outcome),
+    });
+
+    await expect(running).rejects.toBe(reason);
+    expect(settlements).toEqual([{ outcome: 'errored', error: reason }]);
+    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+
+  it('observes a synchronous spawn failure exactly once', async () => {
+    const spawnSpy = vi.mocked(childProcess.spawn);
+    const failure = new Error('synchronous spawn failure');
+    const settlements: unknown[] = [];
+    spawnSpy.mockImplementationOnce(() => {
+      throw failure;
+    });
+    const runner = createSpawnCommandRunner();
+
+    const running = runner('provider', [], {
+      onChildSettled: (outcome) => settlements.push(outcome),
+    });
+
+    await expect(running).rejects.toBe(failure);
+    expect(settlements).toEqual([{ outcome: 'errored', error: failure }]);
+  });
+
   it('does not expose Ambercast secret namespaces to a spawned child', async () => {
     const keys = [
       'AMBERCAST_SECRET_DUMMY',

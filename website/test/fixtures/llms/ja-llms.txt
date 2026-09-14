@@ -46,7 +46,7 @@
 ### CLI
 - [CLIの概要](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/): ambercast CLI のパーサー全体の仕様、コマンド体系、および自動探索の既定動作を解説します。
 - [ambercast generate](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/): ambercast generate コマンドのフラグ仕様および成果物生成に関するリファレンスです。
-- [ambercast run](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/): ambercast run コマンドのフラグ仕様、リプレイパス、および実行時の書き込み動作について説明します。
+- [ambercast run](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/): ambercast run コマンドのフラグ仕様、リプレイパス、明示的な AI 解決、および実行時の書き込み動作について説明します。
 - [ambercast check](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/): CLIにおけるアーティファクトの検査ステータスと検証結果の仕様を解説します。
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/): ambercast heal コマンドのフラグ、修復モデル、制限事項、認可境界、および副作用に関するリファレンス。
 

@@ -3,7 +3,7 @@
  * port without leaking command-line details into callers.
  */
 
-import { abortReason, rejectOnAbort } from '#core/ai/reject-on-abort.js';
+import { rejectOnAbort } from '#core/ai/reject-on-abort.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import {
@@ -14,6 +14,11 @@ import {
   createSpawnCommandRunner,
   type CommandRunner,
 } from '#adapters/ai/shared/command-runner.js';
+import {
+  executeAgentic,
+  type BuildInvocation,
+} from '#adapters/ai/agentic/agentic-executor.js';
+import { buildClaudeInvocation } from '#adapters/ai/agentic/claude-invocation.js';
 import type {
   AiAgenticResult,
   AiExecuteRequest,
@@ -90,18 +95,19 @@ function usageFrom(value: unknown): AiUsage | undefined {
  * `AiExecutorUnavailableError`; availability probes use `claude --version`
  * and fold every failure into `false`.
  *
- * Its `executeAgentic` method first honors an already-aborted signal, then
- * rejects with `AiExecutorUnavailableError` before building a prompt or
-     * spawning a process because this adapter does not perform browser-directed
-     * dispatch. Runtime composition supplies the environment-filtered runner;
-     * the fail-closed fallback prevents an incomplete composition from
-     * inheriting ambient credentials. Injected runners keep the command protocol
-     * testable without a live CLI.
+ * Its `executeAgentic` method delegates browser-directed work to the shared
+ * loopback-MCP executor. Runtime composition supplies the environment-filtered
+ * runner, while this adapter owns only Claude-specific invocation resources.
+ * Injected runners keep the command protocol testable without a live CLI.
  */
 export function createClaudeCodeCliExecutor(
-  deps: { readonly run?: CommandRunner } = {},
+  deps: {
+    readonly run?: CommandRunner;
+    readonly buildInvocation?: BuildInvocation;
+  } = {},
 ): InstructionCoveredAiExecutor {
   const run = deps.run ?? createSpawnCommandRunner();
+  const buildInvocation = deps.buildInvocation ?? buildClaudeInvocation;
 
   return {
     name: 'claude-code-cli',
@@ -158,11 +164,7 @@ export function createClaudeCodeCliExecutor(
       });
     },
     async executeAgentic(request: InstructionCoveredAiAgenticRequest): Promise<AiAgenticResult> {
-      if (request.signal?.aborted) {
-        throw abortReason(request.signal);
-      }
-
-      throw new AiExecutorUnavailableError('Agentic browser-directed execution is unavailable for the Claude Code CLI adapter.');
+      return rejectOnAbort(request.signal, () => executeAgentic(request, run, buildInvocation));
     },
     async isAvailable(signal?: AbortSignal): Promise<boolean> {
       try {

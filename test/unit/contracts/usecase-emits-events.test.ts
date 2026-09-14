@@ -37,7 +37,7 @@ const GENERATE_OPTIONS: GenerateOptions = {
   allowEmpty: false,
   list: false,
 };
-const RUN_OPTIONS: RunOptions = { files: [TEST_PATH], cacheOnly: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
+const RUN_OPTIONS: RunOptions = { files: [TEST_PATH], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 
 registerUsecaseEmitsEventsContract([
   {

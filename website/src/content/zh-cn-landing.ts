@@ -27,7 +27,7 @@ export const zhCnLanding = {
     heading: '三个命令。只有一个会调用 AI。',
     rows: [
       { number: '01', command: 'ambercast generate', description: '读取提示词，把执行计划和定位缓存写成纯 JSON。像锁文件一样复核它们。', status: 'AI · 1 call' },
-      { number: '02', command: 'ambercast run', description: '在真实浏览器中回放执行计划。缓存未命中时仅对该步骤回退为 AI 辅助；--cache-only 可强制无 AI 路径。', status: 'REPLAY · 0 AI CALLS' },
+      { number: '02', command: 'ambercast run', description: '在真实浏览器中回放执行计划。grounding 未命中会失败关闭；--resolve 可显式启用一个步骤的 AI 辅助。', status: 'REPLAY · 0 AI CALLS' },
       { number: '03', command: 'ambercast heal', description: '当 UI 发生漂移时，只重新解析、修复或重新生成受影响的步骤，并在写入前请求确认。', status: 'AI · ASKS FIRST' },
     ],
   },

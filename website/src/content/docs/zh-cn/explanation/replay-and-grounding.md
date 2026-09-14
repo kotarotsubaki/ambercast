@@ -30,28 +30,26 @@ description: 解释重放路径及其安全边界。
 - [ambercast run](/ambercast/zh-cn/reference/cli/run/#replay)
 - [CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#bounded-side-effects)
 
-## 重放路径：未命中与回退 {#miss-with-ai-fallback}
+## 重放路径：未命中与显式解析 {#miss-with-explicit-resolution}
 
-当凭据不足以支持直接重放时，系统将评估未命中路径。缺失 grounding、来源处于 `stale`（已过期）状态、JSON 无效以及缓存未命中，均会在惰性智能体回退之前完成分类。
+未通过完整性验证的 grounding（包括无效 JSON 或 coverage 或 verification proof 失败）无论是否传入 `--resolve` 均会失败关闭。只有缺失的 grounding 和结构有效的 legacy 或 recoverable 条目属于受 `--resolve` 控制的未命中路径。
 
-当未启用 cache-only 模式时，元素 grounding 的未命中可以进行实时解析，并使用解析出的元素指纹更新对应的 grounding 条目。
+传入 `--resolve` 时，元素 grounding 的未命中可以进行实时解析，并使用解析出的元素指纹更新对应的 grounding 条目。
 
-智能体回退仅在未命中路径之后才会开始；缓存命中不会发出任何 AI 调用事件（AI-call event）。
+缓存命中不会发出任何 AI 调用事件（AI-call event）。
 
 相关链接：
 - [ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 - [控制 grounding 回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
 
-## 重放路径：cache-only 未命中 {#cache-only-miss}
+## 重放路径：未解析的未命中 {#unresolved-miss}
 
-如果需要禁止回退行为，您可以使用 `--cache-only` 模式。`--cache-only` 会同时抑制冷启动（cold-start）与可恢复未命中（recoverable-miss）的 AI 回退。
+未传入 `--resolve` 时，run 会同时抑制冷启动（cold-start）与可恢复未命中（recoverable-miss）的实时解析。AI 导向步骤缺少可用 trace 时会以 `grounding-unresolved` 失败关闭（退出码 4），并提示使用 `--resolve`。
 
-在启用 cache-only 模式时：
-- 缺少可用 trace 的 AI 导向步骤（AI-directed step）会直接中止（abort）。
-- 元素 grounding 未命中同样会在 cache-only 模式下直接中止，而不是对元素进行实时解析。
+元素 grounding 未命中同样会失败关闭，而不会对元素进行实时解析。
 
 相关链接：
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#cache-only)
+- [ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)
 - [读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
 
 ## 漂移交接 {#drift-handoff}
@@ -60,7 +58,7 @@ description: 解释重放路径及其安全边界。
 
 运行用例将 `fingerprint-mismatch` 记录为一种独立的分类情况，与成功的 grounded 解析截然区分。
 
-自愈流程首先从一次 cache-only 基线重放开始；如果在重放后仍然存在失败，流程可以尝试进行 grounding 修复（grounding repair）。
+自愈流程首先从一次失败关闭的基线重放开始；如果在重放后仍然存在失败，流程可以尝试进行 grounding 修复（grounding repair）。
 
 相关链接：
 - [自愈模型](/ambercast/zh-cn/explanation/healing-model/#three-stages)

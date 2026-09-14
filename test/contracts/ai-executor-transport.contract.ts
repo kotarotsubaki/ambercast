@@ -140,18 +140,18 @@ export function registerAiExecutorTransportContract(harness: AiExecutorTransport
       }
     });
 
-    it('rejects unsupported agentic execution before producing a fabricated result', async () => {
+    it('returns the strictly parsed outcome from a successful agentic transport', async () => {
       try {
         const executor = await harness.createExecutor('agentic');
 
         await expect(executor.executeAgentic(coveredAgenticRequest()))
-          .rejects.toThrow(/agentic|browser|unavailable/i);
+          .resolves.toEqual({ outcome: 'success' });
       } finally {
         await harness.dispose?.();
       }
     });
 
-    it('gives an already-aborted agentic request precedence over capability rejection', async () => {
+    it('gives an already-aborted agentic request precedence over transport execution', async () => {
       try {
         const executor = await harness.createExecutor('agentic');
         const controller = new AbortController();

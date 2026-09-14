@@ -7,6 +7,7 @@ import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { reportError } from '#report/error-mapping.js';
 import { ReportError } from '#report/schema.js';
+import type { BuildInvocation } from '#adapters/ai/agentic/agentic-executor.js';
 import type { AiResolutionSnapshot, InstructionCoveredAiAgenticRequest } from '#ports/ai.js';
 import { registerAiExecutorTransportContract, type AiExecutorTransportScenario } from '../../../contracts/ai-executor-transport.contract.js';
 import { createFakeCommandRunner, createDeferredCommandRun } from '../../../doubles/create-fake-command-runner.js';
@@ -29,11 +30,30 @@ function runnerFor(scenario: AiExecutorTransportScenario) {
     return createFakeCommandRunner([{ outcome: 'signaled', stdout: '', stderr: '', signal: 'SIGTERM' }]);
   }
 
+  if (scenario === 'agentic') {
+    const result = { outcome: 'exited' as const, stdout: '{"result":"{\\"outcome\\":\\"success\\"}"}', stderr: '', exitCode: 0 };
+    return createFakeCommandRunner([async (call) => {
+      call.options?.onChildSettled?.(result);
+      return result;
+    }]);
+  }
+
   return createFakeCommandRunner([{ outcome: 'exited', stdout: '{"result":"{\\"ok\\":true}"}', stderr: '', exitCode: 0 }]);
 }
 
+const agenticContractInvocation: BuildInvocation = async () => ({
+  command: 'fake-claude-agent',
+  args: [],
+  env: {},
+  cleanup: async () => undefined,
+  readFinalOutcome: async () => ({ outcome: 'success' }),
+});
+
 registerAiExecutorTransportContract({
-  createExecutor: (scenario) => createClaudeCodeCliExecutor({ run: runnerFor(scenario).run }),
+  createExecutor: (scenario) => createClaudeCodeCliExecutor({
+    run: runnerFor(scenario).run,
+    ...(scenario === 'agentic' ? { buildInvocation: agenticContractInvocation } : {}),
+  }),
 });
 
 describe('createClaudeCodeCliExecutor', () => {
@@ -288,10 +308,8 @@ describe('createClaudeCodeCliExecutor', () => {
     await expect(executor.execute({ prompt: 'Generate.', responseSchema })).resolves.toMatchObject({ data: { ok: true } });
   });
 
-  it('rejects agentic execution without spawning a command', async () => {
-    const runner = createFakeCommandRunner();
-    const executor = createClaudeCodeCliExecutor({ run: runner.run });
-    const request: InstructionCoveredAiAgenticRequest = {
+  function agenticRequest(signal?: AbortSignal): InstructionCoveredAiAgenticRequest {
+    return {
       instructionPrompt: 'Drive the browser.',
       allowedSecretRefs: [],
       allowedRunRefs: [],
@@ -306,9 +324,92 @@ describe('createClaudeCodeCliExecutor', () => {
         evaluateAssert: async (_check, _criterionId) => ({ passed: true }),
         snapshotForResolution: async (): Promise<AiResolutionSnapshot> => ({ accessibilityTree: {} }),
       },
+      ...(signal === undefined ? {} : { signal }),
     };
+  }
 
-    await expect(executor.executeAgentic(request)).rejects.toBeInstanceOf(AiExecutorUnavailableError);
+  it('delegates successful agentic execution through the provider invocation', async () => {
+    const result = { outcome: 'exited' as const, stdout: '{"outcome":"success"}', stderr: '', exitCode: 0 };
+    const runner = createFakeCommandRunner([async (call) => {
+      call.options?.onChildSettled?.(result);
+      return result;
+    }]);
+    const invocationCalls: Array<{ readonly url: string; readonly token: string }> = [];
+    let cleanupCalls = 0;
+    const buildInvocation: BuildInvocation = async (url, token) => {
+      invocationCalls.push({ url, token });
+      return {
+        command: 'fake-claude-agent',
+        args: ['--agentic'],
+        env: { AMBERCAST_MCP_BEARER_TOKEN: token },
+        cleanup: async () => { cleanupCalls += 1; },
+        readFinalOutcome: async (runResult) => {
+          expect(runResult).toEqual(result);
+          return { outcome: 'success' };
+        },
+      };
+    };
+    const executor = createClaudeCodeCliExecutor({ run: runner.run, buildInvocation });
+
+    await expect(executor.executeAgentic(agenticRequest())).resolves.toEqual({ outcome: 'success' });
+
+    expect(invocationCalls).toHaveLength(1);
+    expect(invocationCalls[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:/);
+    expect(invocationCalls[0]?.token).not.toBe('');
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.calls[0]).toMatchObject({
+      command: 'fake-claude-agent',
+      args: ['--agentic'],
+      options: { env: { AMBERCAST_MCP_BEARER_TOKEN: invocationCalls[0]?.token } },
+    });
+    expect(cleanupCalls).toBe(1);
+  });
+
+  it('rejects an already-aborted agentic request before building or running an invocation', async () => {
+    const runner = createFakeCommandRunner();
+    let buildCalls = 0;
+    const buildInvocation: BuildInvocation = async () => {
+      buildCalls += 1;
+      throw new Error('buildInvocation must not run for a pre-aborted request');
+    };
+    const executor = createClaudeCodeCliExecutor({ run: runner.run, buildInvocation });
+    const controller = new AbortController();
+    const reason = new Error('stop Claude agentic execution');
+    controller.abort(reason);
+
+    await expect(executor.executeAgentic(agenticRequest(controller.signal))).rejects.toBe(reason);
+    expect(buildCalls).toBe(0);
     expect(runner.calls).toEqual([]);
+  });
+
+  it('gives a latched MCP error precedence over a nominally successful Claude process', async () => {
+    const result = { outcome: 'exited' as const, stdout: '{"outcome":"success"}', stderr: '', exitCode: 0 };
+    let url = '';
+    let readFinalOutcomeCalls = 0;
+    let cleanupCalls = 0;
+    const runner = createFakeCommandRunner([async (call) => {
+      const response = await fetch(url, { method: 'POST' });
+      expect(response.status).toBe(401);
+      call.options?.onChildSettled?.(result);
+      return result;
+    }]);
+    const buildInvocation: BuildInvocation = async (mcpUrl, token) => {
+      url = mcpUrl;
+      return {
+        command: 'fake-claude-agent',
+        args: ['--agentic'],
+        env: { AMBERCAST_MCP_BEARER_TOKEN: token },
+        cleanup: async () => { cleanupCalls += 1; },
+        readFinalOutcome: async () => {
+          readFinalOutcomeCalls += 1;
+          return { outcome: 'success' };
+        },
+      };
+    };
+    const executor = createClaudeCodeCliExecutor({ run: runner.run, buildInvocation });
+
+    await expect(executor.executeAgentic(agenticRequest())).rejects.toThrow();
+    expect(readFinalOutcomeCalls).toBe(0);
+    expect(cleanupCalls).toBe(1);
   });
 });

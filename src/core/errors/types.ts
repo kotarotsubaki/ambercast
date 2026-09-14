@@ -34,6 +34,7 @@ export type ErrorKind =
   | 'missing-plan'
   | 'stale-ir'
   | 'integrity-violation'
+  | 'grounding-unresolved'
   | 'browser-launch-failed'
   | 'ai-executor-unavailable'
   | 'ai-response-invalid'

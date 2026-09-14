@@ -26,7 +26,7 @@ Follow this safe authoring path to declare secret references in your test prompt
 
 ## Verification {#verification}
 
-- After generation, run `npx ambercast run tests/ambercast/<name>.test.md` against a safe target with the variable still in the command environment. Run constructs the environment secrets provider; a `fill-secret` resolves the named variable only after the live origin passes its sink-policy check.
+- After generation, run `npx ambercast run --resolve tests/ambercast/<name>.test.md` against a safe target with the variable still in the command environment. Run constructs the environment secrets provider; a `fill-secret` resolves the named variable only after the live origin passes its sink-policy check.
 - `npx ambercast generate --json tests/ambercast/<name>.test.md` must not return `SECRET_LITERAL_REJECTED`. This rejection inspects provider-derived generated JSON before persistence or report serialization; it protects the generated response, not the prompt that was already sent to the provider.
 
 ## Related {#related}

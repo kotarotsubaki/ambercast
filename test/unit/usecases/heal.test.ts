@@ -63,7 +63,7 @@ vi.mock('#core/errors/ai-executor-unavailable-error.js', async (importOriginal) 
 });
 
 const replayRunObserver = vi.hoisted(() => ({
-  afterRun: undefined as undefined | ((deps: Pick<HealDeps, 'layout' | 'runId'>, storage: StorageAdapter, options: { readonly files: readonly string[]; readonly cacheOnly?: boolean }, outcome: RunOutcome) => void | Promise<void>),
+  afterRun: undefined as undefined | ((deps: Pick<HealDeps, 'layout' | 'runId'>, storage: StorageAdapter, options: { readonly files: readonly string[]; readonly resolve?: boolean }, outcome: RunOutcome) => void | Promise<void>),
   dropFirstLiveAiCall: false,
   droppedCount: 0,
 }));
@@ -81,7 +81,7 @@ vi.mock('#usecases/run.js', async (importOriginal) => {
     ...actual,
     run: async (...args: Parameters<typeof actual.run>) => {
       const [deps, options] = args;
-      const replayDeps = replayRunObserver.dropFirstLiveAiCall && options.cacheOnly === false
+      const replayDeps = replayRunObserver.dropFirstLiveAiCall && options.resolve === true
         ? {
           ...deps,
           events: {
@@ -533,7 +533,7 @@ describe('heal state-machine contract', () => {
     } satisfies Partial<PromptPathInvalidError>);
   });
 
-  function injectReplayIntegrityViolation(when: (call: number, options: { readonly cacheOnly?: boolean }) => boolean, violation: IntegrityViolationError): () => number {
+  function injectReplayIntegrityViolation(when: (call: number, options: { readonly resolve?: boolean }) => boolean, violation: IntegrityViolationError): () => number {
     let call = 0;
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
       call += 1;
@@ -553,7 +553,7 @@ describe('heal state-machine contract', () => {
   it('aborts at the cache-only baseline when its replay carries an integrity violation', async () => {
     const violation = new IntegrityViolationError('baseline evidence escaped containment');
     const scenario = await createScenario();
-    const calls = injectReplayIntegrityViolation((call, options) => call === 1 && options.cacheOnly === true, violation);
+    const calls = injectReplayIntegrityViolation((call, options) => call === 1 && options.resolve === false, violation);
 
     const result = await heal(scenario.deps, OPTIONS);
 
@@ -562,13 +562,35 @@ describe('heal state-machine contract', () => {
     expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
   });
 
+  it('uses resolve false for the baseline and true for every subsequent repair replay', async () => {
+    let agenticAttempts = 0;
+    const executor = createFakeAiExecutor({
+      async executeAgentic(request) {
+        agenticAttempts += 1;
+        if (agenticAttempts === 1) return { outcome: 'failure' };
+        await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: 'Dashboard' }, 'dashboard-reached');
+        return { outcome: 'success' };
+      },
+      execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+    });
+    const scenario = await createScenario({ steps: [AI_STEP], grounding: {}, aiExecutor: executor });
+    const resolves: boolean[] = [];
+    replayRunObserver.afterRun = (_deps, _storage, options) => {
+      resolves.push(options.resolve === true);
+    };
+
+    await heal(scenario.deps, OPTIONS);
+
+    expect(resolves).toEqual([false, true, true]);
+  });
+
   it('aborts at the initial live measurement when its replay carries an integrity violation', async () => {
     const violation = new IntegrityViolationError('initial live evidence escaped containment');
     const scenario = await createScenario();
     let injected = false;
     let injectionCount = 0;
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
-      if (injected || options.cacheOnly !== false) return;
+      if (injected || options.resolve !== true) return;
       const replay = outcome.results[0] as { error?: IntegrityViolationError } | undefined;
       if (replay === undefined) return;
       replay.error = violation;
@@ -608,7 +630,7 @@ describe('heal state-machine contract', () => {
       grounding: {},
       aiExecutor: createFakeAiExecutor({ execute: async () => { throw new AiExecutorUnavailableError('AI is unavailable.'); } }),
     });
-    const calls = injectReplayIntegrityViolation((call, options) => call === 3 && options.cacheOnly === false, violation);
+    const calls = injectReplayIntegrityViolation((call, options) => call === 3 && options.resolve === true, violation);
 
     const result = await heal(scenario.deps, OPTIONS);
 
@@ -639,10 +661,10 @@ describe('heal state-machine contract', () => {
       assertOutcome: { passed: false, message: 'Dashboard is absent.' },
     });
     let candidateSteps: readonly { readonly id: string; readonly status: string }[] | undefined;
-    const calls = injectReplayIntegrityViolation((call, options) => call === 4 && options.cacheOnly === false, violation);
+    const calls = injectReplayIntegrityViolation((call, options) => call === 4 && options.resolve === true, violation);
     const injectViolation = replayRunObserver.afterRun;
     replayRunObserver.afterRun = (deps, storage, options, outcome) => {
-      if (calls() === 3 && options.cacheOnly === false) {
+      if (calls() === 3 && options.resolve === true) {
         candidateSteps = outcome.results[0]?.result.steps.map(({ id, status }) => ({ id, status }));
       }
       return injectViolation?.(deps, storage, options, outcome);
@@ -671,7 +693,7 @@ describe('heal state-machine contract', () => {
     let candidateFirstFailureIndex: number | undefined;
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
       replayCalls += 1;
-      if (replayCalls !== 4 || options.cacheOnly === true) return;
+      if (replayCalls !== 4 || options.resolve === false) return;
       const replay = outcome.results[0];
       candidateFirstFailureIndex = replay?.result.steps.findIndex((step) => step.status === 'failed' || step.status === 'error');
       (replay as { error?: IntegrityViolationError } | undefined)!.error = violation;
@@ -739,7 +761,7 @@ describe('heal state-machine contract', () => {
       grounding: {},
       aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: generation++ === 0 ? invalidStage2 : stage3, raw: '{}' }) }),
     });
-    const calls = injectReplayIntegrityViolation((call, options) => call === 4 && options.cacheOnly === false, violation);
+    const calls = injectReplayIntegrityViolation((call, options) => call === 4 && options.resolve === true, violation);
 
     const result = await heal(scenario.deps, OPTIONS);
 
@@ -1441,7 +1463,7 @@ describe('heal state-machine contract', () => {
     });
     const originalGrounding = await scenario.storage.readText(GROUNDING);
     replayRunObserver.afterRun = async (_deps, storage, options) => {
-      if (options.cacheOnly === false) stageOneOverlay = storage;
+      if (options.resolve === true) stageOneOverlay = storage;
     };
 
     try {
@@ -2865,7 +2887,7 @@ describe('heal state-machine contract', () => {
     let replayCalls = 0;
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
       replayCalls += 1;
-      if (replayCalls === 2 && options.cacheOnly === false) {
+      if (replayCalls === 2 && options.resolve === true) {
         (outcome.results[0] as { error?: IntegrityViolationError } | undefined)!.error = violation;
       }
     };
@@ -3000,7 +3022,7 @@ describe('heal state-machine contract', () => {
       aiExecutor: createFakeAiExecutor({ execute }),
     });
     replayRunObserver.afterRun = (_deps, _storage, options) => {
-      if (options.cacheOnly === false && stageTwoGenerationCompleted) stageTwoCandidateReplayed = true;
+      if (options.resolve === true && stageTwoGenerationCompleted) stageTwoCandidateReplayed = true;
     };
     const clock = { now: () => new Date(), monotonicMs: () => stageTwoCandidateReplayed ? 2 : 0 };
 
@@ -3098,7 +3120,7 @@ describe('heal state-machine contract', () => {
     let injectedStage3CandidateReplay = false;
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
       const replay = outcome.results[0];
-      if (options.cacheOnly === true || replay?.result.steps[0]?.id !== 'stage3-candidate-submit') return;
+      if (options.resolve === false || replay?.result.steps[0]?.id !== 'stage3-candidate-submit') return;
       (replay as { error?: IntegrityViolationError } | undefined)!.error = violation;
       injectedStage3CandidateReplay = true;
     };
@@ -3340,7 +3362,7 @@ describe('heal state-machine contract', () => {
       sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: true, currentFingerprint: FINGERPRINT }]]),
     });
 
-    replayRunObserver.afterRun = (_deps, _storage, options) => { replayModes.push(options.cacheOnly === true); };
+    replayRunObserver.afterRun = (_deps, _storage, options) => { replayModes.push(options.resolve === false); };
 
     const result = await heal({ ...scenario.deps, resolveAiExecutor }, OPTIONS);
 
@@ -3423,7 +3445,7 @@ describe('heal state-machine contract', () => {
     const originalPlan = await scenario.storage.readText(PLAN);
     const originalGrounding = await scenario.storage.readText(GROUNDING);
     replayRunObserver.afterRun = (_deps, storage, options) => {
-      if (options.cacheOnly === false && expired) deniedPhaseStorage = storage;
+      if (options.resolve === true && expired) deniedPhaseStorage = storage;
     };
 
     const result = await heal({
@@ -3669,7 +3691,7 @@ describe('heal interruption contract', () => {
     const scenario = await createScenario({ signal: controller.signal, browserDriver });
     const originalGrounding = await scenario.storage.readText(GROUNDING);
     replayRunObserver.afterRun = async (_deps, storage, options) => {
-      if (options.cacheOnly === false) stageOneOverlay = storage;
+      if (options.resolve === true) stageOneOverlay = storage;
     };
 
     try {
@@ -3738,7 +3760,7 @@ describe('heal interruption contract', () => {
     const replacementRequests: Stage2RequestContext[] = [];
     let stageTwoOverlay: StorageAdapter | undefined;
     replayRunObserver.afterRun = (_deps, storage, options) => {
-      if (options.cacheOnly === false && stageTwoOverlay === undefined) stageTwoOverlay = storage;
+      if (options.resolve === true && stageTwoOverlay === undefined) stageTwoOverlay = storage;
     };
     let launchCount = 0;
     let releaseCandidateReplay: ((session: BrowserSession) => void) | undefined;

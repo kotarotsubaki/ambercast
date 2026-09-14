@@ -27,7 +27,7 @@ export const jaLanding = {
     heading: '3 つのコマンド。AI を呼ぶのはそのうち 1 つ。',
     rows: [
       { number: '01', command: 'ambercast generate', description: 'プロンプトを読み、プランとグラウンディングを素の JSON として書き出す。ロックファイルのようにレビューできる。', status: 'AI · 1 call' },
-      { number: '02', command: 'ambercast run', description: 'プランを実ブラウザでリプレイする。キャッシュミス時はその 1 ステップだけ AI 補助にフォールバックし、--cache-only で AI なしの経路を強制できる。', status: 'REPLAY · 0 AI CALLS' },
+      { number: '02', command: 'ambercast run', description: 'プランを実ブラウザでリプレイする。グラウンディングミスはフェイルクローズし、--resolve で 1 ステップの AI 補助を明示的に有効化できる。', status: 'REPLAY · 0 AI CALLS' },
       { number: '03', command: 'ambercast heal', description: 'UI がドリフトしたとき、影響を受けたステップだけを再解決・修復・再生成し、書き込み前に確認を求める。', status: 'AI · ASKS FIRST' },
     ],
   },

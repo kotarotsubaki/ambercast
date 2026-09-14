@@ -486,18 +486,18 @@ type CaseProcessingResult =
   | { readonly interrupted: false; readonly outcome: HealCaseOutcome; readonly commit: HealCaseCommit | undefined };
 
 /**
- * Runs one replay with the only two cache policies healing needs.
+ * Runs one replay with the two resolution policies healing needs.
  *
- * Baselines must expose an existing artifact's behavior without creating new
- * grounding, while repair replays deliberately update the private overlay so
- * later stages measure the best candidate rather than the original artifact.
+ * `resolve` separates baseline measurement from repair measurement. Baselines
+ * expose existing artifacts without new grounding, while repair replays permit
+ * resolution and update the private overlay for later-stage measurement.
  */
-function replayOptions(file: string, options: HealOptions, cacheOnly: boolean) {
+function replayOptions(file: string, options: HealOptions, resolve: boolean) {
   return {
     files: [file],
     ...(options.target === undefined ? {} : { target: options.target }),
-    cacheOnly,
-    updateCache: !cacheOnly,
+    resolve,
+    updateCache: resolve,
     allowEmpty: true,
     list: false,
     stale: 'fail' as const,
@@ -522,11 +522,11 @@ async function measureReplay(
   file: string,
   overlay: HealOverlayStorage,
   plan: TrustedPlan,
-  cacheOnly: boolean,
+  resolve: boolean,
   attemptOrdinal: number,
 ): Promise<ReplayMeasurement> {
   const evidenceDir = attemptScopedLayout(deps.layout, attemptOrdinal).runsDirFor(file, deps.runId);
-  const batch = await run({ ...deps, storage: overlay.storage, layout: attemptScopedLayout(deps.layout, attemptOrdinal) }, replayOptions(file, options, cacheOnly));
+  const batch = await run({ ...deps, storage: overlay.storage, layout: attemptScopedLayout(deps.layout, attemptOrdinal) }, replayOptions(file, options, resolve));
   const replay = batch.results[0];
   if (replay?.error instanceof IntegrityViolationError && !isRepairableNavigationFailure(replay.error)) throw replay.error;
   if (batch.interrupted || replay === undefined) return { interrupted: true };
@@ -686,7 +686,7 @@ async function tryGroundingRepair(
     delete grounding.entries[failingStep.id];
     await writeStorageText(overlay.storage, groundingFile, toCanonicalArtifactText(grounding as JsonValueT), 'The grounding artifact could not be written.');
   }
-  const measurement = await measureReplay(deps, options, file, overlay, plan, false, nextAttemptOrdinal());
+  const measurement = await measureReplay(deps, options, file, overlay, plan, true, nextAttemptOrdinal());
   if (measurement.interrupted || measurement.firstFailureIndex <= baseline.firstFailureIndex) {
     overlay.restore(snapshot);
     return measurement.interrupted ? measurement : baseline;
@@ -874,7 +874,7 @@ async function trySingleStepRepair(
     return propagate(error);
   }
 
-  const replay = await measureReplay(deps, options, file, overlay, candidate, false, nextAttemptOrdinal());
+  const replay = await measureReplay(deps, options, file, overlay, candidate, true, nextAttemptOrdinal());
   if (replay.interrupted) {
     overlay.restore(snapshot);
     return { kind: 'interrupted' };
@@ -945,7 +945,7 @@ async function tryFullPlanRepair(
     }
 
     const regeneratedPlan = (await readTrustedInstructionCoveredPlan(overlay.storage, planFile, digest, normalized)).plan;
-    const replay = await measureReplay(deps, options, file, overlay, regeneratedPlan, false, nextAttemptOrdinal());
+    const replay = await measureReplay(deps, options, file, overlay, regeneratedPlan, true, nextAttemptOrdinal());
     if (replay.interrupted) {
       overlay.restore(snapshot);
       return { plan, measurement: replay, stage3Error: undefined, replayed: false };
@@ -1065,7 +1065,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
     maxDispatches: caseDeps.config.heal.maxStepRepairs ?? Infinity,
   });
   const assertNever = (value: never): never => { throw new Error(`Unreachable dispatch-budget phase status: ${String(value)}`); };
-  const cacheBaseline = await measureReplay(caseDeps, options, file, overlay, plan, true, nextAttemptOrdinal());
+  const cacheBaseline = await measureReplay(caseDeps, options, file, overlay, plan, false, nextAttemptOrdinal());
   if (cacheBaseline.interrupted) return cacheBaseline;
   let measurement = cacheBaseline;
 
@@ -1078,7 +1078,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
       file,
       overlay,
       plan,
-      false,
+      true,
       nextAttemptOrdinal(),
     ));
     switch (initial.status) {

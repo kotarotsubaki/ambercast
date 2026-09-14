@@ -168,13 +168,13 @@
           "lineBreakAfter": false
         },
         {
-          "name": "cache-only",
+          "name": "resolve",
           "alias": null,
           "value": null,
           "hidden": false,
           "acceptedValues": null,
           "shownValue": null,
-          "effect": "forbid AI fallback",
+          "effect": "allow AI resolution for grounding misses",
           "default": "false",
           "lineBreakAfter": false
         },

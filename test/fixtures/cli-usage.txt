@@ -11,7 +11,7 @@ Generate options:
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
-  --grep <pattern>  --target <name>  --headed  --cache-only  --update-cache  --allow-empty  --list
+  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list
   --stale <fail>  --ai <claude|codex>  --json  --no-color
 
 Check options:

@@ -84,7 +84,7 @@ export const enLanding = {
     heading: 'Three commands. One of them calls AI.',
     rows: [
       { number: '01', command: 'ambercast generate', description: 'Reads the prompt, writes plan and grounding as plain JSON. Review them like a lockfile.', status: 'AI · 1 call' },
-      { number: '02', command: 'ambercast run', description: 'Replays the plan in a real browser. A cache miss falls back to one AI-assisted step; --cache-only enforces the no-AI path.', status: 'REPLAY · 0 AI CALLS' },
+      { number: '02', command: 'ambercast run', description: 'Replays the plan in a real browser. A grounding miss fails closed; --resolve opts into one AI-assisted step.', status: 'REPLAY · 0 AI CALLS' },
       { number: '03', command: 'ambercast heal', description: 'When the UI drifts, re-resolves, repairs or regenerates only the affected steps, and asks before writing.', status: 'AI · ASKS FIRST' },
     ],
   },

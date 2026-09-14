@@ -19,9 +19,9 @@ import { extractStepRunRefs } from './run-ref.js';
 export function computeObligationFingerprint(step: Step): string {
   const opcode = step.kind === 'action' ? step.action : step.kind === 'assert' ? step.check : null;
   const secrets = step.kind === 'ai'
-    ? (step.secrets ?? []).map(({ ref, sourceSpan }) => ({ ref, sourceSpan }))
+    ? (step.secrets ?? []).map(({ ref }) => ({ ref }))
     : step.kind === 'action' && step.action === 'fill-secret'
-      ? [{ ref: step.secretRef, sourceSpan: step.secretGrantSpan }]
+      ? [{ ref: step.secretRef }]
       : [];
   const instructionCoverage = step.kind === 'ai'
     ? step.instructionCoverage.map(({ id, kind, sourceSpan }) => ({ id, kind, sourceSpan }))

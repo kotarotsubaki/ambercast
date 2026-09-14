@@ -8,6 +8,7 @@
  */
 
 import type { SecretsProvider } from '#ports/system.js';
+import { envVarNameFor } from '#core/secrets/env-var-name.js';
 
 /**
  * Creates a secret provider backed by environment variables.
@@ -28,9 +29,7 @@ import type { SecretsProvider } from '#ports/system.js';
 export function createEnvSecretsProvider(env?: NodeJS.ProcessEnv): SecretsProvider {
   return {
     resolve(ref: string): string | undefined {
-      const name = ref.slice('{{secrets.'.length, -'}}'.length).replaceAll('.', '_').toUpperCase();
-
-      return (env ?? process.env)[`AMBERCAST_SECRET_${name}`];
+      return (env ?? process.env)[envVarNameFor(ref as never)];
     },
   };
 }

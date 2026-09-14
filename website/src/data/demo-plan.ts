@@ -2,8 +2,6 @@ import type { PlanDocument } from '../../../src/core/ir/schema.ts';
 
 export const demoPrompt = `# Login
 
-@ambercast-secret {{secrets.password}}
-
 Go to /login.
 Fill in the email "mika@example.com" and the password {{secrets.password}}.
 Click "Sign in".
@@ -11,7 +9,7 @@ Expect to land on the dashboard and see a "Welcome" heading.`;
 
 /** The schema-validated plan rendered by the landing-page demonstration. */
 export const demoPlan = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   source: {
     inputsDigest: '0000000000000000000000000000000000000000000000000000000000000000',
   },
@@ -37,10 +35,6 @@ export const demoPlan = {
       action: 'fill-secret',
       id: 'fill-password',
       kind: 'action',
-      secretGrantSpan: {
-        endLine: 3,
-        startLine: 3,
-      },
       secretRef: '{{secrets.password}}',
       target: {
         name: 'Password',

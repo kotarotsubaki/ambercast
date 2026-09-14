@@ -117,7 +117,7 @@ export async function runCheckCommand(input: CheckCommandInput): Promise<CheckCo
 
   try {
     const storage = createFsReadStorage();
-    const config = await loadConfig({
+    const { resolved: config } = await loadConfig({
       cwd: input.cwd,
       storage,
       configEnv: readConfigEnvironment(),

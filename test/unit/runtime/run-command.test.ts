@@ -75,6 +75,7 @@ const CONFIG: ResolvedConfig = {
   testIgnore: ['**/.runs/**'],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful' } },
   defaultTarget: 'web',
+  secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 },
   viewer: { port: 4600 },
   ci: { heal: false, updateGroundingCache: false },
@@ -167,12 +168,28 @@ beforeEach(async () => {
 });
 
 describe('runRunCommand', () => {
+  it('threads the loaded configuration source path into run dependencies', async () => {
+    const configSource = { path: '/workspace/ambercast.config.json' };
+    mocks.createFsStorage.mockReturnValue(createInMemoryStorage());
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: configSource });
+    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
+    mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
+    mocks.createAmbercast.mockReturnValue({ storage: createInMemoryStorage(), layout: { runReportPathFor: () => '/workspace/tests/.runs/report.json' }, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
+    mocks.run.mockResolvedValue({ results: [], noTestsFound: false, listed: [] });
+    mocks.buildRunReport.mockReturnValue(reportOutput(0));
+
+    await runRunCommand(input());
+
+    expect(mocks.run).toHaveBeenCalledWith(expect.objectContaining({ configSource }), expect.any(Object));
+  });
+
   it('finalizes the persisted candidate before writing and skips the write for the emergency singleton', async () => {
     const storage = createInMemoryStorage();
     const layout = { planPathFor: vi.fn(), groundingPathFor: vi.fn(), runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
     const emergency = reportOutput(3).envelope;
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -195,7 +212,7 @@ describe('runRunCommand', () => {
     const layout = { planPathFor: vi.fn(), groundingPathFor: vi.fn(), runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
     const built = reportOutput(0);
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -233,7 +250,7 @@ describe('runRunCommand', () => {
     const built = reportOutput(1);
     const emergency = reportOutput(3).envelope;
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -262,7 +279,7 @@ describe('runRunCommand', () => {
     const storage = createInMemoryStorage();
     const output = reportOutput(0);
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -295,7 +312,7 @@ describe('runRunCommand', () => {
     >('#adapters/system/process-environment-info.js');
     vi.stubEnv('CI', ci);
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -333,7 +350,7 @@ describe('runRunCommand', () => {
       },
     } as unknown as RunCommandOutput;
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue({ ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` });
+    mocks.loadConfig.mockResolvedValue({ resolved: { ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` }, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -368,7 +385,7 @@ describe('runRunCommand', () => {
     } as unknown as RunCommandOutput;
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(config);
+    mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -455,7 +472,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
@@ -538,7 +555,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -612,7 +629,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(config);
+    mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -643,7 +660,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -677,7 +694,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -744,7 +761,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -805,7 +822,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -903,7 +920,7 @@ describe('runRunCommand', () => {
 
     mocks.createSystemClock.mockReturnValue(commandClock);
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
@@ -950,6 +967,7 @@ describe('runRunCommand', () => {
       events: events.sink,
       discoverTestFiles,
       config: CONFIG,
+      configSource: { path: null },
       resolveAiExecutor: expect.any(Function),
       isCI: false,
     }, {
@@ -1001,7 +1019,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
@@ -1031,7 +1049,7 @@ describe('runRunCommand', () => {
     }]);
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
@@ -1065,7 +1083,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createAmbercast.mockReturnValue({
       storage,
       layout,
@@ -1120,7 +1138,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(config);
+    mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -1181,7 +1199,7 @@ describe('runRunCommand', () => {
     };
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -1225,7 +1243,7 @@ describe('runRunCommand', () => {
     } satisfies RunOutcome;
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -1260,7 +1278,7 @@ describe('runRunCommand', () => {
     } satisfies RunOutcome;
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -1318,7 +1336,7 @@ describe('runRunCommand', () => {
     } satisfies RunOutcome;
 
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -1342,7 +1360,7 @@ describe('runRunCommand', () => {
     const storage = createInMemoryStorage();
     const layout = { runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
     mocks.createFsStorage.mockReturnValue(storage);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
@@ -1368,7 +1386,7 @@ describe('runRunCommand', () => {
   it('closes progress reporting when composition throws after the sink exists', async () => {
     const failure = new Error('composition failed');
     mocks.createFsStorage.mockReturnValue(createInMemoryStorage());
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createAmbercast.mockImplementation(() => { throw failure; });

@@ -17,6 +17,14 @@ import { InterruptedError } from '#core/errors/interrupted-error.js';
 import { selectExitCode } from './exit-code-priority.js';
 import type { GenerateOptions, GenerateOutcome } from './generate.js';
 
+function reportWarnings(warnings: NonNullable<GenerateOutcome['results'][number]['warnings']>): NonNullable<Extract<GenerateResult, { status: 'generated' }>['warnings']> {
+  return warnings.map((warning) => warning.kind === 'secret-name-reused-across-targets'
+    ? { ...warning, stepIds: [...warning.stepIds] }
+    : warning.kind === 'secret-target-changed'
+      ? { ...warning, previousTarget: { ...warning.previousTarget }, target: { ...warning.target } }
+      : { ...warning });
+}
+
 /**
  * Projects one use-case outcome into its strict status-specific report row.
  *
@@ -36,11 +44,13 @@ function reportResult(
 
   switch (result.status) {
     case 'generated':
-      return { ...identity, ...metrics, status: result.status, dryRun: false, planFile: result.planFile!, ambiguities: [...result.ambiguities!] };
+      return { ...identity, ...metrics, status: result.status, dryRun: false, planFile: result.planFile!, ambiguities: [...result.ambiguities!], secrets: [...(result.secrets ?? [])], ...(result.warnings === undefined ? {} : { warnings: reportWarnings(result.warnings) }) };
     case 'would-generate':
-      return { ...identity, ...metrics, status: result.status, dryRun: true, planFile: result.planFile!, ambiguities: [...result.ambiguities!] };
+      return { ...identity, ...metrics, status: result.status, dryRun: true, planFile: result.planFile!, ambiguities: [...result.ambiguities!], secrets: [...(result.secrets ?? [])], ...(result.warnings === undefined ? {} : { warnings: reportWarnings(result.warnings) }) };
     case 'skipped-fresh':
-      return { ...identity, ...metrics, status: result.status, dryRun, planFile: result.planFile! };
+      return dryRun
+        ? { ...identity, ...metrics, status: result.status, dryRun: true, planFile: result.planFile!, secrets: [...(result.secrets ?? [])], ...(result.warnings === undefined ? {} : { warnings: reportWarnings(result.warnings) }) }
+        : { ...identity, ...metrics, status: result.status, dryRun: false, planFile: result.planFile! };
     case 'listed':
       return { ...identity, status: result.status, dryRun: false };
     case 'skipped':

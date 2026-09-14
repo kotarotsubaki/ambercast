@@ -50,7 +50,7 @@ function identityEnvelope(
   const errors = [{ scope: 'case', kind: 'environment', code: 'FS_IO_ERROR', message: 'message /repo', caseId: field === 'caseId' ? value : 'case' }];
   const common = { schemaVersion: '3.5', startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors };
   switch (command) {
-    case 'generate': return ReportEnvelope.parse({ ...common, command, results: [{ id: 'id', file: 'file', planFile: 'plan', status: 'generated', dryRun: false, ambiguities: [], ...resultFields }] });
+    case 'generate': return ReportEnvelope.parse({ ...common, command, results: [{ id: 'id', file: 'file', planFile: 'plan', status: 'generated', dryRun: false, ambiguities: [], secrets: [], ...resultFields }] });
     case 'run': return ReportEnvelope.parse({ ...common, command, reportPersistence: 'not-attempted', results: [{ id: 'id', file: 'file', planFile: 'plan', status: 'failed', durationMs: 1, explanation: 'reason /repo', steps: [], ...resultFields }] });
     case 'check': return ReportEnvelope.parse({ ...common, command, results: [{ id: 'id', file: 'file', planFile: 'plan', status: 'stale', reason: 'reason /repo', ...resultFields }] });
     case 'heal': return ReportEnvelope.parse({ ...common, command, results: [{ id: 'id', file: 'file', planFile: 'plan', status: 'completed', repairOutcome: 'unresolved', application: 'no-artifact-change', stopReason: 'settled', durationMs: 1, explanation: 'reason /repo', steps: [], ...resultFields }] });
@@ -224,6 +224,7 @@ describe('finalizeReportEnvelope', () => {
         status: 'generated',
         dryRun: false,
         ambiguities: [],
+        secrets: [],
         durationMs: 7,
         aiCalls: 2,
       }],

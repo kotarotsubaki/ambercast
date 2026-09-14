@@ -40,8 +40,8 @@ export function escapeHtml(value: string): string {
  * @param line - One source line from the demo prompt.
  * @returns The visual class selected by the prompt renderer.
  */
-export function classifyPromptLine(line: string): 'heading' | 'grant' | 'body' {
-  return line.startsWith('# ') ? 'heading' : line.startsWith('@ambercast-secret') ? 'grant' : 'body';
+export function classifyPromptLine(line: string): 'heading' | 'body' {
+  return line.startsWith('# ') ? 'heading' : 'body';
 }
 
 /**

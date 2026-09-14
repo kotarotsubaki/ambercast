@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { TargetDefinition } from '#core/ir/schema.js';
+import { type SecretName, TargetDefinition, SecretName as SecretNameSchema } from '#core/ir/schema.js';
 
 /** Shared explanation for the incremental repair dispatch budget. */
 export const HEAL_MAX_STEP_REPAIRS_DESCRIPTION = 'Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.';
@@ -75,6 +75,13 @@ export const RawConfig = z.strictObject({
   testIgnore: z.array(z.string()).optional(),
   targets: z.record(z.string(), TargetConfigEntry).optional(),
   defaultTarget: z.string().optional(),
+  // Secret consent is optional only in raw configuration so existing projects
+  // retain their no-secret default; loading supplies the resolved empty set.
+  // Reusing SecretName prevents this boundary from growing a third spelling
+  // grammar beside Plan IR and report validation.
+  secrets: z.strictObject({
+    allow: z.union([z.array(SecretNameSchema), z.literal('*')]),
+  }).optional(),
   ai: z.strictObject({
     provider: z.enum(['claude', 'codex', 'auto']).optional(),
     timeoutMs: z.int().positive().optional().describe(AI_TIMEOUT_MS_DESCRIPTION),
@@ -155,6 +162,14 @@ export interface ResolvedConfig extends LayoutConfig {
   readonly testIgnore: readonly string[];
   readonly targets: Readonly<Record<string, Readonly<ResolvedTargetConfigEntry>>>;
   readonly defaultTarget?: string;
+  /**
+   * Resolved execution-consent policy for committed secret names.
+   *
+   * An explicit array remains readonly because normalization deduplicates and
+   * UTF-16-sorts it once during loading; `'*'` means authorization without
+   * supplying a projected naming candidate.
+   */
+  readonly secrets: Readonly<{ allow: readonly SecretName[] | '*' }>;
   /**
    * AI-provider policy with a positive, resolved per-call timeout and a
    * bounded generation retry budget.

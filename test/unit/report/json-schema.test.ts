@@ -29,6 +29,7 @@ const reportDocuments = [
         planFile: 'cases/generate.ambercast.plan.json',
         status: 'generated',
         dryRun: false,
+        secrets: [],
         ambiguities: [],
         durationMs: 0,
         aiCalls: 0,

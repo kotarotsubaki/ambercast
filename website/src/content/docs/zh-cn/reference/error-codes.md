@@ -19,6 +19,9 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | GROUNDING_UNRESOLVED | usage | case | 4 | 未传入 `--resolve` 的 grounding 未命中 |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | 字面量 secret 被拒绝 |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | 授权无法归属 |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 两个 secret 投影到同一个环境变量名 |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret 名称不在允许列表中 |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | 发现旧版 grant 行或 `{{secrets.*}}` 引用 |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | 浏览器启动失败 |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | 提供商不可用 |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | 提供商响应无效 |
@@ -28,7 +31,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 
 使用错误（usage）与环境错误（environment）拥有相互独立的报告词汇表；每个错误代码到类别的映射关系均集中在 `REPORT_ERROR_DETAILS` 中定义。
 
-在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_GRANT_UNATTRIBUTABLE` 的 details 包含原因和安全的授权位置；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing`、`engine-unregistered` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
+在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_ENV_VAR_COLLISION` 的 details 包含发生冲突的 `envVar` 以及冲突的 secret 引用列表；`SECRET_CONSENT_REQUIRED` 的 details 包含原因（`consent-required`、`declined` 或 `not-interactive`）以及每个未解决 secret 的名称、step id、env var 和原因；`SECRET_SYNTAX_REJECTED` 的 details 包含旧版语法出现位置的列表（行号、列号，以及是 grant 行还是引用）；`SECRET_GRANT_UNATTRIBUTABLE` 的 details 包含原因和安全的授权位置；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing`、`engine-unregistered` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
 
 ## 相关链接
 

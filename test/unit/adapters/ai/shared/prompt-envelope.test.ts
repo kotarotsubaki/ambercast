@@ -37,10 +37,11 @@ describe('prompt envelope', () => {
     const task = 'Generate the sign-in plan.';
     const rendered = corePromptEnvelope.buildGeneratorPromptEnvelope(task);
     const generatorPolicy = corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim();
+    const secretPolicy = corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim();
     const agenticPolicy = corePromptEnvelope.AGENTIC_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim();
 
-    expect(rendered).toBe(buildPromptEnvelope(`${generatorPolicy}\n\n${task}`));
-    expect(rendered).toContain(`## Task\n${generatorPolicy}\n\n${task}`);
+    expect(rendered).toBe(buildPromptEnvelope(`${generatorPolicy}\n\n${secretPolicy}\n\n${task}`));
+    expect(rendered).toContain(`## Task\n${generatorPolicy}\n\n${secretPolicy}\n\n${task}`);
     expect(rendered).not.toContain(agenticPolicy);
     expect(corePromptEnvelope.GENERATOR_PROMPT_TEMPLATE).toContain(generatorPolicy);
     expect(promptTemplateFingerprint()).toBe(
@@ -52,11 +53,15 @@ describe('prompt envelope', () => {
     expect(corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE).toBe('For every AI step, copy a unique verbatim citation for each success or action criterion into instructionCoverage. Every AI step must have at least one criterion of kind success. Provide verificationIntent with exactly one complete terminal assertion for every success criterion; each verificationIntent criterionId must name a declared success criterion id of the same step. A url-matches assertion is invalid as a terminal assertion. When the prompt states a success condition only as reaching a URL, express the intent as an element-visible or text-visible assertion on a destination target that the prompt\'s own words imply, such as its main heading or landmark; do not invent text absent from the prompt, and if no such target can be inferred, keep the url-matches assertion so the policy rejects it. When ## Context contains previousAttempts, the listed issues explain why earlier responses were rejected; return a response that avoids every listed issue. Citations and verificationIntent are attribution inputs and are not committed to the plan.');
   });
 
+  it('pins the C1-10 generator secret policy bytes directly', () => {
+    expect(corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE).toBe('Secret inputs (passwords, one-time codes, API keys) must never be written as values. Represent each secret input as a "fill-secret" step. If context.allowedSecretNames contains a name whose meaning clearly matches the field, set "secret" to { "allowedName": "<that name>" }. For a new secret, propose { "nameHint": "<short_ascii_name>" }. When unsure, omit "secret" entirely. Example: { "id": "fill-password", "kind": "action", "action": "fill-secret", "target": { "strategy": "accessibility", "role": "textbox", "name": "Password" }, "secret": { "nameHint": "password" } }');
+  });
+
   it('exports one generator task composer with the fingerprinted policy delimiter', () => {
     const task = 'Generate the sign-in plan.';
 
     expect(corePromptEnvelope.buildGeneratorTask(task)).toBe(
-      `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${task}`,
+      `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\n${task}`,
     );
   });
 
@@ -86,7 +91,7 @@ describe('prompt envelope', () => {
   });
 
   it('fingerprints the generator policy in both static task-slot variants with exact delimiter order', () => {
-    const taskSlot = `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n{{ambercast.task}}`;
+    const taskSlot = `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\n{{ambercast.task}}`;
     const absentVariant = `## Task\n${taskSlot}\n\n## Context\n(none)`;
     const fencedVariant = `## Task\n${taskSlot}\n\n## Context\n\`\`\`json\n{{ambercast.context}}\n\`\`\``;
 

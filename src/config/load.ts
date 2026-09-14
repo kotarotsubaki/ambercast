@@ -34,6 +34,19 @@ type AiProvider = ResolvedConfig['ai']['provider'];
 type ConfigOverrides = Omit<RawConfigShape, '$schema'>;
 
 /**
+ * Couples a resolved configuration snapshot with the file that supplied its
+ * project-local policy.
+ *
+ * A null path represents the built-in defaults rather than a missing piece of
+ * provenance, so later consent reporting can distinguish the two without
+ * re-running discovery.
+ */
+export interface LoadedConfig {
+  readonly resolved: ResolvedConfig;
+  readonly source: { readonly path: string | null };
+}
+
+/**
  * Names the caller-supplied inputs used to select and load one configuration
  * snapshot.
  *
@@ -142,25 +155,15 @@ export interface LoadConfigOptions {
  * nested object is newly constructed so neither parsed input nor defaults can
  * be aliased by callers.
  */
-export async function loadConfig(options: LoadConfigOptions): Promise<ResolvedConfig> {
+export async function loadConfig(options: LoadConfigOptions): Promise<LoadedConfig> {
   const selectedPath = await selectConfigPath(options);
   let configRoot = options.cwd;
   let overrides: ConfigOverrides = {};
 
   if (selectedPath !== undefined) {
     const text = await options.storage.readText(selectedPath);
-    const document = parseConfigDocument(text, selectedPath);
-    rejectUnsafeRawKeys(document, selectedPath);
-    const result = RawConfig.safeParse(document);
-
-    if (!result.success) {
-      throw new ConfigInvalidError(
-        'Configuration file does not match the expected schema.',
-        { configPath: selectedPath, issues: result.error.issues },
-      );
-    }
-
-    const parsedOverrides = { ...result.data } as ConfigOverrides & { $schema?: string };
+    const rawConfig = parseAndValidateRawConfig(text, selectedPath);
+    const parsedOverrides = { ...rawConfig } as ConfigOverrides & { $schema?: string };
     delete parsedOverrides.$schema;
     overrides = parsedOverrides;
     // Defaults are trusted literals; only supplied patterns require validation.
@@ -216,6 +219,9 @@ export async function loadConfig(options: LoadConfigOptions): Promise<ResolvedCo
     testMatch: [...(overrides.testMatch ?? DEFAULT_RAW_CONFIG.testMatch)],
     testIgnore: [...(overrides.testIgnore ?? DEFAULT_RAW_CONFIG.testIgnore)],
     targets,
+    secrets: {
+      allow: resolveSecretAllowlist(overrides.secrets?.allow ?? DEFAULT_RAW_CONFIG.secrets.allow),
+    },
     ai: {
       provider: aiProviderRaw === undefined
         ? (overrides.ai?.provider ?? DEFAULT_RAW_CONFIG.ai.provider)
@@ -240,7 +246,10 @@ export async function loadConfig(options: LoadConfigOptions): Promise<ResolvedCo
     },
   };
 
-  return defaultTarget === undefined ? config : { ...config, defaultTarget };
+  return {
+    resolved: defaultTarget === undefined ? config : { ...config, defaultTarget },
+    source: { path: selectedPath ?? null },
+  };
 }
 
 async function selectConfigPath(options: LoadConfigOptions): Promise<string | undefined> {
@@ -284,16 +293,36 @@ function resolveExplicitPath(path: string, cwd: string): string {
   }
 }
 
-function parseConfigDocument(text: string, configPath: string): unknown {
+/**
+ * Parses and validates the complete contents of a present configuration file.
+ *
+ * @param text - UTF-8 configuration text supplied by the selected storage path.
+ * @param path - Selected path retained in diagnostics for malformed or invalid input.
+ * @returns The validated partial configuration before defaults and path resolution.
+ * @throws {ConfigInvalidError} When JSON is malformed, unsafe raw keys are present, or the document violates RawConfig.
+ */
+export function parseAndValidateRawConfig(text: string, path: string): RawConfigShape {
+  let document: unknown;
   try {
-    return JSON.parse(text);
+    document = JSON.parse(text);
   } catch (error) {
     throw new ConfigInvalidError(
       'Configuration file contains malformed JSON.',
-      { configPath },
+      { configPath: path },
       { cause: error },
     );
   }
+
+  rejectUnsafeRawKeys(document, path);
+  const result = RawConfig.safeParse(document);
+  if (!result.success) {
+    throw new ConfigInvalidError(
+      'Configuration file does not match the expected schema.',
+      { configPath: path, issues: result.error.issues },
+    );
+  }
+
+  return result.data;
 }
 
 /**
@@ -335,6 +364,12 @@ function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedCo
       healReplayIsolation: target.healReplayIsolation ?? 'stateful',
     }]),
   );
+}
+
+function resolveSecretAllowlist(
+  allow: NonNullable<RawConfigShape['secrets']>['allow'] | ResolvedConfig['secrets']['allow'],
+): ResolvedConfig['secrets']['allow'] {
+  return allow === '*' ? '*' : [...new Set(allow)].sort();
 }
 
 function resolveConfigDirectory(field: 'testDir' | 'runsDir', value: string, configRoot: string): string {

@@ -208,7 +208,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
       );
     }
 
-    const config = await loadConfig({
+    const { resolved: config, source } = await loadConfig({
       cwd: input.cwd,
       storage: createFsStorage(),
       configEnv: readConfigEnvironment(),
@@ -243,6 +243,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
         events,
         discoverTestFiles: ambercast.discoverTestFiles,
         config,
+        configSource: source,
         isCI,
         resolveAiExecutor: (signal) => resolveAiProvider(
           config.ai.provider,

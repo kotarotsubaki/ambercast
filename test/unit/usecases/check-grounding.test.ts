@@ -15,7 +15,7 @@ import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js
 const GROUNDING_PATH = '/workspace/tests/login.ambercast.grounding.json';
 
 const plan = PlanDocument.parse({
-  schemaVersion: 2,
+  schemaVersion: 3,
   source: { inputsDigest: '0'.repeat(64) },
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } },
   steps: [],

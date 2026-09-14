@@ -46,6 +46,15 @@ export const COMMON_PROMPT_POLICY_TEMPLATE = staticGrammar();
 export const GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE = `For every AI step, copy a unique verbatim citation for each success or action criterion into instructionCoverage. Every AI step must have at least one criterion of kind success. Provide verificationIntent with exactly one complete terminal assertion for every success criterion; each verificationIntent criterionId must name a declared success criterion id of the same step. A url-matches assertion is invalid as a terminal assertion. When the prompt states a success condition only as reaching a URL, express the intent as an element-visible or text-visible assertion on a destination target that the prompt's own words imply, such as its main heading or landmark; do not invent text absent from the prompt, and if no such target can be inferred, keep the url-matches assertion so the policy rejects it. When ## Context contains previousAttempts, the listed issues explain why earlier responses were rejected; return a response that avoids every listed issue. Citations and verificationIntent are attribution inputs and are not committed to the plan.`;
 
 /**
+ * Generator-only secret-reference policy bytes.
+ *
+ * These bytes instruct generation to preserve the plan's secret indirection
+ * without extending agentic prompts, whose trusted metadata and traces govern
+ * live secret handling independently.
+ */
+export const GENERATOR_SECRET_POLICY_TEMPLATE = `Secret inputs (passwords, one-time codes, API keys) must never be written as values. Represent each secret input as a "fill-secret" step. If context.allowedSecretNames contains a name whose meaning clearly matches the field, set "secret" to { "allowedName": "<that name>" }. For a new secret, propose { "nameHint": "<short_ascii_name>" }. When unsure, omit "secret" entirely. Example: { "id": "fill-password", "kind": "action", "action": "fill-secret", "target": { "strategy": "accessibility", "role": "textbox", "name": "Password" }, "secret": { "nameHint": "password" } }`;
+
+/**
  * Supplies the literal task instruction for ordinary plan generation.
  *
  * Keeping these bytes in core makes the live provider request and the
@@ -76,7 +85,7 @@ export const AGENTIC_INSTRUCTION_COVERAGE_POLICY_TEMPLATE = `Evaluate terminal a
  * provenance describe a different prompt from the provider input.
  */
 export function buildGeneratorTask(task: string): string {
-  return `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${task}`;
+  return `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\n${task}`;
 }
 
 function agenticTaskSlot(task: string): string {

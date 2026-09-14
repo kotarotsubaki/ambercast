@@ -1,11 +1,12 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import { toCanonicalArtifactText } from '../../../../src/core/ir/canonical-json.js';
 import {
   AccessibilityElementRef,
   ActionStep,
   AiStep,
+  AiStepSecretUse,
   AssertStep,
   CaptureStep,
   ClickAction,
@@ -17,6 +18,7 @@ import {
   Fingerprint,
   GroundingDocument,
   GeneratedAiStep,
+  GeneratedAiStepSecretUse,
   GeneratedFillSecretAction,
   GeneratedPlanResponse,
   GeneratedStep,
@@ -28,8 +30,10 @@ import {
   PressAction,
   RunRef,
   RunVariableName,
+  SecretName,
+  SecretNameChoice,
+  SecretNameHint,
   SecretRef,
-  SourceSpan,
   Step,
   StepId,
   TargetDefinition,
@@ -46,7 +50,7 @@ import {
   TraceRecord,
   UrlMatchesCheck,
 } from '../../../../src/core/ir/schema.js';
-import type { JsonValueT } from '../../../../src/core/ir/schema.js';
+import type { InstructionAttributedSteps, JsonValueT } from '../../../../src/core/ir/schema.js';
 
 interface SchemaUnderTest {
   safeParse(value: unknown): { success: boolean };
@@ -86,9 +90,10 @@ function expectZodAndJsonSchemaVerdict(schema: SchemaUnderTest, value: unknown, 
   expect(validate(value)).toBe(expected);
 }
 
+// SPEC-C1 C1-2
 function plan(steps: unknown[], targets: Record<string, unknown> = { app: TARGET_DEFINITION }): Record<string, unknown> {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { inputsDigest: DIGEST_A },
     targets,
     steps,
@@ -162,23 +167,47 @@ describe('IR primitive schemas', () => {
     expectRejected(JsonValue, () => undefined);
   });
 
-  it('accepts positive inclusive source spans and rejects malformed strict objects', () => {
-    expectAccepted(SourceSpan, { startLine: 1, endLine: 1 });
-
-    for (const value of [
-      { endLine: 1 },
-      { startLine: 1 },
-      { startLine: 1.5, endLine: 2 },
-      { startLine: 0, endLine: 1 },
-      { startLine: -1, endLine: 1 },
-      { startLine: 1, endLine: 1.5 },
-      { startLine: 1, endLine: 0 },
-      { startLine: 1, endLine: -1 },
-      { startLine: 9, endLine: 4 },
-      { startLine: 1, endLine: 1, unexpected: true },
-    ]) {
-      expectRejected(SourceSpan, value);
+  // SPEC-C1 C1-1
+  it('accepts dotted secret names and rejects empty or malformed segments', () => {
+    for (const value of ['password', 'app.password', 'a_1.b_2']) {
+      expectAccepted(SecretName, value);
     }
+    for (const value of ['', '.password', 'app..password', 'password.', 'password-name']) {
+      expectRejected(SecretName, value);
+    }
+  });
+
+  // SPEC-C1 C1-1
+  it('accepts constrained secret name hints and rejects values outside their grammar', () => {
+    for (const value of ['password', 'otp_code']) {
+      expectAccepted(SecretNameHint, value);
+    }
+    for (const value of ['Password', '1password', 'a'.repeat(65), '']) {
+      expectRejected(SecretNameHint, value);
+    }
+  });
+
+  // SPEC-C1 C1-1
+  it('requires exactly one secret naming choice branch', () => {
+    expectAccepted(SecretNameChoice, { allowedName: 'x' });
+    expectAccepted(SecretNameChoice, { nameHint: 'x' });
+    expectRejected(SecretNameChoice, { allowedName: 'x', nameHint: 'x' });
+    expectRejected(SecretNameChoice, {});
+  });
+
+  // SPEC-C1 C1-1
+  it('accepts ref-only committed AI secret uses and rejects legacy source spans', () => {
+    expectAccepted(AiStepSecretUse, { ref: '{{secrets.x}}' });
+    expectRejected(AiStepSecretUse, {
+      ref: '{{secrets.x}}',
+      sourceSpan: { startLine: 1, endLine: 1 },
+    });
+  });
+
+  // SPEC-C1 C1-1
+  it('accepts a naming choice or an empty object for generated AI secret uses', () => {
+    expectAccepted(GeneratedAiStepSecretUse, { allowedName: 'x' });
+    expectAccepted(GeneratedAiStepSecretUse, {});
   });
 });
 
@@ -292,7 +321,8 @@ const actionVariants: ReadonlyArray<readonly [string, SchemaUnderTest, unknown]>
   ['navigate', NavigateAction, { id: 'navigate-home', kind: 'action', action: 'navigate', url: 'https://example.test' }],
   ['press', PressAction, { id: 'press-enter', kind: 'action', action: 'press', target: TARGET, key: 'Enter' }],
   ['fill', FillAction, { id: 'fill-email', kind: 'action', action: 'fill', target: TARGET, value: 'person@example.test' }],
-  ['fill-secret', FillSecretAction, { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET, secretRef: '{{secrets.app.password}}', secretGrantSpan: { startLine: 4, endLine: 4 } }],
+  // SPEC-C1 C1-1
+  ['fill-secret', FillSecretAction, { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET, secretRef: '{{secrets.app.password}}' }],
 ];
 
 describe('ActionStep', () => {
@@ -336,13 +366,15 @@ describe('ActionStep', () => {
       { id: 'fill-email', kind: 'action', action: 'fill', target: TARGET },
     ]],
     ['FillSecretAction.target', FillSecretAction, [
-      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'Password', secretRef: '{{secrets.app.password}}', secretGrantSpan: { startLine: 1, endLine: 1 } },
-      { id: 'fill-password', kind: 'action', action: 'fill-secret', secretRef: '{{secrets.app.password}}', secretGrantSpan: { startLine: 1, endLine: 1 } },
+      // SPEC-C1 C1-1
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'Password', secretRef: '{{secrets.app.password}}' },
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', secretRef: '{{secrets.app.password}}' },
     ]],
     ['FillSecretAction.secretRef', FillSecretAction, [
-      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET, secretRef: 42, secretGrantSpan: { startLine: 1, endLine: 1 } },
-      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET, secretRef: 'hunter2', secretGrantSpan: { startLine: 1, endLine: 1 } },
-      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET, secretGrantSpan: { startLine: 1, endLine: 1 } },
+      // SPEC-C1 C1-1
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET, secretRef: 42 },
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET, secretRef: 'hunter2' },
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: TARGET },
     ]],
   ] as const)('rejects wrong or missing values for %s', (_field, schema, invalidValues) => {
     for (const invalidValue of invalidValues) {
@@ -354,6 +386,7 @@ describe('ActionStep', () => {
     expectAccepted(PressAction, { id: 'press-key', kind: 'action', action: 'press', target: TARGET, key });
   });
 
+  // SPEC-C1 C1-1
   it('rejects literal, malformed, and embedded secret text in fill-secret fields', () => {
     for (const secretRef of ['hunter2', '{{secret.app.password}}', 'pre-{{secrets.app.password}}-post']) {
       expectRejected(FillSecretAction, {
@@ -362,7 +395,6 @@ describe('ActionStep', () => {
         action: 'fill-secret',
         target: TARGET,
         secretRef,
-        secretGrantSpan: { startLine: 1, endLine: 1 },
       });
     }
   });
@@ -531,7 +563,8 @@ describe('CaptureStep and AiStep', () => {
     });
   });
 
-  it('preserves omitted and explicitly empty AI secret grants as distinct serialized values', () => {
+  // SPEC-C1 C1-1
+  it('preserves omitted and explicitly empty AI secret uses as distinct serialized values', () => {
     const omitted = AiStep.parse({
       id: 'find-settings', kind: 'ai', instruction: 'Open settings', instructionCoverage: INSTRUCTION_COVERAGE,
     });
@@ -548,15 +581,16 @@ describe('CaptureStep and AiStep', () => {
     expect(JSON.parse(explicitlyEmptyText)).toHaveProperty('secrets', []);
   });
 
-  it('accepts non-empty AI secret grants and rejects pre-attribution grant lists', () => {
+  // SPEC-C1 C1-1
+  it('accepts non-empty ref-only AI secret uses and rejects non-object use lists', () => {
     expectAccepted(AiStep, {
       id: 'find-settings',
       kind: 'ai',
       instruction: 'Open settings',
       instructionCoverage: INSTRUCTION_COVERAGE,
       secrets: [
-        { ref: '{{secrets.app.token}}', sourceSpan: { startLine: 4, endLine: 4 } },
-        { ref: '{{secrets.app.password}}', sourceSpan: { startLine: 6, endLine: 6 } },
+        { ref: '{{secrets.app.token}}' },
+        { ref: '{{secrets.app.password}}' },
       ],
     });
     expectRejected(AiStep, { id: 'find-settings', kind: 'ai', instruction: 'Open settings', secrets: '{{secrets.app.token}}' });
@@ -569,15 +603,16 @@ describe('CaptureStep and AiStep', () => {
     });
   });
 
-  it('accepts distinct same-reference grants and rejects the old bare-reference shape', () => {
+  // SPEC-C1 C1-1
+  it('accepts duplicate same-reference uses and rejects the old bare-reference shape', () => {
     expectAccepted(AiStep, {
       id: 'find-settings',
       kind: 'ai',
       instruction: 'Open settings',
       instructionCoverage: INSTRUCTION_COVERAGE,
       secrets: [
-        { ref: '{{secrets.app.token}}', sourceSpan: { startLine: 4, endLine: 4 } },
-        { ref: '{{secrets.app.token}}', sourceSpan: { startLine: 9, endLine: 9 } },
+        { ref: '{{secrets.app.token}}' },
+        { ref: '{{secrets.app.token}}' },
       ],
     });
     expectRejected(AiStep, {
@@ -587,13 +622,6 @@ describe('CaptureStep and AiStep', () => {
       instructionCoverage: INSTRUCTION_COVERAGE,
       secrets: ['{{secrets.app.token}}'],
     });
-    expectRejected(FillSecretAction, {
-      id: 'fill-password',
-      kind: 'action',
-      action: 'fill-secret',
-      target: TARGET,
-      secretRef: '{{secrets.app.password}}',
-    });
   });
 
   it('rejects unknown and missing outer kind discriminants', () => {
@@ -602,29 +630,50 @@ describe('CaptureStep and AiStep', () => {
   });
 });
 
-describe('provider-facing secret-grant schemas', () => {
+// SPEC-C1 C1-1
+describe('InstructionAttributedSteps', () => {
+  it('represents unresolved secret naming choices and excludes invalid choice values', () => {
+    const attributed = [{
+      id: 'fill-password',
+      kind: 'action',
+      action: 'fill-secret',
+      target: { strategy: 'accessibility', role: 'textbox', name: 'Password' },
+      secret: { nameHint: 'password' },
+    }] as const;
+    type InvalidAttributedSteps = readonly [{
+      readonly id: 'fill-password';
+      readonly kind: 'action';
+      readonly action: 'fill-secret';
+      readonly target: { readonly strategy: 'accessibility'; readonly role: 'textbox'; readonly name: 'Password' };
+      readonly secret: { readonly allowedName: number };
+    }];
+
+    expectTypeOf(attributed).toMatchTypeOf<InstructionAttributedSteps>();
+    expectTypeOf<InvalidAttributedSteps>().not.toMatchTypeOf<InstructionAttributedSteps>();
+  });
+});
+
+// SPEC-C1 C1-1
+describe('provider-facing secret naming schemas', () => {
   const generatedFillSecret = {
     id: 'fill-password',
     kind: 'action',
     action: 'fill-secret',
     target: TARGET,
-    secretRef: '{{secrets.app.password}}',
-    citation: '@ambercast-secret {{secrets.app.password}}',
+    secret: { allowedName: 'app.password' },
   };
 
   const generatedAi = {
     id: 'complete-sign-in',
     kind: 'ai',
     instruction: 'Complete sign-in.',
-    secrets: [{
-      ref: '{{secrets.app.password}}',
-      citation: '@ambercast-secret {{secrets.app.password}}',
-    }],
+    secrets: [{ nameHint: 'password' }],
     instructionCoverage: GENERATED_INSTRUCTION_COVERAGE,
     verificationIntent: VERIFICATION_INTENT,
   };
 
-  it('accepts citation-bearing generated secret steps through every provider schema', () => {
+  // SPEC-C1 C1-1
+  it('accepts secret naming choices through every provider schema', () => {
     expectAccepted(GeneratedFillSecretAction, generatedFillSecret);
     expectAccepted(GeneratedStep, generatedFillSecret);
     expectAccepted(GeneratedAiStep, generatedAi);
@@ -632,26 +681,22 @@ describe('provider-facing secret-grant schemas', () => {
     expectAccepted(GeneratedPlanResponse, { steps: [generatedFillSecret, generatedAi], ambiguities: [] });
   });
 
-  it('rejects committed source spans in provider output and citations in committed plans', () => {
-    expectRejected(GeneratedFillSecretAction, { ...generatedFillSecret, secretGrantSpan: { startLine: 4, endLine: 4 } });
+  // SPEC-C1 C1-1
+  it('rejects committed refs in provider output and naming choices in committed plans', () => {
     expectRejected(GeneratedFillSecretAction, {
       ...generatedFillSecret,
-      citation: undefined,
-      secretGrantSpan: { startLine: 4, endLine: 4 },
+      secret: undefined,
+      secretRef: '{{secrets.app.password}}',
     });
     expectRejected(GeneratedAiStep, {
       ...generatedAi,
-      secrets: [{ ref: '{{secrets.app.password}}', sourceSpan: { startLine: 4, endLine: 4 } }],
+      secrets: [{ ref: '{{secrets.app.password}}' }],
     });
     expectRejected(FillSecretAction, { ...generatedFillSecret });
     expectRejected(AiStep, generatedAi);
   });
 
-  it('enforces non-empty bounded citations', () => {
-    expectRejected(GeneratedFillSecretAction, { ...generatedFillSecret, citation: '' });
-    expectRejected(GeneratedFillSecretAction, { ...generatedFillSecret, citation: 'x'.repeat(4097) });
-  });
-
+  // SPEC-C1 C1-1
   it('keeps zod and generated JSON Schema aligned for committed and provider secret shapes', () => {
     const committedPlan = plan([{
       id: 'fill-password',
@@ -659,15 +704,14 @@ describe('provider-facing secret-grant schemas', () => {
       action: 'fill-secret',
       target: TARGET,
       secretRef: '{{secrets.app.password}}',
-      secretGrantSpan: { startLine: 4, endLine: 4 },
     }, {
       id: 'complete-sign-in',
       kind: 'ai',
       instruction: 'Complete sign-in.',
       instructionCoverage: INSTRUCTION_COVERAGE,
       secrets: [
-        { ref: '{{secrets.app.password}}', sourceSpan: { startLine: 6, endLine: 6 } },
-        { ref: '{{secrets.app.password}}', sourceSpan: { startLine: 8, endLine: 8 } },
+        { ref: '{{secrets.app.password}}' },
+        { ref: '{{secrets.app.password}}' },
       ],
     }]);
 
@@ -677,11 +721,10 @@ describe('provider-facing secret-grant schemas', () => {
       kind: 'action',
       action: 'fill-secret',
       target: TARGET,
-      secretRef: '{{secrets.app.password}}',
     }]), false);
     expectZodAndJsonSchemaVerdict(GeneratedPlanResponse, { steps: [generatedFillSecret, generatedAi], ambiguities: [] }, true);
     expectZodAndJsonSchemaVerdict(GeneratedPlanResponse, {
-      steps: [{ ...generatedFillSecret, citation: undefined, secretGrantSpan: { startLine: 4, endLine: 4 } }],
+      steps: [{ ...generatedFillSecret, secret: undefined, secretRef: '{{secrets.app.password}}' }],
       ambiguities: [],
     }, false);
   });
@@ -896,7 +939,8 @@ describe('PlanDocument', () => {
     expectRejected(PlanDocument, plan([], { app: { ...TARGET_DEFINITION, unexpected: true } }));
   });
 
-  it('accepts only Plan schema version 2 while Grounding remains schema version 1', () => {
+  // SPEC-C1 C1-2
+  it('accepts only Plan schema version 3 while Grounding remains schema version 1', () => {
     expectAccepted(PlanDocument, plan([]));
     expectRejected(PlanDocument, { ...plan([]), schemaVersion: 1 });
     expectAccepted(GroundingDocument, { schemaVersion: 1, planDigest: DIGEST_B, entries: {} });

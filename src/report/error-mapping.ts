@@ -6,8 +6,10 @@ import {
   CauseName,
   GroundingUnresolvedDetails,
   PromptPathInvalidDetails,
-  SecretGrantUnattributableDetails,
+  SecretConsentRequiredDetails,
+  SecretEnvVarCollisionDetails,
   SecretLiteralRejectedDetails,
+  SecretSyntaxRejectedDetails,
   UnexpectedCrashDetails,
   type ReportError,
   type ReportErrorCode,
@@ -58,7 +60,10 @@ export function projectCauseName(cause: unknown): CauseName {
  * one `{ scope: 'run', kind: 'environment', code: 'INTERRUPTED' }` entry. The
  * `test/unit/report/error-code-correspondence.test.ts` contract test pins
  * `ERROR_EXIT_CODES` and `ReportErrorCode` directly, so the correspondence is
- * not coupled to a particular report builder as its home.
+ * not coupled to a particular report builder as its home. In the opposite
+ * direction, secret syntax, consent, and environment-key collision failures
+ * are case-only: their evidence describes one selected prompt and must never
+ * be promoted to a run-wide error.
  */
 export const REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
@@ -66,7 +71,9 @@ export const REPORT_ERROR_DETAILS = {
   'target-unresolved': { kind: 'usage', code: 'TARGET_UNRESOLVED' },
   'prompt-path-invalid': { kind: 'usage', code: 'PROMPT_PATH_INVALID' },
   'secret-literal-rejected': { kind: 'usage', code: 'SECRET_LITERAL_REJECTED' },
-  'secret-grant-unattributable': { kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE' },
+  'secret-env-var-collision': { kind: 'usage', code: 'SECRET_ENV_VAR_COLLISION' },
+  'secret-consent-required': { kind: 'usage', code: 'SECRET_CONSENT_REQUIRED' },
+  'secret-syntax-rejected': { kind: 'usage', code: 'SECRET_SYNTAX_REJECTED' },
   'missing-plan': { kind: 'usage', code: 'MISSING_PLAN' },
   'stale-ir': { kind: 'usage', code: 'STALE_PLAN' },
   'integrity-violation': { kind: 'usage', code: 'INTEGRITY_VIOLATION' },
@@ -99,9 +106,11 @@ export const REPORT_ERROR_DETAILS = {
  * @param location - The report scope, including a case identifier when needed.
  * @returns The stable report error corresponding to the classified failure.
  * @throws {Error} If the error kind has no report-code correspondence, or if
- * interruption or prompt-path-invalid is requested at case scope. Interruption
- * describes an incomplete batch, while prompt-path-invalid is always raised
- * before any case begins, so both remain run-only.
+ * interruption, prompt-path-invalid, or a case-only secret-policy error is
+ * requested at an invalid scope. Interruption describes an incomplete batch,
+ * while prompt-path-invalid is always raised before any case begins; secret
+ * syntax, consent, and environment-key collisions instead retain prompt-level
+ * evidence and therefore remain case-only.
  *
  * @remarks
  * For diagnostics without a table-defined hint, a string
@@ -125,7 +134,9 @@ export const REPORT_ERROR_DETAILS = {
  * A malformed or unexpected producer details shape is omitted defensively
  * rather than causing report construction to throw.
  *
- * `partiallyWritten` is extracted only for a case-scoped `FS_IO_ERROR`.
+ * The three secret-policy detail shapes are validated here before projection,
+ * so malformed error context cannot widen the public report contract or leak
+ * a value. `partiallyWritten` is extracted only for a case-scoped `FS_IO_ERROR`.
  * Report schemas reject that field on every other branch, and this conversion
  * otherwise omits `AmbercastError.details`, so preserving validated storage
  * evidence here is required rather than optional metadata.
@@ -145,6 +156,9 @@ export function reportError(
   }
   if (error.kind === 'prompt-path-invalid' && location.scope === 'case') {
     throw new Error('Error kind prompt-path-invalid cannot be serialized at case scope.');
+  }
+  if ((error.kind === 'secret-env-var-collision' || error.kind === 'secret-consent-required' || error.kind === 'secret-syntax-rejected') && location.scope === 'run') {
+    throw new Error(`Error kind ${error.kind} cannot be serialized at run scope.`);
   }
 
   const tableHint = 'hint' in details ? details.hint : undefined;
@@ -181,20 +195,17 @@ export function reportError(
           path: readRecordField(sourceDetails, 'path'),
           reason: readRecordField(sourceDetails, 'reason'),
         })
-      : error.kind === 'secret-grant-unattributable'
-        ? SecretGrantUnattributableDetails.safeParse({
-          reason: readRecordField(sourceDetails, 'reason'),
-          secretRef: readRecordField(sourceDetails, 'secretRef'),
-          ...(readRecordField(sourceDetails, 'sourceSpan') === undefined
-            ? { stepId: readRecordField(sourceDetails, 'stepId') }
-            : { sourceSpan: readRecordField(sourceDetails, 'sourceSpan') }),
-          ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
-        })
-        : error.kind === 'grounding-unresolved'
-          ? GroundingUnresolvedDetails.safeParse({
-            stepId: readRecordField(sourceDetails, 'stepId'),
-            reason: readRecordField(sourceDetails, 'reason'),
-          })
+      : error.kind === 'secret-env-var-collision'
+        ? SecretEnvVarCollisionDetails.safeParse({ envVar: readRecordField(sourceDetails, 'envVar'), refs: readRecordField(sourceDetails, 'refs') })
+        : error.kind === 'secret-consent-required'
+          ? SecretConsentRequiredDetails.safeParse({ reason: readRecordField(sourceDetails, 'reason'), secrets: readRecordField(sourceDetails, 'secrets') })
+          : error.kind === 'secret-syntax-rejected'
+            ? SecretSyntaxRejectedDetails.safeParse({ occurrences: readRecordField(sourceDetails, 'occurrences') })
+              : error.kind === 'grounding-unresolved'
+                ? GroundingUnresolvedDetails.safeParse({
+                  stepId: readRecordField(sourceDetails, 'stepId'),
+                  reason: readRecordField(sourceDetails, 'reason'),
+                })
         : error.kind === 'ai-executor-unavailable' && readRecordField(sourceDetails, 'attempts') !== undefined
           ? AiExecutorUnavailableDetails.safeParse({
             ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),

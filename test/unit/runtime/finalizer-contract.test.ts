@@ -92,6 +92,7 @@ const CONFIG: ResolvedConfig = {
   testIgnore: ['**/.runs/**'],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful' } },
   defaultTarget: 'web',
+  secrets: { allow: [] },
   ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
   viewer: { port: 4600 },
   ci: { heal: true, updateGroundingCache: false },
@@ -166,7 +167,7 @@ beforeEach(() => {
     aiExecutor: {},
     discoverTestFiles: async () => [],
   });
-  mocks.loadConfig.mockResolvedValue(CONFIG);
+  mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
   mocks.resolveAiProvider.mockResolvedValue('codex');
   mocks.run.mockResolvedValue({ results: [], noTestsFound: false, listed: [] });
   mocks.heal.mockResolvedValue({

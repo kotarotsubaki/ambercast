@@ -65,11 +65,11 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
     ci: { heal: ciHeal },
   }));
   const plan = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(FIXTURE_PROMPT),
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions,
@@ -90,7 +90,7 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
 
 async function writeStalePlan(project: string): Promise<void> {
   await writeFile(join(project, 'tests', 'test.ambercast.plan.json'), toCanonicalArtifactText({
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { inputsDigest: 'f'.repeat(64) },
     targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } },
     steps: [],

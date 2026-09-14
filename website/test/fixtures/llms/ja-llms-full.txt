@@ -833,6 +833,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `runsDir` | string | `tests/ambercast/.runs` | 絶対配置パスへと解決 | run のレポート／エビデンス、heal 内の書き込み |
 | `testMatch` | string[] | `["**/*.test.md"]` | 限定された `*`/`**` マッチャー。すべてのパターンは `.test.md` で終わる必要があり、そうでなければ設定読み込みは `CONFIG_INVALID` で失敗 | generate、run、check、heal の探索 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含マッチ後に除外 | generate、run、check、heal の探索 |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空配列の場合はすべての secret 名に同意が必要。`"*"` はすべての名前を同意なしで許可（非推奨）。空でない配列の場合はその名前のみを許可 | generate、run、heal |
 | `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
 | `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
@@ -1165,6 +1166,9 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | GROUNDING_UNRESOLVED | usage | case | 4 | `--resolve` なしのグラウンディングミス |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | grant cannot be attributed |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 2つの secret が同じ環境変数名に投影される |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret 名が許可リストにない |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | レガシー grant 行または `{{secrets.*}}` 参照が見つかった |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | browser launch fails |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |
@@ -1174,7 +1178,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 
 利用エラー（usage）と環境エラー（environment）は独立したレポート語彙を持ち、各コードと種別（kind）のマッピングは `REPORT_ERROR_DETAILS` に集約されています。
 
-caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_GRANT_UNATTRIBUTABLE` の details には理由と安全な付与位置、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`engine-unregistered`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
+caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`SECRET_GRANT_UNATTRIBUTABLE` の details には理由と安全な付与位置、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`engine-unregistered`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
 
 レポートの構造については [レポート](/ambercast/ja/reference/reports/#errors)、終了コードの一覧については [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、トラブルシューティングの手順については [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/) を参照してください。
 
@@ -1936,7 +1940,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.3.1 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 2 および Grounding スキーマバージョン 1 を受け付ける。[src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64)
+本仕様は、ambercast 0.3.1 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 3 および Grounding スキーマバージョン 1 を受け付ける。[src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65)
 
 ## 規範的文言 {#normative-language}
 
@@ -1959,10 +1963,10 @@ flowchart LR
 
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
-| Plan `schemaVersion` | `2` | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) |
-| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
+| Plan `schemaVersion` | `3` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) |
+| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65) |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.5` | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| Report `schemaVersion` | `3.5` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 
 ## 読解順序 {#reading-order}
 
@@ -2645,7 +2649,8 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `PROMPT_PATH_INVALID` details 分岐を含む現在の `3.2` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の AI 呼び出し計測フィールドを含む現在の `3.3` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `BROWSER_LAUNCH_FAILED` details 分岐を含む現在の `3.4` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
-| report 3.4 → 3.5 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `GROUNDING_UNRESOLVED` details 分岐（`stepId`, `reason`）を含む現在の `3.5` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| Plan v2 → v3 で secret-grant provenance を削除 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L674) | Producer および consumer は v2 を拒否し、再生成するか stale として報告しなければならず（MUST）、インプレースで移行してはならない（MUST NOT）。[src/core/ir/schema.ts:49](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L49) |
+| report 3.4 → 3.5 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) | Report consumer は、Plan バージョンから互換性を推論するのではなく、3つの新しい secret-policy error code（`SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`）、任意の `GROUNDING_UNRESOLVED` details 分岐（`stepId`、`reason`）、および任意の `GenerateResult.secrets`/`warnings` fields を含む現在の `3.5` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 
 ## 互換性ポリシー {#compatibility-policy}
 

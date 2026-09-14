@@ -29,6 +29,7 @@ const CONFIG: ResolvedConfig = {
   testIgnore: ['**/.runs/**'],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful' } },
   defaultTarget: 'web',
+  secrets: { allow: [] },
   ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
   viewer: { port: 4600 },
   ci: { heal: false, updateGroundingCache: false },

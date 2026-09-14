@@ -92,10 +92,10 @@ describe('heal confirmation gate through the built CLI', () => {
         fixture: { baseUrl: `http://127.0.0.1:${port}`, browser: 'chromium' },
       } as const satisfies Record<string, TargetDefinition>;
       const plan = PlanDocument.parse({
-        schemaVersion: 2,
+        schemaVersion: 3,
         source: {
           inputsDigest: computeInputsDigest({
-            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 2,
+            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 3,
             generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
             planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions,
           }),

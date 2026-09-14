@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ElementRef as CoreElementRef, SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
 import {
   AiResponseIssue,
   CheckResult,
@@ -13,6 +14,9 @@ import {
   RunResult,
   StepResult,
   Summary,
+  SecretConsentRequiredDetails,
+  SecretEnvVarCollisionDetails,
+  SecretSyntaxRejectedDetails,
 } from '../../../src/report/schema.js';
 import { CAUSE_NAMES } from './cause-name-fixtures.js';
 
@@ -75,6 +79,7 @@ const GENERATE_RESULT = {
   status: 'generated',
   dryRun: false,
   ambiguities: [],
+  secrets: [],
 };
 const CHECK_RESULT = {
   id: 'login-succeeds',
@@ -435,20 +440,40 @@ describe('valid nested schema fixtures', () => {
   ] as const)('accepts each exact generate-result status branch', (result) => {
     expectAccepted(GenerateResult, result);
   });
+
+  it.each(['generated', 'would-generate'] as const)('requires secrets and accepts optional warnings for %s', (status) => {
+    const result = status === 'generated'
+      ? GENERATE_RESULT
+      : { ...GENERATE_RESULT, status: 'would-generate' as const, dryRun: true as const };
+    const secret = { name: 'API_TOKEN', stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', allowed: true, selectionSource: 'allowed-name' } as const;
+
+    expectRejected(GenerateResult, without(result, 'secrets'));
+    expectAccepted(GenerateResult, { ...result, secrets: [secret] });
+    expectAccepted(GenerateResult, { ...result, secrets: [secret], warnings: [{ kind: 'secret-name-reused-across-targets', name: 'API_TOKEN', stepIds: ['fill-token', 'use-token'] }] });
+  });
+
+  it('splits skipped-fresh by dry-run evidence', () => {
+    const base = { id: 'login-succeeds', file: 'tests/login.test.md', planFile: 'tests/login.ambercast.plan.json', status: 'skipped-fresh' as const };
+    const secrets = [{ name: 'API_TOKEN', stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', allowed: false, selectionSource: 'existing-plan' }] as const;
+
+    expectAccepted(GenerateResult, { ...base, dryRun: true, secrets });
+    expectRejected(GenerateResult, { ...base, dryRun: true });
+    expectAccepted(GenerateResult, { ...base, dryRun: false });
+    expectRejected(GenerateResult, { ...base, dryRun: false, secrets });
+  });
 });
 
 describe('SPEC-K5 report error details', () => {
   const detailsByCode = {
     AI_RESPONSE_INVALID: { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] },
     SECRET_LITERAL_REJECTED: { detector: 'credential-prefix-sk', path: 'generatorMeta.token', attempts: [] },
-    SECRET_GRANT_UNATTRIBUTABLE: { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'request-token', attempts: [] },
     AI_EXECUTOR_UNAVAILABLE: { attempts: [{ attempt: 5, code: 'AI_EXECUTOR_UNAVAILABLE' }] },
     UNEXPECTED_CRASH: { cause: { name: 'AbortError' } },
   } as const;
 
   const errorFor = (code: keyof typeof detailsByCode, scope: 'run' | 'case') => ({
     scope,
-    kind: code === 'SECRET_LITERAL_REJECTED' || code === 'SECRET_GRANT_UNATTRIBUTABLE' ? 'usage' : 'environment',
+    kind: code === 'SECRET_LITERAL_REJECTED' ? 'usage' : 'environment',
     code,
     message: 'diagnostic',
     ...(scope === 'case' ? { caseId: 'case-a' } : {}),
@@ -486,21 +511,9 @@ describe('SPEC-K5 report error details', () => {
     expectRejected(ReportError, { ...error, details: { ...error.details, unexpected: true } });
   });
 
-  it('accepts both secret-grant reason branches and rejects their mixed shape', () => {
-    expectAccepted(ReportError, {
-      ...errorFor('SECRET_GRANT_UNATTRIBUTABLE', 'run'),
-      details: { reason: 'uncovered-grant', secretRef: '{{secrets.API_TOKEN}}', sourceSpan: { startLine: 3, endLine: 5 } },
-    });
-    expectRejected(ReportError, {
-      ...errorFor('SECRET_GRANT_UNATTRIBUTABLE', 'run'),
-      details: { reason: 'uncovered-grant', secretRef: '{{secrets.API_TOKEN}}', sourceSpan: { startLine: 5, endLine: 3 }, stepId: 'invented-step' },
-    });
-  });
-
   it.each([
     ['AI_RESPONSE_INVALID', { detector: 'credential-prefix-sk', path: 'path' }],
     ['SECRET_LITERAL_REJECTED', { issues: [] }],
-    ['SECRET_GRANT_UNATTRIBUTABLE', { attempts: [] }],
     ['AI_EXECUTOR_UNAVAILABLE', { cause: { name: 'Error' } }],
     ['UNEXPECTED_CRASH', { attempts: [] }],
   ] as const)('rejects a details shape belonging to another code for %s', (code, details) => {
@@ -511,6 +524,35 @@ describe('SPEC-K5 report error details', () => {
     for (const code of Object.keys(detailsByCode) as Array<keyof typeof detailsByCode>) {
       expectRejected(ReportError, { ...errorFor(code, 'run'), details: { ...detailsByCode[code], unexpected: true } });
     }
+  });
+
+  it.each([
+    [SecretEnvVarCollisionDetails, { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }, { envVar: '', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }],
+    [SecretConsentRequiredDetails, { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'API_TOKEN requires consent.' }] }, { reason: 'other', secrets: [] }],
+    [SecretSyntaxRejectedDetails, { occurrences: [{ kind: 'reference', line: 2, column: 8 }] }, { occurrences: [{ kind: 'reference', line: 0, column: 8 }] }],
+  ] as const)('accepts and rejects the golden shape for each new secret-policy details schema', (schema, valid, invalid) => {
+    expectAccepted(schema, valid);
+    expectRejected(schema, invalid);
+    expectRejected(schema, { ...valid, unexpected: true });
+  });
+
+  it('rejects an environment-variable collision details payload with fewer than two refs', () => {
+    expectRejected(SecretEnvVarCollisionDetails, { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}'] });
+  });
+
+  it.each([
+    ['SECRET_ENV_VAR_COLLISION', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }],
+    ['SECRET_CONSENT_REQUIRED', { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'API_TOKEN requires consent.' }] }],
+    ['SECRET_SYNTAX_REJECTED', { occurrences: [{ kind: 'grant-line', line: 1, column: 1 }] }],
+  ] as const)('accepts %s details only at case scope', (code, details) => {
+    const error = { scope: 'case', kind: 'usage', code, message: 'secret policy failure', caseId: 'case-a', details };
+    expectAccepted(ReportError, error);
+    expectRejected(ReportError, { ...error, scope: 'run' });
+  });
+
+  it('keeps SECRET_GRANT_UNATTRIBUTABLE as a bare report-code value without an error-object branch', () => {
+    expectRejected(ReportError, { scope: 'run', kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE', message: 'legacy code' });
+    expectRejected(ReportError, { scope: 'case', kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE', message: 'legacy code', caseId: 'case-a' });
   });
 
   it('accepts unconstrained attempt-array length while constraining every attempt element', () => {
@@ -540,6 +582,10 @@ describe('SPEC-K5 report error details', () => {
     expectRejected(AiResponseIssue, { code: 'unknown-code', path: [] });
     expectAccepted(AiResponseIssue, { code: 'schema-mismatch', path: [], stepId: 'step-id' });
     expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: [], stepId: 'Step_ID' });
+    expectRejected(AiResponseIssue, { code: 'secret-allowed-name-not-projected', path: [] });
+    expectRejected(AiResponseIssue, { code: 'secret-conflicting-target-names', path: [] });
+    expectAccepted(AiResponseIssue, { code: 'secret-allowed-name-not-projected', path: [], stepId: 'step-id' });
+    expectAccepted(AiResponseIssue, { code: 'secret-conflicting-target-names', path: [], stepId: 'step-id' });
   });
 
   it.each(CAUSE_NAMES)(
@@ -641,6 +687,38 @@ describe('heal result status branches', () => {
 
   it('rejects an unrecognized heal status', () => {
     expectRejected(HealResult, { ...HEAL_RESULT, status: 'not-healed' });
+  });
+
+  it('accepts stage3Rejection only for an unresolved repair outcome', () => {
+    const stage3Rejection = { reason: 'secret-set-changed', added: ['NEW_TOKEN'], removed: ['OLD_TOKEN'] } as const;
+
+    expectAccepted(HealResult, { ...HEAL_RESULT, repairOutcome: 'unresolved', application: 'not-eligible', stage3Rejection });
+    expectRejected(HealResult, { ...HEAL_RESULT, stage3Rejection });
+    expectRejected(HealResult, { ...HEAL_RESULT, repairOutcome: 'unresolved', application: 'not-eligible', stage3Rejection: { ...stage3Rejection, added: ['bad-name!'] } });
+  });
+});
+
+describe('report-local IR scalar equivalence', () => {
+  it('matches core ElementRef, SecretName, SecretRef, and StepId acceptance through report shapes', () => {
+    const values = {
+      element: [{ strategy: 'accessibility', role: 'button', name: 'Submit' }, { strategy: 'css', value: '#submit' }],
+      name: ['API_TOKEN', 'bad-name!'],
+      ref: ['{{secrets.API_TOKEN}}', '{{secrets.bad-name!}}'],
+      stepId: ['fill-token', 'Fill_Token'],
+    } as const;
+
+    for (const element of values.element) {
+      expect(GenerateResult.safeParse({ ...GENERATE_RESULT, warnings: [{ kind: 'secret-target-changed', name: 'API_TOKEN', stepId: 'fill-token', previousTarget: element, target: element }] }).success).toBe(CoreElementRef.safeParse(element).success);
+    }
+    for (const name of values.name) {
+      expect(SecretConsentRequiredDetails.safeParse({ reason: 'consent-required', secrets: [{ name, stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }).success).toBe(CoreSecretName.safeParse(name).success);
+    }
+    for (const ref of values.ref) {
+      expect(SecretEnvVarCollisionDetails.safeParse({ envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: [ref, ref] }).success).toBe(CoreSecretRef.safeParse(ref).success);
+    }
+    for (const stepId of values.stepId) {
+      expect(SecretConsentRequiredDetails.safeParse({ reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId, envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }).success).toBe(CoreStepId.safeParse(stepId).success);
+    }
   });
 });
 

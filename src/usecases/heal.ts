@@ -17,8 +17,11 @@ import type { LayoutResolver } from '#core/layout/resolve.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
 import { resolveTarget } from '#core/target/resolve.js';
-import { extractSecretGrants } from '#core/ir/secret-grant-source.js';
-import { assertCommittedSecretAttributionSound, assertNoLiteralSecrets, enumerateSecretGrantClaims, normalizeAiStepSecretGrants } from './generator-secret-policy.js';
+import { scanLegacySecretSyntax } from '#core/ir/secret-syntax-scan.js';
+import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-error.js';
+import { assertNoEnvVarCollision } from '#core/secrets/env-var-name.js';
+import { deriveSecretNames, normalizeAiStepSecretUses } from './secret-naming.js';
+import { assertNoLiteralSecrets, assertSecretUsesAllowed, enumerateSecretUses } from './generator-secret-policy.js';
 import type { StageTwoRejectionReason } from '#ports/system.js';
 import { isLegacyShapedTrace, validateCommittedInstructionCoverage } from './instruction-coverage-policy.js';
 import { FsIoError as FsIoErrorClass } from '#core/errors/fs-io-error.js';
@@ -32,7 +35,8 @@ import { IntegrityViolationError } from '#core/errors/integrity-violation-error.
 import { isRepairableNavigationFailure } from '#usecases/run.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
-import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
+import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import {
   buildStage2RepairContext,
@@ -587,6 +591,13 @@ async function preflightCase(
   groundingFile: string,
 ): Promise<ValidatedHealPreflight> {
   const normalized = normalizeTestMd(await readStorageText(deps.storage, file, 'The test prompt could not be read.'));
+  const legacySecretSyntax = scanLegacySecretSyntax(normalized);
+  if (legacySecretSyntax.length > 0) {
+    throw new SecretSyntaxRejectedError('Legacy secret syntax is not supported.', {
+      occurrences: legacySecretSyntax,
+      hint: 'Delete the offending line(s) and re-run `ambercast generate`.',
+    });
+  }
   const target = resolveTarget({
     targets: deps.config.targets,
     defaultTarget: deps.config.defaultTarget,
@@ -609,7 +620,11 @@ async function preflightCase(
     throw new FsIoErrorClass('The generated plan could not be read.', undefined, { cause: error });
   }
   const plan = validateTrustedInstructionCoveredPlanText(planSnapshot.text, planFile, digest, normalized).plan;
-  assertCommittedSecretAttributionSound(plan, normalized);
+  assertSecretUsesAllowed(plan, deps.config.secrets?.allow ?? [], {
+    configPath: deps.configSource?.path ?? null,
+    cwd: deps.config.projectRoot ?? '',
+  });
+  assertNoEnvVarCollision([...new Set(enumerateSecretUses(plan).map(({ ref }) => ref))]);
 
   let inspection;
   try {
@@ -692,36 +707,6 @@ async function tryGroundingRepair(
     return measurement.interrupted ? measurement : baseline;
   }
   return measurement;
-}
-
-/**
- * Builds the prompt-grant offsets already owned outside a replacement step.
- *
- * Partial attribution receives only provider-shaped replacement steps, while
- * prompt-wide coverage still includes untouched prefix and suffix ownership.
- * The lookup excludes only `replacedIndex`, enumerates
- * the remaining claims, and resolves `ref`, `startLine`, and `endLine` exactly
- * to `grant.offsetStart` values. `offsetStart`, explicitly not `startLine`,
- * is the ownership key because distinct grants can otherwise collide.
- *
- * @param plan - The committed plan whose untouched steps retain ownership.
- * @param replacedIndex - The old step omitted so its replacement may reclaim a
- * matching prompt grant.
- * @param normalized - Canonical prompt from which exact grant offsets are read.
- * @returns Offset-based ownership seed for partial secret attribution.
- */
-export function claimedRetainedGrantOffsets(
-  plan: Pick<TrustedPlan, 'steps'>,
-  replacedIndex: number,
-  normalized: NormalizedTestMd,
-): ReadonlySet<number> {
-  const grants = extractSecretGrants(normalized);
-  return new Set(enumerateSecretGrantClaims(plan.steps.filter((_, index) => index !== replacedIndex))
-    .flatMap((claim) => grants.filter((grant) => (
-      grant.ref === claim.ref
-      && grant.startLine === claim.sourceSpan.startLine
-      && grant.endLine === claim.sourceSpan.endLine
-    )).map((grant) => grant.offsetStart)));
 }
 
 /**
@@ -830,22 +815,35 @@ async function trySingleStepRepair(
 
   let prepared;
   try {
-    prepared = prepareInstructionCoveredSteps(generated, normalized, claimedRetainedGrantOffsets(plan, start, normalized));
+    prepared = prepareInstructionCoveredSteps(generated, normalized);
   } catch (error) {
-    if (error instanceof SecretGrantUnattributableError) return reject('secret-attribution');
     return propagate(error);
   }
   if (!prepared.success) return reject('coverage-invalid');
-  const replacement = normalizeAiStepSecretGrants(prepared.data)[0]!;
+  let replacement;
+  try {
+    const named = deriveSecretNames(prepared.data, {
+      projected: [],
+      allowlist: deps.config.secrets?.allow ?? [],
+    });
+    replacement = normalizeAiStepSecretUses(named.steps)[0]!;
+  } catch (error) {
+    if (error instanceof AiResponseInvalidError) return reject('secret-attribution');
+    return propagate(error);
+  }
   if (!obligationFingerprintMatches(step, replacement)) return reject('obligation-mismatch');
   const candidate = PlanDocument.parse({
       ...plan,
       steps: [...plan.steps.slice(0, start), replacement, ...plan.steps.slice(start + 1)],
   });
   try {
-    assertCommittedSecretAttributionSound(candidate, normalized);
+    assertSecretUsesAllowed(candidate, deps.config.secrets?.allow ?? [], {
+      configPath: deps.configSource?.path ?? null,
+      cwd: deps.config.projectRoot ?? '',
+    });
+    assertNoEnvVarCollision([...new Set(enumerateSecretUses(candidate).map(({ ref }) => ref))]);
   } catch (error) {
-    if (error instanceof SecretGrantUnattributableError) return reject('secret-attribution');
+    if (error instanceof SecretConsentRequiredError || error instanceof SecretEnvVarCollisionError) return reject('secret-attribution');
     return propagate(error);
   }
   for (const candidateStep of candidate.steps) {
@@ -922,6 +920,7 @@ async function tryFullPlanRepair(
       allocateCallId: deps.allocateCallId,
       discoverTestFiles: deps.discoverTestFiles,
       config: deps.config,
+      ...(deps.configSource === undefined ? {} : { configSource: deps.configSource }),
       ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     }, {
       files: [file],

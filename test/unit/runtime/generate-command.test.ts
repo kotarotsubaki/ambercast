@@ -60,6 +60,7 @@ const CONFIG: ResolvedConfig = {
   testIgnore: [],
   targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful' } },
   defaultTarget: 'web',
+  secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 4 },
   viewer: { port: 4600 },
   ci: { heal: false, updateGroundingCache: false },
@@ -109,7 +110,7 @@ function arrangeSuccessfulCommand(
 ) {
   const selected = executor(selectedProvider, true);
   const events = createRecordingEventSink();
-  mocks.loadConfig.mockResolvedValue({ ...CONFIG, ai: { ...CONFIG.ai, provider: configuredProvider } });
+  mocks.loadConfig.mockResolvedValue({ resolved: { ...CONFIG, ai: { ...CONFIG.ai, provider: configuredProvider } }, source: { path: null } });
   if (selectedProvider === 'claude') {
     mocks.claudeFactory.mockReturnValue(selected);
   } else {
@@ -171,10 +172,10 @@ describe('runGenerateCommand', () => {
     const rawEnvelope = {
       ...output.envelope,
       schemaVersion: '3.5',
-      results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }],
+      results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, secrets: [], ambiguities: [] }],
       summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
     } as unknown as GenerateCommandOutput['envelope'];
-    mocks.loadConfig.mockResolvedValue({ ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` });
+    mocks.loadConfig.mockResolvedValue({ resolved: { ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` }, source: { path: null } });
     mocks.buildGenerateReport.mockReturnValue({ ...output, envelope: rawEnvelope });
 
     const returned = await runGenerateCommand(input({ cwd }));
@@ -214,8 +215,8 @@ describe('runGenerateCommand', () => {
     const { output } = arrangeSuccessfulCommand('codex', 'codex');
     const cwd = '/workspace/no-config-project';
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
-    const rawEnvelope = { ...output.envelope, schemaVersion: '3.5', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
-    mocks.loadConfig.mockResolvedValue(config);
+    const rawEnvelope = { ...output.envelope, schemaVersion: '3.5', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, secrets: [], ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
+    mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.buildGenerateReport.mockReturnValue({ ...output, envelope: rawEnvelope });
 
     const returned = await runGenerateCommand(input({ cwd }));
@@ -336,7 +337,7 @@ describe('runGenerateCommand', () => {
   });
 
   it('returns an exit-3 run-scoped unavailable-provider report when auto probing finds no provider', async () => {
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.claudeFactory.mockReturnValue(executor('claude', false));
     mocks.codexFactory.mockReturnValue(executor('codex', false));
     mocks.createAmbercast.mockReturnValue({ clock: { now: () => new Date(), monotonicMs: () => 0 } });
@@ -364,7 +365,7 @@ describe('runGenerateCommand', () => {
       controller.abort(reason);
       return false;
     });
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.claudeFactory.mockReturnValue({ name: 'claude-code-cli', isAvailable });
     mocks.createAmbercast.mockReturnValue({ clock: { now: () => new Date(), monotonicMs: () => 0 } });
     const output = reportOutput(3, [{
@@ -512,7 +513,7 @@ describe('runGenerateCommand', () => {
     const built = reportOutput(3, [{
       scope: 'run', kind: 'environment', code: 'UNEXPECTED_CRASH', message: 'The generate command crashed unexpectedly.',
     }]);
-    mocks.loadConfig.mockResolvedValue(CONFIG);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
     mocks.createAmbercast.mockImplementation(() => { throw failure; });
     mocks.buildGenerateReport.mockReturnValue(built);
 

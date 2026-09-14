@@ -71,7 +71,7 @@ describe('resolveTarget', () => {
       expectSelection(selected);
       return computeInputsDigest({
         normalizedTestMd: normalizeTestMd('# test\n'),
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatorPromptTemplateFingerprint: 'generator-template-fixture',
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions: selected.definitions,

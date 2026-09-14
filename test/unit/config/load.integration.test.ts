@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
+import type { ResolvedConfig } from '#core/config/schema.js';
 import { loadConfig } from '#config/load.js';
 
 const CONFIG_SCHEMA_URL = 'https://ambercast.dev/schema/config.json';
@@ -23,6 +24,15 @@ async function writeConfig(path: string, overrides: Record<string, unknown>): Pr
   await writeFile(path, JSON.stringify({ $schema: CONFIG_SCHEMA_URL, ...overrides }), 'utf8');
 }
 
+async function load(options: Parameters<typeof loadConfig>[0]): Promise<ResolvedConfig> {
+  const loaded: unknown = await loadConfig(options);
+  return isLoadedConfig(loaded) ? loaded.resolved : loaded as ResolvedConfig;
+}
+
+function isLoadedConfig(value: unknown): value is { readonly resolved: ResolvedConfig; readonly source: { readonly path: string | null } } {
+  return value !== null && typeof value === 'object' && 'resolved' in value && 'source' in value;
+}
+
 describe('loadConfig() with FsStorage', () => {
   it('loads a real discovered config file and anchors relative directories to its directory', async () => {
     await withIsolatedConfigDirectory(async (root) => {
@@ -33,7 +43,7 @@ describe('loadConfig() with FsStorage', () => {
         testDir: 'prompt-tests',
       });
 
-      const config = await loadConfig({
+      const config = await load({
         cwd: projectDirectory,
         storage: createFsStorage(),
       });
@@ -55,7 +65,7 @@ describe('loadConfig() with FsStorage', () => {
         viewer: { port: 4_611 },
       });
 
-      const config = await loadConfig({
+      const config = await load({
         cwd: workingDirectory,
         storage: createFsStorage(),
       });
@@ -72,7 +82,7 @@ describe('loadConfig() with FsStorage', () => {
       const workingDirectory = join(root, 'project', 'apps', 'web');
       await mkdir(workingDirectory, { recursive: true });
 
-      const config = await loadConfig({
+      const config = await load({
         cwd: workingDirectory,
         storage: createFsStorage(),
       });
@@ -106,7 +116,7 @@ describe('loadConfig() with FsStorage', () => {
 
         let thrown: unknown;
         try {
-          await loadConfig({
+          await load({
             configPathOverride: configPath,
             cwd: root,
             storage,

@@ -94,7 +94,7 @@ export const LAYERS = Object.freeze({
     path: '^src/core(?:/|$)',
     element: { type: 'core', pattern: 'src/core', partialMatch: false },
     mayImport: [{ layer: 'core' }],
-    externalAllow: ['zod', 'node:crypto', 'node:buffer', 'mdast-util-from-markdown'],
+    externalAllow: ['zod', 'node:crypto', 'node:buffer', 'mdast-util-from-markdown', '@types/unist'],
   },
   ports: {
     root: 'src/ports',

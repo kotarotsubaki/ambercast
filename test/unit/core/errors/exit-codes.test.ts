@@ -9,7 +9,9 @@ const ALL_ERROR_KINDS = [
   'target-unresolved',
   'prompt-path-invalid',
   'secret-literal-rejected',
-  'secret-grant-unattributable',
+  'secret-consent-required',
+  'secret-env-var-collision',
+  'secret-syntax-rejected',
   'missing-plan',
   'stale-ir',
   'integrity-violation',
@@ -40,7 +42,9 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
     case 'target-unresolved':
     case 'prompt-path-invalid':
     case 'secret-literal-rejected':
-    case 'secret-grant-unattributable':
+    case 'secret-consent-required':
+    case 'secret-env-var-collision':
+    case 'secret-syntax-rejected':
       return 2;
     case 'browser-launch-failed':
     case 'ai-executor-unavailable':

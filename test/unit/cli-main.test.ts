@@ -280,6 +280,7 @@ describe('main()', () => {
         dryRun: true,
         planFile: 'login.ambercast.plan.json',
         ambiguities: [],
+        secrets: [],
       }],
     };
     runGenerateCommand.mockResolvedValue({ exitCode: 1, envelope });
@@ -904,7 +905,9 @@ describe('main()', () => {
 
     it.each([
       ['SECRET_LITERAL_REJECTED', 'usage', { detector: 'credential-prefix-sk', path: 'generatorMeta.key', attempts: [] }, 'detector=credential-prefix-sk; path=generatorMeta.key; attempts=[]'],
-      ['SECRET_GRANT_UNATTRIBUTABLE', 'usage', { reason: 'citation-not-found', secretRef: '{{secrets.API_TOKEN}}', stepId: 'step-a', attempts: [] }, 'reason=citation-not-found; secretRef={{secrets.API_TOKEN}}; stepId=step-a; attempts=[]'],
+      ['SECRET_ENV_VAR_COLLISION', 'usage', { envVar: 'AMBERCAST_SECRET_API_TOKEN', refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'] }, 'envVar=AMBERCAST_SECRET_API_TOKEN; refs=["{{secrets.API_TOKEN}}","{{secrets.api_token}}"]'],
+      ['SECRET_CONSENT_REQUIRED', 'usage', { reason: 'consent-required', secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }, 'reason=consent-required; secrets=[{"name":"API_TOKEN","stepId":"step-a","envVar":"AMBERCAST_SECRET_API_TOKEN","reason":"required"}]'],
+      ['SECRET_SYNTAX_REJECTED', 'usage', { occurrences: [{ kind: 'reference', line: 2, column: 8 }] }, 'occurrences=[{"kind":"reference","line":2,"column":8}]'],
       ['AI_EXECUTOR_UNAVAILABLE', 'environment', { attempts: [] }, 'attempts=[]'],
       ['UNEXPECTED_CRASH', 'environment', { cause: { name: 'AbortError' } }, 'cause={"name":"AbortError"}'],
       ['FS_IO_ERROR', 'environment', { partiallyWritten: ['plan', 'grounding'] }, 'partiallyWritten=["plan","grounding"]'],
@@ -1069,16 +1072,15 @@ describe('main()', () => {
       const rendered = renderHumanReport({
         ...RUN_ENVELOPE,
         errors: [{
-          scope: 'run', kind: 'usage', code: 'SECRET_GRANT_UNATTRIBUTABLE', message: 'message',
+          scope: 'case', kind: 'usage', code: 'SECRET_CONSENT_REQUIRED', caseId: 'case-a', message: 'message',
           details: {
-            reason: 'uncovered-grant',
-            secretRef: '{{secrets.API_TOKEN}}',
-            sourceSpan: { startLine: 'unsafe\u007f\u0080', endLine: 2 },
+            reason: 'consent-required',
+            secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'unsafe\u007f\u0080', reason: 'required' }],
           },
         }],
       } as never, false);
 
-      expect(rendered).toBe('error SECRET_GRANT_UNATTRIBUTABLE: message\n  details: reason=uncovered-grant; secretRef={{secrets.API_TOKEN}}; sourceSpan={"startLine":"unsafe\\u007f\\u0080","endLine":2}\n');
+      expect(rendered).toBe('error SECRET_CONSENT_REQUIRED [case-a]: message\n  details: reason=consent-required; secrets=[{"name":"API_TOKEN","stepId":"step-a","envVar":"unsafe\\u007f\\u0080","reason":"required"}]\n');
     });
 
     it('renders normal filesystem and error text as exact report lines', () => {

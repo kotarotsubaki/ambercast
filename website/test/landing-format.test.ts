@@ -33,8 +33,8 @@ describe('escapeHtml', () => {
 
 describe('classifyPromptLine', () => {
   it.each([
-    ['# Login', 'heading'], ['@ambercast-secret {{secrets.password}}', 'grant'], ['body', 'body'], ['', 'body'],
-    ['#without-space', 'body'], ['@ambercast-secretary', 'grant'], ['@ambercast-secrets', 'grant'],
+    ['# Login', 'heading'], ['@ambercast-secret {{secrets.password}}', 'body'], ['body', 'body'], ['', 'body'],
+    ['#without-space', 'body'], ['@ambercast-secretary', 'body'], ['@ambercast-secrets', 'body'],
   ] as const)('classifies %j as %s', (line, expected) => {
     expect(classifyPromptLine(line)).toBe(expected);
   });

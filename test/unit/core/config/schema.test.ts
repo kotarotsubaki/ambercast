@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RawConfig } from '#core/config/schema.js';
+import { RawConfig, type ResolvedConfig } from '#core/config/schema.js';
 
 interface SchemaUnderTest {
   safeParse(value: unknown): { success: boolean };
@@ -30,6 +30,7 @@ describe('RawConfig', () => {
       testIgnore: ['**/node_modules/**'],
       targets: { app: TARGET },
       defaultTarget: 'app',
+      secrets: { allow: ['account.password'] },
       ai: { provider: 'codex' },
       viewer: { port: 4_321 },
       ci: { heal: true, updateGroundingCache: false },
@@ -55,6 +56,28 @@ describe('RawConfig', () => {
       testIgnore: [],
       targets: {},
     });
+  });
+
+  it('accepts optional secret consent with validated names or an unrestricted allowlist', () => {
+    expectAccepted(RawConfig, { $schema: CONFIG_SCHEMA_URL });
+    expectAccepted(RawConfig, { $schema: CONFIG_SCHEMA_URL, secrets: { allow: ['account.password'] } });
+    expectAccepted(RawConfig, { $schema: CONFIG_SCHEMA_URL, secrets: { allow: '*' } });
+  });
+
+  it.each([
+    ['an empty secret name', { $schema: CONFIG_SCHEMA_URL, secrets: { allow: [''] } }],
+    ['an unknown secrets key', { $schema: CONFIG_SCHEMA_URL, secrets: { allow: [], unexpected: true } }],
+  ] as const)('rejects %s', (_description, value) => {
+    expectRejected(RawConfig, value);
+  });
+
+  it('requires resolved configurations to contain secret consent', () => {
+    const resolvedSecrets = { secrets: { allow: ['account.password'] } } satisfies Pick<ResolvedConfig, 'secrets'>;
+    // @ts-expect-error Resolved configuration always includes a secret consent policy.
+    const missingResolvedSecrets: Pick<ResolvedConfig, 'secrets'> = {};
+
+    expect(resolvedSecrets.secrets.allow).toStrictEqual(['account.password']);
+    void missingResolvedSecrets;
   });
 
   it('requires $schema whenever a config file is parsed', () => {

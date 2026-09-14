@@ -13,7 +13,9 @@ import { FsIoError } from '#core/errors/fs-io-error.js';
 import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
-import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
+import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
+import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
@@ -45,7 +47,6 @@ import type { AiAgenticRequest, InstructionCoveredAiAgenticRequest } from '#port
 import type { BrowserDriver, BrowserEngine, BrowserSession, PerformableAction } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
 import { classifyBrowserLaunchFailure, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
@@ -138,15 +139,6 @@ const DEFAULT_OPTIONS: RunOptions = {
   list: false,
   stale: 'fail',
 };
-const GENERATE_OPTIONS: GenerateOptions = {
-  files: [],
-  strict: false,
-  force: false,
-  maxAttempts: 1,
-  dryRun: false,
-  allowEmpty: false,
-  list: false,
-};
 const AI_TIMEOUT_MESSAGE = 'The AI provider did not respond within the configured timeout.';
 const GENERIC_ABORT_EXPLANATION = 'The browser session could not complete this case and no deterministic fallback is available.';
 const HIGH_ENTROPY_TOKEN_LITERAL = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea';
@@ -232,17 +224,7 @@ interface Scenario {
   readonly resolveAiExecutor: ReturnType<typeof vi.fn<RunDeps['resolveAiExecutor']>>;
 }
 
-type LegacyFillSecretStep = Omit<Extract<Step, { kind: 'action'; action: 'fill-secret' }>, 'secretGrantSpan'>;
-type LegacyAiStep = Omit<Extract<Step, { kind: 'ai' }>, 'secrets'> & { readonly secrets: readonly string[] };
-type TestStep = Step | LegacyFillSecretStep | LegacyAiStep;
-
-function isLegacyFillSecretStep(step: TestStep): step is LegacyFillSecretStep {
-  return step.kind === 'action' && step.action === 'fill-secret' && !('secretGrantSpan' in step);
-}
-
-function isLegacyAiStep(step: TestStep): step is LegacyAiStep {
-  return step.kind === 'ai' && 'secrets' in step && step.secrets !== undefined && step.secrets.every((grant) => typeof grant === 'string');
-}
+type TestStep = Step;
 
 function createRecordingStorage(): RecordingStorage {
   const backing = createInMemoryStorage();
@@ -301,6 +283,7 @@ function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
       ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
       ci: { heal: false, updateGroundingCache: false },
       grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
+      secrets: { allow: '*' },
     },
     ...overrides,
     allocateCallId: overrides.allocateCallId ?? createCallIdAllocator(),
@@ -332,55 +315,17 @@ async function createFreshPlan(
   steps: readonly TestStep[] = [],
   targetDefinitions: PlanDocument['targets'] = TARGETS,
 ): Promise<PlanDocument> {
-  const legacyRefs = steps.flatMap((step) => {
-    if (isLegacyFillSecretStep(step)) {
-      return [step.secretRef];
-    }
-    if (isLegacyAiStep(step)) {
-      return step.secrets;
-    }
-    return [];
-  });
-  const promptText = await storage.readText(testPath);
-  const normalizedPrompt = normalizeTestMd(promptText);
-  const grantStartLine = normalizedPrompt.endsWith('\n')
-    ? normalizedPrompt.split('\n').length
-    : normalizedPrompt.split('\n').length + 1;
-  if (legacyRefs.length > 0) {
-    const prefix = normalizedPrompt.endsWith('\n') ? normalizedPrompt : `${normalizedPrompt}\n`;
-    await storage.writeText(testPath, `${prefix}${legacyRefs.map((ref) => `@ambercast-secret ${ref}`).join('\n')}\n`);
-  }
-  let nextGrantLine = grantStartLine;
-  const committedSteps = steps.map((step) => {
-    if (isLegacyFillSecretStep(step)) {
-      const secretGrantSpan = { startLine: nextGrantLine, endLine: nextGrantLine };
-      nextGrantLine += 1;
-      return Step.parse({ ...step, secretGrantSpan });
-    }
-    if (isLegacyAiStep(step)) {
-      return Step.parse({
-        ...step,
-        ...(step.secrets.length === 0 ? {} : {
-          secrets: step.secrets.map((ref) => {
-            const sourceSpan = { startLine: nextGrantLine, endLine: nextGrantLine };
-            nextGrantLine += 1;
-            return { ref, sourceSpan };
-          }),
-        }),
-      });
-    }
-    return Step.parse(step);
-  });
+  const committedSteps = steps.map((step) => Step.parse(step));
   const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundleFingerprint(),
     targetDefinitions,
   });
   const plan = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { inputsDigest },
     targets: targetDefinitions,
     steps: committedSteps,
@@ -498,7 +443,7 @@ async function readGrounding(storage: StorageAdapter, testPath: string): Promise
 }
 
 function aiStep(id?: string): Extract<Step, { kind: 'ai' }>;
-function aiStep(id: string, secrets: readonly string[]): LegacyAiStep;
+function aiStep(id: string, secrets: readonly string[]): Extract<Step, { kind: 'ai' }>;
 function aiStep(id = 'recorded-ai', secrets?: readonly string[]): TestStep {
   const base = {
     id,
@@ -507,7 +452,7 @@ function aiStep(id = 'recorded-ai', secrets?: readonly string[]): TestStep {
     instructionCoverage: DEFAULT_INSTRUCTION_COVERAGE,
   };
 
-  return (secrets === undefined ? base : { ...base, secrets: [...secrets] }) as unknown as TestStep;
+  return (secrets === undefined ? base : { ...base, secrets: secrets.map((ref) => ({ ref })) }) as unknown as TestStep;
 }
 
 function configWithAiTimeout(timeoutMs: number): RunDeps['config'] {
@@ -520,6 +465,7 @@ function configWithAiTimeout(timeoutMs: number): RunDeps['config'] {
     ai: { provider: 'codex', timeoutMs, maxGenerateAttempts: 2 },
     ci: { heal: false, updateGroundingCache: false },
     grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
+    secrets: { allow: [] },
   };
 }
 
@@ -593,7 +539,7 @@ async function runFailureEvidenceScenario(
   const testPath = await writePrompt(
     recordingStorage.storage,
     'login.test.md',
-    `${PROMPT}${secretRefs.length === 0 ? '' : `\n${secretRefs.join('\n')}\n`}`,
+    PROMPT,
   );
   const fillSteps: TestStep[] = secretRefs.map((secretRef, index) => ({
     id: `fill-secret-${index}`,
@@ -630,7 +576,7 @@ describe('run', () => {
     const { deps, browserDriver, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage);
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: [] } } }, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(MissingPlanError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'missing-plan', exitCode: 4 });
@@ -655,7 +601,7 @@ describe('run', () => {
     const testPath = await writePrompt(recordingStorage.storage);
     await arrangePlan(recordingStorage.storage, testPath);
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: [] } } }, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'integrity-violation', exitCode: 4 });
@@ -678,99 +624,103 @@ describe('run', () => {
     expect(browserDriver).not.toHaveBeenCalled();
   });
 
-  it('rejects a hand-edited plan whose persisted grant span is stale before launching a browser', async () => {
+  it('rejects legacy secret syntax before target resolution or browser launch', async () => {
     const { deps, browserDriver, recordingStorage } = createScenario();
-    const secretRef = '{{secrets.FOO}}';
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n@ambercast-secret ${secretRef}\n`);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{
-      id: 'fill-password',
-      kind: 'action',
-      action: 'fill-secret',
-      target: PASSWORD,
-      secretRef,
-      secretGrantSpan: { startLine: 1, endLine: 1 },
-    }]);
+    await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n@ambercast-${'secret'} {{secrets.FOO}}\n`);
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, target: 'missing' });
 
-    expect(outcome.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-    if (outcome.results[0]?.error instanceof SecretGrantUnattributableError) {
-      expect(outcome.results[0].error.details).toMatchObject({
-        reason: 'stale-grant-span',
-        secretRef,
-        stepId: 'fill-password',
-      });
-    }
+    // SPEC-C1 C1-12
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretSyntaxRejectedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      details: { hint: 'Delete the offending line(s) and re-run `ambercast generate`.' },
+    });
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(TargetUnresolvedError);
     expect(browserDriver).not.toHaveBeenCalled();
   });
 
-  it('rejects a fresh plan with an uncovered secret grant before launching a browser', async () => {
+  it('rejects legacy secret syntax with no browser or provider calls', async () => {
     const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
-    const secretRef = '{{secrets.FOO}}';
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `@ambercast-secret ${secretRef}\n`);
-    await seedFreshArtifacts(recordingStorage.storage, testPath);
+    await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n{{secrets.FOO}}\n`);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
-    const error = outcome.results[0]?.error;
 
-    expect(error).toBeInstanceOf(SecretGrantUnattributableError);
-    if (error instanceof SecretGrantUnattributableError) {
-      expect(error.details).toMatchObject({
-        reason: 'uncovered-grant',
-        secretRef,
-        sourceSpan: { startLine: 1, endLine: 1 },
-      });
-    }
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretSyntaxRejectedError);
     expect(browserDriver).not.toHaveBeenCalled();
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['ordinary-text edit that preserves the grant line', true],
-    ['removal of the grant line', false],
-  ] as const)('rejects a %s without regeneration as stale before grant re-attribution can run', async (_description, preservesGrant) => {
+  it('requires configured consent for committed secret uses before browser launch', async () => {
     const { deps, browserDriver, recordingStorage } = createScenario();
-    const secretRef = '{{secrets.FRESHNESS}}';
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n@ambercast-secret ${secretRef}\n`);
-    const response = {
-      steps: [{
-        id: 'fill-password',
-        kind: 'action',
-        action: 'fill-secret',
-        target: PASSWORD,
-        secretRef,
-        citation: `@ambercast-secret ${secretRef}`,
-      }],
-      ambiguities: [],
-    };
-    const generateDeps: GenerateDeps = {
-      storage: recordingStorage.storage,
-      layout: deps.layout,
-      clock: deps.clock,
-      allocateCallId: deps.allocateCallId,
-      resolveAiExecutor: async () => createFakeAiExecutor({
-        execute: async () => ({ data: response, raw: JSON.stringify(response) }),
-      }),
-      events: deps.events,
-      discoverTestFiles: deps.discoverTestFiles,
-      config: deps.config,
-    };
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{
+      id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
+    }]);
 
-    await generate(generateDeps, GENERATE_OPTIONS);
-    await recordingStorage.storage.writeText(
-      testPath,
-      preservesGrant
-        ? `${PROMPT}\nPrompt text changed after generation.\n@ambercast-secret ${secretRef}\n`
-        : PROMPT,
-    );
+    const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: [] } } }, DEFAULT_OPTIONS);
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
-
-    expect(outcome.results[0]?.error).toBeInstanceOf(StaleIrError);
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
     expect(browserDriver).not.toHaveBeenCalled();
   });
 
-  it('replays normally when every fill-secret and AI-step grant is declared by the prompt', async () => {
+  it('denies committed secret uses when the optional consent dependency is absent', async () => {
+    const { deps, browserDriver, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{
+      id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
+    }]);
+    const { secrets: _secrets, ...configWithoutSecrets } = deps.config;
+
+    const outcome = await run({ ...deps, config: configWithoutSecrets }, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
+    expect(browserDriver).not.toHaveBeenCalled();
+  });
+
+  it('accepts every committed secret use when consent allows all names', async () => {
+    const scenario = createScenario();
+    const { deps, browserDriver, recordingStorage } = scenario;
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{
+      id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
+    }]);
+
+    const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: '*' } } }, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(SecretConsentRequiredError);
+    expect(browserDriver).toHaveBeenCalled();
+  });
+
+  it('rejects committed secret refs that collide in environment-variable space before browser launch', async () => {
+    const { deps, browserDriver, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'first', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.FOO_BAR}}' },
+      { id: 'second', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.FOO.BAR}}' },
+    ]);
+
+    const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: '*' } } }, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretEnvVarCollisionError);
+    expect(browserDriver).not.toHaveBeenCalled();
+  });
+
+  it('rejects a v2 committed secret-span field at the strict plan-read boundary', async () => {
+    const { deps, browserDriver, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    const plan = await createFreshPlan(recordingStorage.storage, testPath, []);
+    await recordingStorage.storage.writeText(`${TEST_DIR}/login.ambercast.plan.json`, toCanonicalArtifactText({
+      ...plan,
+      steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.FOO}}', ['secretGrant' + 'Span']: { startLine: 1, endLine: 1 } }],
+    } as unknown as JsonValueT));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+    expect(browserDriver).not.toHaveBeenCalled();
+  });
+
+  it('replays normally when every fill-secret and AI-step secret ref is allowed', async () => {
     const secretRef = '{{secrets.LOGIN_PASSWORD}}';
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
     const browserDriver = vi.fn(() => createFakeBrowserDriver(() => session));
@@ -778,7 +728,7 @@ describe('run', () => {
       browserDriver,
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'resolved-at-run-time']])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -1175,7 +1125,7 @@ describe('run', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'not-in-the-plan']])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     const steps: TestStep[] = [
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT },
       { id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
@@ -1397,7 +1347,7 @@ describe('run', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     const steps: TestStep[] = [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef }];
     await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['fill-password']));
 
@@ -1417,7 +1367,7 @@ describe('run', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map()),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     const steps: TestStep[] = [
       { id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'after-password', kind: 'action', action: 'navigate', url: '/after' },
@@ -1483,7 +1433,7 @@ describe('run', () => {
         config: { ...createScenario().deps.config, targets: DENY_EVERYWHERE_TARGETS },
         secrets,
       });
-      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
       await seedFreshArtifacts(recordingStorage.storage, testPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), DENY_EVERYWHERE_TARGET_DEFINITIONS);
 
       const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -1513,7 +1463,7 @@ describe('run', () => {
         resolveAiExecutor: async () => executor,
         secrets,
       });
-      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
       await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [SECRET_REF])], {}, DENY_EVERYWHERE_TARGET_DEFINITIONS);
 
       const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -1537,7 +1487,7 @@ describe('run', () => {
         config: { ...createScenario().deps.config, targets },
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
-      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
       await seedFreshArtifacts(recordingStorage.storage, testPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), targetDefinitions);
 
       const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -1565,7 +1515,7 @@ describe('run', () => {
         discoverTestFiles: vi.fn(async () => ['allowed.test.md']),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
-      const allowedPath = await writePrompt(allowedScenario.recordingStorage.storage, 'allowed.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const allowedPath = await writePrompt(allowedScenario.recordingStorage.storage, 'allowed.test.md', PROMPT);
       await seedFreshArtifacts(allowedScenario.recordingStorage.storage, allowedPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), IDP_ONLY_TARGET_DEFINITIONS);
 
       const allowedOutcome = await run(allowedScenario.deps, DEFAULT_OPTIONS);
@@ -1589,7 +1539,7 @@ describe('run', () => {
         discoverTestFiles: vi.fn(async () => ['denied.test.md']),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
-      const deniedPath = await writePrompt(deniedScenario.recordingStorage.storage, 'denied.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const deniedPath = await writePrompt(deniedScenario.recordingStorage.storage, 'denied.test.md', PROMPT);
       await seedFreshArtifacts(deniedScenario.recordingStorage.storage, deniedPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), IDP_ONLY_TARGET_DEFINITIONS);
 
       const deniedOutcome = await run(deniedScenario.deps, DEFAULT_OPTIONS);
@@ -1616,7 +1566,7 @@ describe('run', () => {
         resolveAiExecutor,
         secrets,
       });
-      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
       await seedFreshArtifacts(
         recordingStorage.storage,
         testPath,
@@ -1644,7 +1594,7 @@ describe('run', () => {
         discoverTestFiles: vi.fn(async () => ['narrow.test.md']),
         secrets: narrowSecrets,
       });
-      const narrowPath = await writePrompt(narrowScenario.recordingStorage.storage, 'narrow.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const narrowPath = await writePrompt(narrowScenario.recordingStorage.storage, 'narrow.test.md', PROMPT);
       const narrowPlan = await createFreshPlan(narrowScenario.recordingStorage.storage, narrowPath, [FILL_STEP]);
       const narrowLayout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
       await narrowScenario.recordingStorage.storage.writeText(
@@ -1701,7 +1651,7 @@ describe('run', () => {
         }),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
-      const widePath = await writePrompt(wideScenario.recordingStorage.storage, 'wide.test.md', `${PROMPT}\n${SECRET_REF}\n`);
+      const widePath = await writePrompt(wideScenario.recordingStorage.storage, 'wide.test.md', PROMPT);
       const widePlan = await createFreshPlan(wideScenario.recordingStorage.storage, widePath, [FILL_STEP], wideTargetDefinitions);
       const wideLayout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
       await wideScenario.recordingStorage.storage.writeText(
@@ -2807,7 +2757,7 @@ describe('run agentic fallback pipeline', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -2895,7 +2845,7 @@ describe('run agentic fallback pipeline', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -2969,7 +2919,7 @@ describe('run agentic fallback pipeline', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -3077,7 +3027,7 @@ describe('run agentic fallback pipeline', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -3126,7 +3076,7 @@ describe('run agentic fallback pipeline', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -3176,7 +3126,7 @@ describe('run agentic fallback pipeline', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -3638,7 +3588,7 @@ describe('run path-B element recovery', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -3920,7 +3870,7 @@ describe('run path-B element recovery', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -4622,7 +4572,7 @@ describe('run path-C pre-scan', () => {
       resolveAiExecutor,
       secrets: createFakeSecretsProvider(new Map()),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -4684,7 +4634,7 @@ describe('run path-C pre-scan', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -4726,7 +4676,7 @@ describe('run path-C pre-scan', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -4774,7 +4724,7 @@ describe('run path-C pre-scan', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -5150,7 +5100,7 @@ describe('run deterministic redaction boundary', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-path-a-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'assert-path-a-account', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Signed in' },
@@ -5189,7 +5139,7 @@ describe('run deterministic redaction boundary', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-integrity-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'throw-integrity-error', kind: 'action', action: 'navigate', url: '/dashboard' },
@@ -5239,7 +5189,7 @@ describe('run deterministic redaction boundary', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-unsupported-detail-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'throw-unsupported-detail-error', kind: 'action', action: 'navigate', url: '/dashboard' },
@@ -5340,7 +5290,7 @@ describe('run deterministic redaction boundary', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-generic-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'throw-generic-error', kind: 'action', action: 'navigate', url: '/dashboard' },
@@ -5410,7 +5360,7 @@ describe('run deterministic redaction boundary', () => {
       secrets: { resolve },
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-path-a-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       aiStep('resolve-rotated-secret', [secretRef]),
@@ -5440,7 +5390,7 @@ describe('run deterministic redaction boundary', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       aiStep('replay-secret-trace', [secretRef]),
       { id: 'assert-after-trace-replay', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Signed in' },
@@ -5500,7 +5450,7 @@ describe('run agentic materialization boundary', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, variable: 'token' },
       aiStep('agentic-snapshot', [secretRef]),
@@ -5558,7 +5508,7 @@ describe('run agentic materialization boundary', () => {
     const successfulPath = await writePrompt(
       successful.recordingStorage.storage,
       'login.test.md',
-      `${PROMPT}\n${secretRef}\n`,
+      PROMPT,
     );
     await seedFreshArtifacts(successful.recordingStorage.storage, successfulPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, variable: 'token' },
@@ -5617,7 +5567,7 @@ describe('run agentic materialization boundary', () => {
     const failingPath = await writePrompt(
       failing.recordingStorage.storage,
       'login.test.md',
-      `${PROMPT}\n${secretRef}\n`,
+      PROMPT,
     );
     await seedFreshArtifacts(failing.recordingStorage.storage, failingPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, variable: 'token' },
@@ -5679,7 +5629,7 @@ describe('run agentic materialization boundary', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'SECRET-LITERAL-SENTINEL']])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, variable: 'token' },
       aiStep('recorded-ai', [secretRef]),
@@ -5723,7 +5673,7 @@ describe('run agentic materialization boundary', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
     recordingStorage.writes.length = 0;
 
@@ -5822,7 +5772,7 @@ describe('run agentic materialization boundary', () => {
     const testPath = await writePrompt(
       recordingStorage.storage,
       'login.test.md',
-      secretValue === undefined ? PROMPT : `${PROMPT}\n${secretRef}\n`,
+      PROMPT,
     );
     const steps: TestStep[] = secretValue === undefined
       ? [
@@ -5873,7 +5823,7 @@ describe('run agentic materialization boundary', () => {
     const testPath = await writePrompt(
       recordingStorage.storage,
       'login.test.md',
-      `${PROMPT}\n${tiedSecretRef}\n${longSecretRef}\n`,
+      PROMPT,
     );
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'capture-prefix', kind: 'capture', target: EMAIL, variable: 'prefix' },
@@ -5935,7 +5885,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
     const storageFailure = new Error(`The storage backend rejected ${secretValue}.`, {
       cause: new Error(`The filesystem diagnostic contains ${secretValue}.`),
@@ -6144,10 +6094,11 @@ describe('run grounding write-back posture integration', () => {
       resolveAiExecutor: async () => executor,
       config: {
         ...configWithAiTimeout(120_000),
+        secrets: { allow: ['grounding_write_back'] },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'explicit' },
       },
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
     recordingStorage.writes.length = 0;
 
@@ -6191,10 +6142,10 @@ describe('run failure evidence', () => {
     try {
       await storage.writeText(testPath, PROMPT);
       const plan = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         source: {
           inputsDigest: computeInputsDigest({
-            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 2,
+            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 3,
             generatorPromptTemplateFingerprint: promptTemplateFingerprint(), planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: TARGETS,
           }),
         },
@@ -6294,7 +6245,7 @@ describe('run failure evidence', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
@@ -6357,7 +6308,7 @@ describe('run failure evidence', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'xy']])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
@@ -6651,7 +6602,7 @@ describe('run failure evidence', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
@@ -6718,7 +6669,7 @@ describe('run failure evidence', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
@@ -6745,7 +6696,7 @@ describe('run failure evidence', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
@@ -6774,7 +6725,7 @@ describe('run failure evidence', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'capture-token', kind: 'capture', target: EMAIL, variable: 'token' },
@@ -6930,7 +6881,7 @@ describe('run failure evidence', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
@@ -6963,7 +6914,7 @@ describe('run failure evidence', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       { id: 'capture-token', kind: 'capture', target: EMAIL, variable: 'token' },
@@ -7199,7 +7150,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7221,7 +7172,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -7267,7 +7218,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7301,7 +7252,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -7374,7 +7325,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(secretValues),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRefs.join('\n')}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -7473,7 +7424,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(secretValues),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRefs.join('\n')}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', secretRefs)]);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7505,7 +7456,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -7537,7 +7488,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7556,7 +7507,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -7589,7 +7540,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7683,7 +7634,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7709,7 +7660,7 @@ describe('run credential-literal symmetry', () => {
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n${secretRef}\n`);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,

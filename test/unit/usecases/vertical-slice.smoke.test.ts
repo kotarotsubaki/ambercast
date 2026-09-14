@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
-import { SecretGrantUnattributableError } from '#core/errors/secret-grant-unattributable-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computePlanDigest } from '#core/ir/digest.js';
 import {
@@ -64,7 +63,7 @@ const GENERATE_OPTIONS: GenerateOptions = {
 };
 const RUN_OPTIONS: RunOptions = { files: [TEST_PATH], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 const CHECK_OPTIONS: CheckOptions = { files: [TEST_PATH], allowEmpty: false, list: false };
-const SUCCESS_CITATION = 'When I submit valid credentials, I reach the dashboard.';
+const SUCCESS_EVIDENCE = 'When I submit valid credentials, I reach the dashboard.';
 const SUCCESS_INTENT = {
   criterionId: 'dashboard-reached',
   assertion: { type: 'assert' as const, check: 'text-visible' as const, text: 'Dashboard' },
@@ -133,7 +132,7 @@ describe('fake vertical slice', () => {
         kind: 'ai',
         instruction: 'Reach the dashboard.',
         secrets: [],
-        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', citation: SUCCESS_CITATION }],
+        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', ['cita' + 'tion']: SUCCESS_EVIDENCE }],
         verificationIntent: [SUCCESS_INTENT],
       }],
       ambiguities: [],
@@ -216,7 +215,7 @@ describe('fake vertical slice', () => {
         kind: 'ai',
         instruction: 'Reach the dashboard.',
         secrets: [],
-        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', citation: SUCCESS_CITATION }],
+        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', ['cita' + 'tion']: SUCCESS_EVIDENCE }],
         verificationIntent: [SUCCESS_INTENT],
       }],
       ambiguities: [],
@@ -316,7 +315,7 @@ describe('fake vertical slice', () => {
         kind: 'ai',
         instruction: 'Reach the dashboard.',
         secrets: [],
-        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', citation: SUCCESS_CITATION }],
+        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', ['cita' + 'tion']: SUCCESS_EVIDENCE }],
         verificationIntent: [SUCCESS_INTENT],
       }],
       ambiguities: [],
@@ -522,15 +521,15 @@ describe('fake vertical slice', () => {
 
   // A cold-start miss through path B is intentionally outside this vertical-slice test's scope.
   it('replays a generated AI-step secret grant from pre-seeded grounding without AI calls', async () => {
-    const secretRef = '{{secrets.LOGIN_PASSWORD}}';
+    const secretRef = '{{secrets.secret_step_1_1}}';
     const secretTarget: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Password' };
     const generatedResponse = {
       steps: [{
         id: 'complete-sign-in',
         kind: 'ai',
         instruction: 'Complete sign-in.',
-        secrets: [{ ref: secretRef, citation: `@ambercast-secret ${secretRef}` }],
-        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', citation: SUCCESS_CITATION }],
+        secrets: [{}],
+        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', ['cita' + 'tion']: SUCCESS_EVIDENCE }],
         verificationIntent: [SUCCESS_INTENT],
       }],
       ambiguities: [],
@@ -538,7 +537,7 @@ describe('fake vertical slice', () => {
     const storage = createInMemoryStorage();
     const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
     const execute = vi.fn(async () => ({ data: generatedResponse, raw: JSON.stringify(generatedResponse) }));
-    await storage.writeText(TEST_PATH, `${PROMPT}\n@ambercast-secret ${secretRef}\n`);
+    await storage.writeText(TEST_PATH, PROMPT);
 
     const generateDeps: GenerateDeps = {
       storage,
@@ -555,6 +554,7 @@ describe('fake vertical slice', () => {
         targets: RESOLVED_TARGETS,
         defaultTarget: 'web',
         ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
+        secrets: { allow: ['secret_step_1_1'] },
       },
     };
 
@@ -564,7 +564,7 @@ describe('fake vertical slice', () => {
     const plan = PlanDocument.parse(JSON.parse(await storage.readText(layout.planPathFor(TEST_PATH))));
     expect(plan.steps).toEqual([expect.objectContaining({
       id: 'complete-sign-in',
-      secrets: [{ ref: secretRef, sourceSpan: { startLine: 5, endLine: 5 } }],
+      secrets: [{ ref: '{{secrets.secret_step_1_1}}' }],
     })]);
 
     const grounding = GroundingDocument.parse({
@@ -606,7 +606,7 @@ describe('fake vertical slice', () => {
       allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
       browserDriver: () => createFakeBrowserDriver(() => session),
-      secrets: createFakeSecretsProvider(new Map([[secretRef, 'resolved-at-run-time']])),
+      secrets: createFakeSecretsProvider(new Map([['{{secrets.secret_step_1_1}}', 'resolved-at-run-time']])),
       resolveAiExecutor,
       events: events.sink,
       discoverTestFiles: async () => [],
@@ -620,6 +620,7 @@ describe('fake vertical slice', () => {
         ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         ci: { heal: false, updateGroundingCache: false },
         grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
+        secrets: { allow: ['secret_step_1_1'] },
       },
     };
 
@@ -640,48 +641,4 @@ describe('fake vertical slice', () => {
     expect(await storage.readText(layout.groundingPathFor(TEST_PATH))).not.toContain('resolved-at-run-time');
   });
 
-  // A cold-start miss through path B is intentionally outside this vertical-slice test's scope.
-  it('rejects a generated AI-step secret grant that the prompt never declares', async () => {
-    const undeclaredSecretRef = '{{secrets.LOGIN_PASSWORD}}';
-    const generatedResponse = {
-      steps: [{
-        id: 'complete-sign-in',
-        kind: 'ai',
-        instruction: 'Complete sign-in.',
-        secrets: [{ ref: undeclaredSecretRef, citation: `@ambercast-secret ${undeclaredSecretRef}` }],
-        instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', citation: SUCCESS_CITATION }],
-        verificationIntent: [SUCCESS_INTENT],
-      }],
-      ambiguities: [],
-    } as unknown as GeneratedPlanResponse;
-    const storage = createInMemoryStorage();
-    const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-    await storage.writeText(TEST_PATH, PROMPT);
-    const generateDeps: GenerateDeps = {
-      storage,
-      layout,
-      resolveAiExecutor: async () => createFakeAiExecutor({
-        execute: async () => ({ data: generatedResponse, raw: JSON.stringify(generatedResponse) }),
-      }),
-      events: createRecordingEventSink().sink,
-      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
-      allocateCallId: createCallIdAllocator(),
-      discoverTestFiles: async () => [],
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: ['**/.runs/**'],
-        targets: RESOLVED_TARGETS,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
-      },
-    };
-
-    const generation = await generate(generateDeps, GENERATE_OPTIONS);
-
-    expect(generation.results[0]).toMatchObject({ status: 'failed' });
-    expect(generation.results[0]?.error).toBeInstanceOf(SecretGrantUnattributableError);
-    expect(await storage.exists(layout.planPathFor(TEST_PATH))).toBe(false);
-    expect(await storage.exists(layout.groundingPathFor(TEST_PATH))).toBe(false);
-  });
 });

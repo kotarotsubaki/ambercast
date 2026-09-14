@@ -18,7 +18,7 @@ Repair fixture task.
       }
     },
     "currentPlan": {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "source": {
         "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },

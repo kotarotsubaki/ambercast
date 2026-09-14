@@ -25,6 +25,7 @@ description: 本页定义了配置键及其解析逻辑。
 | `runsDir` | string | `tests/ambercast/.runs` | 解析为绝对布局路径 | run 报告/证据；heal 包含的写入 |
 | `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器；每个模式必须以 `.test.md` 结尾，否则加载配置会以 `CONFIG_INVALID` 失败 | generate、run、check、heal 发现 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含匹配后排除 | generate、run、check、heal 发现 |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空数组要求所有 secret 名称都需同意；`"*"` 允许所有名称且无需同意（不推荐）；非空数组仅允许其中列出的名称 | generate、run、heal |
 | `targets.<name>.baseUrl` | string | `web-user` 上的 `http://localhost:3000` | 替换整个 target 记录 | generate、run、check、heal 目标选择 |
 | `targets.<name>.browser` | `chromium` | `web-user` 上的 `chromium` | target 字段 | generate、run、heal 浏览器编排；check（新鲜度） |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | 缺省 secret 条目时仅允许 `baseUrl`；空数组将在所有位置拒绝该 secret；非空数组替换该默认值 | generate、run、heal 的 secret 接收方策略；check（新鲜度） |

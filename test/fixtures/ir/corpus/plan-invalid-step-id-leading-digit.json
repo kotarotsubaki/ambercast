@@ -2,7 +2,7 @@
   "document": "plan",
   "expected": "invalid",
   "value": {
-    "schemaVersion": 2,
+  "schemaVersion": 3,
     "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     "targets": {},
     "steps": [{ "id": "123abc", "kind": "action", "action": "navigate", "url": "https://example.test" }]

@@ -23,12 +23,15 @@ import {
  * Records human-maintained revisions for producer transforms outside core.
  *
  * The counters change only when their corresponding transform can change a
- * committed plan's meaning. Hashing source files would violate architecture
- * layering, so explicit revisions make that semantic dependency reviewable.
+ * committed plan's meaning. The secret-policy counter therefore covers the
+ * provider-facing naming-choice contract as well as local policy validation;
+ * otherwise a changed response shape could evade freshness detection. Hashing
+ * source files would violate architecture layering, so explicit revisions make
+ * that semantic dependency reviewable.
  */
 export const PLAN_PRODUCER_SEMANTIC_REVISIONS = Object.freeze({
   instructionCoveragePolicy: 2,
-  generatorSecretPolicy: 4,
+  generatorSecretPolicy: 5,
 } as const);
 
 /**

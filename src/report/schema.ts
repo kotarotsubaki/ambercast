@@ -11,20 +11,32 @@ import { z } from 'zod';
 const NON_WHITESPACE_STRING_PATTERN = /\S/;
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const SECRET_REF_PATTERN = /^\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
+const SECRET_NAME_PATTERN = /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/;
 const STEP_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 /** Report-local equivalent of the core IR secret-reference schema, kept local because report may only import core types. */
 const SecretRef = z.string().regex(SECRET_REF_PATTERN);
 /** Report-local equivalent of the core IR step-identifier schema, kept local because report may only import core types. */
 const StepId = z.string().regex(STEP_ID_PATTERN);
-/** Report-local equivalent of the core IR source-span schema, kept local because report may only import core types. */
-const SourceSpan = z.strictObject({
-  startLine: z.int().positive(),
-  endLine: z.int().positive(),
-}).refine((span) => span.endLine >= span.startLine, {
-  message: 'endLine must be greater than or equal to startLine',
-  path: ['endLine'],
-}); // JSON Schema omits this sibling-value ordering constraint, as it does for the core schema.
+/**
+ * Report-local equivalent of the core IR secret-name schema.
+ *
+ * Reports may type-import from core but must keep runtime validation local, so
+ * this duplicate is deliberately checked for structural equivalence rather
+ * than reusing a core schema value across the reporting boundary.
+ */
+const SecretName = z.string().regex(SECRET_NAME_PATTERN);
+/**
+ * Report-local equivalent of the core IR element-reference schema.
+ *
+ * Collision and rename warnings need target evidence, yet reports remain a
+ * standalone public schema rather than a runtime dependency on core IR.
+ */
+const ElementRef = z.discriminatedUnion('strategy', [z.strictObject({
+  strategy: z.literal('accessibility'),
+  role: z.string().min(1),
+  name: z.string().min(1),
+})]);
 
 /** Version shared by every structured report envelope. */
 export const REPORT_SCHEMA_VERSION = '3.5' as const;
@@ -50,6 +62,9 @@ const USAGE_REPORT_ERROR_CODES = [
   'INTEGRITY_VIOLATION',
   'SECRET_LITERAL_REJECTED',
   'SECRET_GRANT_UNATTRIBUTABLE',
+  'SECRET_ENV_VAR_COLLISION',
+  'SECRET_CONSENT_REQUIRED',
+  'SECRET_SYNTAX_REJECTED',
   'GROUNDING_UNRESOLVED',
 ] as const;
 
@@ -111,6 +126,8 @@ export const AiResponseIssueCode = z.enum([
   ...INSTRUCTION_COVERAGE_ISSUE_CODES,
   'invalid-json',
   'schema-mismatch',
+  'secret-allowed-name-not-projected',
+  'secret-conflicting-target-names',
 ]);
 
 /** Preserves literal fields and nonnegative array indices in a report issue path. */
@@ -120,13 +137,23 @@ export const AiResponseIssuePath = z.array(z.union([NonNegativeInteger, z.string
  * One strict, report-safe projection of a provider or coverage validation issue.
  *
  * Strictness ensures internal parser messages and arbitrary provider fields do
- * not become an accidental public diagnostics contract.
+ * not become an accidental public diagnostics contract. This is a union rather
+ * than one object with optional `stepId` because naming-policy failures always
+ * identify the provider step that must be corrected, whereas transport and
+ * general coverage failures may not have a meaningful step yet.
  */
-export const AiResponseIssue = z.strictObject({
-  code: AiResponseIssueCode,
-  path: AiResponseIssuePath,
-  stepId: StepId.optional(),
-});
+export const AiResponseIssue = z.union([
+  z.strictObject({
+    code: AiResponseIssueCode.exclude(['secret-allowed-name-not-projected', 'secret-conflicting-target-names']),
+    path: AiResponseIssuePath,
+    stepId: StepId.optional(),
+  }),
+  z.strictObject({
+    code: z.enum(['secret-allowed-name-not-projected', 'secret-conflicting-target-names']),
+    path: AiResponseIssuePath,
+    stepId: StepId,
+  }),
+]);
 
 /** Reserves every literal-secret detector identifier in the public closed enum. */
 export const SecretDetector = z.enum([
@@ -137,15 +164,6 @@ export const SecretDetector = z.enum([
   'embedded-secret-reference',
 ]);
 
-/** Mirrors the closed attribution reasons so reports cannot invent remediation states. */
-export const SecretGrantUnattributableReasonEnum = z.enum([
-  'citation-not-found', 'citation-not-unique', 'citation-missing-ref',
-  'citation-unresolved', 'multiply-attributed-grant', 'uncovered-grant', 'stale-grant-span',
-]);
-const SecretGrantUsageReasonEnum = z.enum([
-  'citation-not-found', 'citation-not-unique', 'citation-missing-ref',
-  'citation-unresolved', 'multiply-attributed-grant', 'stale-grant-span',
-]);
 
 /** Projects only stable built-in error names, preventing implementation-specific names from leaking. */
 export const CauseName = z.enum([
@@ -163,11 +181,33 @@ export const PromptPathInvalidDetails = z.strictObject({
   path: NonWhitespaceString,
   reason: z.enum(['outside-test-dir', 'not-test-md', 'no-name']),
 });
-/** Optional reason-specific attribution details without a fabricated step or source location. */
-export const SecretGrantUnattributableDetails = z.union([
-  z.strictObject({ reason: z.literal('uncovered-grant'), secretRef: SecretRef, sourceSpan: SourceSpan, attempts: ReportAttempts.optional() }),
-  z.strictObject({ reason: SecretGrantUsageReasonEnum, secretRef: SecretRef, stepId: StepId.optional(), attempts: ReportAttempts.optional() }),
-]);
+/**
+ * Identifies the one environment spelling shared by distinct logical
+ * references. The reference array, rather than values, makes the collision
+ * actionable without ever serializing a secret.
+ */
+export const SecretEnvVarCollisionDetails = z.strictObject({ envVar: NonWhitespaceString, refs: z.array(SecretRef).min(2) });
+/**
+ * Carries the consent decision and every denied plan use.
+ *
+ * Per-use rows preserve step identity and environment spelling because one
+ * name may be used more than once; the three reason values represent every
+ * consent-decision outcome in one stable report contract.
+ */
+export const SecretConsentRequiredDetails = z.strictObject({
+  reason: z.enum(['consent-required', 'declined', 'not-interactive']),
+  secrets: z.array(z.strictObject({ name: SecretName, stepId: StepId, envVar: NonWhitespaceString, reason: z.string() })),
+});
+/**
+ * Reports source locations for forbidden legacy secret syntax.
+ *
+ * Occurrences retain their kind because a whole directive has a different
+ * migration action from a reference marker, while one-based coordinates are
+ * suitable for editors and remain independent of host paths.
+ */
+export const SecretSyntaxRejectedDetails = z.strictObject({
+  occurrences: z.array(z.strictObject({ kind: z.enum(['grant-line', 'reference']), line: z.int().positive(), column: z.int().positive() })),
+});
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
 /** Identifies the AI step whose fail-closed grounding miss can be resolved explicitly. */
@@ -184,7 +224,7 @@ export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ n
  * @remarks
  * The remediation reason uses a closed vocabulary, while externally authored
  * reports may omit this evidence. The strict object admits only the reason
- * and a non-whitespace informational engine, keeping future engine additions
+ * and a non-whitespace informational engine, keeping engine identity
  * independent from the closed reason vocabulary.
  */
 export const BrowserLaunchFailedDetails = z.strictObject({
@@ -229,7 +269,6 @@ const RunUsageReportError = z.discriminatedUnion('code', [
   RunUsageErrorBase.extend({ code: z.literal('STALE_PLAN') }),
   RunUsageErrorBase.extend({ code: z.literal('INTEGRITY_VIOLATION') }),
   RunUsageErrorBase.extend({ code: z.literal('SECRET_LITERAL_REJECTED'), details: SecretLiteralRejectedDetails.optional() }),
-  RunUsageErrorBase.extend({ code: z.literal('SECRET_GRANT_UNATTRIBUTABLE'), details: SecretGrantUnattributableDetails.optional() }),
 ]);
 
 const RunEnvironmentReportError = z.discriminatedUnion('code', [
@@ -249,7 +288,9 @@ const CaseUsageReportError = z.discriminatedUnion('code', [
   CaseUsageErrorBase.extend({ code: z.literal('STALE_PLAN') }),
   CaseUsageErrorBase.extend({ code: z.literal('INTEGRITY_VIOLATION') }),
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_LITERAL_REJECTED'), details: SecretLiteralRejectedDetails.optional() }),
-  CaseUsageErrorBase.extend({ code: z.literal('SECRET_GRANT_UNATTRIBUTABLE'), details: SecretGrantUnattributableDetails.optional() }),
+  CaseUsageErrorBase.extend({ code: z.literal('SECRET_ENV_VAR_COLLISION'), details: SecretEnvVarCollisionDetails.optional() }),
+  CaseUsageErrorBase.extend({ code: z.literal('SECRET_CONSENT_REQUIRED'), details: SecretConsentRequiredDetails.optional() }),
+  CaseUsageErrorBase.extend({ code: z.literal('SECRET_SYNTAX_REJECTED'), details: SecretSyntaxRejectedDetails.optional() }),
   CaseUsageErrorBase.extend({ code: z.literal('GROUNDING_UNRESOLVED'), details: GroundingUnresolvedDetails.optional() }),
 ]);
 
@@ -530,6 +571,11 @@ const CompletedHealResult = z.discriminatedUnion('repairOutcome', [
     repairOutcome: z.literal('unresolved'),
     application: z.enum(['no-artifact-change', 'not-eligible']),
     stopReason: z.enum(['settled', 'attempt-limit', 'deadline']),
+    stage3Rejection: z.strictObject({
+      reason: z.literal('secret-set-changed'),
+      added: z.array(SecretName),
+      removed: z.array(SecretName),
+    }).optional(),
     ...ExecutedResultFields,
   }),
   z.strictObject({
@@ -611,6 +657,52 @@ export const HealResult = z.discriminatedUnion('status', [CompletedHealResult, L
 export type HealResult = z.infer<typeof HealResult>;
 
 /**
+ * Records which naming-policy rung established a generated secret name.
+ *
+ * The vocabulary deliberately includes deterministic, reconstruction, and
+ * interactive sources. Keeping those six states closed lets consumers
+ * distinguish an explicit allowed name, target slug,
+ * provider hint, stable ordinal, existing-plan reconstruction, and an
+ * interactive rename without reverse-engineering naming behavior.
+ */
+export const SecretUseSelectionSource = z.enum([
+  'allowed-name', 'target-slug', 'hint', 'ordinal', 'existing-plan', 'interactive-rename',
+]);
+export type SecretUseSelectionSource = z.infer<typeof SecretUseSelectionSource>;
+
+/**
+ * Public warning vocabulary for non-fatal secret naming conditions.
+ *
+ * A discriminated union preserves variant-specific evidence: reuse names all
+ * related steps, a target change retains both locators for its one step, and
+ * truncation reports only counts to avoid turning omitted candidates into
+ * report data. The complete stable shape keeps all naming-policy warnings in
+ * one report schema.
+ */
+export const SecretWarning = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('secret-name-reused-across-targets'), name: SecretName, stepIds: z.array(StepId) }),
+  z.strictObject({ kind: z.literal('secret-target-changed'), name: SecretName, stepId: StepId, previousTarget: ElementRef, target: ElementRef }),
+  z.strictObject({ kind: z.literal('allowed-names-truncated'), kept: NonNegativeInteger, dropped: NonNegativeInteger }),
+]);
+export type SecretWarning = z.infer<typeof SecretWarning>;
+
+/**
+ * One generated or reconstructed secret-use row in a generation result.
+ *
+ * `allowed` is reported separately from naming source because a fresh-plan
+ * dry run may inspect an existing plan after its live consent changed. The
+ * row therefore describes the committed use and current snapshot without
+ * implying that skipped-fresh generation reauthorizes or executes it.
+ */
+const GenerateSecret = z.strictObject({
+  name: SecretName,
+  stepId: StepId,
+  envVar: NonWhitespaceString,
+  allowed: z.boolean(),
+  selectionSource: SecretUseSelectionSource,
+});
+
+/**
  * Zod schema for one result produced by the `generate` command.
  *
  * This variant gives plan generation its own result vocabulary instead of
@@ -622,7 +714,10 @@ export type HealResult = z.infer<typeof HealResult>;
  * `planFile`. Generated and `would-generate` results retain both, with an empty
  * ambiguity list when the provider supplied none. Ambiguities are restricted to
  * JSON values so every report remains serializable across CLI and MCP
- * boundaries. Interruption uses the shared strict identity-only branch and
+ * boundaries. Generated branches include resolved secret rows and optional
+ * naming warnings; only dry-run skipped-fresh reconstructs those rows,
+ * because it is an inspection result whose current consent snapshot must be
+ * observable. Interruption uses the shared strict identity-only branch and
  * therefore carries neither dry-run nor generation evidence.
  */
 export const GenerateResult = z.discriminatedUnion('status', [
@@ -633,6 +728,8 @@ export const GenerateResult = z.discriminatedUnion('status', [
     status: z.literal('generated'),
     dryRun: z.literal(false),
     ambiguities: z.array(z.json()),
+    secrets: z.array(GenerateSecret),
+    warnings: z.array(SecretWarning).optional(),
     durationMs: NonNegativeInteger.optional(),
     aiCalls: NonNegativeInteger.optional(),
   }),
@@ -643,18 +740,33 @@ export const GenerateResult = z.discriminatedUnion('status', [
     status: z.literal('would-generate'),
     dryRun: z.literal(true),
     ambiguities: z.array(z.json()),
+    secrets: z.array(GenerateSecret),
+    warnings: z.array(SecretWarning).optional(),
     durationMs: NonNegativeInteger.optional(),
     aiCalls: NonNegativeInteger.optional(),
   }),
-  z.strictObject({
-    id: NonWhitespaceString,
-    file: NonWhitespaceString,
-    planFile: NonWhitespaceString,
-    status: z.literal('skipped-fresh'),
-    dryRun: z.boolean(),
-    durationMs: NonNegativeInteger.optional(),
-    aiCalls: NonNegativeInteger.optional(),
-  }),
+  z.discriminatedUnion('dryRun', [
+    z.strictObject({
+      id: NonWhitespaceString,
+      file: NonWhitespaceString,
+      planFile: NonWhitespaceString,
+      status: z.literal('skipped-fresh'),
+      dryRun: z.literal(true),
+      secrets: z.array(GenerateSecret),
+      warnings: z.array(SecretWarning).optional(),
+      durationMs: NonNegativeInteger.optional(),
+      aiCalls: NonNegativeInteger.optional(),
+    }),
+    z.strictObject({
+      id: NonWhitespaceString,
+      file: NonWhitespaceString,
+      planFile: NonWhitespaceString,
+      status: z.literal('skipped-fresh'),
+      dryRun: z.literal(false),
+      durationMs: NonNegativeInteger.optional(),
+      aiCalls: NonNegativeInteger.optional(),
+    }),
+  ]),
   z.strictObject({
     id: NonWhitespaceString,
     file: NonWhitespaceString,

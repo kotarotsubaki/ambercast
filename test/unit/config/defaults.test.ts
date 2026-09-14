@@ -15,4 +15,8 @@ describe('DEFAULT_RAW_CONFIG', () => {
       `**/*${GROUNDING_SUFFIX}`,
     ]);
   });
+
+  it('defaults secret consent to an empty allowlist', () => {
+    expect(DEFAULT_RAW_CONFIG.secrets).toStrictEqual({ allow: [] });
+  });
 });

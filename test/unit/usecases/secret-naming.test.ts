@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
-import { compareSecretWarnings, deriveSecretNames, normalizeAiStepSecretUses, slug, type SecretWarning } from '#usecases/secret-naming.js';
+import { PlanDocument } from '#core/ir/schema.js';
+import { compareSecretWarnings, deriveSecretNames, deriveStage2ReplacementSecretNames, normalizeAiStepSecretUses, slug, type SecretWarning } from '#usecases/secret-naming.js';
+
+const STAGE2_PLAN = PlanDocument.parse({
+  schemaVersion: 3,
+  source: { inputsDigest: 'a'.repeat(64) },
+  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } },
+  steps: [
+    { id: 'retained-fill', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: '{{secrets.retained.fill}}' },
+    { id: 'replace-me', kind: 'assert', check: 'text-visible', text: 'old assertion' },
+    { id: 'retained-ai', kind: 'ai', instruction: 'keep this', instructionCoverage: [{ id: 'kept', kind: 'success', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 1 } }], secrets: [{ ref: '{{secrets.retained.ai}}' }] },
+  ],
+});
 
 describe('slug', () => {
   it.each([
@@ -242,6 +254,56 @@ describe('deriveSecretNames', () => {
     expect([...warnings].sort(compareSecretWarnings)).toEqual([
       warnings[2], warnings[4], warnings[1], warnings[3], warnings[0],
     ]);
+  });
+});
+
+describe('deriveStage2ReplacementSecretNames', () => {
+  it('reserves retained fill and AI references even when their names differ from the replacement slug and ordinal', () => {
+    const output = deriveStage2ReplacementSecretNames({
+      plan: STAGE2_PLAN,
+      replacementIndex: 1,
+      attributedReplacement: { id: 'replace-me', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Retained fill' } } as never,
+      projected: [],
+      allowlist: '*',
+    });
+
+    expect(output.candidate.steps).toMatchObject([
+      { secretRef: '{{secrets.retained.fill}}' },
+      { secretRef: '{{secrets.retained_fill_2}}' },
+      { secrets: [{ ref: '{{secrets.retained.ai}}' }] },
+    ]);
+    expect(output.candidate.steps[0]).toBe(STAGE2_PLAN.steps[0]);
+    expect(output.candidate.steps[2]).toBe(STAGE2_PLAN.steps[2]);
+  });
+
+  it.each([
+    ['before', 0, 'password_2'],
+    ['after', 2, 'password_2'],
+  ] as const)('allocates around a retained collision %s the replacement index', (_position, replacementIndex, expectedName) => {
+    const steps = [
+      { id: 'first', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: '{{secrets.password}}' },
+      { id: 'second', kind: 'assert', check: 'text-visible', text: 'replace' },
+      { id: 'third', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: '{{secrets.password}}' },
+    ];
+    const plan = PlanDocument.parse({ ...STAGE2_PLAN, steps });
+    const output = deriveStage2ReplacementSecretNames({
+      plan,
+      replacementIndex,
+      attributedReplacement: { id: plan.steps[replacementIndex]!.id, kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' } } as never,
+      projected: [],
+      allowlist: '*',
+    });
+    expect(output.uses).toMatchObject([{ name: expectedName }]);
+  });
+
+  it('keeps wildcard projection separate from retained reservations and rejects an unprojected explicit replacement name', () => {
+    expect(() => deriveStage2ReplacementSecretNames({
+      plan: STAGE2_PLAN,
+      replacementIndex: 1,
+      attributedReplacement: { id: 'replace-me', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Other' }, secret: { allowedName: 'not-projected' } } as never,
+      projected: [],
+      allowlist: '*',
+    })).toThrow(AiResponseInvalidError);
   });
 });
 

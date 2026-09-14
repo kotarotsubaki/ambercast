@@ -32,7 +32,7 @@ import { AmbercastError } from '#core/errors/types.js';
 import type { AiExecuteRequest, AiExecuteResult } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
+import { generate, projectAllowedNames, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
@@ -116,6 +116,34 @@ const DEFAULT_OPTIONS: GenerateOptions = {
   allowEmpty: false,
   list: false,
 };
+
+describe('projectAllowedNames', () => {
+  it('deduplicates then applies default UTF-16 order before the 64-name cap', () => {
+    const names = ['z', 'a', 'z', 'A', 'a'] as never;
+    expect(projectAllowedNames(names)).toEqual({ names: ['A', 'a', 'z'], kept: 3, dropped: 0 });
+  });
+
+  it('caps the sorted unique projection at 64 names', () => {
+    const allow = Array.from({ length: 66 }, (_, index) => `name_${String(index).padStart(2, '0')}`) as never;
+    const result = projectAllowedNames(allow);
+    expect(result.names).toHaveLength(64);
+    expect(result.names[0]).toBe('name_00');
+    expect(result.names.at(-1)).toBe('name_63');
+    expect(result).toMatchObject({ kept: 64, dropped: 2 });
+  });
+
+  it('removes sorted trailing names until the JSON UTF-8 projection fits 4096 bytes', () => {
+    const allow = Array.from({ length: 64 }, (_, index) => `${String(index).padStart(2, '0')}_${'x'.repeat(70)}`) as never;
+    const result = projectAllowedNames(allow);
+    expect(Buffer.byteLength(JSON.stringify(result.names), 'utf8')).toBeLessThanOrEqual(4096);
+    expect(result.kept).toBeLessThan(64);
+    expect(result.dropped).toBeGreaterThan(0);
+  });
+
+  it('projects wildcard authorization to no provider-visible suggestions', () => {
+    expect(projectAllowedNames('*')).toEqual({ names: [], kept: 0, dropped: 0 });
+  });
+});
 
 interface RecordingStorage {
   readonly storage: StorageAdapter;

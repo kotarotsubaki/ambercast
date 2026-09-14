@@ -573,7 +573,7 @@ describe('run', () => {
   });
 
   it('reports a missing plan as exit-4 failure before resolving a browser driver', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
     await writePrompt(recordingStorage.storage);
 
     const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: [] } } }, DEFAULT_OPTIONS);
@@ -651,7 +651,7 @@ describe('run', () => {
   });
 
   it('requires configured consent for committed secret uses before browser launch', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
@@ -661,10 +661,11 @@ describe('run', () => {
 
     expect(outcome.results[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
     expect(browserDriver).not.toHaveBeenCalled();
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
   it('denies committed secret uses when the optional consent dependency is absent', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
@@ -692,7 +693,7 @@ describe('run', () => {
   });
 
   it('rejects committed secret refs that collide in environment-variable space before browser launch', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'first', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.FOO_BAR}}' },
@@ -703,6 +704,7 @@ describe('run', () => {
 
     expect(outcome.results[0]?.error).toBeInstanceOf(SecretEnvVarCollisionError);
     expect(browserDriver).not.toHaveBeenCalled();
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
   it('rejects a v2 committed secret-span field at the strict plan-read boundary', async () => {

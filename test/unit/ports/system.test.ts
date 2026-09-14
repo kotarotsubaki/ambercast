@@ -40,7 +40,7 @@ describe('system port shapes', () => {
       | {
         readonly type: 'heal-stage2-rejected';
         readonly stepId: StepId;
-        readonly reason: 'provider-error' | 'response-shape' | 'id-mismatch' | 'secret-attribution' | 'coverage-invalid' | 'obligation-mismatch' | 'literal-secret' | 'no-advance';
+        readonly reason: 'provider-error' | 'response-shape' | 'id-mismatch' | 'secret-name-invalid' | 'coverage-invalid' | 'obligation-mismatch' | 'literal-secret' | 'no-advance';
       }
     >();
     expectTypeOf<EventSink['emit']>().toEqualTypeOf<(event: RunEvent) => void>();

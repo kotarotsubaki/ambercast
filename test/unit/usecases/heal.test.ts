@@ -1633,7 +1633,7 @@ describe('heal state-machine contract', () => {
 
     await heal({ ...scenario.deps, events: events.sink }, OPTIONS);
 
-    expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-attribution' });
+    expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-name-invalid' });
     await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(before);
   });
 
@@ -1651,7 +1651,7 @@ describe('heal state-machine contract', () => {
 
     await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['password'] } }, events: events.sink }, OPTIONS);
 
-    expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-attribution' });
+    expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-name-invalid' });
   });
 
   it('rejects a Stage-2 replacement whose secret collides in environment-variable space', async () => {
@@ -1671,7 +1671,7 @@ describe('heal state-machine contract', () => {
 
     await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['unrelated', 'foo.bar', 'foo_bar'] } }, events: events.sink }, OPTIONS);
 
-    expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-attribution' });
+    expect(events.emitted()).toContainEqual({ type: 'heal-stage2-rejected', stepId: 'repair-me', reason: 'secret-name-invalid' });
   });
 
   it('accepts an allowed, non-colliding Stage-2 secret replacement', async () => {
@@ -1689,7 +1689,7 @@ describe('heal state-machine contract', () => {
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['continue'] } }, events: events.sink }, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed', finalFirstFailureIndex: 1 });
-    expect(events.emitted()).not.toContainEqual(expect.objectContaining({ type: 'heal-stage2-rejected', reason: 'secret-attribution' }));
+    expect(events.emitted()).not.toContainEqual(expect.objectContaining({ type: 'heal-stage2-rejected', reason: 'secret-name-invalid' }));
   });
 
   it('reuses one successfully resolved executor across tail repair and full regeneration', async () => {

@@ -200,6 +200,21 @@ describe('main()', () => {
     expect(runGenerateCommand).not.toHaveBeenCalled();
   });
 
+  it('prints the escaped Stage 3 secret-set rejection hint directly after its heal row', () => {
+    const rendered = renderHumanReport({
+      ...HEAL_ENVELOPE,
+      summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
+      results: [{
+        id: 'unsafe\\nname.test.md', file: 'unsafe\nname.test.md', planFile: 'unsafe.ambercast.plan.json',
+        status: 'completed', repairOutcome: 'unresolved', application: 'no-artifact-change', stopReason: 'settled',
+        stage3Rejection: { reason: 'secret-set-changed', added: ['NEW'], removed: ['OLD'] },
+        steps: [], explanation: 'unchanged', durationMs: 0,
+      }],
+    } as never, false);
+
+    expect(rendered).toBe('completed unsafe\\nname.test.md\n  hint: 秘匿値の構成が変わった。ambercast generate --force unsafe\\nname.test.md で再生成し同意を取り直す\n');
+  });
+
   it('passes parsed list flags and literal paths to runtime then renders its human report', async () => {
     runGenerateCommand.mockResolvedValue({ exitCode: 0, envelope: ENVELOPE });
 

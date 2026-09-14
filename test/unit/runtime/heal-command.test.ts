@@ -227,6 +227,23 @@ describe('runHealCommand', () => {
     }));
   });
 
+  it('settles a Stage 3 secret-set rejection as no-artifact-change without confirmation or commit', async () => {
+    const rejected = caseResult('set-change.test.md', {
+      repairOutcome: 'unresolved',
+      stopReason: 'settled',
+      stage3Rejection: { reason: 'secret-set-changed', added: ['NEW'], removed: ['OLD'] },
+    });
+    const commit = capability('set-change.test.md');
+    configure({ result: batch({ outcome: outcome({ results: [rejected] }), commits: commits(commit) }) });
+
+    await runHealCommand(input({ yes: true }));
+
+    expect(commit.commit).not.toHaveBeenCalled();
+    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: expect.objectContaining({ results: [expect.objectContaining({ application: 'no-artifact-change', stage3Rejection: rejected.stage3Rejection })] }),
+    }));
+  });
+
   it('rejects an absent replay-isolation setting before dry-run repair work', async () => {
     const config = {
       ...CONFIG,

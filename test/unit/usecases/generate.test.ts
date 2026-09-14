@@ -23,7 +23,6 @@ import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
-import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
@@ -1138,7 +1137,7 @@ describe('generate', () => {
     expect(events.emitted()).toEqual([]);
   });
 
-  it('retains an earlier fresh grounding repair when later resolver resolution rejects', async () => {
+  it('keeps Stage 1 artifact-free when later resolver resolution rejects', async () => {
     const rejection = new Error('second file needs an unavailable provider');
     const resolveAiExecutor = vi.fn(async () => { throw rejection; });
     const { deps, recordingStorage } = createScenario({
@@ -1148,16 +1147,12 @@ describe('generate', () => {
     const fresh = await writePrompt(recordingStorage.storage, 'fresh.test.md', 'fresh');
     await writePrompt(recordingStorage.storage, 'stale.test.md', 'stale');
     await writePrompt(recordingStorage.storage, 'unused.test.md', 'unused');
-    const freshPlan = await createFreshPlan(recordingStorage.storage, fresh);
+    await createFreshPlan(recordingStorage.storage, fresh);
     recordingStorage.reset();
 
     await expect(generate(deps, DEFAULT_OPTIONS)).rejects.toBe(rejection);
     expect(resolveAiExecutor).toHaveBeenCalledOnce();
-    expect(JSON.parse(await recordingStorage.storage.readText(`${TEST_DIR}/fresh.ambercast.grounding.json`))).toEqual({
-      schemaVersion: 1,
-      planDigest: computePlanDigest(freshPlan),
-      entries: {},
-    });
+    await expect(recordingStorage.storage.exists(`${TEST_DIR}/fresh.ambercast.grounding.json`)).resolves.toBe(false);
   });
 
   it('propagates caller abort during resolver resolution with the exact supplied signal', async () => {
@@ -1287,7 +1282,7 @@ describe('generate', () => {
   it.each([
     [false, { dryRun: false }],
     [true, { dryRun: true }],
-  ] as const)('keeps an unauthorized fresh plan without calling AI in dry-run=%s', async (dryRun, options) => {
+  ] as const)('handles an unauthorized fresh plan without calling AI in dry-run=%s', async (dryRun, options) => {
     const secretRef = FIRST_SECRET_REF;
     const scenario = createScenario();
     const deps = withSecretConfig(scenario.deps, []);
@@ -1301,6 +1296,10 @@ describe('generate', () => {
     }]);
     scenario.recordingStorage.reset();
 
+    if (!dryRun) {
+      await expect(generate(deps, { ...DEFAULT_OPTIONS, ...options })).rejects.toBeInstanceOf(UnexpectedCrashError);
+      return;
+    }
     const outcome = await generate(deps, { ...DEFAULT_OPTIONS, ...options });
 
     if (dryRun) {
@@ -1755,7 +1754,13 @@ describe('generate', () => {
     await writePrompt(recordingStorage.storage, 'first.test.md', 'first');
     await writePrompt(recordingStorage.storage, 'second.test.md', 'second');
 
-    const outcome = await generate(withSecretConfig(deps, '*'), DEFAULT_OPTIONS);
+    const outcome = await generate(withSecretConfig({
+      ...deps,
+      consent: {
+        request: async () => ({ kind: 'allowed' as const, renames: [] }),
+        commitAllowlist: async () => undefined,
+      },
+    }, '*'), DEFAULT_OPTIONS);
     expect(outcome).toMatchObject({
       results: [
         { file: `${TEST_DIR}/first.test.md`, status: 'failed', error: { kind } },
@@ -2185,7 +2190,13 @@ describe('generate', () => {
     });
     const testPath = await writePrompt(recordingStorage.storage);
 
-    const outcome = await generate(withSecretConfig(deps, '*'), DEFAULT_OPTIONS);
+    const outcome = await generate(withSecretConfig({
+      ...deps,
+      consent: {
+        request: async () => ({ kind: 'allowed' as const, renames: [] }),
+        commitAllowlist: async () => undefined,
+      },
+    }, '*'), DEFAULT_OPTIONS);
     const text = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
     const parsed = PlanDocument.parse(JSON.parse(text));
 
@@ -3174,14 +3185,17 @@ describe('generate secret naming and consent boundaries', () => {
     ]);
   });
 
-  it.each([false, true])('fails unauthorized fresh secret before persistence in %s dry-run mode', async (dryRun) => {
+  it.each([false, true])('defers unauthorized generated secrets to the consent gate in %s dry-run mode', async (dryRun) => {
     const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
     const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
     const file = await writePrompt(scenario.recordingStorage.storage);
     scenario.recordingStorage.reset();
+    if (!dryRun) {
+      await expect(generate(withSecretConfig(scenario.deps, []), { ...DEFAULT_OPTIONS, dryRun })).rejects.toBeInstanceOf(UnexpectedCrashError);
+      return;
+    }
     const outcome = await generate(withSecretConfig(scenario.deps, []), { ...DEFAULT_OPTIONS, dryRun });
-    expect(outcome.results[0]).toMatchObject({ file, status: 'failed' });
-    expect(outcome.results[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
+    expect(outcome.results[0]).toMatchObject({ file, status: 'would-generate' });
     expect(execute).toHaveBeenCalledOnce();
     expect(scenario.recordingStorage.writes).toEqual([]);
   });
@@ -3315,7 +3329,7 @@ describe('generate secret naming and consent boundaries', () => {
 
     expect(request).not.toHaveBeenCalled();
     expect(commitAllowlist).not.toHaveBeenCalled();
-    expect(outcome.results).toMatchObject([{ status: 'generated', secrets: [expect.objectContaining({ name: 'login_password' })] }]);
+    expect(outcome.results).toMatchObject([{ status: 'generated', secrets: [expect.objectContaining({ name: 'password' })] }]);
     expect(scenario.recordingStorage.writes).toEqual([]);
   });
 
@@ -3366,7 +3380,7 @@ describe('generate secret naming and consent boundaries', () => {
   it('applies an accepted rename by original file-and-name key, revalidates it, and commits the renamed name', async () => {
     const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
     const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
-      const renames = [{ file: `${TEST_DIR}/login.test.md`, name: 'login_password', newName: 'account_password' }] as const;
+      const renames = [{ file: `${TEST_DIR}/login.test.md`, name: 'password', newName: 'account_password' }] as const;
       expect(input.validateRenames(renames)).toEqual({ ok: true });
       return { kind: 'allowed' as const, renames };
     });
@@ -3384,9 +3398,9 @@ describe('generate secret naming and consent boundaries', () => {
   it('re-prompts only failed rename keys through the existing request without issuing a second request', async () => {
     const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
     const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
-      const first = [{ file: `${TEST_DIR}/login.test.md`, name: 'login_password', newName: 'invalid_name' }] as const;
-      expect(input.validateRenames(first)).toEqual({ ok: false, failedKeys: [{ file: `${TEST_DIR}/login.test.md`, name: 'login_password' }] });
-      const second = [{ file: `${TEST_DIR}/login.test.md`, name: 'login_password', newName: 'account_password' }] as const;
+      const first = [{ file: `${TEST_DIR}/login.test.md`, name: 'password', newName: '' as never }] as const;
+      expect(input.validateRenames(first)).toEqual({ ok: false, failedKeys: [{ file: `${TEST_DIR}/login.test.md`, name: 'password' }] });
+      const second = [{ file: `${TEST_DIR}/login.test.md`, name: 'password', newName: 'account_password' }] as const;
       expect(input.validateRenames(second)).toEqual({ ok: true });
       return { kind: 'allowed' as const, renames: second };
     });

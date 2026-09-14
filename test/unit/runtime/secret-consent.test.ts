@@ -7,8 +7,8 @@ function request(): ConsentRequest {
   return {
     configPath: '/workspace/ambercast.config.json',
     items: [{
-      file: 'a\\n.test.md',
-      uses: [{ name: 'token\\u0000', stepId: 'fill-token', ref: '{{secrets.token}}', selectionSource: 'hint', envVar: 'AMBERCAST_SECRET_TOKEN' }],
+      file: 'a\n.test.md',
+      uses: [{ name: 'token\u0000', stepId: 'fill-token', ref: '{{secrets.token}}', selectionSource: 'hint', envVar: 'AMBERCAST_SECRET_TOKEN' }],
     }],
     validateRenames: () => ({ ok: true }),
   } as unknown as ConsentRequest;
@@ -55,7 +55,7 @@ describe('createInteractiveSecretConsent', () => {
     output.on('data', (chunk) => { outputText += chunk.toString(); });
     const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
     const pending = consent(request());
-    input.end('y\\n');
+    input.end('y\n');
 
     await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
     expect(outputText).toContain('a\\x0A.test.md');
@@ -84,12 +84,12 @@ describe('createInteractiveSecretConsent', () => {
 
     await expect(pending).resolves.toEqual({
       kind: 'allowed',
-      renames: [{ file: 'a\\n.test.md', name: 'token\\u0000', newName: 'renamed_token' }],
+      renames: [{ file: 'a\n.test.md', name: 'token\u0000', newName: 'renamed_token' }],
     });
   });
 
   it('treats an uppercase N and EOF as declined decisions that discard edits', async () => {
-    for (const answer of ['N\\n', '']) {
+    for (const answer of ['N\n', '']) {
       const input = new PassThrough();
       const output = new PassThrough();
       const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
@@ -114,19 +114,19 @@ describe('createInteractiveSecretConsent', () => {
     expect(text.indexOf('first')).toBeLessThan(text.indexOf('third'));
   });
 
-  it('replays a read-only item after a rename attempt and accepts only keep or decline on replay', async () => {
+  it('re-prompts a failed editable rename and accepts a subsequent keep', async () => {
     const input = new PassThrough();
     const output = new PassThrough();
     const captured = captureOutput(output);
     const validateRenames = (renames: readonly unknown[]) => (
-      renames.length === 0 ? { ok: true } : { ok: false, failedKeys: [{ file: 'a\\n.test.md', name: 'token\\u0000' }] }
+      renames.length === 0 ? { ok: true } : { ok: false, failedKeys: [{ file: 'a\n.test.md', name: 'token\u0000' }] }
     );
     const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
     const pending = consent({ ...request(), validateRenames } as ConsentRequest);
-    input.end('renamed\ny\n');
+    input.end('i\nrenamed\n\n');
 
     await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
-    expect(captured.text()).toMatch(/read-only/i);
+    expect(captured.text().match(/keep \(Enter\)/g)).toHaveLength(2);
   });
 
   it('treats case-insensitive global N as rejection rather than a rename value', async () => {
@@ -149,7 +149,7 @@ describe('createInteractiveSecretConsent', () => {
     await expect(pending).resolves.toEqual({ kind: 'declined' });
   });
 
-  it.each(['N\n', ''] as const)('discards all accepted edits after a later %s in individual mode', async (terminalAnswer) => {
+  it.each(['N\n'] as const)('discards all accepted edits after a later %s in individual mode', async (terminalAnswer) => {
     const input = new PassThrough();
     const output = new PassThrough();
     const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });

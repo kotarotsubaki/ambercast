@@ -10,11 +10,14 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { FsIoError } from '#core/errors/fs-io-error.js';
 import type { StorageAdapter } from '#ports/storage.js';
 
 const maximumTemporaryWriteAttempts = 5;
+const maximumLockRetries = 5;
+const lockRetryIntervalMs = 100;
 
 async function ensureParentDirectory(path: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
@@ -96,6 +99,93 @@ async function removeTemporaryFile(path: string): Promise<void> {
   }
 }
 
+function isFilesystemError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new FsIoError('The exclusive storage update was cancelled.', undefined, { cause: signal.reason });
+  }
+}
+
+async function waitForLockRetry(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, lockRetryIntervalMs));
+}
+
+async function rejectSymbolicLink(path: string): Promise<void> {
+  try {
+    if ((await lstat(path)).isSymbolicLink()) {
+      throw new FsIoError('Refusing to update text through a symbolic link.', { path });
+    }
+  } catch (error) {
+    if (isFilesystemError(error, 'ENOENT')) {
+      return;
+    }
+    if (error instanceof FsIoError) {
+      throw error;
+    }
+    throw new FsIoError('The exclusive-update target could not be inspected.', { path }, { cause: error });
+  }
+}
+
+/*
+ * Lock files are ownership records rather than leases. Bounded waiting avoids
+ * an indefinite block, while refusing to stale-steal prevents one process from
+ * entering another process's critical section.
+ */
+async function acquireLock(path: string, token: string, signal: AbortSignal | undefined): Promise<void> {
+  let lastCollision: unknown;
+
+  for (let attempt = 0; attempt <= maximumLockRetries; attempt += 1) {
+    throwIfAborted(signal);
+    try {
+      await writeFile(path, token, { encoding: 'utf8', flag: 'wx' });
+      return;
+    } catch (error) {
+      if (!isFilesystemError(error, 'EEXIST')) {
+        throw new FsIoError('The exclusive-update lock could not be acquired.', { path }, { cause: error });
+      }
+      lastCollision = error;
+      if (attempt < maximumLockRetries) {
+        await waitForLockRetry();
+      }
+    }
+  }
+
+  throw new FsIoError(
+    'The exclusive-update lock remained held after the bounded retry period; verify that no process owns it before removal.',
+    { path },
+    { cause: lastCollision },
+  );
+}
+
+/*
+ * Re-reading the token prevents cleanup from deleting a lock that changed
+ * ownership. A release failure is terminal even after an earlier failure,
+ * because returning while lock ownership is uncertain would hide the more
+ * consequential persistence state.
+ */
+async function releaseLock(
+  path: string,
+  token: string,
+  primaryFailure: { readonly occurred: boolean; readonly error: unknown },
+): Promise<void> {
+  try {
+    const currentToken = await readFile(path, 'utf8');
+    if (currentToken !== token) {
+      throw new Error('The exclusive-update lock is no longer owned by this operation.');
+    }
+    await unlink(path);
+  } catch (error) {
+    throw new FsIoError(
+      'The exclusive-update lock could not be released safely.',
+      { path },
+      { cause: primaryFailure.occurred ? primaryFailure.error : error },
+    );
+  }
+}
+
 /**
  * Creates storage backed by the host filesystem.
  *
@@ -126,29 +216,62 @@ export function createFsStorage(): StorageAdapter {
       const bytes = new Uint8Array(await readFile(path));
       return { text: new TextDecoder().decode(bytes), bytes: new Uint8Array(bytes) };
     },
-    async readTextSnapshotIfExists(_path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
-      /*
-       * Force generation needs to distinguish a genuinely absent prior plan
-       * from a plan that cannot be inspected. The eventual direct read keeps
-       * that distinction and returns detached text and bytes from one observed
-       * version; composing the existing probe and snapshot methods would both
-       * race and erase I/O failures (SPEC-C2-12).
-       */
-      throw new Error('not implemented');
+    async readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+      try {
+        const bytes = new Uint8Array(await readFile(path));
+        return { text: new TextDecoder().decode(bytes), bytes: new Uint8Array(bytes) };
+      } catch (error) {
+        if (isMissingPathError(error)) {
+          return null;
+        }
+        throw error;
+      }
     },
     async updateTextExclusive(
-      _path: string,
-      _updater: (current: string | null) => string | null | Promise<string | null>,
-      _signal?: AbortSignal,
+      path: string,
+      updater: (current: string | null) => string | null | Promise<string | null>,
+      signal?: AbortSignal,
     ): Promise<void> {
       /*
        * Consent must merge against the configuration observed while holding a
        * cross-process boundary, otherwise two accepted batches can lose names.
-       * The eventual lock protects the read, asynchronous updater, and atomic
-       * replacement as one operation; a null result is an intentional no-op,
-       * not an empty-file write (SPEC-C2-9, SPEC-C2-10).
+       * A null result is an intentional no-op, not an empty-file write
+       * (SPEC-C2-9, SPEC-C2-10).
        */
-      throw new Error('not implemented');
+      await rejectSymbolicLink(path);
+      const lockPath = `${path}.lock`;
+      const token = `${process.pid}-${randomBytes(8).toString('hex')}`;
+      await acquireLock(lockPath, token, signal);
+
+      let primaryFailure: { occurred: boolean; error: unknown } = { occurred: false, error: undefined };
+      try {
+        let current: string | null;
+        try {
+          current = await readFile(path, 'utf8');
+        } catch (error) {
+          if (!isMissingPathError(error)) {
+            throw error;
+          }
+          current = null;
+        }
+
+        const replacement = await updater(current);
+        if (replacement !== null) {
+          await ensureParentDirectory(path);
+          throwIfAborted(signal);
+          await writeAtomic(path, async (temporaryPath) => {
+            await writeFile(temporaryPath, replacement, { encoding: 'utf8', flag: 'wx' });
+          });
+        }
+      } catch (error) {
+        primaryFailure = { occurred: true, error };
+      } finally {
+        await releaseLock(lockPath, token, primaryFailure);
+      }
+
+      if (primaryFailure.occurred) {
+        throw primaryFailure.error;
+      }
     },
     async writeText(path: string, content: string): Promise<void> {
       await ensureParentDirectory(path);

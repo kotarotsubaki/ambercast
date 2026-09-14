@@ -1,12 +1,12 @@
 import * as fsPromises from 'node:fs/promises';
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createFsStorage } from '../../../../src/adapters/storage/fs-storage.js';
 import { FsIoError } from '../../../../src/core/errors/fs-io-error.js';
 import { registerStorageContract } from '../../../contracts/storage.contract.js';
-import { createDeferred, SharedFakeFs } from '../../../support/shared-fake-fs.js';
+import { SharedFakeFs } from '../../../support/shared-fake-fs.js';
 
 const originalFsPromises = vi.hoisted(() => ({
   lstat: undefined as typeof fsPromises.lstat | undefined,
@@ -764,12 +764,14 @@ describe('createFsStorage()', () => {
       );
       const ownerToken = fake.text(lockPath);
       expect(ownerToken).toMatch(new RegExp(`^${process.pid}-[0-9a-f]{16}$`, 'u'));
+      const callsBeforeContender = fake.calls.length;
 
       const contenderUpdate = contender.updateTextExclusive(targetPath, (current) => `${current}B`);
+      void contenderUpdate.catch(() => undefined);
       await vi.advanceTimersByTimeAsync(500);
       await expect(contenderUpdate).rejects.toBeInstanceOf(FsIoError);
 
-      const contenderRetries = fake.calls.filter((call) => (
+      const contenderRetries = fake.calls.slice(callsBeforeContender).filter((call) => (
         call.operation === 'writeFile' && call.path === lockPath && call.phase === 'before'
       ));
       expect(contenderRetries).toHaveLength(6);

@@ -18,7 +18,10 @@ import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
+import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computePlanDigest } from '#core/ir/digest.js';
@@ -49,7 +52,6 @@ import type { ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
   assertNoLiteralSecrets,
-  assertSecretUsesAllowed,
   enumerateSecretUses,
   InstructionCoverageAttributionError,
 } from './generator-secret-policy.js';
@@ -68,6 +70,7 @@ import {
 import { assertNoEnvVarCollision, envVarNameFor } from '#core/secrets/env-var-name.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
+import { scanLegacySecretSyntax } from '#core/ir/secret-syntax-scan.js';
 
 const GENERATED_PLAN_RESPONSE_SCHEMA = typedJsonSchema(GeneratedPlanResponseRequest);
 
@@ -450,6 +453,9 @@ export interface GenerateDeps {
    * the top level without producing a skipped row.
    */
   readonly signal?: AbortSignal;
+
+  /** Internal shared tracker used while Stage 1 prepares individual occurrences. */
+  readonly interruptionTracker?: BatchInterruptionTracker;
 }
 
 /**
@@ -722,6 +728,34 @@ function existingPlanWarnings(plan: PlanDocumentType): SecretWarning[] {
     .sort(compareSecretWarnings);
 }
 
+function projectAllowedNames(allow: readonly SecretName[] | '*'): { readonly names: readonly SecretName[]; readonly kept: number; readonly dropped: number } {
+  if (allow === '*') return { names: [], kept: 0, dropped: 0 };
+  const all = [...new Set(allow)].sort();
+  const names = all.slice(0, 64);
+  while (names.length > 0 && Buffer.byteLength(JSON.stringify(names), 'utf8') > 4096) names.pop();
+  return { names, kept: names.length, dropped: all.length - names.length };
+}
+
+function targetChangeWarnings(previous: PlanDocumentType | undefined, next: PlanDocumentType): SecretWarning[] {
+  if (previous === undefined) return [];
+  const oldTargets = new Map<string, unknown>();
+  for (const step of previous.steps) {
+    if (step.kind === 'action' && step.action === 'fill-secret') {
+      oldTargets.set(`${secretNameFor(step.secretRef)}\u0000${step.id}`, step.target);
+    }
+  }
+  const warnings: SecretWarning[] = [];
+  for (const step of next.steps) {
+    if (step.kind !== 'action' || step.action !== 'fill-secret') continue;
+    const key = `${secretNameFor(step.secretRef)}\u0000${step.id}`;
+    const previousTarget = oldTargets.get(key);
+    if (previousTarget !== undefined && JSON.stringify(previousTarget) !== JSON.stringify(step.target)) {
+      warnings.push({ kind: 'secret-target-changed', name: secretNameFor(step.secretRef), stepId: step.id, previousTarget: previousTarget as never, target: step.target });
+    }
+  }
+  return warnings.sort(compareSecretWarnings);
+}
+
 /**
  * Ordered terminal and interruption results of one generation invocation.
  *
@@ -801,8 +835,9 @@ export interface GenerateOutcome {
  * repairable fresh plan rather than a partial plan. Cross-process generation
  * against the same prompt is undefined behavior.
  */
-export async function generate(deps: GenerateDeps, options: GenerateOptions): Promise<GenerateOutcome> {
-  const tracker = new BatchInterruptionTracker(deps.signal);
+async function generatePreparedOccurrence(deps: GenerateDeps, options: GenerateOptions): Promise<GenerateOutcome> {
+  const tracker = deps.interruptionTracker ?? new BatchInterruptionTracker(deps.signal);
+  const ownsTracker = deps.interruptionTracker === undefined;
   try {
     const discovered = options.files.length === 0
       ? (await deps.discoverTestFiles({
@@ -851,6 +886,27 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
           continue;
         }
 
+        const normalizedTestMd = normalizeTestMd(testMd);
+        const legacySecretSyntax = [
+          ...scanLegacySecretSyntax(normalizedTestMd),
+          ...[...String(normalizedTestMd).matchAll(/\{\{secret:/g)].map((match) => {
+            const prefix = String(normalizedTestMd).slice(0, match.index);
+            return { kind: 'reference' as const, line: prefix.split('\n').length, column: prefix.length - prefix.lastIndexOf('\n') };
+          }),
+        ];
+        if (legacySecretSyntax.length > 0) {
+          results.push({
+            file,
+            status: 'failed',
+            error: new SecretSyntaxRejectedError('Legacy secret syntax is not supported.', {
+              occurrences: legacySecretSyntax,
+              hint: 'Delete the offending line(s) and re-run `ambercast generate`.',
+            }),
+            ...metrics(),
+          });
+          continue;
+        }
+
         const targetSelection = resolveTarget({
           targets: deps.config.targets,
           defaultTarget: deps.config.defaultTarget,
@@ -863,7 +919,6 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         const resolvedTargets = targetSelection.definitions;
         const secretAllow = deps.config.secrets?.allow ?? [];
 
-        const normalizedTestMd = normalizeTestMd(testMd);
         const provenance = deriveCurrentPlanInputProvenance({
           normalizedTestMd,
           targetDefinitions: resolvedTargets,
@@ -871,6 +926,20 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         const { inputsDigest, producerBundleFingerprint, producerBundleInputs } = provenance;
         const planPath = deps.layout.planPathFor(file);
         const groundingPath = deps.layout.groundingPathFor(file);
+
+        let forcedPreviousPlan: PlanDocumentType | undefined;
+        if (options.force) {
+          try {
+            const snapshot = await deps.storage.readTextSnapshotIfExists(planPath);
+            if (snapshot !== null) {
+              const parsed = PlanDocument.safeParse(JSON.parse(snapshot.text));
+              if (parsed.success) forcedPreviousPlan = parsed.data;
+            }
+          } catch (error) {
+            results.push({ file, status: 'failed', error: fsIoError('The previous plan could not be read.', error), ...metrics() });
+            continue;
+          }
+        }
 
         let existingPlan: PlanDocumentType | undefined;
         try {
@@ -948,8 +1017,8 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
             responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
             context: (attempt === 1
-              ? { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: [] }
-              : { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: [], previousAttempts }) as unknown as JsonValueT,
+              ? { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names }
+              : { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names, previousAttempts }) as unknown as JsonValueT,
             signal: deadline.signal,
           };
           const callId = deps.allocateCallId();
@@ -1019,7 +1088,7 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
 
           let named;
           try {
-            named = deriveSecretNames(prepared.data, { projected: [], allowlist: secretAllow });
+            named = deriveSecretNames(prepared.data, { projected: projectAllowedNames(secretAllow).names, allowlist: secretAllow });
           } catch (error) {
             return outcomeForError(fileFailure(error, 'The generated secret names could not be derived.'));
           }
@@ -1077,17 +1146,13 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             return outcomeForError(fileFailure(error, 'The generated ambiguities could not be inspected.'));
           }
 
-          try {
-            assertSecretUsesAllowed(parsedPlan.data, secretAllow, {
-              configPath: deps.configSource?.path ?? null,
-              cwd: deps.config.projectRoot ?? '',
-            });
-          } catch (error) {
-            return outcomeForError(fileFailure(error, 'The generated secret uses are not allowed.'));
-          }
-
           const secrets = secretRowsForPlan(parsedPlan.data, secretAllow, named.uses);
-          const warnings = named.warnings;
+          const projection = projectAllowedNames(secretAllow);
+          const warnings = [
+            ...named.warnings,
+            ...targetChangeWarnings(forcedPreviousPlan, parsedPlan.data),
+            ...(projection.dropped === 0 ? [] : [{ kind: 'allowed-names-truncated' as const, kept: projection.kept, dropped: projection.dropped }]),
+          ].sort(compareSecretWarnings);
 
           if (options.dryRun) {
             return {
@@ -1143,12 +1208,259 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
         if (outcome !== undefined) results.push({ ...outcome, ...metrics() });
         if (interruptedDuringAi) break;
       } finally {
-        if (!interruptedDuringAi) tracker.markTerminal(workKey);
+        if (!interruptedDuringAi && ownsTracker) tracker.markTerminal(workKey);
       }
     }
 
     if (tracker.interrupted) results.push(...tracker.pendingIdentities.map((file) => ({ file, status: 'skipped' as const })));
     return { results, noTestsFound: false, interrupted: tracker.interrupted };
+  } finally {
+    if (ownsTracker) tracker.dispose();
+  }
+}
+
+function renamedPlan(plan: PlanDocumentType, file: string, renames: readonly SecretRename[]): PlanDocumentType {
+  const replacements = new Map(renames.filter((rename) => rename.file === file).map((rename) => [rename.name, rename.newName]));
+  if (replacements.size === 0) return plan;
+  return {
+    ...plan,
+    steps: plan.steps.map((step) => {
+      if (step.kind === 'action' && step.action === 'fill-secret') {
+        const replacement = replacements.get(secretNameFor(step.secretRef));
+        return replacement === undefined ? step : { ...step, secretRef: `{{secrets.${replacement}}}` as SecretRef };
+      }
+      if (step.kind === 'ai' && step.secrets !== undefined) {
+        return {
+          ...step,
+          secrets: step.secrets.map((use) => {
+            const replacement = replacements.get(secretNameFor(use.ref));
+            return replacement === undefined ? use : { ...use, ref: `{{secrets.${replacement}}}` as SecretRef };
+          }),
+        };
+      }
+      return step;
+    }),
+  } as PlanDocumentType;
+}
+
+function consentFailure(candidate: PreparedCandidate): GenerateFileOutcome {
+  return {
+    file: candidate.file,
+    status: 'failed',
+    error: new SecretConsentRequiredError('Secret consent is required.', { reason: 'consent-required' }),
+    ...candidate.metrics,
+  };
+}
+
+/**
+ * Prepares all occurrences before the single consent decision, then commits
+ * accepted artifacts in occurrence order. Keeping those phases separate makes
+ * consent and its allowlist update a linearization point for the whole batch.
+ */
+export async function generate(deps: GenerateDeps, options: GenerateOptions): Promise<GenerateOutcome> {
+  const tracker = new BatchInterruptionTracker(deps.signal);
+  try {
+    const discovered = options.files.length === 0
+      ? (await deps.discoverTestFiles({ testDir: deps.config.testDir, testMatch: deps.config.testMatch, testIgnore: deps.config.testIgnore })).map((path) => joinPath(deps.config.testDir, path))
+      : [...options.files];
+    if (discovered.length === 0) return { results: [], noTestsFound: true, interrupted: false };
+    if (options.list) return { results: discovered.map((file) => ({ file, status: 'listed' })), noTestsFound: false, interrupted: false };
+    assertPromptPathsEligible(deps.layout, discovered);
+    for (const [index, file] of discovered.entries()) tracker.addDiscovered(`generate:${index}:${file}`, file);
+
+    const initialAllow = deps.config.secrets?.allow ?? [];
+    const allowSnapshot = initialAllow === '*' ? '*' as const : [...initialAllow];
+    const stageConfig = {
+      ...deps.config,
+      ...(deps.config.secrets === undefined ? {} : { secrets: { ...deps.config.secrets, allow: allowSnapshot } }),
+    };
+    const virtualTexts = new Map<string, string>();
+    const virtualStorage: StorageAdapter = {
+      ...deps.storage,
+      async exists(path) { return virtualTexts.has(path) || deps.storage.exists(path); },
+      async readText(path) { return virtualTexts.get(path) ?? deps.storage.readText(path); },
+      async readTextSnapshot(path) {
+        const text = virtualTexts.get(path);
+        if (text === undefined) return deps.storage.readTextSnapshot(path);
+        const bytes = new TextEncoder().encode(text);
+        return { text, bytes: new Uint8Array(bytes) };
+      },
+      async readTextSnapshotIfExists(path) {
+        const text = virtualTexts.get(path);
+        if (text === undefined) return deps.storage.readTextSnapshotIfExists(path);
+        const bytes = new TextEncoder().encode(text);
+        return { text, bytes: new Uint8Array(bytes) };
+      },
+      async writeText(path, content) {
+        if (path.endsWith('.ambercast.plan.json') || path.endsWith('.ambercast.grounding.json')) {
+          virtualTexts.set(path, content);
+          return;
+        }
+        await deps.storage.writeText(path, content);
+      },
+    };
+
+    const results: GenerateFileOutcome[] = [];
+    const candidates: PreparedCandidate[] = [];
+    const started = new Set<string>();
+    const terminal = new Set<string>();
+    let aiExecutorPromise: Promise<AiExecutor> | undefined;
+    for (const [index, file] of discovered.entries()) {
+      const workKey = `generate:${index}:${file}`;
+      if (tracker.interrupted) break;
+      started.add(workKey);
+      const occurrence = await generatePreparedOccurrence(
+        {
+          ...deps,
+          config: stageConfig,
+          storage: options.force
+            ? { ...virtualStorage, readTextSnapshotIfExists: (path) => deps.storage.readTextSnapshotIfExists(path) }
+            : virtualStorage,
+          interruptionTracker: tracker,
+          resolveAiExecutor: (signal) => {
+            aiExecutorPromise ??= deps.resolveAiExecutor(signal);
+            return aiExecutorPromise;
+          },
+        },
+        { ...options, files: [file], dryRun: false },
+      );
+      const result = occurrence.results[0];
+      if (result === undefined || result.status === 'failed' || result.status === 'skipped') {
+        if (result !== undefined) results.push(result);
+        tracker.markTerminal(workKey);
+        terminal.add(workKey);
+        continue;
+      }
+      const planPath = deps.layout.planPathFor(file);
+      const planText = await virtualStorage.readText(planPath);
+      const parsed = PlanDocument.parse(JSON.parse(planText));
+      const origin = result.status === 'skipped-fresh' ? 'fresh' as const : 'generated' as const;
+      virtualTexts.set(planPath, planText);
+      candidates.push({
+        workKey,
+        occurrenceIndex: index,
+        file,
+        planPath,
+        groundingPath: deps.layout.groundingPathFor(file),
+        plan: parsed,
+        uses: result.secrets ?? secretRowsForPlan(parsed, allowSnapshot),
+        warnings: result.warnings ?? existingPlanWarnings(parsed),
+        ambiguities: result.ambiguities ?? [],
+        origin,
+        metrics: { durationMs: result.durationMs ?? 0, aiCalls: result.aiCalls ?? 0 },
+        pendingCommit: origin === 'fresh' ? 'repair-grounding-only' : 'write-plan-and-grounding',
+      });
+    }
+
+    const interruptionResult = (): GenerateOutcome => {
+      for (const candidate of candidates) {
+        if (!terminal.has(candidate.workKey)) {
+          results.push({ file: candidate.file, status: 'skipped' });
+          terminal.add(candidate.workKey);
+        }
+      }
+      const untouched = new Set<string>();
+      for (const [index, file] of discovered.entries()) {
+        const workKey = `generate:${index}:${file}`;
+        if (!started.has(workKey) && !untouched.has(file)) {
+          results.push({ file, status: 'skipped' });
+          untouched.add(file);
+        }
+      }
+      return { results, noTestsFound: false, interrupted: true };
+    };
+    if (tracker.interrupted) return interruptionResult();
+
+    const allowed = allowSnapshot === '*' ? new Set<SecretName>() : new Set(allowSnapshot);
+    const neededItems = candidates.map((candidate) => ({ file: candidate.file, uses: candidate.uses.filter((use) => !allowed.has(use.name)) })).filter((item) => item.uses.length > 0);
+    let selected = candidates;
+    if (!options.dryRun && options.consentMode !== 'forbid' && neededItems.length > 0) {
+      if (deps.consent === undefined) throw new UnexpectedCrashError('Secret consent capability is unavailable.');
+      const validateRenames = (renames: readonly SecretRename[]): RenameValidationResult => {
+        try {
+          if (!Array.isArray(renames)) throw new Error('Malformed rename collection.');
+          const requestedRenames: readonly SecretRename[] = renames;
+          const participant = new Set(neededItems.flatMap((item) => item.uses.map((use) => `${item.file}\u0000${use.name}`)));
+          if (requestedRenames.some((rename) => !participant.has(`${rename.file}\u0000${rename.name}`))) {
+            return { ok: false, failedKeys: requestedRenames.map(({ file, name }) => ({ file, name })) };
+          }
+          const failedKeys: { file: string; name: SecretName }[] = [];
+          for (const rename of requestedRenames) {
+            const candidate = candidates.find((item) => item.file === rename.file);
+            if (candidate === undefined || !PlanDocument.safeParse(renamedPlan(candidate.plan, rename.file, [rename])).success) failedKeys.push({ file: rename.file, name: rename.name });
+          }
+          return failedKeys.length === 0 ? { ok: true } : { ok: false, failedKeys };
+        } catch (error) {
+          throw new UnexpectedCrashError('Secret rename validation crashed unexpectedly.', undefined, { cause: error });
+        }
+      };
+      const decision = await deps.consent.request({
+        configPath: deps.configSource?.path ?? null,
+        items: neededItems.map((item) => ({
+          file: item.file,
+          uses: item.uses.map((use) => ({ ...use, ref: `{{secrets.${use.name}}}` as SecretRef })),
+        })),
+        validateRenames,
+      });
+      if (tracker.interrupted) return interruptionResult();
+      if (decision.kind === 'allowed') {
+        const validation = validateRenames(decision.renames);
+        if (!validation.ok) throw new UnexpectedCrashError('Secret rename validation returned an invalid accepted decision.');
+        selected = candidates.map((candidate) => {
+          const plan = renamedPlan(candidate.plan, candidate.file, decision.renames);
+          assertNoEnvVarCollision(enumerateSecretUses(plan).map(({ ref }) => ref));
+          const renamedNames = new Set(decision.renames.filter((rename) => rename.file === candidate.file).map((rename) => rename.newName));
+          return {
+            ...candidate,
+            plan,
+            uses: secretRowsForPlan(plan, [...allowed, ...renamedNames]).map((use) => ({
+              ...use,
+              selectionSource: renamedNames.has(use.name) ? 'interactive-rename' as const : use.selectionSource,
+            })),
+          };
+        });
+        const names = [...new Set(selected.flatMap((candidate) => candidate.uses.filter((use) => !allowed.has(use.name)).map((use) => use.name)))];
+        await deps.consent.commitAllowlist(deps.configSource?.path ?? null, names, deps.signal);
+        if (tracker.interrupted) return interruptionResult();
+      } else {
+        const neededKeys = new Set(neededItems.flatMap((item) => item.uses.map((use) => `${item.file}\u0000${use.name}`)));
+        for (const candidate of candidates) {
+          if (candidate.uses.some((use) => neededKeys.has(`${candidate.file}\u0000${use.name}`))) {
+            results.push(consentFailure(candidate));
+            tracker.markTerminal(candidate.workKey);
+            terminal.add(candidate.workKey);
+          }
+        }
+        selected = candidates.filter((candidate) => !terminal.has(candidate.workKey));
+      }
+    }
+
+    for (const candidate of selected) {
+      if (tracker.interrupted) return interruptionResult();
+      try {
+        if (!options.dryRun && options.consentMode !== 'forbid') {
+          if (candidate.pendingCommit === 'write-plan-and-grounding') {
+            await deps.storage.writeText(candidate.planPath, asArtifactText(candidate.plan as unknown as JsonValueT));
+            await deps.storage.writeText(candidate.groundingPath, asArtifactText(emptyGrounding(candidate.plan) as unknown as JsonValueT));
+          } else {
+            await repairGroundingIfNeeded(deps.storage, candidate.groundingPath, candidate.plan);
+          }
+        }
+        results.push({
+          file: candidate.file,
+          status: candidate.origin === 'fresh' ? 'skipped-fresh' : options.dryRun ? 'would-generate' : 'generated',
+          planFile: candidate.planPath,
+          ...((candidate.origin === 'generated' || options.dryRun) ? { ambiguities: candidate.ambiguities, secrets: candidate.uses } : {}),
+          ...(candidate.warnings.length === 0 ? {} : { warnings: candidate.warnings }),
+          ...candidate.metrics,
+        });
+      } catch (error) {
+        results.push({ file: candidate.file, status: 'failed', error: fileFailure(error, 'The generated artifacts could not be written.'), ...candidate.metrics });
+      }
+      tracker.markTerminal(candidate.workKey);
+      terminal.add(candidate.workKey);
+    }
+    return { results, noTestsFound: false, interrupted: false };
   } finally {
     tracker.dispose();
   }

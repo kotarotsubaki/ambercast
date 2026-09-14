@@ -6,6 +6,7 @@
 import { AI_EXECUTOR_FACTORIES } from '#adapters/ai/registry.js';
 import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
+import { displayLine } from '#adapters/system/confirmation-answer-reader.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
@@ -18,6 +19,7 @@ import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError } from '#core/errors/types.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
+import { envVarNameFor } from '#core/secrets/env-var-name.js';
 import { generate } from '#usecases/generate.js';
 import type { FinalizedReportEnvelope } from '#usecases/report-finalization.js';
 import { finalizeReportEnvelope, isEmergencyFinalizedEnvelope } from '#usecases/report-finalization.js';
@@ -33,10 +35,29 @@ import { createInteractiveSecretConsent } from './secret-consent.js';
  * This command composes both halves of the consent capability because it owns
  * process streams, TTY policy, config-source identity, and the real storage
  * boundary. Keeping the prompt factory and exclusive config writer out of the
- * use case prevents CLI-specific I/O from crossing inward; the eventual
+ * use case prevents CLI-specific I/O from crossing inward; the
  * non-interactive diagnostic is rendered here as well so JSON and text modes
  * expose the same unmet-use remedy (SPEC-C2-3, SPEC-C2-5, SPEC-C2-9).
  */
+
+function renderNonInteractiveConsent(
+  stderr: NodeJS.WritableStream,
+  request: Parameters<ReturnType<typeof createInteractiveSecretConsent>>[0],
+  defaultConfigPath: string,
+): void {
+  for (const { file, uses } of request.items) {
+    for (const use of uses) {
+      const projected = use as typeof use & { readonly envVar?: unknown };
+      const envVar = typeof projected.envVar === 'string' ? projected.envVar : envVarNameFor(use.ref);
+      stderr.write(
+        `${displayLine(file)}  ${displayLine(use.name)}  ${displayLine(use.stepId)}  env ${displayLine(envVar)}\n`,
+      );
+    }
+  }
+  stderr.write(
+    `Add the listed names to ${displayLine(request.configPath ?? defaultConfigPath)} secrets.allow and retry.\n`,
+  );
+}
 
 function reportTimestamp(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -143,21 +164,29 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
     const allocateCallId = createCallIdAllocator();
     try {
       const ambercast = createAmbercast({ config, events });
+      const configTarget = {
+        path: source.path ?? joinPath(input.cwd, 'ambercast.config.json'),
+        existedAtLoad: source.path !== null,
+      };
+      const interactiveConsent = createInteractiveSecretConsent({
+        input: process.stdin,
+        output: input.stderr,
+        isInteractive: createTtyInteractivityCheck(),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
       const outcome = await generate({
         storage: ambercast.storage,
         consent: {
-          request: createInteractiveSecretConsent({
-            input: process.stdin,
-            output: input.stderr,
-            isInteractive: createTtyInteractivityCheck(),
-            ...(input.signal === undefined ? {} : { signal: input.signal }),
-          }),
+          request: async (request) => {
+            const decision = await interactiveConsent(request);
+            if (decision.kind === 'not-interactive' && !input.dryRun) {
+              renderNonInteractiveConsent(input.stderr, request, configTarget.path);
+            }
+            return decision;
+          },
           commitAllowlist: (_configPath, names, signal) => commitAllowlist(
             ambercast.storage,
-            {
-              path: source.path ?? joinPath(input.cwd, 'ambercast.config.json'),
-              existedAtLoad: source.path !== null,
-            },
+            configTarget,
             names,
             signal,
           ),

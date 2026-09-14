@@ -380,22 +380,17 @@ function createHealOverlayStorage(
       const bytes = buffered.has(path) ? bufferedBytes(path) : new Uint8Array(snapshotFor(path).bytes);
       return { text: buffered.has(path) ? buffered.get(path)! : snapshotFor(path).text, bytes };
     },
-    readTextSnapshotIfExists: async (_path) => {
-      /*
-       * The eventual overlay returns its current detached tracked buffer when
-       * available and its validated preimage otherwise; untracked paths retain
-       * the base adapter's ENOENT-versus-I/O distinction. This prevents an
-       * internal forced generation read from bypassing candidate isolation or
-       * observing an inconsistent artifact pair (SPEC-C2-12).
-       */
-      throw new Error('not implemented');
+    readTextSnapshotIfExists: async (path) => {
+      if (!tracked(path)) return base.readTextSnapshotIfExists(path);
+      const bytes = buffered.has(path) ? bufferedBytes(path) : new Uint8Array(snapshotFor(path).bytes);
+      return { text: buffered.has(path) ? buffered.get(path)! : snapshotFor(path).text, bytes };
     },
     updateTextExclusive: async (_path, _updater, _signal) => {
       /*
        * Healing may buffer only its validated plan and grounding pair. Config
        * mutation would escape that per-case commit capability and make repair
-       * authorization imply a separate consent write, so this boundary always
-       * rejects instead of delegating to base storage (SPEC-C2-10).
+       * authorization imply a separate consent write, so this boundary rejects
+       * instead of delegating to base storage (SPEC-C2-10).
        */
       throw new FsIoErrorClass('Config updates not permitted during heal.');
     },

@@ -26,13 +26,14 @@ description: ambercast で公開されている機械可読リソースと、そ
 | [`llms-planned.txt`](https://kotarotsubaki.github.io/ambercast/llms-planned.txt) | 利用可能 |
 | [`schemas/config.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json) | 利用可能 |
 | [`schemas/plan.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json) | 利用可能 |
+| [`schemas/plan.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json) | 利用可能 |
 | [`schemas/grounding.v1.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json) | 利用可能 |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | 利用可能 |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 利用可能 |
 
-config、plan、grounding、および report 向けのスキーマアーティファクトは公開済みであり、サイト向けと npm 配布向けで同一のバイト列が生成されます。
+`schemas/plan.v2.schema.json` は、コミット済みの履歴スナップショットをサイトへコピーした凍結アーティファクトです。現在のビルドは config スキーマ、Plan v3 スキーマ、grounding スキーマ、report スキーマ、`capabilities.json`、および `manifest/cli.json` を生成し、サイト向けと npm 配布向けで同一のバイト列になります。
 
-本ドキュメントは、このリリースで公開されたビルド生成アーティファクトを扱います。
+本ドキュメントは、このリリースで公開されたアーティファクトを扱います。
 
 関連情報: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [JSON スキーマ](/ambercast/ja/reference/json-schemas/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)

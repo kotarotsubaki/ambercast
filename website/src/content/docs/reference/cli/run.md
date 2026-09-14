@@ -32,7 +32,7 @@ description: Reference for the ambercast run command, covering CLI flags, replay
 | grounding miss, `--resolve` omitted | none | fails closed as `grounding-unresolved` (exit 4) |
 | grounding miss, `--resolve` passed | resolver; `--ai` overrides | live AI resolution and possible write-back |
 
-The runtime rejects `--stale=regenerate` before configuration or file I/O. During setup, the runtime composes the browser, secrets, configuration, and the provider resolver that `--resolve` can use.
+The runtime rejects `--stale=regenerate` before configuration or file I/O. During setup, the runtime composes the browser, environment-backed secrets, configuration, and the provider resolver that `--resolve` can use. Secret values resolve only from `AMBERCAST_SECRET_<NAME>` at a permitted browser sink; `run` never requests generation consent.
 
 ## AI calls {#ai-calls}
 

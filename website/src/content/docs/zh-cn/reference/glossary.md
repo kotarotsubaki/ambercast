@@ -15,7 +15,7 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | fingerprint | 指纹（fingerprint）是一种元素 Grounding 值，包含字面量算法 `a11y-neighborhood-v2` 与一个 SHA-256 哈希值。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | `planDigest` |
 | inputs digest | 输入摘要（inputs digest）是基于规范化 Prompt、Plan Schema 版本、生成器模板指纹、生产器产物包指纹（producer-bundle fingerprint）及命名目标计算出的权威 SHA-256 来源凭证摘要。 | `computeInputsDigest`；[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/) | `planDigest` |
 | plan digest | 计划摘要（plan digest）是排除 `generatorMeta` 后符合 Schema 校验的 Plan 的权威 SHA-256 哈希值，用于绑定 Grounding。 | `computePlanDigest`；[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/) | `inputsDigest` |
-| normalized test prompt | 规范化测试 Prompt（normalized test prompt）至多移除一个开头的 U+FEFF 字符，并将 CRLF 或单独的 CR 映射为 LF，同时保留其余全部内容。 | `normalizeTestMd`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization-and-grants) | 格式清理 |
+| normalized test prompt | 规范化测试 Prompt（normalized test prompt）至多移除一个开头的 U+FEFF 字符，并将 CRLF 或单独的 CR 映射为 LF，同时保留其余全部内容。 | `normalizeTestMd`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization) | 格式清理 |
 
 - `PlanDocument` 与 `GroundingDocument` 是严格的运行时信任边界，JSON Schema 均派生自二者。
 
@@ -32,7 +32,10 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | report envelope | 报告信封（report envelope）是由报告命令返回的、带版本且按命令进行区分的结构化结果。 | `ReportEnvelope`；[报告](/ambercast/zh-cn/reference/reports/#envelope) | 持久化的 `report.json` |
 | report persistence | 报告持久化（report persistence）是运行信封针对最终信封写入操作记录的状态，取值为 `persisted`、`failed` 或 `not-attempted`。 | 运行 `ReportEnvelope`；[报告](/ambercast/zh-cn/reference/reports/#persistence) | 语义测试结果 |
 | secret reference | 密钥引用（secret reference）是由 `SecretRef` 接受的完整值字符串，在 `secrets.` 之后包含一个或多个由点分隔的 ASCII 字母、数字或下划线段。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 字面量密钥 |
-| secret grant | 密钥授权（secret grant）是位于 CommonMark 代码范围之外、严格按照源文件顺序书写的完整 `@ambercast-secret <secret reference>` 行。 | `extractSecretGrants`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization-and-grants) | 密钥引用本身 |
+| consent | 同意（consent）是 `generate` 在持久化包含 `secrets.allow` 之外机密名称的候选项前所需的交互式决定。 | `ambercast generate`；[管理机密](/ambercast/zh-cn/how-to/manage-secrets/) | 运行时机密值解析 |
+| allowlist | 许可列表（allowlist）是在生成持久化候选项之前，由 `secrets.allow` 接受的已审查逻辑机密名称集合。 | configuration / `ambercast generate`；[配置](/ambercast/zh-cn/reference/configuration/#secret-consent) | 机密接收端源 |
+| `secrets.allow` | `secrets.allow` 是预先批准的逻辑机密名称配置数组，或无需逐名审查即可接受所有 AI 提议名称的高风险 `"*"` 值。 | `RawConfig`；[配置](/ambercast/zh-cn/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` 值 |
+| `SecretNameChoice` | `SecretNameChoice` 是提供商侧在投影的 `allowedName` 与新的 `nameHint` 之间进行的严格选择；在存在已提交的 `SecretRef` 前，二者都在本地解析。 | `SecretNameChoice`；[值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 已提交的 `SecretRef` |
 
 - `stale` 属于 check 结果，而不是 run 结果状态。
 - 自愈命令对幂等目标（idempotent target）的检查仅在列表模式下跳过。
@@ -66,9 +69,9 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生工件 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 工件 Schema 版本 |
-| `0.3.1` | `0.3.1` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.5` |
+| `0.4.0` | `0.4.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.5` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
-| `@ambercast-secret` | `@ambercast-secret` 用于在 CommonMark 代码范围之外开启一个完整的授权行。 | 授权提取器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization-and-grants) | 密钥引用 |
+| `@ambercast-secret` | `@ambercast-secret` 是被拒绝的旧式 Prompt 语法，必须在重新生成 Plan v3 工件前移除。 | Prompt 解析器；[迁移机密授权](/ambercast/zh-cn/how-to/upgrade/#migrate-secret-grants) | 密钥引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |
 | `AMBERCAST_CONFIG` | `AMBERCAST_CONFIG` 提供环境变量级别的配置路径覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--config` |
 | `AMBERCAST_ENV_*` | `AMBERCAST_ENV_*` 是对 AI 提供商子进程隐藏且未列出的 Ambercast 输入命名空间。 | 子进程运行器；[环境变量](/ambercast/zh-cn/reference/environment-variables/#provider-child-environment) | `AMBERCAST_SECRET_*` |

@@ -15,7 +15,7 @@
 
 ## HOW-TO GUIDES
 - [编写高效的 Prompt](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/): 掌握编写清晰、聚焦的测试用例 Prompt 的推荐做法，并通过预检安全验证生成流程。
-- [管理机密](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/): 遵循安全编写路径在测试提示词中管理与使用机密引用。
+- [管理机密](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/): 安全地批准生成的机密名称，并从环境变量解析其值。
 - [配置目标环境](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/configure-targets/): 配置 ambercast 测试运行的目标环境，包括基础 URL、自愈重放隔离及密钥注入源。
 - [选择 AI 提供商](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/choose-ai-provider/): 配置 ambercast 使用固定的 AI 提供商或使用自动探测。
 - [选择要运行的测试](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/): 介绍如何指定测试文件路径、使用模式过滤用例以及配置用例发现规则。
@@ -30,7 +30,7 @@
 
 ## REFERENCE
 - [配置](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/): 本页定义了配置键及其解析逻辑。
-- [提示词文件格式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/prompt-format/): 说明 ambercast 0.3.1 中提示词文件所强制执行的文件标识、文本规范化、机密授权及引用语法规范。
+- [提示词文件格式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/prompt-format/): 说明 ambercast 测试提示词文件的精确文件标识、规范化规则和机密引用语法。
 - [发现模式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/discovery-patterns/): 定义 ambercast 测试发现中的配置匹配规则与路径排序约定。
 - [报告](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/): ambercast 结构化输出字段与结果 Schema 的完整规范参考。
 - [错误代码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/error-codes/): ambercast 稳定错误代码词汇表、作用域、退出码及触发条件的完整参考。

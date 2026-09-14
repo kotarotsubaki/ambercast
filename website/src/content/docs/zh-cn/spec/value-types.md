@@ -17,8 +17,6 @@ description: "所有其他章节必须（MUST）使用这些定义，而不是�
 |  | `name` | string | required | min 1 | 可访问名称。 | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L186) |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | 定位器证据格式。 | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小写 SHA-256。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:223](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L223) |
-| `SourceSpan` | `startLine` | integer | required | positive | 包含边界的、基于 1 的授权起始行。 | [src/core/ir/schema.ts:259](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L259) |
-|  | `endLine` | integer | required | positive; `endLine >= startLine` | 包含边界的授权结束行。 | [src/core/ir/schema.ts:260](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L260), [src/core/ir/schema.ts:261](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L261) |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | 基于 1 的 UTF-16 起始行。 | [src/core/ir/schema.ts:332](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L332) |
 |  | `startColumn` | integer | required | positive | 基于 1 的 UTF-16 起始列。 | [src/core/ir/schema.ts:333](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L333) |
 |  | `endLine` | integer | required | positive | 基于 1 的 UTF-16 结束行。 | [src/core/ir/schema.ts:334](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L334) |
@@ -29,6 +27,8 @@ description: "所有其他章节必须（MUST）使用这些定义，而不是�
 | `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 已提交的准则 ID。 | [src/core/ir/schema.ts:366](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L366) |
 |  | `kind` | string | required | enum `success`, `action` | 子句角色。 | [src/core/ir/schema.ts:367](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L367) |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 本地派生的 prompt 位置。 | [src/core/ir/schema.ts:368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L368) |
+| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | provider 请求复用已投影的允许列表名称。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
+|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | provider 对新发现名称的提议。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
 
 `ElementRef` 目前仅有 `AccessibilityElementRef`。`HexSha256` 为 `/^[0-9a-f]{64}$/`；`StepId` 与 `InstructionCriterionId` 为 `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/`；`RunVariableName` 为 `/^[a-z][a-zA-Z0-9]*$/`；`RunRef` 为 `/^\\{\\{run\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/`。[src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:198](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L198), [src/core/ir/schema.ts:237](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L237), [src/core/ir/schema.ts:311](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L311), [src/core/ir/schema.ts:381](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L381), [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L396)
 
@@ -37,12 +37,14 @@ description: "所有其他章节必须（MUST）使用这些定义，而不是�
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | 完整的 secret 引用。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L33), [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L74) |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 供同意和配置使用的裸逻辑名称。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L92) |
+| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | provider 的回退命名候选，而非已提交引用。 | [src/core/ir/schema.ts:94-102](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L94-L102) |
 | `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | 仅限 HTTP(S) 源。 | [src/core/ir/schema.ts:40](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L40), [src/core/ir/schema.ts:95-97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L95-L97) |
 | `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | 文本可包含 run 插值，但不得包含 secret 令牌。 | [src/core/ir/schema.ts:37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37), [src/core/ir/schema.ts:125](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L125) |
 | `Citation` | string | value | min 1; max `4096` | 归因前精确的 prompt 子字符串。 | [src/core/ir/schema.ts:273](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L273), [src/core/ir/schema.ts:279](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L279) |
 | `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | 元数据或提供方歧义值。 | [src/core/ir/schema.ts:1167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1167) |
 
-`secretSinkOrigins` 中缺失的 secret 条目默认将该 secret 指向 `baseUrl`；显式的空数组拒绝所有源；非空数组则替换默认值。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) `SourceSpan` 顺序以及所有 `InstructionSourceSpan` 的 prompt 坐标检查均属于语义验证。[src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254), [src/core/ir/schema.ts:328](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L328)
+`secretSinkOrigins` 中缺失的 secret 条目默认将该 secret 指向 `baseUrl`；显式的空数组拒绝所有源；非空数组则替换默认值。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) 所有 `InstructionSourceSpan` 的 prompt 坐标检查均属于语义验证。[src/usecases/instruction-coverage-policy.ts:467-496](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L467-L496)
 
 ## 示例 {#examples}
 
@@ -58,6 +60,6 @@ description: "所有其他章节必须（MUST）使用这些定义，而不是�
 
 共享对象解决了计划（plan）、生成响应（generation response）与 grounding逐渐引入互不兼容的定位器、引用和溯源信息的问题。该设计将严格的运行时定义统一置于一个 schema 中，并从中派生 JSON Schema。
 
-所选设计将完整值的 secret 和 run 引用与普通文本分离开来，并将提供方引文与已提交的源区间分离开来。因此，本地代码而非 AI 生成的摘录对持久溯源信息具有权威性。
+所选设计将完整值的 secret 和 run 引用与普通文本分离开来，并将 provider 命名意图与已提交的 secret 引用分离开来。因此，本地命名和同意而非 AI 生成的引用，对持久授权具有权威性。
 
 一个被否决的备选方案是在每个文档中独立定义定位器和 secret 语法；该方案被否决是因为审查无法发现看似兼容的漂移。另一个被否决的方案是将引文视为持久权威；该方案被否决是因为相对于 prompt 的验证必须具有确定性且在本地进行。 

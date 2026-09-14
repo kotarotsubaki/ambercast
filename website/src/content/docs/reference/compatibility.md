@@ -1,9 +1,9 @@
 ---
 title: Compatibility
-description: Artifact-format compatibility across package versions and provenance-driven regeneration rules for plans, groundings, and reports.
+description: Artifact-format compatibility across package versions and regeneration rules for plans, groundings, and reports.
 ---
 
-Ambercast defines artifact-format compatibility and regeneration boundaries across package releases using explicit schema versions, element fingerprint tags, and cryptographic provenance digests. This reference details artifact compatibility across releases and the conditions under which you must regenerate your Plan, Grounding, or report files.
+Ambercast defines artifact-format compatibility and regeneration boundaries across package releases using explicit schema versions, element fingerprint tags, and cryptographic digests. This reference details artifact compatibility across releases and the conditions under which you must regenerate your Plan, Grounding, or report files.
 
 ## Compatibility table {#compatibility-table}
 
@@ -11,10 +11,11 @@ Ambercast defines artifact-format compatibility and regeneration boundaries acro
 | --- | --- | --- | --- | --- |
 | `0.1.0` | `2` | `1` (not yet confirmed) | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
+| `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
 
 In version 0.2.0, the provider request contract changed without incrementing the Plan schema version. That change updated `producerBundleFingerprint` and altered every prompt's `inputsDigest`, making 0.1.0 plans stale (see [Changelog](/ambercast/reference/changelog/#release-020)).
 
-Plan version 1 is regenerated or reported stale rather than migrated in place. For step-by-step upgrade procedures, refer to [Upgrade between versions](/ambercast/how-to/upgrade/).
+Plans with schema versions 1 and 2 are never migrated in place. `generate` treats either as non-fresh and regenerates a current Plan; `check` read-only reports it as `stale`; `run` and `heal` reject it with `INTEGRITY_VIOLATION` (exit code 4). Plan v3 replaces the v2 secret-grant provenance model with consent and `secrets.allow`; for step-by-step upgrade procedures, refer to [Upgrade between versions](/ambercast/how-to/upgrade/).
 
 ## Regeneration boundary {#regeneration-boundary}
 
@@ -23,7 +24,7 @@ Plan version 1 is regenerated or reported stale rather than migrated in place. F
 | Normalized prompt, Plan schema version, generator-template fingerprint, producer-bundle fingerprint, or named target definitions | `inputsDigest` and Plan freshness | Regenerate the Plan. Replay-relevant Plan content separately governs the resulting Grounding binding. |
 | Replay-relevant Plan content | `planDigest` recorded by Grounding | Regenerate or replace Grounding; `generatorMeta` alone does not enter `planDigest`. |
 | Accepted element fingerprint algorithm or preimage | Existing element-grounding entries | In `run`, an unusable source is a cache miss when it is absent, invalid JSON, stale provenance, or fails strict parsing without a coverage claim. Once a current-provenance source makes a coverage claim, its structural or canonical failure is an integrity failure and does not fall back. In `check`, grounding inspection classifies JSON/schema failure and a claimed non-canonical source as `invalid` and a stale `planDigest` as `stale`; the public report status is derived per repository policy in [Freshness and digests](/ambercast/spec/freshness/#freshness-consequences). |
-| Report schema version or field contract | Structured-output consumers and persisted run reports | Consumer migration and report-regeneration obligations are not yet confirmed (not defined by 0.2.0 code); the implementation only pins the emitted envelope version. |
+| Report schema version or field contract | Structured-output consumers and persisted run reports | Update consumers for the emitted report contract; 3.5 adds the secret-policy error details, generate secret-use/warning fields, and heal Stage 3 rejection details. |
 | Plan, Grounding, config, or report Zod schema | Published npm schema artifacts | Run the package build so the four JSON Schemas are regenerated from their Zod sources. |
 
 The `inputsDigest` hashes exactly the five declared inputs—the normalized prompt, the Plan schema version, the generator-template fingerprint, the producer-bundle fingerprint, and named target definitions—through canonical JSON and SHA-256.

@@ -1620,6 +1620,7 @@ async function assertIssue298MachineReadableResourceLinks(browser) {
     'https://kotarotsubaki.github.io/ambercast/llms-planned.txt',
     'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json',
     'https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json',
+    'https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json',
     'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json',
     'https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json',
     'https://kotarotsubaki.github.io/ambercast/capabilities.json',

@@ -25,6 +25,10 @@ A completed repair result distinguishes `healed`, `partially-healed`, `unresolve
 
 Heal first repairs Grounding, then attempts single-step or tail repair, and finally performs full-plan repair when needed; Stage 3 resolves an AI executor and calls generation, so it can dispatch a real provider.
 
+Heal never makes a new secret-consent decision. If its Stage 2 candidate has an invalid secret name, allowlist failure, or environment-variable collision, it rejects that repair with `secret-name-invalid`. If the Stage 3 full-plan candidate changes the complete logical secret-name set, heal rejects it with `stage3Rejection.reason: "secret-set-changed"`, writes no Plan or Grounding update, and prints the literal Japanese hint the shipped CLI renders:
+
+`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
+
 ## Limits {#limits}
 
 - `heal.maxStepRepairs`, when set, is a positive hard limit on real incremental repair provider dispatches, including element confirmation and excluding the fail-closed baseline and Stage 3.

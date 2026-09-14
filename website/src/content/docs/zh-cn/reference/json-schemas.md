@@ -12,7 +12,8 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | 产物 | 公开路径与 `$id` | 版本 | `title` | `description` | 适用范围 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 可用 |
-| plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 完整的 `PlanDocument`，包含来源出处（provenance）、目标（targets）与步骤（steps）。 | 可用 |
+| plan（历史快照） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 为已废弃契约的使用者保留的冻结 Plan v2 快照。 | 可用 |
+| plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 当前完整的 `PlanDocument`，包含目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.5"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
 
@@ -23,7 +24,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 
 | 生成的文件 | 验证对象 | 生成来源 | npm 导出 |
 | --- | --- | --- | --- |
-| `plan.schema.json` | 包含 Plan `schemaVersion` 2、来源出处（provenance source）、目标（targets）与步骤（steps）的完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
+| `plan.schema.json` | 包含 Plan `schemaVersion` 3、来源出处（provenance source）、目标（targets）与步骤（steps）的当前完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 包含 Grounding `schemaVersion` 1、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | 当前存在的配置文档，其 `$schema` 为必填项，其余声明的设置项均为可选项。 | Zod `RawConfig` 转换为 JSON Schema 2020-12。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `report.schema.json` | 包含 Report `schemaVersion` 3.5 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
@@ -34,8 +35,8 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 ## 结构约束边界 {#structural-boundary}
 
 - Plan、Grounding、config 以及 report 的 JSON Schema 均派生自 Zod，而非作为独立的手写定义进行维护。
-- 重复的 Plan 步骤 ID 以及 `SourceSpan.endLine >= startLine` 属于仅在 Zod 中生效的语义细化约束，因为 JSON Schema 2020-12 无法表达这些跨项或跨属性约束。
-- 仅验证生成的 Plan JSON Schema 并不能确立重复步骤 ID 的唯一性或 `SourceSpan` 的行号顺序约束；[符合性](/ambercast/zh-cn/spec/conformance/) 记录了这一组合约束边界。
+- 重复的 Plan 步骤 ID 属于仅在 Zod 中生效的语义细化约束，因为 JSON Schema 2020-12 无法表达数组项之间投影字段的唯一性。
+- 仅验证生成的 Plan JSON Schema 并不能确立重复步骤 ID 的唯一性；[符合性](/ambercast/zh-cn/spec/conformance/) 记录了这一组合约束边界。
 
 ## 报告 Schema {#report-schema}
 

@@ -72,10 +72,9 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `action` | string | required | literal `fill-secret` | アクション識別子。 | [src/core/ir/schema.ts:518](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L518) |
 | `target` | `ElementRef` | required | strict locator | シークレット投入先フィールド。 | [src/core/ir/schema.ts:515](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L515) |
 | `secretRef` | `SecretRef` | required | whole secret-ref grammar | シークレット値の参照。 | [src/core/ir/schema.ts:515](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L515) |
-| `secretGrantSpan` | `SourceSpan` | required | strict span; ordered lines | ローカルグラントの来歴。 | [src/core/ir/schema.ts:520](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L520) |
 
 ```json
-{"id":"fill-password","kind":"action","action":"fill-secret","target":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}","secretGrantSpan":{"startLine":1,"endLine":1}}
+{"id":"fill-password","kind":"action","action":"fill-secret","target":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
 ### `assert` / `text-visible` {#assert-text-visible}
@@ -165,36 +164,34 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `id` | `StepId` | required | step-ID regex | 安定したID。 | [src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:416-420](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L416-L420) |
 | `kind` | string | required | literal `ai` | ステップ識別子。 | [src/core/ir/schema.ts:418](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L418) |
 | `instruction` | `InterpolatableText` | required | no secret marker | エージェントへの指示。 | [src/core/ir/schema.ts:419](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L419) |
-| `secrets` | `AiStepSecretGrant[]` | optional | strict entries | 承認されたシークレットの用途。 | [src/core/ir/schema.ts:713](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L713) |
+| `secrets` | `AiStepSecretUse[]` | optional | strict entries | コミット済みシークレット使用。 | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L688-L692) |
 | `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | ローカルに帰属付けられた基準。 | [src/core/ir/schema.ts:714](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L714) |
 
 ```json
 {"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-### コミット済み AI シークレットグラント {#committed-ai-secret-grants}
+### コミット済み AI シークレット使用 {#committed-ai-secret-grants}
 
-コミット済み AI ステップの任意の `secrets` 配列の各要素は厳格な `AiStepSecretGrant` であり、承認された参照およびローカルで導出されたグラントの来歴を記録する。[src/core/ir/schema.ts:684](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L684)
+コミット済み AI ステップの任意の `secrets` 配列の各要素は厳格な `AiStepSecretUse` であり、解決済み参照のみを記録する。同意および許可リスト認可は Plan の永続化前に行われ、Plan の来歴フィールドではない。[src/core/ir/schema.ts:667-692](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L667-L692) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493)
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `ref` | `SecretRef` | required | whole secret-reference grammar | 承認されたシークレット参照。 | [src/core/ir/schema.ts:690](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L690) |
-| `sourceSpan` | `SourceSpan` | required | strict, one-based inclusive lines | `ref` を承認するプロンプトグラント。 | [src/core/ir/schema.ts:692](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L692) |
+| `ref` | `SecretRef` | required | whole secret-reference grammar | コミット済みシークレット参照。 | [src/core/ir/schema.ts:674-675](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L674-L675) |
 
 ```json
-{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}","sourceSpan":{"startLine":4,"endLine":4}}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
 ## 生成形式 {#generated-forms}
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target`, `secretRef` | as committed fill-secret | required | `kind: action`, `action: fill-secret` | プロバイダー形式。 | [src/core/ir/schema.ts:758](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L758) |
-|  | `citation` | `Citation` | required | 1–4096 characters | ローカルで `secretGrantSpan` に置き換えられる。 | [src/core/ir/schema.ts:763](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L763) |
-| `GeneratedAiStepSecretGrant` | `ref` | `SecretRef` | required | whole reference | プロバイダグラント参照。 | [src/core/ir/schema.ts:798](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L798) |
-|  | `citation` | `Citation` | required | 1–4096 characters | 帰属のエビデンス。 | [src/core/ir/schema.ts:800](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L800) |
+| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | ローカル命名を待つプロバイダー形式。 | [src/core/ir/schema.ts:773-805](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L773-L805) |
+|  | `secret` | `SecretNameChoice` | optional | strict choice | 既存の許可リスト名の要求または新しい名前のヒント。 | [src/core/ir/schema.ts:104-115,779-785](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
+| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | ローカル解決を待つプロバイダー命名意図。 | [src/core/ir/schema.ts:813-821](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L813-L821) |
 | `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | 共有AIコントラクト。 | [src/core/ir/schema.ts:814](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L814) |
-|  | `secrets` | generated grants[] | optional | strict entries | 保留中のグラント帰属。 | [src/core/ir/schema.ts:816](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L816) |
+|  | `secrets` | generated uses[] | optional | strict entries | 保留中のシークレット名解決。 | [src/core/ir/schema.ts:824-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L824-L833) |
 |  | `instructionCoverage` | generated criteria[] | required | min 1 | 保留中の基準帰属。 | [src/core/ir/schema.ts:817](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L817) |
 |  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | 一時的な検証提案。 | [src/core/ir/schema.ts:818](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L818) |
 
@@ -202,7 +199,7 @@ description: "コミットされたすべてのステップは、`kind` によ�
 
 問題は、特に UI が誤った合格（wrong pass）を生じさせ得る箇所において、アクションが証明と誤認されるのを防ぐことである。明示的なアサーションブランチにより、観測された成功基準が検査可能になる。
 
-選択された判別共用体により、すべてのオペコードに閉じたフィールド規約が与えられ、シークレットの投入が通常のテキストから分離される。プロバイダの citation は、計画がコミットされる前にローカルのスパンに変換される。
+選択された判別共用体により、すべてのオペコードに閉じたフィールド規約が与えられ、シークレットの投入が通常のテキストから分離される。プロバイダーの命名意図は、計画がコミットされる前にローカルで解決され同意される。
 
 プロバイダによる逐語的な citation は、各基準をローカルでチェックされた 1 つのプロンプト抜粋にバインドする。4 座標の `InstructionSourceSpan` へのローカル変換により、プロバイダに行数をカウントさせることなく、コミットされる帰属付けが正確なものとなる。 [src/usecases/instruction-coverage-policy.ts:337-415](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337-L415)
 

@@ -70,7 +70,7 @@ A consumer MUST recompute the Plan digest and accept Grounding only when it equa
 
 After successful replay of an existing trace, an implementation MUST leave that entry unchanged. It MUST write or overwrite an AI entry only after successful agentic execution with exact terminal success-criterion coverage. For a successful agentic execution ending in a snapshot or failed assertion, a cold path MUST write no entry and a fallback path MUST delete the stale entry that caused fallback. It MUST leave an existing entry untouched after agentic failure or abort. [repo:src/usecases/run.ts:1895-1912] [repo:src/usecases/run.ts:2051-2127]
 
-For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` grant set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [repo:src/usecases/run.ts:896] [repo:src/usecases/run.ts:1075]
+For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [repo:src/usecases/run.ts:896] [repo:src/usecases/run.ts:1075]
 
 ## Rationale {#rationale}
 

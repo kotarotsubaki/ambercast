@@ -15,15 +15,13 @@ A test is written in natural language, in a Markdown file.
 ```markdown
 # Login
 
-@ambercast-secret {{secrets.password}}
-
 Go to /login.
-Fill in the email "mika@example.com" and the password {{secrets.password}}.
+Fill in the email "mika@example.com" and the password.
 Click "Sign in".
 Expect to land on the dashboard and see a "Welcome" heading.
 ```
 
-You can write the prompt in your own language. The password's value is never written; only the reference `{{secrets.password}}` is.
+You can write the prompt in your own language. The password's value is never written anywhere.
 
 There are no selectors, no waits, and no test code. All you write here is what you want to verify. This file is the single source of truth.
 
@@ -33,7 +31,7 @@ There are no selectors, no waits, and no test code. All you write here is what y
 ambercast generate
 ```
 
-AI reads the prompt and builds a plan. The browser does not run yet. This is where two derived files are born.
+AI reads the prompt and builds a plan. The browser does not run yet. When it finds a password field, it asks whether it may treat it as a secret named `password`; that consent is recorded in `ambercast.config.json` and is not asked again. The value is passed in at run time from the environment variable `AMBERCAST_SECRET_PASSWORD`. This is where two derived files are born.
 
 ```
 login.test.md

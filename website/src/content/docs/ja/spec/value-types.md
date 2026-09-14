@@ -17,8 +17,6 @@ description: "他のすべての章は、それらの形状を再記述するの
 |  | `name` | string | required | min 1 | アクセシブル名。 | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L186) |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | ロケータエビデンスの形式。 | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小文字のSHA-256。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:223](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L223) |
-| `SourceSpan` | `startLine` | integer | required | positive | 境界を含む、1始まりのグラント開始行。 | [src/core/ir/schema.ts:259](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L259) |
-|  | `endLine` | integer | required | positive; `endLine >= startLine` | 境界を含むグラント終了行。 | [src/core/ir/schema.ts:260](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L260), [src/core/ir/schema.ts:261](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L261) |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | 1始まりのUTF-16開始行。 | [src/core/ir/schema.ts:332](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L332) |
 |  | `startColumn` | integer | required | positive | 1始まりのUTF-16開始列。 | [src/core/ir/schema.ts:333](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L333) |
 |  | `endLine` | integer | required | positive | 1始まりのUTF-16終了行。 | [src/core/ir/schema.ts:334](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L334) |
@@ -29,6 +27,8 @@ description: "他のすべての章は、それらの形状を再記述するの
 | `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 確定されたクライテリアID。 | [src/core/ir/schema.ts:366](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L366) |
 |  | `kind` | string | required | enum `success`, `action` | 節の役割。 | [src/core/ir/schema.ts:367](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L367) |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | ローカルで導出されたプロンプト位置。 | [src/core/ir/schema.ts:368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L368) |
+| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | 投影済み許可リスト名を再利用するプロバイダー要求。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
+|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | 新たに発見した名前に対するプロバイダー提案。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
 
 現在、`ElementRef` は `AccessibilityElementRef` のみを持つ。`HexSha256` は `/^[0-9a-f]{64}$/` であり、`StepId` および `InstructionCriterionId` は `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` であり、`RunVariableName` は `/^[a-z][a-zA-Z0-9]*$/` であり、`RunRef` は `/^\\{\\{run\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` である。[src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:198](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L198), [src/core/ir/schema.ts:237](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L237), [src/core/ir/schema.ts:311](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L311), [src/core/ir/schema.ts:381](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L381), [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L396)
 
@@ -37,12 +37,14 @@ description: "他のすべての章は、それらの形状を再記述するの
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | 完全なシークレット参照。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L33), [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L74) |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 同意と構成で使用する裸の論理名。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L92) |
+| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | プロバイダーのフォールバック命名候補であり、コミット済み参照ではない。 | [src/core/ir/schema.ts:94-102](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L94-L102) |
 | `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | HTTP(S)オリジンのみ。 | [src/core/ir/schema.ts:40](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L40), [src/core/ir/schema.ts:95-97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L95-L97) |
 | `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | テキストはrunの補間を含み得るが、シークレットトークンを含まない。 | [src/core/ir/schema.ts:37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37), [src/core/ir/schema.ts:125](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L125) |
 | `Citation` | string | value | min 1; max `4096` | 帰属前の正確なプロンプト部分文字列。 | [src/core/ir/schema.ts:273](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L273), [src/core/ir/schema.ts:279](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L279) |
 | `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | メタデータまたはプロバイダの曖昧性の値。 | [src/core/ir/schema.ts:1167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1167) |
 
-`secretSinkOrigins` にシークレットのエントリが存在しない場合、そのシークレットのデフォルトは `baseUrl` となる。明示的な空配列はすべてのオリジンを拒否し、空でない配列はデフォルトを置き換える。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) `SourceSpan` の順序付け、およびすべての `InstructionSourceSpan` のプロンプト座標チェックはセマンティックバリデーションである。[src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254), [src/core/ir/schema.ts:328](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L328)
+`secretSinkOrigins` にシークレットのエントリが存在しない場合、そのシークレットのデフォルトは `baseUrl` となる。明示的な空配列はすべてのオリジンを拒否し、空でない配列はデフォルトを置き換える。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) すべての `InstructionSourceSpan` のプロンプト座標チェックはセマンティックバリデーションである。[src/usecases/instruction-coverage-policy.ts:467-496](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L467-L496)
 
 ## 例 {#examples}
 
@@ -58,6 +60,6 @@ description: "他のすべての章は、それらの形状を再記述するの
 
 共有オブジェクトは、プラン、生成レスポンス、およびグラウンディングが、互換性のないロケータ、参照、および出所情報（provenance）を徐々に獲得していく問題を解決する。本設計は厳格なランタイム定義を1つのスキーマに配置し、そこから JSON Schema を導出する。
 
-選択された設計は、値全体のシークレット参照および run 参照を通常のテキストから分離し、プロバイダの引用をコミットされたソーススパンから分離する。したがって、AIが生成した抜粋ではなくローカルコードが、永続的な出所情報（provenance）に対するオーソリティとなる。
+選択された設計は、値全体のシークレット参照および run 参照を通常のテキストから分離し、プロバイダーの命名意図をコミット済みシークレット参照から分離する。したがって、AI が生成した参照ではなくローカルの命名と同意が、永続的認可に対するオーソリティとなる。
 
 却下された代替案の1つは、各ドキュメントでロケータとシークレットの構文を独立して定義することであった。レビューでは一見互換性があるように見える乖離（drift）を検出できないため、これは却下された。もう1つは、引用を永続的なオーソリティとして扱うことであった。プロンプト相対の検証は決定論的かつローカルでなければならないため、これは却下された。 

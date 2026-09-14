@@ -11,6 +11,8 @@ Durable artifact validation and the provider-output acceptance boundary remain s
 
 Provider-generated steps are not trusted directly into persistent storage. When steps are produced, they are parsed against the local response contract, subjected to instruction-coverage checks, and then assembled into and parsed as a complete plan before persistence.
 
+For secrets, generation separates proposal from authorization. The provider can propose a `SecretNameChoice`, but Ambercast resolves every committed secret reference locally and persists a candidate only after the name is already allowlisted or receives interactive consent. `secrets.allow: "*"` bypasses per-name review and is therefore a deliberate high-risk configuration, not an implicit default.
+
 Links: [Plan document](/ambercast/spec/plan-document/), [Conformance](/ambercast/spec/conformance/), [Error codes](/ambercast/reference/error-codes/)
 
 ## Page observations are not instructions {#untrusted-page-data}
@@ -42,5 +44,7 @@ Links: [Manage secrets](/ambercast/how-to/manage-secrets/), [Configuration](/amb
 Configured AI providers run without access to ambercast-managed secret namespaces. When spawning child processes for a provider, provider child processes receive a copied environment that excludes `AMBERCAST_SECRET_*` and `AMBERCAST_ENV_*`, using case-insensitive matching.
 
 The design assigns secret validation, generator policy, and report redaction distinct roles rather than trusting a schema alone to prove secrecy.
+
+Secret values resolve only at runtime from `AMBERCAST_SECRET_<NAME>`. Providers receive names rather than values, which avoids value disclosure but does not make descriptive names harmless; review proposed names before approving them.
 
 Links: [Manage secrets](/ambercast/how-to/manage-secrets/), [Environment variables](/ambercast/reference/environment-variables/), [Security policy](/ambercast/reference/security-policy/)

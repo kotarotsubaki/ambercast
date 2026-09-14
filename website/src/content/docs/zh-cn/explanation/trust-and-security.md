@@ -11,6 +11,8 @@ description: 阐释 ambercast 的信任边界与故障安全设计考量。
 
 对于提供商生成的步骤，系统不会将其直接视作可信的持久化工件。这些步骤首先需要针对本地响应契约进行解析，并接受指令覆盖检查；随后组装并作为完整计划进行解析，只有完全通过这些阶段后才会持久化存储。
 
+对于机密，生成将提案与授权分离。提供商可以提出 `SecretNameChoice`，但 Ambercast 会在本地解析每个提交的机密引用，且仅当名称已在许可列表中或获得交互式同意后，才持久化候选项。`secrets.allow: "*"` 会绕过逐名审查，因此它是有意设置的高风险配置，而非隐式默认值。
+
 相关链接：[计划文档](/ambercast/zh-cn/spec/plan-document/)、[符合性](/ambercast/zh-cn/spec/conformance/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)
 
 ## 页面观测数据不构成指令 {#untrusted-page-data}
@@ -42,5 +44,7 @@ description: 阐释 ambercast 的信任边界与故障安全设计考量。
 配置的提供商子进程不会被托付 ambercast 管理的敏感命名空间。提供商子进程接收的是一份复制的环境变量，该环境变量通过不区分大小写的匹配方式排除了 `AMBERCAST_SECRET_*` 与 `AMBERCAST_ENV_*`。
 
 在整体安全设计中，系统为 Secret 校验、生成器策略以及报告脱敏分配了各自独立的角色，而不是单纯依赖数据模式自身来证明保密性。
+
+机密值仅在运行时从 `AMBERCAST_SECRET_<NAME>` 解析。提供商接收名称而不是值，这避免了值的泄露，但不代表描述性名称毫无风险；请在批准前审查所提名称。
 
 相关链接：[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)、[安全策略](/ambercast/zh-cn/reference/security-policy/)

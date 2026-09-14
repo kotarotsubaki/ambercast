@@ -1,33 +1,44 @@
 ---
 title: Manage secrets
-description: Follow the safe authoring path to declare secrets in prompts and resolve them from environment variables.
+description: Approve generated secret names safely and resolve their values from environment variables.
 ---
 
-Follow this safe authoring path to declare secret references in your test prompts and resolve them from environment variables like `AMBERCAST_SECRET_A_B`.
+Ambercast discovers candidate secret names while generating a Plan. You approve those names through an interactive consent prompt or pre-populate the configuration allowlist for non-interactive use; secret values remain outside prompts and artifacts.
 
 ## Prerequisites {#prerequisites}
 
-- A secret reference `{{secrets.a.b}}` resolves from `AMBERCAST_SECRET_A_B`.
+- No existing `ambercast.config.json` file is required. When accepted consent needs to persist an allowlist and the configured file is absent, Ambercast creates it automatically.
 
 ## Steps {#steps}
 
-1. Put exactly `@ambercast-secret {{secrets.password}}` on its own non-code prompt line. The grant parser accepts a complete matching line and excludes fenced, indented, and inline code. One grant line authorizes exactly one use, so repeat the line once per use when the same secret is used more than once—for example, to sign in, sign out, and sign in again. Placing each grant line immediately before the instruction that describes its corresponding use is not a requirement (see the [grant origin rules](/ambercast/spec/secrets/#grant-origin)), but doing so tends to make that one-to-one attribution obvious to the provider and helps avoid an unresolved citation.
+1. Write the user outcome in the prompt without any grant line or secret value.
 
+   ```markdown
+   # Sign in
+
+   Sign in as the configured test user and verify that the dashboard heading is visible.
    ```
-   @ambercast-secret {{secrets.password}}
-   Sign in with the password.
-   Sign out.
-   @ambercast-secret {{secrets.password}}
-   Sign in again with the same password.
+2. Run `npx ambercast generate tests/ambercast/<name>.test.md`. Generation first produces a candidate Plan and lists any newly proposed secret names. In an interactive terminal, review each name and accept only the names that are appropriate for this test.
+3. For CI or another non-interactive environment, add the reviewed names before generating:
+
+   ```json
+   {
+     "$schema": "https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json",
+     "secrets": { "allow": ["password"] }
+   }
    ```
-2. Before the first `npx ambercast generate tests/ambercast/<name>.test.md`, have a human or an approved scanner confirm that the entire prompt contains no literal secret outside a SecretRef grant. `generate` sends the normalized prompt in its AI-provider context before it performs the literal-secret check; that check cannot protect a secret already sent in the prompt.
-3. Set `AMBERCAST_SECRET_PASSWORD` in the command environment, then run `npx ambercast generate tests/ambercast/<name>.test.md`. Generation authorizes the prompt grant but does not construct a secrets provider or resolve its value.
-4. Configure an additional origin as in [Configure targets](/ambercast/how-to/configure-targets/) if the fill is not at `baseUrl`. Missing mapping defaults to the base-URL origin.
+
+   An empty `secrets.allow` requires consent for every name. The value `"*"` accepts any AI-proposed name without per-name review; use it only when you understand that this removes the approval boundary. When it is already `"*"`, accepting consent writes no allowlist update.
+
+   When recording accepted names, Ambercast takes an exclusive update, then re-reads and validates the current on-disk configuration before merging; it does not overwrite an earlier configuration snapshot. Existing `secrets.allow` names are deduplicated while keeping their existing order. Newly accepted names are deduplicated, names already present are excluded, and the remaining names are sorted alphabetically and appended.
+4. Set the corresponding value only in the command environment. At runtime, `{{secrets.a.b}}` resolves from `AMBERCAST_SECRET_A_B`: dots become underscores and segments are uppercased. Configure an additional origin as in [Configure targets](/ambercast/how-to/configure-targets/) if the fill is not at `baseUrl`.
 
 ## Verification {#verification}
 
-- After generation, run `npx ambercast run --resolve tests/ambercast/<name>.test.md` against a safe target with the variable still in the command environment. Run constructs the environment secrets provider; a `fill-secret` resolves the named variable only after the live origin passes its sink-policy check.
-- `npx ambercast generate --json tests/ambercast/<name>.test.md` must not return `SECRET_LITERAL_REJECTED`. This rejection inspects provider-derived generated JSON before persistence or report serialization; it protects the generated response, not the prompt that was already sent to the provider.
+- After accepting consent or adding the allowlist entry, generation persists the Plan and records the name in `secrets.allow` when it was newly accepted.
+- For one generation batch, Ambercast commits every newly accepted name to the allowlist once before writing any candidate's Plan or Grounding file. These are separate operations, not one transaction: if interruption or failure occurs after the allowlist commit, the allowlist remains on disk even when some or all candidate Plan and Grounding files were not written. This known, accepted state means `secrets.allow` can be ahead of generated artifacts; rerun `generate` to recover, which proceeds with the already-allowlisted names.
+- If consent is declined or cannot be requested in a non-interactive terminal, generation fails with `SECRET_CONSENT_REQUIRED` and writes no candidate artifacts. Add the reviewed names to `secrets.allow`, then rerun generation.
+- Run `npx ambercast run --resolve tests/ambercast/<name>.test.md` against a safe target with the required `AMBERCAST_SECRET_<NAME>` variables still in the command environment. A `fill-secret` resolves the named variable only after its live origin passes the sink-policy check.
 
 ## Related {#related}
 

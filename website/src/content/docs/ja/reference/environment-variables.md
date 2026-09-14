@@ -40,4 +40,4 @@ Ambercastが読み取る環境変数と、AIプロバイダーの子プロセス
 
 フィルタリングは環境のコピーを返し、親プロセスの環境は変更されません。
 
-関連リンク: [設定](/ambercast/ja/reference/configuration/#file-selection), [ambercast generate](/ambercast/ja/reference/cli/generate/#flags), [ambercast run](/ambercast/ja/reference/cli/run/#flags), [ambercast heal](/ambercast/ja/reference/cli/heal/#flags), [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization-and-grants).
+関連リンク: [設定](/ambercast/ja/reference/configuration/#file-selection), [ambercast generate](/ambercast/ja/reference/cli/generate/#flags), [ambercast run](/ambercast/ja/reference/cli/run/#flags), [ambercast heal](/ambercast/ja/reference/cli/heal/#flags), [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization).

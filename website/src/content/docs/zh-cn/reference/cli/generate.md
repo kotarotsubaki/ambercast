@@ -26,6 +26,12 @@ description: 详细参考 ambercast generate 的命令行参数、AI 提供商�
 - Generate 仅通过其生成依赖解析提供商执行器；已配置的提供商与 `--ai` 覆盖参数将提供给该解析器。
 - `--list` 返回发现行。在配合 `--dry-run` 时，需要生成的目标返回 `would-generate`；未过期的 Plan 返回 `skipped-fresh`。两种 dry-run 结果均不写入产物：未过期分支跳过 grounding 修复，而生成分支在写入前返回。
 
+## 机密同意 {#secret-consent}
+
+生成采用“先候选后同意”的方式：它构造候选 Plan，识别 `secrets.allow` 之外的机密名称，并在持久化 Plan 或 Grounding 前请求交互式批准。即使用 `--force` 重新生成未过期的 Plan，也遵守该同意边界。`--dry-run` 不写入产物，也不持久化同意。
+
+在非交互上下文中，或拒绝同意时，未许可的候选会以 `SECRET_CONSENT_REQUIRED` 和退出码 2 失败。请先将已审查的名称添加到 `secrets.allow` 后再于 CI 运行；`"*"` 会绕过逐名审查并接受 AI 提出的任意名称，因此带有强风险警告。安全工作流程请参见[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)。
+
 ## 副作用与退出码 {#side-effects}
 
 - 名为 `<name>.test.md` 的提示词映射到其同级的 plan 与 grounding 伴生文件。

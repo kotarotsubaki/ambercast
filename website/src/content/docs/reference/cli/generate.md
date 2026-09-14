@@ -27,6 +27,12 @@ The `ambercast generate` command compiles test prompts into plans and companion 
 
 `--list` returns discovery rows without running generation. With `--dry-run`, a target needing generation returns `would-generate`, while a fresh Plan returns `skipped-fresh`. Neither dry-run outcome writes artifacts: the fresh branch skips Grounding repair, and the generation branch returns before writes.
 
+## Secret consent {#secret-consent}
+
+Generation is candidate-then-consent: it constructs the candidate Plan, identifies secret names outside `secrets.allow`, and asks for interactive approval before persisting the Plan or Grounding. `--force` still follows this consent boundary when a fresh Plan is regenerated. `--dry-run` produces no artifact writes and does not persist consent.
+
+In a non-interactive context, or when consent is declined, an unallowlisted candidate fails with `SECRET_CONSENT_REQUIRED` and exit 2. Add reviewed names to `secrets.allow` before running in CI; `"*"` bypasses per-name review and accepts any AI-proposed name, so it carries a strong risk warning. See [Manage secrets](/ambercast/how-to/manage-secrets/) for the safe workflow.
+
 ## Side effects and exits {#side-effects}
 
 A prompt named `<name>.test.md` maps to plan and grounding companions beside it (see [File layout](/ambercast/reference/file-layout/#companions)).

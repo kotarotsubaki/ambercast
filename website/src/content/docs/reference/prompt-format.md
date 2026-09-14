@@ -1,9 +1,9 @@
 ---
 title: Prompt file format
-description: Exact file identity, normalization rules, secret grant extraction, and secret reference syntax for ambercast test prompts.
+description: Exact file identity, normalization rules, and secret reference syntax for ambercast test prompts.
 ---
 
-Ambercast test prompts define end-to-end test cases in natural language. This reference specifies the exact file identity rules, source normalization transformations, secret grant extraction behavior, and secret reference patterns enforced by the layout resolver and parser.
+Ambercast test prompts define end-to-end test cases in natural language. This reference specifies the exact file identity rules, source normalization transformations, and secret reference patterns enforced by the layout resolver and parser.
 
 ## File identity {#file-identity}
 
@@ -14,7 +14,7 @@ Ambercast test prompts define end-to-end test cases in natural language. This re
 
 File discovery is controlled by `testMatch` and `testIgnore`. The `.test.md` suffix is an exact source suffix required by the layout resolver, not a general Markdown parser rule. For pattern configuration details, see [Discovery patterns](/ambercast/reference/discovery-patterns/#selection).
 
-## Normalization and grants {#normalization-and-grants}
+## Normalization {#normalization}
 
 Before extraction, test prompt sources undergo strict normalization:
 
@@ -24,19 +24,9 @@ Before extraction, test prompt sources undergo strict normalization:
 | Line endings | Convert each CRLF and lone CR to one LF. |
 | Everything else | Preserve it: no trimming, whitespace collapsing, reordering, rewording, or other transformation. |
 
-Grant extraction receives normalized Markdown and returns grants in source order. A candidate line is excluded when its physical source range overlaps a CommonMark fenced-code, indented-code, or inline-code node. Each returned grant preserves raw line text, zero-based UTF-16 start/exclusive-end offsets, and one-based physical line numbers.
-
-When an identical citation occurs two or more times, attribution resolves its occurrences in document order only when every occurrence uniquely brackets a distinct matching grant; otherwise it fails with `citation-not-unique`.
-
-Grant lines matching the `@ambercast-secret` pragma are evaluated using the following regular expression construction:
-
-```ts
-new RegExp(`^[ \\t]*@ambercast-secret[ \\t]+(${SECRET_REF_SOURCE})[ \\t]*$`)
-```
-
 ## Secret references {#secret-references}
 
-Secret references identify credential slots within secret grants and schema fields:
+`SecretRef` is the syntax `generate` writes into the committed Plan's `secretRef` fields once a proposed secret name is consented; a prompt itself never contains this syntax (see [Legacy secret syntax](#legacy-secret-syntax) below — a prompt containing it is rejected). Secret references identify credential slots in schema fields:
 
 | Symbol | Verbatim implementation | Meaning |
 | --- | --- | --- |
@@ -44,6 +34,16 @@ Secret references identify credential slots within secret grants and schema fiel
 | `SECRET_REF_PATTERN` | `new RegExp(\`^${SECRET_REF_SOURCE}$\`)` | A secret-bearing schema field accepts the reference only as its entire value. |
 
 Surrounding prose is not accepted by `SecretRef`; whole-value anchoring enforced by `SECRET_REF_PATTERN` keeps secret-bearing fields unambiguous. A valid reference such as `{{secrets.name}}` must occupy the entire field value rather than being embedded alongside prose.
+
+## Legacy secret syntax {#legacy-secret-syntax}
+
+Older prompts could contain a grant line such as the following:
+
+```markdown
+@ambercast-secret {{secrets.password}}
+```
+
+This syntax is no longer accepted. Remove every such line, then follow [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants); see [Secrets in plans](/ambercast/spec/secrets/) for the current consent and allowlist model.
 
 ## Terminal assertions and instruction coverage {#terminal-assertions-and-instruction-coverage}
 

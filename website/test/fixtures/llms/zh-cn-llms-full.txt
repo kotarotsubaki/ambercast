@@ -1085,7 +1085,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下八个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下九个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
@@ -1097,6 +1097,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 非空白字符串, reason: "outside-test-dir"、"not-test-md" 或 "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" 或 "recoverable-miss" }` |
 
 ## 报告持久化 {#persistence}
 
@@ -1559,7 +1560,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生工件 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 工件 Schema 版本 |
-| `0.3.1` | `0.3.1` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.4` |
+| `0.3.1` | `0.3.1` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.5` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
 | `@ambercast-secret` | `@ambercast-secret` 用于在 CommonMark 代码范围之外开启一个完整的授权行。 | 授权提取器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization-and-grants) | 密钥引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -2692,7 +2693,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 ## 重放路径：未命中与显式解析 {#miss-with-explicit-resolution}
 
-当凭据不足以支持直接重放时，系统将评估未命中路径。缺失 grounding、来源处于 `stale`（已过期）状态、JSON 无效以及缓存未命中，均会在实时 AI 解析之前完成分类。只有传入 `--resolve` 后，解析才会在未命中路径之后开始。
+未通过完整性验证的 grounding（包括无效 JSON 或 coverage 或 verification proof 失败）无论是否传入 `--resolve` 均会失败关闭。只有缺失的 grounding 和结构有效的 legacy 或 recoverable 条目属于受 `--resolve` 控制的未命中路径。
 
 传入 `--resolve` 时，元素 grounding 的未命中可以进行实时解析，并使用解析出的元素指纹更新对应的 grounding 条目。
 

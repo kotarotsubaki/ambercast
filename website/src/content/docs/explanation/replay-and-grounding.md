@@ -23,7 +23,7 @@ Links: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI
 
 ## Replay path: miss with explicit resolution {#miss-with-explicit-resolution}
 
-Absent grounding, stale provenance, invalid JSON, and cache misses are classified before live AI resolution. Resolution begins only after the miss path and only when `--resolve` is passed; cache hits emit no AI-call event.
+Grounding that fails integrity validation, including invalid JSON or failed coverage or verification proof, fails closed regardless of `--resolve`. Only absent grounding and structurally valid legacy or recoverable entries are miss paths gated by `--resolve`; cache hits emit no AI-call event.
 
 With `--resolve`, an element grounding miss can resolve live and update the grounding entry with the resolved element fingerprint.
 

@@ -1098,7 +1098,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の8コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の9コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
@@ -1110,6 +1110,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }` |
 
 ## レポートの永続化 {#persistence}
 
@@ -2742,7 +2743,7 @@ ambercastのリプレイ実行において、グラウンディングは実行�
 
 ## リプレイパス: 明示的な解決を伴うミス {#miss-with-explicit-resolution}
 
-キャッシュから有効なグラウンディングが得られない場合、実行パスはミスの分岐へと進みます。グラウンディングの不在、stale（古くなった状態）なプロベナンス（provenance）、無効なJSON、およびキャッシュミスは、ライブ AI 解決の前に分類されます。解決は `--resolve` を指定した場合にのみ、ミスパスの後で開始されます。
+整合性検証に失敗したグラウンディング（無効な JSON やカバレッジまたは検証証明の失敗を含む）は、`--resolve` に関係なくフェイルクローズします。不在のグラウンディングと構造的に有効な legacy または recoverable のエントリだけが、`--resolve` でゲートされるミスパスです。
 
 `--resolve` を指定した場合、要素グラウンディングのミスはライブで解決（resolve live）でき、解決された要素フィンガープリントでグラウンディングエントリを更新できます。
 

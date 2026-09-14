@@ -32,7 +32,7 @@ description: 解释重放路径及其安全边界。
 
 ## 重放路径：未命中与显式解析 {#miss-with-explicit-resolution}
 
-当凭据不足以支持直接重放时，系统将评估未命中路径。缺失 grounding、来源处于 `stale`（已过期）状态、JSON 无效以及缓存未命中，均会在实时 AI 解析之前完成分类。只有传入 `--resolve` 后，解析才会在未命中路径之后开始。
+未通过完整性验证的 grounding（包括无效 JSON 或 coverage 或 verification proof 失败）无论是否传入 `--resolve` 均会失败关闭。只有缺失的 grounding 和结构有效的 legacy 或 recoverable 条目属于受 `--resolve` 控制的未命中路径。
 
 传入 `--resolve` 时，元素 grounding 的未命中可以进行实时解析，并使用解析出的元素指纹更新对应的 grounding 条目。
 

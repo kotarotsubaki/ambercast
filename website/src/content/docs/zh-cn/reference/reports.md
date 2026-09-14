@@ -94,7 +94,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下八个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下九个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
@@ -106,6 +106,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 非空白字符串, reason: "outside-test-dir"、"not-test-md" 或 "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" 或 "recoverable-miss" }` |
 
 ## 报告持久化 {#persistence}
 

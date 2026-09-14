@@ -96,7 +96,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の8コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の9コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
@@ -108,6 +108,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }` |
 
 ## レポートの永続化 {#persistence}
 

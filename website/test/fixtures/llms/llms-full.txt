@@ -1089,7 +1089,7 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these eight codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these nine codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
 
 | Code | Optional `details` shape |
 | --- | --- |
@@ -1101,6 +1101,7 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" or "recoverable-miss" }` |
 
 ## Report persistence {#persistence}
 
@@ -2687,7 +2688,7 @@ Links: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI
 
 ## Replay path: miss with explicit resolution {#miss-with-explicit-resolution}
 
-Absent grounding, stale provenance, invalid JSON, and cache misses are classified before live AI resolution. Resolution begins only after the miss path and only when `--resolve` is passed; cache hits emit no AI-call event.
+Grounding that fails integrity validation, including invalid JSON or failed coverage or verification proof, fails closed regardless of `--resolve`. Only absent grounding and structurally valid legacy or recoverable entries are miss paths gated by `--resolve`; cache hits emit no AI-call event.
 
 With `--resolve`, an element grounding miss can resolve live and update the grounding entry with the resolved element fingerprint.
 

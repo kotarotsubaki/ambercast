@@ -94,7 +94,7 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these eight codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these nine codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
 
 | Code | Optional `details` shape |
 | --- | --- |
@@ -106,6 +106,7 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" or "recoverable-miss" }` |
 
 ## Report persistence {#persistence}
 

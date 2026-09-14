@@ -34,7 +34,7 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 
 运行时在加载配置或执行文件 I/O 之前，会直接拒绝 `--stale=regenerate`。
 
-运行时负责组装浏览器、机密信息（secrets）、配置以及可供 `--resolve` 使用的提供商解析器。
+运行时负责组装浏览器、由环境变量支持的机密、配置以及可供 `--resolve` 使用的提供商解析器。机密值仅在允许的浏览器接收端从 `AMBERCAST_SECRET_<NAME>` 解析；`run` 从不请求生成同意。
 
 ## AI 调用 {#ai-calls}
 

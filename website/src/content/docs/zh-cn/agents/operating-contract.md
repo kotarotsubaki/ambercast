@@ -11,7 +11,7 @@ ambercast 解析器所公开实现的命令恰好为 `generate`、`run`、`check
 
 | 命令 | 前提条件 | 副作用 | 是否需要批准？ | CI 中是否安全？ |
 | --- | --- | --- | --- | --- |
-| generate | 所选 prompt 与目标必须有效。 | 可能写入计划与 grounding 工件。 | 写入时需要；提交前须呈现 diff。 | 安全，遵循项目策略。 |
+| generate | 所选 prompt 与目标必须有效；新提出的机密名称若不在许可列表中，需要取得同意。 | 可能写入 Plan、Grounding 工件以及已接受的名称到 `secrets.allow`。 | 同意与写入时需要；提交前须呈现 diff。 | 已审查名称预先填入 `secrets.allow` 时安全。 |
 | run | 所选 prompt 具有受信任的计划。 | 写入调用报告；可在其回写契约下写入 grounding。 | 当请求的范围未预先授权写入时需要。 | 安全，遵循回写策略。 |
 | check | 所选目标可被发现。 | 仅读取 prompt 与工件。 | 不需要 ambercast 工件写入批准。 | 安全。 |
 | heal | 目标具备幂等性，且在 CI 中时已启用真实尝试。 | 可能在 runs 目录中写入尝试证据；仅在确认后提交测得的计划/grounding 候选变更。 | 需要用户明确批准；--yes 不构成 agent 授权。 | 默认不安全；仅在 ci.heal: true 时安全。 |
@@ -24,6 +24,7 @@ ambercast 解析器所公开实现的命令恰好为 `generate`、`run`、`check
 
 - Agent 绝不能在 prompt、工件、命令、报告或消息中放置字面机密值；请改用 SecretRef、其环境变量值以及目标的接收端策略（sink policy）。
 - 公共错误词汇表中包含 `SECRET_LITERAL_REJECTED`；该检测器属于狭义的启发式检测，不能替代 Agent 对字面机密的禁止规则。
+- Agent 绝不能添加 `@ambercast-secret` 授权行。对于 `secrets.allow` 之外的生成名称，应取得操作员的明确同意，或请操作员添加已审查的名称；`"*"` 无需逐名审查即可接受任意 AI 提议名称，因此需要明确批准。
 - 在 CI 环境中，除非启用了 `ci.heal`，否则会拒绝执行真实的修复。
 - `--yes` 仅用于预先授权 CLI 的确认提示；dry run 绝不会进行提交。
 
@@ -51,6 +52,7 @@ ambercast 解析器所公开实现的命令恰好为 `generate`、`run`、`check
 | 错误类别 | 下一步安全动作 |
 | --- | --- |
 | 配置、机密或目标 | 读取指定的 Reference，在不猜测具体值的情况下修正该边界。 |
+| `SECRET_CONSENT_REQUIRED` | 以交互方式获得对所列名称的批准，或将已审查的名称添加至 `secrets.allow`；不得将同意视为已获授而重试。 |
 | 计划新鲜度或完整性 | 将工件视为不可信，并使用 `stale`（已过期）工件恢复。 |
 | 浏览器、提供商、存储或崩溃 | 保留 envelope 并修复环境。 |
 | 中断 | 将剩余工作视为未完成；切勿推断用例结果。 |

@@ -42,6 +42,12 @@ description: 本页定义了配置键及其解析逻辑。
 | `heal.maxStepRepairs` | positive integer | absent | 仅限制向真实提供商发起的增量分发次数 | heal |
 | `heal.caseTimeoutMs` | positive integer | `300000` | 用例准入截止时间 | heal |
 
+## 机密同意 {#secret-consent}
+
+`secrets.allow` 是生成时发现的逻辑机密名称的持久许可列表。`generate` 会为列表之外的名称请求交互式批准，并将已接受的名称合并到配置文件中。在 CI 或其他非交互环境中，请预先填入已审查的名称。
+
+`"*"` 会绕过逐名同意并接受 AI 提出的任意名称。它是高风险的逃生出口，不是更安全的默认值；仅当确实希望不经审查地接受任意提议名称时才使用。
+
 ## AI 配置 {#ai}
 
 `ai.maxGenerateAttempts`：当本地验证器拒绝响应时，generate 针对每个提示词允许的提供商最大尝试次数。取值范围为 1 至 5，默认值为 2。绝不用于 heal 修复。

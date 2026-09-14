@@ -16,6 +16,16 @@ CHANGELOG 0.3.1 に記載されている通り、producer-fingerprint の変更�
 3. check が終了コード `4` で終了した場合は、`npx ambercast generate` を実行してプランとグラウンディングの差分を確認します。生成処理はジェネレーターとレポート結果を構成します。
 4. 依存関係と、受け入れたコンパニオンの変更をまとめてコミットします。その後に check を再実行して、最終的な状態を観測可能にします。
 
+## シークレットグラントの移行 {#migrate-secret-grants}
+
+Plan v2 用に作成されたプロンプトには、旧シークレットグラント行を含められます。プロンプトからグラント行をすべて削除してください。旧構文は拒否され、その場で移行することはできません。
+
+```markdown
+@ambercast-secret {{secrets.password}}
+```
+
+続いて `npx ambercast generate --force <file>` を実行し、新しい同意プロンプトに応答します。CI または別の非対話環境では、先にレビュー済みの名前を `secrets.allow` に追加してください。再生成された Plan では v3 の同意／許可リストモデルが使用されます。
+
 ## 確認 {#verification}
 
 再生成を受け入れた後、`npx ambercast check` が終了コード `0` で終了することを確認します。

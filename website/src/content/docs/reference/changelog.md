@@ -3,7 +3,17 @@ title: Changelog
 description: User-visible product behavior and public-contract changes across ambercast releases, with breaking changes listed first.
 ---
 
-This reference tracks user-visible product behavior and public-contract changes across ambercast releases, ordering breaking changes before fixes. Release 0.2.0 introduces one declared breaking change to the provider request schema that updates `producerBundleFingerprint` and each prompt's `inputsDigest`, alongside fixes for provider generation handling and report output.
+This reference tracks user-visible product behavior and public-contract changes across ambercast releases, ordering breaking changes before fixes.
+
+## Release 0.4.0 {#release-040}
+
+Release date: 2026-09-14.
+
+| Class | User-visible entry |
+| --- | --- |
+| BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model; Plan v2 is not migrated in place. |
+
+Version 0.4.0 has one declared breaking change.
 
 ## Release 0.2.0 {#release-020}
 

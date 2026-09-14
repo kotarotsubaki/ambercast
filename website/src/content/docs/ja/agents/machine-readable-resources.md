@@ -26,6 +26,7 @@ description: ambercast で公開されている機械可読リソースと、そ
 | [`llms-planned.txt`](https://kotarotsubaki.github.io/ambercast/llms-planned.txt) | 利用可能 |
 | [`schemas/config.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json) | 利用可能 |
 | [`schemas/plan.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json) | 利用可能 |
+| [`schemas/plan.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json) | 利用可能 |
 | [`schemas/grounding.v1.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json) | 利用可能 |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | 利用可能 |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |

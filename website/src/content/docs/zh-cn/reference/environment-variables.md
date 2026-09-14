@@ -40,4 +40,4 @@ Ambercast 在运行时会读取特定的系统环境变量，用于确定配置�
 
 过滤过程会返回一个副本，父进程环境保持不变。
 
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection)、[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)、[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization-and-grants)。
+相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection)、[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)、[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization)。

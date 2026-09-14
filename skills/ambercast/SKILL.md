@@ -40,7 +40,7 @@ Rules:
 
 - Use `generate --list` for discovery. It has no side effects. `run --list` writes a report under `runsDir`, so do not use it for discovery.
 - Choosing a target: an explicit instruction from the user first, then `defaultTarget`, then the only target if exactly one exists. If several targets exist and none is selected, stop and ask the user which one to pass with `--target`.
-- Secret names come only from the prompt: the `{{secrets.name}}` references and their grant lines are the source of truth. The environment variable `AMBERCAST_SECRET_<NAME>` only tells you whether a value is present. Never derive a logical secret name from an environment variable name; the mapping is not reversible.
+- Secret names are AI-proposed candidates that become available only after interactive consent or approval through `secrets.allow`. The environment variable `AMBERCAST_SECRET_<NAME>` only tells you whether a value is present. Never derive a logical secret name from an environment variable name; the mapping is not reversible.
 - When the config and this skill disagree, the config wins.
 
 ## Writing a prompt
@@ -57,18 +57,17 @@ Structure:
 
 Secrets:
 
-- Reference a secret as `{{secrets.name}}` and grant it on its own line, outside any code block: `@ambercast-secret {{secrets.name}}`. A grant inside a code block or code span is documentation, not a grant.
-- The value comes from the environment variable `AMBERCAST_SECRET_<NAME>`: dots become underscores and letters are uppercased, so `{{secrets.api.key}}` reads `AMBERCAST_SECRET_API_KEY`.
-- A reference without a grant line, or a grant without a value in the environment, fails closed with exit code 2.
-- One grant line authorizes exactly one use. Repeat the grant line once per use when the same secret is used more than once.
+- Describe the desired outcome and action naturally, in plain language, with no `{{secrets.name}}` marker and no grant line. Writing that marker or a grant line in a prompt is legacy syntax and fails `generate` with `SECRET_SYNTAX_REJECTED`; the plan's own `secretRef` is derived by `generate`, never authored by hand.
+- During `generate`, Ambercast infers which field is a secret from the prompt and presents newly discovered secret names for consent. In an interactive terminal, review and accept only the names appropriate for the test.
+- For CI or another non-interactive environment, add reviewed names to `secrets.allow` in `ambercast.config.json` before running `generate`. The `"*"` wildcard accepts any AI-proposed name without per-name review; use it only when you understand that risk.
+- Once accepted, a secret's value comes from the environment variable `AMBERCAST_SECRET_<NAME>` at run time: dots become underscores and letters are uppercased, so the logical name `api.key` reads `AMBERCAST_SECRET_API_KEY`. This mapping is internal to the plan; it is never written in the prompt.
+- If consent is declined or unavailable, `generate` fails closed with `SECRET_CONSENT_REQUIRED` and exit code 2. Add the reviewed names to `secrets.allow`, then rerun generation.
 
 ### Good example
 ```markdown
 # Sign in with a saved password
 
-@ambercast-secret {{secrets.password}}
-
-When I open the sign-in page, enter the username "demo@example.com" and the password {{secrets.password}}, and submit the form, I reach the dashboard and see the heading "Welcome back".
+When I open the sign-in page, enter the username "demo@example.com" and the saved password, and submit the form, I reach the dashboard and see the heading "Welcome back".
 ```
 
 ### Bad example
@@ -78,7 +77,7 @@ When I open the sign-in page, enter the username "demo@example.com" and the pass
 Go to the login page. Type demo@example.com and hunter2. Click the button.
 ```
 
-The bad example puts a real password in the prompt (it must be a `{{secrets.*}}` reference with a grant line) and never says what should be true afterwards, so nothing is verified.
+The bad example puts a real password in the prompt (describe filling in "the saved password" and let consent authorize it) and never says what should be true afterwards, so nothing is verified.
 
 ## The loop
 
@@ -147,7 +146,7 @@ Never edit plan or grounding files by hand. Change the prompt and regenerate, or
 
 ## Never do this
 
-- Never put a literal secret value in a prompt, a plan, a command line, a report, or a chat message. Use a `{{secrets.name}}` reference with a grant line and provide the value through the environment.
+- Never put a literal secret value in a prompt, a plan, a command line, a report, or a chat message. Describe the field naturally in the prompt, let consent authorize the secret name `generate` proposes, and provide the value only through the environment.
 - Never run `heal` in CI. The CLI refuses with exit code 2 unless `ci.heal` is true, and even then an agent must not start it there.
 - Never edit `.ambercast.plan.json` or `.ambercast.grounding.json` by hand.
 - Never hide a failure: do not add `--resolve` to make a CI run pass, and do not use `--force` to regenerate a plan just to get past a red result.

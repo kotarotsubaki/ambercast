@@ -41,7 +41,7 @@ const URLS = [
 const REQUIRED_SECTION_TEXT = [
   ['Node.js', '22.14', 'npx playwright-core install chromium', 'claude', 'codex', 'http://localhost:3000', 'ambercast.config.json'],
   ['ambercast.config.json', 'testDir', 'tests/ambercast', 'runsDir', 'baseUrl', 'defaultTarget', '--target', 'npx ambercast generate --list --json', 'AMBERCAST_SECRET_'],
-  ['.test.md', '{{secrets.', '@ambercast-secret', 'AMBERCAST_SECRET_', '### Good example', '### Bad example'],
+  ['.test.md', '{{secrets.', 'secrets.allow', 'SECRET_CONSENT_REQUIRED', 'AMBERCAST_SECRET_', '### Good example', '### Bad example'],
   ['npx ambercast generate', 'npx ambercast run --json', 'npx ambercast check', 'npx ambercast heal --dry-run', '--resolve', '--update-cache', 'grounding.localWriteBack', '--yes'],
   ['2 > 3 > 4 > 1 > 5 > 0', 'summary', 'results[]', 'errors[].code', '--strict', 'testIgnore', 'stderr'],
   ['.ambercast.plan.json', '.ambercast.grounding.json', 'grounding.repositoryPolicy', 'runsDir', 'tests/ambercast/.runs'],
@@ -113,9 +113,9 @@ function extractFlagTokens(text: string): string[] {
  * the version's own quoted characters — so future edits (a longer
  * pre-release identifier, say) do not shift the pinned byte length in a way
  * that would otherwise look like a metadata-relevant change. The regex assumes
- * package.json's current 2-space-indented, LF-terminated
- * formatting and throws when it finds anything other than exactly one match,
- * so a future reformat (or a stray second "version"-shaped line) fails the
+ * package.json's 2-space-indented, LF-terminated formatting and throws when
+ * it finds anything other than exactly one match, so a reformat (or a stray
+ * second "version"-shaped line) fails the
  * test loudly instead of silently hashing bytes SPEC-2 no longer intends.
  */
 function stripVersionField(bytes: Buffer): Buffer {
@@ -293,7 +293,7 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-8 preserves the approved draft byte-for-byte', () => {
-    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('6317d2972f4f5cef0ea354bc410aebcce83e3dae3061f75332a86921c3cd1fa0');
+    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('bf402e3518397edee9947a320618711e9a119b4a5114b61eb2c6d14ed0dafb47');
   });
 
   it('SPEC-9 and SPEC-10 keep skill flags aligned with the CLI usage contract', () => {
@@ -337,9 +337,8 @@ describe('official ambercast skill', () => {
     }
   });
 
-  // The 8th URL is a same-slug page: its old and new URL are both
-  // reference/configuration/. It now ships as an ordinary content page like the rest,
-  // so it needs no special-casing beyond a plain existence check.
+  // The 8th URL targets the configuration reference page, whose same slug maps
+  // directly to its content file, so the ordinary existence check verifies it.
   it('SPEC-12 links to the blocked configuration reference page', () => {
     const url = URLS.at(-1)!;
     const path = new URL(url).pathname.replace(/^\/ambercast\//, '').replace(/\/$/, '');

@@ -24,6 +24,7 @@ description: 明确列出已发布的机器可读资源及其可用性规则。
 | [`llms-planned.txt`](https://kotarotsubaki.github.io/ambercast/llms-planned.txt) | 可用 |
 | [`schemas/config.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json) | 可用 |
 | [`schemas/plan.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json) | 可用 |
+| [`schemas/plan.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json) | 可用 |
 | [`schemas/grounding.v1.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json) | 可用 |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | 可用 |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 可用 |

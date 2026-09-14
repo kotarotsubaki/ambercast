@@ -64,15 +64,14 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:515 |
-| `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:517 |
-| `action` | string | required | literal `fill-secret` | Action discriminator. | repo:src/core/ir/schema.ts:518 |
-| `target` | `ElementRef` | required | strict locator | Secret sink field. | repo:src/core/ir/schema.ts:515 |
-| `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | repo:src/core/ir/schema.ts:515 |
-| `secretGrantSpan` | `SourceSpan` | required | strict span; ordered lines | Local grant provenance. | repo:src/core/ir/schema.ts:520 |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:499-504 |
+| `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:499-504 |
+| `action` | string | required | literal `fill-secret` | Action discriminator. | repo:src/core/ir/schema.ts:499-504 |
+| `target` | `ElementRef` | required | strict locator | Secret sink field. | repo:src/core/ir/schema.ts:396,499-504 |
+| `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | repo:src/core/ir/schema.ts:396,499-504 |
 
 ```json
-{"id":"fill-password","kind":"action","action":"fill-secret","target":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}","secretGrantSpan":{"startLine":1,"endLine":1}}
+{"id":"fill-password","kind":"action","action":"fill-secret","target":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
 ### `assert` / `text-visible` {#assert-text-visible}
@@ -162,36 +161,34 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:404,416-420 |
 | `kind` | string | required | literal `ai` | Step discriminator. | repo:src/core/ir/schema.ts:418 |
 | `instruction` | `InterpolatableText` | required | no secret marker | Agent instruction. | repo:src/core/ir/schema.ts:419 |
-| `secrets` | `AiStepSecretGrant[]` | optional | strict entries | Authorized secret uses. | repo:src/core/ir/schema.ts:713 |
-| `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | repo:src/core/ir/schema.ts:714 |
+| `secrets` | `AiStepSecretUse[]` | optional | strict entries | Committed secret uses. | repo:src/core/ir/schema.ts:688-692 |
+| `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | repo:src/core/ir/schema.ts:688-692 |
 
 ```json
 {"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-### Committed AI secret grants {#committed-ai-secret-grants}
+### Committed AI secret uses {#committed-ai-secret-grants}
 
-Each member of a committed AI step's optional `secrets` array is a strict `AiStepSecretGrant`; it records the authorized reference and its locally derived grant provenance. [repo:src/core/ir/schema.ts:684]
+Each member of a committed AI step's optional `secrets` array is a strict `AiStepSecretUse`; it records only the resolved reference. Consent and allowlist authorization happen before Plan persistence and are not Plan provenance fields. [repo:src/core/ir/schema.ts:667-692] [repo:src/usecases/generate.ts:1405-1493]
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `ref` | `SecretRef` | required | whole secret-reference grammar | Authorized secret reference. | repo:src/core/ir/schema.ts:690 |
-| `sourceSpan` | `SourceSpan` | required | strict, one-based inclusive lines | Prompt grant that authorizes `ref`. | repo:src/core/ir/schema.ts:692 |
+| `ref` | `SecretRef` | required | whole secret-reference grammar | Committed secret reference. | repo:src/core/ir/schema.ts:674-675 |
 
 ```json
-{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}","sourceSpan":{"startLine":4,"endLine":4}}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
 ## Generated forms {#generated-forms}
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target`, `secretRef` | as committed fill-secret | required | `kind: action`, `action: fill-secret` | Provider form. | repo:src/core/ir/schema.ts:758 |
-|  | `citation` | `Citation` | required | 1–4096 characters | Replaced locally by `secretGrantSpan`. | repo:src/core/ir/schema.ts:763 |
-| `GeneratedAiStepSecretGrant` | `ref` | `SecretRef` | required | whole reference | Provider grant ref. | repo:src/core/ir/schema.ts:798 |
-|  | `citation` | `Citation` | required | 1–4096 characters | Attribution evidence. | repo:src/core/ir/schema.ts:800 |
+| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | Provider form awaiting local naming. | repo:src/core/ir/schema.ts:773-805 |
+|  | `secret` | `SecretNameChoice` | optional | strict choice | Existing allowlisted-name request or new-name hint. | repo:src/core/ir/schema.ts:104-115,779-785 |
+| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | Provider naming intent awaiting local resolution. | repo:src/core/ir/schema.ts:813-821 |
 | `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | Shared AI contract. | repo:src/core/ir/schema.ts:814 |
-|  | `secrets` | generated grants[] | optional | strict entries | Pending grant attribution. | repo:src/core/ir/schema.ts:816 |
+|  | `secrets` | generated uses[] | optional | strict entries | Pending secret-name resolution. | repo:src/core/ir/schema.ts:824-833 |
 |  | `instructionCoverage` | generated criteria[] | required | min 1 | Pending criterion attribution. | repo:src/core/ir/schema.ts:817 |
 |  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | Transient verification proposals. | repo:src/core/ir/schema.ts:818 |
 
@@ -199,10 +196,10 @@ Each member of a committed AI step's optional `secrets` array is a strict `AiSte
 
 The problem is preventing actions from being mistaken for proof, particularly where a UI can produce a wrong pass. Explicit assertion branches make observed success criteria inspectable. 
 
-The selected discriminated union gives every opcode a closed field contract and separates secret filling from ordinary text. Provider citations are transformed into local spans before a plan is committed. 
+The selected discriminated union gives every opcode a closed field contract and separates secret filling from ordinary text. Provider naming intent is resolved locally and consented before a plan is committed.
 
 Verbatim provider citations bind each criterion to one locally checked prompt excerpt; local conversion to a four-coordinate `InstructionSourceSpan` makes the committed attribution precise without asking the provider to count lines.  [repo:src/usecases/instruction-coverage-policy.ts:337-415]
 
 Terminal `url-matches` is rejected because it is a tautological success form rather than independent proof of the cited success criterion. Use a supported, non-duplicative terminal `TraceAssert`; if the success condition cannot be represented, generation fails.  [repo:src/usecases/instruction-coverage-policy.ts:361-365] [repo:src/usecases/instruction-coverage-policy.ts:589-606]
 
-One rejected alternative used one action object with optional payload fields; it was rejected because invalid combinations become schema-invisible. Another let generic text carry secrets; it was rejected because secret provenance and redaction would be ambiguous.  
+One rejected alternative used one action object with optional payload fields; it was rejected because invalid combinations become schema-invisible. Another let generic text carry secrets; it was rejected because consent boundaries and redaction would be ambiguous.  

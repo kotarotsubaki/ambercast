@@ -15,7 +15,7 @@
 
 ## HOW-TO GUIDES
 - [Write effective prompts](https://kotarotsubaki.github.io/ambercast/how-to/write-effective-prompts/): Author focused test prompts with clear outcomes and verify plan generation with a dry run.
-- [Manage secrets](https://kotarotsubaki.github.io/ambercast/how-to/manage-secrets/): Follow the safe authoring path to declare secrets in prompts and resolve them from environment variables.
+- [Manage secrets](https://kotarotsubaki.github.io/ambercast/how-to/manage-secrets/): Approve generated secret names safely and resolve their values from environment variables.
 - [Configure targets](https://kotarotsubaki.github.io/ambercast/how-to/configure-targets/): Configure targets, replay isolation, and secret sink origins in ambercast.
 - [Choose an AI provider](https://kotarotsubaki.github.io/ambercast/how-to/choose-ai-provider/): Configure ambercast to use Claude, Codex, or automatic provider resolution for test generation.
 - [Select which tests run](https://kotarotsubaki.github.io/ambercast/how-to/select-tests/): Selection recipes to choose which test prompts run.
@@ -30,7 +30,7 @@
 
 ## REFERENCE
 - [Configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/): Configuration keys and resolution rules for ambercast.
-- [Prompt file format](https://kotarotsubaki.github.io/ambercast/reference/prompt-format/): Exact file identity, normalization rules, secret grant extraction, and secret reference syntax for ambercast test prompts.
+- [Prompt file format](https://kotarotsubaki.github.io/ambercast/reference/prompt-format/): Exact file identity, normalization rules, and secret reference syntax for ambercast test prompts.
 - [Discovery patterns](https://kotarotsubaki.github.io/ambercast/reference/discovery-patterns/): Configured test file discovery matching rules, pattern grammar, and ordering.
 - [Reports](https://kotarotsubaki.github.io/ambercast/reference/reports/): Reference for ambercast structured report schemas, envelope properties, command result shapes, and error structures.
 - [Error codes](https://kotarotsubaki.github.io/ambercast/reference/error-codes/): Reference vocabulary of stable error codes, execution scopes, and exit codes for ambercast.
@@ -38,7 +38,7 @@
 - [Environment variables](https://kotarotsubaki.github.io/ambercast/reference/environment-variables/): Exhaustive reference of environment variables read by Ambercast and the filtering boundary for AI-provider child processes.
 - [File layout](https://kotarotsubaki.github.io/ambercast/reference/file-layout/): Reference for Ambercast path arithmetic, artifact producers, timing, and implementation-backed repository policies.
 - [JSON Schemas](https://kotarotsubaki.github.io/ambercast/reference/json-schemas/): Publication contract and inventory of generated JSON Schemas for Ambercast configuration, plan, grounding, and report artifacts.
-- [Compatibility](https://kotarotsubaki.github.io/ambercast/reference/compatibility/): Artifact-format compatibility across package versions and provenance-driven regeneration rules for plans, groundings, and reports.
+- [Compatibility](https://kotarotsubaki.github.io/ambercast/reference/compatibility/): Artifact-format compatibility across package versions and regeneration rules for plans, groundings, and reports.
 - [Changelog](https://kotarotsubaki.github.io/ambercast/reference/changelog/): User-visible product behavior and public-contract changes across ambercast releases, with breaking changes listed first.
 - [Security policy](https://kotarotsubaki.github.io/ambercast/reference/security-policy/): Supported versions and vulnerability reporting procedures for ambercast.
 - [Glossary](https://kotarotsubaki.github.io/ambercast/reference/glossary/): Normative site-wide terminology and index of literal translation-invariant tokens for Ambercast.

@@ -33,6 +33,12 @@ description: ambercast generate コマンドのフラグ仕様および成果物
 - `--dry-run` を指定した場合、生成が必要なターゲットに対しては `would-generate` を返し、最新状態の Plan（fresh Plan）に対しては `skipped-fresh` を返します。
 - `--dry-run` のいずれの結果においても、成果物への書き込みは行われません。fresh ブランチでは Grounding の修復（Grounding repair）がスキップされ、生成ブランチでは実際の書き込み処理の前にリターンします。
 
+## シークレット同意 {#secret-consent}
+
+生成は候補作成後に同意を求めます。候補 Plan を作成し、`secrets.allow` にないシークレット名を識別してから、Plan または Grounding を永続化する前に対話的な承認を求めます。最新の Plan を `--force` で再生成する場合も、この同意境界に従います。`--dry-run` は成果物を書き込まず、同意も永続化しません。
+
+非対話コンテキスト、または同意を拒否した場合、許可リストにない候補は `SECRET_CONSENT_REQUIRED` と終了コード 2 で失敗します。CI で実行する前にレビュー済みの名前を `secrets.allow` に追加してください。`"*"` は名前ごとのレビューを回避して AI が提案する任意の名前を受け入れるため、強いリスク警告を伴います。安全なワークフローは[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)を参照してください。
+
 ## 副作用と終了コード {#side-effects}
 
 `<name>.test.md` という名称のプロンプトは、その隣に配置される Plan および Grounding のコンパニオンファイルに対応付けられます（詳細は [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) を参照してください）。

@@ -45,6 +45,12 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `heal.maxStepRepairs` | positive integer | absent | caps incremental real-provider dispatches only | heal |
 | `heal.caseTimeoutMs` | positive integer | `300000` | case admission deadline | heal |
 
+## Secret consent {#secret-consent}
+
+`secrets.allow` is the durable allowlist for logical secret names discovered during generation. `generate` prompts for names outside a list value and merges accepted names into the configuration file. In CI or another non-interactive context, pre-populate the list with names that have already been reviewed.
+
+`"*"` bypasses per-name consent and accepts any AI-proposed name. It is a high-risk escape hatch, not a safer default: use it only when accepting arbitrary proposed names without review is intended.
+
 ## AI configuration {#ai}
 
 `ai.maxGenerateAttempts`: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.

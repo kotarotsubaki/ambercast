@@ -16,6 +16,16 @@ This release-safety procedure guides you through upgrading ambercast when change
 3. If check exits `4`, run `npx ambercast generate` and review the plan/grounding diff. Generation composes the generator and report result.
 4. Commit the dependency and accepted companion changes together. Then re-run check to make the final condition observable.
 
+## Migrate secret grants {#migrate-secret-grants}
+
+Prompts created for Plan v2 can contain legacy secret grant lines. Remove every grant line from the prompt; the old syntax is rejected and must not be migrated in place.
+
+```markdown
+@ambercast-secret {{secrets.password}}
+```
+
+Then run `npx ambercast generate --force <file>` and respond to the new consent prompt. For CI or another non-interactive environment, add the reviewed names to `secrets.allow` first. The regenerated Plan uses the v3 consent/allowlist model.
+
 ## Verification {#verification}
 
 - `npx ambercast check` exits `0` after accepted regeneration.

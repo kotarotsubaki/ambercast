@@ -17,7 +17,7 @@ The following schema- and resolver-bound definitions govern the core artifact mo
 | fingerprint | A fingerprint is an element-grounding value containing the literal `a11y-neighborhood-v2` algorithm and a SHA-256 hash. | `Fingerprint`; [Element fingerprint](/ambercast/spec/fingerprint/) | `planDigest` |
 | inputs digest | An inputs digest is the canonical SHA-256 provenance digest of normalized prompt, Plan schema version, generator-template fingerprint, producer-bundle fingerprint, and named targets. | `computeInputsDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `planDigest` |
 | plan digest | A plan digest is the canonical SHA-256 of a schema-valid Plan excluding `generatorMeta`, used to bind Grounding. | `computePlanDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `inputsDigest` |
-| normalized test prompt | A normalized test prompt removes at most one leading U+FEFF and maps CRLF/lone CR to LF while preserving everything else. | `normalizeTestMd`; [Prompt file format](/ambercast/reference/prompt-format/#normalization-and-grants) | formatting cleanup |
+| normalized test prompt | A normalized test prompt removes at most one leading U+FEFF and maps CRLF/lone CR to LF while preserving everything else. | `normalizeTestMd`; [Prompt file format](/ambercast/reference/prompt-format/#normalization) | formatting cleanup |
 
 `PlanDocument` and `GroundingDocument` are strict runtime trust boundaries from which JSON Schema is derived.
 
@@ -36,7 +36,10 @@ The following command- and report-bound definitions govern execution, target res
 | report envelope | A report envelope is the versioned command-discriminated structured result returned by a reporting command. | `ReportEnvelope`; [Reports](/ambercast/reference/reports/#envelope) | persisted `report.json` |
 | report persistence | Report persistence is the run-envelope state `persisted`, `failed`, or `not-attempted` for the finalized envelope write. | run `ReportEnvelope`; [Reports](/ambercast/reference/reports/#persistence) | semantic test result |
 | secret reference | A secret reference is a whole-value string accepted by `SecretRef`, with one or more dot-separated segments of ASCII letters, digits, or underscores after `secrets.`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal secret |
-| secret grant | A secret grant is a source-ordered complete `@ambercast-secret <secret reference>` line outside CommonMark code ranges. | `extractSecretGrants`; [Prompt file format](/ambercast/reference/prompt-format/#normalization-and-grants) | secret reference itself |
+| consent | Consent is the interactive decision required before `generate` persists a candidate whose secret name is outside `secrets.allow`. | `ambercast generate`; [Manage secrets](/ambercast/how-to/manage-secrets/) | runtime secret-value resolution |
+| allowlist | An allowlist is the reviewed set of logical secret names accepted by `secrets.allow` before generation persists a candidate. | configuration / `ambercast generate`; [Configuration](/ambercast/reference/configuration/#secret-consent) | secret sink origins |
+| `secrets.allow` | `secrets.allow` is the configuration array of pre-approved logical secret names, or the high-risk `"*"` value that accepts every AI-proposed name without per-name review. | `RawConfig`; [Configuration](/ambercast/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` values |
+| `SecretNameChoice` | `SecretNameChoice` is the provider-facing strict choice between a projected `allowedName` and a new `nameHint`, both resolved locally before a committed `SecretRef` exists. | `SecretNameChoice`; [Value types](/ambercast/spec/value-types/#shared-types) | committed `SecretRef` |
 
 `stale` belongs to check results and is not a run result status. Heal's idempotent-target check is skipped only in list mode.
 
@@ -71,9 +74,9 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `.runs` | `.runs` is the final segment of the default `runsDir`, not an independently resolved root. | configuration / [File layout](/ambercast/reference/file-layout/#run-artifacts) | companion artifacts |
 | `.test.md` | `.test.md` is the exact suffix required for a discovered prompt path to receive layout mappings. | layout resolver; [Prompt file format](/ambercast/reference/prompt-format/#file-identity) | arbitrary Markdown |
 | `0.1.0` | `0.1.0` names the 2026-09-03 release in the repository changelog. | [Changelog](/ambercast/reference/changelog/#release-010) | artifact schema version |
-| `0.3.1` | `0.3.1` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.4` |
+| `0.4.0` | `0.4.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.5` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` is the fixed process-exit precedence from strongest to weakest. | exit selector; [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) | numeric order |
-| `@ambercast-secret` | `@ambercast-secret` begins a complete grant line outside CommonMark code. | grant extractor; [Prompt file format](/ambercast/reference/prompt-format/#normalization-and-grants) | secret reference |
+| `@ambercast-secret` | `@ambercast-secret` is rejected legacy prompt syntax and must be removed before regenerating a Plan v3 artifact. | prompt parser; [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants) | secret reference |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` supplies the environment provider override. | config environment; [Environment variables](/ambercast/reference/environment-variables/#configuration) | CLI `--ai` |
 | `AMBERCAST_CONFIG` | `AMBERCAST_CONFIG` supplies the environment configuration-path override. | config environment; [Environment variables](/ambercast/reference/environment-variables/#configuration) | CLI `--config` |
 | `AMBERCAST_ENV_*` | `AMBERCAST_ENV_*` is a namespace withheld from AI-provider children and not a listed Ambercast input. | child runner; [Environment variables](/ambercast/reference/environment-variables/#provider-child-environment) | `AMBERCAST_SECRET_*` |

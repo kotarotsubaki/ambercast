@@ -25,6 +25,10 @@ description: 规定 ambercast heal 命令的授权机制与运行时副作用，
 
 修复流程首先修复 Grounding，随后尝试单步修复或尾部修复，并在必要时执行全计划修复；Stage 3 会解析 AI 执行器并调用生成逻辑，因此能够调度真实的提供商。
 
+heal 不会作出新的机密同意决定。若其 Stage 2 候选包含无效机密名称、许可列表失败或环境变量冲突，它会以 `secret-name-invalid` 拒绝该修复。若 Stage 3 全计划候选改变完整的逻辑机密名称集合，heal 会以 `stage3Rejection.reason: "secret-set-changed"` 拒绝它，不写入 Plan 或 Grounding 更新，并输出以下提示：
+
+`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
+
 ## 限制 {#limits}
 
 若设置了 `heal.maxStepRepairs`，该项是对真实增量修复提供商调度的正整数硬性限制，包含元素确认，但不包含失败关闭基线与 Stage 3。

@@ -15,7 +15,7 @@
 
 ## HOW-TO GUIDES
 - [効果的なプロンプトの作成](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/): レビューしやすく焦点の定まったテストプロンプトを作成し、ドライランで検証する手順を説明します。
-- [シークレットの管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/): プロンプト内でシークレットを安全に作成し、テスト生成および実行時に適切に解決するための手順を説明します。
+- [シークレットの管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/): 生成されたシークレット名を安全に承認し、その値を環境変数から解決する方法を説明します。
 - [ターゲットの設定](https://kotarotsubaki.github.io/ambercast/ja/how-to/configure-targets/): ambercastの設定ファイルでターゲット環境、自己修復のリプレイ分離、およびシークレット送信先オリジンを構成します。
 - [AIプロバイダーの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/choose-ai-provider/): ambercast.config.json、環境変数、または --ai オプションを使用してAIプロバイダーを選択・指定する手順を説明します。
 - [実行するテストの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/select-tests/): 実行対象とするテストプロンプトを選択・フィルタリングするための手順です。
@@ -30,7 +30,7 @@
 
 ## REFERENCE
 - [設定](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/): ambercast の設定キーと設定解決に関する仕様です。
-- [プロンプトファイルのフォーマット](https://kotarotsubaki.github.io/ambercast/ja/reference/prompt-format/): ambercast 0.3.1 が規定するテストプロンプトファイルの構文規則、テキスト正規化、およびシークレット参照仕様。
+- [プロンプトファイルのフォーマット](https://kotarotsubaki.github.io/ambercast/ja/reference/prompt-format/): テストプロンプトファイルの厳密なファイル識別、正規化規則、およびシークレット参照構文を説明します。
 - [ディスカバリーパターン](https://kotarotsubaki.github.io/ambercast/ja/reference/discovery-patterns/): 設定されたテスト検出パターンの構文規則、選択仕様、デフォルト値、および評価例を定義します。
 - [レポート](https://kotarotsubaki.github.io/ambercast/ja/reference/reports/): ambercast が出力する構造化レポートのスキーマおよび各コマンド固有の結果形式に関するリファレンスです。
 - [エラーコード](https://kotarotsubaki.github.io/ambercast/ja/reference/error-codes/): ambercastのエラーコード体系、種別、スコープ、および終了コードのリファレンスです。

@@ -12,7 +12,8 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | アーティファクト | 公開パスおよび `$id` | バージョン | `title` | `description` | スコープ | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がありません） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
-| plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | provenance、targets、steps を含む完成した `PlanDocument`。 | 利用可能 |
+| plan（履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持される、凍結済みの Plan v2 スナップショット。 | 利用可能 |
+| plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | targets と steps を含む、現在の完成した `PlanDocument`。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.5"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
@@ -24,7 +25,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 
 | 生成ファイル | 検証対象 | 生成元 | npm エクスポート |
 | --- | --- | --- | --- |
-| `plan.schema.json` | Plan の `schemaVersion` が 2 であり、provenance source、targets、steps を含む完成した `PlanDocument`。 | JSON Schema 2020-12 として変換された Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
+| `plan.schema.json` | Plan の `schemaVersion` が 3 であり、provenance source、targets、steps を含む現在の完成した `PlanDocument`。 | JSON Schema 2020-12 として変換された Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | Grounding の `schemaVersion` が 1 であり、`planDigest` およびステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 として変換された Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須であり、それ以外に宣言される設定は任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 として変換された Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `report.schema.json` | Report の `schemaVersion` 3.5 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |

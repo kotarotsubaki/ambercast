@@ -13,7 +13,7 @@ Among these commands, `check` has no mutable-storage, AI-provider, or browser de
 
 | Command | Precondition | Side effects | Needs approval? | Safe in CI? |
 | --- | --- | --- | --- | --- |
-| `generate` | A selected prompt and target must be valid. | May write plan and grounding artifacts. | Yes for writes; present diff before commit. | Yes, subject to project policy. |
+| `generate` | A selected prompt and target must be valid; newly proposed secret names need consent unless allowlisted. | May write Plan and Grounding artifacts and accepted names into `secrets.allow`. | Yes for consent and writes; present diff before commit. | Yes when reviewed names are pre-populated in `secrets.allow`. |
 | `run` | A selected prompt has a trusted plan. | Writes invocation report; may write grounding under its write-back contract. | Yes when requested scope does not already authorize writes. | Yes, subject to write-back policy. |
 | `check` | A selection can be discovered. | Reads prompts and artifacts only. | No ambercast-artifact write approval required. | Yes. |
 | `heal` | Target is idempotent and a real attempt is CI-enabled when in CI. | May write attempt evidence in the runs directory; commits measured plan/grounding candidates only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | No by default; only with `ci.heal: true`. |
@@ -26,6 +26,7 @@ Operating within safety boundaries requires adhering to these non-negotiable res
 
 - An agent MUST NOT place a literal secret value in a prompt, artifact, command, report, or message; use a `SecretRef`, its environment-variable value, and the target's sink policy instead.
 - The public error vocabulary includes `SECRET_LITERAL_REJECTED`; the detector is a narrow heuristic and does not replace the agent prohibition on literal secrets.
+- An agent MUST NOT add `@ambercast-secret` grant lines. For a generated name outside `secrets.allow`, obtain explicit operator consent or ask the operator to add the reviewed name; `"*"` requires explicit approval because it accepts arbitrary AI-proposed names without per-name review.
 - In CI, real healing is refused unless `ci.heal` is enabled.
 - `--yes` pre-authorizes the CLI confirmation prompt only; dry runs never commit.
 
@@ -53,6 +54,7 @@ The report schema defines eight usage codes and six environment codes, structura
 | Error family | Next safe action |
 | --- | --- |
 | configuration, secret, or target | Read the named Reference and correct the boundary without guessing values. |
+| `SECRET_CONSENT_REQUIRED` | Obtain approval for the listed names interactively or add reviewed names to `secrets.allow`; do not retry as though consent had been granted. |
 | plan freshness or integrity | Treat artifacts as untrusted and use stale-artifact recovery. |
 | browser, provider, storage, or crash | Preserve the envelope and repair the environment. |
 | interruption | Treat remaining work as incomplete; do not infer a case result. |

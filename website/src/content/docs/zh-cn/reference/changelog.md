@@ -5,6 +5,14 @@ description: 记录 ambercast 用户可见的产品行为与公共契约变更�
 
 ambercast 是面向 prompt 原生的端到端测试 CLI 工具，由 AI 将自然语言测试 prompt 一次性编译为类似 lockfile 的确定性 Plan；在 Chromium 中命中 Grounding 时无需任何 AI 调用即可重放，并在 UI 发生漂移时通过自愈流程进行修复。本参考页面记录 ambercast 各版本中用户可见的产品行为与公共契约变更，并严格按照破坏性变更（BREAKING）优先的顺序编排。有关升级的具体步骤请参阅 [在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)，兼容性规则与详细对照请参阅 [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) 及 [兼容性](/ambercast/zh-cn/reference/compatibility/#regeneration-boundary)，变更记录规范请参阅 [规范变更日志](/ambercast/zh-cn/spec/changelog/)。
 
+## 0.4.0 版本 {#release-040}
+
+发布日期：2026-09-14。
+
+| 类别 | 用户可见变更 |
+| --- | --- |
+| BREAKING | Plan v2 → v3 删除机密授权来源。删除旧授权行，用 `generate --force` 重新生成，并通过同意／`secrets.allow` 模型批准候选机密名称；Plan v2 不会原地迁移。 |
+
 ## 0.2.0 版本 {#release-020}
 
 0.2.0 版本发布于 2026-09-04。该版本包含 1 项已声明的破坏性变更，在此置于修复项之前展示。

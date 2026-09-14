@@ -1,33 +1,44 @@
 ---
 title: 管理机密
-description: 遵循安全编写路径在测试提示词中管理与使用机密引用。
+description: 安全地批准生成的机密名称，并从环境变量解析其值。
 ---
 
-本文介绍在测试提示词中管理机密的安全编写路径。机密引用 `{{secrets.a.b}}` 从环境变量 `AMBERCAST_SECRET_A_B` 解析。
+Ambercast 在生成 Plan 时发现候选机密名称。你可通过交互式同意提示批准这些名称，或为非交互式使用预先填充配置许可列表；机密值始终保留在提示词和产物之外。
 
 ## 前提条件 {#prerequisites}
 
-- 机密引用 `{{secrets.a.b}}` 从 `AMBERCAST_SECRET_A_B` 解析。
+- 不需要已有的 `ambercast.config.json` 文件。当已批准的同意需要持久化许可列表而配置文件不存在时，Ambercast 会自动创建该文件。
 
 ## 操作步骤 {#steps}
 
-1. 在单独的非代码提示词行中精确写入 `@ambercast-secret {{secrets.password}}`。授权解析器会接受完整匹配的行，并排除代码块、缩进代码和行内代码。一行授权仅授权一次使用；同一机密需要多次使用时，每次使用都重复一行。例如，先登录、登出后再次登录。将每个授权行紧邻放在描述其对应使用的指令之前并非硬性要求（参见[授权来源规则](/ambercast/zh-cn/spec/secrets/#grant-origin)），但这样做通常能让这种一一对应关系对提供商更加明确，有助于避免引用无法解析。
+1. 在提示词中描述用户结果，不要包含授权行或机密值。
 
+   ```markdown
+   # Sign in
+
+   Sign in as the configured test user and verify that the dashboard heading is visible.
    ```
-   @ambercast-secret {{secrets.password}}
-   Sign in with the password.
-   Sign out.
-   @ambercast-secret {{secrets.password}}
-   Sign in again with the same password.
+2. 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。生成首先创建候选 Plan，并列出任何新提出的机密名称。在交互式终端中，逐一审查名称，只批准适用于该测试的名称。
+3. 对于 CI 或其他非交互环境，请在生成前添加已审查的名称：
+
+   ```json
+   {
+     "$schema": "https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json",
+     "secrets": { "allow": ["password"] }
+   }
    ```
-2. 在首次执行 `npx ambercast generate tests/ambercast/<name>.test.md` 之前，请由人工或经批准的扫描工具确认整个提示词在 SecretRef 授权之外不包含任何明文机密。随后，`generate` 会在执行明文机密检查之前将其 AI 提供商上下文中的规范化提示词发送出去；该检查无法保护已在提示词中发送的机密。
-3. 在命令环境中设置 `AMBERCAST_SECRET_PASSWORD`，然后运行 `npx ambercast generate tests/ambercast/<name>.test.md`。随后，生成阶段会授权提示词 grant，但不会构建机密提供商，也不会解析其值。
-4. 若填充操作不在 `baseUrl`，请按照 [配置目标环境](/ambercast/zh-cn/how-to/configure-targets/) 配置额外源。缺失的映射默认回退至 base-URL 源。
+
+   空的 `secrets.allow` 要求逐个同意名称。值 `"*"` 会无需逐名审查地接受 AI 提出的任何名称；它会移除批准边界，只有在理解这一点时才应使用。如果它已经是 `"*"`，批准同意不会写入许可列表更新。
+
+   记录已批准的名称时，Ambercast 会执行排他更新，然后在合并前重新读取并验证当前磁盘上的配置；不会覆盖在运行早期取得的配置快照。现有 `secrets.allow` 名称会去重并保留原有顺序。新批准的名称会先去重、排除已存在的名称，再按字母顺序排序并追加。
+4. 仅在命令环境中设置相应的值。运行时，`{{secrets.a.b}}` 从 `AMBERCAST_SECRET_A_B` 解析：点号变为下划线，各段转为大写。若填充操作不在 `baseUrl`，请按照 [配置目标环境](/ambercast/zh-cn/how-to/configure-targets/) 配置额外源。
 
 ## 验证 {#verification}
 
-- 生成完成后，请在命令环境中保留该变量的情况下，针对安全目标运行 `npx ambercast run --resolve tests/ambercast/<name>.test.md`。运行阶段会构建环境机密提供商；只有在实时源通过其 sink-policy 检查后，`fill-secret` 才会解析该命名变量。
-- `npx ambercast generate --json tests/ambercast/<name>.test.md` 不得返回 `SECRET_LITERAL_REJECTED`。该拒绝逻辑会在持久化或报告序列化之前检查来自提供商的生成 JSON；它保护的是生成的响应，而非已发送给提供商的提示词。
+- 在同意或添加许可列表条目后，生成会持久化 Plan；新接受的名称也会记录在 `secrets.allow` 中。
+- 对于一次生成批次，Ambercast 会将所有新批准的名称一次性提交到许可列表，然后才写入任何候选项的 Plan 或 Grounding 文件。这些是独立操作，而非一个事务：如果在许可列表提交成功后发生中断或失败，即使部分或全部候选项的 Plan 和 Grounding 文件尚未写入，许可列表更新仍会保留在磁盘上。这是已知且可接受的状态：`secrets.allow` 可能领先于实际生成的产物。重新运行 `generate` 即可恢复；它会继续使用已经在许可列表中的名称。
+- 若拒绝同意，或在非交互式终端中无法请求同意，生成会以 `SECRET_CONSENT_REQUIRED` 失败，且不会写入候选产物。将已审查的名称添加到 `secrets.allow` 后重新生成。
+- 在命令环境中仍保留所需的 `AMBERCAST_SECRET_<NAME>` 变量，在安全目标上运行 `npx ambercast run --resolve tests/ambercast/<name>.test.md`。只有实时源通过 sink-policy 检查后，`fill-secret` 才会解析该命名变量。
 
 ## 相关链接 {#related}
 

@@ -14,8 +14,6 @@ All other chapters MUST use these definitions rather than restating their shapes
 |  | `name` | string | required | min 1 | Accessible name. | repo:src/core/ir/schema.ts:186 |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | Locator-evidence format. | repo:src/core/ir/schema.ts:221 |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | Lowercase SHA-256. | repo:src/core/ir/schema.ts:35,223 |
-| `SourceSpan` | `startLine` | integer | required | positive | Inclusive, one-based grant start line. | repo:src/core/ir/schema.ts:259 |
-|  | `endLine` | integer | required | positive; `endLine >= startLine` | Inclusive grant end line. | repo:src/core/ir/schema.ts:260,261 |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | One-based UTF-16 start line. | repo:src/core/ir/schema.ts:332 |
 |  | `startColumn` | integer | required | positive | One-based UTF-16 start column. | repo:src/core/ir/schema.ts:333 |
 |  | `endLine` | integer | required | positive | One-based UTF-16 end line. | repo:src/core/ir/schema.ts:334 |
@@ -26,6 +24,8 @@ All other chapters MUST use these definitions rather than restating their shapes
 | `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Committed criterion ID. | repo:src/core/ir/schema.ts:366 |
 |  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:367 |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Locally derived prompt location. | repo:src/core/ir/schema.ts:368 |
+| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | Provider request to reuse a projected allowlisted name. | repo:src/core/ir/schema.ts:104-115 |
+|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | Provider proposal for a newly discovered name. | repo:src/core/ir/schema.ts:104-115 |
 
 `ElementRef` has only `AccessibilityElementRef` today. `HexSha256` is `/^[0-9a-f]{64}$/`; `StepId` and `InstructionCriterionId` are `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/`; `RunVariableName` is `/^[a-z][a-zA-Z0-9]*$/`; `RunRef` is `/^\\{\\{run\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/`. [repo:src/core/ir/schema.ts:35,41,198,237,311,381,396]
 
@@ -34,12 +34,14 @@ All other chapters MUST use these definitions rather than restating their shapes
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | Whole secret reference. | repo:src/core/ir/schema.ts:31,33,74 |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | Bare logical name used by consent and configuration. | repo:src/core/ir/schema.ts:31,83-92 |
+| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | Provider fallback naming candidate, not a committed reference. | repo:src/core/ir/schema.ts:94-102 |
 | `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | HTTP(S) origin only. | repo:src/core/ir/schema.ts:40,95-97 |
 | `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Text may contain run interpolation but no secret token. | repo:src/core/ir/schema.ts:37,125 |
 | `Citation` | string | value | min 1; max `4096` | Exact prompt substring before attribution. | repo:src/core/ir/schema.ts:273,279 |
 | `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | Metadata or provider ambiguity value. | repo:src/core/ir/schema.ts:1167 |
 
-An absent secret entry in `secretSinkOrigins` defaults that secret to `baseUrl`; an explicit empty array denies all origins; a non-empty array replaces the default. [repo:src/core/ir/schema.ts:152-157] `SourceSpan` ordering and all `InstructionSourceSpan` prompt-coordinate checks are semantic validation. [repo:src/core/ir/schema.ts:254,328]
+An absent secret entry in `secretSinkOrigins` defaults that secret to `baseUrl`; an explicit empty array denies all origins; a non-empty array replaces the default. [repo:src/core/ir/schema.ts:152-157] All `InstructionSourceSpan` prompt-coordinate checks are semantic validation. [repo:src/usecases/instruction-coverage-policy.ts:467-496]
 
 ## Examples {#examples}
 
@@ -55,6 +57,6 @@ An absent secret entry in `secretSinkOrigins` defaults that secret to `baseUrl`;
 
 Shared objects solve the problem of plan, generation response, and grounding gradually acquiring incompatible locators, references, and provenance. The design puts strict runtime definitions in one schema and derives JSON Schema from it. 
 
-The selected design separates whole-value secret and run references from ordinary text, and separates provider citation from committed source span. Local code, not an AI-produced excerpt, is therefore authoritative for durable provenance. 
+The selected design separates whole-value secret and run references from ordinary text, and separates provider naming intent from committed secret references. Local naming and consent, not an AI-produced reference, are authoritative for durable authorization.
 
 One rejected alternative was independently defining a locator and secret syntax in each document; it was rejected because review could not expose compatible-looking drift. Another was treating citations as durable authority; it was rejected because prompt-relative verification must be deterministic and local.  

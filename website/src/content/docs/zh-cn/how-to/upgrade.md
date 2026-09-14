@@ -16,6 +16,16 @@ description: 跨版本安全升级 ambercast 的操作流程与验证方法。
 3. 如果 check 的退出代码为 `4`，请运行 `npx ambercast generate` 并审查 plan 与 grounding 的 diff。生成操作会组合生成器与报告结果。
 4. 将依赖项与接受的伴生文件变动一同提交。随后重新运行 check，使最终状态可见。
 
+## 迁移机密授权 {#migrate-secret-grants}
+
+为 Plan v2 创建的提示词可能包含旧版机密授权行。请从提示词中删除每一行授权；旧语法会被拒绝，不能原地迁移。
+
+```markdown
+@ambercast-secret {{secrets.password}}
+```
+
+然后运行 `npx ambercast generate --force <file>` 并响应新的同意提示。对于 CI 或其他非交互环境，请先将已审查的名称添加到 `secrets.allow`。重新生成的 Plan 使用 v3 同意／许可列表模型。
+
 ## 验证 {#verification}
 
 - 接受重新生成后，`npx ambercast check` 的退出代码为 `0`。

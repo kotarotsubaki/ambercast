@@ -17,7 +17,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | fingerprint | フィンガープリントとは、リテラル `a11y-neighborhood-v2` アルゴリズムとSHA-256ハッシュを含む、要素グラウンディングの値です。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | `planDigest` |
 | inputs digest | 入力ダイジェストとは、正規化プロンプト、Planスキーマバージョン、ジェネレーターテンプレートのフィンガープリント、プロデューサバンドルのフィンガープリント、および名前付きターゲットから生成される、出所確認用の標準的なSHA-256ダイジェストです。 | `computeInputsDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `planDigest` |
 | plan digest | プランダイジェストとは、Groundingを紐付けるために使用される、`generatorMeta` を除外したスキーマ準拠Planの標準的なSHA-256ハッシュです。 | `computePlanDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `inputsDigest` |
-| normalized test prompt | 正規化テストプロンプトとは、先頭の最大1つのU+FEFFを除去し、CRLFおよび単独のCRをLFにマッピングしつつ、その他の要素をすべて維持したプロンプトです。 | `normalizeTestMd`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization-and-grants) | 書式クリーンアップ |
+| normalized test prompt | 正規化テストプロンプトとは、先頭の最大1つのU+FEFFを除去し、CRLFおよび単独のCRをLFにマッピングしつつ、その他の要素をすべて維持したプロンプトです。 | `normalizeTestMd`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization) | 書式クリーンアップ |
 
 `PlanDocument` および `GroundingDocument` は厳格なランタイムの信頼境界であり、これらからJSON Schemaが導出されます。
 
@@ -36,7 +36,10 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | report envelope | レポートエンベロープとは、レポート生成コマンドによって返される、バージョン管理されコマンドごとに識別される構造化結果です。 | `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#envelope) | 永続化された `report.json` |
 | report persistence | レポート永続化（report persistence）とは、確定したエンベロープの書き込みに関する、runエンベロープの状態（`persisted`、`failed`、または `not-attempted`）です。 | runの `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#persistence) | セマンティックなテスト結果 |
 | secret reference | シークレット参照とは、`SecretRef` で受け入れられる完全一致文字列であり、`secrets.` の後にASCII英数字またはアンダースコアで構成される1つ以上のドット区切りセグメントが続きます。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | リテラルのシークレット値 |
-| secret grant | シークレット付与（secret grant）とは、CommonMarkコード範囲外にある、ソース順で記述された完全な `@ambercast-secret <secret reference>` 行です。 | `extractSecretGrants`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization-and-grants) | シークレット参照そのもの |
+| consent | 同意とは、`generate` が `secrets.allow` の外にあるシークレット名を含む候補を永続化する前に必要な、対話式の判断です。 | `ambercast generate`; [シークレットの管理](/ambercast/ja/how-to/manage-secrets/) | 実行時のシークレット値解決 |
+| allowlist | 許可リストとは、生成が候補を永続化する前に `secrets.allow` で受け入れる、レビュー済みの論理シークレット名の集合です。 | configuration / `ambercast generate`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | シークレットシンクのオリジン |
+| `secrets.allow` | `secrets.allow` は、事前承認済みの論理シークレット名を持つ設定配列、または名前ごとのレビューなしで AI が提案したすべての名前を受け入れる高リスクな `"*"` 値です。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` の値 |
+| `SecretNameChoice` | `SecretNameChoice` は、プロジェクションされた `allowedName` と新しい `nameHint` のプロバイダー向けの厳格な選択であり、コミット済みの `SecretRef` が存在する前に両方がローカルで解決されます。 | `SecretNameChoice`; [値の型](/ambercast/ja/spec/value-types/#shared-types) | コミット済みの `SecretRef` |
 
 `stale` はcheckの結果に属するステータスであり、runの結果ステータスではありません。また、healの冪等ターゲット検証（idempotent-target check）がスキップされるのはリストモード時のみです。
 
@@ -71,9 +74,9 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `.runs` | `.runs` はデフォルトの `runsDir` の最終セグメントであり、独立して解決されるルートではありません。 | 設定 / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | コンパニオンアーティファクト |
 | `.test.md` | `.test.md` は、検出されたプロンプトパスがレイアウトマッピングを受け取るために必要な正確なサフィックスです。 | レイアウト解決ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity) | 任意のMarkdown |
 | `0.1.0` | `0.1.0` はリポジトリのチェンジログに記載されている2026-09-03のリリースを示します。 | [変更履歴](/ambercast/ja/reference/changelog/#release-010) | アーティファクトのスキーマバージョン |
-| `0.3.1` | `0.3.1` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.5` |
+| `0.4.0` | `0.4.0` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.5` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` は、最も強い優先度から最も弱い優先度への固定されたプロセス終了コードの優先順位です。 | 終了コードセレクター; [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) | 数値順 |
-| `@ambercast-secret` | `@ambercast-secret` は、CommonMarkコード外で完全な付与行を開始します。 | 付与抽出ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization-and-grants) | シークレット参照 |
+| `@ambercast-secret` | `@ambercast-secret` は拒否されるレガシープロンプト構文であり、Plan v3 アーティファクトを再生成する前に除去する必要があります。 | プロンプトパーサー; [シークレットグラントの移行](/ambercast/ja/how-to/upgrade/#migrate-secret-grants) | シークレット参照 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` は、環境変数によるプロバイダーのオーバーライドを指定します。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--ai` |
 | `AMBERCAST_CONFIG` | `AMBERCAST_CONFIG` は、環境変数による設定ファイルパスのオーバーライドを指定します。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--config` |
 | `AMBERCAST_ENV_*` | `AMBERCAST_ENV_*` はAIプロバイダーの子プロセスから除外される名前空間であり、Ambercastの入力一覧には含まれません。 | 子プロセスランナー; [環境変数](/ambercast/ja/reference/environment-variables/#provider-child-environment) | `AMBERCAST_SECRET_*` |

@@ -3,7 +3,7 @@ title: Write effective prompts
 description: Author focused test prompts with clear outcomes and verify plan generation with a dry run.
 ---
 
-Focused test prompts keep test cases clear and make plan review straightforward. This guide walks you through structuring prompt files, isolating user outcomes into dedicated files, declaring secrets when needed, and verifying plan generation using a dry run.
+Focused test prompts keep test cases clear and make plan review straightforward. This guide walks you through structuring prompt files, isolating user outcomes into dedicated files, and verifying plan generation using a dry run.
 
 ## Prerequisites {#prerequisites}
 
@@ -17,7 +17,7 @@ Focused test prompts keep test cases clear and make plan review straightforward.
 
    > …I reach the dashboard and see the heading "Welcome back".
 2. Split unrelated user outcomes into separate `<name>.test.md` files to keep cases focused.
-3. Use a standalone `@ambercast-secret {{secrets.name}}` line only when needed. The parser identifies only complete grant lines outside code. One grant line authorizes exactly one use, so repeat the line once per use when the same secret is used more than once.
+3. Do not put secret values, secret references, or legacy grant lines in the prompt. When generation discovers a needed secret name, review it through the consent prompt or pre-populate `secrets.allow`; see [Manage secrets](/ambercast/how-to/manage-secrets/).
 4. Run `npx ambercast generate tests/ambercast/checkout.test.md --dry-run`. A valid preview result has status `would-generate` and `dryRun: true`; it does not claim a committed write.
 
 ## Verification {#verification}

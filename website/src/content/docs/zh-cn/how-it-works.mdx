@@ -15,15 +15,13 @@ ambercast 的运作方式可以用三个文件和 generate、run、heal 三个�
 ```markdown
 # Login
 
-@ambercast-secret {{secrets.password}}
-
 Go to /login.
-Fill in the email "mika@example.com" and the password {{secrets.password}}.
+Fill in the email "mika@example.com" and the password.
 Click "Sign in".
 Expect to land on the dashboard and see a "Welcome" heading.
 ```
 
-prompt 可以用你自己的语言书写。密码的值不会写出来，只会放一个 `{{secrets.password}}` 引用。
+prompt 可以用你自己的语言书写。密码的值不会被写在任何地方。
 
 这里没有选择器，没有等待逻辑，也没有测试代码。写在这里的只有"想确认什么"。这个文件就是唯一的正本。
 
@@ -33,7 +31,7 @@ prompt 可以用你自己的语言书写。密码的值不会写出来，只会�
 ambercast generate
 ```
 
-AI 读取 prompt，生成一份执行计划。浏览器此时还不会运行。此时会诞生两个衍生文件。
+AI 读取 prompt，生成一份执行计划。浏览器此时还不会运行。当它发现一个密码输入框时，会询问是否可以将其作为名为 `password` 的秘密值处理；这项同意会被记录到 `ambercast.config.json` 中，此后不再询问。该值会在运行时从环境变量 `AMBERCAST_SECRET_PASSWORD` 中传入。此时会诞生两个衍生文件。
 
 ```
 login.test.md

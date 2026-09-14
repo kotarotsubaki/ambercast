@@ -73,7 +73,7 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 既存のトレースの再生に成功した後、実装はそのエントリを変更せずそのまま残さなければならない（MUST）。実装は、終了成功基準の厳密なカバレッジを伴うエージェント実行に成功した後にのみ、AI エントリを書き込むか上書きしなければならない（MUST）。スナップショットまたは失敗したアサーションで終了する成功したエージェント実行の場合、コールドパスはいかなるエントリも書き込んではならず（MUST NOT）、フォールバックパスはフォールバックを引き起こした古いエントリを削除しなければならない（MUST）。実装は、エージェント実行の失敗または中断の後は、既存のエントリに手を触れずに残さなければならない（MUST）。[src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
 
-すべての `TraceFillSecret` について、`secretRef` はそれを含む Plan の AI ステップのコミットされた `secrets[].ref` 付与セットに属していなければならない（MUST）。違反は整合性の失敗（integrity failure）であり、エージェント実行にフォールバックしてはならない（MUST NOT）。[src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
+すべての `TraceFillSecret` について、`secretRef` はそれを含む Plan の AI ステップのコミットされた `secrets[].ref` セットに属していなければならない（MUST）。違反は整合性の失敗（integrity failure）であり、エージェント実行にフォールバックしてはならない（MUST NOT）。[src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
 
 ## 設計根拠 {#rationale}
 

@@ -11,9 +11,15 @@ import { fileURLToPath } from 'node:url';
  */
 
 /**
- * Removes stale output, classifies the root build, preflights every source, and then publishes
- * byte-preserving copies. `SYNC_OPTIONAL=1` permits only an entirely absent root build so local
- * development can deliberately serve 404s instead of obsolete generated artifacts.
+ * Publishes the current build interfaces alongside the committed Plan v2 snapshot. Build output
+ * supplies schemas that evolve with the repository, while the snapshot preserves the exact
+ * historical bytes emitted immediately before Plan v3 (commit
+ * c391a59604a81da0e294f265ce5f47fba7344a02, SHA-256
+ * 123a3e3b22570ddbe6fa1886a9d91a7ddfc97e31a5b05b124a829e20f27b9325) so consumers of the
+ * retired contract keep a stable URL even though the current build no longer creates it.
+ * `SYNC_OPTIONAL=1` permits only
+ * an entirely absent root build so local development can deliberately serve 404s instead of
+ * obsolete generated artifacts.
  *
  * @returns {Promise<void>} Resolves after a complete publication or an allowed missing-build
  * outcome; rejects for a required or malformed build input.
@@ -23,6 +29,7 @@ export async function main() {
   const repositoryRoot = join(websiteRoot, '..');
   const publicRoot = join(websiteRoot, 'public');
   const distRoot = join(repositoryRoot, 'dist');
+  const frozenSchemaRoot = join(websiteRoot, 'src', 'schemas-frozen');
 
   await removePublishedOutputs(publicRoot);
   if (!await hasBuildDirectory(distRoot)) {
@@ -33,7 +40,7 @@ export async function main() {
     throw new Error(`Generated artifacts are unavailable because ${distRoot} does not exist.`);
   }
 
-  await publishArtifacts(await preflightPublications(distRoot, publicRoot));
+  await publishArtifacts(await preflightPublications(distRoot, publicRoot, frozenSchemaRoot));
 }
 
 /**
@@ -71,22 +78,31 @@ async function hasBuildDirectory(distRoot) {
 }
 
 /**
- * Verifies the complete public artifact surface before the first destination write, preventing an
- * incomplete root build from producing a complete-looking partial publication.
+ * Verifies the complete public artifact surface from both source roots before the first
+ * destination write. The frozen Plan v2 schema remains a committed historical snapshot rather
+ * than generated output because it is pinned to the exact bytes from immediately before Plan v3
+ * at commit c391a59604a81da0e294f265ce5f47fba7344a02 with SHA-256
+ * 123a3e3b22570ddbe6fa1886a9d91a7ddfc97e31a5b05b124a829e20f27b9325; treating it as part of
+ * the same preflight prevents a v3-only publication when that contract artifact is unavailable.
  *
  * @param {string} distRoot Absolute path to the already-validated root `dist` directory.
  * @param {string} publicRoot Absolute `website/public` directory for the copied artifacts.
+ * @param {string} frozenSchemaRoot Absolute directory containing committed frozen schemas.
  * @returns {Promise<Publication[]>} The complete, preflighted copy plan in deterministic order.
  */
-async function preflightPublications(distRoot, publicRoot) {
+async function preflightPublications(distRoot, publicRoot, frozenSchemaRoot) {
   const publications = [
     ['schema/config.schema.json', 'schemas/config.schema.json'],
-    ['schema/plan.schema.json', 'schemas/plan.v2.schema.json'],
+    ['schema/plan.schema.json', 'schemas/plan.v3.schema.json'],
     ['schema/grounding.schema.json', 'schemas/grounding.v1.schema.json'],
     ['schema/report.schema.json', 'schemas/report.v3.schema.json'],
     ['manifest/capabilities.json', 'capabilities.json'],
     ['manifest/cli.json', 'manifest/cli.json'],
   ].map(([source, destination]) => ({ source: join(distRoot, source), destination: join(publicRoot, destination) }));
+  publications.push({
+    source: join(frozenSchemaRoot, 'plan.v2.schema.json'),
+    destination: join(publicRoot, 'schemas/plan.v2.schema.json'),
+  });
 
   await Promise.all(publications.map(async ({ source }) => {
     const details = await stat(source);

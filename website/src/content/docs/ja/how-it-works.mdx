@@ -15,15 +15,13 @@ ambercast の動きは、三つのファイルと、generate・run・heal の三
 ```markdown
 # Login
 
-@ambercast-secret {{secrets.password}}
-
 Go to /login.
-Fill in the email "mika@example.com" and the password {{secrets.password}}.
+Fill in the email "mika@example.com" and the password.
 Click "Sign in".
 Expect to land on the dashboard and see a "Welcome" heading.
 ```
 
-プロンプトは日本語で書いてもよい。パスワードの値は書かず、`{{secrets.password}}` という参照だけを置く。
+プロンプトは日本語で書いてもよい。パスワードの値はどこにも書かない。
 
 セレクタも、待機処理も、テストコードもない。ここに書くのは「何を確かめたいか」だけだ。このファイルが唯一の正本になる。
 
@@ -33,7 +31,7 @@ Expect to land on the dashboard and see a "Welcome" heading.
 ambercast generate
 ```
 
-AI がプロンプトを読み、実行計画を作る。ブラウザはまだ動かない。このとき生まれるのが二つの派生ファイルだ。
+AI がプロンプトを読み、実行計画を作る。ブラウザはまだ動かない。パスワード欄を見つけると、`password` という名前の秘匿値として使ってよいかを尋ね、許可は `ambercast.config.json` に記録されて次からは聞かれない。値は実行時に環境変数 `AMBERCAST_SECRET_PASSWORD` から渡す。このとき生まれるのが二つの派生ファイルだ。
 
 ```
 login.test.md

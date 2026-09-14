@@ -5,11 +5,11 @@ description: "`PlanDocument` は厳格なオブジェクトである。"
 
 ## ドキュメントの形状 {#document-shape}
 
-`PlanDocument` は厳格なオブジェクトである。プロデューサはリテラルバージョン 2 を出力しなければならず（MUST）、コンシューマは未知のプロパティおよび他のバージョンを拒絶しなければならない（MUST）。[src/core/ir/schema.ts:1189](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189)
+`PlanDocument` は厳格なオブジェクトである。プロデューサはリテラルバージョン 3 を出力しなければならず（MUST）、コンシューマは未知のプロパティおよび他のバージョンを拒絶しなければならない（MUST）。[src/core/ir/schema.ts:1205-1224](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1224)
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `2` | 計画フォーマットのバージョン。 | [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57), [src/core/ir/schema.ts:1190](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1190) |
+| `schemaVersion` | integer | required | literal `3` | 計画フォーマットのバージョン。 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1207) |
 | `source` | strict object | required | exactly `inputsDigest` | 鮮度ラッパー。 | [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
 | `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | 生成入力のダイジェスト。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
 | `generatorMeta` | record string → `JsonValue` | optional | JSON only | `planDigest` から除外されるメタデータ。 | [src/core/ir/schema.ts:1189-1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189-L1193); [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128-L131) |
@@ -24,7 +24,7 @@ description: "`PlanDocument` は厳格なオブジェクトである。"
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "source": {"inputsDigest": "0000000000000000000000000000000000000000000000000000000000000000"},
   "targets": {"app": {"baseUrl": "https://example.test", "browser": "chromium"}},
   "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "url": "https://example.test"}]
@@ -37,7 +37,7 @@ description: "`PlanDocument` は厳格なオブジェクトである。"
 
 ## プロバイダー専用の生成レスポンス {#provider-generation-response}
 
-プロバイダーは `schemaVersion`、`source`、または `targets` を作成しない。コミット済み計画のバリデーションの前に、ローカル生成がこれらを追加する。[src/core/ir/schema.ts:1227](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1227)
+プロバイダーは `schemaVersion`、`source`、または `targets` を作成しない。コミット済み計画のバリデーションの前に、ローカル生成がこれらを追加する。プロバイダーのシークレット命名意図は、コミット済み `SecretRef` が形成される前にローカルで解決される。[src/core/ir/schema.ts:729-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L729-L833) [src/core/ir/schema.ts:1242-1254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1242-L1254)
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |

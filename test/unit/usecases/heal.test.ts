@@ -435,6 +435,42 @@ describe('heal validated overlay capability', () => {
     await expect(captured[0]!.readText(PLAN)).resolves.toBe(await scenario.storage.readText(PLAN));
   });
 
+  it('serves optional tracked snapshots from its validated buffer and delegates an untracked optional snapshot to base storage', async () => {
+    const scenario = await createScenario({
+      sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: true, currentFingerprint: FINGERPRINT }]]),
+    });
+    const extra = `${TEST_DIR}/untracked.txt`;
+    await scenario.storage.writeText(extra, 'base optional snapshot');
+    let observed = false;
+    replayRunObserver.afterRun = async (_deps, storage) => {
+      if (observed) return;
+      observed = true;
+      await expect(storage.readTextSnapshotIfExists(PLAN)).resolves.toEqual(textSnapshot(await scenario.storage.readText(PLAN)));
+      await storage.writeText(PLAN, 'buffered optional snapshot');
+      await expect(storage.readTextSnapshotIfExists(PLAN)).resolves.toEqual(textSnapshot('buffered optional snapshot'));
+      await expect(storage.readTextSnapshotIfExists(extra)).resolves.toEqual(textSnapshot('base optional snapshot'));
+    };
+
+    await heal(scenario.deps, OPTIONS);
+    expect(observed).toBe(true);
+  });
+
+  it('rejects exclusive config updates from the heal overlay with its policy FsIoError', async () => {
+    const scenario = await createScenario({
+      sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: true, currentFingerprint: FINGERPRINT }]]),
+    });
+    let observed = false;
+    replayRunObserver.afterRun = async (_deps, storage) => {
+      if (observed) return;
+      observed = true;
+      await expect(storage.updateTextExclusive('/workspace/ambercast.config.json', () => '{}'))
+        .rejects.toMatchObject({ kind: 'fs-io', message: expect.stringMatching(/config updates not permitted during heal/i) });
+    };
+
+    await heal(scenario.deps, OPTIONS);
+    expect(observed).toBe(true);
+  });
+
   it.each(['', 'こんにちは世界'] as const)('keeps validated preimages after base mutation/deletion and then exposes buffered %j through all read views', async (content) => {
     const deletable = createDeletableStorage();
     const scenario = await createScenario({

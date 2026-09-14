@@ -605,4 +605,71 @@ describe('createFsStorage()', () => {
       restore();
     }
   });
+
+  it('checks cancellation before the first lock acquisition, each retry, and before an atomic write, but never after writing starts', async () => {
+    const fake = new SharedFakeFs();
+    fake.setText('/shared/config.json', '{"names":[]}');
+    const controller = new AbortController();
+    const restore = installSharedFake(fake);
+    try {
+      controller.abort(new Error('stop before acquire'));
+      await expect(createFsStorage().updateTextExclusive('/shared/config.json', () => '{"names":["A"]}', controller.signal))
+        .rejects.toBeInstanceOf(FsIoError);
+      expect(fake.calls.filter((call) => call.operation === 'writeFile')).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not start an atomic target write when the exclusive updater returns null', async () => {
+    const fake = new SharedFakeFs();
+    fake.setText('/shared/config.json', '{"names":[]}');
+    const restore = installSharedFake(fake);
+    try {
+      await expect(createFsStorage().updateTextExclusive('/shared/config.json', () => null)).resolves.toBeUndefined();
+      expect(fake.text('/shared/config.json')).toBe('{"names":[]}');
+      expect(fake.calls.filter((call) => call.operation === 'rename')).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('makes a release failure terminal after a successful primary update', async () => {
+    const fake = new SharedFakeFs();
+    fake.setText('/shared/config.json', '{}');
+    const restore = installSharedFake(fake);
+    try {
+      const unlink = vi.mocked(fsPromises.unlink).mockRejectedValueOnce(createFilesystemError('EACCES', 'release denied'));
+      await expect(createFsStorage().updateTextExclusive('/shared/config.json', () => '{"ok":true}')).rejects.toBeInstanceOf(FsIoError);
+      expect(unlink).toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it('makes a release failure supersede a primary failure with the primary error as cause', async () => {
+    const fake = new SharedFakeFs();
+    fake.setText('/shared/config.json', '{}');
+    const primary = new Error('updater failed');
+    const restore = installSharedFake(fake);
+    try {
+      vi.mocked(fsPromises.unlink).mockRejectedValueOnce(createFilesystemError('EACCES', 'release denied'));
+      await expect(createFsStorage().updateTextExclusive('/shared/config.json', () => { throw primary; }))
+        .rejects.toMatchObject({ cause: primary });
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves a primary failure unchanged when release succeeds', async () => {
+    const fake = new SharedFakeFs();
+    fake.setText('/shared/config.json', '{}');
+    const primary = new Error('updater failed');
+    const restore = installSharedFake(fake);
+    try {
+      await expect(createFsStorage().updateTextExclusive('/shared/config.json', () => { throw primary; })).rejects.toBe(primary);
+    } finally {
+      restore();
+    }
+  });
 });

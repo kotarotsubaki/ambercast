@@ -3338,6 +3338,80 @@ describe('generate secret naming and consent boundaries', () => {
     expect(request?.context.allowedSecretNames)
       .toEqual(names.slice(0, 64));
   });
+
+  it('applies the UTF-8 provider-context byte cap after the 64-name cap and reports the complete kept/dropped accounting', async () => {
+    const names = Array.from({ length: 65 }, (_value, index) => `${String(index).padStart(2, '0')}-${'x'.repeat(80)}`);
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+
+    const outcome = await generate(withSecretConfig(scenario.deps, [...names].reverse()), DEFAULT_OPTIONS);
+    const request = (execute.mock.calls as unknown as Array<[{ readonly context: { readonly allowedSecretNames: readonly string[] } }]>)[0]?.[0];
+    const projected = request?.context.allowedSecretNames ?? [];
+
+    expect(Buffer.byteLength(JSON.stringify(projected), 'utf8')).toBeLessThanOrEqual(4096);
+    expect(projected).toEqual(names.slice(0, projected.length));
+    expect(projected.length).toBeLessThan(64);
+    expect(outcome.results[0]).toMatchObject({
+      warnings: [expect.objectContaining({ code: 'allowed-names-truncated', kept: projected.length, dropped: names.length - projected.length })],
+    });
+  });
+
+  it('treats a non-ENOENT forced old-plan snapshot failure as a case-local FsIoError before provider dispatch', async () => {
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    const readTextSnapshotIfExists = vi.fn<StorageAdapter['readTextSnapshotIfExists']>(async () => {
+      throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    });
+
+    const outcome = await generate({ ...scenario.deps, storage: { ...scenario.deps.storage, readTextSnapshotIfExists } }, { ...DEFAULT_OPTIONS, force: true });
+
+    expect(outcome.results[0]).toMatchObject({ status: 'failed', error: expect.objectContaining({ kind: 'fs-io' }) });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('leaves every artifact uncommitted when the allowed consent config commit fails before settlement', async () => {
+    const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const commitAllowlist = vi.fn(async () => { throw new Error('config write failed'); });
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    const outcome = await generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS);
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(outcome.results[0]).toMatchObject({ status: 'failed' });
+    expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('asks once and declines only candidates containing needed names while settling unaffected prepared candidates', async () => {
+    let dispatch = 0;
+    const execute = vi.fn(async () => ({
+      data: dispatch++ === 0 ? namedResponse({ nameHint: 'login_password' }) : RESPONSE,
+      raw: 'prepared',
+    }));
+    const request = vi.fn(async () => ({ kind: 'declined' as const }));
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['needs-consent.test.md', 'unaffected.test.md']),
+    });
+    await writePrompt(scenario.recordingStorage.storage, 'needs-consent.test.md');
+    await writePrompt(scenario.recordingStorage.storage, 'unaffected.test.md');
+    scenario.recordingStorage.reset();
+
+    const outcome = await generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS);
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(commitAllowlist).not.toHaveBeenCalled();
+    expect(outcome.results).toMatchObject([{ status: 'failed' }, { status: 'generated' }]);
+    expect(scenario.recordingStorage.writes.map((write) => write.path)).toEqual(expect.arrayContaining([
+      `${TEST_DIR}/unaffected.ambercast.plan.json`,
+      `${TEST_DIR}/unaffected.ambercast.grounding.json`,
+    ]));
+  });
 });
 
 describe('generate interruption contract', () => {

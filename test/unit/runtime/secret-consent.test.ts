@@ -14,6 +14,28 @@ function request(): ConsentRequest {
   } as unknown as ConsentRequest;
 }
 
+function requestWithItems(): ConsentRequest {
+  return {
+    configPath: '/workspace/ambercast.config.json',
+    items: [
+      { file: 'z.test.md', uses: [
+        { name: 'second', stepId: 'step-z', ref: '{{secrets.second}}', selectionSource: 'hint', envVar: 'SECOND' },
+        { name: 'first', stepId: 'step-a', ref: '{{secrets.first}}', selectionSource: 'hint', envVar: 'FIRST' },
+      ] },
+      { file: 'a.test.md', uses: [
+        { name: 'third', stepId: 'step-b', ref: '{{secrets.third}}', selectionSource: 'hint', envVar: 'THIRD' },
+      ] },
+    ],
+    validateRenames: () => ({ ok: true }),
+  } as unknown as ConsentRequest;
+}
+
+function captureOutput(stream: PassThrough): { readonly text: () => string } {
+  let value = '';
+  stream.on('data', (chunk) => { value += chunk.toString(); });
+  return { text: () => value };
+}
+
 describe('createInteractiveSecretConsent', () => {
   it('short-circuits non-interactive execution without consuming input or writing output', async () => {
     const input = new PassThrough();
@@ -49,5 +71,55 @@ describe('createInteractiveSecretConsent', () => {
       input.end(answer);
       await expect(pending).resolves.toEqual({ kind: 'declined' });
     }
+  });
+
+  it('asks individual items in first selected occurrence order, then first appearance in each file', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const captured = captureOutput(output);
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent(requestWithItems());
+    input.end('y\ny\ny\n');
+
+    await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
+    const text = captured.text();
+    expect(text.indexOf('z.test.md')).toBeLessThan(text.indexOf('a.test.md'));
+    expect(text.indexOf('second')).toBeLessThan(text.indexOf('first'));
+    expect(text.indexOf('first')).toBeLessThan(text.indexOf('third'));
+  });
+
+  it('replays a read-only item after a rename attempt and accepts only keep or decline on replay', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const captured = captureOutput(output);
+    const validateRenames = (renames: readonly unknown[]) => (
+      renames.length === 0 ? { ok: true } : { ok: false, failedKeys: [{ file: 'a\\n.test.md', name: 'token\\u0000' }] }
+    );
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent({ ...request(), validateRenames } as ConsentRequest);
+    input.end('renamed\ny\n');
+
+    await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
+    expect(captured.text()).toMatch(/read-only/i);
+  });
+
+  it('treats case-insensitive global N as rejection rather than a rename value', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent(requestWithItems());
+    input.end('N\n');
+
+    await expect(pending).resolves.toEqual({ kind: 'declined' });
+  });
+
+  it('discards every prior edit when EOF occurs before the individual protocol completes', async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
+    const pending = consent(requestWithItems());
+    input.end('replacement\n');
+
+    await expect(pending).resolves.toEqual({ kind: 'declined' });
   });
 });

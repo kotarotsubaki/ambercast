@@ -2257,6 +2257,71 @@ describe('heal state-machine contract', () => {
     expect(rewrittenPlan.steps[0]?.id).toBe('regenerated-submit');
   });
 
+  it.each([
+    ['adds names', ['alpha', 'zeta'], ['B', 'alpha', 'same'], ['B', 'same'], ['zeta']],
+    ['removes names', ['B', 'alpha', 'same'], ['alpha', 'same'], [], ['B']],
+    ['renames names', ['alpha', 'zeta'], ['B', 'alpha', 'same'], ['B', 'same'], ['zeta']],
+  ] as const)('rejects a Stage-3 candidate that %s without replaying or retaining artifacts', async (_title, beforeNames, afterNames, added, removed) => {
+    const stage2Invalid: GeneratedPlanResponse = { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] };
+    const candidate: GeneratedPlanResponse = {
+      steps: afterNames.map((name, index) => ({
+        id: `candidate-${index}`, kind: 'action' as const, action: 'fill-secret' as const,
+        target: { strategy: 'accessibility' as const, role: 'textbox' as const, name: `Secret ${index}` }, secret: { allowedName: name },
+      })),
+      ambiguities: [],
+    };
+    const retained = beforeNames.map((name, index) => Step.parse({
+      id: `retained-${index}`, kind: 'action', action: 'fill-secret',
+      target: { strategy: 'accessibility', role: 'textbox', name: `Committed ${index}` }, secretRef: `{{secrets.${name}}}`,
+    }));
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), ...retained], grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
+        data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}',
+      }) }),
+    });
+    const original = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    let candidateReplay = false;
+    replayRunObserver.afterRun = (_deps, _storage, options) => { if (options.resolve === true) candidateReplay = true; };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(candidateReplay).toBe(false);
+    expect(result.outcome.results[0]).toMatchObject({
+      repairOutcome: 'unresolved', stage3Rejection: { reason: 'secret-set-changed', added, removed },
+    });
+    expect(result.commits.size).toBe(0);
+    expect(scenario.textWrites).not.toHaveBeenCalled();
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(original);
+  });
+
+  it('allows a same-name Stage-3 move and buffers a distinct candidate plan with fresh grounding before replay', async () => {
+    const stage2Invalid: GeneratedPlanResponse = { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] };
+    const candidate: GeneratedPlanResponse = { steps: [{
+      id: 'candidate-secret', kind: 'action', action: 'fill-secret',
+      target: { strategy: 'accessibility', role: 'textbox', name: 'Moved password' }, secret: { allowedName: 'password' },
+    }], ambiguities: [] };
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), Step.parse({
+        id: 'committed-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.password}}',
+      })], grounding: {}, secrets: new Map([['{{secrets.password}}', 'value']]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' }) }),
+    });
+    let staged: { readonly plan: string; readonly grounding: string } | undefined;
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve === true) staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
+    };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(generateRunObserver.options).toMatchObject({ force: true, dryRun: false, consentMode: 'forbid' });
+    expect(staged).toBeDefined();
+    expect(PlanDocument.parse(JSON.parse(staged!.plan)).steps[0]?.id).toBe('candidate-secret');
+    expect(JSON.parse(staged!.grounding)).toMatchObject({ entries: {} });
+    expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed' });
+    expect(result.commits.has(OPTIONS.files[0]!)).toBe(true);
+  });
+
   it('keeps a no-changes-needed sibling artifacts write-isolated from a Stage-3 regeneration', async () => {
     const first = OPTIONS.files[0]!;
     const second = '/workspace/tests/second.test.md';

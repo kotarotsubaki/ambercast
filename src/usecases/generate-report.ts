@@ -51,6 +51,8 @@ function reportResult(
       return dryRun
         ? { ...identity, ...metrics, status: result.status, dryRun: true, planFile: result.planFile!, secrets: [...(result.secrets ?? [])], ...(result.warnings === undefined ? {} : { warnings: reportWarnings(result.warnings) }) }
         : { ...identity, ...metrics, status: result.status, dryRun: false, planFile: result.planFile! };
+    case 'candidate':
+      throw new Error('A forbid-mode generation candidate cannot be rendered as a CLI report.');
     case 'listed':
       return { ...identity, status: result.status, dryRun: false };
     case 'skipped':

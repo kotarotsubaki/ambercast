@@ -154,7 +154,7 @@ async function acquireLock(path: string, token: string, signal: AbortSignal | un
   }
 
   throw new FsIoError(
-    'The exclusive-update lock remained held after the bounded retry period; verify that no process owns it before removal.',
+    `The exclusive-update lock remained held after the bounded retry period; if ambercast isn't running, delete \`${path}\` and rerun.`,
     { path },
     { cause: lastCollision },
   );

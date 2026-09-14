@@ -3329,7 +3329,7 @@ describe('generate secret naming and consent boundaries', () => {
 
     expect(request).not.toHaveBeenCalled();
     expect(commitAllowlist).not.toHaveBeenCalled();
-    expect(outcome.results).toMatchObject([{ status: 'generated', secrets: [expect.objectContaining({ name: 'password' })] }]);
+    expect(outcome.results).toMatchObject([{ status: 'candidate', plan: expect.any(Object), secrets: [expect.objectContaining({ name: 'password' })] }]);
     expect(scenario.recordingStorage.writes).toEqual([]);
   });
 
@@ -3751,7 +3751,7 @@ describe('generate secret naming and consent boundaries', () => {
       resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
       discoverTestFiles: vi.fn(async () => ['legacy.test.md', 'valid.test.md']),
     });
-    const legacy = await writePrompt(scenario.recordingStorage.storage, 'legacy.test.md', '# Legacy\n\n{{secret:password}}\n');
+    const legacy = await writePrompt(scenario.recordingStorage.storage, 'legacy.test.md', '# Legacy\n\n{{secrets.password}}\n');
     await writePrompt(scenario.recordingStorage.storage, 'valid.test.md');
 
     const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, target: 'missing-target' });

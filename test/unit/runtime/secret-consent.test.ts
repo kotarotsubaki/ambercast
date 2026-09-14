@@ -105,7 +105,7 @@ describe('createInteractiveSecretConsent', () => {
     const captured = captureOutput(output);
     const consent = createInteractiveSecretConsent({ input, output, isInteractive: () => true });
     const pending = consent(requestWithItems());
-    input.end('y\ny\ny\n');
+    input.end('i\n\n\n\n');
 
     await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
     const text = captured.text();

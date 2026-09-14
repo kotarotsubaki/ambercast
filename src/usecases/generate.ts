@@ -85,7 +85,8 @@ type GeneratedPlanResponseForPolicyType = ReturnType<typeof GeneratedPlanRespons
  * (SPEC-C2-3, SPEC-C2-4).
  */
 export interface SecretRename {
-  /** Prompt whose original secret occurrence participates in the decision. */
+  /** One accepted replacement addressed by its original file-and-name pair. */
+  /** @remarks An array is used because native `Map` keys do not compare tuple values structurally. */
   readonly file: string;
   /** Pre-consent name used as the simultaneous-substitution key. */
   readonly name: SecretName;
@@ -329,7 +330,7 @@ function aiFailure(error: unknown, isTimeout: boolean): AmbercastErrorType {
  * Command policy for one generation batch.
  *
  * Consent mode is invocation policy rather than a dependency setting because
- * C3 must reuse generation internally without allowing it to prompt or mutate
+ * Internal callers can reuse generation without allowing it to prompt or mutate
  * configuration. Omission deliberately preserves ordinary CLI consent-gate
  * behavior (SPEC-C2-3).
  */
@@ -373,7 +374,7 @@ export interface GenerateOptions {
  * Dependencies supplied at the generation application boundary.
  *
  * The consent capability is optional only to preserve the existing heal
- * composition until C3 supplies `consentMode: 'forbid'`. Production runtime
+ * composition when callers use `consentMode: 'forbid'`. Production runtime
  * always injects it; if consent becomes necessary without it, generation must
  * fail closed rather than silently writing artifacts or attempting a UI that
  * does not exist (SPEC-C2-3).
@@ -454,8 +455,6 @@ export interface GenerateDeps {
    */
   readonly signal?: AbortSignal;
 
-  /** Internal shared tracker used while Stage 1 prepares individual occurrences. */
-  readonly interruptionTracker?: BatchInterruptionTracker;
 }
 
 /**
@@ -464,7 +463,7 @@ export interface GenerateDeps {
  * Interrupted work uses the shared identity-only skipped state; it never
  * borrows plan, provider, ambiguity, or dry-run evidence from completed work.
  */
-export type GenerateFileStatus = 'generated' | 'skipped-fresh' | 'would-generate' | 'listed' | 'skipped' | 'failed';
+export type GenerateFileStatus = 'generated' | 'skipped-fresh' | 'would-generate' | 'candidate' | 'listed' | 'skipped' | 'failed';
 
 /**
  * Serializable-identifying data plus any live error for one prompt path.
@@ -478,6 +477,9 @@ export interface GenerateFileOutcome {
 
   /** Plan path retained only for generated, fresh, or previewed results. */
   readonly planFile?: string;
+
+  /** Prepared final plan returned only when an internal caller forbids settlement. */
+  readonly plan?: PlanDocumentType;
 
   /** Provider ambiguities retained only for generated or previewed plans. */
   readonly ambiguities?: readonly JsonValueT[];
@@ -835,9 +837,9 @@ export interface GenerateOutcome {
  * repairable fresh plan rather than a partial plan. Cross-process generation
  * against the same prompt is undefined behavior.
  */
-async function generatePreparedOccurrence(deps: GenerateDeps, options: GenerateOptions): Promise<GenerateOutcome> {
-  const tracker = deps.interruptionTracker ?? new BatchInterruptionTracker(deps.signal);
-  const ownsTracker = deps.interruptionTracker === undefined;
+async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageTracker?: BatchInterruptionTracker; readonly occurrenceWorkKey?: string }, options: GenerateOptions): Promise<GenerateOutcome> {
+  const tracker = deps.stageTracker ?? new BatchInterruptionTracker(deps.signal);
+  const ownsTracker = deps.stageTracker === undefined;
   try {
     const discovered = options.files.length === 0
       ? (await deps.discoverTestFiles({
@@ -862,10 +864,10 @@ async function generatePreparedOccurrence(deps: GenerateDeps, options: GenerateO
     assertPromptPathsEligible(deps.layout, discovered);
 
     let aiExecutorPromise: Promise<AiExecutor> | undefined;
-    for (const [index, file] of discovered.entries()) tracker.addDiscovered(`generate:${index}:${file}`, file);
+    if (ownsTracker) for (const [index, file] of discovered.entries()) tracker.addDiscovered(`generate:${index}:${file}`, file);
     const results: GenerateFileOutcome[] = [];
     for (const [index, file] of discovered.entries()) {
-      const workKey = `generate:${index}:${file}`;
+      const workKey = deps.occurrenceWorkKey ?? `generate:${index}:${file}`;
       let interruptedDuringAi = false;
       if (tracker.interrupted) {
         break;
@@ -887,13 +889,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps, options: GenerateO
         }
 
         const normalizedTestMd = normalizeTestMd(testMd);
-        const legacySecretSyntax = [
-          ...scanLegacySecretSyntax(normalizedTestMd),
-          ...[...String(normalizedTestMd).matchAll(/\{\{secret:/g)].map((match) => {
-            const prefix = String(normalizedTestMd).slice(0, match.index);
-            return { kind: 'reference' as const, line: prefix.split('\n').length, column: prefix.length - prefix.lastIndexOf('\n') };
-          }),
-        ];
+        const legacySecretSyntax = scanLegacySecretSyntax(normalizedTestMd);
         if (legacySecretSyntax.length > 0) {
           results.push({
             file,
@@ -929,15 +925,18 @@ async function generatePreparedOccurrence(deps: GenerateDeps, options: GenerateO
 
         let forcedPreviousPlan: PlanDocumentType | undefined;
         if (options.force) {
+          let snapshot: { readonly text: string } | null;
           try {
-            const snapshot = await deps.storage.readTextSnapshotIfExists(planPath);
-            if (snapshot !== null) {
-              const parsed = PlanDocument.safeParse(JSON.parse(snapshot.text));
-              if (parsed.success) forcedPreviousPlan = parsed.data;
-            }
+            snapshot = await deps.storage.readTextSnapshotIfExists(planPath);
           } catch (error) {
             results.push({ file, status: 'failed', error: fsIoError('The previous plan could not be read.', error), ...metrics() });
             continue;
+          }
+          if (snapshot !== null) {
+            try {
+              const parsed = PlanDocument.safeParse(JSON.parse(snapshot.text));
+              if (parsed.success) forcedPreviousPlan = parsed.data;
+            } catch { /* An invalid old artifact is not a comparison source. */ }
           }
         }
 
@@ -1212,7 +1211,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps, options: GenerateO
       }
     }
 
-    if (tracker.interrupted) results.push(...tracker.pendingIdentities.map((file) => ({ file, status: 'skipped' as const })));
+    if (ownsTracker && tracker.interrupted) results.push(...tracker.pendingIdentities.map((file) => ({ file, status: 'skipped' as const })));
     return { results, noTestsFound: false, interrupted: tracker.interrupted };
   } finally {
     if (ownsTracker) tracker.dispose();
@@ -1243,11 +1242,11 @@ function renamedPlan(plan: PlanDocumentType, file: string, renames: readonly Sec
   } as PlanDocumentType;
 }
 
-function consentFailure(candidate: PreparedCandidate): GenerateFileOutcome {
+function consentFailure(candidate: PreparedCandidate, reason: 'declined' | 'not-interactive'): GenerateFileOutcome {
   return {
     file: candidate.file,
     status: 'failed',
-    error: new SecretConsentRequiredError('Secret consent is required.', { reason: 'consent-required' }),
+    error: new SecretConsentRequiredError('Secret consent is required.', { reason, secrets: candidate.uses.map((use) => ({ name: use.name, stepId: use.stepId, envVar: use.envVar, reason: 'requires consent' })), hint: 'Add the secret names to secrets.allow in ambercast.config.json, then rerun `ambercast generate`.' }),
     ...candidate.metrics,
   };
 }
@@ -1316,7 +1315,8 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
           storage: options.force
             ? { ...virtualStorage, readTextSnapshotIfExists: (path) => deps.storage.readTextSnapshotIfExists(path) }
             : virtualStorage,
-          interruptionTracker: tracker,
+          stageTracker: tracker,
+          occurrenceWorkKey: workKey,
           resolveAiExecutor: (signal) => {
             aiExecutorPromise ??= deps.resolveAiExecutor(signal);
             return aiExecutorPromise;
@@ -1327,13 +1327,23 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
       const result = occurrence.results[0];
       if (result === undefined || result.status === 'failed' || result.status === 'skipped') {
         if (result !== undefined) results.push(result);
-        tracker.markTerminal(workKey);
-        terminal.add(workKey);
+        if (!tracker.interrupted) {
+          tracker.markTerminal(workKey);
+          terminal.add(workKey);
+        }
         continue;
       }
       const planPath = deps.layout.planPathFor(file);
       const planText = await virtualStorage.readText(planPath);
       const parsed = PlanDocument.parse(JSON.parse(planText));
+      try {
+        assertNoEnvVarCollision(enumerateSecretUses(parsed).map(({ ref }) => ref));
+      } catch (error) {
+        results.push({ file, status: 'failed', error: fileFailure(error, 'The generated secret environment variables could not be inspected.'), durationMs: result.durationMs ?? 0, aiCalls: result.aiCalls ?? 0 });
+        tracker.markTerminal(workKey);
+        terminal.add(workKey);
+        continue;
+      }
       const origin = result.status === 'skipped-fresh' ? 'fresh' as const : 'generated' as const;
       virtualTexts.set(planPath, planText);
       candidates.push({
@@ -1359,6 +1369,13 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
           terminal.add(candidate.workKey);
         }
       }
+      for (const [index, file] of discovered.entries()) {
+        const workKey = `generate:${index}:${file}`;
+        if (started.has(workKey) && !terminal.has(workKey)) {
+          results.push({ file, status: 'skipped' });
+          terminal.add(workKey);
+        }
+      }
       const untouched = new Set<string>();
       for (const [index, file] of discovered.entries()) {
         const workKey = `generate:${index}:${file}`;
@@ -1371,8 +1388,23 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
     };
     if (tracker.interrupted) return interruptionResult();
 
+    if (options.consentMode === 'forbid') {
+      return {
+        results: [...results, ...candidates.map((candidate) => ({
+          file: candidate.file,
+          status: 'candidate' as const,
+          plan: candidate.plan,
+          secrets: candidate.uses,
+          ...(candidate.warnings.length === 0 ? {} : { warnings: candidate.warnings }),
+          ...candidate.metrics,
+        }))],
+        noTestsFound: false,
+        interrupted: false,
+      };
+    }
+
     const allowed = allowSnapshot === '*' ? new Set<SecretName>() : new Set(allowSnapshot);
-    const neededItems = candidates.map((candidate) => ({ file: candidate.file, uses: candidate.uses.filter((use) => !allowed.has(use.name)) })).filter((item) => item.uses.length > 0);
+    const neededItems = allowSnapshot === '*' ? [] : candidates.map((candidate) => ({ file: candidate.file, uses: candidate.uses.filter((use) => !allowed.has(use.name)) })).filter((item) => item.uses.length > 0);
     let selected = candidates;
     if (!options.dryRun && options.consentMode !== 'forbid' && neededItems.length > 0) {
       if (deps.consent === undefined) throw new UnexpectedCrashError('Secret consent capability is unavailable.');
@@ -1419,14 +1451,14 @@ export async function generate(deps: GenerateDeps, options: GenerateOptions): Pr
             })),
           };
         });
-        const names = [...new Set(selected.flatMap((candidate) => candidate.uses.filter((use) => !allowed.has(use.name)).map((use) => use.name)))];
+        const names = [...new Set(selected.flatMap((candidate) => candidate.uses.map((use) => use.name)))];
         await deps.consent.commitAllowlist(deps.configSource?.path ?? null, names, deps.signal);
         if (tracker.interrupted) return interruptionResult();
       } else {
         const neededKeys = new Set(neededItems.flatMap((item) => item.uses.map((use) => `${item.file}\u0000${use.name}`)));
         for (const candidate of candidates) {
           if (candidate.uses.some((use) => neededKeys.has(`${candidate.file}\u0000${use.name}`))) {
-            results.push(consentFailure(candidate));
+            results.push(consentFailure(candidate, decision.kind));
             tracker.markTerminal(candidate.workKey);
             terminal.add(candidate.workKey);
           }

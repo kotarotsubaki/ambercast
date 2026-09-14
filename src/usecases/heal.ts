@@ -1002,13 +1002,13 @@ async function tryFullPlanRepair(
       overlay.restore(snapshot);
       return { kind: 'interrupted' };
     }
-    if (item.status !== 'candidate' && item.status !== 'generated') {
+    if (item.status !== 'candidate') {
       if (item.error instanceof IntegrityViolationError) throw item.error;
       overlay.restore(snapshot);
       return { kind: 'failed', stage3Error: item.error };
     }
-    if (item.status === 'candidate' && (item.plan === undefined || item.secrets === undefined)) throw new UnexpectedCrashError('Healing regeneration returned incomplete candidate evidence.');
-    const candidatePlan = item.plan ?? (await readTrustedInstructionCoveredPlan(overlay.storage, planFile, digest, normalized)).plan;
+    if (item.plan === undefined || item.secrets === undefined) throw new UnexpectedCrashError('Healing regeneration returned incomplete candidate evidence.');
+    const candidatePlan = item.plan;
     const beforeNames = new Set(enumerateSecretUses(plan).map(({ ref }) => secretNameFor(ref)));
     const afterNames = new Set((item.secrets ?? enumerateSecretUses(candidatePlan).map(({ ref }) => ({ name: secretNameFor(ref) }))).map(({ name }) => name));
     const added = [...afterNames].filter((name) => !beforeNames.has(name)).sort();
@@ -1299,7 +1299,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
                 repairOutcome: 'unresolved' as const,
                 stage3Rejection: full.stage3Rejection,
               };
-              return { interrupted: false, outcome };
+              return { interrupted: false, outcome, commit: undefined };
             }
             case 'failed': {
               stage3Error = full.stage3Error;

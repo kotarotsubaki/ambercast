@@ -118,32 +118,23 @@ export interface Stage2ReplacementNamingOutput {
 export function deriveStage2ReplacementSecretNames(
   input: Stage2ReplacementNamingInput,
 ): Stage2ReplacementNamingOutput {
-  const retained = input.plan.steps.map((step, stepIndex) => {
-    if (stepIndex === input.replacementIndex) return undefined;
+  const reservations: ExistingPlanSecretReservation[] = [];
+  for (const [stepIndex, step] of input.plan.steps.entries()) {
+    if (stepIndex === input.replacementIndex) continue;
     if (step.kind === 'action' && step.action === 'fill-secret') {
-      // Reservations own their name but never become a provider-derived
-      // canonical-target sharing candidate; only the replacement is materialized.
-      return { id: step.id, kind: step.kind, action: step.action, target: { ...step.target, name: `reservation_${stepIndex}` }, secret: { allowedName: slug(secretNameFor(step.secretRef)) as SecretName } };
+      reservations.push({ stepIndex, stepId: step.id, ref: step.secretRef, name: secretNameFor(step.secretRef), target: step.target, targetKey: canonicalTargetKey(step.target), selectionSource: 'existing-plan' });
+    } else if (step.kind === 'ai') {
+      for (const [useIndex, { ref }] of (step.secrets ?? []).entries()) {
+        reservations.push({ stepIndex, stepId: step.id, useIndex, ref, name: secretNameFor(ref), selectionSource: 'existing-plan' });
+      }
     }
-    if (step.kind === 'ai' && step.secrets !== undefined) {
-      return { ...step, secrets: step.secrets.map(({ ref }) => ({ allowedName: secretNameFor(ref) })) };
-    }
-    return step;
-  });
-  // Validate replacement explicit choices against P before adding retained
-  // reservations to the projection used by the shared collision allocator.
-  deriveSecretNames([input.attributedReplacement], { projected: input.projected, allowlist: input.allowlist });
-  const reservations = input.plan.steps.flatMap((step, stepIndex) => stepIndex === input.replacementIndex
-    ? []
-    : step.kind === 'action' && step.action === 'fill-secret'
-      ? [secretNameFor(step.secretRef), slug(secretNameFor(step.secretRef)) as SecretName]
-      : step.kind === 'ai'
-        ? (step.secrets ?? []).map(({ ref }) => secretNameFor(ref))
-        : []);
-  const attributed = retained.map((step, index) => index === input.replacementIndex ? input.attributedReplacement : step) as InstructionAttributedSteps;
+  }
+  const attributed = input.plan.steps.map((step, index) => index === input.replacementIndex ? input.attributedReplacement : step) as InstructionAttributedSteps;
   const named = deriveSecretNames(attributed, {
-    projected: [...new Set([...input.projected, ...reservations])],
+    projected: input.projected,
     allowlist: input.allowlist,
+    reservations,
+    candidateStepIndexes: new Set([input.replacementIndex]),
   });
   const replacement = normalizeAiStepSecretUses([named.steps[input.replacementIndex]!])[0]!;
   const parsedCandidate = PlanDocument.parse({
@@ -198,7 +189,12 @@ export function deriveStage2ReplacementSecretNames(
  */
 export function deriveSecretNames(
   attributed: InstructionAttributedSteps,
-  sets: { readonly projected: readonly SecretName[]; readonly allowlist: readonly SecretName[] | '*' },
+  sets: {
+    readonly projected: readonly SecretName[];
+    readonly allowlist: readonly SecretName[] | '*';
+    readonly reservations?: readonly ExistingPlanSecretReservation[];
+    readonly candidateStepIndexes?: ReadonlySet<number>;
+  },
 ): { steps: Step[]; uses: SecretUse[]; warnings: SecretWarning[] } {
   type Candidate = {
     readonly step: Record<string, unknown>;
@@ -217,6 +213,7 @@ export function deriveSecretNames(
   const candidates: Candidate[] = [];
   const invalidIssues: { code: string; path: string; stepId: StepId }[] = [];
   for (const [stepIndex, step] of attributed.entries()) {
+    if (sets.candidateStepIndexes !== undefined && !sets.candidateStepIndexes.has(stepIndex)) continue;
     const current = step as unknown as Record<string, unknown>;
     if (current.kind === 'action' && current.action === 'fill-secret') {
       const choice = current.secret as { allowedName?: SecretName; nameHint?: SecretName } | undefined;
@@ -241,9 +238,20 @@ export function deriveSecretNames(
   }
   if (invalidIssues.length > 0) throw new AiResponseInvalidError('Generated secret names are not projected.', { issues: invalidIssues });
 
-  const owners = new Map<SecretName, Candidate>();
+  const owners = new Map<SecretName, { readonly source: SecretUse['selectionSource'] }>();
   const targetNames = new Map<string, SecretName>();
   const targetIssues: { code: string; path: string; stepId: StepId }[] = [];
+  for (const reservation of sets.reservations ?? []) {
+    if (!owners.has(reservation.name)) owners.set(reservation.name, { source: reservation.selectionSource });
+    if (reservation.targetKey === undefined) continue;
+    const establishedForTarget = targetNames.get(reservation.targetKey);
+    if (establishedForTarget !== undefined && establishedForTarget !== reservation.name) {
+      targetIssues.push({ code: 'secret-conflicting-target-names', path: `steps[${reservation.stepIndex}].secret`, stepId: reservation.stepId });
+      continue;
+    }
+    if (establishedForTarget === undefined) targetNames.set(reservation.targetKey, reservation.name);
+  }
+  if (targetIssues.length > 0) throw new AiResponseInvalidError('Generated secret names conflict for one target.', { issues: targetIssues });
   const isReserved = (candidate: Candidate): boolean => candidate.explicit || (sets.allowlist !== '*' && sets.allowlist.includes(candidate.candidate));
 
   // Pass 1: reserve every projected explicit or allowlist-promoted name before
@@ -252,7 +260,7 @@ export function deriveSecretNames(
     const owner = owners.get(candidate.candidate);
     candidate.name = candidate.candidate;
     candidate.source = owner?.source ?? candidate.selectionSource;
-    if (owner === undefined) owners.set(candidate.candidate, candidate);
+    if (owner === undefined) owners.set(candidate.candidate, { source: candidate.source ?? candidate.selectionSource });
 
     if (candidate.targetKey === undefined) continue;
     const establishedForTarget = targetNames.get(candidate.targetKey);
@@ -278,7 +286,7 @@ export function deriveSecretNames(
     const owner = owners.get(name);
     candidate.name = name;
     candidate.source = owner?.source ?? candidate.selectionSource;
-    if (owner === undefined) owners.set(name, candidate);
+    if (owner === undefined) owners.set(name, { source: candidate.source ?? candidate.selectionSource });
     if (candidate.targetKey !== undefined && establishedForTarget === undefined) targetNames.set(candidate.targetKey, name);
   }
 
@@ -286,6 +294,7 @@ export function deriveSecretNames(
   const byStep = new Map<number, typeof resolved>();
   for (const candidate of resolved) byStep.set(candidate.stepIndex, [...(byStep.get(candidate.stepIndex) ?? []), candidate]);
   const steps = attributed.map((step, stepIndex) => {
+    if (sets.candidateStepIndexes !== undefined && !sets.candidateStepIndexes.has(stepIndex)) return step;
     const stepCandidates = byStep.get(stepIndex) ?? [];
     const current = step as unknown as Record<string, unknown>;
     if (current.kind === 'action' && current.action === 'fill-secret') {

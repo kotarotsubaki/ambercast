@@ -2296,7 +2296,7 @@ describe('heal state-machine contract', () => {
     const candidate: GeneratedPlanResponse = {
       steps: afterNames.map((name, index) => ({
         id: `candidate-${index}`, kind: 'action' as const, action: 'fill-secret' as const,
-        target: { strategy: 'accessibility' as const, role: 'textbox' as const, name: `Secret ${index}` }, secret: { allowedName: name },
+        target: { strategy: 'accessibility' as const, role: 'textbox' as const, name: '秘密' }, secret: { nameHint: name },
       })),
       ambiguities: [],
     };
@@ -2312,7 +2312,9 @@ describe('heal state-machine contract', () => {
     });
     const original = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
     let candidateReplay = false;
-    replayRunObserver.afterRun = (_deps, _storage, options) => { if (options.resolve === true) candidateReplay = true; };
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve === true && (await storage.readText(PLAN)).includes('candidate-0')) candidateReplay = true;
+    };
 
     const result = await heal(scenario.deps, OPTIONS);
 
@@ -2329,7 +2331,7 @@ describe('heal state-machine contract', () => {
     const stage2Invalid: GeneratedPlanResponse = { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] };
     const candidate: GeneratedPlanResponse = { steps: [{
       id: 'candidate-secret', kind: 'action', action: 'fill-secret',
-      target: { strategy: 'accessibility', role: 'textbox', name: 'Moved password' }, secret: { allowedName: 'password' },
+      target: { strategy: 'accessibility', role: 'textbox', name: '秘密' }, secret: { nameHint: 'password' },
     }], ambiguities: [] };
     const scenario = await createScenario({
       steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), Step.parse({
@@ -2339,9 +2341,10 @@ describe('heal state-machine contract', () => {
     });
     let staged: { readonly plan: string; readonly grounding: string } | undefined;
     replayRunObserver.afterRun = async (_deps, storage, options) => {
-      if (options.resolve === true) staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
+      if (options.resolve === true && (await storage.readText(PLAN)).includes('candidate-secret')) {
+        staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
+      }
     };
-
     const result = await heal(scenario.deps, OPTIONS);
 
     expect(generateRunObserver.options).toMatchObject({ force: true, dryRun: false, consentMode: 'forbid' });
@@ -2396,6 +2399,7 @@ describe('heal state-machine contract', () => {
       if (options.resolve !== true || candidateRefs !== undefined) return;
       const candidate = PlanDocument.parse(JSON.parse(await storage.readText(PLAN)));
       if (candidate.steps[1]?.kind !== 'action' || candidate.steps[1].action !== 'fill-secret') return;
+      if (candidate.steps[1].secretRef !== '{{secrets.persisted.fill.ref}}') return;
       candidateRefs = candidate.steps.flatMap((step) => step.kind === 'action' && step.action === 'fill-secret'
         ? [step.secretRef]
         : step.kind === 'ai'
@@ -2435,8 +2439,8 @@ describe('heal state-machine contract', () => {
     };
     const stage3ChangedSet: GeneratedPlanResponse = {
       steps: [{
-        id: 'stage3-secret', kind: 'action', action: 'fill-secret', target: PASSWORD,
-        secret: { allowedName: 'newly_added_secret' },
+        id: 'stage3-secret', kind: 'action', action: 'fill-secret', target: { ...PASSWORD, name: '秘密' },
+        secret: { nameHint: 'newly_added_secret' },
       }], ambiguities: [],
     };
     const scenario = await createScenario({
@@ -2500,7 +2504,7 @@ describe('heal state-machine contract', () => {
     };
     const candidate: GeneratedPlanResponse = { steps: [{
       id: 'candidate-secret', kind: 'action', action: 'fill-secret',
-      target: { strategy: 'accessibility', role: 'textbox', name: 'Moved password' }, secret: { allowedName: 'password' },
+      target: { strategy: 'accessibility', role: 'textbox', name: '秘密' }, secret: { nameHint: 'password' },
     }], ambiguities: [] };
     const scenario = await createScenario({
       steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), Step.parse({
@@ -2513,7 +2517,9 @@ describe('heal state-machine contract', () => {
     const updateTextExclusive = vi.fn(scenario.storage.updateTextExclusive);
     let staged: { readonly plan: string; readonly grounding: string } | undefined;
     replayRunObserver.afterRun = async (_deps, storage, options) => {
-      if (options.resolve === true) staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
+      if (options.resolve === true && (await storage.readText(PLAN)).includes('candidate-secret')) {
+        staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
+      }
     };
 
     const result = await heal({ ...scenario.deps, storage: { ...scenario.storage, updateTextExclusive } }, OPTIONS);
@@ -2646,7 +2652,9 @@ describe('heal state-machine contract', () => {
     });
     const original = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
     let candidateReplay = false;
-    replayRunObserver.afterRun = (_deps, _storage, options) => { if (options.resolve === true) candidateReplay = true; };
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve === true && (await storage.readText(PLAN)).includes('stage3-candidate')) candidateReplay = true;
+    };
     generateRunObserver.afterGenerate = (outcome) => {
       const item = (outcome as unknown as { results: Array<{ plan?: unknown; secrets?: unknown }> }).results[0]!;
       delete item[missing];

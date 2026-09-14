@@ -269,7 +269,7 @@ describe('deriveStage2ReplacementSecretNames', () => {
 
     expect(output.candidate.steps).toMatchObject([
       { secretRef: '{{secrets.retained.fill}}' },
-      { secretRef: '{{secrets.retained_fill_2}}' },
+      { secretRef: '{{secrets.retained_fill}}' },
       { secrets: [{ ref: '{{secrets.retained.ai}}' }] },
     ]);
     expect(output.candidate.steps[0]).toBe(STAGE2_PLAN.steps[0]);
@@ -277,9 +277,9 @@ describe('deriveStage2ReplacementSecretNames', () => {
   });
 
   it.each([
-    ['before', 0, 'password_2'],
-    ['after', 2, 'password_2'],
-  ] as const)('allocates around a retained collision %s the replacement index', (_position, replacementIndex, expectedName) => {
+    ['before', 0, 'password'],
+    ['after', 2, 'password'],
+  ] as const)('shares a retained canonical target %s the replacement index', (_position, replacementIndex, expectedName) => {
     const steps = [
       { id: 'first', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: '{{secrets.password}}' },
       { id: 'second', kind: 'assert', check: 'text-visible', text: 'replace' },

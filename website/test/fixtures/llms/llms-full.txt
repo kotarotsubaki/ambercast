@@ -249,7 +249,7 @@ The no-argument forms `npx ambercast generate` and `npx ambercast run` discover 
 ## Completion state {#completion-state}
 
 - The resolver maps the prompt to `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
-- `npx ambercast run --resolve` exited `0` and reports `passed` for the case.
+- `npx ambercast run --resolve tests/ambercast/find-page.test.md` exited `0` and reports `passed` for the case.
 
 Links: [Configuration](/ambercast/reference/configuration/), [File layout](/ambercast/reference/file-layout/), [ambercast generate](/ambercast/reference/cli/generate/), [ambercast run](/ambercast/reference/cli/run/), [Write effective prompts](/ambercast/how-to/write-effective-prompts/).
 

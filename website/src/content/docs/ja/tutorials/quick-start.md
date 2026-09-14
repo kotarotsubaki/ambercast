@@ -42,6 +42,6 @@ When I open the application, navigate to the search page, search for "ambercast"
 ## 完了状態 {#completion-state}
 
 - リゾルバーによって、プロンプトが `tests/ambercast/find-page.ambercast.plan.json` および `tests/ambercast/find-page.ambercast.grounding.json` にマッピングされます。
-- `npx ambercast run --resolve` が終了コード `0` で終了し、対象ケースについて `passed` が報告されます。
+- `npx ambercast run --resolve tests/ambercast/find-page.test.md` が終了コード `0` で終了し、対象ケースについて `passed` が報告されます。
 
 関連情報: [設定](/ambercast/ja/reference/configuration/), [ファイルレイアウト](/ambercast/ja/reference/file-layout/), [ambercast generate](/ambercast/ja/reference/cli/generate/), [ambercast run](/ambercast/ja/reference/cli/run/), [効果的なプロンプトの作成](/ambercast/ja/how-to/write-effective-prompts/)

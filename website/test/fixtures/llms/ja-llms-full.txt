@@ -833,7 +833,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `runsDir` | string | `tests/ambercast/.runs` | 絶対配置パスへと解決 | run のレポート／エビデンス、heal 内の書き込み |
 | `testMatch` | string[] | `["**/*.test.md"]` | 限定された `*`/`**` マッチャー。すべてのパターンは `.test.md` で終わる必要があり、そうでなければ設定読み込みは `CONFIG_INVALID` で失敗 | generate、run、check、heal の探索 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含マッチ後に除外 | generate、run、check、heal の探索 |
-| `secrets.allow` | `SecretName[] | "*"` | `[]` | 空配列の場合はすべての secret 名に同意が必要。`"*"` はすべての名前を同意なしで許可（非推奨）。空でない配列の場合はその名前のみを許可 | generate、run、heal |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空配列の場合はすべての secret 名に同意が必要。`"*"` はすべての名前を同意なしで許可（非推奨）。空でない配列の場合はその名前のみを許可 | generate、run、heal |
 | `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
 | `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
@@ -1164,9 +1164,9 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | grant cannot be attributed |
-| SECRET_ENV_VAR_COLLISION | usage | run/case | 2 | 2つの secret が同じ環境変数名に投影される |
-| SECRET_CONSENT_REQUIRED | usage | run/case | 2 | secret 名が許可リストにない |
-| SECRET_SYNTAX_REJECTED | usage | run/case | 2 | レガシー grant 行または `{{secrets.*}}` 参照が見つかった |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 2つの secret が同じ環境変数名に投影される |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret 名が許可リストにない |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | レガシー grant 行または `{{secrets.*}}` 参照が見つかった |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | browser launch fails |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |
@@ -1938,7 +1938,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.3.1 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 2 および Grounding スキーマバージョン 1 を受け付ける。[src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64)
+本仕様は、ambercast 0.3.1 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 3 および Grounding スキーマバージョン 1 を受け付ける。[src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65)
 
 ## 規範的文言 {#normative-language}
 
@@ -1962,7 +1962,7 @@ flowchart LR
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
 | Plan `schemaVersion` | `3` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) |
-| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
+| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65) |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
 | Report `schemaVersion` | `3.5` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 

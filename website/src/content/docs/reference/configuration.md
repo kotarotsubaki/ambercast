@@ -28,7 +28,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `runsDir` | string | `tests/ambercast/.runs` | resolves to an absolute layout path | run reports/evidence; heal contained writes |
 | `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher; every pattern must end in `.test.md` or config loading fails with `CONFIG_INVALID` | generate, run, check, heal discovery |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | excludes after inclusion match | generate, run, check, heal discovery |
-| `secrets.allow` | `SecretName[] | "*"` | `[]` | an empty array requires consent for every secret name; `"*"` allows every name without consent (not recommended); a non-empty array allows exactly those names | generate, run, heal |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | an empty array requires consent for every secret name; `"*"` allows every name without consent (not recommended); a non-empty array allows exactly those names | generate, run, heal |
 | `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate, run, check, heal target selection |
 | `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | target field | generate, run, heal browser composition; check (freshness) |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |

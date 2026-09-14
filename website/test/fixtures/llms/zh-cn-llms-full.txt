@@ -829,7 +829,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/
 | `runsDir` | string | `tests/ambercast/.runs` | 解析为绝对布局路径 | run 报告/证据；heal 包含的写入 |
 | `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器；每个模式必须以 `.test.md` 结尾，否则加载配置会以 `CONFIG_INVALID` 失败 | generate、run、check、heal 发现 |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含匹配后排除 | generate、run、check、heal 发现 |
-| `secrets.allow` | `SecretName[] | "*"` | `[]` | 空数组要求所有 secret 名称都需同意；`"*"` 允许所有名称且无需同意（不推荐）；非空数组仅允许其中列出的名称 | generate、run、heal |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空数组要求所有 secret 名称都需同意；`"*"` 允许所有名称且无需同意（不推荐）；非空数组仅允许其中列出的名称 | generate、run、heal |
 | `targets.<name>.baseUrl` | string | `web-user` 上的 `http://localhost:3000` | 替换整个 target 记录 | generate、run、check、heal 目标选择 |
 | `targets.<name>.browser` | `chromium` | `web-user` 上的 `chromium` | target 字段 | generate、run、heal 浏览器编排；check（新鲜度） |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | 缺省 secret 条目时仅允许 `baseUrl`；空数组将在所有位置拒绝该 secret；非空数组替换该默认值 | generate、run、heal 的 secret 接收方策略；check（新鲜度） |
@@ -1150,9 +1150,9 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | INTEGRITY_VIOLATION | usage | run/case | 4 | 制品完整性校验失败 |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | 字面量 secret 被拒绝 |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | 授权无法归属 |
-| SECRET_ENV_VAR_COLLISION | usage | run/case | 2 | 两个 secret 投影到同一个环境变量名 |
-| SECRET_CONSENT_REQUIRED | usage | run/case | 2 | secret 名称不在允许列表中 |
-| SECRET_SYNTAX_REJECTED | usage | run/case | 2 | 发现旧版 grant 行或 `{{secrets.*}}` 引用 |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 两个 secret 投影到同一个环境变量名 |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret 名称不在允许列表中 |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | 发现旧版 grant 行或 `{{secrets.*}}` 引用 |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | 浏览器启动失败 |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | 提供商不可用 |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | 提供商响应无效 |
@@ -1894,7 +1894,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.3.1 接受的工件。该实现接受 Plan 模式版本 2 和 Grounding 模式版本 1。[src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64)
+本规范描述了 ambercast 0.3.1 接受的工件。该实现接受 Plan 模式版本 3 和 Grounding 模式版本 1。[src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65)
 
 ## 规范性用语 {#normative-language}
 
@@ -1918,7 +1918,7 @@ flowchart LR
 | 工件 | 接受的值 | 证据 |
 | --- | --- | --- |
 | Plan `schemaVersion` | `3` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) |
-| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
+| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65) |
 | 指纹算法 | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
 | Report `schemaVersion` | `3.5` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 

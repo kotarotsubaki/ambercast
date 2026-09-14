@@ -20,9 +20,9 @@ Usage errors and environment errors have independent report vocabularies; each c
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | grant cannot be attributed |
-| SECRET_ENV_VAR_COLLISION | usage | run/case | 2 | secret environment variable collision |
-| SECRET_CONSENT_REQUIRED | usage | run/case | 2 | secret consent required |
-| SECRET_SYNTAX_REJECTED | usage | run/case | 2 | legacy secret syntax rejected |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | secret environment variable collision |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret consent required |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | legacy secret syntax rejected |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | browser launch fails |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |

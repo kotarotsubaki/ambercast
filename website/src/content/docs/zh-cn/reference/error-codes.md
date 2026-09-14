@@ -18,9 +18,9 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | INTEGRITY_VIOLATION | usage | run/case | 4 | 制品完整性校验失败 |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | 字面量 secret 被拒绝 |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | 授权无法归属 |
-| SECRET_ENV_VAR_COLLISION | usage | run/case | 2 | 两个 secret 投影到同一个环境变量名 |
-| SECRET_CONSENT_REQUIRED | usage | run/case | 2 | secret 名称不在允许列表中 |
-| SECRET_SYNTAX_REJECTED | usage | run/case | 2 | 发现旧版 grant 行或 `{{secrets.*}}` 引用 |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 两个 secret 投影到同一个环境变量名 |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret 名称不在允许列表中 |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | 发现旧版 grant 行或 `{{secrets.*}}` 引用 |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | 浏览器启动失败 |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | 提供商不可用 |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | 提供商响应无效 |

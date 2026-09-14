@@ -833,7 +833,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `runsDir` | string | `tests/ambercast/.runs` | resolves to an absolute layout path | run reports/evidence; heal contained writes |
 | `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher; every pattern must end in `.test.md` or config loading fails with `CONFIG_INVALID` | generate, run, check, heal discovery |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | excludes after inclusion match | generate, run, check, heal discovery |
-| `secrets.allow` | `SecretName[] | "*"` | `[]` | an empty array requires consent for every secret name; `"*"` allows every name without consent (not recommended); a non-empty array allows exactly those names | generate, run, heal |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | an empty array requires consent for every secret name; `"*"` allows every name without consent (not recommended); a non-empty array allows exactly those names | generate, run, heal |
 | `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate, run, check, heal target selection |
 | `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | target field | generate, run, heal browser composition; check (freshness) |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |
@@ -1153,9 +1153,9 @@ Usage errors and environment errors have independent report vocabularies; each c
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | grant cannot be attributed |
-| SECRET_ENV_VAR_COLLISION | usage | run/case | 2 | secret environment variable collision |
-| SECRET_CONSENT_REQUIRED | usage | run/case | 2 | secret consent required |
-| SECRET_SYNTAX_REJECTED | usage | run/case | 2 | legacy secret syntax rejected |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | secret environment variable collision |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret consent required |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | legacy secret syntax rejected |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | browser launch fails |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |
@@ -1897,7 +1897,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/overview/
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.3.1. The implementation accepts Plan schema version 2 and Grounding schema version 1. [src/core/ir/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L57) [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64)
+This specification describes the artifacts accepted by ambercast 0.3.1. The implementation accepts Plan schema version 3 and Grounding schema version 1. [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65)
 
 ## Normative language {#normative-language}
 
@@ -1921,7 +1921,7 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Artifact | Accepted value | Evidence |
 | --- | --- | --- |
 | Plan `schemaVersion` | `3` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) |
-| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64) |
+| Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
 | Report `schemaVersion` | `3.5` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 

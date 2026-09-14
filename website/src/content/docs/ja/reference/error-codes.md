@@ -18,9 +18,9 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | grant cannot be attributed |
-| SECRET_ENV_VAR_COLLISION | usage | run/case | 2 | 2つの secret が同じ環境変数名に投影される |
-| SECRET_CONSENT_REQUIRED | usage | run/case | 2 | secret 名が許可リストにない |
-| SECRET_SYNTAX_REJECTED | usage | run/case | 2 | レガシー grant 行または `{{secrets.*}}` 参照が見つかった |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 2つの secret が同じ環境変数名に投影される |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret 名が許可リストにない |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | レガシー grant 行または `{{secrets.*}}` 参照が見つかった |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | browser launch fails |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |

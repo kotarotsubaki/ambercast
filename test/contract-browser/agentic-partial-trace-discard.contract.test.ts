@@ -61,10 +61,10 @@ async function writeFixture(project: string, baseUrl: string): Promise<string> {
   await mkdir(tests);
   const targets = { fixture: { baseUrl, browser: 'chromium' } } as const satisfies Record<string, TargetDefinition>;
   const plan = PlanDocument.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: {
       inputsDigest: computeInputsDigest({
-        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 2,
+        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 3,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
       }),

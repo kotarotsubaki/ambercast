@@ -234,10 +234,13 @@ describe('runHealCommand', () => {
       stage3Rejection: { reason: 'secret-set-changed', added: ['NEW'], removed: ['OLD'] },
     });
     const commit = capability('set-change.test.md');
-    configure({ result: batch({ outcome: outcome({ results: [rejected] }), commits: commits(commit) }) });
+    const readConfirmationAnswer = vi.fn(async () => 'authorized' as const);
+    configure({ result: batch({ outcome: outcome({ results: [rejected] }), commits: new Map() }), readConfirmationAnswer });
 
     await runHealCommand(input({ yes: true }));
 
+    expect(mocks.createConfirmationAnswerReader).not.toHaveBeenCalled();
+    expect(readConfirmationAnswer).not.toHaveBeenCalled();
     expect(commit.commit).not.toHaveBeenCalled();
     expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({
       outcome: expect.objectContaining({ results: [expect.objectContaining({ application: 'no-artifact-change', stage3Rejection: rejected.stage3Rejection })] }),

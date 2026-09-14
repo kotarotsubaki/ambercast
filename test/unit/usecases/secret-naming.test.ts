@@ -277,14 +277,16 @@ describe('deriveStage2ReplacementSecretNames', () => {
   });
 
   it.each([
-    ['before', 0, 'password'],
-    ['after', 2, 'password'],
-  ] as const)('shares a retained canonical target %s the replacement index', (_position, replacementIndex, expectedName) => {
-    const steps = [
-      { id: 'first', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: '{{secrets.password}}' },
-      { id: 'second', kind: 'assert', check: 'text-visible', text: 'replace' },
-      { id: 'third', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: '{{secrets.password}}' },
-    ];
+    ['before', 1],
+    ['after', 0],
+  ] as const)('suffixes a replacement when a retained owner is %s its index on a different target', (position, replacementIndex) => {
+    const retained = {
+      id: `retained-${position}`, kind: 'action', action: 'fill-secret',
+      target: { strategy: 'accessibility', role: 'textbox', name: 'Existing credential' },
+      secretRef: '{{secrets.password}}',
+    };
+    const replacement = { id: 'replace-me', kind: 'assert', check: 'text-visible', text: 'replace' };
+    const steps = position === 'before' ? [retained, replacement] : [replacement, retained];
     const plan = PlanDocument.parse({ ...STAGE2_PLAN, steps });
     const output = deriveStage2ReplacementSecretNames({
       plan,
@@ -293,7 +295,10 @@ describe('deriveStage2ReplacementSecretNames', () => {
       projected: [],
       allowlist: '*',
     });
-    expect(output.uses).toMatchObject([{ name: expectedName }]);
+    expect(output.uses).toMatchObject([{ name: 'password_2' }]);
+    const retainedIndex = position === 'before' ? 0 : 1;
+    expect(output.candidate.steps[retainedIndex]).toBe(plan.steps[retainedIndex]);
+    expect(output.candidate.steps[retainedIndex]).toMatchObject({ secretRef: '{{secrets.password}}' });
   });
 
   it('keeps wildcard projection separate from retained reservations and rejects an unprojected explicit replacement name', () => {

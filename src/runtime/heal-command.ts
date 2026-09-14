@@ -538,20 +538,14 @@ export async function runHealCommand(
       }
 
       const result: HealBatchResult = await heal(deps, options);
-      const rejected = new Set(result.outcome.results
-        .filter(({ stage3Rejection }) => stage3Rejection !== undefined)
-        .map(({ id }) => id));
-      const commits = rejected.size === 0
-        ? result.commits
-        : new Map([...result.commits].filter(([caseId]) => !rejected.has(caseId)));
-      const confirmation = await promptForHealConfirmation(commits, input, {
+      const confirmation = await promptForHealConfirmation(result.commits, input, {
         isCI,
         isInteractive: () => createTtyInteractivityCheck()(),
         readConfirmationAnswer: (commits, signal) => createConfirmationAnswerReader()(commits, signal),
       });
       const settlements: HealCommitSettlement[] = [];
       if (!input.dryRun && confirmation === 'authorized') {
-        for (const [caseId, commit] of commits) {
+        for (const [caseId, commit] of result.commits) {
           try {
             settlements.push({ caseId, commit, result: await commit.commit() });
           } catch (error) {
@@ -579,7 +573,7 @@ export async function runHealCommand(
 
       const output = buildHealReport({
         ...reportContext(),
-        outcome: settleHealOutcome(result.outcome, confirmation, input.dryRun, new Set(commits.keys()), settlements),
+        outcome: settleHealOutcome(result.outcome, confirmation, input.dryRun, new Set(result.commits.keys()), settlements),
       });
       const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
       return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };

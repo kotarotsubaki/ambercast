@@ -24,6 +24,7 @@ import {
   GroundingDocument,
   GeneratedPlanResponse,
   type JsonValueT,
+  GROUNDING_SCHEMA_VERSION,
   PLAN_SCHEMA_VERSION,
   PlanDocument,
   Step,
@@ -66,6 +67,7 @@ vi.mock('#core/errors/ai-executor-unavailable-error.js', async (importOriginal) 
 });
 
 const replayRunObserver = vi.hoisted(() => ({
+  beforeRun: undefined as undefined | ((deps: Pick<HealDeps, 'layout' | 'runId'>, storage: StorageAdapter, options: { readonly files: readonly string[]; readonly resolve?: boolean }) => void | Promise<void>),
   afterRun: undefined as undefined | ((deps: Pick<HealDeps, 'layout' | 'runId'>, storage: StorageAdapter, options: { readonly files: readonly string[]; readonly resolve?: boolean }, outcome: RunOutcome) => void | Promise<void>),
   dropFirstLiveAiCall: false,
   droppedCount: 0,
@@ -109,6 +111,7 @@ vi.mock('#usecases/run.js', async (importOriginal) => {
           },
         }
         : deps;
+      await replayRunObserver.beforeRun?.(replayDeps, replayDeps.storage, options);
       const outcome = await actual.run(replayDeps, options);
       await replayRunObserver.afterRun?.(replayDeps, replayDeps.storage, options, outcome);
       return outcome;
@@ -132,6 +135,7 @@ vi.mock('#usecases/generate.js', async (importOriginal) => {
 });
 
 afterEach(() => {
+  replayRunObserver.beforeRun = undefined;
   aiExecutorUnavailableObserver.messages.splice(0);
   replayRunObserver.afterRun = undefined;
   replayRunObserver.dropFirstLiveAiCall = false;
@@ -2291,15 +2295,13 @@ describe('heal state-machine contract', () => {
   it.each([
     ['adds names', ['alpha', 'zeta'], ['beta', 'alpha', 'same'], ['beta', 'same'], ['zeta']],
     ['removes names', ['beta', 'alpha', 'same'], ['alpha', 'same'], [], ['beta']],
-    ['renames names with duplicated logical uses', ['alpha', 'alpha', 'zeta'], ['beta', 'beta', 'alpha', 'same'], ['beta', 'same'], ['zeta']],
+    ['renames names with duplicated logical uses', ['zeta', 'zeta', 'omega', 'same'], ['same', 'beta', 'alpha'], ['alpha', 'beta'], ['omega', 'zeta']],
   ] as const)('rejects a Stage-3 candidate that %s without replaying or retaining artifacts', async (_title, beforeNames, afterNames, added, removed) => {
     const stage2Invalid: GeneratedPlanResponse = { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] };
     const candidate: GeneratedPlanResponse = {
       steps: afterNames.map((name, index) => ({
         id: `candidate-${index}`, kind: 'action' as const, action: 'fill-secret' as const,
-        // A distinct non-ASCII target keeps the hint naming rung active without
-        // asking one target to own several logical secret names.
-        target: { strategy: 'accessibility' as const, role: 'textbox' as const, name: `秘密${name === 'beta' ? '' : '！'.repeat(index)}` }, secret: { nameHint: name },
+        target: { strategy: 'accessibility' as const, role: 'textbox' as const, name: `Candidate ${index}` }, secret: { allowedName: name },
       })),
       ambiguities: [],
     };
@@ -2319,7 +2321,10 @@ describe('heal state-machine contract', () => {
       if (options.resolve === true && (await storage.readText(PLAN)).includes('candidate-0')) candidateReplay = true;
     };
 
-    const result = await heal(scenario.deps, OPTIONS);
+    const result = await heal({
+      ...scenario.deps,
+      config: { ...scenario.deps.config, secrets: { allow: ['alpha', 'beta', 'omega', 'same', 'zeta'] } },
+    }, OPTIONS);
 
     expect(candidateReplay).toBe(false);
     expect(result.outcome.results[0]).toMatchObject({
@@ -2346,17 +2351,30 @@ describe('heal state-machine contract', () => {
         : { data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' } }),
     });
     let staged: { readonly plan: string; readonly grounding: string } | undefined;
-    replayRunObserver.afterRun = async (_deps, storage, options) => {
+    let candidateReplay = false;
+    replayRunObserver.beforeRun = async (_deps, storage, options) => {
       if (options.resolve === true && (await storage.readText(PLAN)).includes('candidate-secret')) {
         staged = { plan: await storage.readText(PLAN), grounding: await storage.readText(GROUNDING) };
+      }
+    };
+    replayRunObserver.afterRun = async (_deps, storage, options) => {
+      if (options.resolve === true && (await storage.readText(PLAN)).includes('candidate-secret')) {
+        candidateReplay = true;
       }
     };
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['password'] } } }, OPTIONS);
 
     expect(generateRunObserver.options).toMatchObject({ force: true, dryRun: false, consentMode: 'forbid' });
+    expect(candidateReplay).toBe(true);
     expect(staged).toBeDefined();
-    expect(PlanDocument.parse(JSON.parse(staged!.plan)).steps[0]?.id).toBe('candidate-secret');
-    expect(JSON.parse(staged!.grounding)).toMatchObject({ entries: {} });
+    const candidatePlan = PlanDocument.parse(JSON.parse(staged!.plan));
+    expect(candidatePlan.steps[0]?.id).toBe('candidate-secret');
+    expect(staged!.plan).toBe(toCanonicalArtifactText(candidatePlan as JsonValueT));
+    expect(staged!.grounding).toBe(toCanonicalArtifactText({
+      schemaVersion: GROUNDING_SCHEMA_VERSION,
+      planDigest: computePlanDigest(candidatePlan),
+      entries: {},
+    } as JsonValueT));
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed' });
     expect(result.commits.has(OPTIONS.files[0]!)).toBe(true);
   });

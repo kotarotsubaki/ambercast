@@ -14,10 +14,13 @@ import type { StepId } from '#core/ir/schema.js';
  * communicate the same rejected property: the replacement cannot yield a
  * permitted committed secret-name plan.
  *
- * Evaluation is ordered from provider and response boundaries through identity,
- * naming, coverage, obligation, literal-secret, and replay-progress checks.
- * An `AiResponseInvalidError` from the executor remains a provider error;
- * `response-shape` is reserved for defensive validation after a value arrives.
+ * Provider-response coverage attribution and committed-candidate coverage
+ * validation protect different boundaries: the former can reject an
+ * incomplete response before naming, while the latter evaluates the full
+ * named candidate. The closed vocabulary avoids exposing that control-flow
+ * detail to consumers. An `AiResponseInvalidError` from the executor remains
+ * a provider error; `response-shape` is reserved for defensive validation
+ * after a value arrives.
  */
 export type StageTwoRejectionReason =
   | 'provider-error'

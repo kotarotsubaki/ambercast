@@ -483,11 +483,12 @@ type ResolveCaseAiExecutor = (signal?: AbortSignal) => Promise<ResolvedAiExecuto
  *
  * The result makes the caller's control flow explicit instead of inferring a
  * rejection from object identity. The implementation checks for
- * cancellation before every rejection classification, maps executor-thrown
- * `AiResponseInvalidError` to `provider-error`, reserves `response-shape` for
- * local safe-parse and count checks after a valid executor response, and then
- * evaluates the fixed `id-mismatch`, `secret-name-invalid`, `coverage-invalid`,
- * `obligation-mismatch`, `literal-secret`, and `no-advance` sequence.
+ * cancellation before every rejection classification. Provider-response
+ * coverage attribution must be established before a replacement can be named,
+ * while a separate committed-candidate coverage validation runs after naming
+ * against the full candidate. These distinct boundaries deliberately do not
+ * impose one total order on every rejection reason; their closed vocabulary
+ * still keeps reports and event consumers interoperable.
  */
 type SingleStepRepairResult =
   | {
@@ -1010,7 +1011,7 @@ async function tryFullPlanRepair(
     if (item.plan === undefined || item.secrets === undefined) throw new UnexpectedCrashError('Healing regeneration returned incomplete candidate evidence.');
     const candidatePlan = item.plan;
     const beforeNames = new Set(enumerateSecretUses(plan).map(({ ref }) => secretNameFor(ref)));
-    const afterNames = new Set((item.secrets ?? enumerateSecretUses(candidatePlan).map(({ ref }) => ({ name: secretNameFor(ref) }))).map(({ name }) => name));
+    const afterNames = new Set(item.secrets.map(({ name }) => name));
     const added = [...afterNames].filter((name) => !beforeNames.has(name)).sort();
     const removed = [...beforeNames].filter((name) => !afterNames.has(name)).sort();
     if (added.length > 0 || removed.length > 0) {
@@ -1295,9 +1296,20 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
             case 'secret-set-rejected': {
               overlay.restore(bestSnapshot);
               const outcome = {
-                ...caseOutcome(file, planFile, baselineFirstFailureIndex, bestMeasurement, bestPlan, undefined, false, stopReason, budget.aiCalls),
+                id: file,
+                file,
+                planFile,
                 repairOutcome: 'unresolved' as const,
+                steps: bestMeasurement.replay.result.steps,
+                explanation: bestMeasurement.replay.result.explanation,
+                durationMs: bestMeasurement.replay.result.durationMs,
+                aiCalls: budget.aiCalls,
+                baselineFirstFailureIndex,
+                finalFirstFailureIndex: bestMeasurement.firstFailureIndex,
+                stopReason,
+                stage3Error: undefined,
                 stage3Rejection: full.stage3Rejection,
+                finalReplayError: bestMeasurement.replay.error,
               };
               return { interrupted: false, outcome, commit: undefined };
             }

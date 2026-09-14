@@ -1,5 +1,5 @@
 import type { NormalizedTestMd } from '#core/ir/normalize.js';
-import type { JsonValueT, Step, TargetDefinition } from '#core/ir/schema.js';
+import type { JsonValueT, SecretName, Step, TargetDefinition } from '#core/ir/schema.js';
 import type { StepResult } from '#report/schema.js';
 import type { RunCaseOutcome, readTrustedInstructionCoveredPlan } from './run.js';
 
@@ -78,6 +78,7 @@ export function toProviderReplayEvidence(steps: readonly StepResult[]): readonly
 export interface Stage2RepairContext {
   readonly trustedInputs: {
     readonly testMd: NormalizedTestMd;
+    readonly allowedSecretNames: readonly SecretName[];
     readonly targets: Readonly<Record<string, TargetDefinition>>;
     readonly currentPlan: {
       readonly schemaVersion: number;
@@ -108,6 +109,7 @@ export interface Stage2RepairContext {
  */
 export interface Stage2RepairContextInputs {
   readonly normalizedTestMd: NormalizedTestMd;
+  readonly allowedSecretNames: readonly SecretName[];
   readonly baseline: {
     /** The case-start plan; future repair stages must never mutate it in place. */
     readonly plan: TrustedPlan;
@@ -180,6 +182,7 @@ export function buildStage2RepairContext(params: Stage2RepairContextInputs): Jso
   const context: Stage2RepairContext = {
     trustedInputs: {
       testMd: params.normalizedTestMd,
+      allowedSecretNames: params.allowedSecretNames,
       targets: params.current.plan.targets,
       currentPlan,
       frontier: { index: frontierIndex, stepId: params.current.plan.steps[frontierIndex]?.id ?? '' },

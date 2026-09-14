@@ -327,7 +327,9 @@ export function renderHumanReport(
   const results = Array.isArray(report.results) ? report.results : [];
   const errors = Array.isArray(report.errors) ? report.errors : [];
   const lines = results.map((result) => {
-    const item = result as Record<string, unknown>;
+    const item = result as Record<string, unknown> & {
+      readonly stage3Rejection?: { readonly reason?: unknown };
+    };
     const status = String(item.status ?? 'unknown');
     const healApplication = report.command === 'heal' && typeof item.application === 'string'
       ? item.application

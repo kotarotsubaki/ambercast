@@ -25,6 +25,7 @@ import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computePlanDigest } from '#core/ir/digest.js';
+import { secretNameFor } from '#core/ir/secret-ref.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import {
   GeneratedPlanResponseRequest,
@@ -697,10 +698,6 @@ function attachAttemptsHistory(
   return error;
 }
 
-function secretNameFor(ref: SecretRef): SecretName {
-  return ref.slice('{{secrets.'.length, -'}}'.length) as SecretName;
-}
-
 function secretRowsForPlan(
   plan: PlanDocumentType,
   allow: readonly SecretName[] | '*',
@@ -784,7 +781,7 @@ function finalWarnings(candidate: PreparedCandidate, plan: PlanDocumentType): Se
   ].sort(compareSecretWarnings);
 }
 
-function projectAllowedNames(allow: readonly SecretName[] | '*'): { readonly names: readonly SecretName[]; readonly kept: number; readonly dropped: number } {
+export function projectAllowedNames(allow: readonly SecretName[] | '*'): { readonly names: readonly SecretName[]; readonly kept: number; readonly dropped: number } {
   if (allow === '*') return { names: [], kept: 0, dropped: 0 };
   const all = [...new Set(allow)].sort();
   const names = all.slice(0, 64);

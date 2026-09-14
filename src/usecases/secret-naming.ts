@@ -44,6 +44,39 @@ export type SecretWarning =
   | { readonly kind: 'secret-target-changed'; readonly name: SecretName; readonly stepId: StepId; readonly previousTarget: ElementRef; readonly target: ElementRef }
   | { readonly kind: 'allowed-names-truncated'; readonly kept: number; readonly dropped: number };
 
+export interface ExistingPlanSecretReservation {
+  readonly stepIndex: number;
+  readonly stepId: StepId;
+  readonly useIndex?: number;
+  readonly ref: SecretRef;
+  readonly name: SecretName;
+  readonly target?: ElementRef;
+  readonly targetKey?: string;
+  readonly selectionSource: 'existing-plan';
+}
+
+export interface Stage2ReplacementNamingInput {
+  readonly plan: import('#core/ir/schema.js').PlanDocument;
+  readonly replacementIndex: number;
+  readonly attributedReplacement: InstructionAttributedSteps[number];
+  readonly projected: readonly SecretName[];
+  readonly allowlist: readonly SecretName[] | '*';
+}
+
+export interface Stage2ReplacementNamingOutput {
+  readonly candidate: import('#core/ir/schema.js').PlanDocument;
+  readonly replacement: Step;
+  readonly uses: readonly SecretUse[];
+  readonly warnings: readonly SecretWarning[];
+}
+
+/** Reserves retained plan names before naming one Stage 2 replacement. */
+export function deriveStage2ReplacementSecretNames(
+  _input: Stage2ReplacementNamingInput,
+): Stage2ReplacementNamingOutput {
+  throw new Error('not implemented');
+}
+
 /**
  * Resolves provider naming choices into committed secret references while
  * retaining a reportable account of every use (SPEC-C1-3, C1-4).

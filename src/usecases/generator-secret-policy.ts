@@ -11,6 +11,7 @@
  */
 import type { PlanDocument, SecretName, SecretRef, StepId } from '#core/ir/schema.js';
 import { SecretRef as SecretRefSchema } from '#core/ir/schema.js';
+import { secretNameFor } from '#core/ir/secret-ref.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { envVarNameFor } from '#core/secrets/env-var-name.js';
@@ -97,7 +98,7 @@ export function assertSecretUsesAllowed(
   if (allow === '*') return;
   const allowed = new Set(allow);
   const rejected = enumerateSecretUses(plan).flatMap(({ ref, stepId }) => {
-    const name = ref.slice('{{secrets.'.length, -'}}'.length) as SecretName;
+    const name = secretNameFor(ref);
     return allowed.has(name) ? [] : [{ name, stepId, envVar: envVarNameFor(ref), reason: 'not included in secrets.allow' }];
   });
   if (rejected.length === 0) return;

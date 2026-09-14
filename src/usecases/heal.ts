@@ -5,14 +5,14 @@ import type { StepResult } from '#report/schema.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { RunCaseOutcome, RunDeps } from './run.js';
 import { run, readTrustedInstructionCoveredPlan, validateTrustedInstructionCoveredPlanText } from './run.js';
-import { generate, prepareInstructionCoveredSteps } from './generate.js';
+import { generate, prepareInstructionCoveredSteps, projectAllowedNames } from './generate.js';
 import { inspectGroundingArtifactText } from './check-grounding.js';
 import { computePlanDigest } from '#core/ir/digest.js';
 import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
-import { GROUNDING_SCHEMA_VERSION, PlanDocument, GeneratedPlanResponse, type GroundingDocument, type JsonValueT } from '#core/ir/schema.js';
+import { GROUNDING_SCHEMA_VERSION, PlanDocument, GeneratedPlanResponse, type GroundingDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
@@ -189,6 +189,13 @@ export interface HealCaseOutcome {
 
   /** Classified failure encountered while constructing a full-plan candidate. */
   readonly stage3Error: AmbercastError | undefined;
+
+  /** A Stage 3 candidate rejected because its logical secret-name set changed. */
+  readonly stage3Rejection?: {
+    readonly reason: 'secret-set-changed';
+    readonly added: readonly SecretName[];
+    readonly removed: readonly SecretName[];
+  };
 
   /** Classified failure attached to the replay supplying the retained evidence. */
   readonly finalReplayError: AmbercastError | undefined;
@@ -472,7 +479,7 @@ type ResolveCaseAiExecutor = (signal?: AbortSignal) => Promise<ResolvedAiExecuto
  * cancellation before every rejection classification, maps executor-thrown
  * `AiResponseInvalidError` to `provider-error`, reserves `response-shape` for
  * local safe-parse and count checks after a valid executor response, and then
- * evaluates the fixed `id-mismatch`, `secret-attribution`, `coverage-invalid`,
+ * evaluates the fixed `id-mismatch`, `secret-name-invalid`, `coverage-invalid`,
  * `obligation-mismatch`, `literal-secret`, and `no-advance` sequence.
  */
 type SingleStepRepairResult =
@@ -788,6 +795,7 @@ async function trySingleStepRepair(
     responseSchema: typedJsonSchema(GeneratedPlanResponse),
     context: buildStage2RepairContext({
       normalizedTestMd: normalized,
+      allowedSecretNames: projectAllowedNames(deps.config.secrets?.allow ?? []).names,
       baseline: caseBaseline,
       current: { plan, measurement },
       repairHistory,
@@ -842,7 +850,7 @@ async function trySingleStepRepair(
     });
     replacement = normalizeAiStepSecretUses(named.steps)[0]!;
   } catch (error) {
-    if (error instanceof AiResponseInvalidError) return reject('secret-attribution');
+    if (error instanceof AiResponseInvalidError) return reject('secret-name-invalid');
     return propagate(error);
   }
   if (!obligationFingerprintMatches(step, replacement)) return reject('obligation-mismatch');
@@ -857,7 +865,7 @@ async function trySingleStepRepair(
     });
     assertNoEnvVarCollision([...new Set(enumerateSecretUses(candidate).map(({ ref }) => ref))]);
   } catch (error) {
-    if (error instanceof SecretConsentRequiredError || error instanceof SecretEnvVarCollisionError) return reject('secret-attribution');
+    if (error instanceof SecretConsentRequiredError || error instanceof SecretEnvVarCollisionError) return reject('secret-name-invalid');
     return propagate(error);
   }
   for (const candidateStep of candidate.steps) {
@@ -907,12 +915,30 @@ async function trySingleStepRepair(
  * repairable-navigation allowlist applies only to replay-observed errors in
  * {@link measureReplay}.
  */
+export type FullPlanRepairResult =
+  | { readonly kind: 'interrupted' }
+  | { readonly kind: 'failed'; readonly stage3Error: AmbercastError | undefined }
+  | {
+    readonly kind: 'secret-set-rejected';
+    readonly stage3Rejection: {
+      readonly reason: 'secret-set-changed';
+      readonly added: readonly SecretName[];
+      readonly removed: readonly SecretName[];
+    };
+  }
+  | {
+    readonly kind: 'replayed';
+    readonly plan: TrustedPlan;
+    readonly measurement: ReplayMeasurement & { readonly interrupted: false };
+  };
+
 async function tryFullPlanRepair(
   deps: HealDeps,
   resolveAiExecutor: ResolveCaseAiExecutor,
   options: HealOptions,
   file: string,
   planFile: string,
+  groundingFile: string,
   overlay: HealOverlayStorage,
   normalized: NormalizedTestMd,
   digest: string,
@@ -944,6 +970,7 @@ async function tryFullPlanRepair(
       maxAttempts: 1,
       allowEmpty: options.allowEmpty ?? false,
       dryRun: false,
+      consentMode: 'forbid',
       ...(options.target === undefined ? {} : { target: options.target }),
     });
     const item = generated.results[0];
@@ -1213,7 +1240,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
       const bestMeasurement = measurement;
       const bestSnapshot = overlay.snapshot();
       const fullPhase = await budget.runPhase('stage3', (phaseDeps) => tryFullPlanRepair(
-        { ...caseDeps, resolveAiExecutor: phaseDeps.resolveAiExecutor, events: phaseDeps.events }, phaseDeps.resolveAiExecutor, options, file, planFile, overlay, preflight.normalized, preflight.digest, plan, measurement, nextAttemptOrdinal,
+        { ...caseDeps, resolveAiExecutor: phaseDeps.resolveAiExecutor, events: phaseDeps.events }, phaseDeps.resolveAiExecutor, options, file, planFile, groundingFile, overlay, preflight.normalized, preflight.digest, plan, measurement, nextAttemptOrdinal,
       ));
       switch (fullPhase.status) {
         case 'denied': {

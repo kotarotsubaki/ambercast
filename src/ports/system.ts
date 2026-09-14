@@ -19,7 +19,7 @@ export type StageTwoRejectionReason =
   | 'provider-error'
   | 'response-shape'
   | 'id-mismatch'
-  | 'secret-attribution'
+  | 'secret-name-invalid'
   | 'coverage-invalid'
   | 'obligation-mismatch'
   | 'literal-secret'

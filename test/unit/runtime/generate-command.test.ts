@@ -1,3 +1,4 @@
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
@@ -9,6 +10,7 @@ import {
   type GenerateCommandInput,
   type GenerateCommandOutput,
 } from '#runtime/generate-command.js';
+import type { ConsentCapability, ConsentRequest } from '#usecases/generate.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 
 const mocks = vi.hoisted(() => ({
@@ -26,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   readCommandEnvironment: vi.fn(),
   finalizeReportEnvelope: vi.fn(),
   isEmergencyFinalizedEnvelope: vi.fn(),
+  createInteractiveSecretConsent: vi.fn(),
+  secretConsentRequest: vi.fn(),
 }));
 
 vi.mock('#config/load.js', () => ({ loadConfig: mocks.loadConfig }));
@@ -45,6 +49,9 @@ vi.mock('#adapters/system/process-command-environment.js', () => ({
 vi.mock('#usecases/report-finalization.js', () => ({
   finalizeReportEnvelope: mocks.finalizeReportEnvelope,
   isEmergencyFinalizedEnvelope: mocks.isEmergencyFinalizedEnvelope,
+}));
+vi.mock('#runtime/secret-consent.js', () => ({
+  createInteractiveSecretConsent: mocks.createInteractiveSecretConsent,
 }));
 
 const rawEnvelopeForFinalizedBoundary = {} as ReportEnvelope;
@@ -145,6 +152,33 @@ function generateDeps(): Record<string, unknown> {
   return deps as Record<string, unknown>;
 }
 
+function capturedStream(): { readonly stream: PassThrough; readonly text: () => string } {
+  const stream = new PassThrough();
+  let value = '';
+  stream.on('data', (chunk) => { value += chunk.toString(); });
+  return { stream, text: () => value };
+}
+
+const NON_INTERACTIVE_CONSENT_REQUEST = {
+  configPath: '/workspace/config\nname.json',
+  items: [
+    {
+      file: 'z\nfirst.test.md',
+      uses: [
+        { name: 'second\\name', stepId: 'step\rsecond', envVar: 'AMBERCAST_SECRET_SECOND\u001B' },
+        { name: 'first', stepId: 'step-first', envVar: 'AMBERCAST_SECRET_FIRST' },
+      ],
+    },
+    {
+      file: 'a.test.md',
+      uses: [
+        { name: 'third', stepId: 'step-third', envVar: 'AMBERCAST_SECRET_THIRD' },
+      ],
+    },
+  ],
+  validateRenames: () => ({ ok: true }),
+} as unknown as ConsentRequest;
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.resetAllMocks();
@@ -162,9 +196,61 @@ beforeEach(async () => {
   });
   mocks.createProcessEnvironmentInfo.mockReturnValue({ isCI: () => false });
   mocks.createStderrProgressSink.mockImplementation(() => ({ emit: vi.fn(), close: mocks.closeProgressSink }));
+  mocks.secretConsentRequest.mockResolvedValue({ kind: 'not-interactive' });
+  mocks.createInteractiveSecretConsent.mockReturnValue(mocks.secretConsentRequest);
 });
 
 describe('runGenerateCommand', () => {
+  it('writes one plain escaped unmet-consent diagnostic in preserved use order for non-interactive callers', async () => {
+    const captured = capturedStream();
+    const { output } = arrangeSuccessfulCommand('codex', 'codex');
+    mocks.generate.mockImplementation(async (deps: { readonly consent: ConsentCapability }) => {
+      await deps.consent.request(NON_INTERACTIVE_CONSENT_REQUEST);
+      return { results: [], noTestsFound: false };
+    });
+
+    // Step 11 must wire the command-owned C2-5 renderer around this existing request call.
+    await expect(runGenerateCommand(input({ stderr: captured.stream }))).resolves.toEqual(output);
+
+    const text = captured.text();
+    expect(text).not.toBe('');
+    const lines = text.trimEnd().split('\n');
+    const useRows = [
+      ['z\\x0Afirst.test.md', 'second\\\\name', 'step\\x0Dsecond', 'AMBERCAST_SECRET_SECOND\\x1B'],
+      ['z\\x0Afirst.test.md', 'first', 'step-first', 'AMBERCAST_SECRET_FIRST'],
+      ['a.test.md', 'third', 'step-third', 'AMBERCAST_SECRET_THIRD'],
+    ];
+    const rowIndexes = useRows.map((fields) => lines.findIndex((line) => fields.every((field) => line.includes(field))));
+    expect(rowIndexes.every((index) => index >= 0)).toBe(true);
+    expect(rowIndexes).toEqual([...rowIndexes].sort((left, right) => left - right));
+    expect(new Set(rowIndexes).size).toBe(useRows.length);
+    expect(lines.filter((line) => line.includes('secrets.allow'))).toEqual([
+      expect.stringContaining('/workspace/config\\x0Aname.json'),
+    ]);
+    expect(text).not.toContain('z\nfirst.test.md');
+    expect(text).not.toContain('step\rsecond');
+    expect(text).not.toContain('\u001B');
+    expect(() => JSON.parse(text)).toThrow();
+    expect(mocks.secretConsentRequest).toHaveBeenCalledExactlyOnceWith(NON_INTERACTIVE_CONSENT_REQUEST);
+  });
+
+  it('never emits the non-interactive unmet-consent diagnostic during dry-run', async () => {
+    const captured = capturedStream();
+    const { output } = arrangeSuccessfulCommand('codex', 'codex');
+    mocks.generate.mockImplementation(async (
+      deps: { readonly consent: ConsentCapability },
+      options: { readonly dryRun: boolean },
+    ) => {
+      expect(options.dryRun).toBe(true);
+      await deps.consent.request(NON_INTERACTIVE_CONSENT_REQUEST);
+      return { results: [], noTestsFound: false };
+    });
+
+    await expect(runGenerateCommand(input({ dryRun: true, stderr: captured.stream }))).resolves.toEqual(output);
+
+    expect(captured.text()).toBe('');
+  });
+
   it('returns identities relative to the config-resolved root rather than cwd', async () => {
     const { output } = arrangeSuccessfulCommand('codex', 'codex');
     const projectRoot = '/workspace/config-parent';

@@ -20,6 +20,8 @@ import { normalizeTestMd } from '#core/ir/normalize.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
+import { FsIoError } from '#core/errors/fs-io-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
@@ -3053,6 +3055,30 @@ describe('generate secret naming and consent boundaries', () => {
     ambiguities: [],
   } as unknown as GeneratedPlanResponse);
 
+  const committedAiSecretStep = (name: string): Step => ({
+    id: 'fill-password',
+    kind: 'ai',
+    instruction: 'Reach the dashboard.',
+    secrets: [{ ref: `{{secrets.${name}}}` }],
+    instructionCoverage: [{
+      id: 'dashboard-reached',
+      kind: 'success',
+      sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 },
+    }],
+  } as unknown as Step);
+
+  const generatedAiSecretResponse = (nameHint: string): GeneratedPlanResponse => ({
+    steps: [{
+      ...coveredResponse.steps[0],
+      id: 'fill-password',
+      secrets: [{ nameHint }],
+    }],
+    ambiguities: [],
+  } as unknown as GeneratedPlanResponse);
+
+  const targetChangeWarnings = (outcome: Awaited<ReturnType<typeof generate>>) =>
+    (outcome.results[0]?.warnings ?? []).filter((warning) => warning.kind === 'secret-target-changed');
+
   it('retries provider naming violation secret-allowed-name-not-projected as AI_RESPONSE_INVALID', async () => {
     let dispatch = 0;
     const execute = vi.fn(async () => {
@@ -3280,8 +3306,51 @@ describe('generate secret naming and consent boundaries', () => {
     await writePrompt(scenario.recordingStorage.storage);
     scenario.recordingStorage.reset();
 
-    const outcome = await generate(withSecretConfig(scenario.deps, []), DEFAULT_OPTIONS);
-    expect(outcome.results[0]?.error).toBeInstanceOf(UnexpectedCrashError);
+    await expect(generate(withSecretConfig(scenario.deps, []), DEFAULT_OPTIONS))
+      .rejects.toBeInstanceOf(UnexpectedCrashError);
+    expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('turns a throwing validateRenames callback into a run-scoped UnexpectedCrashError before artifact settlement', async () => {
+    const execute = vi.fn(async () => ({ data: namedResponse(undefined), raw: 'named' }));
+    const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
+      const throwingRenames = new Proxy([], {
+        get(target, property, receiver) {
+          if (property === Symbol.iterator || property === 'map' || property === 'entries') {
+            throw new Error('rename iteration failed');
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      input.validateRenames(throwingRenames as never);
+      return { kind: 'allowed' as const, renames: [] };
+    });
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    await expect(generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS))
+      .rejects.toBeInstanceOf(UnexpectedCrashError);
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(commitAllowlist).not.toHaveBeenCalled();
+    expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('turns a malformed rename-validation handoff into a run-scoped UnexpectedCrashError before artifact settlement', async () => {
+    const execute = vi.fn(async () => ({ data: namedResponse(undefined), raw: 'named' }));
+    const request = vi.fn(async () => ({ kind: 'allowed', renames: null }) as never);
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    await expect(generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS))
+      .rejects.toBeInstanceOf(UnexpectedCrashError);
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(commitAllowlist).not.toHaveBeenCalled();
     expect(scenario.recordingStorage.writes).toEqual([]);
   });
 
@@ -3298,6 +3367,130 @@ describe('generate secret naming and consent boundaries', () => {
     expect(execute).toHaveBeenCalledOnce();
   });
 
+  it('lets a later duplicate observe a successfully generated virtual plan before settlement makes it durable', async () => {
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['login.test.md', 'login.test.md']),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    const storage: StorageAdapter = {
+      ...scenario.deps.storage,
+      async writeText(path, content) {
+        if (path.endsWith('.ambercast.plan.json') || path.endsWith('.ambercast.grounding.json')) return;
+        await scenario.deps.storage.writeText(path, content);
+      },
+    };
+
+    const outcome = await generate({ ...scenario.deps, storage }, DEFAULT_OPTIONS);
+
+    expect(outcome.results).toMatchObject([
+      { file, status: 'generated' },
+      { file, status: 'skipped-fresh' },
+    ]);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('lets a later duplicate observe a successful fresh virtual plan even when the durable lookup disappears', async () => {
+    const scenario = createScenario({
+      discoverTestFiles: vi.fn(async () => ['login.test.md', 'login.test.md']),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    await seedFreshArtifacts(scenario.recordingStorage.storage, file, [{
+      id: 'fill-password',
+      kind: 'action',
+      action: 'fill-secret',
+      target: PASSWORD_TARGET,
+      secretRef: '{{secrets.password}}',
+    }] as unknown as Step[]);
+    const planPath = scenario.deps.layout.planPathFor(file);
+    let durablePlanChecks = 0;
+    const storage: StorageAdapter = {
+      ...scenario.deps.storage,
+      async exists(path) {
+        if (path === planPath) {
+          durablePlanChecks += 1;
+          return durablePlanChecks === 1;
+        }
+        return scenario.deps.storage.exists(path);
+      },
+    };
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const commitAllowlist = vi.fn(async () => undefined);
+
+    const outcome = await generate(
+      withSecretConfig({ ...scenario.deps, storage, consent: { request, commitAllowlist } }, []),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(outcome.results).toMatchObject([
+      { file, status: 'skipped-fresh' },
+      { file, status: 'skipped-fresh' },
+    ]);
+    expect(scenario.execute).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      items: [
+        { file, uses: [expect.objectContaining({ name: 'password', stepId: 'fill-password' })] },
+        { file, uses: [expect.objectContaining({ name: 'password', stepId: 'fill-password' })] },
+      ],
+    }));
+    expect(commitAllowlist).toHaveBeenCalledExactlyOnceWith(
+      '/workspace/ambercast.config.json',
+      ['password'],
+      undefined,
+    );
+  });
+
+  it('creates no virtual freshness entry for a failed first duplicate occurrence', async () => {
+    let dispatch = 0;
+    const execute = vi.fn(async () => {
+      dispatch += 1;
+      if (dispatch === 1) throw new Error('first occurrence failed');
+      return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
+    });
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['login.test.md', 'login.test.md']),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+
+    expect(outcome.results).toMatchObject([
+      { file, status: 'failed' },
+      { file, status: 'generated' },
+    ]);
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('forces every duplicate past durable and virtual freshness while snapshotting each occurrence before dispatch', async () => {
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['login.test.md', 'login.test.md']),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    await seedFreshArtifacts(scenario.recordingStorage.storage, file);
+    const readTextSnapshotIfExists = vi.fn(scenario.deps.storage.readTextSnapshotIfExists);
+
+    const outcome = await generate(
+      { ...scenario.deps, storage: { ...scenario.deps.storage, readTextSnapshotIfExists } },
+      { ...DEFAULT_OPTIONS, force: true, dryRun: true },
+    );
+
+    expect(outcome.results).toMatchObject([
+      { file, status: 'would-generate' },
+      { file, status: 'would-generate' },
+    ]);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(readTextSnapshotIfExists).toHaveBeenCalledTimes(2);
+    expect(readTextSnapshotIfExists).toHaveBeenNthCalledWith(1, scenario.deps.layout.planPathFor(file));
+    expect(readTextSnapshotIfExists).toHaveBeenNthCalledWith(2, scenario.deps.layout.planPathFor(file));
+    expect(readTextSnapshotIfExists.mock.invocationCallOrder[0]).toBeLessThan(execute.mock.invocationCallOrder[0]!);
+    expect(readTextSnapshotIfExists.mock.invocationCallOrder[1]).toBeLessThan(execute.mock.invocationCallOrder[1]!);
+  });
+
   it('takes the old-plan snapshot before a forced provider call, including dry-run', async () => {
     const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
     const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
@@ -3308,6 +3501,134 @@ describe('generate secret naming and consent boundaries', () => {
 
     expect(readTextSnapshotIfExists).toHaveBeenCalledWith(`${TEST_DIR}/login.ambercast.plan.json`);
     expect(readTextSnapshotIfExists.mock.invocationCallOrder[0]).toBeLessThan(execute.mock.invocationCallOrder[0]!);
+  });
+
+  it('does not take the C2-12 old-plan snapshot without force', async () => {
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const readTextSnapshotIfExists = vi.fn(scenario.deps.storage.readTextSnapshotIfExists);
+    await writePrompt(scenario.recordingStorage.storage);
+
+    await generate(
+      { ...scenario.deps, storage: { ...scenario.deps.storage, readTextSnapshotIfExists } },
+      DEFAULT_OPTIONS,
+    );
+
+    expect(readTextSnapshotIfExists).not.toHaveBeenCalled();
+  });
+
+  it('warns when a forced valid-v3 old plan and generated plan use the same name and step with different targets', async () => {
+    const response = namedResponse(undefined);
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'named' }) }),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    const previousTarget = { ...PASSWORD_TARGET, role: 'searchbox' };
+    await createFreshPlan(scenario.recordingStorage.storage, file, [{
+      id: 'fill-password',
+      kind: 'action',
+      action: 'fill-secret',
+      target: previousTarget,
+      secretRef: '{{secrets.password}}',
+    }] as unknown as Step[]);
+
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), { ...DEFAULT_OPTIONS, force: true, dryRun: true });
+
+    expect(targetChangeWarnings(outcome)).toEqual([{
+      kind: 'secret-target-changed',
+      name: 'password',
+      stepId: 'fill-password',
+      previousTarget,
+      target: PASSWORD_TARGET,
+    }]);
+  });
+
+  it('does not warn when both forced-plan targets for the same name and step are equal', async () => {
+    const response = namedResponse(undefined);
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'named' }) }),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    await createFreshPlan(scenario.recordingStorage.storage, file, [{
+      id: 'fill-password',
+      kind: 'action',
+      action: 'fill-secret',
+      target: PASSWORD_TARGET,
+      secretRef: '{{secrets.password}}',
+    }] as unknown as Step[]);
+
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), { ...DEFAULT_OPTIONS, force: true, dryRun: true });
+
+    expect(targetChangeWarnings(outcome)).toEqual([]);
+  });
+
+  it.each([
+    {
+      side: 'old plan',
+      oldStep: committedAiSecretStep('password'),
+      response: namedResponse(undefined),
+    },
+    {
+      side: 'generated plan',
+      oldStep: {
+        id: 'fill-password',
+        kind: 'action',
+        action: 'fill-secret',
+        target: PASSWORD_TARGET,
+        secretRef: '{{secrets.password}}',
+      } as unknown as Step,
+      response: generatedAiSecretResponse('password'),
+    },
+  ] as const)('does not warn when the $side side of a forced target comparison is untargeted', async ({ oldStep, response }) => {
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'named' }) }),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    await createFreshPlan(scenario.recordingStorage.storage, file, [oldStep]);
+
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), { ...DEFAULT_OPTIONS, force: true, dryRun: true });
+
+    expect(targetChangeWarnings(outcome)).toEqual([]);
+  });
+
+  it.each([
+    ['invalid JSON', '{'],
+    ['a non-v3 plan', JSON.stringify({ schemaVersion: 2, source: { inputsDigest: '0'.repeat(64) }, targets: {}, steps: [] })],
+  ] as const)('does not warn from %s returned by the forced old-plan snapshot', async (_description, text) => {
+    const response = namedResponse(undefined);
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'named' }) }),
+    });
+    await writePrompt(scenario.recordingStorage.storage);
+    const readTextSnapshotIfExists = vi.fn<StorageAdapter['readTextSnapshotIfExists']>(async () => ({
+      text,
+      bytes: new TextEncoder().encode(text),
+    }));
+
+    const outcome = await generate(
+      withSecretConfig({ ...scenario.deps, storage: { ...scenario.deps.storage, readTextSnapshotIfExists } }, '*'),
+      { ...DEFAULT_OPTIONS, force: true, dryRun: true },
+    );
+
+    expect(readTextSnapshotIfExists).toHaveBeenCalledOnce();
+    expect(targetChangeWarnings(outcome)).toEqual([]);
+  });
+
+  it('treats an ENOENT forced old-plan snapshot as null and emits no target-change warning', async () => {
+    const response = namedResponse(undefined);
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'named' }) }),
+    });
+    await writePrompt(scenario.recordingStorage.storage);
+    const readTextSnapshotIfExists = vi.fn<StorageAdapter['readTextSnapshotIfExists']>(async () => null);
+
+    const outcome = await generate(
+      withSecretConfig({ ...scenario.deps, storage: { ...scenario.deps.storage, readTextSnapshotIfExists } }, '*'),
+      { ...DEFAULT_OPTIONS, force: true, dryRun: true },
+    );
+
+    expect(readTextSnapshotIfExists).toHaveBeenCalledOnce();
+    expect(targetChangeWarnings(outcome)).toEqual([]);
   });
 
   it('scans legacy secret syntax before target selection and continues later occurrences', async () => {
@@ -3321,8 +3642,9 @@ describe('generate secret naming and consent boundaries', () => {
 
     const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, target: 'missing-target' });
 
-    expect(outcome.results[0]).toMatchObject({ file: legacy, status: 'failed', error: expect.objectContaining({ code: 'SECRET_SYNTAX_REJECTED' }) });
-    expect(outcome.results[1]).toMatchObject({ status: 'generated' });
+    expect(outcome.results[0]).toMatchObject({ file: legacy, status: 'failed', error: expect.objectContaining({ kind: 'secret-syntax-rejected' }) });
+    expect(outcome.results[1]).toMatchObject({ status: 'failed', error: expect.any(TargetUnresolvedError) });
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('projects a sorted names-only allowlist through the 64-name provider boundary', async () => {
@@ -3353,7 +3675,7 @@ describe('generate secret naming and consent boundaries', () => {
     expect(projected).toEqual(names.slice(0, projected.length));
     expect(projected.length).toBeLessThan(64);
     expect(outcome.results[0]).toMatchObject({
-      warnings: [expect.objectContaining({ code: 'allowed-names-truncated', kept: projected.length, dropped: names.length - projected.length })],
+      warnings: [expect.objectContaining({ kind: 'allowed-names-truncated', kept: projected.length, dropped: names.length - projected.length })],
     });
   });
 
@@ -3367,23 +3689,166 @@ describe('generate secret naming and consent boundaries', () => {
 
     const outcome = await generate({ ...scenario.deps, storage: { ...scenario.deps.storage, readTextSnapshotIfExists } }, { ...DEFAULT_OPTIONS, force: true });
 
-    expect(outcome.results[0]).toMatchObject({ status: 'failed', error: expect.objectContaining({ kind: 'fs-io' }) });
+    expect(outcome.results[0]).toMatchObject({ status: 'failed', error: expect.any(FsIoError) });
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('leaves every artifact uncommitted when the allowed consent config commit fails before settlement', async () => {
+  it.each([
+    ['invalid config', new ConfigInvalidError('config became invalid')],
+    ['config I/O', new FsIoError('config write failed')],
+  ] as const)('propagates a run-scoped %s commit error and leaves every artifact uncommitted', async (_description, failure) => {
     const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
     const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
     const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
-    const commitAllowlist = vi.fn(async () => { throw new Error('config write failed'); });
+    const commitAllowlist = vi.fn(async () => { throw failure; });
     await writePrompt(scenario.recordingStorage.storage);
     scenario.recordingStorage.reset();
 
-    const outcome = await generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS);
+    await expect(generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS))
+      .rejects.toBe(failure);
 
     expect(request).toHaveBeenCalledOnce();
-    expect(outcome.results[0]).toMatchObject({ status: 'failed' });
     expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('settles config then each plan and grounding in occurrence order, continuing without rollback after one grounding failure', async () => {
+    let dispatch = 0;
+    const execute = vi.fn(async () => ({
+      data: dispatch++ === 0 ? namedResponse(undefined) : RESPONSE,
+      raw: 'prepared',
+    }));
+    const operations: string[] = [];
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['first.test.md', 'second.test.md']),
+    });
+    const first = await writePrompt(scenario.recordingStorage.storage, 'first.test.md');
+    const second = await writePrompt(scenario.recordingStorage.storage, 'second.test.md');
+    const firstPlan = scenario.deps.layout.planPathFor(first);
+    const firstGrounding = scenario.deps.layout.groundingPathFor(first);
+    const secondPlan = scenario.deps.layout.planPathFor(second);
+    const secondGrounding = scenario.deps.layout.groundingPathFor(second);
+    const configPath = '/workspace/ambercast.config.json';
+    await scenario.recordingStorage.storage.writeText(configPath, '{"secrets":{"allow":[]}}\n');
+    scenario.recordingStorage.reset();
+    const storage: StorageAdapter = {
+      ...scenario.deps.storage,
+      async writeText(path, content) {
+        operations.push(path);
+        if (path === firstGrounding) throw new Error('first grounding failed');
+        await scenario.deps.storage.writeText(path, content);
+      },
+    };
+    const commitAllowlist = vi.fn(async () => {
+      operations.push('config');
+      await scenario.deps.storage.writeText(configPath, '{"secrets":{"allow":["password"]}}\n');
+    });
+
+    const outcome = await generate(
+      withSecretConfig({ ...scenario.deps, storage, consent: { request, commitAllowlist } }, []),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(operations).toEqual(['config', firstPlan, firstGrounding, secondPlan, secondGrounding]);
+    expect(outcome.results).toMatchObject([
+      { file: first, status: 'failed', error: expect.any(FsIoError) },
+      { file: second, status: 'generated' },
+    ]);
+    await expect(scenario.deps.storage.readText(configPath)).resolves.toContain('password');
+    await expect(scenario.deps.storage.exists(firstPlan)).resolves.toBe(true);
+    await expect(scenario.deps.storage.exists(firstGrounding)).resolves.toBe(false);
+    await expect(scenario.deps.storage.exists(secondPlan)).resolves.toBe(true);
+    await expect(scenario.deps.storage.exists(secondGrounding)).resolves.toBe(true);
+  });
+
+  it('leaves config and all candidate artifacts unchanged when abort wins before config commit success', async () => {
+    const controller = new AbortController();
+    const execute = vi.fn(async () => ({ data: namedResponse(undefined), raw: 'named' }));
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    let markCommitStarted!: () => void;
+    const commitStarted = new Promise<void>((resolve) => { markCommitStarted = resolve; });
+    let releaseCommit!: () => void;
+    const commitRelease = new Promise<void>((resolve) => { releaseCommit = resolve; });
+    const scenario = createScenario({
+      signal: controller.signal,
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    const configPath = '/workspace/ambercast.config.json';
+    const originalConfig = '{"secrets":{"allow":[]}}\n';
+    await scenario.recordingStorage.storage.writeText(configPath, originalConfig);
+    scenario.recordingStorage.reset();
+    const commitAllowlist = vi.fn(async (_path: string | null, _names: readonly string[], signal?: AbortSignal) => {
+      markCommitStarted();
+      await commitRelease;
+      signal?.throwIfAborted();
+      await scenario.deps.storage.writeText(configPath, '{"secrets":{"allow":["password"]}}\n');
+    });
+    const running = generate(
+      withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []),
+      DEFAULT_OPTIONS,
+    );
+    const phase = await Promise.race([
+      commitStarted.then(() => 'commit-started' as const),
+      running.then(() => 'finished-early' as const),
+    ]);
+    expect(phase).toBe('commit-started');
+    if (phase !== 'commit-started') return;
+
+    controller.abort(new Error('abort before config commit'));
+    releaseCommit();
+    await running.catch(() => undefined);
+
+    expect(commitAllowlist).toHaveBeenCalledExactlyOnceWith(configPath, ['password'], controller.signal);
+    await expect(scenario.deps.storage.readText(configPath)).resolves.toBe(originalConfig);
+    await expect(scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).resolves.toBe(false);
+    await expect(scenario.deps.storage.exists(scenario.deps.layout.groundingPathFor(file))).resolves.toBe(false);
+  });
+
+  it('keeps a successful config commit when abort lands before it returns, without settling candidate artifacts', async () => {
+    const controller = new AbortController();
+    const execute = vi.fn(async () => ({ data: namedResponse(undefined), raw: 'named' }));
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    let markConfigPersisted!: () => void;
+    const configPersisted = new Promise<void>((resolve) => { markConfigPersisted = resolve; });
+    let releaseCommit!: () => void;
+    const commitRelease = new Promise<void>((resolve) => { releaseCommit = resolve; });
+    const scenario = createScenario({
+      signal: controller.signal,
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    const configPath = '/workspace/ambercast.config.json';
+    await scenario.recordingStorage.storage.writeText(configPath, '{"secrets":{"allow":[]}}\n');
+    scenario.recordingStorage.reset();
+    const committedConfig = '{"secrets":{"allow":["password"]}}\n';
+    const commitAllowlist = vi.fn(async () => {
+      await scenario.deps.storage.writeText(configPath, committedConfig);
+      markConfigPersisted();
+      await commitRelease;
+    });
+    const running = generate(
+      withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []),
+      DEFAULT_OPTIONS,
+    );
+    const phase = await Promise.race([
+      configPersisted.then(() => 'config-persisted' as const),
+      running.then(() => 'finished-early' as const),
+    ]);
+    expect(phase).toBe('config-persisted');
+    if (phase !== 'config-persisted') return;
+
+    controller.abort(new Error('abort after config commit'));
+    releaseCommit();
+    await expect(running).resolves.toMatchObject({
+      interrupted: true,
+      results: [{ file, status: 'skipped' }],
+    });
+
+    await expect(scenario.deps.storage.readText(configPath)).resolves.toBe(committedConfig);
+    await expect(scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).resolves.toBe(false);
+    await expect(scenario.deps.storage.exists(scenario.deps.layout.groundingPathFor(file))).resolves.toBe(false);
   });
 
   it('asks once and declines only candidates containing needed names while settling unaffected prepared candidates', async () => {
@@ -3427,6 +3892,57 @@ describe('generate interruption contract', () => {
       { file: `${TEST_DIR}/same.test.md`, status: 'skipped' },
     ]);
     expect(recordingStorage.reads).toEqual([]);
+  });
+
+  it('keeps every started duplicate as an individual skipped row when interruption lands at the in-flight consent gate', async () => {
+    const controller = new AbortController();
+    const response = {
+      steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD_TARGET }],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: response, raw: 'named' }));
+    let markRequestStarted!: () => void;
+    const requestStarted = new Promise<void>((resolve) => { markRequestStarted = resolve; });
+    let releaseRequest!: () => void;
+    const requestRelease = new Promise<void>((resolve) => { releaseRequest = resolve; });
+    const request = vi.fn(async () => {
+      markRequestStarted();
+      await requestRelease;
+      return { kind: 'not-interactive' as const };
+    });
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({
+      signal: controller.signal,
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['same.test.md', 'same.test.md']),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage, 'same.test.md');
+    scenario.recordingStorage.reset();
+    const running = generate(
+      withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []),
+      DEFAULT_OPTIONS,
+    );
+    const phase = await Promise.race([
+      requestStarted.then(() => 'request-started' as const),
+      running.then(() => 'finished-early' as const),
+    ]);
+    expect(phase).toBe('request-started');
+    if (phase !== 'request-started') return;
+
+    controller.abort(new Error('abort during consent'));
+    releaseRequest();
+
+    await expect(running).resolves.toMatchObject({
+      interrupted: true,
+      results: [
+        { file, status: 'skipped' },
+        { file, status: 'skipped' },
+      ],
+    });
+    expect(execute).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledOnce();
+    expect(commitAllowlist).not.toHaveBeenCalled();
+    expect(scenario.recordingStorage.writes).toEqual([]);
   });
 
   it('keeps list mode atomic for an already aborted signal and exposes a false interruption fact', async () => {

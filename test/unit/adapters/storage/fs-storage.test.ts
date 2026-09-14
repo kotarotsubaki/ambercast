@@ -192,6 +192,24 @@ function installSharedFake(fake: SharedFakeFs): () => void {
   };
 }
 
+async function waitForCheckpoint(
+  entered: Promise<void>,
+  operation: Promise<void>,
+  message: string,
+): Promise<void> {
+  await Promise.race([
+    entered,
+    operation.then(
+      () => {
+        throw new Error(message);
+      },
+      (error: unknown) => {
+        throw error;
+      },
+    ),
+  ]);
+}
+
 registerStorageContract({
   async createStorage() {
     contractWorkingDirectory = process.cwd();
@@ -606,7 +624,7 @@ describe('createFsStorage()', () => {
     }
   });
 
-  it('checks cancellation before the first lock acquisition, each retry, and before an atomic write, but never after writing starts', async () => {
+  it('checks cancellation immediately before the first lock-acquisition attempt', async () => {
     const fake = new SharedFakeFs();
     fake.setText('/shared/config.json', '{"names":[]}');
     const controller = new AbortController();
@@ -617,6 +635,151 @@ describe('createFsStorage()', () => {
         .rejects.toBeInstanceOf(FsIoError);
       expect(fake.calls.filter((call) => call.operation === 'writeFile')).toEqual([]);
     } finally {
+      restore();
+    }
+  });
+
+  it('checks a signal that becomes aborted immediately before a later lock-acquisition attempt', async () => {
+    const targetPath = '/shared/config.json';
+    const lockPath = `${targetPath}.lock`;
+    const foreignToken = 'foreign-process-0123456789abcdef';
+    const fake = new SharedFakeFs();
+    fake.setText(targetPath, '{"names":[]}');
+    fake.setText(lockPath, foreignToken);
+    const firstAttempt = fake.pauseNext('writeFile', lockPath, 'before');
+    const controller = new AbortController();
+    const restore = installSharedFake(fake);
+    const updating = createFsStorage().updateTextExclusive(
+      targetPath,
+      () => '{"names":["A"]}',
+      controller.signal,
+    );
+    void updating.catch(() => undefined);
+
+    try {
+      await waitForCheckpoint(
+        firstAttempt.entered,
+        updating,
+        'Expected the first lock-acquisition attempt to begin before the update settled.',
+      );
+      controller.abort(new Error('stop before retry'));
+      firstAttempt.release();
+
+      await expect(updating).rejects.toBeInstanceOf(FsIoError);
+
+      const lockAttempts = fake.calls.filter((call) => (
+        call.operation === 'writeFile' && call.path === lockPath && call.phase === 'before'
+      ));
+      expect(lockAttempts).toHaveLength(1);
+      expect(fake.text(lockPath)).toBe(foreignToken);
+      expect(fake.calls.filter((call) => call.operation === 'unlink')).toEqual([]);
+    } finally {
+      firstAttempt.release();
+      await updating.catch(() => undefined);
+      restore();
+    }
+  });
+
+  it('checks cancellation immediately before starting the atomic target write', async () => {
+    const targetPath = '/shared/config.json';
+    const lockPath = `${targetPath}.lock`;
+    const originalText = '{"names":[]}';
+    const fake = new SharedFakeFs();
+    fake.setText(targetPath, originalText);
+    const controller = new AbortController();
+    const restore = installSharedFake(fake);
+
+    try {
+      await expect(createFsStorage().updateTextExclusive(
+        targetPath,
+        () => {
+          controller.abort(new Error('stop before write'));
+          return '{"names":["A"]}';
+        },
+        controller.signal,
+      )).rejects.toBeInstanceOf(FsIoError);
+
+      expect(fake.text(targetPath)).toBe(originalText);
+      expect(fake.calls.filter((call) => (
+        call.operation === 'writeFile' && call.path !== lockPath
+      ))).toEqual([]);
+      expect(fake.calls.filter((call) => call.operation === 'rename')).toEqual([]);
+      expect(fake.has(lockPath)).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not admit cancellation after the atomic target write has started', async () => {
+    const targetPath = '/shared/config.json';
+    const lockPath = `${targetPath}.lock`;
+    const replacement = '{"names":["A"]}';
+    const fake = new SharedFakeFs();
+    fake.setText(targetPath, '{"names":[]}');
+    const controller = new AbortController();
+    const restore = installSharedFake(fake);
+    const writeFileMock = vi.mocked(fsPromises.writeFile);
+    writeFileMock.mockImplementation(async (...arguments_) => {
+      const path = stringPath(arguments_[0]);
+      await fake.writeFile(path, arguments_[1], arguments_[2]);
+      if (path !== lockPath) {
+        controller.abort(new Error('stop after write started'));
+      }
+    });
+
+    try {
+      await expect(createFsStorage().updateTextExclusive(
+        targetPath,
+        () => replacement,
+        controller.signal,
+      )).resolves.toBeUndefined();
+
+      expect(controller.signal.aborted).toBe(true);
+      expect(fake.text(targetPath)).toBe(replacement);
+      expect(fake.calls.some((call) => call.operation === 'rename')).toBe(true);
+      expect(fake.has(lockPath)).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('never unlinks a foreign-token lock while a competing adapter owns it', async () => {
+    const targetPath = '/shared/config.json';
+    const lockPath = `${targetPath}.lock`;
+    const fake = new SharedFakeFs();
+    fake.setText(targetPath, '{"names":[]}');
+    const firstRead = fake.pauseNext('readFile', targetPath, 'after');
+    const restore = installSharedFake(fake);
+    const owner = createFsStorage();
+    const contender = createFsStorage();
+    const ownerUpdate = owner.updateTextExclusive(targetPath, (current) => `${current}A`);
+    void ownerUpdate.catch(() => undefined);
+
+    try {
+      await waitForCheckpoint(
+        firstRead.entered,
+        ownerUpdate,
+        'Expected the lock owner to pause after reading under its acquired lock.',
+      );
+      const ownerToken = fake.text(lockPath);
+      expect(ownerToken).toMatch(new RegExp(`^${process.pid}-[0-9a-f]{16}$`, 'u'));
+
+      await expect(contender.updateTextExclusive(targetPath, (current) => `${current}B`))
+        .rejects.toBeInstanceOf(FsIoError);
+
+      const contenderRetries = fake.calls.filter((call) => (
+        call.operation === 'writeFile' && call.path === lockPath && call.phase === 'before'
+      ));
+      expect(contenderRetries.length).toBeGreaterThan(2);
+      expect(fake.text(lockPath)).toBe(ownerToken);
+      expect(fake.calls.filter((call) => call.operation === 'unlink')).toEqual([]);
+
+      firstRead.release();
+      await expect(ownerUpdate).resolves.toBeUndefined();
+      expect(fake.has(lockPath)).toBe(false);
+    } finally {
+      firstRead.release();
+      await ownerUpdate.catch(() => undefined);
       restore();
     }
   });

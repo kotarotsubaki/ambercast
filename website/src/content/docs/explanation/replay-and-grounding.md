@@ -21,26 +21,26 @@ The run pipeline is designed so a complete cache can execute without probing a p
 
 Links: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#bounded-side-effects)
 
-## Replay path: miss with fallback {#miss-with-ai-fallback}
+## Replay path: miss with explicit resolution {#miss-with-explicit-resolution}
 
-Absent grounding, stale provenance, invalid JSON, and cache misses are classified before the lazy agentic fallback. A fallback begins only after the miss path; cache hits emit no AI-call event.
+Grounding that fails integrity validation, including invalid JSON or failed coverage or verification proof, fails closed regardless of `--resolve`. Only absent grounding and structurally valid legacy or recoverable entries are miss paths gated by `--resolve`; cache hits emit no AI-call event.
 
-When cache-only mode is not enabled, an element grounding miss can resolve live and update the grounding entry with the resolved element fingerprint.
+With `--resolve`, an element grounding miss can resolve live and update the grounding entry with the resolved element fingerprint.
 
 Links: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
 
-## Replay path: cache-only miss {#cache-only-miss}
+## Replay path: unresolved miss {#unresolved-miss}
 
-`--cache-only` suppresses both cold-start and recoverable-miss AI fallback. During an AI-directed replay, an AI-directed step with no usable trace aborts when cache-only mode is enabled.
+Without `--resolve`, run suppresses live resolution for both cold-start and recoverable misses. During an AI-directed replay, an AI-directed step with no usable trace fails closed as `grounding-unresolved` (exit 4) and points to `--resolve`.
 
-An element grounding miss aborts in cache-only mode instead of resolving the element live.
+An element grounding miss also fails closed instead of resolving the element live.
 
-Links: [ambercast run](/ambercast/reference/cli/run/#cache-only), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+Links: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
 
 ## Drift hand-off {#drift-handoff}
 
 A `fingerprint-mismatch` means a matched node's current accessibility fingerprint differs from the stored fingerprint. The run use case records `fingerprint-mismatch` as a classification case distinct from a successful grounded resolution.
 
-Healing starts with a cache-only baseline replay, then can attempt grounding repair when a failure remains.
+Healing starts with a fail-closed baseline replay, then can attempt grounding repair when a failure remains.
 
 Links: [Healing model](/ambercast/explanation/healing-model/#three-stages), [Healing a test after a UI change](/ambercast/tutorials/repair-your-first-drift/)

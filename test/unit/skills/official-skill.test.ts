@@ -42,10 +42,10 @@ const REQUIRED_SECTION_TEXT = [
   ['Node.js', '22.14', 'npx playwright-core install chromium', 'claude', 'codex', 'http://localhost:3000', 'ambercast.config.json'],
   ['ambercast.config.json', 'testDir', 'tests/ambercast', 'runsDir', 'baseUrl', 'defaultTarget', '--target', 'npx ambercast generate --list --json', 'AMBERCAST_SECRET_'],
   ['.test.md', '{{secrets.', '@ambercast-secret', 'AMBERCAST_SECRET_', '### Good example', '### Bad example'],
-  ['npx ambercast generate', 'npx ambercast run --json', 'npx ambercast check', 'npx ambercast heal --dry-run', '--cache-only', '--update-cache', 'grounding.localWriteBack', '--yes'],
+  ['npx ambercast generate', 'npx ambercast run --json', 'npx ambercast check', 'npx ambercast heal --dry-run', '--resolve', '--update-cache', 'grounding.localWriteBack', '--yes'],
   ['2 > 3 > 4 > 1 > 5 > 0', 'summary', 'results[]', 'errors[].code', '--strict', 'testIgnore', 'stderr'],
   ['.ambercast.plan.json', '.ambercast.grounding.json', 'grounding.repositoryPolicy', 'runsDir', 'tests/ambercast/.runs'],
-  ['ci.heal', '--cache-only', '--force', '--yes', 'secret'],
+  ['ci.heal', '--resolve', '--force', '--yes', 'secret'],
   URLS,
 ];
 
@@ -204,7 +204,7 @@ describe('official ambercast skill', () => {
     const pkg = JSON.parse(packageBytes.toString('utf8'));
 
     expect(pkg.files).toStrictEqual(['bin', 'dist', 'skills']);
-    expect(createHash('sha256').update(stripVersionField(packageBytes)).digest('hex')).toBe('47dd466d90d01066e79433719d3a2d378479ac91fcf0f5fc39abfc56fe605dc5');
+    expect(createHash('sha256').update(stripVersionField(packageBytes)).digest('hex')).toBe('17c2aa4f37081b5bf985ad91d7ee4615911c1fda18cc1ad82b61579a50f678a7');
   });
 
   it('SPEC-2 keeps the publication-metadata pin independent of the released version', () => {
@@ -293,7 +293,7 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-8 preserves the approved draft byte-for-byte', () => {
-    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('21b34c58f9fff195b83e40befdb4781492c5fb0ad2c380b21108a2db86500b7d');
+    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('6317d2972f4f5cef0ea354bc410aebcce83e3dae3061f75332a86921c3cd1fa0');
   });
 
   it('SPEC-9 and SPEC-10 keep skill flags aligned with the CLI usage contract', () => {
@@ -304,7 +304,7 @@ describe('official ambercast skill', () => {
       .map(([, command, options]) => [command!.toLowerCase(), new Set(extractFlagTokens(options!))]));
     expect(sections.get('run')).toContain('--ai');
     expect(usage!.match(/Run options:\n([^\n]+)\n([^\n]+)/)?.slice(1)).toStrictEqual([
-      '  --grep <pattern>  --target <name>  --headed  --cache-only  --update-cache  --allow-empty  --list',
+      '  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list',
       '  --stale <fail>  --ai <claude|codex>  --json  --no-color',
     ]);
 

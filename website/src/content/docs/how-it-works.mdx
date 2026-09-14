@@ -50,12 +50,12 @@ AI's job is to build the plan, and that usually takes just one call.
 ## run: replay without calling AI \{#run}
 
 ```bash
-ambercast run
+ambercast run --resolve
 ```
 
-The first run executes the plan in a browser while recording, in the grounding, which on-screen element each element-using step maps to. Only a step it is unsure about gets AI's confirmation. From the second time on, AI is not called as long as the grounding hits. That makes it fast, free of AI cost, and free of run-to-run variance. Locally, updated grounding is saved automatically; in CI, it is not saved by default.
+The first run uses `--resolve` to execute the plan in a browser while recording, in the grounding, which on-screen element each element-using step maps to. Only a step it is unsure about gets AI's confirmation. From the second time on, `ambercast run` calls no AI as long as the grounding hits. A grounding miss now fails closed by default and points to `--resolve` when live resolution is intentional. That makes replay fast, free of AI cost, and free of run-to-run variance. Locally, updated grounding is saved automatically; in CI, it is not saved by default.
 
-Only a step whose grounding drifted because of a small UI change gets a single step of AI assistance. If that still cannot fix it, the test is reported as failed.
+To resolve a step whose grounding drifted because of a small UI change, run with `--resolve`; if that still cannot fix it, the test is reported as failed.
 
 In CI, `ambercast check` first confirms the plan has not gone stale, and then `ambercast run` replays it. check is a read-only inspection that calls neither AI nor a browser, and run never fixes a break on its own.
 

@@ -4,6 +4,9 @@ import type { ResolvedConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
+import {
+  GroundingUnresolvedError,
+} from '#core/errors/grounding-unresolved-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
@@ -182,7 +185,8 @@ interface DispatchContext {
   readonly allowedRunRefs: ReadonlySet<RunVariableName>;
   readonly instructionCoverageByStepId: ReadonlyMap<StepId, readonly TrustedInstructionCriterion[]>;
   readonly resolveAiExecutor: () => Promise<InstructionCoveredAiExecutor>;
-  readonly cacheOnly: boolean;
+  /** Permits AI fallback for unresolved AI-step grounding. */
+  readonly resolve: boolean;
   readonly events: EventSink;
   readonly updateGroundingEntry: (stepId: Step['id'], entry: GroundingEntry) => void;
   readonly deleteGroundingEntry: (stepId: Step['id']) => void;
@@ -2215,20 +2219,24 @@ async function executeAgentic(
  * trace. A separate policy stage proves coverage absence before narrowing safe
  * legacy provider context, or proves present coverage before narrowing a local
  * replay candidate. Present-invalid coverage fails before browser, AI, or
- * cache-only classification. A covered-valid trace replays without resolving
- * an AI executor. `cacheOnly` suppresses both cold-start and recoverable miss
- * calls but cannot downgrade integrity failure into an ordinary miss.
+ * resolution policy. A covered-valid trace replays without resolving
+ * an AI executor. Without resolution, cold-start and recoverable misses fail
+ * with their case-scoped grounding classification and never downgrade an
+ * integrity failure into an ordinary miss.
  */
 async function executeAiStep(
   step: Extract<Step, { kind: 'ai' }>,
   context: DispatchContext,
-  cacheOnly: boolean,
+  resolve: boolean,
 ): Promise<DispatchOutcome> {
   const entry = context.grounding.entries[step.id];
   const secretRefs = new Set(step.secrets?.map((grant) => grant.ref) ?? []);
   if (entry?.kind !== 'ai') {
-    if (cacheOnly) {
-      throw new CaseAbort('AI-directed replay has no usable trace while cache-only mode is enabled.');
+    if (!resolve) {
+      throw new GroundingUnresolvedError(
+        'AI-directed replay has no usable trace because AI resolution is not permitted. Pass --resolve to permit resolution.',
+        { stepId: step.id, reason: 'missing' },
+      );
     }
 
     return executeAgentic(step, context, undefined, false);
@@ -2250,8 +2258,11 @@ async function executeAiStep(
     });
   }
   if (classified.data.kind === 'legacy-cache-miss') {
-    if (cacheOnly) {
-      throw new CaseAbort('AI-directed replay has no covered trace while cache-only mode is enabled.');
+    if (!resolve) {
+      throw new GroundingUnresolvedError(
+        'AI-directed replay has no covered trace because AI resolution is not permitted. Pass --resolve to permit resolution.',
+        { stepId: step.id, reason: 'recoverable-miss' },
+      );
     }
     return executeAgentic(step, context, classified.data.priorTrace, true);
   }
@@ -2276,8 +2287,11 @@ async function executeAiStep(
 
   context.signal?.throwIfAborted();
 
-  if (cacheOnly) {
-    throw new CaseAbort('AI trace replay missed while cache-only mode is enabled.');
+  if (!resolve) {
+    throw new GroundingUnresolvedError(
+      'AI trace replay missed because AI resolution is not permitted. Pass --resolve to permit resolution.',
+      { stepId: step.id, reason: 'recoverable-miss' },
+    );
   }
 
   return executeAgentic(step, context, undefined, true);
@@ -2326,8 +2340,8 @@ async function groundedTarget(
     }
   }
 
-  if (context.cacheOnly) {
-    throw new CaseAbort('Element grounding is unavailable while cache-only mode is enabled.');
+  if (!context.resolve) {
+    throw new CaseAbort('Element grounding is unavailable because AI resolution is not permitted. Pass --resolve to permit resolution.');
   }
 
   const snapshot = await context.session.snapshotForResolution();
@@ -2809,8 +2823,8 @@ export interface RunOptions {
   /** Optional explicit target name; an invalid name never falls back. */
   readonly target?: string;
 
-  /** Whether grounding misses and trace misses must fail without an AI fallback. */
-  readonly cacheOnly: boolean;
+  /** Whether AI may resolve grounding and trace misses. */
+  readonly resolve: boolean;
 
   /*
    * Records the caller's explicit request to persist grounding changes when
@@ -2913,8 +2927,8 @@ export interface RunDeps {
    *
    * `runCase` memoizes this resolver after the first actual fallback, so AI
    * re-resolution and fresh agentic execution in the same case share one
-   * executor without probing a provider for cache-only or complete-cache
-   * replay. The instruction-coverage boundary narrows this field to
+   * executor without probing a provider for replay with complete grounding or
+   * for a miss that resolution policy rejects. The instruction-coverage boundary narrows this field to
    * {@link InstructionCoveredAiExecutorResolver} without changing that lazy
    * transition point.
    */
@@ -2927,7 +2941,7 @@ export interface RunDeps {
    * successful trace replay. For each attempted executor dispatch, its caller
    * owns both emissions: one `ai-call` immediately before invocation and one
    * matching `ai-result` from `finally`, whether the invocation succeeds or
-   * fails. Full cache hits and cache-only paths that suppress fallback emit
+   * fails. Full grounding hits and resolution-disallowed paths emit
    * neither event.
    */
   readonly events: EventSink;
@@ -3134,7 +3148,7 @@ export type RunListedFile = { readonly file: string };
  * Deterministic steps materialize run and secret values only immediately
  * before browser operations. Agentic instructions, provider-visible context,
  * and committed traces retain unresolved references; trusted trace replay
- * precedes a lazy agentic fallback when `cacheOnly` permits it. These
+ * precedes a lazy agentic fallback when resolution is enabled. These
  * boundaries prevent materialized secrets and run values from crossing back
  * into provider-visible or persisted data.
  *
@@ -3297,7 +3311,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     resolvedSecrets = new Map<string, Set<string>>();
     const preflightAllowedRunRefs = new Set<RunVariableName>();
     const preflightRunState = new Map<RunVariableName, string>();
-    let cacheOnlyAiMissBeforeExecutableStep = false;
+    let firstPreflightAiMiss: { readonly stepId: Step['id']; readonly reason: 'missing' | 'recoverable-miss' } | undefined;
+    let firstPreflightAiMissStep: Step | undefined;
     let hasPriorExecutableStep = false;
     for (const step of plan.steps) {
       if (step.kind === 'capture') {
@@ -3313,7 +3328,10 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       currentStep = step;
       const entry = loadedGrounding.entries[step.id];
       if (entry?.kind !== 'ai') {
-        if (options.cacheOnly && !hasPriorExecutableStep) cacheOnlyAiMissBeforeExecutableStep = true;
+        if (!options.resolve && !hasPriorExecutableStep && firstPreflightAiMiss === undefined) {
+          firstPreflightAiMiss = { stepId: step.id, reason: 'missing' };
+          firstPreflightAiMissStep = step;
+        }
         continue;
       }
       const secretRefs = new Set(step.secrets?.map((grant) => grant.ref) ?? []);
@@ -3337,13 +3355,18 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           issues: classified.issues,
         });
       }
-      if (classified.data.kind === 'legacy-cache-miss' && options.cacheOnly && !hasPriorExecutableStep) {
-        cacheOnlyAiMissBeforeExecutableStep = true;
+      if (classified.data.kind === 'legacy-cache-miss' && !options.resolve && !hasPriorExecutableStep && firstPreflightAiMiss === undefined) {
+        firstPreflightAiMiss = { stepId: step.id, reason: 'recoverable-miss' };
+        firstPreflightAiMissStep = step;
       }
       hasPriorExecutableStep = true;
     }
-    if (cacheOnlyAiMissBeforeExecutableStep) {
-      throw new CaseAbort('AI-directed replay has no covered trace while cache-only mode is enabled.');
+    if (firstPreflightAiMiss !== undefined) {
+      currentStep = firstPreflightAiMissStep;
+      throw new GroundingUnresolvedError(
+        'AI-directed replay has no covered trace because AI resolution is not permitted. Pass --resolve to permit resolution.',
+        firstPreflightAiMiss,
+      );
     }
     currentStep = undefined;
 
@@ -3382,7 +3405,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         aiExecutorPromise ??= deps.resolveAiExecutor(deps.signal);
         return aiExecutorPromise;
       },
-      cacheOnly: options.cacheOnly,
+      resolve: options.resolve,
       events: deps.events,
       updateGroundingEntry: (stepId, entry) => {
         loadedGrounding.entries[stepId] = entry;
@@ -3412,7 +3435,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         ? originalStep
         : materializeStep(originalStep, context.runState, context.target.baseUrl);
       const outcome = step.kind === 'ai'
-        ? await executeAiStep(step, context, options.cacheOnly)
+        ? await executeAiStep(step, context, options.resolve)
         : await DISPATCH_TABLE[step.kind](step, context);
       if (outcome.kind === 'assertion-failed') {
         /*

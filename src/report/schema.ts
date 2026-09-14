@@ -65,6 +65,7 @@ const USAGE_REPORT_ERROR_CODES = [
   'SECRET_ENV_VAR_COLLISION',
   'SECRET_CONSENT_REQUIRED',
   'SECRET_SYNTAX_REJECTED',
+  'GROUNDING_UNRESOLVED',
 ] as const;
 
 const ENVIRONMENT_REPORT_ERROR_CODES = [
@@ -209,6 +210,11 @@ export const SecretSyntaxRejectedDetails = z.strictObject({
 });
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
+/** Identifies the AI step whose fail-closed grounding miss can be resolved explicitly. */
+export const GroundingUnresolvedDetails = z.strictObject({
+  stepId: z.string(),
+  reason: z.enum(['missing', 'recoverable-miss']),
+});
 /** Projects an unexpected failure to a stable cause name rather than arbitrary error details. */
 export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ name: CauseName }) });
 
@@ -285,6 +291,7 @@ const CaseUsageReportError = z.discriminatedUnion('code', [
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_ENV_VAR_COLLISION'), details: SecretEnvVarCollisionDetails.optional() }),
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_CONSENT_REQUIRED'), details: SecretConsentRequiredDetails.optional() }),
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_SYNTAX_REJECTED'), details: SecretSyntaxRejectedDetails.optional() }),
+  CaseUsageErrorBase.extend({ code: z.literal('GROUNDING_UNRESOLVED'), details: GroundingUnresolvedDetails.optional() }),
 ]);
 
 const CaseOtherEnvironmentReportError = z.discriminatedUnion('code', [

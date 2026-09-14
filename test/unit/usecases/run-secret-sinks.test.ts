@@ -8,6 +8,7 @@ import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js'
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
@@ -65,7 +66,7 @@ const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.
 const EMAIL: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Email' };
 const PASSWORD: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Password' };
 const SUBMIT: ElementRef = { strategy: 'accessibility', role: 'button', name: 'Submit' };
-const RUN_OPTIONS: RunOptions = { files: [], cacheOnly: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
+const RUN_OPTIONS: RunOptions = { files: [], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [],
   strict: false,
@@ -336,11 +337,18 @@ describe('run secret sinks', () => {
   });
 
   it('keeps AMBERCAST_SECRET_DUMMY out of CLI arguments for structured and agentic calls', async () => {
-    const runner = createFakeCommandRunner([async (call) => {
-      const { outputPath } = commandPaths(call.args);
-      await writeFile(outputPath, '{"ok":true}');
-      return { outcome: 'exited', stdout: '', stderr: '', exitCode: 0 };
-    }]);
+    const runner = createFakeCommandRunner([
+      async (call) => {
+        const { outputPath } = commandPaths(call.args);
+        await writeFile(outputPath, '{"ok":true}');
+        return { outcome: 'exited', stdout: '', stderr: '', exitCode: 0 };
+      },
+      async (call) => {
+        const result = { outcome: 'exited' as const, stdout: '', stderr: '', exitCode: 0 };
+        call.options?.onChildSettled?.(result);
+        throw new AiExecutorUnavailableError('The Codex CLI is unavailable.', { provider: 'codex' });
+      },
+    ]);
     const executor = createCodexCliExecutor({ run: runner.run });
     const controller = {
       perform: async () => undefined,
@@ -368,7 +376,7 @@ describe('run secret sinks', () => {
     await expect(executor.executeAgentic(agenticRequest))
       .rejects.toMatchObject({ kind: 'ai-executor-unavailable' });
 
-    expect(runner.calls).toHaveLength(1);
+    expect(runner.calls).toHaveLength(2);
     for (const call of runner.calls) {
       expect(call.args.some((argument) => argument.includes(SECRET_VALUE))).toBe(false);
     }

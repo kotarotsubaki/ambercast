@@ -162,12 +162,12 @@ AI の仕事は計画を作ることで、通常は 1 回で終わる。
 ## run: AI を呼ばずに再生する \{#run}
 
 ```bash
-ambercast run
+ambercast run --resolve
 ```
 
-初回の run はブラウザで計画を実行しながら、要素を使うステップについて、画面のどの要素に対応したかをグラウンディングに記録する。迷ったステップだけ AI が確認する。二度目からは記録が命中する限り AI は呼ばれない。だから速く、コストがゼロで、結果が揺れない。ローカルでは記録の更新が自動で保存され、CI では既定で保存しない。
+初回の run では `--resolve` を指定し、ブラウザで計画を実行しながら、要素を使うステップについて、画面のどの要素に対応したかをグラウンディングに記録する。迷ったステップだけ AI が確認する。二度目からは、記録が命中する限り `ambercast run` は AI を呼ばない。グラウンディングミスは既定でフェイルクローズし、ライブ解決を意図する場合には `--resolve` を使うよう案内される。だからリプレイは速く、コストがゼロで、結果が揺れない。ローカルでは記録の更新が自動で保存され、CI では既定で保存しない。
 
-UI が少し変わって記録が外れたステップだけ、AI が一段階だけ補助する。それでも直らなければ、テストは失敗として報告される。
+UI が少し変わって記録が外れたステップを解決するには `--resolve` を指定する。それでも直らなければ、テストは失敗として報告される。
 
 CI では、まず `ambercast check` で計画が古くなっていないかを確かめ、それから `ambercast run` で再生する。check は AI もブラウザも動かさない読み取り専用の検査で、run は壊れても勝手に直さない。
 
@@ -227,7 +227,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 セットアッププロンプト（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使用するエージェントはサーバーがすでに実行されていると想定し、要求がない限りサーバーを起動しません。生成が成功すると終了コード `0` で終了し、結果ステータスは `generated` になります。レポートフィールドは `planFile` であり、生成処理によって指定されたプロンプトの隣に派生した2つのコンパニオンが書き出されます。
 
-3. `npx ambercast run tests/ambercast/find-page.test.md` を実行します。
+3. `npx ambercast run --resolve tests/ambercast/find-page.test.md` を実行します。
 
 リプレイが成功すると終了コード `0` で終了します。`run` は設定された runs ディレクトリ配下に呼び出しごとの `report.json` を作成します。
 
@@ -240,7 +240,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 ## 完了状態 {#completion-state}
 
 - リゾルバーによって、プロンプトが `tests/ambercast/find-page.ambercast.plan.json` および `tests/ambercast/find-page.ambercast.grounding.json` にマッピングされます。
-- `npx ambercast run` が終了コード `0` で終了し、対象ケースについて `passed` が報告されます。
+- `npx ambercast run --resolve tests/ambercast/find-page.test.md` が終了コード `0` で終了し、対象ケースについて `passed` が報告されます。
 
 関連情報: [設定](/ambercast/ja/reference/configuration/), [ファイルレイアウト](/ambercast/ja/reference/file-layout/), [ambercast generate](/ambercast/ja/reference/cli/generate/), [ambercast run](/ambercast/ja/reference/cli/run/), [効果的なプロンプトの作成](/ambercast/ja/how-to/write-effective-prompts/)
 
@@ -288,9 +288,9 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/tutorials/repair-your-first
 
 ターゲット名およびダイジェストに参加する定義が変更されていないため、既存の Plan の鮮度（freshness）は保たれます。変更されるのはライブ修復ポリシーのみです。このファイルは `RawConfig` で必須とされている `$schema` を満たしており、Schema URL は公開されている設定用 Schema URL です。
 
-2. 失敗する実行を行う前に、runs ディレクトリの保持ポリシーと承認された閲覧者を確認します。完了した `run` はそのディレクトリに `report.json` を保存しようとし、失敗時のスクリーンショットを保存する場合があるためです（ベストエフォートであり、シークレット検出時、キャプチャ失敗時、またはストレージ書き込み失敗時には省略されます）。確認後、ロケーターに影響を与える UI の変更を行い、`npx ambercast run --cache-only tests/ambercast/<name>.test.md` を実行します。修復を試みる前に、テストが失敗した結果を確認してください。
+2. 失敗する実行を行う前に、runs ディレクトリの保持ポリシーと承認された閲覧者を確認します。完了した `run` はそのディレクトリに `report.json` を保存しようとし、失敗時のスクリーンショットを保存する場合があるためです（ベストエフォートであり、シークレット検出時、キャプチャ失敗時、またはストレージ書き込み失敗時には省略されます）。確認後、ロケーターに影響を与える UI の変更を行い、`npx ambercast run tests/ambercast/<name>.test.md` を実行します。修復を試みる前に、テストが失敗した結果を確認してください。
 
-`--cache-only` を指定すると、グラウンディングのミスが発生した際に AI による再グラウンディングを行わずにテストを失敗させます。これにより、明示的な修復承認を得る前にバージョン管理されたグラウンディングが上書きされるのを防ぎます（デフォルトの `grounding.localWriteBack: "auto"` では、再解決されたフィンガープリントが永続化され、実行が成功してしまう可能性があります）。
+既定のフェイルクローズ動作は、グラウンディングのミスが発生した際に AI による再グラウンディングを行わずにテストを失敗させます。これにより、明示的な修復承認を得る前にバージョン管理されたグラウンディングが上書きされるのを防ぎます。ライブでの再グラウンディングを意図する場合にだけ `--resolve` を指定してください。既定の `grounding.localWriteBack: "auto"` では、再解決されたフィンガープリントが永続化され、実行が成功する可能性があります。
 
 3. `npx ambercast heal --dry-run tests/ambercast/<name>.test.md` を実行し、dry-run レポートを確認します（runs ディレクトリの保持ポリシーと閲覧者はステップ2で確認済みです）。
 
@@ -415,7 +415,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/
 
 ## 確認 {#verification}
 
-- 生成後、コマンド実行環境に変数を保持したまま、安全なターゲットに対して `npx ambercast run tests/ambercast/<name>.test.md` を実行します。実行処理により環境シークレットプロバイダーが構築され、`fill-secret` は稼働中のオリジンがシンクポリシーチェックに合格した後にのみ、指定された変数を解決します。
+- 生成後、コマンド実行環境に変数を保持したまま、安全なターゲットに対して `npx ambercast run --resolve tests/ambercast/<name>.test.md` を実行します。実行処理により環境シークレットプロバイダーが構築され、`fill-secret` は稼働中のオリジンがシンクポリシーチェックに合格した後にのみ、指定された変数を解決します。
 - `npx ambercast generate --json tests/ambercast/<name>.test.md` の実行結果に `SECRET_LITERAL_REJECTED` が返されないことを確認します。この拒否処理は、永続化やレポートのシリアライズの前にプロバイダー由来の生成 JSON を検査するものであり、プロバイダーにすでに送信されたプロンプトではなく、生成されたレスポンスを保護します。
 
 ## 関連情報 {#related}
@@ -649,7 +649,7 @@ GitLab CI や汎用ランナー環境で ambercast を実行するためのポ�
 
 ## 前提条件 {#prerequisites}
 
-- `run` は `--cache-only`、`--update-cache`、`--allow-empty`、`--list` を受け付けますが、`--config` オプションは持ちません。
+- `run` は `--resolve`、`--update-cache`、`--allow-empty`、`--list` を受け付けますが、`--config` オプションは持ちません。グラウンディングミス時の既定動作はすでにフェイルクローズであるため、CI で AI 解決を抑制する追加フラグは不要です。
 
 ## 手順 {#steps}
 
@@ -1012,7 +1012,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.4` |
+| `schemaVersion` | リテラル `3.5` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -1099,7 +1099,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の8コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の9コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
@@ -1111,6 +1111,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }` |
 
 ## レポートの永続化 {#persistence}
 
@@ -1123,19 +1124,19 @@ ambercast が出力するすべての構造化フィールドを定義します�
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
 ```json
-{"schemaVersion":"3.4","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.4","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.5","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.4","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.5","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.4","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.5","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}
@@ -1162,6 +1163,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
+| GROUNDING_UNRESOLVED | usage | case | 4 | `--resolve` なしのグラウンディングミス |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | grant cannot be attributed |
 | SECRET_ENV_VAR_COLLISION | usage | case | 2 | 2つの secret が同じ環境変数名に投影される |
@@ -1320,7 +1322,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がありません） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | provenance、targets、steps を含む完成した `PlanDocument`。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.4"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.5"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
 各スキーマの `$id` はその公開パス URL と一致します。バイト単位で同一のスキーマファイルが、ドキュメントサイトと npm の `schemas/` エクスポートに公開されています。
 
@@ -1333,7 +1335,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | `plan.schema.json` | Plan の `schemaVersion` が 2 であり、provenance source、targets、steps を含む完成した `PlanDocument`。 | JSON Schema 2020-12 として変換された Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | Grounding の `schemaVersion` が 1 であり、`planDigest` およびステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 として変換された Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須であり、それ以外に宣言される設定は任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 として変換された Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report の `schemaVersion` 3.4 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report の `schemaVersion` 3.5 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行します。これによりスキーマディレクトリが再帰的に作成され、上記のちょうど 4 つのファイルが書き出されます。
 
@@ -1349,7 +1351,7 @@ Plan の重複するステップ ID や `SourceSpan.endLine >= startLine` は、
 
 ## レポートスキーマ {#report-schema}
 
-`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.4 を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
+`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.5 を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#key-table), [レポート](/ambercast/ja/reference/reports/#envelope), [適合性](/ambercast/ja/spec/conformance/), [計画ドキュメント](/ambercast/ja/spec/plan-document/), [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)
 
@@ -1581,7 +1583,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `--` | `--` はオプション解析を終了し、後続のトークンをリテラルパスとして扱います。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--` で始まるファイル名 |
 | `--allow-empty` | `--allow-empty` は、このフラグを解析するコマンドにおいて空の選択を許容します。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1パーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#planned-interface) | 実装済みの `--headed` |
-| `--cache-only` | `--cache-only` は、runの実行時にグラウンディングのミスが発生した場合にAIフォールバックを呼び出さず拒絶させます。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
+| `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可します。指定しない場合、run はミスを拒絶します。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
 | `--clear` | `--clear` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1ベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
 | `--config` | `--config` はコマンドローカルのフラグであり、generateとcheckでのみ解析されます。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 initパーサーセマンティクスはありません。 | [ambercast init](/ambercast/ja/reference/cli/init/#planned-interface) | 設定の `testDir` |
@@ -1600,7 +1602,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `.runs` | `.runs` はデフォルトの `runsDir` の最終セグメントであり、独立して解決されるルートではありません。 | 設定 / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | コンパニオンアーティファクト |
 | `.test.md` | `.test.md` は、検出されたプロンプトパスがレイアウトマッピングを受け取るために必要な正確なサフィックスです。 | レイアウト解決ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity) | 任意のMarkdown |
 | `0.1.0` | `0.1.0` はリポジトリのチェンジログに記載されている2026-09-03のリリースを示します。 | [変更履歴](/ambercast/ja/reference/changelog/#release-010) | アーティファクトのスキーマバージョン |
-| `0.3.1` | `0.3.1` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.4` |
+| `0.3.1` | `0.3.1` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.5` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` は、最も強い優先度から最も弱い優先度への固定されたプロセス終了コードの優先順位です。 | 終了コードセレクター; [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) | 数値順 |
 | `@ambercast-secret` | `@ambercast-secret` は、CommonMarkコード外で完全な付与行を開始します。 | 付与抽出ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization-and-grants) | シークレット参照 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` は、環境変数によるプロバイダーのオーバーライドを指定します。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -1681,8 +1683,8 @@ Generate options:
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
-  --grep <pattern>  --target <name>  --headed  --cache-only  --update-cache  --allow-empty  --list
-  --stale <fail>  --json  --no-color
+  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list
+  --stale <fail>  --ai <claude|codex>  --json  --no-color
 
 Check options:
   --target <name>  --allow-empty  --list  --json  --config <path>  --no-color
@@ -1695,7 +1697,7 @@ AI configuration:
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
 
 Heal configuration:
-  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
+  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the fail-closed baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
@@ -1708,7 +1710,7 @@ Heal configuration:
 | コマンド | 位置引数 | 受け付けるオプション | 設定ファイルの探索優先順位 |
 | --- | --- | --- | --- |
 | generate | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`cache-only`（キャッシュのみ）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 | check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
 | heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 
@@ -1785,7 +1787,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/
 # ambercast run
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 
-`ambercast run` は、リプレイパスの実行と実行結果の書き込みを制御するコマンドです。対象ファイルや実行オプションをフラグで指定して実行を構成します。
+`ambercast run` は、リプレイパスの実行と実行結果の書き込みを制御するコマンドです。既定では AI を呼び出さず、グラウンディングミスは `grounding-unresolved`（終了コード 4）としてフェイルクローズし、`--resolve` を使うよう案内します。ミスをライブ AI で解決するには `--resolve` を明示的に指定します。
 
 ## フラグ {#flags}
 
@@ -1795,10 +1797,10 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 | --grep | pattern | 正規表現によるパスフィルター | omitted |
 | --target | name | ターゲットを選択 | omitted |
 | --headed | boolean | ブラウザ画面を表示（headed） | false |
-| --cache-only | boolean | AIフォールバックを禁止 | false |
+| --resolve | boolean | グラウンディングミス時のライブ AI 解決を明示的に有効化 | false |
 | --update-cache | boolean | キャッシュの書き込みを要求 | false |
 | --stale | fail\|regenerate | stale（古くなった状態）ポリシーのパーサー値 | fail |
-| --ai | claude\|codex | フォールバックのオーバーライド | omitted |
+| --ai | claude\|codex | 解決プロバイダーのオーバーライド | omitted |
 | --allow-empty | boolean | 空の選択を許可 | false |
 | --list | boolean | リプレイを実行せずに一覧表示 | false |
 | --json | boolean | JSONエンベロープ形式で出力 | false |
@@ -1809,19 +1811,19 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 | 条件 | AIプロバイダー | 結果パス |
 | --- | --- | --- |
 | グラウンディングヒット | そのリプレイでは使用しない | 決定論的リプレイ |
-| グラウンディングミス、かつ cache-only が false | フォールバックリゾルバー（`--ai` によるオーバーライド） | ライブAIフォールバックおよび書き戻しの可能性 |
-| グラウンディングミス、かつ cache-only が true | なし | フォールバックせずに失敗 |
+| グラウンディングミス、`--resolve` なし | なし | `grounding-unresolved`（終了コード 4）としてフェイルクローズ |
+| グラウンディングミス、`--resolve` あり | リゾルバー（`--ai` によるオーバーライド） | ライブ AI 解決および書き戻しの可能性 |
 
 - ランタイムは、設定の読み込みやファイルI/Oを行う前に `--stale=regenerate` を拒否します。
-- ランタイムは、ブラウザ、シークレット、設定、およびフォールバックプロバイダーの解決機構を構成します。
+- ランタイムは、ブラウザ、シークレット、設定、および `--resolve` が使用できるプロバイダーの解決機構を構成します。
 
 ## AI呼び出し {#ai-calls}
 
-プロバイダーの解決機構が run ユースケースに渡されるため、グラウンディング済みのリプレイは利用可能なプロバイダーが存在しない状態でも進行できます。キャッシュミスが発生することが、そのフォールバックを必要とし得る条件です。
+プロバイダーの解決機構が run ユースケースに渡されるため、グラウンディング済みのリプレイは利用可能なプロバイダーが存在しない状態でも進行できます。キャッシュミスでそれを使用できるのは、`--resolve` を指定した場合だけです。
 
-## キャッシュのみ {#cache-only}
+## 不足しているグラウンディングを解決する {#resolve}
 
-`--cache-only` はAIフォールバックパスを禁止します。この場合、グラウンディングミスが発生してもプロバイダーをディスパッチせず、失敗します。
+`--resolve` は AI 解決パスを明示的に有効化します。指定しない場合、グラウンディングミスはプロバイダーをディスパッチせずにフェイルクローズします。
 
 ## グラウンディングの書き戻し {#grounding-write-back}
 
@@ -1909,7 +1911,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/
 
 ## 制限事項 {#limits}
 
-`heal.maxStepRepairs` が設定されている場合、実際の増分修復プロバイダーのディスパッチに対する正のハードリミットとなります。これには要素確認が含まれ、キャッシュのみのベースラインおよび Stage 3 は除外されます。
+`heal.maxStepRepairs` が設定されている場合、実際の増分修復プロバイダーのディスパッチに対する正のハードリミットとなります。これには要素確認が含まれ、フェイルクローズのベースラインおよび Stage 3 は除外されます。
 
 `heal.caseTimeoutMs` は、ケース全体に対する正の受付期限（admission deadline）です。解決される既定値は 300000 ms です。
 
@@ -2648,7 +2650,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 | report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の AI 呼び出し計測フィールドを含む現在の `3.3` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `BROWSER_LAUNCH_FAILED` details 分岐を含む現在の `3.4` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | Plan v2 → v3 で secret-grant provenance を削除 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L674) | Producer および consumer は v2 を拒否し、再生成するか stale として報告しなければならず（MUST）、インプレースで移行してはならない（MUST NOT）。[src/core/ir/schema.ts:49](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L49) |
-| report 3.4 → 3.5 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) | Report consumer は、Plan バージョンから互換性を推論するのではなく、3つの新しい secret-policy error code（`SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`）および任意の `GenerateResult.secrets`/`warnings` fields を含む現在の `3.5` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
+| report 3.4 → 3.5 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) | Report consumer は、Plan バージョンから互換性を推論するのではなく、3つの新しい secret-policy error code（`SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`）、任意の `GROUNDING_UNRESOLVED` details 分岐（`stepId`、`reason`）、および任意の `GenerateResult.secrets`/`warnings` fields を含む現在の `3.5` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 
 ## 互換性ポリシー {#compatibility-policy}
 
@@ -2744,23 +2746,23 @@ ambercastのリプレイ実行において、グラウンディングは実行�
 
 関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#replay), [CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
 
-## リプレイパス: フォールバックを伴うミス {#miss-with-ai-fallback}
+## リプレイパス: 明示的な解決を伴うミス {#miss-with-explicit-resolution}
 
-キャッシュから有効なグラウンディングが得られない場合、実行パスはフォールバックを伴う分岐へと進みます。グラウンディングの不在、stale（古くなった状態）なプロベナンス（provenance）、無効なJSON、およびキャッシュミスは、遅延エージェントフォールバックの前に分類されます。
+整合性検証に失敗したグラウンディング（無効な JSON やカバレッジまたは検証証明の失敗を含む）は、`--resolve` に関係なくフェイルクローズします。不在のグラウンディングと構造的に有効な legacy または recoverable のエントリだけが、`--resolve` でゲートされるミスパスです。
 
-cache-onlyモードが有効になっていない場合、要素グラウンディングのミスが発生してもライブで解決（resolve live）を行い、解決された要素フィンガープリントでグラウンディングエントリを更新できます。
+`--resolve` を指定した場合、要素グラウンディングのミスはライブで解決（resolve live）でき、解決された要素フィンガープリントでグラウンディングエントリを更新できます。
 
-フォールバック処理はミスパスを経た後にのみ開始されます。グラウンディングヒットの経路では、AI呼び出しイベント（AI-call event）は発行されません。
+グラウンディングヒットの経路では、AI呼び出しイベント（AI-call event）は発行されません。
 
 関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back), [グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
 
-## リプレイパス: cache-only ミス {#cache-only-miss}
+## リプレイパス: 未解決のミス {#unresolved-miss}
 
-厳格なリプレイ境界を維持する経路では、フォールバックの発生そのものが拒否されます。`--cache-only` は、コールドスタートおよび回復可能なミスの双方において、AIフォールバックを抑制します。
+`--resolve` を指定しない場合、run はコールドスタートおよび回復可能なミスの双方でライブ解決を抑制します。AI-directed replay で使用可能なトレースがない AI ディレクテッドステップは、`grounding-unresolved`（終了コード 4）としてフェイルクローズし、`--resolve` を使うよう案内します。
 
-AI-directed replay において、使用可能なトレースが存在しないAIディレクテッドステップ（AI-directed step）は、cache-onlyモードが有効な場合に中断（abort）します。同様に、要素グラウンディングのミスが発生した際も、要素をライブで解決するのではなく、cache-onlyモードでは処理を中断します。
+要素グラウンディングのミスも、要素をライブで解決するのではなく、フェイルクローズします。
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#cache-only), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#resolve), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
 
 ## ドリフトのハンドオフ {#drift-handoff}
 
@@ -2768,7 +2770,7 @@ UIの変更などによってリプレイが単純なキャッシュ判定にと
 
 `fingerprint-mismatch` は、マッチしたノードの現在のアクセシビリティフィンガープリントが、保存されているフィンガープリントと異なることを意味します。`run` のユースケースでは、`fingerprint-mismatch` をグラウンディング解決が成功した場合とは明確に異なる分類ケースとして記録します。
 
-ヒーリング処理はまず cache-only のベースラインリプレイから開始され、そこで失敗が残る場合にグラウンディングの修復を試行できます。
+ヒーリング処理はまずフェイルクローズのベースラインリプレイから開始され、そこで失敗が残る場合にグラウンディングの修復を試行できます。
 
 関連情報: [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages), [UI変更後にテストを修復する](/ambercast/ja/tutorials/repair-your-first-drift/)
 
@@ -2793,7 +2795,7 @@ CI環境においては、`ci.heal` が有効化されていない限り、実�
 
 自己修復では、キャッシュされた証拠に基づく局所的な対応から、より広範な再生成へと順を追って段階的にエスカレーションします。
 
-処理の開始時には、まずキャッシュのみのリプレイベースラインが測定されます。非キャッシュ測定が試行されるのは、このベースライン測定で失敗が確認された場合のみです。
+処理の開始時には、まずフェイルクローズのリプレイベースラインが測定されます。解決を有効にした測定が試行されるのは、このベースライン測定で失敗が確認された場合のみです。
 
 第1ステージでは、最初に失敗したフロンティアにおいてグラウンディング修復を試みます。フロンティアが前進する際には、要素の再グラウンディングまたはAIによる再トレースのいずれかが記録されます。
 

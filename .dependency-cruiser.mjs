@@ -290,5 +290,6 @@ export default {
   options: {
     tsPreCompilationDeps: 'specify',
     tsConfig: { fileName: TSCONFIG_FILE },
+    enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'node', 'default'] },
   },
 };

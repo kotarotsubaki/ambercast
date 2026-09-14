@@ -15,7 +15,7 @@ Links: [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [Configur
 
 ## Three-stage escalation {#three-stages}
 
-When responding to test drift, healing moves in order from cached evidence to broader regeneration. Healing first measures a cache-only replay baseline, then attempts a non-cache-only measurement only when that baseline has a failure.
+When responding to test drift, healing moves in order from cached evidence to broader regeneration. Healing first measures a fail-closed replay baseline, then attempts a resolution-enabled measurement only when that baseline has a failure.
 
 When that baseline fails, repair escalates across three stages:
 

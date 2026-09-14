@@ -73,9 +73,13 @@ export interface RunCommandInput {
   readonly headed: boolean;
 
   /**
-   * Prevents a replay miss from invoking the lazy AI fallback.
+   * Permits AI resolution only when grounding replay misses.
+   *
+   * Omitting this opt-in preserves fail-closed replay. The command boundary
+   * carries this explicit policy so the use case can distinguish replay from
+   * resolution without inferring intent from grounding state.
    */
-  readonly cacheOnly: boolean;
+  readonly resolve: boolean;
 
   /**
    * Records the caller's explicit request to persist this invocation's
@@ -253,7 +257,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
         files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
         ...(input.grep === undefined ? {} : { grep: input.grep }),
         ...(input.target === undefined ? {} : { target: input.target }),
-        cacheOnly: input.cacheOnly,
+        resolve: input.resolve,
         updateCache: input.updateCache,
         allowEmpty: input.allowEmpty,
         list: input.list,

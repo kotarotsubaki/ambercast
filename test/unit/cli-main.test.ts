@@ -399,7 +399,7 @@ describe('main()', () => {
       'web',
       '--headed',
       '--json',
-      '--cache-only',
+      '--resolve',
       '--update-cache',
       '--stale',
       'regenerate',
@@ -412,7 +412,7 @@ describe('main()', () => {
       grep: expect.any(RegExp),
       target: 'web',
       headed: true,
-      cacheOnly: true,
+      resolve: true,
       updateCache: true,
       stale: 'regenerate',
       aiProviderOverride: 'claude',
@@ -521,6 +521,7 @@ describe('main()', () => {
 
   it.each([
     ['unknown run flag even with JSON requested', ['run', '--json', '--unknown']],
+    ['removed cache-only run flag', ['run', '--cache-only']],
     ['missing grep value', ['run', '--grep']],
     ['missing target value', ['run', '--target']],
     ['missing stale value', ['run', '--stale']],
@@ -534,6 +535,16 @@ describe('main()', () => {
     expect(result.stderr.trim().startsWith('{')).toBe(false);
     expect(result.exitCode).toBe(2);
     expect(runRunCommand).not.toHaveBeenCalled();
+  });
+
+  it('parses --resolve as an explicit opt-in and defaults it to false', async () => {
+    runRunCommand.mockResolvedValue({ exitCode: 0, envelope: RUN_ENVELOPE });
+
+    await run(['run']);
+    await run(['run', '--resolve']);
+
+    expect(runRunCommand.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ resolve: false }));
+    expect(runRunCommand.mock.calls[1]?.[0]).toEqual(expect.objectContaining({ resolve: true }));
   });
 
   it('rejects a malformed run grep pattern before command composition', async () => {

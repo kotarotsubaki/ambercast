@@ -137,7 +137,7 @@ export const CLI_MANIFEST: VersionlessCliManifest = {
         { name: 'grep', alias: null, value: '<pattern>', hidden: false, acceptedValues: null, shownValue: null, effect: 'RegExp path filter', default: 'omitted', lineBreakAfter: false },
         { name: 'target', alias: null, value: '<name>', hidden: false, acceptedValues: null, shownValue: null, effect: 'select target', default: 'omitted', lineBreakAfter: false },
         { name: 'headed', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'headed browser', default: 'false', lineBreakAfter: false },
-        { name: 'cache-only', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'forbid AI fallback', default: 'false', lineBreakAfter: false },
+        { name: 'resolve', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'allow AI resolution for grounding misses', default: 'false', lineBreakAfter: false },
         { name: 'update-cache', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'request cache write', default: 'false', lineBreakAfter: false },
         { name: 'allow-empty', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'allow empty selection', default: 'false', lineBreakAfter: false },
         { name: 'list', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'list without replay', default: 'false', lineBreakAfter: true },

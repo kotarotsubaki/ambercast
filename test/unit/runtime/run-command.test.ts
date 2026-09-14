@@ -121,7 +121,7 @@ function runEnvelope(output: RunCommandOutput): Extract<RunCommandOutput['envelo
 
 function input(overrides: Partial<RunCommandInput> = {}): RunCommandInput {
   return {
-    files: [], headed: false, cacheOnly: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail', cwd: '/workspace', stderr: TEST_STDERR, ...overrides,
+    files: [], headed: false, resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail', cwd: '/workspace', stderr: TEST_STDERR, ...overrides,
   };
 }
 
@@ -944,7 +944,7 @@ describe('runRunCommand', () => {
       grep,
       target: 'web',
       headed: true,
-      cacheOnly: true,
+      resolve: false,
       aiProviderOverride: 'codex',
     }))).resolves.toEqual(persistedOutput);
 
@@ -974,7 +974,7 @@ describe('runRunCommand', () => {
       files: ['/workspace/login.test.md'],
       grep,
       target: 'web',
-      cacheOnly: true,
+      resolve: false,
       updateCache: false,
       allowEmpty: false,
       list: false,

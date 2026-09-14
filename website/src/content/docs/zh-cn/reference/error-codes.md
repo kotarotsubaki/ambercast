@@ -16,6 +16,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | MISSING_PLAN | usage | run/case | 4 | 缺失 plan |
 | STALE_PLAN | usage | run/case | 4 | plan 已过期（`stale`） |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | 制品完整性校验失败 |
+| GROUNDING_UNRESOLVED | usage | case | 4 | 未传入 `--resolve` 的 grounding 未命中 |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | 字面量 secret 被拒绝 |
 | SECRET_GRANT_UNATTRIBUTABLE | usage | run/case | 2 | 授权无法归属 |
 | SECRET_ENV_VAR_COLLISION | usage | case | 2 | 两个 secret 投影到同一个环境变量名 |

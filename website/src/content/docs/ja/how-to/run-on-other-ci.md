@@ -7,7 +7,7 @@ GitLab CI や汎用ランナー環境で ambercast を実行するためのポ�
 
 ## 前提条件 {#prerequisites}
 
-- `run` は `--cache-only`、`--update-cache`、`--allow-empty`、`--list` を受け付けますが、`--config` オプションは持ちません。
+- `run` は `--resolve`、`--update-cache`、`--allow-empty`、`--list` を受け付けますが、`--config` オプションは持ちません。グラウンディングミス時の既定動作はすでにフェイルクローズであるため、CI で AI 解決を抑制する追加フラグは不要です。
 
 ## 手順 {#steps}
 

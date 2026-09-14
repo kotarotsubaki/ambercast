@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
+import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
@@ -34,7 +35,7 @@ const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' as
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const } };
 const OPTIONS: RunOptions = {
   files: [TEST_PATH],
-  cacheOnly: false,
+  resolve: true,
   updateCache: false,
   allowEmpty: false,
   list: false,
@@ -325,7 +326,7 @@ describe('run instruction coverage trust boundary', () => {
     recording.resetMutations();
     const arranged = scenario(recording);
 
-    const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+    const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
     expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 0 });
     expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
@@ -491,16 +492,19 @@ describe('run instruction coverage trust boundary', () => {
       .not.toHaveProperty('reach-action');
   });
 
-  it('treats safe legacy evidence as a cache-only miss without AI or browser activity', async () => {
+  it('reports safe legacy evidence as an unresolved preflight miss without AI or browser activity', async () => {
     const recording = recordingStorage();
     await arrangeArtifacts(recording.storage, { events: [], verification: [READY_ASSERTION] });
     recording.resetMutations();
     const arranged = scenario(recording);
 
-    const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly: true });
+    const outcome = await run(arranged.deps, { ...OPTIONS, resolve: false });
 
     expect(outcome.results[0]?.result).toMatchObject({ status: 'error', aiCalls: 0 });
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      details: { stepId: 'reach-dashboard', reason: 'recoverable-miss' },
+    });
     expect(outcome.results[0]?.result.steps[0]).toMatchObject({
       id: 'reach-dashboard',
       status: 'error',
@@ -528,7 +532,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/secret|literal/i);
@@ -553,7 +557,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|canonical/i);
@@ -580,7 +584,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error).toMatchObject({
@@ -620,7 +624,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|verification|terminal/i);
@@ -651,7 +655,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/instruction|coverage|source span/i);
@@ -700,7 +704,7 @@ describe('run instruction coverage trust boundary', () => {
         recording.resetMutations();
         const arranged = scenario(recording);
 
-        const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+        const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
         expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
         expect(outcome.results[0]?.error?.message).toMatch(message);
@@ -735,7 +739,7 @@ describe('run instruction coverage trust boundary', () => {
         recording.resetMutations();
         const arranged = scenario(recording);
 
-        const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+        const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
         expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
         expect(outcome.results[0]?.error?.message).toMatch(/coverage|grounding|verification/i);
@@ -768,7 +772,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|grounding|integrity/i);
@@ -810,7 +814,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|duplicate|grounding|verification/i);
@@ -843,7 +847,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|duplicate|grounding|verification/i);
@@ -883,7 +887,7 @@ describe('run instruction coverage trust boundary', () => {
       recording.resetMutations();
       const arranged = scenario(recording);
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly: true });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: false });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|verification|terminal/i);
@@ -993,7 +997,7 @@ describe('run instruction coverage trust boundary', () => {
         ]]),
       });
 
-      const outcome = await run(arranged.deps, { ...OPTIONS, cacheOnly });
+      const outcome = await run(arranged.deps, { ...OPTIONS, resolve: !cacheOnly });
 
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();

@@ -15,6 +15,7 @@ const ALL_ERROR_KINDS = [
   'missing-plan',
   'stale-ir',
   'integrity-violation',
+  'grounding-unresolved',
   'browser-launch-failed',
   'ai-executor-unavailable',
   'ai-response-invalid',
@@ -55,6 +56,7 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
     case 'missing-plan':
     case 'stale-ir':
     case 'integrity-violation':
+    case 'grounding-unresolved':
       return 4;
     case 'no-tests-found':
       return 5;
@@ -76,5 +78,9 @@ describe('ERROR_EXIT_CODES', () => {
     for (const value of Object.values(ERROR_EXIT_CODES)) {
       expect([1, 2, 3, 4, 5]).toContain(value);
     }
+  });
+
+  it('assigns grounding-unresolved the fail-closed usage exit status', () => {
+    expect(ERROR_EXIT_CODES['grounding-unresolved']).toBe(4);
   });
 });

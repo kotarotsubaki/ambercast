@@ -187,7 +187,7 @@ beforeEach(() => {
 
 function runInput() {
   return {
-    files: [], headed: false, cacheOnly: false, updateCache: false,
+    files: [], headed: false, resolve: true, updateCache: false,
     allowEmpty: false, list: false, stale: 'fail' as const, cwd: '/workspace', stderr: TEST_STDERR,
   };
 }

@@ -7,7 +7,7 @@ description: 适用于 GitLab CI 与通用运行器的可移植 CI 配置方案�
 
 ## 前提条件 {#prerequisites}
 
-- `run` 接受 `--cache-only`、`--update-cache`、`--allow-empty` 和 `--list`；它没有 `--config` 选项。
+- `run` 接受 `--resolve`、`--update-cache`、`--allow-empty` 和 `--list`；它没有 `--config` 选项。其 grounding 未命中的默认行为已经是失败关闭，因此 CI 无需额外标志来抑制 AI 解析。
 
 ## 操作步骤 {#steps}
 

@@ -624,6 +624,25 @@ describe('createFsStorage()', () => {
     }
   });
 
+  it('creates a missing parent directory before acquiring an exclusive-update lock', async () => {
+    await withIsolatedStorage(async (storage) => {
+      const targetPath = 'nested/config/consent.json';
+      const lockPath = `${targetPath}.lock`;
+
+      await expect(storage.updateTextExclusive(targetPath, (current) => {
+        expect(current).toBeNull();
+        return '{"accepted":true}\n';
+      })).resolves.toBeUndefined();
+
+      expect(vi.mocked(fsPromises.writeFile)).toHaveBeenCalledWith(
+        lockPath,
+        expect.any(String),
+        { encoding: 'utf8', flag: 'wx' },
+      );
+      await expect(storage.readText(targetPath)).resolves.toBe('{"accepted":true}\n');
+    });
+  });
+
   it('checks cancellation immediately before the first lock-acquisition attempt', async () => {
     const fake = new SharedFakeFs();
     fake.setText('/shared/config.json', '{"names":[]}');

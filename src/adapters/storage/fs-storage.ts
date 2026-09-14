@@ -237,8 +237,9 @@ export function createFsStorage(): StorageAdapter {
        * cross-process boundary, otherwise two accepted batches can lose names.
        * A null result is an intentional no-op, not an empty-file write
        * (SPEC-C2-9, SPEC-C2-10).
-       */
+      */
       await rejectSymbolicLink(path);
+      await ensureParentDirectory(path);
       const lockPath = `${path}.lock`;
       const token = `${process.pid}-${randomBytes(8).toString('hex')}`;
       await acquireLock(lockPath, token, signal);
@@ -257,7 +258,6 @@ export function createFsStorage(): StorageAdapter {
 
         const replacement = await updater(current);
         if (replacement !== null) {
-          await ensureParentDirectory(path);
           throwIfAborted(signal);
           await writeAtomic(path, async (temporaryPath) => {
             await writeFile(temporaryPath, replacement, { encoding: 'utf8', flag: 'wx' });

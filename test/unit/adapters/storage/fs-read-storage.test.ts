@@ -29,7 +29,7 @@ function isSymbolicLinkPermissionError(error: unknown): error is { readonly code
 }
 
 // Issue #193 derives this set from the storage adapter so coverage follows future method additions or renames.
-const readOnlyMethodNames = ['readText', 'exists'] as const;
+const readOnlyMethodNames = ['readText', 'readTextSnapshotIfExists', 'exists'] as const;
 const allStorageMethodNames = Object.keys(createFsStorage());
 const nonReadStorageMethodNames = allStorageMethodNames.filter(
   (name) => !(readOnlyMethodNames as readonly string[]).includes(name),
@@ -49,6 +49,49 @@ describe('createFsReadStorage()', () => {
       await writeFile('present.txt', 'present', 'utf8');
 
       await expect(storage.exists('present.txt')).resolves.toBe(true);
+    });
+  });
+
+  it('returns detached text and bytes from one optional snapshot read', async () => {
+    await withIsolatedStorage(async (storage) => {
+      const original = new Uint8Array([0x68, 0x69, 0x80]);
+      await writeFile('snapshot.txt', original);
+
+      const snapshot = await storage.readTextSnapshotIfExists('snapshot.txt');
+      expect(snapshot).not.toBeNull();
+      if (snapshot === null) {
+        throw new Error('Expected an existing optional snapshot.');
+      }
+
+      expect(snapshot.text).toBe(new TextDecoder().decode(snapshot.bytes));
+      expect(snapshot.bytes).toEqual(original);
+      snapshot.bytes[0] = 0;
+
+      const retained = await storage.readTextSnapshotIfExists('snapshot.txt');
+      expect(retained?.bytes).toEqual(original);
+    });
+  });
+
+  it('returns null only when the optional snapshot path is missing', async () => {
+    await withIsolatedStorage(async (storage) => {
+      await expect(storage.readTextSnapshotIfExists('missing.txt')).resolves.toBeNull();
+    });
+  });
+
+  it('propagates a directory read failure instead of classifying it as absence', async () => {
+    await withIsolatedStorage(async (storage) => {
+      await mkdir('directory');
+
+      await expect(storage.readTextSnapshotIfExists('directory')).rejects.toBeInstanceOf(Error);
+    });
+  });
+
+  it('propagates ENOTDIR instead of classifying it as absence', async () => {
+    await withIsolatedStorage(async (storage) => {
+      await writeFile('not-a-directory', 'file', 'utf8');
+
+      await expect(storage.readTextSnapshotIfExists('not-a-directory/child.txt'))
+        .rejects.toMatchObject({ code: 'ENOTDIR' });
     });
   });
 
@@ -98,13 +141,15 @@ describe('createFsReadStorage()', () => {
     });
   });
 
-  it('exposes exactly the two read-only operations as own properties', () => {
-    expect([...Reflect.ownKeys(createFsReadStorage())].sort()).toEqual(['exists', 'readText']);
+  it('exposes exactly the three read-only operations as own properties', () => {
+    expect([...Reflect.ownKeys(createFsReadStorage())].sort()).toEqual(
+      ['exists', 'readText', 'readTextSnapshotIfExists'].sort(),
+    );
   });
 
   it('derives the excluded method list from createFsStorage() and matches the fixed named set', () => {
     expect([...nonReadStorageMethodNames].sort()).toEqual(
-      ['ensureDir', 'listFiles', 'readBinary', 'readTextSnapshot', 'writeBinary', 'writeText'].sort(),
+      ['ensureDir', 'listFiles', 'readBinary', 'readTextSnapshot', 'updateTextExclusive', 'writeBinary', 'writeText'].sort(),
     );
   });
 

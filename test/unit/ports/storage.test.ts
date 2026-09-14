@@ -5,6 +5,12 @@ describe('storage port shape', () => {
   it('defines the complete text, binary, existence, listing, and directory surface', () => {
     expectTypeOf<StorageAdapter['readText']>().toEqualTypeOf<(path: string) => Promise<string>>();
     expectTypeOf<StorageAdapter['readTextSnapshot']>().toEqualTypeOf<(path: string) => Promise<{ readonly text: string; readonly bytes: Uint8Array }>>();
+    expectTypeOf<StorageAdapter['readTextSnapshotIfExists']>().toEqualTypeOf<(path: string) => Promise<{ readonly text: string; readonly bytes: Uint8Array } | null>>();
+    expectTypeOf<StorageAdapter['updateTextExclusive']>().toEqualTypeOf<(
+      path: string,
+      updater: (current: string | null) => string | null | Promise<string | null>,
+      signal?: AbortSignal,
+    ) => Promise<void>>();
     expectTypeOf<StorageAdapter['writeText']>().toEqualTypeOf<(path: string, content: string) => Promise<void>>();
     expectTypeOf<StorageAdapter['readBinary']>().toEqualTypeOf<(path: string) => Promise<Uint8Array>>();
     expectTypeOf<StorageAdapter['writeBinary']>().toEqualTypeOf<(path: string, content: Uint8Array) => Promise<void>>();
@@ -17,9 +23,11 @@ describe('storage port shape', () => {
 describe('read storage port shape', () => {
   it('defines exactly the text-read and regular-file existence surface', () => {
     expectTypeOf<ReadStorageAdapter['readText']>().toEqualTypeOf<(path: string) => Promise<string>>();
+    expectTypeOf<ReadStorageAdapter['readTextSnapshotIfExists']>().toEqualTypeOf<(path: string) => Promise<{ readonly text: string; readonly bytes: Uint8Array } | null>>();
     expectTypeOf<ReadStorageAdapter['exists']>().toEqualTypeOf<(path: string) => Promise<boolean>>();
     expectTypeOf<ReadStorageAdapter>().toEqualTypeOf<{
       readText(path: string): Promise<string>;
+      readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null>;
       exists(path: string): Promise<boolean>;
     }>();
   });

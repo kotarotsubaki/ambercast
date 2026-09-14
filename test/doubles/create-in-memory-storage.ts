@@ -78,6 +78,7 @@ function ensureDirectory(
 export function createInMemoryStorage(): StorageAdapter {
   const files = new Map<string, Uint8Array>();
   const directories = new Set<string>(['']);
+  const exclusiveUpdates = new Map<string, Promise<void>>();
 
   return {
     async readText(path: string): Promise<string> {
@@ -95,6 +96,50 @@ export function createInMemoryStorage(): StorageAdapter {
       }
 
       return { text: utf8Decoder.decode(content), bytes: new Uint8Array(content) };
+    },
+    async readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+      const content = files.get(path);
+      if (content === undefined) {
+        if (directories.has(path)) {
+          throw new Error(`Cannot read directory path: ${path}`);
+        }
+
+        return null;
+      }
+
+      return { text: utf8Decoder.decode(content), bytes: new Uint8Array(content) };
+    },
+    async updateTextExclusive(
+      path: string,
+      updater: (current: string | null) => string | null | Promise<string | null>,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      const previous = exclusiveUpdates.get(path) ?? Promise.resolve();
+      const current = previous.catch(() => undefined).then(async () => {
+        signal?.throwIfAborted();
+        const stored = files.get(path);
+        if (stored === undefined && directories.has(path)) {
+          throw new Error(`Cannot update directory path: ${path}`);
+        }
+
+        const replacement = await updater(stored === undefined ? null : utf8Decoder.decode(stored));
+        if (replacement === null) {
+          return;
+        }
+
+        signal?.throwIfAborted();
+        ensureParentDirectories(path, directories, files);
+        files.set(path, utf8Encoder.encode(replacement));
+      });
+
+      exclusiveUpdates.set(path, current);
+      try {
+        await current;
+      } finally {
+        if (exclusiveUpdates.get(path) === current) {
+          exclusiveUpdates.delete(path);
+        }
+      }
     },
     async writeText(path: string, content: string): Promise<void> {
       ensureParentDirectories(path, directories, files);

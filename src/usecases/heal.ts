@@ -380,6 +380,20 @@ function createHealOverlayStorage(
       const bytes = buffered.has(path) ? bufferedBytes(path) : new Uint8Array(snapshotFor(path).bytes);
       return { text: buffered.has(path) ? buffered.get(path)! : snapshotFor(path).text, bytes };
     },
+    readTextSnapshotIfExists: async (path) => {
+      if (!tracked(path)) return base.readTextSnapshotIfExists(path);
+      const bytes = buffered.has(path) ? bufferedBytes(path) : new Uint8Array(snapshotFor(path).bytes);
+      return { text: buffered.has(path) ? buffered.get(path)! : snapshotFor(path).text, bytes };
+    },
+    updateTextExclusive: async (_path, _updater, _signal) => {
+      /*
+       * Healing may buffer only its validated plan and grounding pair. Config
+       * mutation would escape that per-case commit capability and make repair
+       * authorization imply a separate consent write, so this boundary rejects
+       * instead of delegating to base storage (SPEC-C2-10).
+       */
+      throw new FsIoErrorClass('Config updates not permitted during heal.');
+    },
     exists: async (path) => tracked(path) ? true : base.exists(path),
     writeText: async (path, text) => {
       if (tracked(path)) {

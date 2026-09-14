@@ -116,6 +116,20 @@ describe('createInMemoryStorage', () => {
     await expect(storage.readBinary('missing.bin')).resolves.toEqual(new Uint8Array([1]));
   });
 
+  it('returns null for missing optional snapshots and serializes exclusive updates', async () => {
+    const storage = createInMemoryStorage();
+    await expect(storage.readTextSnapshotIfExists('missing.txt')).resolves.toBeNull();
+    await storage.writeText('config.json', 'start');
+    await Promise.all([
+      storage.updateTextExclusive('config.json', async (current) => `${current}A`),
+      storage.updateTextExclusive('config.json', async (current) => `${current}B`),
+    ]);
+    const updated = await storage.readText('config.json');
+    expect(updated).toMatch(/^start(?:AB|BA)$/);
+    await storage.updateTextExclusive('config.json', () => null);
+    await expect(storage.readText('config.json')).resolves.toBe(updated);
+  });
+
   it('keeps two storage instances isolated', async () => {
     const first = createInMemoryStorage();
     const second = createInMemoryStorage();

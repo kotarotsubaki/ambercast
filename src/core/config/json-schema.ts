@@ -9,6 +9,15 @@ import { z } from 'zod';
 import { RawConfig } from './schema.js';
 
 /**
+ * Canonical identity for the generated configuration schema.
+ *
+ * The consent writer uses the same public identifier when it creates a new
+ * configuration, so a generated document and its published validation schema
+ * cannot disagree about their contract (SPEC-C2-1, SPEC-C2-9).
+ */
+export const CONFIG_SCHEMA_ID = 'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json';
+
+/**
  * Returns a JSON Schema 2020-12 representation of the raw configuration
  * document.
  *
@@ -23,7 +32,7 @@ import { RawConfig } from './schema.js';
 export function getConfigJsonSchema(): z.core.JSONSchema.BaseSchema {
   return {
     ...z.toJSONSchema(RawConfig),
-    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json',
+    $id: CONFIG_SCHEMA_ID,
     title: 'ambercast config schema',
     description: 'Validates the parsed contents of a present Ambercast configuration file.',
   };

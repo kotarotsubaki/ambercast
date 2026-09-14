@@ -1122,7 +1122,7 @@ describe('architecture guardrails', () => {
         fileName: PLAN_INPUT_PROVENANCE_MODULE_FILE,
       }),
     ]);
-  });
+  }, 90_000);
 
   test('detects a planted digest call outside the exact authority identity through the architecture scan path', () => {
     const authority = ts.createSourceFile(

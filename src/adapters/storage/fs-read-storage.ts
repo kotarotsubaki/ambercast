@@ -17,9 +17,13 @@ import type { ReadStorageAdapter } from '#ports/storage.js';
  * file existence probes.
  *
  * @remarks
- * The object contains exactly the two `ReadStorageAdapter`
- * members, rather than a cast or projection of a fuller adapter. This keeps
- * write methods absent at runtime as well as unavailable through the type.
+ * The object contains the read-only `ReadStorageAdapter` surface, rather than
+ * a cast or projection of a fuller adapter. This keeps write methods absent at
+ * runtime as well as unavailable through the type.
+ *
+ * Optional snapshots use a direct read so `null` remains reserved for a
+ * genuinely missing path; an existence probe would hide inspection failures
+ * and observe a separate filesystem version (SPEC-C2-12).
  */
 export function createFsReadStorage(): ReadStorageAdapter {
   return {
@@ -30,6 +34,17 @@ export function createFsReadStorage(): ReadStorageAdapter {
 
       return readFile(path, 'utf8');
     },
+    async readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+      try {
+        const bytes = new Uint8Array(await readFile(path));
+        return { text: new TextDecoder().decode(bytes), bytes: new Uint8Array(bytes) };
+      } catch (error) {
+        if (isMissingPathError(error)) {
+          return null;
+        }
+        throw error;
+      }
+    },
     async exists(path: string): Promise<boolean> {
       try {
         return (await stat(path)).isFile();
@@ -38,4 +53,8 @@ export function createFsReadStorage(): ReadStorageAdapter {
       }
     },
   };
+}
+
+function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }

@@ -426,6 +426,12 @@ describe('loadConfig', () => {
         async readTextSnapshot(): Promise<{ readonly text: string; readonly bytes: Uint8Array }> {
           throw sentinelError;
         },
+        async readTextSnapshotIfExists(): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
+          throw sentinelError;
+        },
+        async updateTextExclusive(): Promise<void> {
+          throw sentinelError;
+        },
         async writeText(): Promise<void> {},
         async readBinary(): Promise<Uint8Array> {
           return new Uint8Array();

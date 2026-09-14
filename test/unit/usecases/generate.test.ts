@@ -24,6 +24,7 @@ import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
@@ -1754,11 +1755,13 @@ describe('generate', () => {
     await writePrompt(recordingStorage.storage, 'first.test.md', 'first');
     await writePrompt(recordingStorage.storage, 'second.test.md', 'second');
 
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const commitAllowlist = vi.fn(async () => undefined);
     const outcome = await generate(withSecretConfig({
       ...deps,
       consent: {
-        request: async () => ({ kind: 'allowed' as const, renames: [] }),
-        commitAllowlist: async () => undefined,
+        request,
+        commitAllowlist,
       },
     }, '*'), DEFAULT_OPTIONS);
     expect(outcome).toMatchObject({
@@ -1771,6 +1774,8 @@ describe('generate', () => {
     expect(execute).toHaveBeenCalledTimes(expectedAiCalls);
     expect(aiCallEvents(events.emitted())).toHaveLength(expectedAiCalls);
     expect(aiEvents(events.emitted())).toHaveLength(expectedAiCalls * 2);
+    expect(request).not.toHaveBeenCalled();
+    expect(commitAllowlist).not.toHaveBeenCalled();
   });
 
   it('wraps a per-call timeout as an unavailable executor failure and continues the batch', async () => {
@@ -2190,11 +2195,13 @@ describe('generate', () => {
     });
     const testPath = await writePrompt(recordingStorage.storage);
 
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const commitAllowlist = vi.fn(async () => undefined);
     const outcome = await generate(withSecretConfig({
       ...deps,
       consent: {
-        request: async () => ({ kind: 'allowed' as const, renames: [] }),
-        commitAllowlist: async () => undefined,
+        request,
+        commitAllowlist,
       },
     }, '*'), DEFAULT_OPTIONS);
     const text = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
@@ -2202,6 +2209,8 @@ describe('generate', () => {
 
     expect(outcome.results[0]).toMatchObject({ status: 'generated' });
     expect(toCanonicalArtifactText(parsed as unknown as JsonValueT)).toBe(text);
+    expect(request).not.toHaveBeenCalled();
+    expect(commitAllowlist).not.toHaveBeenCalled();
   });
 
   const producerBundleMeta = () => {
@@ -3226,6 +3235,28 @@ describe('generate secret naming and consent boundaries', () => {
     expect(execute).toHaveBeenCalledOnce();
   });
 
+  it('rejects an environment-name collision while preparing a fresh candidate before it reaches consent', async () => {
+    const scenario = createScenario();
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    await seedFreshArtifacts(scenario.recordingStorage.storage, file, [
+      { id: 'fill-dot', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Dot' }, secretRef: '{{secrets.foo.bar}}' },
+      { id: 'fill-underscore', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Underscore' }, secretRef: '{{secrets.foo_bar}}' },
+    ] as unknown as Step[]);
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const commitAllowlist = vi.fn(async () => undefined);
+
+    const outcome = await generate(
+      withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(outcome.results).toMatchObject([{ file, status: 'failed', error: { kind: 'secret-env-var-collision' } }]);
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretEnvVarCollisionError);
+    expect(scenario.execute).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+    expect(commitAllowlist).not.toHaveBeenCalled();
+  });
+
   it('projects one AI secret row after duplicate provider choices normalize to one ref', async () => {
     const response = {
       steps: [{
@@ -3314,6 +3345,20 @@ describe('generate secret naming and consent boundaries', () => {
     expect(commitAllowlist.mock.invocationCallOrder[0]).toBeLessThan(writeText.mock.invocationCallOrder[0]!);
   });
 
+  it('does not request or commit consent for a wildcard allowlist', async () => {
+    const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+
+    await expect(generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, '*'), DEFAULT_OPTIONS))
+      .resolves.toMatchObject({ results: [{ status: 'generated' }] });
+
+    expect(request).not.toHaveBeenCalled();
+    expect(commitAllowlist).not.toHaveBeenCalled();
+  });
+
   it('forbid mode neither requests nor commits and returns the prepared candidate result without normal settlement', async () => {
     const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
     const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
@@ -3397,6 +3442,86 @@ describe('generate secret naming and consent boundaries', () => {
     expect(request).toHaveBeenCalledOnce();
     expect(commitAllowlist).toHaveBeenCalledExactlyOnceWith('/workspace/ambercast.config.json', ['account_password'], undefined);
     expect(outcome.results).toMatchObject([{ secrets: [expect.objectContaining({ name: 'account_password', selectionSource: 'interactive-rename' })] }]);
+  });
+
+  it('rejects a simultaneous cross-occurrence rename set whose destinations collide as environment variables', async () => {
+    const response = {
+      steps: [
+        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
+        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
+      const renames = [
+        { file: `${TEST_DIR}/login.test.md`, name: 'alpha', newName: 'foo.bar' },
+        { file: `${TEST_DIR}/login.test.md`, name: 'beta', newName: 'foo_bar' },
+      ] as const;
+      expect(input.validateRenames(renames)).toEqual({
+        ok: false,
+        failedKeys: [
+          { file: `${TEST_DIR}/login.test.md`, name: 'alpha' },
+          { file: `${TEST_DIR}/login.test.md`, name: 'beta' },
+        ],
+      });
+      return { kind: 'allowed' as const, renames: [] };
+    });
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'two names' }) }) });
+    await writePrompt(scenario.recordingStorage.storage);
+
+    await generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS);
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(commitAllowlist).toHaveBeenCalledExactlyOnceWith('/workspace/ambercast.config.json', ['alpha', 'beta'], undefined);
+  });
+
+  it('applies a shared rename consistently to duplicate selected occurrences', async () => {
+    const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
+    const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
+      expect(input.items).toHaveLength(2);
+      const renames = [{ file: `${TEST_DIR}/login.test.md`, name: 'password', newName: 'account_password' }] as const;
+      expect(input.validateRenames(renames)).toEqual({ ok: true });
+      return { kind: 'allowed' as const, renames };
+    });
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['login.test.md', 'login.test.md']),
+    });
+    const file = await writePrompt(scenario.recordingStorage.storage);
+
+    const outcome = await generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS);
+
+    expect(outcome.results).toMatchObject([{ file, status: 'generated' }, { file, status: 'skipped-fresh' }]);
+    expect(commitAllowlist).toHaveBeenCalledExactlyOnceWith('/workspace/ambercast.config.json', ['account_password'], undefined);
+    const plan = PlanDocument.parse(JSON.parse(await scenario.deps.storage.readText(scenario.deps.layout.planPathFor(file))));
+    expect(plan.steps).toMatchObject([{ secretRef: '{{secrets.account_password}}' }]);
+  });
+
+  it('keeps an unedited use at a merged destination marked with its original selection source', async () => {
+    const response = {
+      steps: [
+        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
+        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const request = vi.fn(async () => ({
+      kind: 'allowed' as const,
+      renames: [{ file: `${TEST_DIR}/login.test.md`, name: 'alpha', newName: 'beta' }],
+    }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'two names' }) }) });
+    await writePrompt(scenario.recordingStorage.storage);
+
+    const outcome = await generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist: async () => undefined } }, []), DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]).toMatchObject({
+      secrets: [
+        { name: 'beta', stepId: 'fill-alpha', selectionSource: 'interactive-rename' },
+        { name: 'beta', stepId: 'fill-beta', selectionSource: 'target-slug' },
+      ],
+    });
   });
 
   it('re-prompts only failed rename keys through the existing request without issuing a second request', async () => {
@@ -3483,6 +3608,26 @@ describe('generate secret naming and consent boundaries', () => {
     await generate(scenario.deps, DEFAULT_OPTIONS);
 
     expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an earlier Stage-1 success before a later Stage-1 failure in selection-occurrence order', async () => {
+    const execute = vi.fn(async (request: AiExecuteRequest<unknown>) => {
+      if (String((request.context as { readonly testMd: string }).testMd).includes('second')) throw new AiExecutorUnavailableError('later failed');
+      return { data: RESPONSE, raw: 'first succeeded' };
+    });
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['first.test.md', 'second.test.md']),
+    });
+    const first = await writePrompt(scenario.recordingStorage.storage, 'first.test.md', 'first');
+    const second = await writePrompt(scenario.recordingStorage.storage, 'second.test.md', 'second');
+
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+
+    expect(outcome.results.map(({ file, status }) => ({ file, status }))).toEqual([
+      { file: first, status: 'generated' },
+      { file: second, status: 'failed' },
+    ]);
   });
 
   it('lets a later duplicate observe a successfully generated virtual plan before settlement makes it durable', async () => {
@@ -3714,8 +3859,9 @@ describe('generate secret naming and consent boundaries', () => {
     ['a non-v3 plan', JSON.stringify({ schemaVersion: 2, source: { inputsDigest: '0'.repeat(64) }, targets: {}, steps: [] })],
   ] as const)('does not warn from %s returned by the forced old-plan snapshot', async (_description, text) => {
     const response = namedResponse(undefined);
+    const execute = vi.fn(async () => ({ data: response, raw: 'named' }));
     const scenario = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'named' }) }),
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
     });
     await writePrompt(scenario.recordingStorage.storage);
     const readTextSnapshotIfExists = vi.fn<StorageAdapter['readTextSnapshotIfExists']>(async () => ({
@@ -3730,6 +3876,8 @@ describe('generate secret naming and consent boundaries', () => {
 
     expect(readTextSnapshotIfExists).toHaveBeenCalledOnce();
     expect(targetChangeWarnings(outcome)).toEqual([]);
+    expect(outcome.results).toMatchObject([{ status: 'would-generate' }]);
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it('treats an ENOENT forced old-plan snapshot as null and emits no target-change warning', async () => {
@@ -4035,6 +4183,86 @@ describe('generate secret naming and consent boundaries', () => {
       `${TEST_DIR}/unaffected.ambercast.plan.json`,
       `${TEST_DIR}/unaffected.ambercast.grounding.json`,
     ]));
+  });
+
+  it.each(['declined', 'not-interactive'] as const)('keeps an earlier allowed success before a later %s consent failure', async (kind) => {
+    let dispatch = 0;
+    const execute = vi.fn(async () => ({
+      data: dispatch++ === 0 ? namedResponse({ allowedName: 'already' }) : namedResponse({ nameHint: 'needs' }),
+      raw: 'named',
+    }));
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['first.test.md', 'second.test.md']),
+    });
+    const first = await writePrompt(scenario.recordingStorage.storage, 'first.test.md');
+    const second = await writePrompt(scenario.recordingStorage.storage, 'second.test.md');
+
+    const outcome = await generate(withSecretConfig({
+      ...scenario.deps,
+      consent: { request: async () => ({ kind }), commitAllowlist: async () => undefined },
+    }, ['already']), DEFAULT_OPTIONS);
+
+    expect(outcome.results.map(({ file, status }) => ({ file, status }))).toEqual([
+      { file: first, status: 'generated' },
+      { file: second, status: 'failed' },
+    ]);
+  });
+
+  it('reports the exact not-interactive consent remedy and ordered multi-use details', async () => {
+    const response = {
+      steps: [
+        { id: 'fill-first', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'First' }, secret: { nameHint: 'first_name' } },
+        { id: 'fill-second', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Second' }, secret: { nameHint: 'second_name' } },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'multi-use' }) }) });
+    await writePrompt(scenario.recordingStorage.storage);
+
+    const outcome = await generate(withSecretConfig({
+      ...scenario.deps,
+      consent: { request: async () => ({ kind: 'not-interactive' }), commitAllowlist: async () => undefined },
+    }, []), DEFAULT_OPTIONS);
+    const error = outcome.results[0]?.error;
+
+    expect(error).toBeInstanceOf(SecretConsentRequiredError);
+    expect(error).toMatchObject({
+      details: {
+        reason: 'not-interactive',
+        hint: 'Add the secret names to secrets.allow in ambercast.config.json, then rerun `ambercast generate`.',
+        secrets: [
+          { name: 'first', stepId: 'fill-first', envVar: 'AMBERCAST_SECRET_FIRST', reason: 'requires consent' },
+          { name: 'second', stepId: 'fill-second', envVar: 'AMBERCAST_SECRET_SECOND', reason: 'requires consent' },
+        ],
+      },
+    });
+  });
+
+  it('commits every final candidate name when a concurrently held config removes an initially allowed name', async () => {
+    const response = {
+      steps: [
+        { id: 'fill-retained', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Retained' }, secret: { nameHint: 'retained' } },
+        { id: 'fill-added', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Added' }, secret: { nameHint: 'added' } },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'two names' }) }) });
+    const configPath = '/workspace/ambercast.config.json';
+    await writePrompt(scenario.recordingStorage.storage);
+    await scenario.deps.storage.writeText(configPath, '{"secrets":{"allow":["retained"]}}\n');
+    const commitAllowlist = vi.fn(async (_path: string | null, names: readonly string[]) => {
+      await scenario.deps.storage.writeText(configPath, '{"secrets":{"allow":[]}}\n');
+      expect(await scenario.deps.storage.readText(configPath)).toBe('{"secrets":{"allow":[]}}\n');
+      expect(names).toEqual(['retained', 'added']);
+    });
+
+    await expect(generate(withSecretConfig({
+      ...scenario.deps,
+      consent: { request: async () => ({ kind: 'allowed' as const, renames: [] }), commitAllowlist },
+    }, ['retained']), DEFAULT_OPTIONS)).resolves.toMatchObject({ results: [{ status: 'generated' }] });
+
+    expect(commitAllowlist).toHaveBeenCalledExactlyOnceWith(configPath, ['retained', 'added'], undefined);
   });
 });
 

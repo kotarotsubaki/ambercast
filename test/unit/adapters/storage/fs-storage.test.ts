@@ -680,6 +680,34 @@ describe('createFsStorage()', () => {
     }
   });
 
+  it('reports the settled delete-and-rerun remediation after all six lock acquisitions are exhausted', async () => {
+    const targetPath = '/shared/config.json';
+    const lockPath = `${targetPath}.lock`;
+    const fake = new SharedFakeFs();
+    fake.setText(targetPath, '{"names":[]}');
+    fake.setText(lockPath, 'foreign-process-0123456789abcdef');
+    const restore = installSharedFake(fake);
+    vi.useFakeTimers();
+
+    try {
+      const updating = createFsStorage().updateTextExclusive(targetPath, () => '{"names":["A"]}');
+      const settled = updating.then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await vi.runAllTimersAsync();
+
+      await expect(settled).resolves.toMatchObject({
+        message: `The exclusive-update lock remained held after the bounded retry period; if ambercast isn't running, delete \`${lockPath}\` and rerun.`,
+        details: { path: lockPath },
+      });
+      expect(fake.calls.filter((call) => call.operation === 'writeFile' && call.path === lockPath)).toHaveLength(6);
+    } finally {
+      vi.useRealTimers();
+      restore();
+    }
+  });
+
   it('checks cancellation immediately before starting the atomic target write', async () => {
     const targetPath = '/shared/config.json';
     const lockPath = `${targetPath}.lock`;

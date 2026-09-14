@@ -36,7 +36,7 @@ Its terminal `.test.md` suffix is eligible for companion-path resolution.
 
 Successful generation exits `0` with result status `generated`. Its report field is `planFile`, while generation writes both derived companions beside the named prompt. When an agent uses the setup prompt ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)), it assumes the server is already running and does not start it without a request.
 
-3. Run `npx ambercast run tests/ambercast/find-page.test.md`.
+3. Run `npx ambercast run --resolve tests/ambercast/find-page.test.md`.
 
 On a passed replay, the process exits with code `0`. In addition, `run` creates a per-invocation `report.json` below the configured runs directory.
 
@@ -51,6 +51,6 @@ The no-argument forms `npx ambercast generate` and `npx ambercast run` discover 
 ## Completion state {#completion-state}
 
 - The resolver maps the prompt to `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
-- `npx ambercast run` exited `0` and reports `passed` for the case.
+- `npx ambercast run --resolve` exited `0` and reports `passed` for the case.
 
 Links: [Configuration](/ambercast/reference/configuration/), [File layout](/ambercast/reference/file-layout/), [ambercast generate](/ambercast/reference/cli/generate/), [ambercast run](/ambercast/reference/cli/run/), [Write effective prompts](/ambercast/how-to/write-effective-prompts/).

@@ -26,7 +26,7 @@ description: プロンプト内でシークレットを安全に作成し、テ�
 
 ## 確認 {#verification}
 
-- 生成後、コマンド実行環境に変数を保持したまま、安全なターゲットに対して `npx ambercast run tests/ambercast/<name>.test.md` を実行します。実行処理により環境シークレットプロバイダーが構築され、`fill-secret` は稼働中のオリジンがシンクポリシーチェックに合格した後にのみ、指定された変数を解決します。
+- 生成後、コマンド実行環境に変数を保持したまま、安全なターゲットに対して `npx ambercast run --resolve tests/ambercast/<name>.test.md` を実行します。実行処理により環境シークレットプロバイダーが構築され、`fill-secret` は稼働中のオリジンがシンクポリシーチェックに合格した後にのみ、指定された変数を解決します。
 - `npx ambercast generate --json tests/ambercast/<name>.test.md` の実行結果に `SECRET_LITERAL_REJECTED` が返されないことを確認します。この拒否処理は、永続化やレポートのシリアライズの前にプロバイダー由来の生成 JSON を検査するものであり、プロバイダーにすでに送信されたプロンプトではなく、生成されたレスポンスを保護します。
 
 ## 関連情報 {#related}

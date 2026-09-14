@@ -234,7 +234,7 @@ Its terminal `.test.md` suffix is eligible for companion-path resolution.
 
 Successful generation exits `0` with result status `generated`. Its report field is `planFile`, while generation writes both derived companions beside the named prompt. When an agent uses the setup prompt ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)), it assumes the server is already running and does not start it without a request.
 
-3. Run `npx ambercast run tests/ambercast/find-page.test.md`.
+3. Run `npx ambercast run --resolve tests/ambercast/find-page.test.md`.
 
 On a passed replay, the process exits with code `0`. In addition, `run` creates a per-invocation `report.json` below the configured runs directory.
 
@@ -249,7 +249,7 @@ The no-argument forms `npx ambercast generate` and `npx ambercast run` discover 
 ## Completion state {#completion-state}
 
 - The resolver maps the prompt to `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
-- `npx ambercast run` exited `0` and reports `passed` for the case.
+- `npx ambercast run --resolve` exited `0` and reports `passed` for the case.
 
 Links: [Configuration](/ambercast/reference/configuration/), [File layout](/ambercast/reference/file-layout/), [ambercast generate](/ambercast/reference/cli/generate/), [ambercast run](/ambercast/reference/cli/run/), [Write effective prompts](/ambercast/how-to/write-effective-prompts/).
 
@@ -416,7 +416,7 @@ Follow this safe authoring path to declare secret references in your test prompt
 
 ## Verification {#verification}
 
-- After generation, run `npx ambercast run tests/ambercast/<name>.test.md` against a safe target with the variable still in the command environment. Run constructs the environment secrets provider; a `fill-secret` resolves the named variable only after the live origin passes its sink-policy check.
+- After generation, run `npx ambercast run --resolve tests/ambercast/<name>.test.md` against a safe target with the variable still in the command environment. Run constructs the environment secrets provider; a `fill-secret` resolves the named variable only after the live origin passes its sink-policy check.
 - `npx ambercast generate --json tests/ambercast/<name>.test.md` must not return `SECRET_LITERAL_REJECTED`. This rejection inspects provider-derived generated JSON before persistence or report serialization; it protects the generated response, not the prompt that was already sent to the provider.
 
 ## Related {#related}
@@ -2603,6 +2603,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.2` contract, including the optional `PROMPT_PATH_INVALID` details branch, rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) |
 | report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.3` contract, including optional AI-call accounting fields, rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) |
 | report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.4` contract, including the optional `BROWSER_LAUNCH_FAILED` details branch, rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) |
+| report 3.4 → 3.5 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.5` contract, including the optional `GROUNDING_UNRESOLVED` details branch (`stepId`, `reason`), rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.4.0/src/report/schema.ts#L30) |
 
 ## Compatibility policy {#compatibility-policy}
 

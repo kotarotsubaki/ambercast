@@ -227,7 +227,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 セットアッププロンプト（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使用するエージェントはサーバーがすでに実行されていると想定し、要求がない限りサーバーを起動しません。生成が成功すると終了コード `0` で終了し、結果ステータスは `generated` になります。レポートフィールドは `planFile` であり、生成処理によって指定されたプロンプトの隣に派生した2つのコンパニオンが書き出されます。
 
-3. `npx ambercast run tests/ambercast/find-page.test.md` を実行します。
+3. `npx ambercast run --resolve tests/ambercast/find-page.test.md` を実行します。
 
 リプレイが成功すると終了コード `0` で終了します。`run` は設定された runs ディレクトリ配下に呼び出しごとの `report.json` を作成します。
 
@@ -240,7 +240,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 ## 完了状態 {#completion-state}
 
 - リゾルバーによって、プロンプトが `tests/ambercast/find-page.ambercast.plan.json` および `tests/ambercast/find-page.ambercast.grounding.json` にマッピングされます。
-- `npx ambercast run` が終了コード `0` で終了し、対象ケースについて `passed` が報告されます。
+- `npx ambercast run --resolve` が終了コード `0` で終了し、対象ケースについて `passed` が報告されます。
 
 関連情報: [設定](/ambercast/ja/reference/configuration/), [ファイルレイアウト](/ambercast/ja/reference/file-layout/), [ambercast generate](/ambercast/ja/reference/cli/generate/), [ambercast run](/ambercast/ja/reference/cli/run/), [効果的なプロンプトの作成](/ambercast/ja/how-to/write-effective-prompts/)
 
@@ -415,7 +415,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/
 
 ## 確認 {#verification}
 
-- 生成後、コマンド実行環境に変数を保持したまま、安全なターゲットに対して `npx ambercast run tests/ambercast/<name>.test.md` を実行します。実行処理により環境シークレットプロバイダーが構築され、`fill-secret` は稼働中のオリジンがシンクポリシーチェックに合格した後にのみ、指定された変数を解決します。
+- 生成後、コマンド実行環境に変数を保持したまま、安全なターゲットに対して `npx ambercast run --resolve tests/ambercast/<name>.test.md` を実行します。実行処理により環境シークレットプロバイダーが構築され、`fill-secret` は稼働中のオリジンがシンクポリシーチェックに合格した後にのみ、指定された変数を解決します。
 - `npx ambercast generate --json tests/ambercast/<name>.test.md` の実行結果に `SECRET_LITERAL_REJECTED` が返されないことを確認します。この拒否処理は、永続化やレポートのシリアライズの前にプロバイダー由来の生成 JSON を検査するものであり、プロバイダーにすでに送信されたプロンプトではなく、生成されたレスポンスを保護します。
 
 ## 関連情報 {#related}
@@ -2644,6 +2644,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 | report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `PROMPT_PATH_INVALID` details 分岐を含む現在の `3.2` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の AI 呼び出し計測フィールドを含む現在の `3.3` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `BROWSER_LAUNCH_FAILED` details 分岐を含む現在の `3.4` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
+| report 3.4 → 3.5 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report consumer は、Plan バージョンから互換性を推論するのではなく、任意の `GROUNDING_UNRESOLVED` details 分岐（`stepId`, `reason`）を含む現在の `3.5` コントラクトを受け入れなければならない（MUST）。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 
 ## 互換性ポリシー {#compatibility-policy}
 

@@ -35,6 +35,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 3. 运行以下命令执行测试：
 
+`npx ambercast run --resolve tests/ambercast/find-page.test.md`
 
 
 回放通过时退出码为 `0`；`run` 会在配置的 runs 目录下为每次调用创建一个 `report.json`。
@@ -49,6 +50,6 @@ Agent 会展示完整的变更集，并且只有在对话中收到明确请求�
 ## 完成状态 {#completion-state}
 
 - 解析器将 prompt 映射至 `tests/ambercast/find-page.ambercast.plan.json` 与 `tests/ambercast/find-page.ambercast.grounding.json`。
-- `npx ambercast run` 退出码为 `0`，并报告该用例状态为 `passed`。
+- `npx ambercast run --resolve` 退出码为 `0`，并报告该用例状态为 `passed`。
 
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/), [文件布局](/ambercast/zh-cn/reference/file-layout/), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/), [ambercast run](/ambercast/zh-cn/reference/cli/run/), [编写高效的 Prompt](/ambercast/zh-cn/how-to/write-effective-prompts/)。

@@ -44,6 +44,15 @@ export type SecretWarning =
   | { readonly kind: 'secret-target-changed'; readonly name: SecretName; readonly stepId: StepId; readonly previousTarget: ElementRef; readonly target: ElementRef }
   | { readonly kind: 'allowed-names-truncated'; readonly kept: number; readonly dropped: number };
 
+/**
+ * A fixed secret use retained while Stage 2 names only its frontier replacement.
+ *
+ * Retained plan uses seed the ordinary name-owner and canonical-target maps as
+ * reservations, rather than being merged into provider candidates or P. That
+ * preserves their committed references exactly, including under wildcard
+ * execution policy, while still making suffix and target ownership decisions
+ * see collisions at every original plan index (SPEC-C3-2).
+ */
 export interface ExistingPlanSecretReservation {
   readonly stepIndex: number;
   readonly stepId: StepId;
@@ -55,6 +64,15 @@ export interface ExistingPlanSecretReservation {
   readonly selectionSource: 'existing-plan';
 }
 
+/**
+ * Inputs for naming one attributed Stage 2 replacement against a committed plan.
+ *
+ * The full plan supplies immutable reservations, while only the replacement is
+ * provider-authored naming input. Keeping P separate from `allowlist` ensures
+ * an explicit replacement choice is checked against the bounded provider
+ * projection without retroactively validating or renaming retained uses
+ * (SPEC-C3-2).
+ */
 export interface Stage2ReplacementNamingInput {
   readonly plan: import('#core/ir/schema.js').PlanDocument;
   readonly replacementIndex: number;
@@ -63,6 +81,14 @@ export interface Stage2ReplacementNamingInput {
   readonly allowlist: readonly SecretName[] | '*';
 }
 
+/**
+ * The validated full candidate and replacement-scoped naming evidence.
+ *
+ * The candidate is parsed as a whole plan after only the replacement is
+ * materialized, so downstream obligation, allowlist, and replay gates observe
+ * the same artifact. `uses` and `warnings` remain replacement-scoped to avoid
+ * treating unchanged committed uses as fresh provider decisions (SPEC-C3-2).
+ */
 export interface Stage2ReplacementNamingOutput {
   readonly candidate: import('#core/ir/schema.js').PlanDocument;
   readonly replacement: Step;
@@ -70,7 +96,23 @@ export interface Stage2ReplacementNamingOutput {
   readonly warnings: readonly SecretWarning[];
 }
 
-/** Reserves retained plan names before naming one Stage 2 replacement. */
+/**
+ * Derives a Stage 2 replacement without renaming its retained plan context.
+ *
+ * The eventual algorithm enumerates all non-replacement secret uses as fixed
+ * reservations, seeds the existing owner maps, runs the C1 naming machinery
+ * at the replacement's original index, normalizes only its AI references, and
+ * then parses the spliced whole-plan candidate (SPEC-C3-2). Reusing retained
+ * step objects is an invariant: no repair naming path may reconstruct or
+ * alter a committed reference merely because it participates in collision
+ * allocation.
+ *
+ * @param input - The committed plan, frontier replacement, and separated
+ * provider projection and execution policy.
+ * @returns The whole candidate plus replacement-only naming evidence.
+ * @throws {AiResponseInvalidError} When an explicit replacement name is outside
+ * the projection or fixed target ownership is inconsistent.
+ */
 export function deriveStage2ReplacementSecretNames(
   _input: Stage2ReplacementNamingInput,
 ): Stage2ReplacementNamingOutput {

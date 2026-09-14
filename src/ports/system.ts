@@ -7,13 +7,17 @@ import type { StepId } from '#core/ir/schema.js';
 /**
  * Explains why Stage 2 declined a single-step repair candidate.
  *
- * The closed vocabulary keeps reports and event consumers aligned with the
- * repair boundary. Its evaluation order prioritizes cancellation,
- * then provider failures before local response-shape checks, and proceeds
- * through the remaining validation boundaries to a lack of replay progress.
- * An `AiResponseInvalidError` originates at the executor and is therefore a
- * provider error; `response-shape` is reserved for Stage 2's defensive
- * safe-parse or replacement-count check after the executor returned a value.
+ * The closed vocabulary keeps reports and event consumers aligned with one
+ * security-relevant repair boundary (SPEC-C3-2). `secret-name-invalid`
+ * replaces the former attribution wording instead of extending it, so both
+ * local naming failure and the later allowlist or environment-collision gate
+ * communicate the same rejected property: the replacement cannot yield a
+ * permitted committed secret-name plan.
+ *
+ * Evaluation is ordered from provider and response boundaries through identity,
+ * naming, coverage, obligation, literal-secret, and replay-progress checks.
+ * An `AiResponseInvalidError` from the executor remains a provider error;
+ * `response-shape` is reserved for defensive validation after a value arrives.
  */
 export type StageTwoRejectionReason =
   | 'provider-error'

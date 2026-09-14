@@ -73,7 +73,11 @@ export function toProviderReplayEvidence(steps: readonly StepResult[]): readonly
  * so provenance is visible without treating page-derived text as trusted plan
  * data. `trustedInputs` is only a provenance label: neither it nor any nested
  * string gains instruction authority, and the prompt envelope's existing
- * "never instructions" framing governs the complete context.
+ * "never instructions" framing governs the complete context. The projected
+ * allowlist belongs with the locally derived inputs because it is trusted
+ * policy context, not provider output or a retained-name reservation
+ * (SPEC-C3-2); it contains names only and never secret values or environment
+ * provenance.
  */
 export interface Stage2RepairContext {
   readonly trustedInputs: {
@@ -109,6 +113,7 @@ export interface Stage2RepairContext {
  */
 export interface Stage2RepairContextInputs {
   readonly normalizedTestMd: NormalizedTestMd;
+  /** The single bounded projection exposed to a replacement provider (SPEC-C3-2). */
   readonly allowedSecretNames: readonly SecretName[];
   readonly baseline: {
     /** The case-start plan; future repair stages must never mutate it in place. */
@@ -135,7 +140,10 @@ export interface Stage2RepairContextInputs {
  * The builder is the JsonValueT compatibility boundary: callers receive a
  * JSON-safe value and must not add an unchecked cast. Its provenance split is
  * not an authority split; all values remain data under the prompt envelope's
- * existing instruction-resistant framing.
+ * existing instruction-resistant framing. It carries the already-derived
+ * allowlist projection only under `trustedInputs`, preserving the distinction
+ * between provider choice, fixed committed reservations, and execution policy
+ * required by Stage 2 (SPEC-C3-2).
  *
  * @remarks
  * `currentPlan` is constructed by explicitly enumerating `schemaVersion`,

@@ -5,7 +5,9 @@
  * This module keeps reviewable artifacts free of literal secrets and gives
  * every committed secret use one canonical enumeration order that consent
  * checking, error reporting, and env-var collision detection all reuse rather
- * than each re-deriving their own plan walk. Authorization is defined by the
+ * than each re-deriving their own plan walk. Logical names are extracted
+ * through the shared validated-reference helper so Stage 2 and Stage 3 compare
+ * the same identity as the live boundary (SPEC-C3-2). Authorization is defined by the
  * `secrets.allow` configuration allowlist and checked live against the
  * committed plan by {@link assertSecretUsesAllowed}.
  */

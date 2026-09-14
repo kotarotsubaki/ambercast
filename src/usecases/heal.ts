@@ -190,7 +190,13 @@ export interface HealCaseOutcome {
   /** Classified failure encountered while constructing a full-plan candidate. */
   readonly stage3Error: AmbercastError | undefined;
 
-  /** A Stage 3 candidate rejected because its logical secret-name set changed. */
+  /**
+   * A Stage 3 candidate rejected because its logical secret-name set changed.
+   *
+   * The delta is set-based, deliberately ignoring moves that preserve a name;
+   * Stage 3 cannot make a new secret consent decision while healing
+   * (SPEC-C3-2).
+   */
   readonly stage3Rejection?: {
     readonly reason: 'secret-set-changed';
     readonly added: readonly SecretName[];
@@ -913,7 +919,13 @@ async function trySingleStepRepair(
  * or a subclass, is rethrown unconditionally before restoration so it remains
  * fail-closed. Generation output is not a `RunCaseOutcome`; the
  * repairable-navigation allowlist applies only to replay-observed errors in
- * {@link measureReplay}.
+ * {@link measureReplay}. Before replay, the eventual flow compares logical
+ * name sets and stages an equal-set plan with fresh empty grounding in the
+ * overlay. Staging is required because nested replay reads artifacts through
+ * overlay storage rather than accepting an in-memory candidate (SPEC-C3-2).
+ * The exclusive union is intentional: optional plan and measurement fields
+ * could let callers accidentally combine a new candidate with pre-Stage-3
+ * evidence, whereas each arm carries only the facts it can safely prove.
  */
 export type FullPlanRepairResult =
   | { readonly kind: 'interrupted' }
@@ -932,6 +944,16 @@ export type FullPlanRepairResult =
     readonly measurement: ReplayMeasurement & { readonly interrupted: false };
   };
 
+/**
+ * Attempts Stage 3 regeneration without granting it artifact or consent authority.
+ *
+ * Its eventual discriminated result keeps interrupted, failed, and
+ * secret-set-rejected branches from accidentally pairing a new plan with old
+ * replay evidence. A changed set restores the snapshot before any staging or
+ * replay; an equal set buffers the canonical candidate and fresh grounding
+ * pair before replay so the nested run observes the candidate artifact
+ * (SPEC-C3-2).
+ */
 async function tryFullPlanRepair(
   deps: HealDeps,
   resolveAiExecutor: ResolveCaseAiExecutor,

@@ -514,7 +514,7 @@ type GenerateSecretOutcome = {
  * Stage 2 settlement preserve recovery after partial writes (SPEC-C2-2,
  * SPEC-C2-3, SPEC-C2-11).
  */
-export type PreparedCandidate = {
+type PreparedCandidate = {
   /** Occurrence-qualified identity used for interruption and finalization. */
   readonly workKey: string;
   /** Selection position, retained so duplicate occurrences never collapse after starting. */

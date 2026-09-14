@@ -23,6 +23,7 @@ import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError } from '#core/errors/types.js';
@@ -3253,6 +3254,89 @@ describe('generate secret naming and consent boundaries', () => {
       { name: 'zeta', stepId: 'complete-sign-in' },
       { name: 'password', stepId: 'fill-password' },
     ]);
+  });
+
+  it('requests one batch consent and commits it before writing any generated artifact', async () => {
+    const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
+    const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
+    const commitAllowlist = vi.fn(async () => undefined);
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const writeText = vi.fn<StorageAdapter['writeText']>(scenario.deps.storage.writeText);
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    await expect(generate(withSecretConfig({ ...scenario.deps, storage: { ...scenario.deps.storage, writeText }, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS))
+      .resolves.toMatchObject({ results: [{ status: 'generated' }] });
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(commitAllowlist).toHaveBeenCalledOnce();
+    expect(writeText).toHaveBeenCalled();
+    expect(commitAllowlist.mock.invocationCallOrder[0]).toBeLessThan(writeText.mock.invocationCallOrder[0]!);
+  });
+
+  it('fails closed without artifact writes when unmet consent has no injected capability', async () => {
+    const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    scenario.recordingStorage.reset();
+
+    const outcome = await generate(withSecretConfig(scenario.deps, []), DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toBeInstanceOf(UnexpectedCrashError);
+    expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('reuses a successful first duplicate occurrence virtually instead of calling the provider twice', async () => {
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['login.test.md', 'login.test.md']),
+    });
+    await writePrompt(scenario.recordingStorage.storage);
+
+    await generate(scenario.deps, DEFAULT_OPTIONS);
+
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('takes the old-plan snapshot before a forced provider call, including dry-run', async () => {
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const readTextSnapshotIfExists = vi.fn(scenario.deps.storage.readTextSnapshotIfExists);
+    await writePrompt(scenario.recordingStorage.storage);
+
+    await generate({ ...scenario.deps, storage: { ...scenario.deps.storage, readTextSnapshotIfExists } }, { ...DEFAULT_OPTIONS, force: true, dryRun: true });
+
+    expect(readTextSnapshotIfExists).toHaveBeenCalledWith(`${TEST_DIR}/login.ambercast.plan.json`);
+    expect(readTextSnapshotIfExists.mock.invocationCallOrder[0]).toBeLessThan(execute.mock.invocationCallOrder[0]!);
+  });
+
+  it('scans legacy secret syntax before target selection and continues later occurrences', async () => {
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      discoverTestFiles: vi.fn(async () => ['legacy.test.md', 'valid.test.md']),
+    });
+    const legacy = await writePrompt(scenario.recordingStorage.storage, 'legacy.test.md', '# Legacy\n\n{{secret:password}}\n');
+    await writePrompt(scenario.recordingStorage.storage, 'valid.test.md');
+
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, target: 'missing-target' });
+
+    expect(outcome.results[0]).toMatchObject({ file: legacy, status: 'failed', error: expect.objectContaining({ code: 'SECRET_SYNTAX_REJECTED' }) });
+    expect(outcome.results[1]).toMatchObject({ status: 'generated' });
+  });
+
+  it('projects a sorted names-only allowlist through the 64-name provider boundary', async () => {
+    const names = Array.from({ length: 65 }, (_value, index) => `name-${String(index).padStart(2, '0')}`);
+    const execute = vi.fn(async () => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+
+    await generate(withSecretConfig(scenario.deps, [...names].reverse()), DEFAULT_OPTIONS);
+
+    const calls = execute.mock.calls as unknown as Array<[{ readonly context: { readonly allowedSecretNames: readonly string[] } }]>;
+    const request = calls[0]?.[0];
+    expect(request?.context.allowedSecretNames)
+      .toEqual(names.slice(0, 64));
   });
 });
 

@@ -1,12 +1,20 @@
 import * as fsPromises from 'node:fs/promises';
-import { chmod, lstat, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createFsStorage } from '../../../../src/adapters/storage/fs-storage.js';
+import { FsIoError } from '../../../../src/core/errors/fs-io-error.js';
 import { registerStorageContract } from '../../../contracts/storage.contract.js';
+import { createDeferred, SharedFakeFs } from '../../../support/shared-fake-fs.js';
 
 const originalFsPromises = vi.hoisted(() => ({
+  lstat: undefined as typeof fsPromises.lstat | undefined,
+  mkdir: undefined as typeof fsPromises.mkdir | undefined,
+  readFile: undefined as typeof fsPromises.readFile | undefined,
+  rename: undefined as typeof fsPromises.rename | undefined,
+  rm: undefined as typeof fsPromises.rm | undefined,
+  unlink: undefined as typeof fsPromises.unlink | undefined,
   writeFile: undefined as typeof fsPromises.writeFile | undefined,
 }));
 
@@ -15,12 +23,22 @@ const originalFsPromises = vi.hoisted(() => ({
 // making the two atomic-write calls observable to this test.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>();
+  originalFsPromises.lstat = original.lstat;
+  originalFsPromises.mkdir = original.mkdir;
+  originalFsPromises.readFile = original.readFile;
+  originalFsPromises.rename = original.rename;
+  originalFsPromises.rm = original.rm;
+  originalFsPromises.unlink = original.unlink;
   originalFsPromises.writeFile = original.writeFile;
 
   return {
     ...original,
+    lstat: vi.fn(original.lstat),
+    mkdir: vi.fn(original.mkdir),
+    readFile: vi.fn(original.readFile),
     rename: vi.fn(original.rename),
     rm: vi.fn(original.rm),
+    unlink: vi.fn(original.unlink),
     writeFile: vi.fn(original.writeFile),
   };
 });
@@ -144,6 +162,34 @@ function resetAtomicWriteMocks(): void {
   vi.mocked(fsPromises.writeFile).mockReset();
   vi.mocked(fsPromises.rename).mockReset();
   vi.mocked(fsPromises.rm).mockReset();
+}
+
+function requireOriginal<T>(value: T | undefined, name: string): T {
+  if (value === undefined) {
+    throw new Error(`Expected the mocked filesystem module to retain its original ${name} implementation.`);
+  }
+
+  return value;
+}
+
+function installSharedFake(fake: SharedFakeFs): () => void {
+  vi.mocked(fsPromises.lstat).mockReset().mockImplementation(fake.lstat as typeof fsPromises.lstat);
+  vi.mocked(fsPromises.mkdir).mockReset().mockImplementation(async () => undefined);
+  vi.mocked(fsPromises.readFile).mockReset().mockImplementation(fake.readFile as typeof fsPromises.readFile);
+  vi.mocked(fsPromises.rename).mockReset().mockImplementation(fake.rename as typeof fsPromises.rename);
+  vi.mocked(fsPromises.rm).mockReset().mockImplementation(fake.rm as typeof fsPromises.rm);
+  vi.mocked(fsPromises.unlink).mockReset().mockImplementation(fake.unlink as typeof fsPromises.unlink);
+  vi.mocked(fsPromises.writeFile).mockReset().mockImplementation(fake.writeFile as typeof fsPromises.writeFile);
+
+  return () => {
+    vi.mocked(fsPromises.lstat).mockReset().mockImplementation(requireOriginal(originalFsPromises.lstat, 'lstat'));
+    vi.mocked(fsPromises.mkdir).mockReset().mockImplementation(requireOriginal(originalFsPromises.mkdir, 'mkdir'));
+    vi.mocked(fsPromises.readFile).mockReset().mockImplementation(requireOriginal(originalFsPromises.readFile, 'readFile'));
+    vi.mocked(fsPromises.rename).mockReset().mockImplementation(requireOriginal(originalFsPromises.rename, 'rename'));
+    vi.mocked(fsPromises.rm).mockReset().mockImplementation(requireOriginal(originalFsPromises.rm, 'rm'));
+    vi.mocked(fsPromises.unlink).mockReset().mockImplementation(requireOriginal(originalFsPromises.unlink, 'unlink'));
+    vi.mocked(fsPromises.writeFile).mockReset().mockImplementation(requireOriginal(originalFsPromises.writeFile, 'writeFile'));
+  };
 }
 
 registerStorageContract({
@@ -527,5 +573,36 @@ describe('createFsStorage()', () => {
         await chmod(restrictedDirectory, 0o700);
       }
     });
+  });
+
+  it('rejects an exclusive update through a symbolic-link target before opening its lock', async () => {
+    const fake = new SharedFakeFs();
+    fake.setSymbolicLink('/shared/config.json');
+    const restore = installSharedFake(fake);
+    try {
+      await expect(createFsStorage().updateTextExclusive('/shared/config.json', () => '{"ok":true}\n'))
+        .rejects.toBeInstanceOf(FsIoError);
+      expect(fake.calls.filter((call) => call.operation === 'writeFile')).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+
+  it('serializes two independently-created adapters through the lock before either merge can lose a name', async () => {
+    const fake = new SharedFakeFs();
+    fake.setText('/shared/config.json', '{"names":[]}');
+    const restore = installSharedFake(fake);
+    try {
+      const first = createFsStorage();
+      const second = createFsStorage();
+      const firstUpdate = first.updateTextExclusive('/shared/config.json', (current) => `${current}A`);
+      const secondUpdate = second.updateTextExclusive('/shared/config.json', (current) => `${current}B`);
+
+      await expect(Promise.all([firstUpdate, secondUpdate])).resolves.toEqual([undefined, undefined]);
+      expect(fake.text('/shared/config.json')).toContain('A');
+      expect(fake.text('/shared/config.json')).toContain('B');
+    } finally {
+      restore();
+    }
   });
 });

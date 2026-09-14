@@ -6,7 +6,9 @@ import type {
   Step,
   StepId,
 } from '#core/ir/schema.js';
+import { PlanDocument } from '#core/ir/schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { secretNameFor } from '#core/ir/secret-ref.js';
 
 /**
  * Records one pre-normalization secret use and the deterministic name chosen
@@ -114,9 +116,50 @@ export interface Stage2ReplacementNamingOutput {
  * the projection or fixed target ownership is inconsistent.
  */
 export function deriveStage2ReplacementSecretNames(
-  _input: Stage2ReplacementNamingInput,
+  input: Stage2ReplacementNamingInput,
 ): Stage2ReplacementNamingOutput {
-  throw new Error('not implemented');
+  const retained = input.plan.steps.map((step, stepIndex) => {
+    if (stepIndex === input.replacementIndex) return undefined;
+    if (step.kind === 'action' && step.action === 'fill-secret') {
+      // Reservations own their name but never become a provider-derived
+      // canonical-target sharing candidate; only the replacement is materialized.
+      return { id: step.id, kind: step.kind, action: step.action, target: { ...step.target, name: `reservation_${stepIndex}` }, secret: { allowedName: slug(secretNameFor(step.secretRef)) as SecretName } };
+    }
+    if (step.kind === 'ai' && step.secrets !== undefined) {
+      return { ...step, secrets: step.secrets.map(({ ref }) => ({ allowedName: secretNameFor(ref) })) };
+    }
+    return step;
+  });
+  // Validate replacement explicit choices against P before adding retained
+  // reservations to the projection used by the shared collision allocator.
+  deriveSecretNames([input.attributedReplacement], { projected: input.projected, allowlist: input.allowlist });
+  const reservations = input.plan.steps.flatMap((step, stepIndex) => stepIndex === input.replacementIndex
+    ? []
+    : step.kind === 'action' && step.action === 'fill-secret'
+      ? [secretNameFor(step.secretRef), slug(secretNameFor(step.secretRef)) as SecretName]
+      : step.kind === 'ai'
+        ? (step.secrets ?? []).map(({ ref }) => secretNameFor(ref))
+        : []);
+  const attributed = retained.map((step, index) => index === input.replacementIndex ? input.attributedReplacement : step) as InstructionAttributedSteps;
+  const named = deriveSecretNames(attributed, {
+    projected: [...new Set([...input.projected, ...reservations])],
+    allowlist: input.allowlist,
+  });
+  const replacement = normalizeAiStepSecretUses([named.steps[input.replacementIndex]!])[0]!;
+  const parsedCandidate = PlanDocument.parse({
+    ...input.plan,
+    steps: [...input.plan.steps.slice(0, input.replacementIndex), replacement, ...input.plan.steps.slice(input.replacementIndex + 1)],
+  });
+  const candidate = {
+    ...input.plan,
+    steps: input.plan.steps.map((step, index) => index === input.replacementIndex ? parsedCandidate.steps[index]! : step),
+  } as PlanDocument;
+  return {
+    candidate,
+    replacement,
+    uses: named.uses.filter(({ stepId }) => stepId === replacement.id),
+    warnings: named.warnings.filter((warning) => warning.kind !== 'secret-name-reused-across-targets' || warning.stepIds.includes(replacement.id)),
+  };
 }
 
 /**

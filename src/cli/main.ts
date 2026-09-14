@@ -330,7 +330,7 @@ export function renderHumanReport(
   const report = envelope as Record<string, unknown>;
   const results = Array.isArray(report.results) ? report.results : [];
   const errors = Array.isArray(report.errors) ? report.errors : [];
-  const lines = results.map((result) => {
+  const lines = results.flatMap((result) => {
     const item = result as Record<string, unknown> & {
       readonly stage3Rejection?: { readonly reason?: unknown };
     };
@@ -348,7 +348,10 @@ export function renderHumanReport(
         && (healApplication === 'applied' || healApplication === 'preview-only' || healApplication === 'no-artifact-change');
     const statusColor = healthy ? '32' : status === 'would-generate' ? '33' : '31';
     const reason = typeof item.reason === 'string' ? `: ${escapeControlChars(item.reason)}` : '';
-    return `${colorize(status, statusColor, color)} ${escapeControlChars(String(item.file ?? item.id ?? ''))}${reason}`.trimEnd();
+    const row = `${colorize(status, statusColor, color)} ${escapeControlChars(String(item.file ?? item.id ?? ''))}${reason}`.trimEnd();
+    return item.stage3Rejection?.reason === 'secret-set-changed'
+      ? [row, `  hint: 秘匿値の構成が変わった。ambercast generate --force ${escapeControlChars(String(item.file ?? item.id ?? ''))} で再生成し同意を取り直す`]
+      : [row];
   });
 
   for (const error of errors) {

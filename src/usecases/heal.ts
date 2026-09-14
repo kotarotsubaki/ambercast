@@ -20,7 +20,8 @@ import { resolveTarget } from '#core/target/resolve.js';
 import { scanLegacySecretSyntax } from '#core/ir/secret-syntax-scan.js';
 import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-error.js';
 import { assertNoEnvVarCollision } from '#core/secrets/env-var-name.js';
-import { deriveSecretNames, normalizeAiStepSecretUses } from './secret-naming.js';
+import { deriveStage2ReplacementSecretNames } from './secret-naming.js';
+import { secretNameFor } from '#core/ir/secret-ref.js';
 import { assertNoLiteralSecrets, assertSecretUsesAllowed, enumerateSecretUses } from './generator-secret-policy.js';
 import type { StageTwoRejectionReason } from '#ports/system.js';
 import { isLegacyShapedTrace, validateCommittedInstructionCoverage } from './instruction-coverage-policy.js';
@@ -849,21 +850,22 @@ async function trySingleStepRepair(
   }
   if (!prepared.success) return reject('coverage-invalid');
   let replacement;
+  let candidate: TrustedPlan;
   try {
-    const named = deriveSecretNames(prepared.data, {
-      projected: [],
+    const named = deriveStage2ReplacementSecretNames({
+      plan,
+      replacementIndex: start,
+      attributedReplacement: prepared.data[0]!,
+      projected: projectAllowedNames(deps.config.secrets?.allow ?? []).names,
       allowlist: deps.config.secrets?.allow ?? [],
     });
-    replacement = normalizeAiStepSecretUses(named.steps)[0]!;
+    replacement = named.replacement;
+    candidate = named.candidate;
   } catch (error) {
     if (error instanceof AiResponseInvalidError) return reject('secret-name-invalid');
     return propagate(error);
   }
   if (!obligationFingerprintMatches(step, replacement)) return reject('obligation-mismatch');
-  const candidate = PlanDocument.parse({
-      ...plan,
-      steps: [...plan.steps.slice(0, start), replacement, ...plan.steps.slice(start + 1)],
-  });
   try {
     assertSecretUsesAllowed(candidate, deps.config.secrets?.allow ?? [], {
       configPath: deps.configSource?.path ?? null,
@@ -967,7 +969,7 @@ async function tryFullPlanRepair(
   plan: TrustedPlan,
   measurement: ReplayMeasurement & { readonly interrupted: false },
   nextAttemptOrdinal: () => number,
-): Promise<{ readonly plan: TrustedPlan; readonly measurement: ReplayMeasurement; readonly stage3Error: AmbercastError | undefined; readonly replayed: boolean }> {
+): Promise<FullPlanRepairResult> {
   const snapshot = overlay.snapshot();
   try {
     const aiExecutor = await resolveAiExecutor();
@@ -998,21 +1000,35 @@ async function tryFullPlanRepair(
     const item = generated.results[0];
     if (generated.interrupted || item === undefined) {
       overlay.restore(snapshot);
-      return { plan, measurement: { interrupted: true }, stage3Error: undefined, replayed: false };
+      return { kind: 'interrupted' };
     }
-    if (item.status !== 'generated') {
+    if (item.status !== 'candidate' && item.status !== 'generated') {
       if (item.error instanceof IntegrityViolationError) throw item.error;
       overlay.restore(snapshot);
-      return { plan, measurement, stage3Error: item.error, replayed: false };
+      return { kind: 'failed', stage3Error: item.error };
     }
-
-    const regeneratedPlan = (await readTrustedInstructionCoveredPlan(overlay.storage, planFile, digest, normalized)).plan;
-    const replay = await measureReplay(deps, options, file, overlay, regeneratedPlan, true, nextAttemptOrdinal());
+    if (item.status === 'candidate' && (item.plan === undefined || item.secrets === undefined)) throw new UnexpectedCrashError('Healing regeneration returned incomplete candidate evidence.');
+    const candidatePlan = item.plan ?? (await readTrustedInstructionCoveredPlan(overlay.storage, planFile, digest, normalized)).plan;
+    const beforeNames = new Set(enumerateSecretUses(plan).map(({ ref }) => secretNameFor(ref)));
+    const afterNames = new Set((item.secrets ?? enumerateSecretUses(candidatePlan).map(({ ref }) => ({ name: secretNameFor(ref) }))).map(({ name }) => name));
+    const added = [...afterNames].filter((name) => !beforeNames.has(name)).sort();
+    const removed = [...beforeNames].filter((name) => !afterNames.has(name)).sort();
+    if (added.length > 0 || removed.length > 0) {
+      overlay.restore(snapshot);
+      return { kind: 'secret-set-rejected', stage3Rejection: { reason: 'secret-set-changed', added, removed } };
+    }
+    await writeStorageText(overlay.storage, planFile, toCanonicalArtifactText(candidatePlan as JsonValueT), 'The regenerated plan could not be written.');
+    await writeStorageText(overlay.storage, groundingFile, toCanonicalArtifactText({
+      schemaVersion: GROUNDING_SCHEMA_VERSION,
+      planDigest: computePlanDigest(candidatePlan),
+      entries: {},
+    } as JsonValueT), 'The regenerated grounding artifact could not be written.');
+    const replay = await measureReplay(deps, options, file, overlay, candidatePlan, true, nextAttemptOrdinal());
     if (replay.interrupted) {
       overlay.restore(snapshot);
-      return { plan, measurement: replay, stage3Error: undefined, replayed: false };
+      return { kind: 'interrupted' };
     }
-    return { plan: regeneratedPlan, measurement: replay, stage3Error: undefined, replayed: true };
+    return { kind: 'replayed', plan: candidatePlan, measurement: replay };
   } catch (error) {
     // Every IntegrityViolationError, whether an exact class or subclass and
     // whether from generation or the internal measureReplay call, is rethrown
@@ -1023,15 +1039,10 @@ async function tryFullPlanRepair(
     // that classification.
     if (error instanceof IntegrityViolationError) throw error;
     overlay.restore(snapshot);
-    if (deps.signal?.aborted) return { plan, measurement: { interrupted: true }, stage3Error: undefined, replayed: false };
-    return {
-      plan,
-      measurement,
-      stage3Error: error instanceof AmbercastErrorClass
+    if (deps.signal?.aborted) return { kind: 'interrupted' };
+    return { kind: 'failed', stage3Error: error instanceof AmbercastErrorClass
         ? error
-        : new UnexpectedCrashError('Healing regeneration failed.', undefined, { cause: error }),
-      replayed: false,
-    };
+        : new UnexpectedCrashError('Healing regeneration failed.', undefined, { cause: error }) };
   }
 }
 
@@ -1277,18 +1288,43 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
         case 'completed': {
           if (!fullPhase.result.ok) throw fullPhase.result.error;
           const full = fullPhase.result.value;
-          if (full.measurement.interrupted) return full.measurement;
-          stage3Error = full.stage3Error;
-          if (full.replayed && full.measurement.firstFailureIndex === full.plan.steps.length) {
-            plan = full.plan;
-            measurement = full.measurement;
-            repairKind = 'full-plan';
-            fullPlanReplayed = true;
-            stopReason = 'settled';
-          } else {
-            overlay.restore(bestSnapshot);
-            plan = bestPlan;
-            measurement = bestMeasurement;
+          switch (full.kind) {
+            case 'interrupted': {
+              return { interrupted: true };
+            }
+            case 'secret-set-rejected': {
+              overlay.restore(bestSnapshot);
+              const outcome = {
+                ...caseOutcome(file, planFile, baselineFirstFailureIndex, bestMeasurement, bestPlan, undefined, false, stopReason, budget.aiCalls),
+                repairOutcome: 'unresolved' as const,
+                stage3Rejection: full.stage3Rejection,
+              };
+              return { interrupted: false, outcome };
+            }
+            case 'failed': {
+              stage3Error = full.stage3Error;
+              overlay.restore(bestSnapshot);
+              plan = bestPlan;
+              measurement = bestMeasurement;
+              break;
+            }
+            case 'replayed': {
+              if (full.measurement.firstFailureIndex === full.plan.steps.length) {
+                plan = full.plan;
+                measurement = full.measurement;
+                repairKind = 'full-plan';
+                fullPlanReplayed = true;
+                stopReason = 'settled';
+              } else {
+                overlay.restore(bestSnapshot);
+                plan = bestPlan;
+                measurement = bestMeasurement;
+              }
+              break;
+            }
+            default: {
+              assertNever(full);
+            }
           }
           break;
         }
@@ -1309,7 +1345,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
     stopReason,
     budget.aiCalls,
   );
-  const commit = (outcome.repairOutcome === 'healed' || outcome.repairOutcome === 'partially-healed') && overlay.hasBufferedWrites()
+  const commit = outcome.stage3Rejection === undefined && (outcome.repairOutcome === 'healed' || outcome.repairOutcome === 'partially-healed') && overlay.hasBufferedWrites()
     ? commitFor(file, planFile, overlay, repairKind ?? 'grounding-element')
     : undefined;
   return { interrupted: false, outcome, commit };

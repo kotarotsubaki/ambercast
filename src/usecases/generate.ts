@@ -8,6 +8,7 @@ import { composeAiDeadline, isAiDeadlineTimeout } from '#core/ai/ai-deadline.js'
 import {
   buildGeneratorTask,
   GENERATE_PLAN_TASK_INSTRUCTION,
+  toAnchoredLines,
 } from '#core/ai/prompt-envelope.js';
 import {
   planProducerBundleComponentDiagnostics,
@@ -642,6 +643,9 @@ function isRetryable(error: AmbercastError): boolean {
   if (!(error instanceof AiResponseInvalidError)) return false;
 
   const issues = responseIssues(error);
+  // Provider-side attribution mistakes are correctable, unlike an inherently
+  // unresolvable terminal URL assertion, so the generic invalid-response rule
+  // needs no code-specific carve-out.
   return issues.length === 0 || !issues.every((issue) => issue.code === 'terminal-url-matches-forbidden');
 }
 
@@ -1022,8 +1026,8 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
             responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
             context: (attempt === 1
-              ? { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names }
-              : { testMd: normalizedTestMd, targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names, previousAttempts }) as unknown as JsonValueT,
+              ? { testMd: toAnchoredLines(normalizedTestMd), targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names }
+              : { testMd: toAnchoredLines(normalizedTestMd), targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names, previousAttempts }) as unknown as JsonValueT,
             signal: deadline.signal,
           };
           const callId = deps.allocateCallId();

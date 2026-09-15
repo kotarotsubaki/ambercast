@@ -74,7 +74,7 @@ describe('Stage 2 provider context', () => {
 
     expect(result).toEqual({
       trustedInputs: {
-        testMd: '# Fixture\n',
+        testMd: [{ anchor: 'L1', text: '# Fixture' }, { anchor: 'L2', text: '' }],
         allowedSecretNames: ['account.password'],
         targets: { web: target },
         currentPlan: {
@@ -151,7 +151,7 @@ describe('Stage 2 provider context', () => {
     const instructionIndex = prompt.indexOf(instructionLike);
     const closingFenceIndex = prompt.lastIndexOf('\n```');
 
-    expect(result.trustedInputs.testMd).toBe(instructionLike);
+    expect(result.trustedInputs.testMd).toEqual([{ anchor: 'L1', text: instructionLike }]);
     expect(result.trustedInputs.currentPlan.steps[0]).toEqual(step('first', instructionLike));
     expect(Object.keys(result)).toEqual(['trustedInputs', 'untrustedReplayEvidence']);
     expect(framingIndex).toBeGreaterThanOrEqual(0);

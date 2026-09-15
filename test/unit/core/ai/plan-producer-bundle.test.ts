@@ -71,6 +71,10 @@ describe('plan producer bundle', () => {
         instructionCoverage: [{
           id: 'submit-credentials',
           kind: 'action',
+          startAnchor: 'L1',
+          startColumn: 1,
+          endAnchor: 'L1',
+          endColumn: 24,
           citation: 'Submit the credentials.',
         }],
         verificationIntent: [],
@@ -120,6 +124,10 @@ describe('plan producer bundle', () => {
         instructionCoverage: [{
           id: 'some-id',
           kind: 'action',
+          startAnchor: 'L1',
+          startColumn: 1,
+          endAnchor: 'L1',
+          endColumn: 29,
           citation: 'Complete the sign-in flow.',
         }],
         verificationIntent: [{

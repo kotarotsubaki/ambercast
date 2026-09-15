@@ -17,6 +17,7 @@ import {
   FillSecretAction,
   Fingerprint,
   GroundingDocument,
+  GeneratedInstructionCriterion,
   GeneratedAiStep,
   GeneratedAiStepSecretUse,
   GeneratedFillSecretAction,
@@ -68,6 +69,10 @@ const INSTRUCTION_COVERAGE = [{
 const GENERATED_INSTRUCTION_COVERAGE = [{
   id: 'settings-open',
   kind: 'success',
+  startAnchor: 'L1',
+  startColumn: 1,
+  endAnchor: 'L1',
+  endColumn: 14,
   citation: 'Open settings',
 }] as const;
 const VERIFICATION_INTENT = [{
@@ -995,8 +1000,26 @@ describe('PlanDocument', () => {
     });
     expectRejected(GeneratedAiStep, {
       ...generated,
+      instructionCoverage: [{ ...GENERATED_INSTRUCTION_COVERAGE[0], citation: '' }],
+    });
+    expectRejected(GeneratedAiStep, {
+      ...generated,
       instructionCoverage: [{ ...GENERATED_INSTRUCTION_COVERAGE[0], citation: 'a'.repeat(4_097) }],
     });
+
+    for (const invalid of [
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], startAnchor: undefined },
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], startAnchor: 1 },
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], startColumn: undefined },
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], startColumn: '1' },
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], endAnchor: undefined },
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], endAnchor: 1 },
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], endColumn: undefined },
+      { ...GENERATED_INSTRUCTION_COVERAGE[0], endColumn: '14' },
+    ]) {
+      expectRejected(GeneratedInstructionCriterion, invalid);
+      expectRejected(GeneratedAiStep, { ...generated, instructionCoverage: [invalid] });
+    }
   });
 });
 

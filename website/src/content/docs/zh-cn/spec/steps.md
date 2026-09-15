@@ -201,7 +201,7 @@ description: "每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严�
 
 所选定的可辨识联合体为每个操作码（opcode）赋予了封闭的字段契约，并将机密填充与普通文本分离开来。提供商命名意图会在计划提交前于本地解析并取得同意。
 
-逐字的提供商引文将每个准则绑定到一个经本地检查的提示词摘录；本地转换为四坐标 `InstructionSourceSpan` 使得提交的归属变得精确，而无需让提供商计算行数。 [src/usecases/instruction-coverage-policy.ts:337-415](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337-L415)
+provider 提供的锚点与列坐标将每个准则绑定到一个经本地解析的提示词摘录；本地解析为四坐标 `InstructionSourceSpan` 使得提交的归属变得精确，而 provider 返回的 `citation` 仅是确认该解析结果的校验和，并不作为结合键使用。 [src/usecases/instruction-coverage-policy.ts:369-399](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L369-L399)
 
 终结性 `url-matches` 被否决，因为它是同义反复的成功形式，而不是所引用的成功准则的独立证明。请使用受支持且非重复的终结性 `TraceAssert`；如果无法表示成功条件，则生成失败。 [src/usecases/instruction-coverage-policy.ts:361-365](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L361-L365) [src/usecases/instruction-coverage-policy.ts:589-606](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L589-L606)
 

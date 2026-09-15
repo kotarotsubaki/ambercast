@@ -111,7 +111,7 @@ export const ReportAttempts = z.array(z.strictObject({
 
 // The usecase-owned compile-time cross-check stays there because report may not import usecases.
 export const INSTRUCTION_COVERAGE_ISSUE_CODES = [
-  'citation-whitespace-only', 'citation-not-found', 'citation-not-unique',
+  'citation-whitespace-only', 'anchor-invalid', 'citation-checksum-mismatch',
   'criterion-id-duplicate', 'criterion-range-duplicate', 'criterion-order-invalid',
   'source-span-invalid', 'source-span-whitespace-only', 'success-criterion-missing',
   'intent-id-duplicate', 'intent-id-missing', 'intent-id-unknown', 'intent-id-action',

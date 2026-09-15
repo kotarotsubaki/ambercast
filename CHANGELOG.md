@@ -5,10 +5,10 @@
 
 ### ⚠ BREAKING CHANGES
 
-* **generate:** replace instruction-coverage citation matching with anchor IDs ([#378](https://github.com/kotarotsubaki/ambercast/issues/378))
-* **secrets:** generate two-stage consent gate, allowlist write-back with exclusive config update (SPEC-C2) ([#375](https://github.com/kotarotsubaki/ambercast/issues/375))
-* **secrets:** add deterministic secret naming, allowlist verification, and legacy-syntax rejection (Plan IR v3, report 3.5) ([#372](https://github.com/kotarotsubaki/ambercast/issues/372))
-* **run:** agentic executor over an in-process MCP server; invert run's default to fail-closed with --resolve ([#371](https://github.com/kotarotsubaki/ambercast/issues/371))
+* **generate:** Existing plans become stale and must be regenerated with `ambercast generate --force`. The generator prompt template and generated-response schema change (instruction-coverage criteria now carry `startAnchor`/`startColumn`/`endAnchor`/`endColumn`, and `citation` is a checksum instead of a join key), and the `instructionCoveragePolicy` producer-bundle revision advances from 2 to 3 ([#378](https://github.com/kotarotsubaki/ambercast/issues/378))
+* **secrets:** `generate` stops at a consent gate for every newly detected secret name: an interactive terminal asks `y / N / i`, a non-interactive run exits 2 and lists the unallowed names, and consenting appends the names to `secrets.allow` in `ambercast.config.json` ([#375](https://github.com/kotarotsubaki/ambercast/issues/375))
+* **secrets:** Plan IR schemaVersion 3 (was 2): committed v2 plans fail `run`/`heal` with `IntegrityViolationError` until regenerated with `ambercast generate`. Report schema 3.5 (was 3.4). The legacy `@ambercast-secret` grant line and `{{secrets.*}}` prompt syntax are rejected with exit 2, with no migration window ([#372](https://github.com/kotarotsubaki/ambercast/issues/372))
+* **run:** `run` no longer resolves grounding misses with AI unless `--resolve` is given, and `--cache-only` is removed (unknown option, exit 2). A new `grounding-unresolved` error kind maps to exit code 4 and report code `GROUNDING_UNRESOLVED` ([#371](https://github.com/kotarotsubaki/ambercast/issues/371))
 
 ### Features
 

@@ -33,7 +33,7 @@ description: "`PlanDocument` は厳格なオブジェクトである。"
 
 ## セマンティック制約 {#semantic-constraints}
 
-ステップ ID は一意でなければならず（MUST）、重複がある場合は後続の `steps[index].id` において `duplicate step id: <id>` が報告される。[src/core/ir/schema.ts:1180-1204](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1180-L1204) インストラクションカバレッジは、[適合性](/ambercast/ja/spec/conformance/#semantic-validation) におけるプロンプト束縛のローカル帰属と集合チェックを要求する。[src/usecases/instruction-coverage-policy.ts:337-496](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337-L496)
+ステップ ID は一意でなければならず（MUST）、重複がある場合は後続の `steps[index].id` において `duplicate step id: <id>` が報告される。[src/core/ir/schema.ts:1180-1204](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1180-L1204) インストラクションカバレッジは、[適合性](/ambercast/ja/spec/conformance/#semantic-validation) におけるプロンプト束縛のローカル帰属と集合チェックを要求する。[src/usecases/instruction-coverage-policy.ts:379-538](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L379-L538)
 
 ## プロバイダー専用の生成レスポンス {#provider-generation-response}
 

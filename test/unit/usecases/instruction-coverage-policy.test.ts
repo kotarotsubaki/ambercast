@@ -28,11 +28,15 @@ const READY_ASSERTION = { type: 'assert' as const, check: 'text-visible' as cons
 
 function generatedCoverage(
   citation: string,
+  startAnchor = 'L1',
+  startColumn = 1,
+  endAnchor = 'L1',
+  endColumn = citation.length + 1,
   id = 'ready',
   assertion: TraceAssert = READY_ASSERTION,
 ): GeneratedInstructionCoverage {
   return {
-    instructionCoverage: [{ id, kind: 'success', citation }],
+    instructionCoverage: [{ id, kind: 'success', startAnchor, startColumn, endAnchor, endColumn, citation }],
     verificationIntent: [{ criterionId: id, assertion }],
   };
 }
@@ -83,21 +87,21 @@ function preScanned(trace: TraceRecordWithCoverageStorage): PreScannedTraceRecor
   return trace as PreScannedTraceRecord;
 }
 
-describe('validateGeneratedInstructionCoverage citation attribution', () => {
+describe('validateGeneratedInstructionCoverage anchor attribution', () => {
   it.each([
-    ['LF first line', 'Alpha\nBeta', 'Alpha', { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 }],
-    ['LF second line at EOF', 'Alpha\nBeta', 'Beta', { startLine: 2, startColumn: 1, endLine: 2, endColumn: 5 }],
-    ['citation containing LF', 'Alpha\nBeta', 'Alpha\n', { startLine: 1, startColumn: 1, endLine: 2, endColumn: 1 }],
-    ['CRLF normalization', 'Alpha\r\nBeta', 'Beta', { startLine: 2, startColumn: 1, endLine: 2, endColumn: 5 }],
-    ['lone CR normalization', 'Alpha\rBeta', 'Beta', { startLine: 2, startColumn: 1, endLine: 2, endColumn: 5 }],
-    ['one leading BOM removal', '\uFEFFAlpha', 'Alpha', { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 }],
-    ['terminal LF boundary', 'Alpha\n', 'Alpha\n', { startLine: 1, startColumn: 1, endLine: 2, endColumn: 1 }],
-    ['no terminal LF EOF', 'Alpha', 'Alpha', { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 }],
-    ['emoji UTF-16 width', '😀 Ready', '😀', { startLine: 1, startColumn: 1, endLine: 1, endColumn: 3 }],
-    ['same-line second clause', 'Act, then succeed', 'succeed', { startLine: 1, startColumn: 11, endLine: 1, endColumn: 18 }],
-  ] as const)('derives precise coordinates for %s', (_name, raw, citation, sourceSpan) => {
+    ['LF first line', 'Alpha\nBeta', 'Alpha', 'L1', 1, 'L1', 6, { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 }],
+    ['LF second line at EOF', 'Alpha\nBeta', 'Beta', 'L2', 1, 'L2', 5, { startLine: 2, startColumn: 1, endLine: 2, endColumn: 5 }],
+    ['span containing LF', 'Alpha\nBeta', 'Alpha\n', 'L1', 1, 'L2', 1, { startLine: 1, startColumn: 1, endLine: 2, endColumn: 1 }],
+    ['CRLF normalization', 'Alpha\r\nBeta', 'Beta', 'L2', 1, 'L2', 5, { startLine: 2, startColumn: 1, endLine: 2, endColumn: 5 }],
+    ['lone CR normalization', 'Alpha\rBeta', 'Beta', 'L2', 1, 'L2', 5, { startLine: 2, startColumn: 1, endLine: 2, endColumn: 5 }],
+    ['one leading BOM removal', '\uFEFFAlpha', 'Alpha', 'L1', 1, 'L1', 6, { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 }],
+    ['terminal LF boundary', 'Alpha\n', 'Alpha\n', 'L1', 1, 'L2', 1, { startLine: 1, startColumn: 1, endLine: 2, endColumn: 1 }],
+    ['no terminal LF EOF', 'Alpha', 'Alpha', 'L1', 1, 'L1', 6, { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 }],
+    ['emoji UTF-16 width', '😀 Ready', '😀', 'L1', 1, 'L1', 3, { startLine: 1, startColumn: 1, endLine: 1, endColumn: 3 }],
+    ['same-line second clause', 'Act, then succeed', 'succeed', 'L1', 11, 'L1', 18, { startLine: 1, startColumn: 11, endLine: 1, endColumn: 18 }],
+  ] as const)('derives precise coordinates for %s', (_name, raw, citation, startAnchor, startColumn, endAnchor, endColumn, sourceSpan) => {
     const result = expectSuccess(validateGeneratedInstructionCoverage(
-      generatedCoverage(citation),
+      generatedCoverage(citation, startAnchor, startColumn, endAnchor, endColumn),
       normalizeTestMd(raw),
     ));
 
@@ -107,27 +111,65 @@ describe('validateGeneratedInstructionCoverage citation attribution', () => {
   });
 
   it.each([
-    ['missing', 'citation-not-found', 'Other', 'Alpha'],
-    ['fabricated', 'citation-not-found', 'Alpha!', 'Alpha'],
-    ['ambiguous', 'citation-not-unique', 'Alpha', 'Alpha and Alpha'],
-    ['adjacent duplicate', 'citation-not-unique', 'Alpha', 'AlphaAlpha'],
-    ['self-overlapping', 'citation-not-unique', 'aba', 'ababa'],
-    ['empty', 'citation-whitespace-only', '', 'Alpha'],
-    ['spaces', 'citation-whitespace-only', ' \t', 'Alpha'],
-    ['newline only', 'citation-whitespace-only', '\n', 'Alpha'],
-  ] as const)('rejects a %s citation with a stable code', (_name, code, citation, prompt) => {
-    expectIssueCodes(
-      validateGeneratedInstructionCoverage(generatedCoverage(citation), normalizeTestMd(prompt)),
-      [code],
+    ['leading-zero anchor', 'L01', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['zero anchor', 'L0', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['non-L anchor', '1', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['empty anchor', '', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['unknown anchor', 'L3', 1, 'L3', 2, 'A', 'startAnchor'],
+    ['malformed end anchor', 'L1', 1, 'not-an-anchor', 2, 'A', 'endAnchor'],
+    ['unknown end anchor', 'L1', 1, 'L3', 2, 'A', 'endAnchor'],
+    ['zero column', 'L1', 0, 'L1', 2, 'A', 'startColumn'],
+    ['negative column', 'L1', -1, 'L1', 2, 'A', 'startColumn'],
+    ['zero end column', 'L1', 1, 'L1', 0, 'A', 'endColumn'],
+    ['negative end column', 'L1', 1, 'L1', -1, 'A', 'endColumn'],
+    ['column past text plus one', 'L1', 1, 'L1', 7, 'A', 'endColumn'],
+    ['same-line reversed range', 'L1', 3, 'L1', 2, 'A', 'startColumn'],
+    ['zero-width range', 'L1', 2, 'L1', 2, 'A', 'endColumn'],
+    ['cross-anchor reversed range', 'L2', 1, 'L1', 2, 'A\nB', 'endAnchor'],
+    ['lone high surrogate split', 'L1', 2, 'L1', 3, '😀 Ready', 'startColumn'],
+    ['lone low surrogate split', 'L1', 1, 'L1', 2, '😀 Ready', 'endColumn'],
+  ] as const)('rejects %s with anchor-invalid', (_name, startAnchor, startColumn, endAnchor, endColumn, prompt, expectedPath) => {
+    const issues = expectIssueCodes(
+      validateGeneratedInstructionCoverage(generatedCoverage('A', startAnchor, startColumn, endAnchor, endColumn), normalizeTestMd(prompt)),
+      ['anchor-invalid'],
     );
+    expect(issues[0]!.path).toEqual(['instructionCoverage', 0, expectedPath]);
+  });
+
+  it.each([
+    ['a different checksum', 'Other'],
+    ['a whitespace-only checksum for a non-whitespace resolved span', ' \t'],
+  ] as const)('rejects %s as citation-checksum-mismatch', (_name, citation) => {
+    expectIssueCodes(validateGeneratedInstructionCoverage(
+      generatedCoverage(citation, 'L1', 1, 'L1', 6),
+      normalizeTestMd('Alpha'),
+    ), ['citation-checksum-mismatch']);
+  });
+
+  it.each([
+    ['spaces', 'A  B', 'L1', 2, 'L1', 4],
+    ['LF only', 'Alpha\nBeta', 'L1', 6, 'L2', 1],
+  ] as const)('rejects a whitespace-only resolved %s', (_name, prompt, startAnchor, startColumn, endAnchor, endColumn) => {
+    expectIssueCodes(validateGeneratedInstructionCoverage(
+      generatedCoverage('not used', startAnchor, startColumn, endAnchor, endColumn),
+      normalizeTestMd(prompt),
+    ), ['citation-whitespace-only']);
+  });
+
+  it('rejects a zero-width empty-line range with anchor-invalid', () => {
+    const issues = expectIssueCodes(validateGeneratedInstructionCoverage(
+      generatedCoverage('not used', 'L2', 1, 'L2', 1),
+      normalizeTestMd('Alpha\n'),
+    ), ['anchor-invalid']);
+    expect(issues[0]!.path).toEqual(['instructionCoverage', 0, 'endColumn']);
   });
 
   it('rejects duplicate IDs and duplicate resolved ranges while accumulating deterministic issues', () => {
     const result = validateGeneratedInstructionCoverage({
       instructionCoverage: [
-        { id: 'ready', kind: 'success', citation: 'Ready' },
-        { id: 'ready', kind: 'action', citation: 'Click' },
-        { id: 'also-ready', kind: 'success', citation: 'Ready' },
+        { id: 'ready', kind: 'success', startAnchor: 'L1', startColumn: 13, endAnchor: 'L1', endColumn: 18, citation: 'Ready' },
+        { id: 'ready', kind: 'action', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 6, citation: 'Click' },
+        { id: 'also-ready', kind: 'success', startAnchor: 'L1', startColumn: 13, endAnchor: 'L1', endColumn: 18, citation: 'Ready' },
       ],
       verificationIntent: [
         { criterionId: 'ready', assertion: READY_ASSERTION },
@@ -148,8 +190,8 @@ describe('validateGeneratedInstructionCoverage citation attribution', () => {
   it('sorts successful committed coverage by source range, kind, and ID', () => {
     const result = expectSuccess(validateGeneratedInstructionCoverage({
       instructionCoverage: [
-        { id: 'success-second', kind: 'success', citation: 'Done' },
-        { id: 'action-first', kind: 'action', citation: 'Click' },
+        { id: 'success-second', kind: 'success', startAnchor: 'L1', startColumn: 13, endAnchor: 'L1', endColumn: 17, citation: 'Done' },
+        { id: 'action-first', kind: 'action', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 6, citation: 'Click' },
       ],
       verificationIntent: [{ criterionId: 'success-second', assertion: READY_ASSERTION }],
     }, normalizeTestMd('Click, then Done')));
@@ -157,25 +199,12 @@ describe('validateGeneratedInstructionCoverage citation attribution', () => {
     expect(result.map(({ id }) => id)).toEqual(['action-first', 'success-second']);
   });
 
-  it.each([
-    ['lone high surrogate', '\uD83D'],
-    ['lone low surrogate', '\uDE00'],
-  ] as const)('rejects a %s citation that would split an emoji source span', (_name, citation) => {
-    const issues = expectIssueCodes(
-      validateGeneratedInstructionCoverage(generatedCoverage(citation), normalizeTestMd('😀 Ready')),
-      ['source-span-invalid'],
-    );
-
-    expect(issues).toEqual([
-      expect.objectContaining({ path: ['instructionCoverage', 0, 'citation'] }),
-    ]);
-  });
 });
 
 describe('validateGeneratedInstructionCoverage transient intent', () => {
   it('rejects nonempty action-only coverage even when its empty terminal intent is an exact set', () => {
     const issues = expectIssueCodes(validateGeneratedInstructionCoverage({
-      instructionCoverage: [{ id: 'click', kind: 'action', citation: 'Click' }],
+      instructionCoverage: [{ id: 'click', kind: 'action', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 6, citation: 'Click' }],
       verificationIntent: [],
     }, normalizeTestMd('Click')), ['success-criterion-missing']);
 
@@ -187,8 +216,8 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
   it('accepts an own-key-safe exact success set and never returns transient intent', () => {
     const result = expectSuccess(validateGeneratedInstructionCoverage({
       instructionCoverage: [
-        { id: 'constructor', kind: 'success', citation: 'Ready' },
-        { id: 'to-string', kind: 'action', citation: 'Click' },
+        { id: 'constructor', kind: 'success', startAnchor: 'L1', startColumn: 13, endAnchor: 'L1', endColumn: 18, citation: 'Ready' },
+        { id: 'to-string', kind: 'action', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 6, citation: 'Click' },
       ],
       verificationIntent: [{ criterionId: 'constructor', assertion: READY_ASSERTION }],
     }, normalizeTestMd('Click, then Ready')));
@@ -206,7 +235,7 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
     ], ['intent-id-duplicate']],
   ] as const)('rejects %s in the success-intent bijection', (_name, verificationIntent, codes) => {
     expectIssueCodes(validateGeneratedInstructionCoverage({
-      ...generatedCoverage('Ready'),
+      ...generatedCoverage('Ready', 'L1', 1, 'L1', 6),
       verificationIntent,
     }, normalizeTestMd('Ready')), codes);
   });
@@ -214,8 +243,8 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
   it('reports every missing success intent at a distinct criterion path', () => {
     const result = validateGeneratedInstructionCoverage({
       instructionCoverage: [
-        { id: 'first-ready', kind: 'success', citation: 'First ready' },
-        { id: 'second-ready', kind: 'success', citation: 'Second ready' },
+        { id: 'first-ready', kind: 'success', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 12, citation: 'First ready' },
+        { id: 'second-ready', kind: 'success', startAnchor: 'L1', startColumn: 19, endAnchor: 'L1', endColumn: 31, citation: 'Second ready' },
       ],
       verificationIntent: [],
     }, normalizeTestMd('First ready, then Second ready'));
@@ -239,8 +268,8 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
   it('rejects an action ID in terminal intent', () => {
     expectIssueCodes(validateGeneratedInstructionCoverage({
       instructionCoverage: [
-        { id: 'click', kind: 'action', citation: 'Click' },
-        { id: 'ready', kind: 'success', citation: 'Ready' },
+        { id: 'click', kind: 'action', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 6, citation: 'Click' },
+        { id: 'ready', kind: 'success', startAnchor: 'L1', startColumn: 11, endAnchor: 'L1', endColumn: 16, citation: 'Ready' },
       ],
       verificationIntent: [
         { criterionId: 'click', assertion: READY_ASSERTION },
@@ -250,7 +279,7 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
   });
 
   it('rejects terminal url-matches without rejecting the supported assertion vocabulary', () => {
-    expectIssueCodes(validateGeneratedInstructionCoverage(generatedCoverage('Ready', 'ready', {
+    expectIssueCodes(validateGeneratedInstructionCoverage(generatedCoverage('Ready', 'L1', 1, 'L1', 6, 'ready', {
       type: 'assert', check: 'url-matches', pattern: '/ready$',
     }), normalizeTestMd('Ready')), ['terminal-url-matches-forbidden']);
   });
@@ -259,7 +288,7 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
     const assertion = { type: 'assert' as const, check: 'element-count' as const, target: TARGET, count: 0 };
     expect(TraceRecord.safeParse({ events: [], verification: [assertion] }).success).toBe(true);
     expectSuccess(validateGeneratedInstructionCoverage(
-      generatedCoverage('No alerts', 'no-alerts', assertion),
+      generatedCoverage('No alerts', 'L1', 1, 'L1', 10, 'no-alerts', assertion),
       normalizeTestMd('No alerts'),
     ));
   });
@@ -271,7 +300,7 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
     ['element-count', { type: 'assert', check: 'element-count', target: TARGET, count: 0 }],
   ] as const)('accepts the supported %s terminal intent vocabulary', (_name, assertion) => {
     expectSuccess(validateGeneratedInstructionCoverage(
-      generatedCoverage('Ready', 'ready', assertion),
+      generatedCoverage('Ready', 'L1', 1, 'L1', 6, 'ready', assertion),
       normalizeTestMd('Ready'),
     ));
   });
@@ -280,7 +309,7 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
     const assertion = { type: 'assert', check: 'element-count', target: TARGET, min: 0 };
     expect(TraceRecord.safeParse({ events: [], verification: [assertion] }).success).toBe(false);
     expectIssueCodes(validateGeneratedInstructionCoverage(
-      generatedCoverage('Ready', 'ready', assertion as unknown as TraceAssert),
+      generatedCoverage('Ready', 'L1', 1, 'L1', 6, 'ready', assertion as unknown as TraceAssert),
       normalizeTestMd('Ready'),
     ), ['intent-assertion-unsupported']);
   });

@@ -3,11 +3,12 @@
  * claims into reviewable plan provenance and covered replay evidence.
  *
  * Provider output is never authoritative for source coordinates. Generation
- * resolves verbatim citations against normalized Markdown, derives precise
- * coordinates locally, validate a bounded assertion intent, and discard both
- * the citation text and intent before constructing a plan. Generation
- * freshness checks, `check`, and `run` re-extract the same committed spans, so
- * a schema-valid plan cannot acquire authority from an impossible or
+ * validates provider-supplied anchors and columns against normalized
+ * Markdown, resolve their coordinates locally, validate a bounded assertion
+ * intent, and discard both the citation text and intent before constructing a
+ * plan. Citation serves only as a checksum and never locates a range.
+ * Generation freshness checks, `check`, and `run` re-extract the same
+ * committed spans, so a schema-valid plan cannot acquire authority from an impossible or
  * hand-edited range.
  *
  * Trace coverage is likewise a local claim rather than proof by itself. The
@@ -80,8 +81,8 @@ export type TrustedInstructionCriterion = AiTrustedInstructionCriterion;
  */
 export type InstructionCoverageIssueCode =
   | 'citation-whitespace-only'
-  | 'citation-not-found'
-  | 'citation-not-unique'
+  | 'anchor-invalid'
+  | 'citation-checksum-mismatch'
   | 'criterion-id-duplicate'
   | 'criterion-range-duplicate'
   | 'criterion-order-invalid'
@@ -274,18 +275,6 @@ function issue(
   return { code, path, message: code };
 }
 
-function offsetToPosition(source: string, offset: number): { line: number; column: number } {
-  let line = 1;
-  let previousLf = -1;
-  for (let index = 0; index < offset; index += 1) {
-    if (source.charCodeAt(index) === 0x0A) {
-      line += 1;
-      previousLf = index;
-    }
-  }
-  return { line, column: offset - previousLf };
-}
-
 function isSurrogateBoundary(source: string, offset: number): boolean {
   if (offset <= 0 || offset >= source.length) return true;
   const before = source.charCodeAt(offset - 1);
@@ -293,26 +282,68 @@ function isSurrogateBoundary(source: string, offset: number): boolean {
   return !(before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF);
 }
 
+/**
+ * Resolves one line/column boundary to an absolute UTF-16 offset, or
+ * `undefined` if the boundary is out of range or splits a surrogate pair.
+ *
+ * Factored out of {@link extractSpan} so {@link invalidSpanPath} can reuse the
+ * exact same bound and surrogate rules to decide *why* a boundary failed,
+ * instead of re-deriving a second, potentially divergent notion of validity.
+ */
+function resolveBoundaryOffset(source: string, lines: readonly string[], line: number, column: number): number | undefined {
+  if (!Number.isInteger(line) || !Number.isInteger(column) || line < 1 || column < 1 || line > lines.length) {
+    return undefined;
+  }
+  const lineText = lines[line - 1]!;
+  if (column > lineText.length + 1) return undefined;
+  let offset = 0;
+  for (let index = 0; index < line - 1; index += 1) offset += lines[index]!.length + 1;
+  offset += column - 1;
+  return isSurrogateBoundary(source, offset) ? offset : undefined;
+}
+
 function extractSpan(
   source: string,
   span: InstructionCriterion['sourceSpan'],
 ): string | undefined {
   const lines = source.split('\n');
-  const toOffset = (line: number, column: number): number | undefined => {
-    if (!Number.isInteger(line) || !Number.isInteger(column) || line < 1 || column < 1 || line > lines.length) {
-      return undefined;
-    }
-    const lineText = lines[line - 1]!;
-    if (column > lineText.length + 1) return undefined;
-    let offset = 0;
-    for (let index = 0; index < line - 1; index += 1) offset += lines[index]!.length + 1;
-    offset += column - 1;
-    return isSurrogateBoundary(source, offset) ? offset : undefined;
-  };
-  const start = toOffset(span.startLine, span.startColumn);
-  const end = toOffset(span.endLine, span.endColumn);
+  const start = resolveBoundaryOffset(source, lines, span.startLine, span.startColumn);
+  const end = resolveBoundaryOffset(source, lines, span.endLine, span.endColumn);
   if (start === undefined || end === undefined || end <= start) return undefined;
   return source.slice(start, end);
+}
+
+/**
+ * Attributes an `extractSpan` rejection to the one coordinate a corrected
+ * response would need to change.
+ *
+ * Retry feedback (`PreviousAttemptContext` in `generate.ts`) carries only
+ * `{ code, path, stepId }` — never citation text or resolved prompt
+ * fragments — so the failing path is the *only* signal the provider gets
+ * back. Pointing every anchor failure at `citation` left the provider
+ * unable to tell a bad anchor from a bad checksum. The check order is
+ * deterministic, so a response with multiple invalid coordinates always
+ * retries against the same blocker. It leaves the outcome undecided only
+ * once both boundaries individually resolve, in which case the sole
+ * remaining `extractSpan` rejection is a reversed or zero-width range:
+ * that is entirely a property of the end boundary relative to the start
+ * (an already-valid start never becomes invalid by comparison), so the end
+ * coordinate is what a corrected response must move — the end anchor if it
+ * names an earlier line, otherwise the end column on their shared line.
+ */
+function invalidSpanPath(
+  source: string,
+  span: InstructionCriterion['sourceSpan'],
+): 'startAnchor' | 'startColumn' | 'endAnchor' | 'endColumn' {
+  const lines = source.split('\n');
+  const lineInRange = (line: number): boolean => Number.isInteger(line) && line >= 1 && line <= lines.length;
+  if (resolveBoundaryOffset(source, lines, span.startLine, span.startColumn) === undefined) {
+    return lineInRange(span.startLine) ? 'startColumn' : 'startAnchor';
+  }
+  if (resolveBoundaryOffset(source, lines, span.endLine, span.endColumn) === undefined) {
+    return lineInRange(span.endLine) ? 'endColumn' : 'endAnchor';
+  }
+  return span.endLine < span.startLine ? 'endAnchor' : 'endColumn';
 }
 
 /**
@@ -346,21 +377,17 @@ export interface TraceCoverageValidationInput {
  * @param normalizedTestMd - Canonical prompt in which citations are resolved.
  * @returns Source-ordered committed criteria, or deterministic provider issues.
  * @remarks
- * Citation search counts overlapping exact-substring matches by advancing one
- * UTF-16 code unit at a time. The exact excerpt must contain at least one
- * non-whitespace character, while every interior whitespace code unit remains
- * significant. Exactly one occurrence is required; missing, ambiguous,
- * self-overlapping, fabricated, duplicate-ID, or duplicate-range claims fail.
- * The unique half-open offsets are converted to precise coordinates locally
- * and generated criteria are sorted by start, end, kind, and ID.
+ * Anchors let repeated or otherwise non-unique prompt clauses remain
+ * unambiguous evidence. {@link extractSpan} is the shared coordinate
+ * resolution authority for generated and committed coverage, keeping their
+ * range, ordering, and surrogate-boundary contract aligned. Whitespace-only
+ * resolution is rejected before checksum confirmation so a blank span is
+ * never misreported as a checksum mismatch. The citation confirms the
+ * provider's claim against raw prompt text; it is not a second way to locate
+ * the range.
  *
- * For any offset `o` from zero through the normalized source length, line is
- * one plus the number of LF code units in `[0, o)`. Let `p` be the greatest LF
- * offset below `o`, or `-1` when none exists; column is `o - p`. Thus an offset
- * on LF is the preceding line's exclusive column, an offset immediately after
- * LF is column one, EOF is always defined, and EOF after a terminal LF is
- * column one of the terminal empty line. Start and end offsets cannot split a
- * surrogate pair.
+ * Duplicate IDs still fail, and generated criteria remain sorted by
+ * start, end, kind, and ID.
  *
  * Success IDs and intent IDs form an own-key-safe exact bijection within this
  * AI step. Action, unknown, duplicate, or missing IDs fail, as do unsupported
@@ -380,42 +407,38 @@ export function validateGeneratedInstructionCoverage(
   for (const [index, candidate] of generated.instructionCoverage.entries()) {
     if (ids.has(candidate.id)) issues.push(issue('criterion-id-duplicate', ['instructionCoverage', index, 'id']));
     ids.add(candidate.id);
-    if (!/\S/u.test(candidate.citation)) {
+    const startAnchor = /^L([1-9]\d*)$/.exec(candidate.startAnchor);
+    const endAnchor = /^L([1-9]\d*)$/.exec(candidate.endAnchor);
+    if (startAnchor === null || endAnchor === null) {
+      issues.push(issue('anchor-invalid', ['instructionCoverage', index, startAnchor === null ? 'startAnchor' : 'endAnchor']));
+      continue;
+    }
+    const sourceSpan = {
+      startLine: Number(startAnchor[1]),
+      startColumn: candidate.startColumn,
+      endLine: Number(endAnchor[1]),
+      endColumn: candidate.endColumn,
+    };
+    const text = extractSpan(normalizedTestMd, sourceSpan);
+    if (text === undefined) {
+      issues.push(issue('anchor-invalid', ['instructionCoverage', index, invalidSpanPath(normalizedTestMd, sourceSpan)]));
+      continue;
+    }
+    if (!/\S/u.test(text)) {
       issues.push(issue('citation-whitespace-only', ['instructionCoverage', index, 'citation']));
       continue;
     }
-    const matches: number[] = [];
-    for (let start = normalizedTestMd.indexOf(candidate.citation); start !== -1; start = normalizedTestMd.indexOf(candidate.citation, start + 1)) {
-      matches.push(start);
-    }
-    if (matches.length === 0) {
-      issues.push(issue('citation-not-found', ['instructionCoverage', index, 'citation']));
-      continue;
-    }
-    if (matches.length !== 1) {
-      issues.push(issue('citation-not-unique', ['instructionCoverage', index, 'citation']));
-      continue;
-    }
-    const start = matches[0]!;
-    const end = start + candidate.citation.length;
-    if (!isSurrogateBoundary(normalizedTestMd, start) || !isSurrogateBoundary(normalizedTestMd, end)) {
-      issues.push(issue('source-span-invalid', ['instructionCoverage', index, 'citation']));
-      continue;
-    }
-    const rangeKey = `${start}:${end}`;
+    const rangeKey = `${sourceSpan.startLine}:${sourceSpan.startColumn}:${sourceSpan.endLine}:${sourceSpan.endColumn}`;
     if (ranges.has(rangeKey)) issues.push(issue('criterion-range-duplicate', ['instructionCoverage', index, 'citation']));
     ranges.add(rangeKey);
-    const startPosition = offsetToPosition(normalizedTestMd, start);
-    const endPosition = offsetToPosition(normalizedTestMd, end);
+    if (text !== candidate.citation) {
+      issues.push(issue('citation-checksum-mismatch', ['instructionCoverage', index, 'citation']));
+      continue;
+    }
     criteria.push({
       id: candidate.id,
       kind: candidate.kind,
-      sourceSpan: {
-        startLine: startPosition.line,
-        startColumn: startPosition.column,
-        endLine: endPosition.line,
-        endColumn: endPosition.column,
-      },
+      sourceSpan,
     });
   }
 

@@ -6,7 +6,8 @@ import {
   PROMPT_ENVELOPE_TEMPLATE,
   promptTemplateFingerprint,
 } from '#adapters/ai/shared/prompt-envelope.js';
-import { buildPromptEnvelope } from '#core/ai/prompt-envelope.js';
+import { buildPromptEnvelope, toAnchoredLines } from '#core/ai/prompt-envelope.js';
+import { normalizeTestMd } from '#core/ir/normalize.js';
 import * as corePromptEnvelope from '#core/ai/prompt-envelope.js';
 import * as adapterPromptEnvelope from '#adapters/ai/shared/prompt-envelope.js';
 
@@ -50,7 +51,17 @@ describe('prompt envelope', () => {
   });
 
   it('pins the K3a generator instruction-coverage policy bytes directly', () => {
-    expect(corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE).toBe('For every AI step, copy a unique verbatim citation for each success or action criterion into instructionCoverage. Every AI step must have at least one criterion of kind success. Provide verificationIntent with exactly one complete terminal assertion for every success criterion; each verificationIntent criterionId must name a declared success criterion id of the same step. A url-matches assertion is invalid as a terminal assertion. When the prompt states a success condition only as reaching a URL, express the intent as an element-visible or text-visible assertion on a destination target that the prompt\'s own words imply, such as its main heading or landmark; do not invent text absent from the prompt, and if no such target can be inferred, keep the url-matches assertion so the policy rejects it. When ## Context contains previousAttempts, the listed issues explain why earlier responses were rejected; return a response that avoids every listed issue. Citations and verificationIntent are attribution inputs and are not committed to the plan.');
+    expect(corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE).toBe('For every AI step, testMd is a JSON array of { anchor, text } lines; for each success or action criterion, report { startAnchor, startColumn, endAnchor, endColumn } naming the first and last line anchors and 1-based UTF-16 columns within their text, with an inclusive start and exclusive end, and copy the exact cited substring into citation as a confirmation checksum. For a multi-line span, citation must be the original raw normalized-prompt substring at [startOffset, endOffset), including each interior LF character between anchored lines, not a concatenation of anchored-line text fields or another value constructed from the anchors. Every AI step must have at least one criterion of kind success. Provide verificationIntent with exactly one complete terminal assertion for every success criterion; each verificationIntent criterionId must name a declared success criterion id of the same step. A url-matches assertion is invalid as a terminal assertion. When the prompt states a success condition only as reaching a URL, express the intent as an element-visible or text-visible assertion on a destination target that the prompt\'s own words imply, such as its main heading or landmark; do not invent text absent from the prompt, and if no such target can be inferred, keep the url-matches assertion so the policy rejects it. When ## Context contains previousAttempts, the listed issues explain why earlier responses were rejected; return a response that avoids every listed issue. Citations and verificationIntent are attribution inputs and are not committed to the plan.');
+  });
+
+  it.each([
+    ['an empty prompt', '', [{ anchor: 'L1', text: '' }]],
+    ['one line without a trailing LF', 'Alpha', [{ anchor: 'L1', text: 'Alpha' }]],
+    ['multiple lines', 'Alpha\nBeta', [{ anchor: 'L1', text: 'Alpha' }, { anchor: 'L2', text: 'Beta' }]],
+    ['a trailing LF as a final empty line', 'Alpha\n', [{ anchor: 'L1', text: 'Alpha' }, { anchor: 'L2', text: '' }]],
+    ['a lone surrogate without transformation', '\uD83D', [{ anchor: 'L1', text: '\uD83D' }]],
+  ] as const)('maps %s to one-based anchored lines', (_name, raw, expected) => {
+    expect(toAnchoredLines(normalizeTestMd(raw))).toEqual(expected);
   });
 
   it('pins the C1-10 generator secret policy bytes directly', () => {

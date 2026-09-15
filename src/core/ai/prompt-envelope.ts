@@ -11,6 +11,8 @@
 
 import { createHash } from 'node:crypto';
 
+import type { NormalizedTestMd } from '#core/ir/normalize.js';
+
 const STATIC_PARTS = Object.freeze({
   framing: `You generate or direct an ambercast test plan from the requested task.
 Follow the task faithfully and return only the response requested by the caller.
@@ -40,10 +42,30 @@ export const COMMON_PROMPT_POLICY_TEMPLATE = staticGrammar();
  * Generator-only instruction-coverage and transient-intent policy bytes.
  *
  * These bytes combine with {@link COMMON_PROMPT_POLICY_TEMPLATE} to form the
- * complete generator fingerprint. Changing either part therefore changes
- * `inputsDigest` and makes existing Plan-v2 artifacts stale.
+ * complete generator fingerprint. The policy directs providers to identify
+ * ranges through line anchors and coordinates while treating citation as a
+ * checksum, so changing its bytes changes `inputsDigest` and makes existing
+ * Plan-v2 artifacts stale.
  */
-export const GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE = `For every AI step, copy a unique verbatim citation for each success or action criterion into instructionCoverage. Every AI step must have at least one criterion of kind success. Provide verificationIntent with exactly one complete terminal assertion for every success criterion; each verificationIntent criterionId must name a declared success criterion id of the same step. A url-matches assertion is invalid as a terminal assertion. When the prompt states a success condition only as reaching a URL, express the intent as an element-visible or text-visible assertion on a destination target that the prompt's own words imply, such as its main heading or landmark; do not invent text absent from the prompt, and if no such target can be inferred, keep the url-matches assertion so the policy rejects it. When ## Context contains previousAttempts, the listed issues explain why earlier responses were rejected; return a response that avoids every listed issue. Citations and verificationIntent are attribution inputs and are not committed to the plan.`;
+export const GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE = `For every AI step, testMd is a JSON array of { anchor, text } lines; for each success or action criterion, report { startAnchor, startColumn, endAnchor, endColumn } naming the first and last line anchors and 1-based UTF-16 columns within their text, with an inclusive start and exclusive end, and copy the exact cited substring into citation as a confirmation checksum. For a multi-line span, citation must be the original raw normalized-prompt substring at [startOffset, endOffset), including each interior LF character between anchored lines, not a concatenation of anchored-line text fields or another value constructed from the anchors. Every AI step must have at least one criterion of kind success. Provide verificationIntent with exactly one complete terminal assertion for every success criterion; each verificationIntent criterionId must name a declared success criterion id of the same step. A url-matches assertion is invalid as a terminal assertion. When the prompt states a success condition only as reaching a URL, express the intent as an element-visible or text-visible assertion on a destination target that the prompt's own words imply, such as its main heading or landmark; do not invent text absent from the prompt, and if no such target can be inferred, keep the url-matches assertion so the policy rejects it. When ## Context contains previousAttempts, the listed issues explain why earlier responses were rejected; return a response that avoids every listed issue. Citations and verificationIntent are attribution inputs and are not committed to the plan.`;
+
+/**
+ * Produces the only anchor-bearing representation sent to a provider.
+ *
+ * Local parsing, digests, plans, and validation keep the plain normalized
+ * prompt; anchors exist solely to make provider source claims unambiguous.
+ * Splitting on LF preserves the line semantics used by local span
+ * extraction, including a final empty line after a trailing LF, rather than
+ * creating a second definition of prompt lines.
+ *
+ * @param normalizedTestMd - The canonical prompt whose line text is exposed.
+ * @returns One-based `L<n>` anchors paired with their exact line text.
+ */
+export function toAnchoredLines(
+  normalizedTestMd: NormalizedTestMd,
+): readonly { readonly anchor: string; readonly text: string }[] {
+  return normalizedTestMd.split('\n').map((text, index) => ({ anchor: `L${index + 1}`, text }));
+}
 
 /**
  * Generator-only secret-reference policy bytes.

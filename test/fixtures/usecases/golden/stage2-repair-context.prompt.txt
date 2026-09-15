@@ -10,7 +10,16 @@ Repair fixture task.
 ```json
 {
   "trustedInputs": {
-    "testMd": "# Golden fixture\n",
+    "testMd": [
+      {
+        "anchor": "L1",
+        "text": "# Golden fixture"
+      },
+      {
+        "anchor": "L2",
+        "text": ""
+      }
+    ],
     "allowedSecretNames": [
       "account.password"
     ],

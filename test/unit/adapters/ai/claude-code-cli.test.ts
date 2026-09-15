@@ -120,6 +120,10 @@ describe('createClaudeCodeCliExecutor', () => {
         instructionCoverage: [{
           id: 'submit-credentials',
           kind: 'action',
+          startAnchor: 'L1',
+          startColumn: 1,
+          endAnchor: 'L1',
+          endColumn: 24,
           citation: 'Submit the credentials.',
         }],
         verificationIntent: [],

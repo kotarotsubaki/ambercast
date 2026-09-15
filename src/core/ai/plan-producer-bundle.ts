@@ -30,7 +30,7 @@ import {
  * that semantic dependency reviewable.
  */
 export const PLAN_PRODUCER_SEMANTIC_REVISIONS = Object.freeze({
-  instructionCoveragePolicy: 2,
+  instructionCoveragePolicy: 3,
   generatorSecretPolicy: 5,
 } as const);
 

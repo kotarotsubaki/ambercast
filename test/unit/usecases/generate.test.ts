@@ -3,6 +3,7 @@ import {
   GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE,
   GENERATOR_SECRET_POLICY_TEMPLATE,
   promptTemplateFingerprint,
+  toAnchoredLines,
 } from '#core/ai/prompt-envelope.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import {
@@ -97,6 +98,10 @@ const coveredResponse = {
     instructionCoverage: [{
       id: 'dashboard-reached',
       kind: 'success',
+      startAnchor: 'L3',
+      startColumn: 1,
+      endAnchor: 'L3',
+      endColumn: 56,
       [INSTRUCTION_PROOF_FIELD]: 'When I submit valid credentials, I reach the dashboard.',
     }],
     verificationIntent: [{
@@ -458,8 +463,8 @@ describe('generate', () => {
       steps: [{
         ...coveredResponse.steps[0],
         instructionCoverage: [
-          { id: 'first-ready', kind: 'success', [INSTRUCTION_PROOF_FIELD]: 'First success criterion.' },
-          { id: 'second-ready', kind: 'success', [INSTRUCTION_PROOF_FIELD]: 'Second success criterion.' },
+          { id: 'first-ready', kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 25, [INSTRUCTION_PROOF_FIELD]: 'First success criterion.' },
+          { id: 'second-ready', kind: 'success', startAnchor: 'L4', startColumn: 1, endAnchor: 'L4', endColumn: 26, [INSTRUCTION_PROOF_FIELD]: 'Second success criterion.' },
         ],
         verificationIntent: [{
           criterionId: 'unknown-ready',
@@ -549,9 +554,13 @@ describe('generate', () => {
           {
             id: 'dashboard-reached',
             kind: 'success',
+            startAnchor: 'L3',
+            startColumn: 1,
+            endAnchor: 'L3',
+            endColumn: 56,
             [INSTRUCTION_PROOF_FIELD]: 'When I submit valid credentials, I reach the dashboard.',
           },
-          { id: 'sign-in-action', kind: 'action', [INSTRUCTION_PROOF_FIELD]: '# Sign in' },
+          { id: 'sign-in-action', kind: 'action', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 10, [INSTRUCTION_PROOF_FIELD]: '# Sign in' },
         ],
         verificationIntent: [
           {
@@ -588,7 +597,7 @@ describe('generate', () => {
       ...coveredResponse,
       steps: [{
         ...coveredResponse.steps[0],
-        instructionCoverage: [{ id: 'sign-in-action', kind: 'action', [INSTRUCTION_PROOF_FIELD]: '# Sign in' }],
+        instructionCoverage: [{ id: 'sign-in-action', kind: 'action', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 10, [INSTRUCTION_PROOF_FIELD]: '# Sign in' }],
         verificationIntent: [],
       }],
     } as unknown as GeneratedPlanResponse;
@@ -614,15 +623,14 @@ describe('generate', () => {
     expect(recordingStorage.writes).toEqual([]);
   });
 
-  it.each([
-    ['missing', 'This proof is absent.', PROMPT],
-    ['ambiguous', 'When I submit valid credentials, I reach the dashboard.', `${PROMPT}When I submit valid credentials, I reach the dashboard.\n`],
-  ] as const)('rejects a %s instruction proof with raw/path evidence and zero writes', async (_name, proof, prompt) => {
+  it('rejects a missing instruction proof with raw/path evidence and zero writes', async () => {
+    const proof = 'This proof is absent.';
+    const prompt = PROMPT;
     const response = {
       ...coveredResponse,
       steps: [{
         ...coveredResponse.steps[0],
-        instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', [INSTRUCTION_PROOF_FIELD]: proof }],
+        instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, [INSTRUCTION_PROOF_FIELD]: proof }],
       }],
     } as unknown as GeneratedPlanResponse;
     const raw = `RAW:${JSON.stringify(response)}`;
@@ -646,6 +654,20 @@ describe('generate', () => {
     expect(recordingStorage.writes).toEqual([]);
   });
 
+  it('accepts an anchored instruction proof when its citation text occurs twice', async () => {
+    const prompt = `${PROMPT}When I submit valid credentials, I reach the dashboard.\n`;
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: coveredResponse, raw: JSON.stringify(coveredResponse) }) }),
+    });
+    await writePrompt(recordingStorage.storage, 'login.test.md', prompt);
+    recordingStorage.reset();
+
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]).toMatchObject({ status: 'generated' });
+    expect(recordingStorage.writes).toHaveLength(2);
+  });
+
   it.each([
     ['lone high surrogate', '\uD83D'],
     ['lone low surrogate', '\uDE00'],
@@ -656,7 +678,7 @@ describe('generate', () => {
         ...coveredResponse,
         steps: [{
           ...coveredResponse.steps[0],
-          instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', [INSTRUCTION_PROOF_FIELD]: proof }],
+          instructionCoverage: [{ id: 'dashboard-reached', kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 3, [INSTRUCTION_PROOF_FIELD]: proof }],
         }],
       } as unknown as GeneratedPlanResponse;
       const raw = `RAW:${JSON.stringify(response)}`;
@@ -722,7 +744,7 @@ describe('generate', () => {
       `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan.`,
     );
     expect(request?.context).toEqual({
-      testMd: normalizeTestMd(PROMPT),
+      testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
       targets: TARGETS,
       allowedSecretNames: [], // SPEC-C1 C1-10
     });
@@ -1769,7 +1791,7 @@ describe('generate', () => {
     ],
   ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, expectedAiCalls, expectedAttempts) => {
     const execute = vi.fn(async (request: AiExecuteRequest<unknown>) => {
-      if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && String(request.context.testMd).includes('first')) {
+      if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd).includes('first')) {
         throw error;
       }
       return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
@@ -1829,7 +1851,7 @@ describe('generate', () => {
       config: { testDir: TEST_DIR, testMatch: ['**/*.test.md'], testIgnore: [], targets: RESOLVED_TARGETS, defaultTarget: 'web', ai: sequentialTimeoutConfig([101, 102]) },
       resolveAiExecutor: async () => createFakeAiExecutor({
         execute: (request) => {
-          if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && request.context.testMd === 'first') {
+          if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd) === JSON.stringify(toAnchoredLines(normalizeTestMd('first')))) {
             observedSignal = request.signal;
             markStarted?.();
             return new Promise<never>(() => undefined);
@@ -1917,7 +1939,7 @@ describe('generate', () => {
     const { deps, recordingStorage } = createScenario({
       resolveAiExecutor: async () => createFakeAiExecutor({
         execute: async (request) => {
-          if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && request.context.testMd === 'first') {
+          if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd) === JSON.stringify(toAnchoredLines(normalizeTestMd('first')))) {
             throw providerError;
           }
           return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
@@ -1945,7 +1967,7 @@ describe('generate', () => {
     const { deps, recordingStorage } = createScenario({
       resolveAiExecutor: async () => createFakeAiExecutor({
         execute: async (request) => {
-          if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && request.context.testMd === 'first') {
+          if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd) === JSON.stringify(toAnchoredLines(normalizeTestMd('first')))) {
             throw new Error('temporary schema write failed');
           }
           return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
@@ -2163,7 +2185,7 @@ describe('generate', () => {
   it('rejects literal secrets before either artifact write and continues with the next file', async () => {
     const { deps, recordingStorage } = createScenario({
       resolveAiExecutor: async () => createFakeAiExecutor({
-        execute: async (request) => request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && request.context.testMd === 'unsafe'
+        execute: async (request) => request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd) === JSON.stringify(toAnchoredLines(normalizeTestMd('unsafe')))
           ? { data: { steps: [], ambiguities: [], generatorMeta: { token: 'sk-live-secret-value' } }, raw: '{...}' }
           : { data: RESPONSE, raw: '{...}' },
       }),
@@ -2358,7 +2380,7 @@ describe('generate', () => {
       } as unknown as GeneratedPlanResponse;
       const responses = [rejected, coveredResponse] as const;
       let responseIndex = 0;
-      const execute = vi.fn(async () => {
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
         const response = responses[responseIndex];
         responseIndex += 1;
         if (response === undefined) throw new Error('Unexpected provider dispatch.');
@@ -2562,6 +2584,86 @@ describe('generate', () => {
       return value;
     }
 
+    it('retries a non-positive provider column as anchor-invalid rather than schema-mismatch', async () => {
+      const invalid = {
+        ...coveredResponse,
+        steps: [{
+          ...coveredResponse.steps[0],
+          instructionCoverage: [{
+            id: 'dashboard-reached',
+            kind: 'success',
+            startAnchor: 'L3',
+            startColumn: 0,
+            endAnchor: 'L3',
+            endColumn: 56,
+            [INSTRUCTION_PROOF_FIELD]: 'When I submit valid credentials, I reach the dashboard.',
+          }],
+        }],
+      } as unknown as GeneratedPlanResponse;
+      const execute = vi.fn(async () => ({ data: invalid, raw: JSON.stringify(invalid) }));
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
+      expect(outcome.results[0]?.error).toMatchObject({
+        details: {
+          issues: [expect.objectContaining({ code: 'anchor-invalid', path: ['instructionCoverage', 0, 'startColumn'] })],
+          attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' }],
+        },
+      });
+    });
+
+    it('retries a citation checksum mismatch with projected retry feedback', async () => {
+      const invalid = {
+        ...coveredResponse,
+        steps: [{
+          ...coveredResponse.steps[0],
+          instructionCoverage: [{
+            id: 'dashboard-reached',
+            kind: 'success',
+            startAnchor: 'L3',
+            startColumn: 1,
+            endAnchor: 'L3',
+            endColumn: 56,
+            [INSTRUCTION_PROOF_FIELD]: 'A different citation.',
+          }],
+        }],
+      } as unknown as GeneratedPlanResponse;
+      const responses = [invalid, coveredResponse] as const;
+      let index = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        const response = responses[index++];
+        if (response === undefined) throw new Error('Unexpected retry dispatch.');
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const { deps, recordingStorage } = createScenario({
+        resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+      });
+      await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(execute.mock.calls[1]?.[0].context).toMatchObject({
+        previousAttempts: [{
+          attempt: 1,
+          code: 'AI_RESPONSE_INVALID',
+          issues: [{
+            code: 'citation-checksum-mismatch',
+            path: ['instructionCoverage', 0, 'citation'],
+            stepId: 'reach-dashboard',
+          }],
+        }],
+      });
+    });
+
     it('retries coverage rejection, supplies only projected feedback, and preserves context key order', async () => {
       const rejected = responseWithMissingSuccessIntent();
       const responses = [rejected, coveredResponse] as const;
@@ -2589,7 +2691,7 @@ describe('generate', () => {
       expect(Object.keys(firstContext)).toEqual(['testMd', 'targets', 'allowedSecretNames']); // SPEC-C1 C1-10
       expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'allowedSecretNames', 'previousAttempts']); // SPEC-C1 C1-10
       expect(secondContext).toEqual({
-        testMd: normalizeTestMd(PROMPT),
+        testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
         targets: TARGETS,
         allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [{
@@ -2629,7 +2731,7 @@ describe('generate', () => {
       expect(aiCallEvents(events.emitted())).toHaveLength(3);
       expect(aiEvents(events.emitted())).toHaveLength(6);
       expect(thirdContext).toEqual({
-        testMd: normalizeTestMd(PROMPT),
+        testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
         targets: TARGETS,
         allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [
@@ -2802,7 +2904,7 @@ describe('generate', () => {
       expect(execute).toHaveBeenCalledTimes(2);
       expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'allowedSecretNames', 'previousAttempts']); // SPEC-C1 C1-10
       expect(secondContext).toEqual({
-        testMd: normalizeTestMd(PROMPT),
+        testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
         targets: TARGETS,
         allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }],
@@ -3640,7 +3742,7 @@ describe('generate secret naming and consent boundaries', () => {
 
   it('keeps an earlier Stage-1 success before a later Stage-1 failure in selection-occurrence order', async () => {
     const execute = vi.fn(async (request: AiExecuteRequest<unknown>) => {
-      if (String((request.context as { readonly testMd: string }).testMd).includes('second')) throw new AiExecutorUnavailableError('later failed');
+      if (JSON.stringify((request.context as { readonly testMd: unknown }).testMd).includes('second')) throw new AiExecutorUnavailableError('later failed');
       return { data: RESPONSE, raw: 'first succeeded' };
     });
     const scenario = createScenario({

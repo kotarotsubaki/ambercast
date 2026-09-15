@@ -21,9 +21,13 @@ description: "所有其他章节必须（MUST）使用这些定义，而不是�
 |  | `startColumn` | integer | required | positive | 基于 1 的 UTF-16 起始列。 | [src/core/ir/schema.ts:333](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L333) |
 |  | `endLine` | integer | required | positive | 基于 1 的 UTF-16 结束行。 | [src/core/ir/schema.ts:334](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L334) |
 |  | `endColumn` | integer | required | positive | 不包含边界的 UTF-16 结束列。 | [src/core/ir/schema.ts:335](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L335) |
-| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 待归因的准则。 | [src/core/ir/schema.ts:350](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L350) |
-|  | `kind` | string | required | enum `success`, `action` | 子句角色。 | [src/core/ir/schema.ts:351](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L351) |
-|  | `citation` | string | required | min 1; max `4096` | 逐字引用的提供方摘录。 | [src/core/ir/schema.ts:352](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L352) |
+| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 待归因的准则。 | [src/core/ir/schema.ts:338](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L338) |
+|  | `kind` | string | required | enum `success`, `action` | 子句角色。 | [src/core/ir/schema.ts:339](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L339) |
+|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | provider 声称的起始行锚点（`L<n>`）。 | [src/core/ir/schema.ts:340](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L340) |
+|  | `startColumn` | integer | required | none (range checked by usecase policy) | provider 声称的基于 1 的 UTF-16 起始列。 | [src/core/ir/schema.ts:341](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L341) |
+|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | provider 声称的结束行锚点（`L<n>`）。 | [src/core/ir/schema.ts:342](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L342) |
+|  | `endColumn` | integer | required | none (range checked by usecase policy) | provider 声称的不包含边界的 UTF-16 结束列。 | [src/core/ir/schema.ts:343](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L343) |
+|  | `citation` | string | required | min 1; max `4096` | 逐字引用的提供方摘录(仅作校验和使用，不用于定位)。 | [src/core/ir/schema.ts:344](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L344) |
 | `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 已提交的准则 ID。 | [src/core/ir/schema.ts:366](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L366) |
 |  | `kind` | string | required | enum `success`, `action` | 子句角色。 | [src/core/ir/schema.ts:367](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L367) |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 本地派生的 prompt 位置。 | [src/core/ir/schema.ts:368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L368) |
@@ -44,7 +48,7 @@ description: "所有其他章节必须（MUST）使用这些定义，而不是�
 | `Citation` | string | value | min 1; max `4096` | 归因前精确的 prompt 子字符串。 | [src/core/ir/schema.ts:273](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L273), [src/core/ir/schema.ts:279](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L279) |
 | `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | 元数据或提供方歧义值。 | [src/core/ir/schema.ts:1167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1167) |
 
-`secretSinkOrigins` 中缺失的 secret 条目默认将该 secret 指向 `baseUrl`；显式的空数组拒绝所有源；非空数组则替换默认值。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) 所有 `InstructionSourceSpan` 的 prompt 坐标检查均属于语义验证。[src/usecases/instruction-coverage-policy.ts:467-496](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L467-L496)
+`secretSinkOrigins` 中缺失的 secret 条目默认将该 secret 指向 `baseUrl`；显式的空数组拒绝所有源；非空数组则替换默认值。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) 所有 `InstructionSourceSpan` 的 prompt 坐标检查均属于语义验证。[src/usecases/instruction-coverage-policy.ts:509-538](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L509-L538)
 
 ## 示例 {#examples}
 

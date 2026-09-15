@@ -1,5 +1,6 @@
 import type { NormalizedTestMd } from '#core/ir/normalize.js';
 import type { JsonValueT, SecretName, Step, TargetDefinition } from '#core/ir/schema.js';
+import { toAnchoredLines } from '#core/ai/prompt-envelope.js';
 import type { StepResult } from '#report/schema.js';
 import type { RunCaseOutcome, readTrustedInstructionCoveredPlan } from './run.js';
 
@@ -77,11 +78,13 @@ export function toProviderReplayEvidence(steps: readonly StepResult[]): readonly
  * allowlist belongs with the locally derived inputs because it is trusted
  * policy context, not provider output or a retained-name reservation
  * (SPEC-C3-2); it contains names only and never secret values or environment
- * provenance.
+ * provenance. Stage 2 uses the generator's fingerprinted policy, so its
+ * provider-facing prompt lines carry the same anchors that policy requires
+ * for instruction-coverage attribution.
  */
 export interface Stage2RepairContext {
   readonly trustedInputs: {
-    readonly testMd: NormalizedTestMd;
+    readonly testMd: readonly { readonly anchor: string; readonly text: string }[];
     readonly allowedSecretNames: readonly SecretName[];
     readonly targets: Readonly<Record<string, TargetDefinition>>;
     readonly currentPlan: {
@@ -189,7 +192,7 @@ export function buildStage2RepairContext(params: Stage2RepairContextInputs): Jso
   };
   const context: Stage2RepairContext = {
     trustedInputs: {
-      testMd: params.normalizedTestMd,
+      testMd: toAnchoredLines(params.normalizedTestMd),
       allowedSecretNames: params.allowedSecretNames,
       targets: params.current.plan.targets,
       currentPlan,

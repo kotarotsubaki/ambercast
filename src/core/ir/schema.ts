@@ -326,14 +326,21 @@ export type InstructionSourceSpan = z.infer<typeof InstructionSourceSpan>;
 /**
  * A provider-authored instruction claim awaiting local source attribution.
  *
- * The exact citation must contain at least one non-whitespace character while
- * preserving every interior whitespace code unit. Providers cannot submit
- * coordinates because only local normalized-source search may establish
- * persisted provenance.
+ * Text matching cannot establish provenance when natural-language prompt
+ * prose repeats, so providers identify a source range by local line anchors
+ * and UTF-16 coordinates instead. The coordinates mirror
+ * {@link InstructionSourceSpan}'s one-based inclusive-start, exclusive-end
+ * contract, allowing a valid claim to become committed provenance without
+ * re-deriving positions from an offset. Citation remains a non-authoritative
+ * checksum; it never locates the range (Issue #369).
  */
 export const GeneratedInstructionCriterion = z.strictObject({
   id: InstructionCriterionId,
   kind: z.enum(['success', 'action']),
+  startAnchor: z.string(),
+  startColumn: z.number().int(),
+  endAnchor: z.string(),
+  endColumn: z.number().int(),
   citation: z.string().min(1).max(CITATION_MAX_LENGTH),
 });
 

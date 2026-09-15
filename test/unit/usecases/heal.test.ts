@@ -1941,7 +1941,7 @@ describe('heal state-machine contract', () => {
         id: 'repair-me',
         kind: 'ai',
         instruction: 'Reach the dashboard.',
-        instructionCoverage: [{ id: 'dashboard', kind: 'success', [GENERATED_INSTRUCTION_TEXT_FIELD]: 'not present in the prompt' }],
+        instructionCoverage: [{ id: 'dashboard', kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 2, [GENERATED_INSTRUCTION_TEXT_FIELD]: 'not present in the prompt' }],
         verificationIntent: [{ criterionId: 'dashboard', assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' } }],
       },
     },

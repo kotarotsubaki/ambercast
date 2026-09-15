@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.0](https://github.com/kotarotsubaki/ambercast/compare/v0.4.0...v0.5.0) (2026-09-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **generate:** Existing plans become stale and must be regenerated with `ambercast generate --force`. The generator prompt template and generated-response schema change (instruction-coverage criteria now carry `startAnchor`/`startColumn`/`endAnchor`/`endColumn`, and `citation` is a checksum instead of a join key), and the `instructionCoveragePolicy` producer-bundle revision advances from 2 to 3 ([#378](https://github.com/kotarotsubaki/ambercast/issues/378))
+* **secrets:** `generate` stops at a consent gate for every newly detected secret name: an interactive terminal asks `y / N / i`, a non-interactive run exits 2 and lists the unallowed names, and consenting appends the names to `secrets.allow` in `ambercast.config.json` ([#375](https://github.com/kotarotsubaki/ambercast/issues/375))
+* **secrets:** Plan IR schemaVersion 3 (was 2): committed v2 plans fail `run`/`heal` with `IntegrityViolationError` until regenerated with `ambercast generate`. Report schema 3.5 (was 3.4). The legacy `@ambercast-secret` grant line and `{{secrets.*}}` prompt syntax are rejected with exit 2, with no migration window ([#372](https://github.com/kotarotsubaki/ambercast/issues/372))
+* **run:** `run` no longer resolves grounding misses with AI unless `--resolve` is given, and `--cache-only` is removed (unknown option, exit 2). A new `grounding-unresolved` error kind maps to exit code 4 and report code `GROUNDING_UNRESOLVED` ([#371](https://github.com/kotarotsubaki/ambercast/issues/371))
+
+### Features
+
+* **generate:** replace instruction-coverage citation matching with anchor IDs ([#378](https://github.com/kotarotsubaki/ambercast/issues/378)) ([c1cf45a](https://github.com/kotarotsubaki/ambercast/commit/c1cf45af423cfac7b793f0e358c4c44aa8f5fad4))
+* **run:** agentic executor over an in-process MCP server; invert run's default to fail-closed with --resolve ([#371](https://github.com/kotarotsubaki/ambercast/issues/371)) ([c391a59](https://github.com/kotarotsubaki/ambercast/commit/c391a59604a81da0e294f265ce5f47fba7344a02))
+* **secrets:** add deterministic secret naming, allowlist verification, and legacy-syntax rejection (Plan IR v3, report 3.5) ([#372](https://github.com/kotarotsubaki/ambercast/issues/372)) ([6ee4e84](https://github.com/kotarotsubaki/ambercast/commit/6ee4e8465e98c9e2a13e7a797f135a31883715d1))
+* **secrets:** generate two-stage consent gate, allowlist write-back with exclusive config update (SPEC-C2) ([#375](https://github.com/kotarotsubaki/ambercast/issues/375)) ([7b41e4b](https://github.com/kotarotsubaki/ambercast/commit/7b41e4b9cd2fe43d977ea88fe63e190d4ff60d15))
+* **secrets:** heal Stage 2/3 under the allowlist model — secret-set invariance (SPEC-C3) ([#376](https://github.com/kotarotsubaki/ambercast/issues/376)) ([2f4f5b0](https://github.com/kotarotsubaki/ambercast/commit/2f4f5b0ceb4aa2b9687aa77833dbbb8e4a986dc1))
+
+
+### Bug Fixes
+
+* **generate:** retry provider responses rejected for an embedded secret reference, and document grant line placement ([#356](https://github.com/kotarotsubaki/ambercast/issues/356)) ([33cb998](https://github.com/kotarotsubaki/ambercast/commit/33cb998dd543587bad4a412e2345e6fcaf710af5))
+* **report:** classify BROWSER_LAUNCH_FAILED and add hint/details (report schema 3.4) ([#361](https://github.com/kotarotsubaki/ambercast/issues/361)) ([c257ad9](https://github.com/kotarotsubaki/ambercast/commit/c257ad962f2cc692da4215cf44b4ced7d6a43d5c))
+* **website:** redesign the how-it-works cycle figure as a connected loop ([#352](https://github.com/kotarotsubaki/ambercast/issues/352)) ([#363](https://github.com/kotarotsubaki/ambercast/issues/363)) ([d5d5ce0](https://github.com/kotarotsubaki/ambercast/commit/d5d5ce038199a3f32dc29247bbc39e80246a8a57))
+
 ## [0.4.0](https://github.com/kotarotsubaki/ambercast/compare/v0.3.1...v0.4.0) (2026-09-09)
 
 

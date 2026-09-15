@@ -201,8 +201,8 @@ description: "コミットされたすべてのステップは、`kind` によ�
 
 選択された判別共用体により、すべてのオペコードに閉じたフィールド規約が与えられ、シークレットの投入が通常のテキストから分離される。プロバイダーの命名意図は、計画がコミットされる前にローカルで解決され同意される。
 
-プロバイダが提供する anchor と列の座標は、各基準をローカルで解決された 1 つのプロンプト抜粋にバインドする。4 座標の `InstructionSourceSpan` へのローカル解決により、コミットされる帰属付けが正確なものとなる一方、プロバイダの `citation` はその解決を確認するチェックサムに過ぎず、結合キーとしては使われない。 [src/usecases/instruction-coverage-policy.ts:369-399](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L369-L399)
+プロバイダが提供する anchor と列の座標は、各基準をローカルで解決された 1 つのプロンプト抜粋にバインドする。4 座標の `InstructionSourceSpan` へのローカル解決により、コミットされる帰属付けが正確なものとなる一方、プロバイダの `citation` はその解決を確認するチェックサムに過ぎず、結合キーとしては使われない。 [src/usecases/instruction-coverage-policy.ts:407-443](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L407-L443)
 
-末尾の `url-matches` は、引用された成功基準の独立した証明ではなく同義反復的な成功形式であるため、拒絶される。サポートされている重複のない末尾の `TraceAssert` を使用する。成功条件を表現できない場合、生成は失敗する。 [src/usecases/instruction-coverage-policy.ts:361-365](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L361-L365) [src/usecases/instruction-coverage-policy.ts:589-606](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L589-L606)
+末尾の `url-matches` は、引用された成功基準の独立した証明ではなく同義反復的な成功形式であるため、拒絶される。サポートされている重複のない末尾の `TraceAssert` を使用する。成功条件を表現できない場合、生成は失敗する。 [src/usecases/instruction-coverage-policy.ts:403-407](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L403-L407) [src/usecases/instruction-coverage-policy.ts:622-625](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L622-L625)
 
 却下された代替案の 1 つは、任意のペイロードフィールドを持つ 1 つのアクションオブジェクトを使用するものであったが、無効な組み合わせがスキーマ上で不可視になるため却下された。もう 1 つは一般的なテキストにシークレットを含めることを許容するものであったが、シークレットの来歴とマスキング（redaction）が曖昧になるため却下された。 

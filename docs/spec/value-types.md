@@ -18,9 +18,13 @@ All other chapters MUST use these definitions rather than restating their shapes
 |  | `startColumn` | integer | required | positive | One-based UTF-16 start column. | repo:src/core/ir/schema.ts:333 |
 |  | `endLine` | integer | required | positive | One-based UTF-16 end line. | repo:src/core/ir/schema.ts:334 |
 |  | `endColumn` | integer | required | positive | Exclusive UTF-16 end column. | repo:src/core/ir/schema.ts:335 |
-| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Criterion pending attribution. | repo:src/core/ir/schema.ts:350 |
-|  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:351 |
-|  | `citation` | string | required | min 1; max `4096` | Verbatim provider excerpt. | repo:src/core/ir/schema.ts:352 |
+| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Criterion pending attribution. | repo:src/core/ir/schema.ts:338 |
+|  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:339 |
+|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | Provider-claimed start-line anchor (`L<n>`). | repo:src/core/ir/schema.ts:340 |
+|  | `startColumn` | integer | required | none (range checked by usecase policy) | Provider-claimed one-based UTF-16 start column. | repo:src/core/ir/schema.ts:341 |
+|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | Provider-claimed end-line anchor (`L<n>`). | repo:src/core/ir/schema.ts:342 |
+|  | `endColumn` | integer | required | none (range checked by usecase policy) | Provider-claimed exclusive UTF-16 end column. | repo:src/core/ir/schema.ts:343 |
+|  | `citation` | string | required | min 1; max `4096` | Verbatim provider excerpt (checksum only; never a locator). | repo:src/core/ir/schema.ts:344 |
 | `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Committed criterion ID. | repo:src/core/ir/schema.ts:366 |
 |  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:367 |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Locally derived prompt location. | repo:src/core/ir/schema.ts:368 |
@@ -41,7 +45,7 @@ All other chapters MUST use these definitions rather than restating their shapes
 | `Citation` | string | value | min 1; max `4096` | Exact prompt substring before attribution. | repo:src/core/ir/schema.ts:273,279 |
 | `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | Metadata or provider ambiguity value. | repo:src/core/ir/schema.ts:1167 |
 
-An absent secret entry in `secretSinkOrigins` defaults that secret to `baseUrl`; an explicit empty array denies all origins; a non-empty array replaces the default. [repo:src/core/ir/schema.ts:152-157] All `InstructionSourceSpan` prompt-coordinate checks are semantic validation. [repo:src/usecases/instruction-coverage-policy.ts:467-496]
+An absent secret entry in `secretSinkOrigins` defaults that secret to `baseUrl`; an explicit empty array denies all origins; a non-empty array replaces the default. [repo:src/core/ir/schema.ts:152-157] All `InstructionSourceSpan` prompt-coordinate checks are semantic validation. [repo:src/usecases/instruction-coverage-policy.ts:509-538]
 
 ## Examples {#examples}
 

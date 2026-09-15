@@ -282,26 +282,68 @@ function isSurrogateBoundary(source: string, offset: number): boolean {
   return !(before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF);
 }
 
+/**
+ * Resolves one line/column boundary to an absolute UTF-16 offset, or
+ * `undefined` if the boundary is out of range or splits a surrogate pair.
+ *
+ * Factored out of {@link extractSpan} so {@link invalidSpanPath} can reuse the
+ * exact same bound and surrogate rules to decide *why* a boundary failed,
+ * instead of re-deriving a second, potentially divergent notion of validity.
+ */
+function resolveBoundaryOffset(source: string, lines: readonly string[], line: number, column: number): number | undefined {
+  if (!Number.isInteger(line) || !Number.isInteger(column) || line < 1 || column < 1 || line > lines.length) {
+    return undefined;
+  }
+  const lineText = lines[line - 1]!;
+  if (column > lineText.length + 1) return undefined;
+  let offset = 0;
+  for (let index = 0; index < line - 1; index += 1) offset += lines[index]!.length + 1;
+  offset += column - 1;
+  return isSurrogateBoundary(source, offset) ? offset : undefined;
+}
+
 function extractSpan(
   source: string,
   span: InstructionCriterion['sourceSpan'],
 ): string | undefined {
   const lines = source.split('\n');
-  const toOffset = (line: number, column: number): number | undefined => {
-    if (!Number.isInteger(line) || !Number.isInteger(column) || line < 1 || column < 1 || line > lines.length) {
-      return undefined;
-    }
-    const lineText = lines[line - 1]!;
-    if (column > lineText.length + 1) return undefined;
-    let offset = 0;
-    for (let index = 0; index < line - 1; index += 1) offset += lines[index]!.length + 1;
-    offset += column - 1;
-    return isSurrogateBoundary(source, offset) ? offset : undefined;
-  };
-  const start = toOffset(span.startLine, span.startColumn);
-  const end = toOffset(span.endLine, span.endColumn);
+  const start = resolveBoundaryOffset(source, lines, span.startLine, span.startColumn);
+  const end = resolveBoundaryOffset(source, lines, span.endLine, span.endColumn);
   if (start === undefined || end === undefined || end <= start) return undefined;
   return source.slice(start, end);
+}
+
+/**
+ * Attributes an `extractSpan` rejection to the one coordinate a corrected
+ * response would need to change.
+ *
+ * Retry feedback (`PreviousAttemptContext` in `generate.ts`) carries only
+ * `{ code, path, stepId }` — never citation text or resolved prompt
+ * fragments — so the failing path is the *only* signal the provider gets
+ * back. Pointing every anchor failure at `citation` left the provider
+ * unable to tell a bad anchor from a bad checksum. The check order is
+ * deterministic, so a response with multiple invalid coordinates always
+ * retries against the same blocker. It leaves the outcome undecided only
+ * once both boundaries individually resolve, in which case the sole
+ * remaining `extractSpan` rejection is a reversed or zero-width range:
+ * that is entirely a property of the end boundary relative to the start
+ * (an already-valid start never becomes invalid by comparison), so the end
+ * coordinate is what a corrected response must move — the end anchor if it
+ * names an earlier line, otherwise the end column on their shared line.
+ */
+function invalidSpanPath(
+  source: string,
+  span: InstructionCriterion['sourceSpan'],
+): 'startAnchor' | 'startColumn' | 'endAnchor' | 'endColumn' {
+  const lines = source.split('\n');
+  const lineInRange = (line: number): boolean => Number.isInteger(line) && line >= 1 && line <= lines.length;
+  if (resolveBoundaryOffset(source, lines, span.startLine, span.startColumn) === undefined) {
+    return lineInRange(span.startLine) ? 'startColumn' : 'startAnchor';
+  }
+  if (resolveBoundaryOffset(source, lines, span.endLine, span.endColumn) === undefined) {
+    return lineInRange(span.endLine) ? 'endColumn' : 'endAnchor';
+  }
+  return span.endLine < span.startLine ? 'endAnchor' : 'endColumn';
 }
 
 /**
@@ -368,7 +410,7 @@ export function validateGeneratedInstructionCoverage(
     const startAnchor = /^L([1-9]\d*)$/.exec(candidate.startAnchor);
     const endAnchor = /^L([1-9]\d*)$/.exec(candidate.endAnchor);
     if (startAnchor === null || endAnchor === null) {
-      issues.push(issue('anchor-invalid', ['instructionCoverage', index, 'citation']));
+      issues.push(issue('anchor-invalid', ['instructionCoverage', index, startAnchor === null ? 'startAnchor' : 'endAnchor']));
       continue;
     }
     const sourceSpan = {
@@ -379,7 +421,7 @@ export function validateGeneratedInstructionCoverage(
     };
     const text = extractSpan(normalizedTestMd, sourceSpan);
     if (text === undefined) {
-      issues.push(issue('anchor-invalid', ['instructionCoverage', index, 'citation']));
+      issues.push(issue('anchor-invalid', ['instructionCoverage', index, invalidSpanPath(normalizedTestMd, sourceSpan)]));
       continue;
     }
     if (!/\S/u.test(text)) {

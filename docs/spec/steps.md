@@ -198,8 +198,8 @@ The problem is preventing actions from being mistaken for proof, particularly wh
 
 The selected discriminated union gives every opcode a closed field contract and separates secret filling from ordinary text. Provider naming intent is resolved locally and consented before a plan is committed.
 
-Provider-supplied anchor and column coordinates bind each criterion to one locally resolved prompt excerpt; local resolution against a four-coordinate `InstructionSourceSpan` makes the committed attribution precise, while the provider's `citation` is only a checksum confirming that resolution, never a join key.  [repo:src/usecases/instruction-coverage-policy.ts:369-399]
+Provider-supplied anchor and column coordinates bind each criterion to one locally resolved prompt excerpt; local resolution against a four-coordinate `InstructionSourceSpan` makes the committed attribution precise, while the provider's `citation` is only a checksum confirming that resolution, never a join key.  [repo:src/usecases/instruction-coverage-policy.ts:407-443]
 
-Terminal `url-matches` is rejected because it is a tautological success form rather than independent proof of the cited success criterion. Use a supported, non-duplicative terminal `TraceAssert`; if the success condition cannot be represented, generation fails.  [repo:src/usecases/instruction-coverage-policy.ts:361-365] [repo:src/usecases/instruction-coverage-policy.ts:589-606]
+Terminal `url-matches` is rejected because it is a tautological success form rather than independent proof of the cited success criterion. Use a supported, non-duplicative terminal `TraceAssert`; if the success condition cannot be represented, generation fails.  [repo:src/usecases/instruction-coverage-policy.ts:403-407] [repo:src/usecases/instruction-coverage-policy.ts:622-625]
 
 One rejected alternative used one action object with optional payload fields; it was rejected because invalid combinations become schema-invisible. Another let generic text carry secrets; it was rejected because consent boundaries and redaction would be ambiguous.  

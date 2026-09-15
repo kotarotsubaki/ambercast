@@ -2612,7 +2612,7 @@ describe('generate', () => {
       expect(execute).toHaveBeenCalledTimes(DEFAULT_OPTIONS.maxAttempts);
       expect(outcome.results[0]?.error).toMatchObject({
         details: {
-          issues: [expect.objectContaining({ code: 'anchor-invalid', path: ['instructionCoverage', 0, 'citation'] })],
+          issues: [expect.objectContaining({ code: 'anchor-invalid', path: ['instructionCoverage', 0, 'startColumn'] })],
           attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' }],
         },
       });

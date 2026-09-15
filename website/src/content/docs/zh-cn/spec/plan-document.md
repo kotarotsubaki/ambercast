@@ -33,7 +33,7 @@ description: "`PlanDocument` 是一个严格对象。"
 
 ## 语义约束 {#semantic-constraints}
 
-步骤 ID 必须唯一（MUST）；重复项会在靠后的 `steps[index].id` 处报告 `duplicate step id: <id>`。[src/core/ir/schema.ts:1180-1204](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1180-L1204) 指令覆盖率要求在 [符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation) 中进行绑定提示词的本地归因与集合检查。[src/usecases/instruction-coverage-policy.ts:337-496](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L337-L496)
+步骤 ID 必须唯一（MUST）；重复项会在靠后的 `steps[index].id` 处报告 `duplicate step id: <id>`。[src/core/ir/schema.ts:1180-1204](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1180-L1204) 指令覆盖率要求在 [符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation) 中进行绑定提示词的本地归因与集合检查。[src/usecases/instruction-coverage-policy.ts:379-538](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L379-L538)
 
 ## 仅提供方生成响应 {#provider-generation-response}
 

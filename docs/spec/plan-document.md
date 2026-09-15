@@ -30,7 +30,7 @@ Digest strings are illustrative placeholders. The Grounding example uses the sam
 
 ## Semantic constraints {#semantic-constraints}
 
-Step IDs MUST be unique; a duplicate reports `duplicate step id: <id>` at the later `steps[index].id`. [repo:src/core/ir/schema.ts:1211-1224] Instruction coverage requires prompt-bound local attribution and set checks in [[spec/conformance#semantic-validation]]. [repo:src/usecases/instruction-coverage-policy.ts:337-496]
+Step IDs MUST be unique; a duplicate reports `duplicate step id: <id>` at the later `steps[index].id`. [repo:src/core/ir/schema.ts:1211-1224] Instruction coverage requires prompt-bound local attribution and set checks in [[spec/conformance#semantic-validation]]. [repo:src/usecases/instruction-coverage-policy.ts:379-538]
 
 ## Provider-only generation response {#provider-generation-response}
 

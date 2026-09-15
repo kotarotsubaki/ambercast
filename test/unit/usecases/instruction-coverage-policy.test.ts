@@ -111,28 +111,29 @@ describe('validateGeneratedInstructionCoverage anchor attribution', () => {
   });
 
   it.each([
-    ['leading-zero anchor', 'L01', 1, 'L1', 2, 'A'],
-    ['zero anchor', 'L0', 1, 'L1', 2, 'A'],
-    ['non-L anchor', '1', 1, 'L1', 2, 'A'],
-    ['empty anchor', '', 1, 'L1', 2, 'A'],
-    ['unknown anchor', 'L3', 1, 'L3', 2, 'A'],
-    ['malformed end anchor', 'L1', 1, 'not-an-anchor', 2, 'A'],
-    ['unknown end anchor', 'L1', 1, 'L3', 2, 'A'],
-    ['zero column', 'L1', 0, 'L1', 2, 'A'],
-    ['negative column', 'L1', -1, 'L1', 2, 'A'],
-    ['zero end column', 'L1', 1, 'L1', 0, 'A'],
-    ['negative end column', 'L1', 1, 'L1', -1, 'A'],
-    ['column past text plus one', 'L1', 1, 'L1', 7, 'A'],
-    ['same-line reversed range', 'L1', 3, 'L1', 2, 'A'],
-    ['zero-width range', 'L1', 2, 'L1', 2, 'A'],
-    ['cross-anchor reversed range', 'L2', 1, 'L1', 2, 'A\nB'],
-    ['lone high surrogate split', 'L1', 2, 'L1', 3, '😀 Ready'],
-    ['lone low surrogate split', 'L1', 1, 'L1', 2, '😀 Ready'],
-  ] as const)('rejects %s with anchor-invalid', (_name, startAnchor, startColumn, endAnchor, endColumn, prompt) => {
-    expectIssueCodes(
+    ['leading-zero anchor', 'L01', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['zero anchor', 'L0', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['non-L anchor', '1', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['empty anchor', '', 1, 'L1', 2, 'A', 'startAnchor'],
+    ['unknown anchor', 'L3', 1, 'L3', 2, 'A', 'startAnchor'],
+    ['malformed end anchor', 'L1', 1, 'not-an-anchor', 2, 'A', 'endAnchor'],
+    ['unknown end anchor', 'L1', 1, 'L3', 2, 'A', 'endAnchor'],
+    ['zero column', 'L1', 0, 'L1', 2, 'A', 'startColumn'],
+    ['negative column', 'L1', -1, 'L1', 2, 'A', 'startColumn'],
+    ['zero end column', 'L1', 1, 'L1', 0, 'A', 'endColumn'],
+    ['negative end column', 'L1', 1, 'L1', -1, 'A', 'endColumn'],
+    ['column past text plus one', 'L1', 1, 'L1', 7, 'A', 'endColumn'],
+    ['same-line reversed range', 'L1', 3, 'L1', 2, 'A', 'startColumn'],
+    ['zero-width range', 'L1', 2, 'L1', 2, 'A', 'endColumn'],
+    ['cross-anchor reversed range', 'L2', 1, 'L1', 2, 'A\nB', 'endAnchor'],
+    ['lone high surrogate split', 'L1', 2, 'L1', 3, '😀 Ready', 'startColumn'],
+    ['lone low surrogate split', 'L1', 1, 'L1', 2, '😀 Ready', 'endColumn'],
+  ] as const)('rejects %s with anchor-invalid', (_name, startAnchor, startColumn, endAnchor, endColumn, prompt, expectedPath) => {
+    const issues = expectIssueCodes(
       validateGeneratedInstructionCoverage(generatedCoverage('A', startAnchor, startColumn, endAnchor, endColumn), normalizeTestMd(prompt)),
       ['anchor-invalid'],
     );
+    expect(issues[0]!.path).toEqual(['instructionCoverage', 0, expectedPath]);
   });
 
   it.each([
@@ -156,10 +157,11 @@ describe('validateGeneratedInstructionCoverage anchor attribution', () => {
   });
 
   it('rejects a zero-width empty-line range with anchor-invalid', () => {
-    expectIssueCodes(validateGeneratedInstructionCoverage(
+    const issues = expectIssueCodes(validateGeneratedInstructionCoverage(
       generatedCoverage('not used', 'L2', 1, 'L2', 1),
       normalizeTestMd('Alpha\n'),
     ), ['anchor-invalid']);
+    expect(issues[0]!.path).toEqual(['instructionCoverage', 0, 'endColumn']);
   });
 
   it('rejects duplicate IDs and duplicate resolved ranges while accumulating deterministic issues', () => {

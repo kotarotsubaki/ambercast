@@ -477,6 +477,26 @@ export interface BrowserSession {
   accessibilitySnapshot(): Promise<AccessibilityCapture>;
 
   /**
+   * Waits for a visible match for an accessibility locator.
+   *
+   * @remarks
+   * Locator-side failures resolve normally because the caller's existing
+   * verification or classification path, rather than this opportunistic wait,
+   * decides whether the locator passes. Implementations never resolve or log
+   * a secret. A zero timeout returns immediately without waiting.
+   *
+   * @param ref - The role-and-name locator to wait for.
+   * @param timeoutMs - The maximum wait in milliseconds. It is a finite
+   *   integer from 0 through 60000, guaranteed by configuration validation and
+   *   therefore not revalidated here.
+   * @returns Resolves after a visible match appears or a locator-side failure
+   *   occurs.
+   * @throws Never throws for locator-side timeouts, absent matches, or multiple
+   *   matches.
+   */
+  awaitElementPresence(ref: ElementRef, timeoutMs: number): Promise<void>;
+
+  /**
    * Releases resources held by the session.
    *
    * @remarks

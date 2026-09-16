@@ -9,6 +9,11 @@ import { CLI_MANIFEST } from '#core/cli/manifest.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { DEFAULT_RAW_CONFIG } from '#config/defaults.js';
 import { loadConfig } from '#config/load.js';
+import { computeInputsDigest } from '#core/ir/digest.js';
+import { normalizeTestMd } from '#core/ir/normalize.js';
+import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
+import { toTargetDefinition } from '#core/target/resolve.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import { EXPECTED_DEFAULT_CONFIG } from './expected-default-config.fixture.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
@@ -22,8 +27,8 @@ const ABSOLUTE_COMMAND_CONFIG_PATH = '/workspace/explicit/command.json';
 const ABSOLUTE_ENVIRONMENT_CONFIG_PATH = '/workspace/explicit/environment.json';
 const APP_TARGET = { baseUrl: 'http://app.test', browser: 'chromium' } as const;
 const ADMIN_TARGET = { baseUrl: 'http://admin.test', browser: 'chromium' } as const;
-const RESOLVED_APP_TARGET = { ...APP_TARGET, healReplayIsolation: 'stateful' as const };
-const RESOLVED_ADMIN_TARGET = { ...ADMIN_TARGET, healReplayIsolation: 'stateful' as const };
+const RESOLVED_APP_TARGET = { ...APP_TARGET, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
+const RESOLVED_ADMIN_TARGET = { ...ADMIN_TARGET, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
 
 interface LoadOptions {
   readonly cwd?: string | undefined;
@@ -45,6 +50,7 @@ function expectedDefaults(configRoot: string): ResolvedConfig {
         baseUrl: 'http://localhost:3000',
         browser: 'chromium',
         healReplayIsolation: 'stateful',
+        resolveTimeoutMs: 5000,
       },
     },
     defaultTarget: 'web-user',
@@ -451,6 +457,59 @@ describe('loadConfig', () => {
   });
 
   describe('merging and target validation', () => {
+    it('defaults an omitted resolveTimeoutMs to 5000 and keeps it equivalent to an explicit default', async () => {
+      const omittedStorage = createInMemoryStorage();
+      const explicitStorage = createInMemoryStorage();
+      await writeConfig(omittedStorage, `${CWD}/ambercast.config.json`, { targets: { app: APP_TARGET }, defaultTarget: 'app' });
+      await writeConfig(explicitStorage, `${CWD}/ambercast.config.json`, {
+        targets: { app: { ...APP_TARGET, resolveTimeoutMs: 5000 } }, defaultTarget: 'app',
+      });
+
+      const [omitted, explicit] = await Promise.all([load(omittedStorage), load(explicitStorage)]);
+
+      expect(omitted.targets.app?.resolveTimeoutMs).toBe(5000);
+      expect(explicit.targets.app?.resolveTimeoutMs).toBe(omitted.targets.app?.resolveTimeoutMs);
+    });
+
+    it.each([-1, 60_001, 1.5, Number.NaN] as const)('rejects an invalid resolveTimeoutMs value %s', async (resolveTimeoutMs) => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, {
+        targets: { app: { ...APP_TARGET, resolveTimeoutMs } }, defaultTarget: 'app',
+      });
+
+      await expectConfigInvalid(load(storage));
+    });
+
+    it.each([0, 60_000] as const)('accepts resolveTimeoutMs boundary value %s', async (resolveTimeoutMs) => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, {
+        targets: { app: { ...APP_TARGET, resolveTimeoutMs } }, defaultTarget: 'app',
+      });
+
+      await expect(load(storage)).resolves.toMatchObject({ targets: { app: { resolveTimeoutMs } } });
+    });
+
+    it('keeps inputsDigest unchanged when resolveTimeoutMs changes', async () => {
+      const firstStorage = createInMemoryStorage();
+      const secondStorage = createInMemoryStorage();
+      await writeConfig(firstStorage, `${CWD}/ambercast.config.json`, {
+        targets: { app: { ...APP_TARGET, resolveTimeoutMs: 0 } }, defaultTarget: 'app',
+      });
+      await writeConfig(secondStorage, `${CWD}/ambercast.config.json`, {
+        targets: { app: { ...APP_TARGET, resolveTimeoutMs: 60_000 } }, defaultTarget: 'app',
+      });
+      const [first, second] = await Promise.all([load(firstStorage), load(secondStorage)]);
+      const digestFor = (target: NonNullable<typeof first.targets.app>) => computeInputsDigest({
+        normalizedTestMd: normalizeTestMd('# test'),
+        schemaVersion: 3,
+        generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
+        planProducerBundleFingerprint: planProducerBundleFingerprint(),
+        targetDefinitions: { app: toTargetDefinition(target) },
+      });
+
+      expect(digestFor(first.targets.app!)).toBe(digestFor(second.targets.app!));
+    });
+
     it('deduplicates and UTF-16-sorts an explicit secret allowlist during resolution', async () => {
       const storage = createInMemoryStorage();
       await writeConfig(storage, `${CWD}/ambercast.config.json`, {

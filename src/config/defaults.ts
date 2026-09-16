@@ -39,6 +39,7 @@ export const DEFAULT_RAW_CONFIG = {
       baseUrl: 'http://localhost:3000',
       browser: 'chromium',
       healReplayIsolation: 'stateful',
+      resolveTimeoutMs: 5000,
     },
   },
   defaultTarget: 'web-user',

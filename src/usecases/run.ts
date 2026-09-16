@@ -192,6 +192,7 @@ interface DispatchContext {
   readonly deleteGroundingEntry: (stepId: Step['id']) => void;
   readonly resolvedVias: Map<Step['id'], ResolutionVia>;
   readonly aiTimeoutMs: number;
+  readonly resolveTimeoutMs: number;
   readonly signal?: AbortSignal;
 }
 
@@ -329,6 +330,21 @@ async function callAiExecutor<T>(
  */
 class CaseAbort extends Error {}
 class AgenticCoverageAbort extends CaseAbort {}
+/**
+ * Carries the raw accessibility tree captured when classification aborts
+ * resolution so failure evidence can retain the exact observation that caused
+ * the abort.
+ *
+ * @remarks
+ * Redaction occurs once downstream in `captureObservedEvidence`, matching the
+ * existing evidence paths. Redacting at construction would create a second
+ * redaction point that could drift from the report boundary.
+ */
+class GroundingClassificationAbort extends CaseAbort {
+  constructor(message: string, readonly accessibilityTree: JsonValueT) {
+    super(message);
+  }
+}
 class TraceProviderExposureIntegrityError extends IntegrityViolationError {}
 
 /**
@@ -2316,6 +2332,13 @@ async function executeAiStep(
  * unavailable candidate leaves the existing grounding untouched, preventing
  * failed recovery from replacing known evidence with unconfirmed data.
  *
+ * This waits once for element presence after the recovery-mode guard and
+ * before reading grounding state, regardless of resolution policy or a
+ * grounding-cache hit. That narrows the race where an element appears just
+ * after this step starts while leaving AI-call and resolution accounting
+ * unchanged. It does not wait before the later post-confirmation re-bind,
+ * whose explicit exclusion keeps that fresh verify path independent.
+ *
  * The dispatcher calls this boundary only for variants the shared recovery
  * table classifies as element-reground. A local invariant rejects any other
  * caller, keeping accidental grounding of bare-target steps visible even when
@@ -2329,6 +2352,7 @@ async function groundedTarget(
   if (groundingRecoveryModeForStep(step) !== 'element-reground') {
     throw new Error('groundedTarget called for a step kind classified outside element-reground.');
   }
+  await context.session.awaitElementPresence(target, context.resolveTimeoutMs);
   const entry = context.grounding.entries[step.id];
   if (entry?.kind === 'element') {
     const resolved = await context.session.resolveGrounded(target, {
@@ -2352,13 +2376,13 @@ async function groundedTarget(
   );
   switch (classification.kind) {
     case 'no-match':
-      throw groundingAbort('element-not-found');
+      throw groundingClassificationAbort('element-not-found', snapshot.accessibilityTree);
     case 'ambiguous-match':
-      throw groundingAbort('ambiguous-match');
+      throw groundingClassificationAbort('ambiguous-match', snapshot.accessibilityTree);
     case 'snapshot-invalid':
-      throw groundingAbort('snapshot-invalid');
+      throw groundingClassificationAbort('snapshot-invalid', snapshot.accessibilityTree);
     case 'secret-contaminated':
-      throw groundingAbort('secret-contaminated');
+      throw groundingClassificationAbort('secret-contaminated', snapshot.accessibilityTree);
     case 'ok':
       break;
   }
@@ -2399,25 +2423,40 @@ async function groundedTarget(
   return resolved.element;
 }
 
-function groundingAbort(reason: GroundingMissReason): CaseAbort {
+/**
+ * Builds the shared grounding-abort message without constructing an error,
+ * so the ordinary and classification abort paths keep one mapping from each
+ * reason to its user-facing explanation.
+ */
+function groundingAbortMessage(reason: GroundingMissReason): string {
   switch (reason) {
     case 'fingerprint-mismatch':
-      return new CaseAbort('The supplied locator changed shape after AI confirmation and cannot be safely bound.');
+      return 'The supplied locator changed shape after AI confirmation and cannot be safely bound.';
     case 'element-not-found':
-      return new CaseAbort('The supplied locator has no matching element in the current accessibility evidence.');
+      return 'The supplied locator has no matching element in the current accessibility evidence.';
     case 'ambiguous-match':
-      return new CaseAbort(
-        'The supplied locator matches more than one element in the current accessibility evidence. Add a distinguishing aria-label (or other accessible-name difference) to one of the matching elements so the locator can identify a single element.',
-      );
+      return 'The supplied locator matches more than one element in the current accessibility evidence. Add a distinguishing aria-label (or other accessible-name difference) to one of the matching elements so the locator can identify a single element.';
     case 'snapshot-invalid':
-      return new CaseAbort(
-        'The current accessibility evidence could not be parsed and cannot be trusted for this locator. Retry the run; if this persists, the page structure may use a form this parser does not recognize.',
-      );
+      return 'The current accessibility evidence could not be parsed and cannot be trusted for this locator. Retry the run; if this persists, the page structure may use a form this parser does not recognize.';
     case 'secret-contaminated':
-      return new CaseAbort(
-        'The supplied locator\'s accessibility evidence contains a resolved secret value and cannot be fingerprinted or cached. Add an aria-label that does not echo the secret value to the affected element.',
-      );
+      return 'The supplied locator\'s accessibility evidence contains a resolved secret value and cannot be fingerprinted or cached. Add an aria-label that does not echo the secret value to the affected element.';
   }
+}
+
+function groundingAbort(reason: GroundingMissReason): CaseAbort {
+  return new CaseAbort(groundingAbortMessage(reason));
+}
+
+/**
+ * Builds the classification counterpart to `groundingAbort` with the same
+ * message while retaining the snapshot being classified, so its failing
+ * report shows the exact evidence that caused the abort.
+ */
+function groundingClassificationAbort(
+  reason: GroundingMissReason,
+  accessibilityTree: JsonValueT,
+): GroundingClassificationAbort {
+  return new GroundingClassificationAbort(groundingAbortMessage(reason), accessibilityTree);
 }
 
 /**
@@ -2624,11 +2663,19 @@ async function captureScreenshotEvidence(
  * uncertain secret presence into permission to capture a screenshot.
  * Rendering is separately best-effort and retains the already-established
  * signal.
+ *
+ * When supplied, a preset tree is redacted into `observed.accessibilitySnapshot`
+ * instead of the freshly captured tree. The fresh capture is still always
+ * taken and exclusively drives the three-channel secret detector, so it alone
+ * controls screenshot retention. If that re-capture throws, this boundary
+ * remains fail-closed and returns no observed evidence even when a preset tree
+ * exists; preset evidence must not weaken the safety-relevant capture check.
  */
 async function captureObservedEvidence(
   session: BrowserSession,
   resolvedSecrets: ReadonlyMap<string, ReadonlySet<string>>,
   runState: ReadonlyMap<RunVariableName, string>,
+  presetAccessibilityTree?: JsonValueT,
 ): Promise<{ readonly observed?: Observed; readonly captureContainsResolvedSecret: boolean }> {
   let capture: AccessibilityCapture;
   try {
@@ -2650,7 +2697,7 @@ async function captureObservedEvidence(
       captureContainsResolvedSecret,
       observed: {
         note: OBSERVED_NOTE,
-        accessibilitySnapshot: JSON.stringify(redactJsonStrings(capture.tree, resolvedSecrets, runState)),
+        accessibilitySnapshot: JSON.stringify(redactJsonStrings(presetAccessibilityTree ?? capture.tree, resolvedSecrets, runState)),
       },
     };
   } catch {
@@ -2695,7 +2742,8 @@ function accessibilityCaptureContainsResolvedSecret(
  * the redacted parsed tree, while detection-only capture channels never cross
  * that boundary. Diagnostic failures remain independent, so losing one form
  * of evidence does not discard other available failure detail or invent
- * assertion-specific fields.
+ * assertion-specific fields. An optional preset tree passes unchanged to
+ * `captureObservedEvidence`.
  */
 async function captureFailureEvidence(
   session: BrowserSession,
@@ -2705,8 +2753,9 @@ async function captureFailureEvidence(
   resolvedSecrets: ReadonlyMap<string, ReadonlySet<string>>,
   runState: ReadonlyMap<RunVariableName, string>,
   rawAssertionText: readonly string[] = [],
+  presetAccessibilityTree?: JsonValueT,
 ): Promise<FailureDetail> {
-  const { observed, captureContainsResolvedSecret } = await captureObservedEvidence(session, resolvedSecrets, runState);
+  const { observed, captureContainsResolvedSecret } = await captureObservedEvidence(session, resolvedSecrets, runState, presetAccessibilityTree);
   if (captureContainsResolvedSecret || rawAssertionText.some((text) => containsResolvedSecret(text, resolvedSecrets))) {
     return { ...(observed === undefined ? {} : { observed }), screenshotOmitted: 'secret-detected' };
   }
@@ -3419,6 +3468,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       },
       resolvedVias,
       aiTimeoutMs: deps.config.ai.timeoutMs,
+      resolveTimeoutMs: deps.config.targets[targetSelection.name]!.resolveTimeoutMs,
       ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     };
 
@@ -3524,6 +3574,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           currentStep.id,
           resolvedSecrets ?? new Map(),
           runState ?? new Map(),
+          [],
+          error instanceof GroundingClassificationAbort ? error.accessibilityTree : undefined,
         );
       } catch (evidenceError) {
         if (evidenceError instanceof IntegrityViolationError) classificationError = evidenceError;

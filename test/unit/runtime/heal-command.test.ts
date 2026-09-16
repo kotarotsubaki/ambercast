@@ -38,7 +38,7 @@ vi.mock('#usecases/report-finalization.js', () => ({
 const CONFIG: ResolvedConfig = {
   testDir: '/workspace/tests', runsDir: '/workspace/tests/.runs', projectRoot: '/workspace',
   testMatch: ['**/*.test.md'], testIgnore: ['**/.runs/**'],
-  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'idempotent' } }, defaultTarget: 'web',
+  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 } }, defaultTarget: 'web',
   secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 }, viewer: { port: 4600 },
   ci: { heal: true, updateGroundingCache: false }, grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
@@ -148,7 +148,7 @@ describe('runHealCommand', () => {
   });
 
   it.each([false, true])('rejects a stateful target before an ineligible prompt can call heal for --dry-run=%s', async (dryRun) => {
-    configure({ config: { ...CONFIG, targets: { web: { ...CONFIG.targets.web!, healReplayIsolation: 'stateful' } } }, built: report(2) });
+    configure({ config: { ...CONFIG, targets: { web: { ...CONFIG.targets.web!, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } } }, built: report(2) });
 
     await expect(runHealCommand(input({ dryRun, files: ['tests/ineligible.md'] }))).resolves.toMatchObject({ exitCode: 2 });
     expect(mocks.heal).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('runHealCommand', () => {
     expect(mocks.heal).toHaveBeenCalledOnce();
 
     vi.resetAllMocks();
-    configure({ config: { ...CONFIG, targets: { web: { ...CONFIG.targets.web!, healReplayIsolation: 'stateful' } } } });
+    configure({ config: { ...CONFIG, targets: { web: { ...CONFIG.targets.web!, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } } } });
     await expect(runHealCommand(input({ list: true }))).resolves.toMatchObject({ exitCode: 0 });
     expect(mocks.heal).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ list: true }));
   });
@@ -187,7 +187,7 @@ describe('runHealCommand', () => {
         ...CONFIG,
         targets: {
           web: CONFIG.targets.web!,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful' },
+          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
         },
       },
     });
@@ -201,7 +201,7 @@ describe('runHealCommand', () => {
         ...CONFIG,
         targets: {
           web: CONFIG.targets.web!,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful' },
+          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
         },
       },
       built: report(2),

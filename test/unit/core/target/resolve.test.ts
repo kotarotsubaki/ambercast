@@ -11,9 +11,9 @@ import {
 } from '#core/target/resolve.js';
 import type { ResolvedTargetConfigEntry } from '#core/config/schema.js';
 
-const WEB = Object.freeze({ baseUrl: 'https://web.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const });
-const ADMIN = Object.freeze({ baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const });
-const MOBILE = Object.freeze({ baseUrl: 'https://mobile.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const });
+const WEB = Object.freeze({ baseUrl: 'https://web.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 });
+const ADMIN = Object.freeze({ baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 });
+const MOBILE = Object.freeze({ baseUrl: 'https://mobile.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 });
 const WEB_DEFINITION = toTargetDefinition(WEB);
 const ADMIN_DEFINITION = toTargetDefinition(ADMIN);
 const MOBILE_DEFINITION = toTargetDefinition(MOBILE);
@@ -54,8 +54,8 @@ function inheritedTarget(name: string, definition: Readonly<TargetDefinition> = 
 
 describe('resolveTarget', () => {
   it('projects live replay isolation out of plan and input-digest target definitions', () => {
-    const idempotent: ResolvedTargetConfigEntry = { baseUrl: 'https://web.example.test', browser: 'chromium', healReplayIsolation: 'idempotent' };
-    const stateful: ResolvedTargetConfigEntry = { ...idempotent, healReplayIsolation: 'stateful' };
+    const idempotent: ResolvedTargetConfigEntry = { baseUrl: 'https://web.example.test', browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 };
+    const stateful: ResolvedTargetConfigEntry = { ...idempotent, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 };
 
     expect(toTargetDefinition(idempotent)).toEqual({ baseUrl: 'https://web.example.test', browser: 'chromium' });
     expect(toTargetDefinition(stateful)).toEqual(toTargetDefinition(idempotent));
@@ -64,8 +64,8 @@ describe('resolveTarget', () => {
 
   it('keeps the resolved target selection input digest byte-identical across isolation-only configuration changes', () => {
     const common = { baseUrl: 'https://web.example.test', browser: 'chromium' as const };
-    const idempotent: ResolvedTargetConfigEntry = { ...common, healReplayIsolation: 'idempotent' };
-    const stateful: ResolvedTargetConfigEntry = { ...common, healReplayIsolation: 'stateful' };
+    const idempotent: ResolvedTargetConfigEntry = { ...common, healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 };
+    const stateful: ResolvedTargetConfigEntry = { ...common, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 };
     const digest = (target: ResolvedTargetConfigEntry) => {
       const selected = resolveTarget({ targets: { web: target }, defaultTarget: 'web', explicitTarget: undefined });
       expectSelection(selected);

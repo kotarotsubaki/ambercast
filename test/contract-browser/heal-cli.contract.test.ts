@@ -118,7 +118,7 @@ describe('heal confirmation gate through the built CLI', () => {
       await Promise.all([
         writeFile(join(project, 'ambercast.config.json'), JSON.stringify({
           $schema: 'https://ambercast.dev/schema/config.json', testDir: 'tests', runsDir: 'tests/.runs',
-          targets: { fixture: { ...targetDefinitions.fixture, healReplayIsolation: 'idempotent' } },
+          targets: { fixture: { ...targetDefinitions.fixture, healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 } },
           defaultTarget: 'fixture', ai: { provider: 'codex' }, ci: { heal: true },
         })),
         writeFile(join(tests, 'heal-confirmation.test.md'), PROMPT),

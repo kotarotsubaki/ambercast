@@ -190,6 +190,16 @@ async function expectRejectedWithoutBrowserWork(
 
 export function registerBrowserSessionContract(harness: BrowserSessionContractHarness): void {
   describe('BrowserSession contract', () => {
+    it.each([true, false])('awaitElementPresence never rejects and returns promptly at zero timeout when the element exists is %s', async (exists) => {
+      const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists };
+
+      await withSession(harness, setup, async (session) => {
+        const startedAt = Date.now();
+        await expect(session.awaitElementPresence(REF, 0)).resolves.toBeUndefined();
+        expect(Date.now() - startedAt).toBeLessThan(2000);
+      });
+    });
+
     it('binds a matching verify query and derives the current fingerprint for a compute query', async () => {
       const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists: true };
 

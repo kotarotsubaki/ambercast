@@ -84,7 +84,7 @@ afterEach(() => {
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
@@ -820,6 +820,7 @@ describe('generate', () => {
         browser: 'chromium' as const,
         secretSinkOrigins: { '{{secrets.app.password}}': ['https://idp.example.test'] },
         healReplayIsolation: 'stateful' as const,
+        resolveTimeoutMs: 5000,
       },
     };
     const { deps, recordingStorage } = createScenario({
@@ -1518,7 +1519,7 @@ describe('generate', () => {
 
   it('selects the sole own target when configuration omits defaultTarget', async () => {
     const soleTargets = {
-      replacement: { baseUrl: 'https://replacement.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+      replacement: { baseUrl: 'https://replacement.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const { deps, execute, recordingStorage } = createScenario({
       config: {
@@ -1579,7 +1580,7 @@ describe('generate', () => {
         testIgnore: [],
         targets: {
           web: RESOLVED_TARGETS.web,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
         },
         ai: { provider: 'codex' as const, timeoutMs: 100, maxGenerateAttempts: 2 },
       },
@@ -1631,6 +1632,7 @@ describe('generate', () => {
       baseUrl: 'https://inherited.example.test',
       browser: 'chromium' as const,
       healReplayIsolation: 'stateful' as const,
+      resolveTimeoutMs: 5000,
     };
     const prototype = Object.fromEntries([[inheritedName, inheritedDefinition]]);
     const targets = Object.assign(
@@ -1688,7 +1690,7 @@ describe('generate', () => {
   ) => {
     const targets = {
       web: RESOLVED_TARGETS.web,
-      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const { deps, execute, recordingStorage } = createScenario({
       config: {
@@ -1727,12 +1729,12 @@ describe('generate', () => {
 
   it('regenerates for a changed selected target but ignores an unrelated target change', async () => {
     const selectedChanged = {
-      web: { baseUrl: 'https://changed.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
-      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+      web: { baseUrl: 'https://changed.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const unrelatedChanged = {
       web: RESOLVED_TARGETS.web,
-      admin: { baseUrl: 'https://changed-admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+      admin: { baseUrl: 'https://changed-admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
 
     const changedScenario = createScenario({

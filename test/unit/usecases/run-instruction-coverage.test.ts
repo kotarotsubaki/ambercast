@@ -32,7 +32,7 @@ const RUNS_DIR = `${TEST_DIR}/.runs`;
 const TEST_PATH = `${TEST_DIR}/covered.test.md`;
 const PROMPT = '# Covered replay\n\nReach the dashboard.\n';
 const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' as const } };
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const } };
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } };
 const OPTIONS: RunOptions = {
   files: [TEST_PATH],
   resolve: true,

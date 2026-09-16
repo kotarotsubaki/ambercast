@@ -138,6 +138,8 @@ type FakeBrowserSessionState = {
   readonly entries: Map<string, FakeBrowserSessionEntry>;
   readonly bindings: WeakMap<BoundElement, FakeBindingRecord>;
   readonly operations: FakeBrowserSessionOperation[];
+  readonly scheduledAppearances: Set<string>;
+  readonly awaitElementPresenceCalls: { readonly ref: ElementRef; readonly timeoutMs: number }[];
   generation: number;
   currentUrl: string;
   closed: boolean;
@@ -401,6 +403,23 @@ export function operationObservation(
 }
 
 /**
+ * Returns a fresh copy of the fake's presence-wait observations.
+ *
+ * Presence waits remain separate from `operations()` so tests can inspect
+ * their arguments without changing the established browser-operation trace.
+ */
+export function awaitElementPresenceCalls(
+  session: FakeBrowserSession,
+): readonly { readonly ref: ElementRef; readonly timeoutMs: number }[] {
+  const state = sessionStates.get(session);
+  if (state === undefined) {
+    throw new Error('awaitElementPresenceCalls requires a session created by createFakeBrowserSession.');
+  }
+
+  return state.awaitElementPresenceCalls.map((call) => ({ ...call, ref: copyRef(call.ref) }));
+}
+
+/**
  * Changes only a fake session's current URL.
  *
  * Keeping URL mutation independent from generation lets a test isolate an
@@ -419,6 +438,21 @@ export function setFakeCurrentUrl(session: FakeBrowserSession, url: string): voi
   }
 
   state.currentUrl = url;
+}
+
+/**
+ * Schedules an existing fake descriptor to appear during its next presence wait.
+ *
+ * The schedule is intentionally one-shot, which lets run tests model a page
+ * race without making later grounding calls observe an unrelated mutation.
+ */
+export function scheduleFakeAppearance(session: FakeBrowserSession, ref: ElementRef): void {
+  const state = sessionStates.get(session);
+  if (state === undefined) {
+    throw new Error('scheduleFakeAppearance requires a session created by createFakeBrowserSession.');
+  }
+
+  state.scheduledAppearances.add(elementRefKey(ref));
 }
 
 /**
@@ -449,6 +483,8 @@ export function createFakeBrowserSession(
     entries,
     bindings: new WeakMap(),
     operations: [],
+    scheduledAppearances: new Set(),
+    awaitElementPresenceCalls: [],
     generation: 0,
     // Chromium starts a newly created page at about:blank, so omitted test setup fails closed.
     currentUrl: options.currentUrl ?? 'about:blank',
@@ -460,6 +496,17 @@ export function createFakeBrowserSession(
   };
 
   const session: FakeBrowserSession = {
+    async awaitElementPresence(ref: ElementRef, timeoutMs: number): Promise<void> {
+      const key = elementRefKey(ref);
+      state.awaitElementPresenceCalls.push({ ref: copyRef(ref), timeoutMs });
+      const scheduled = state.scheduledAppearances.delete(key);
+      if (timeoutMs > 0 && scheduled) {
+        const entry = state.entries.get(key);
+        if (entry !== undefined) {
+          entry.exists = true;
+        }
+      }
+    },
     async perform(action): Promise<void> {
       switch (action.type) {
         case 'navigate':

@@ -160,9 +160,11 @@ class FakePlaywrightLocator implements PlaywrightLocatorHandle {
   clickFailure: Error | undefined;
   fillFailure: Error | undefined;
   pressFailure: Error | undefined;
+  waitForFailure: Error | undefined;
   readonly clickCalls: undefined[] = [];
   readonly fillValues: string[] = [];
   readonly firstCalls: undefined[] = [];
+  readonly waitForCalls: { readonly state: 'visible'; readonly timeout: number }[] = [];
   readonly innerTextCalls: undefined[] = [];
   readonly isVisibleCalls: undefined[] = [];
   readonly inputValueCalls: undefined[] = [];
@@ -188,6 +190,13 @@ class FakePlaywrightLocator implements PlaywrightLocatorHandle {
   first(): PlaywrightLocatorHandle {
     this.firstCalls.push(undefined);
     return this;
+  }
+
+  async waitFor(options: { readonly state: 'visible'; readonly timeout: number }): Promise<void> {
+    this.waitForCalls.push(options);
+    if (this.waitForFailure !== undefined) {
+      throw this.waitForFailure;
+    }
   }
 
   async click(): Promise<void> {
@@ -1539,6 +1548,46 @@ describe('ChromiumBrowserSession.resolveGrounded()', () => {
         kind: 'miss',
         reason: 'secret-contaminated',
       });
+    });
+  });
+});
+
+describe('ChromiumBrowserSession.awaitElementPresence()', () => {
+  it('waits on the first exact role/name locator with the requested visible timeout', async () => {
+    await withLaunchedSession({}, async (session, launcher) => {
+      await expect(session.awaitElementPresence(SUBMIT_BUTTON, 1234)).resolves.toBeUndefined();
+
+      expect(launcher.page.roleCalls).toEqual([{
+        role: 'button',
+        options: { name: 'Submit', exact: true },
+      }]);
+      expect(launcher.page.roleLocator.firstCalls).toHaveLength(1);
+      expect(launcher.page.roleLocator.waitForCalls).toEqual([{ state: 'visible', timeout: 1234 }]);
+      expect(launcher.page.roleLocator.ariaSnapshotCalls).toHaveLength(0);
+      expect(launcher.page.textLocator.ariaSnapshotCalls).toHaveLength(0);
+      expect(launcher.page.bodyLocator.ariaSnapshotCalls).toHaveLength(0);
+    });
+  });
+
+  it('swallows every locator wait rejection', async () => {
+    const waitForFailure = new Error('locator wait failed');
+    const roleLocator = new FakePlaywrightLocator();
+    roleLocator.waitForFailure = waitForFailure;
+
+    await withLaunchedSession({ roleLocator }, async (session, launcher) => {
+      await expect(session.awaitElementPresence(SUBMIT_BUTTON, 1234)).resolves.toBeUndefined();
+
+      expect(launcher.page.roleLocator.waitForCalls).toEqual([{ state: 'visible', timeout: 1234 }]);
+    });
+  });
+
+  it('returns immediately for a zero timeout without locator narrowing, waiting, or ARIA capture', async () => {
+    await withLaunchedSession({}, async (session, launcher) => {
+      await expect(session.awaitElementPresence(SUBMIT_BUTTON, 0)).resolves.toBeUndefined();
+
+      expect(launcher.page.roleLocator.firstCalls).toEqual([]);
+      expect(launcher.page.roleLocator.waitForCalls).toEqual([]);
+      expect(launcher.page.bodyLocator.ariaSnapshotCalls).toEqual([]);
     });
   });
 });

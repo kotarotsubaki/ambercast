@@ -31,7 +31,7 @@ const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TEST_PATH = `${TEST_DIR}/login.test.md`;
 const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const GENERATED_RESPONSE: GeneratedPlanResponse = {
   steps: [

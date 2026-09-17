@@ -39,9 +39,15 @@ export const AI_TIMEOUT_MS_DESCRIPTION = 'Deadline in milliseconds for one provi
  * any runtime consumer receives the target; keeping that defaulting out of
  * the IR target schema prevents live replay policy from becoming a plan or
  * input-digest dependency.
+ * Like `healReplayIsolation`, `resolveTimeoutMs` is optional at this raw
+ * configuration-file boundary. `copyTargets` supplies its resolved 5000 ms
+ * default before any runtime consumer receives the target, while
+ * `toTargetDefinition` keeps its three-field projection free of this
+ * live-only setting so it never becomes a plan or input-digest dependency.
  */
 export const TargetConfigEntry = TargetDefinition.extend({
   healReplayIsolation: z.enum(['idempotent', 'stateful']).optional(),
+  resolveTimeoutMs: z.int().min(0).max(60000).optional(),
 });
 
 /**
@@ -52,10 +58,16 @@ export const TargetConfigEntry = TargetDefinition.extend({
  * target before browser or provider work starts. Digest-bound consumers must
  * project it back to {@link TargetDefinition}, which intentionally has no
  * live-only replay-isolation field.
+ * `resolveTimeoutMs` is likewise required here because `copyTargets` resolves
+ * an omitted configuration value to 5000 ms before runtime selection. Like
+ * `healReplayIsolation`, it stays outside `toTargetDefinition`'s three-field
+ * projection, so no plan or input digest carries the live-only timeout.
  */
-export type ResolvedTargetConfigEntry = Omit<z.infer<typeof TargetConfigEntry>, 'healReplayIsolation'> & {
-  readonly healReplayIsolation: 'idempotent' | 'stateful';
-};
+export type ResolvedTargetConfigEntry =
+  Omit<z.infer<typeof TargetConfigEntry>, 'healReplayIsolation' | 'resolveTimeoutMs'> & {
+    readonly healReplayIsolation: 'idempotent' | 'stateful';
+    readonly resolveTimeoutMs: number;
+  };
 
 /**
  * Validates the parsed contents of a present Ambercast configuration file.

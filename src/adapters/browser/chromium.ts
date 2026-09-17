@@ -89,6 +89,8 @@ export interface PlaywrightLocatorHandle {
   count(): Promise<number>;
   ariaSnapshot(): Promise<string>;
   elementHandle(): Promise<PlaywrightElementHandle>;
+  first(): PlaywrightLocatorHandle;
+  waitFor(options: { readonly state: 'visible'; readonly timeout: number }): Promise<void>;
 }
 
 /**
@@ -190,6 +192,8 @@ function adaptLocator(locator: PlaywrightLocator): PlaywrightLocatorHandle {
     inputValue: () => locator.inputValue(),
     count: () => locator.count(),
     ariaSnapshot: () => locator.ariaSnapshot(),
+    first: () => adaptLocator(locator.first()),
+    waitFor: (options) => locator.waitFor(options),
     elementHandle: async () => {
       const element = await locator.elementHandle();
       if (element === null) {
@@ -732,6 +736,28 @@ class ChromiumBrowserSession implements BrowserSession {
       tree: parseAriaSnapshot(rawYaml),
       scalarValues: extractDiscardedScalarValues(rawYaml),
     };
+  }
+
+  /**
+   * A zero timeout returns immediately; otherwise this waits for the first
+   * exact role-and-name match to become visible. Every locator-side rejection
+   * is caught so the run usecase retains its existing verification and
+   * classification decision path.
+   *
+   * It deliberately does not capture an accessibility or ARIA snapshot.
+   * Waiting must preserve the existing one-bind-attempt/one-capture contract
+   * and the `ariaSnapshotCalls` count assertions that protect it.
+   */
+  async awaitElementPresence(ref: ElementRef, timeoutMs: number): Promise<void> {
+    if (timeoutMs === 0) return;
+    try {
+      await this.page.getByRole(ref.role, { name: ref.name, exact: true }).first().waitFor({
+        state: 'visible',
+        timeout: timeoutMs,
+      });
+    } catch {
+      // The caller's existing resolution path makes the pass/fail decision.
+    }
   }
 
   /**

@@ -27,7 +27,7 @@ const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const OPTIONS: CheckOptions = { files: [], allowEmpty: false, list: false };
 
 type TestConfig = CheckDeps['config'];
@@ -661,12 +661,12 @@ describe('check', () => {
     } as const;
     const changedSelectedTargets = {
       ...planTargets,
-      web: { baseUrl: 'https://changed.example.test', browser: 'chromium', healReplayIsolation: 'stateful' },
-      admin: { ...planTargets.admin, healReplayIsolation: 'stateful' },
+      web: { baseUrl: 'https://changed.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+      admin: { ...planTargets.admin, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
     } as const;
     const changedUnrelatedTargets = {
       web: RESOLVED_TARGETS.web,
-      admin: { baseUrl: 'https://changed-admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful' },
+      admin: { baseUrl: 'https://changed-admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
     } as const;
     const { storage, layout } = createScenario();
     await storage.writeText(testPath, PROMPT);
@@ -777,7 +777,7 @@ describe('check', () => {
         ...ambiguousConfig,
         targets: {
           web: RESOLVED_TARGETS.web,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful' },
+          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
         },
       },
     });
@@ -800,7 +800,7 @@ describe('check', () => {
   it('uses a sole implicit target for freshness when defaultTarget is absent', async () => {
     const testPath = `${TEST_DIR}/implicit.test.md`;
     const soleTargets = {
-      replacement: { baseUrl: 'https://replacement.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+      replacement: { baseUrl: 'https://replacement.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const { defaultTarget: _defaultTarget, ...configWithoutDefault } = createConfig();
     const { storage, layout, deps } = createScenario({
@@ -829,7 +829,7 @@ describe('check', () => {
     const testPath = `${TEST_DIR}/${expectedName}.test.md`;
     const targets = {
       web: RESOLVED_TARGETS.web,
-      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const { storage, layout, deps } = createScenario({
       config: createConfig({ targets, defaultTarget: 'web' }),
@@ -864,7 +864,7 @@ describe('check', () => {
         ...ambiguousConfig,
         targets: {
           web: RESOLVED_TARGETS.web,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful' },
+          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
         },
       },
     });

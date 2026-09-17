@@ -349,19 +349,24 @@ function rejectUnsafeRawKeys(document: unknown, configPath: string): void {
 }
 
 /**
- * Copies resolved targets while preserving their live replay-isolation setting.
+ * Copies resolved targets while preserving their live-only settings.
  *
  * Configuration loading must default `healReplayIsolation` before runtime
  * eligibility checks inspect a target, so an omitted setting is never treated
  * as permissive. The digest projection occurs separately and picks
  * only plan-relevant target fields; keeping this copy whole prevents that
  * projection boundary from accidentally erasing the live-only policy first.
+ * `resolveTimeoutMs` likewise defaults to 5000 here, so runtime eligibility
+ * and behavior checks never receive an undefaulted value. Its default remains
+ * outside the separate digest-projection boundary for the same live-only
+ * reason.
  */
 function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedConfig['targets']): ResolvedConfig['targets'] {
   return Object.fromEntries(
     Object.entries(source).map(([name, target]) => [name, {
       ...target,
       healReplayIsolation: target.healReplayIsolation ?? 'stateful',
+      resolveTimeoutMs: target.resolveTimeoutMs ?? 5000,
     }]),
   );
 }

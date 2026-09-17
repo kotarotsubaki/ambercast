@@ -213,6 +213,8 @@ function observeLocator(
       return locator.inputValue();
     },
     count: () => locator.count(),
+    first: () => observeLocator(locator.first(), observation),
+    waitFor: (options: { readonly state: 'visible'; readonly timeout: number }) => locator.waitFor(options),
     async ariaSnapshot(): Promise<string> {
       observation.ariaSnapshotCalls += 1;
       return locator.ariaSnapshot();

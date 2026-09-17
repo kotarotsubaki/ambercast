@@ -17,7 +17,7 @@ A supplied `targets` object replaces, rather than deep-merges with, default targ
 
 ## Targets {#targets}
 
-A target configuration supplies a browser destination; its `healReplayIsolation` setting is resolved before heal and is not a Plan or inputs-digest field.
+A target configuration supplies a browser destination; its `healReplayIsolation` and `resolveTimeoutMs` settings are resolved live (before heal, and before element resolution respectively) and are not Plan or inputs-digest fields.
 
 ## Key table {#key-table}
 
@@ -33,6 +33,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | target field | generate, run, heal browser composition; check (freshness) |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires selected `idempotent` target | heal |
+| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
 | `defaultTarget` | string | `web-user` | must resolve to a target | generate, run, check, heal target selection |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |

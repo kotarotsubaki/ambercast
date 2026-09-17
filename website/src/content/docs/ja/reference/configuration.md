@@ -22,7 +22,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 
 ## ターゲット {#targets}
 
-ターゲット設定はブラウザの接続先を提供します。ターゲットの `healReplayIsolation` 設定は修復（heal）の実行前に解決され、Plan や inputs-digest のフィールドには含まれません。なお、`healReplayIsolation` の既定値は `stateful` です。
+ターゲット設定はブラウザの接続先を提供します。ターゲットの `healReplayIsolation` 設定は修復（heal）の実行前に、`resolveTimeoutMs` 設定は要素解決の実行前にそれぞれライブに解決され、いずれも Plan や inputs-digest のフィールドには含まれません。なお、`healReplayIsolation` の既定値は `stateful` です。
 
 ## 設定キー一覧 {#key-table}
 
@@ -38,6 +38,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal には選択された `idempotent` ターゲットが必要 | heal |
+| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
 | `defaultTarget` | string | `web-user` | ターゲットへと解決される必要あり | generate、run、check、heal のターゲット選択 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |
 | `ai.maxGenerateAttempts` | 正の整数 | `2` | 1〜5。ファイルごとの生成試行回数 | generate のみ。heal Stage 3 には適用しない |

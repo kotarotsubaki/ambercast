@@ -56,7 +56,7 @@ import { createFakeCommandRunner } from '../../doubles/create-fake-command-runne
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const SECRET_REF = '{{secrets.AMBERCAST_SECRET_DUMMY}}';
 const SECRET_VALUE = 'sk-AMBERCAST_SECRET_DUMMY';

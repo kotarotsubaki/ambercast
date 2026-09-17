@@ -10,6 +10,7 @@ export const EXPECTED_DEFAULT_CONFIG = {
       baseUrl: 'http://localhost:3000',
       browser: 'chromium',
       healReplayIsolation: 'stateful',
+      resolveTimeoutMs: 5000,
     },
   },
   defaultTarget: 'web-user',

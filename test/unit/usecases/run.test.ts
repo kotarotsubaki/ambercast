@@ -61,7 +61,9 @@ import { expectSecretSinkOriginViolation } from '../../doubles/expect-secret-sin
 import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
 import {
   createFakeBrowserSession as createRawFakeBrowserSession,
+  awaitElementPresenceCalls,
   elementRefKey,
+  scheduleFakeAppearance,
   setFakeCurrentUrl,
   type FakeBrowserSessionOptions,
   type FakeBrowserSessionEntry,
@@ -111,14 +113,14 @@ vi.mock('#core/ir/grounding-recovery-mode.js', async (importOriginal) => {
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const MULTI_TARGETS = {
   web: { baseUrl: 'https://example.test', browser: 'chromium' },
   staging: { baseUrl: 'https://staging.example.test', browser: 'chromium' },
 } as const;
 const RESOLVED_MULTI_TARGETS = {
-  web: { ...MULTI_TARGETS.web, healReplayIsolation: 'stateful' as const },
-  staging: { ...MULTI_TARGETS.staging, healReplayIsolation: 'stateful' as const },
+  web: { ...MULTI_TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+  staging: { ...MULTI_TARGETS.staging, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
 } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const DEFAULT_INSTRUCTION_COVERAGE = [{
@@ -855,6 +857,7 @@ describe('run', () => {
       baseUrl: 'https://inherited.example.test',
       browser: 'chromium' as const,
       healReplayIsolation: 'stateful' as const,
+      resolveTimeoutMs: 5000,
     };
     const prototype = Object.fromEntries([[inheritedName, inheritedDefinition]]);
     const targets = Object.assign(
@@ -913,7 +916,7 @@ describe('run', () => {
       browser: 'chromium' as const,
     };
     const soleTargets = {
-      replacement: { ...soleDefinition, healReplayIsolation: 'stateful' as const },
+      replacement: { ...soleDefinition, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const session = createFakeBrowserSession(new Map());
     const launch = vi.fn<BrowserDriver['launch']>(async () => session);
@@ -991,8 +994,8 @@ describe('run', () => {
 
   it('treats a selected target change as stale while ignoring an unrelated target change', async () => {
     const selectedChanged = {
-      web: { baseUrl: 'https://changed.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
-      staging: { ...MULTI_TARGETS.staging, healReplayIsolation: 'stateful' as const },
+      web: { baseUrl: 'https://changed.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      staging: { ...MULTI_TARGETS.staging, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const changedScenario = createScenario({
       config: {
@@ -1016,7 +1019,7 @@ describe('run', () => {
 
     const unrelatedChanged = {
       web: RESOLVED_TARGETS.web,
-      staging: { baseUrl: 'https://changed-staging.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const },
+      staging: { baseUrl: 'https://changed-staging.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const unrelatedScenario = createScenario({
       config: {
@@ -3841,6 +3844,247 @@ describe('run path-B element recovery', () => {
     expect(recordingStorage.writes).toEqual([]);
     expect(await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`)).toBe(groundingBefore);
     expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+  });
+
+  it('waits exactly once with the resolved default before cache verification, including when resolution is disabled', async () => {
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
+    const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
+    const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
+    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
+
+    await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(awaitElementPresence).toHaveBeenCalledExactlyOnceWith(SUBMIT, 5000);
+    expect(awaitElementPresenceCalls(session)).toEqual([{ ref: SUBMIT, timeoutMs: 5000 }]);
+    expect(awaitElementPresence.mock.invocationCallOrder[0]).toBeLessThan(resolveGrounded.mock.invocationCallOrder[0]!);
+  });
+
+  it('uses the selected target\'s non-default resolve timeout for presence waiting', async () => {
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
+    const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
+    const targets = { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 1500 } } as const;
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      config: { ...createScenario().deps.config, targets },
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
+
+    await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(awaitElementPresence).toHaveBeenCalledExactlyOnceWith(SUBMIT, 1500);
+    expect(awaitElementPresenceCalls(session)).toEqual([{ ref: SUBMIT, timeoutMs: 1500 }]);
+  });
+
+  it('waits before cache-miss classification and never waits again before the post-confirmation re-bind', async () => {
+    const tree = pathBAccessibilityTree();
+    const fingerprint = pathBFingerprint(tree);
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprint), {
+      snapshot: { accessibilityTree: tree, screenshot: new Uint8Array() },
+    });
+    const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
+    const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
+    const snapshotForResolution = vi.spyOn(session, 'snapshotForResolution');
+    const executor = createFakeAiExecutor({ execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) });
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 1 });
+    expect(awaitElementPresence).toHaveBeenCalledExactlyOnceWith(SUBMIT, 5000);
+    expect(awaitElementPresence.mock.invocationCallOrder[0]).toBeLessThan(snapshotForResolution.mock.invocationCallOrder[0]!);
+    expect(resolveGrounded).toHaveBeenCalledTimes(1);
+    expect(awaitElementPresence.mock.invocationCallOrder[0]).toBeLessThan(resolveGrounded.mock.invocationCallOrder[0]!);
+  });
+
+  it('waits once before both cache verification and the second AI-confirmed re-bind', async () => {
+    const tree = pathBAccessibilityTree();
+    const fingerprint = pathBFingerprint(tree);
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprint), {
+      snapshot: { accessibilityTree: tree, screenshot: new Uint8Array() },
+    });
+    const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
+    const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
+    const executor = createFakeAiExecutor({ execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) });
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
+
+    await run(deps, DEFAULT_OPTIONS);
+
+    expect(awaitElementPresence).toHaveBeenCalledTimes(1);
+    expect(resolveGrounded).toHaveBeenCalledTimes(2);
+    expect(awaitElementPresence.mock.invocationCallOrder[0]).toBeLessThan(resolveGrounded.mock.invocationCallOrder[1]!);
+  });
+
+  it('wins an appearance race through a cached grounding verify without an AI call', async () => {
+    const entries = new Map<string, FakeBrowserSessionEntry>([[elementRefKey(SUBMIT), {
+      exists: false,
+      currentFingerprint: FINGERPRINT,
+    }]]);
+    const session = createFakeBrowserSession(entries);
+    const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
+    const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
+    scheduleFakeAppearance(session, SUBMIT);
+    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 0 });
+    expect(events.emitted()).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'grounding' });
+    expect(awaitElementPresence).toHaveBeenCalledExactlyOnceWith(SUBMIT, 5000);
+    expect(awaitElementPresence.mock.invocationCallOrder[0]).toBeLessThan(resolveGrounded.mock.invocationCallOrder[0]!);
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+    expect(aiCalls(events)).toEqual([]);
+  });
+
+  it.each([
+    ['without an appearance', { role: 'root', name: '', children: [] } as JsonValueT, 'The supplied locator has no matching element in the current accessibility evidence.'],
+    ['with an appearance but ambiguous evidence', {
+      role: 'root', name: '', children: [{ role: 'main', name: '', children: [
+        { role: 'button', name: 'Submit', children: [] }, { role: 'button', name: 'Submit', children: [] },
+      ] }],
+    } as JsonValueT, 'The supplied locator matches more than one element in the current accessibility evidence. Add a distinguishing aria-label (or other accessible-name difference) to one of the matching elements so the locator can identify a single element.'],
+  ] as const)('keeps the existing classification abort %s after presence waiting', async (description, accessibilityTree, explanation) => {
+    const entries = new Map<string, FakeBrowserSessionEntry>([[elementRefKey(SUBMIT), {
+      exists: false,
+      currentFingerprint: description.includes('ambiguous') ? DIFFERENT_FINGERPRINT : FINGERPRINT,
+    }]]);
+    const session = createFakeBrowserSession(entries, { snapshot: { accessibilityTree, screenshot: new Uint8Array() } });
+    if (description.includes('ambiguous')) scheduleFakeAppearance(session, SUBMIT);
+    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result.explanation).toBe(explanation);
+  });
+
+  it('reports the classification tree rather than the fresh re-capture for a classification abort', async () => {
+    const classificationTree: JsonValueT = { role: 'root', name: 'classification', children: [] };
+    const recaptureTree: JsonValueT = { role: 'root', name: 'recapture', children: [] };
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
+    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
+    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(JSON.parse(outcome.results[0]?.result.steps.at(-1)?.observed?.accessibilitySnapshot ?? 'null')).toEqual(classificationTree);
+  });
+
+  it('redacts a secret-bearing classification tree while screenshot policy uses the clean re-capture', async () => {
+    const secretRef = '{{secrets.classification}}';
+    const secretValue = 'CLASSIFICATION_SECRET_VALUE';
+    const classificationTree: JsonValueT = {
+      role: 'root', name: secretValue, children: [{ role: 'button', name: 'Submit', children: [] }],
+    };
+    const recaptureTree: JsonValueT = { role: 'root', name: 'clean re-capture', children: [] };
+    const session = createFakeBrowserSession(new Map([
+      [elementRefKey(PASSWORD), { exists: true, currentFingerprint: FINGERPRINT }],
+      [elementRefKey(SUBMIT), { exists: true, currentFingerprint: DIFFERENT_FINGERPRINT }],
+    ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
+    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
+      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT },
+    ], elementGrounding(['fill-secret', 'click-submit']));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const step = outcome.results[0]?.result.steps.at(-1);
+
+    expect(step?.observed?.accessibilitySnapshot).toContain(secretRef);
+    expect(step?.observed?.accessibilitySnapshot).not.toContain(secretValue);
+    expect(step?.screenshotOmitted).toBeUndefined();
+  });
+
+  it('omits screenshots when a clean classification tree has a secret-bearing fresh re-capture', async () => {
+    const secretRef = '{{secrets.fresh_recapture}}';
+    const secretValue = 'FRESH_RECAPTURE_SECRET_VALUE';
+    const classificationTree: JsonValueT = { role: 'root', name: 'clean classification', children: [] };
+    const recaptureTree: JsonValueT = { role: 'root', name: secretValue, children: [] };
+    const session = createFakeBrowserSession(new Map([
+      [elementRefKey(PASSWORD), { exists: true, currentFingerprint: FINGERPRINT }],
+      [elementRefKey(SUBMIT), { exists: true, currentFingerprint: DIFFERENT_FINGERPRINT }],
+    ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
+    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({
+      tree: recaptureTree,
+      rawYaml: `secret: ${secretValue}`,
+      scalarValues: [secretValue],
+    });
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
+      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT },
+    ], elementGrounding(['fill-secret', 'click-submit']));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const step = outcome.results[0]?.result.steps.at(-1);
+
+    expect(JSON.parse(step?.observed?.accessibilitySnapshot ?? 'null')).toEqual(classificationTree);
+    expect(step?.screenshotOmitted).toBe('secret-detected');
+  });
+
+  it('fails closed when fresh re-capture rejects after a secret-bearing classification abort', async () => {
+    const secretRef = '{{secrets.failed_recapture}}';
+    const secretValue = 'FAILED_RECAPTURE_SECRET_VALUE';
+    const classificationTree: JsonValueT = { role: 'root', name: 'classification', children: [] };
+    const session = createFakeBrowserSession(new Map([
+      [elementRefKey(PASSWORD), { exists: true, currentFingerprint: FINGERPRINT }],
+      [elementRefKey(SUBMIT), { exists: true, currentFingerprint: DIFFERENT_FINGERPRINT }],
+    ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
+    vi.spyOn(session, 'accessibilitySnapshot').mockRejectedValue(new Error('fresh re-capture unavailable'));
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
+      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT },
+    ], elementGrounding(['fill-secret', 'click-submit']));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const step = outcome.results[0]?.result.steps.at(-1);
+
+    expect(step?.observed).toBeUndefined();
+    expect(step?.screenshotOmitted).toBe('secret-detected');
+  });
+
+  it('keeps using the fresh re-capture for non-classification abort evidence', async () => {
+    const recaptureTree: JsonValueT = { role: 'root', name: 'fresh non-classification re-capture', children: [] };
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
+    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
+    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(JSON.parse(outcome.results[0]?.result.steps.at(-1)?.observed?.accessibilitySnapshot ?? 'null')).toEqual(recaptureTree);
   });
 
   it('aborts secret-contaminated evidence without echoing or persisting the resolved secret', async () => {

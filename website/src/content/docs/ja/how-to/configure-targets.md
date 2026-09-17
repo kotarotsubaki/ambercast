@@ -13,7 +13,8 @@ ambercastの設定ファイルにターゲット（targets）を定義し、各�
 
 1. `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","browser":"chromium"},"admin":{"baseUrl":"https://admin.example.test","browser":"chromium"}},"defaultTarget":"staging"}` を記述します。これは公開されている設定スキーマURLであり、`targets` および `defaultTarget` は受け入れられる設定形式を持ちます。
 2. 破棄可能なターゲットにのみ `"healReplayIsolation":"idempotent"` を追加します。受け入れられる分離設定の値は `idempotent` と `stateful` であり、`healReplayIsolation` の既定値は `stateful` です。
-3. シークレットが `baseUrl` 以外のオリジンに入力される可能性がある場合は、`"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}` を追加します。`secretSinkOrigins` は各シークレット参照を許可されたオリジンの配列へとマッピングします。設定されたマッピングは既定のオリジンポリシー（`baseUrl` のオリジン）を置き換え、各オリジンは正規化されます。
+3. 解決中に要素の出現を待機するには、ターゲットに `"resolveTimeoutMs":<ms>` を設定します。既定値は `5000` で、指定できる値の範囲は `0`〜`60000` です。
+4. シークレットが `baseUrl` 以外のオリジンに入力される可能性がある場合は、`"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}` を追加します。`secretSinkOrigins` は各シークレット参照を許可されたオリジンの配列へとマッピングします。設定されたマッピングは既定のオリジンポリシー（`baseUrl` のオリジン）を置き換え、各オリジンは正規化されます。
 
 ## 確認 {#verification}
 

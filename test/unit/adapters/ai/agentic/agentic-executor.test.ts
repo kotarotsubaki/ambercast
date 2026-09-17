@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { executeAgentic, type BuildInvocation } from '#adapters/ai/agentic/agentic-executor.js';
 import type { CommandRunner } from '#adapters/ai/shared/command-runner.js';
+import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { createFakeAiActionController } from '../../../../doubles/fake-ai-action-controller.js';
 
 const mcp = vi.hoisted(() => ({ start: vi.fn() }));
@@ -38,9 +39,11 @@ describe('executeAgentic', () => {
     expect(order).toEqual(['close']);
   });
 
-  it('rejects a latched MCP error even after a nominal provider success and cleans up before close', async () => {
+  it.each([
+    ['a generic Error', new Error('latched MCP error')],
+    ['an AiResponseInvalidError', new AiResponseInvalidError('latched schema mismatch', { issues: [{ code: 'schema-mismatch', path: ['action'] }] })],
+  ])('rejects %s latched MCP error even after a nominal provider success and cleans up before close', async (_label, latch) => {
     const order: string[] = [];
-    const latch = new Error('latched MCP error');
     mcp.start.mockResolvedValue({ url: 'http://127.0.0.1:1', token: 'token', awaitDrain: async () => undefined, peekLatchedError: () => latch, close: async () => { order.push('close'); } });
     const run: CommandRunner = async (_command, _args, options) => {
       const result = { outcome: 'exited' as const, stdout: '{"outcome":"success"}', stderr: '', exitCode: 0 };

@@ -22,7 +22,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 
 ## ターゲット {#targets}
 
-ターゲット設定はブラウザの接続先を提供します。ターゲットの `healReplayIsolation` 設定は修復（heal）の実行前に解決され、Plan や inputs-digest のフィールドには含まれません。なお、`healReplayIsolation` の既定値は `stateful` です。
+ターゲット設定はブラウザの接続先を提供します。ターゲットの `healReplayIsolation` 設定は修復（heal）の実行前に、`resolveTimeoutMs` 設定は要素解決の実行前にそれぞれライブに解決され、いずれも Plan や inputs-digest のフィールドには含まれません。なお、`healReplayIsolation` の既定値は `stateful` です。
 
 ## 設定キー一覧 {#key-table}
 

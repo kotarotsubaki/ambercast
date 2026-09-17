@@ -14,7 +14,7 @@ description: 本页定义了配置键及其解析逻辑。
 
 ## 目标 {#targets}
 
-目标配置提供浏览器目的地；其 `healReplayIsolation` 设置在 heal 之前完成解析，且它不是 Plan 或 inputs-digest 字段。
+目标配置提供浏览器目的地；其 `healReplayIsolation` 设置在 heal 之前、`resolveTimeoutMs` 设置在元素解析之前分别完成实时解析，二者均不是 Plan 或 inputs-digest 字段。
 
 ## 配置键列表 {#key-table}
 

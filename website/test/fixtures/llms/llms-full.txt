@@ -844,7 +844,7 @@ A supplied `targets` object replaces, rather than deep-merges with, default targ
 
 ## Targets {#targets}
 
-A target configuration supplies a browser destination; its `healReplayIsolation` setting is resolved before heal and is not a Plan or inputs-digest field.
+A target configuration supplies a browser destination; its `healReplayIsolation` and `resolveTimeoutMs` settings are resolved live (before heal, and before element resolution respectively) and are not Plan or inputs-digest fields.
 
 ## Key table {#key-table}
 

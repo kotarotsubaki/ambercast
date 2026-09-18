@@ -28,7 +28,7 @@ Every digest path MUST use [[spec/canonical-json#digest-form]]. `inputsDigest` b
 | Plan `schemaVersion` | `3` | repo:src/core/ir/schema.ts:58 |
 | Grounding `schemaVersion` | `1` | repo:src/core/ir/schema.ts:65 |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:221 |
-| Report `schemaVersion` | `3.5` | repo:src/report/schema.ts:42 |
+| Report `schemaVersion` | `3.6` | repo:src/report/schema.ts:42 |
 
 ## Reading order {#reading-order}
 

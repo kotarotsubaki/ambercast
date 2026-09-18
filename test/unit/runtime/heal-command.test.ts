@@ -56,13 +56,13 @@ function input(overrides: Partial<HealCommandInput> = {}): HealCommandInput {
   return { files: [], dryRun: false, yes: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides };
 }
 function report(exitCode: HealCommandOutput['exitCode']): HealCommandOutput {
-  return { exitCode, envelope: { schemaVersion: '3.5', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
+  return { exitCode, envelope: { schemaVersion: '3.6', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
 }
 function reportWithExecutionEvidence(root: string): HealCommandOutput {
   return {
     exitCode: 1,
     envelope: {
-      schemaVersion: '3.5', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
+      schemaVersion: '3.6', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
       summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
       errors: [{
         scope: 'case', kind: 'environment', code: 'FS_IO_ERROR',
@@ -86,7 +86,7 @@ function reportWithExecutionEvidence(root: string): HealCommandOutput {
 }
 function caseResult(id: string, overrides: Partial<HealCaseOutcome> = {}): HealCaseOutcome {
   const file = `/workspace/tests/${id}`;
-  return { id: file, file, planFile: `/workspace/tests/${id}.ambercast.plan.json`, repairOutcome: 'healed', steps: [], explanation: 'The candidate repaired the case.', durationMs: 1.6, aiCalls: 0, baselineFirstFailureIndex: 0, finalFirstFailureIndex: 1, stopReason: 'settled', stage3Error: undefined, finalReplayError: undefined, ...overrides };
+  return { id: file, file, planFile: `/workspace/tests/${id}.ambercast.plan.json`, repairOutcome: 'healed', steps: [], explanation: 'The candidate repaired the case.', durationMs: 1.6, aiCalls: 0, baselineFirstFailureIndex: 0, finalFirstFailureIndex: 1, stopReason: 'settled', stage3Error: undefined, finalReplayError: undefined, repairTrace: [], ...overrides };
 }
 function outcome(overrides: Partial<HealOutcome> = {}): HealOutcome {
   return { results: [caseResult('login.test.md')], errors: [], noTestsFound: false, listed: [], skipped: [], interrupted: false, ...overrides };

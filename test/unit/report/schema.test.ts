@@ -9,7 +9,10 @@ import {
   Observed,
   ReportEnvelope,
   ReportError,
+  ReportErrorCode,
   REPORT_SCHEMA_VERSION,
+  HealStageTwoRejectionReason,
+  RepairTraceEntry,
   ReviewResult,
   RunResult,
   StepResult,
@@ -132,7 +135,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.5',
+    schemaVersion: '3.6',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -363,11 +366,95 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.5', () => {
+  it('requires schema version 3.6', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.5' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.6' });
+  });
+});
+
+describe('repair trace schema 3.6 contract', () => {
+  const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
+  const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
+
+  it('exports schema version 3.6', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.6');
+  });
+
+  it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
+    expectAccepted(RepairTraceEntry, { ...stage1, outcome });
+  });
+
+  it('rejects invalid or non-strict stage1 entries', () => {
+    expectRejected(RepairTraceEntry, { ...stage1, outcome: 'rejected' });
+    expectRejected(RepairTraceEntry, { ...stage1, outcome: 'accepted', unexpected: true });
+  });
+
+  it('accepts a minimal accepted stage2 entry and rejects its forbidden reason or missing step id', () => {
+    expectAccepted(RepairTraceEntry, { ...stage2, outcome: 'accepted' });
+    expectRejected(RepairTraceEntry, { ...stage2, outcome: 'accepted', reason: 'no-advance' });
+    expectRejected(RepairTraceEntry, { stage: 'stage2', outcome: 'accepted' });
+  });
+
+  it.each(HealStageTwoRejectionReason.options)('accepts rejected stage2 reason %s', (reason) => {
+    expectAccepted(RepairTraceEntry, { ...stage2, outcome: 'rejected', reason });
+  });
+
+  it('rejects malformed or non-strict rejected stage2 entries', () => {
+    expectRejected(RepairTraceEntry, { ...stage2, outcome: 'rejected' });
+    expectRejected(RepairTraceEntry, { ...stage2, outcome: 'rejected', reason: 'unknown' });
+    expectRejected(RepairTraceEntry, { ...stage2, outcome: 'rejected', reason: 'no-advance', unexpected: true });
+  });
+
+  it('accepts stage3 accepted only without outcome-specific fields', () => {
+    expectAccepted(RepairTraceEntry, { stage: 'stage3', outcome: 'accepted' });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'accepted', firstFailureIndex: 0 });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'accepted', code: 'FS_IO_ERROR' });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'accepted', reason: 'no-advance' });
+  });
+
+  it.each([-1, 0, 1])('accepts stage3 not-passing at firstFailureIndex %i', (firstFailureIndex) => {
+    expectAccepted(RepairTraceEntry, { stage: 'stage3', outcome: 'not-passing', firstFailureIndex });
+  });
+
+  it('rejects malformed or cross-contaminated stage3 not-passing entries', () => {
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'not-passing', firstFailureIndex: -2 });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 1.5 });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'not-passing', firstFailureIndex: '1' });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'not-passing' });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0, code: 'FS_IO_ERROR' });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0, reason: 'no-advance' });
+  });
+
+  it('accepts stage3 failed with or without a valid report error code', () => {
+    expectAccepted(RepairTraceEntry, { stage: 'stage3', outcome: 'failed' });
+    expectAccepted(RepairTraceEntry, { stage: 'stage3', outcome: 'failed', code: ReportErrorCode.options[0] });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'failed', firstFailureIndex: 0 });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'failed', code: 'UNKNOWN_CODE' });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'failed', reason: 'no-advance' });
+  });
+
+  it.each(['firstFailureIndex', 'code', 'reason'] as const)('rejects extra %s on stage3 secret-set-rejected', (field) => {
+    expectAccepted(RepairTraceEntry, { stage: 'stage3', outcome: 'secret-set-rejected' });
+    expectRejected(RepairTraceEntry, { stage: 'stage3', outcome: 'secret-set-rejected', [field]: field === 'firstFailureIndex' ? 0 : 'no-advance' });
+  });
+
+  it('rejects cross-stage fields and an unknown stage', () => {
+    expectRejected(RepairTraceEntry, { ...stage1, outcome: 'accepted', reason: 'no-advance' });
+    expectRejected(RepairTraceEntry, { stage: 'stage4', outcome: 'accepted' });
+  });
+
+  it.each([
+    ['healed', 'applied'],
+    ['partially-healed', 'applied'],
+    ['unresolved', 'no-artifact-change'],
+    ['no-changes-needed', 'no-artifact-change'],
+  ] as const)('accepts repairTrace as both present and omitted for completed %s', (repairOutcome, application) => {
+    const result = { ...HEAL_RESULT, repairOutcome, application };
+    expectAccepted(HealResult, { ...result, repairTrace: [{ ...stage1, outcome: 'accepted' }] });
+    expectAccepted(HealResult, without(result, 'repairTrace'));
+    expectRejected(HealResult, { ...result, repairTrace: [{ stage: 'stage3', outcome: 'not-passing' }] });
   });
 });
 
@@ -722,7 +809,7 @@ describe('report-local IR scalar equivalence', () => {
   });
 });
 
-describe('report schema 3.5 AI accounting fields', () => {
+describe('report schema 3.6 AI accounting fields', () => {
   const generateBranches = [
     ['generated', GENERATE_RESULT],
     ['would-generate', { ...GENERATE_RESULT, status: 'would-generate', dryRun: true }],
@@ -796,7 +883,7 @@ describe('report schema 3.5 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.5');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.6');
   });
 
   it.each(generateBranches)(

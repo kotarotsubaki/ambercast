@@ -11,7 +11,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.5 |
+| `schemaVersion` | literal 3.6 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -74,6 +74,8 @@ In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `stat
 
 When Stage 3 rejects a full-plan candidate because its logical secret-name set changes, the completed result has `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`. This is a hard rejection: no artifact commit occurs and users must regenerate with consent rather than silently reattribute the candidate.
 
+Every completed branch may also include `repairTrace`, an ordered diagnostic array that projects the case's Stage 1, Stage 2, and Stage 3 attempts and outcomes. Stage 1 entries are `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`; Stage 2 entries are `{ stage: "stage2", stepId, outcome: "accepted" }` or `{ stage: "stage2", stepId, outcome: "rejected", reason }`; and Stage 3 entries are `{ stage: "stage3", outcome: "accepted" }`, `{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`, `{ stage: "stage3", outcome: "failed", code? }`, or `{ stage: "stage3", outcome: "secret-set-rejected" }`. Each entry is strict: fields from another stage or outcome are not allowed.
+
 ## Result statuses {#result-statuses}
 
 Step and review execution structures share common result branches.
@@ -125,16 +127,16 @@ The `reportPersistence` property tracks the write outcome:
 - `not-attempted` applies when a write is never tried, including a command failure before an outcome.
 
 ```json
-{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.6","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.6","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.5","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}

@@ -1028,7 +1028,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.5` |
+| `schemaVersion` | 字面量 `3.6` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -1093,6 +1093,8 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 当 Stage 3 因逻辑机密名称集合变化而拒绝完整 Plan 候选项时，完成的结果为 `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`。这是硬拒绝：不会提交任何工件，用户必须在获得同意后重新生成，而不能悄然重新归属候选项。
 
+所有 completed 分支还可以包含可选的诊断数组 `repairTrace`，它按顺序投影该案例的 Stage 1、Stage 2 和 Stage 3 尝试及结果。Stage 1 条目为 `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`；Stage 2 条目为 `{ stage: "stage2", stepId, outcome: "accepted" }` 或 `{ stage: "stage2", stepId, outcome: "rejected", reason }`；Stage 3 条目为 `{ stage: "stage3", outcome: "accepted" }`、`{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`、`{ stage: "stage3", outcome: "failed", code? }` 或 `{ stage: "stage3", outcome: "secret-set-rejected" }`。每个条目都采用严格结构，不允许属于其他 stage 或 outcome 的字段。
+
 ## 结果状态 {#result-statuses}
 
 共享的步骤（step）与审查（review）结果结构。
@@ -1144,16 +1146,16 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
 ```json
-{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.6","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.6","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.5","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}
@@ -1337,7 +1339,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | plan（历史快照） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 为已废弃契约的使用者保留的冻结 Plan v2 快照。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 当前完整的 `PlanDocument`，包含目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.5"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.6"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
 
 - 每个 `$id` 均与其公开路径 URL 完全一致；内容完全一致（byte-identical）的 Schema 文件已发布至文档站点以及 npm 的 `schemas/` 导出。
 - 当前 Astro 配置将 `site` 设定为主机 `https://kotarotsubaki.github.io`，基路径为 `/ambercast`；上述发布 URL 均基于该主机。
@@ -1349,7 +1351,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | `plan.schema.json` | 包含 Plan `schemaVersion` 3、来源出处（provenance source）、目标（targets）与步骤（steps）的当前完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 包含 Grounding `schemaVersion` 1、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | 当前存在的配置文档，其 `$schema` 为必填项，其余声明的设置项均为可选项。 | Zod `RawConfig` 转换为 JSON Schema 2020-12。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | 包含 Report `schemaVersion` 3.5 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | 包含 Report `schemaVersion` 3.6 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 - 执行 `npm run build` 会先编译软件包，随后运行 `node dist/schema-gen.js`；该命令会以递归方式创建 Schema 目录，并精确写入上述四个文件。
 - 已校验的生成文件通过 `$schema` 声明了 JSON Schema draft 2020-12，并且包含发布元数据中所示的 `$id`。
@@ -1362,7 +1364,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.5 的结构化报告外层信封（envelope）及其命令专属结果。
+`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.6 的结构化报告外层信封（envelope）及其命令专属结果。
 
 ## 相关链接
 
@@ -1976,7 +1978,7 @@ flowchart LR
 | Plan `schemaVersion` | `3` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65) |
 | 指纹算法 | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.5` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
+| Report `schemaVersion` | `3.6` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 
 ## 阅读顺序 {#reading-order}
 
@@ -2676,6 +2678,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 | report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.4` 契约（包括可选的 `BROWSER_LAUNCH_FAILED` details 分支），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
 | Plan v2 → v3 删除 secret-grant provenance | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L674) | 生成者与消费者必须（MUST）拒绝 v2 并重新生成或报告其过时；不得（MUST NOT）对其进行就地迁移。[src/core/ir/schema.ts:49](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L49) |
 | report 3.4 → 3.5 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) | Report 消费者必须（MUST）接受当前的 `3.5` 契约（包括三个新的 secret-policy error code：`SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、可选的 `GROUNDING_UNRESOLVED` details 分支（`stepId`、`reason`），以及可选的 `GenerateResult.secrets`/`warnings` fields），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
+| report 3.5 → 3.6 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) | Report 消费者必须（MUST）接受当前的 `3.6` 契约，包括所有四个 completed heal-result 分支新增的可选 `repairTrace` 诊断字段，而不是从 Plan 版本推断兼容性。该字段投影每个案例的 Stage 1/2/3 尝试与结果历史（issue #383 / SPEC-9 至 SPEC-12）。[src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 
 ## 兼容性策略 {#compatibility-policy}
 

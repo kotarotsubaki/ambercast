@@ -10,7 +10,7 @@ const REPORT_METADATA = {
 } as const;
 
 const reportEnvelopeFields = {
-  schemaVersion: '3.5',
+  schemaVersion: '3.6',
   startedAt: '2026-09-08T12:34:56Z',
   durationMs: 1,
   summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },

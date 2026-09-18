@@ -14,6 +14,7 @@
 | report 3.3 → 3.4 | repo:src/report/schema.ts:30 | Report consumers MUST accept the current `3.4` contract, including the optional `BROWSER_LAUNCH_FAILED` details branch, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:30] |
 | Plan v2 → v3 removes secret-grant provenance | repo:src/core/ir/schema.ts:58, repo:src/core/ir/schema.ts:674 | Producers and consumers MUST reject v2 and regenerate or report it stale; they MUST NOT migrate it in place. [repo:src/core/ir/schema.ts:49] |
 | report 3.4 → 3.5 | repo:src/report/schema.ts:42 | Report consumers MUST accept the current `3.5` contract, including the three new secret-policy error codes (`SECRET_ENV_VAR_COLLISION`, `SECRET_CONSENT_REQUIRED`, `SECRET_SYNTAX_REJECTED`), the optional `GROUNDING_UNRESOLVED` details branch (`stepId`, `reason`), and the optional `GenerateResult.secrets`/`warnings` fields, rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:42] |
+| report 3.5 → 3.6 | repo:src/report/schema.ts:42 | Report consumers MUST accept the current `3.6` contract, including the optional `repairTrace` diagnostic field on all four completed heal-result branches. It projects each case's Stage 1, Stage 2, and Stage 3 attempt-and-outcome history (issue #383 / SPEC-9 through SPEC-12), rather than infer compatibility from the Plan version. [repo:src/report/schema.ts:42] |
 
 ## Compatibility policy {#compatibility-policy}
 

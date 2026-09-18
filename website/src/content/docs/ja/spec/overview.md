@@ -31,7 +31,7 @@ flowchart LR
 | Plan `schemaVersion` | `3` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65) |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.5` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
+| Report `schemaVersion` | `3.6` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
 
 ## 読解順序 {#reading-order}
 

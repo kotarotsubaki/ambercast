@@ -39,7 +39,7 @@ const ElementRef = z.discriminatedUnion('strategy', [z.strictObject({
 })]);
 
 /** Version shared by every structured report envelope. */
-export const REPORT_SCHEMA_VERSION = '3.5' as const;
+export const REPORT_SCHEMA_VERSION = '3.6' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -548,6 +548,65 @@ const HealedOrPartiallyHealedApplication = z.enum([
   'apply-failed', 'partially-applied',
 ]);
 
+/**
+ * A reason attached when a Stage 2 single-step repair trace entry is rejected.
+ *
+ * @remarks
+ * Verbatim mirror of {@link StageTwoRejectionReason} in `src/ports/system.ts`;
+ * kept as a separate report-local enum for the same reporting-boundary
+ * duplication reason as the other report-local schemas in this file.
+ */
+export const HealStageTwoRejectionReason = z.enum([
+  'provider-error',
+  'response-shape',
+  'id-mismatch',
+  'secret-name-invalid',
+  'coverage-invalid',
+  'obligation-mismatch',
+  'literal-secret',
+  'no-advance',
+]);
+export type HealStageTwoRejectionReason = z.infer<typeof HealStageTwoRejectionReason>;
+
+const Stage2Trace = z.discriminatedUnion('outcome', [
+  z.strictObject({ stage: z.literal('stage2'), stepId: StepId, outcome: z.literal('accepted') }),
+  z.strictObject({
+    stage: z.literal('stage2'),
+    stepId: StepId,
+    outcome: z.literal('rejected'),
+    reason: HealStageTwoRejectionReason,
+  }),
+]);
+
+const Stage3Trace = z.discriminatedUnion('outcome', [
+  z.strictObject({ stage: z.literal('stage3'), outcome: z.literal('accepted') }),
+  z.strictObject({ stage: z.literal('stage3'), outcome: z.literal('not-passing'), firstFailureIndex: z.int().min(-1) }),
+  z.strictObject({ stage: z.literal('stage3'), outcome: z.literal('failed'), code: ReportErrorCode.optional() }),
+  z.strictObject({ stage: z.literal('stage3'), outcome: z.literal('secret-set-rejected') }),
+]);
+
+/**
+ * One recorded Stage 1, Stage 2, or Stage 3 repair attempt and outcome in a
+ * completed heal case's repair trace.
+ *
+ * @remarks
+ * A two-level discriminated union (outer `stage`, inner `outcome` for stage2/
+ * stage3) is required because a flat union cannot express "accepted never
+ * carries reason/code/firstFailureIndex" at the schema level; each leaf is a
+ * `z.strictObject` so an unexpected field is rejected rather than silently
+ * accepted.
+ */
+export const RepairTraceEntry = z.discriminatedUnion('stage', [
+  z.strictObject({
+    stage: z.literal('stage1'),
+    stepId: StepId,
+    outcome: z.enum(['accepted', 'no-advance', 'not-eligible']),
+  }),
+  Stage2Trace,
+  Stage3Trace,
+]);
+export type RepairTraceEntry = z.infer<typeof RepairTraceEntry>;
+
 const CompletedHealResult = z.discriminatedUnion('repairOutcome', [
   z.strictObject({
     ...ResultIdentityFields,
@@ -556,6 +615,7 @@ const CompletedHealResult = z.discriminatedUnion('repairOutcome', [
     application: HealedOrPartiallyHealedApplication,
     stopReason: z.enum(['settled', 'attempt-limit', 'deadline']),
     ...ExecutedResultFields,
+    repairTrace: z.array(RepairTraceEntry).optional(),
   }),
   z.strictObject({
     ...ResultIdentityFields,
@@ -564,6 +624,7 @@ const CompletedHealResult = z.discriminatedUnion('repairOutcome', [
     application: HealedOrPartiallyHealedApplication,
     stopReason: z.enum(['settled', 'attempt-limit', 'deadline']),
     ...ExecutedResultFields,
+    repairTrace: z.array(RepairTraceEntry).optional(),
   }),
   z.strictObject({
     ...ResultIdentityFields,
@@ -577,6 +638,7 @@ const CompletedHealResult = z.discriminatedUnion('repairOutcome', [
       removed: z.array(SecretName),
     }).optional(),
     ...ExecutedResultFields,
+    repairTrace: z.array(RepairTraceEntry).optional(),
   }),
   z.strictObject({
     ...ResultIdentityFields,
@@ -585,6 +647,7 @@ const CompletedHealResult = z.discriminatedUnion('repairOutcome', [
     application: z.literal('no-artifact-change'),
     stopReason: z.literal('settled'),
     ...ExecutedResultFields,
+    repairTrace: z.array(RepairTraceEntry).optional(),
   }),
 ]);
 

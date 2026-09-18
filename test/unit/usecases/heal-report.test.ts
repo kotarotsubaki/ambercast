@@ -27,7 +27,7 @@ function healed(
     application: repairOutcome === 'unresolved' ? 'no-artifact-change' : repairOutcome === 'no-changes-needed' ? 'no-artifact-change' : 'applied', stopReason: 'settled',
     steps: [], explanation: `The case is ${repairOutcome}.`, durationMs: 4, aiCalls: 3,
     baselineFirstFailureIndex: 0, finalFirstFailureIndex: repairOutcome === 'healed' ? 1 : 0,
-    stage3Error: error, finalReplayError: undefined,
+    stage3Error: error, finalReplayError: undefined, repairTrace: [],
   };
 }
 
@@ -40,17 +40,37 @@ function report(input: { readonly outcome?: SettledHealOutcome; readonly error?:
 }
 
 describe('buildHealReport', () => {
-  it('emits the shared 3.5 schema version', () => {
-    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.5');
+  it('emits the shared 3.6 schema version', () => {
+    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.6');
   });
 
-  it('serializes a completed healed candidate without exposing internal stages or progress indices', () => {
+  it('serializes a completed healed candidate without exposing internal progress indices, for a case with no Stage 3 activity', () => {
     const output = report({ outcome: outcome() });
 
     expect(output.exitCode).toBe(0);
     expect(output.envelope.results).toEqual([expect.objectContaining({ status: 'completed', repairOutcome: 'healed', application: 'applied', aiCalls: 3 })]);
     expect(JSON.stringify(output.envelope)).not.toContain('ReachedIndex');
     expect(JSON.stringify(output.envelope)).not.toContain('stage3');
+  });
+
+  it('passes repairTrace through unchanged when a completed case records Stage 2 and Stage 3 activity', () => {
+    const repairTrace = [
+      { stage: 'stage2' as const, stepId: 'click-submit', outcome: 'rejected' as const, reason: 'no-advance' as const },
+      { stage: 'stage3' as const, outcome: 'not-passing' as const, firstFailureIndex: -1 },
+    ];
+    const output = report({ outcome: outcome({ results: [{ ...healed('unresolved'), repairTrace }] }) });
+
+    expect(output.envelope.results).toEqual([
+      expect.objectContaining({ repairTrace }),
+    ]);
+  });
+
+  it('passes through an empty no-changes-needed repairTrace unchanged', () => {
+    const output = report({ outcome: outcome({ results: [{ ...healed('no-changes-needed'), repairTrace: [] }] }) });
+
+    expect(output.envelope.results).toEqual([
+      expect.objectContaining({ repairOutcome: 'no-changes-needed', repairTrace: [] }),
+    ]);
   });
 
   it.each([0, 1, 7])('passes through the case-scoped admitted provider count %i without deriving it from nested rows', (aiCalls) => {

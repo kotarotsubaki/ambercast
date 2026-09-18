@@ -1,5 +1,6 @@
-import { describe, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { StepId } from '../../../src/core/ir/schema.js';
+import { HealStageTwoRejectionReason, type HealStageTwoRejectionReason as ReportStageTwoRejectionReason } from '../../../src/report/schema.js';
 import type {
   Clock,
   EnvironmentInfo,
@@ -7,6 +8,7 @@ import type {
   RandomSource,
   RunEvent,
   SecretsProvider,
+  StageTwoRejectionReason,
 } from '../../../src/ports/system.js';
 
 describe('system port shapes', () => {
@@ -44,5 +46,22 @@ describe('system port shapes', () => {
       }
     >();
     expectTypeOf<EventSink['emit']>().toEqualTypeOf<(event: RunEvent) => void>();
+  });
+});
+
+describe('Stage 2 rejection reason report mirror', () => {
+  it('keeps the system-port and report-schema types mutually assignable and their runtime values identical', () => {
+    expectTypeOf<StageTwoRejectionReason>().toEqualTypeOf<ReportStageTwoRejectionReason>();
+    expectTypeOf<ReportStageTwoRejectionReason>().toEqualTypeOf<StageTwoRejectionReason>();
+    expect([...HealStageTwoRejectionReason.options].sort()).toEqual([
+      'coverage-invalid',
+      'id-mismatch',
+      'literal-secret',
+      'no-advance',
+      'obligation-mismatch',
+      'provider-error',
+      'response-shape',
+      'secret-name-invalid',
+    ]);
   });
 });

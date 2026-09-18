@@ -1036,7 +1036,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.5 |
+| `schemaVersion` | literal 3.6 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -1099,6 +1099,8 @@ In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `stat
 
 When Stage 3 rejects a full-plan candidate because its logical secret-name set changes, the completed result has `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`. This is a hard rejection: no artifact commit occurs and users must regenerate with consent rather than silently reattribute the candidate.
 
+Every completed branch may also include `repairTrace`, an ordered diagnostic array that projects the case's Stage 1, Stage 2, and Stage 3 attempts and outcomes. Stage 1 entries are `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`; Stage 2 entries are `{ stage: "stage2", stepId, outcome: "accepted" }` or `{ stage: "stage2", stepId, outcome: "rejected", reason }`; and Stage 3 entries are `{ stage: "stage3", outcome: "accepted" }`, `{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`, `{ stage: "stage3", outcome: "failed", code? }`, or `{ stage: "stage3", outcome: "secret-set-rejected" }`. Each entry is strict: fields from another stage or outcome are not allowed.
+
 ## Result statuses {#result-statuses}
 
 Step and review execution structures share common result branches.
@@ -1150,16 +1152,16 @@ The `reportPersistence` property tracks the write outcome:
 - `not-attempted` applies when a write is never tried, including a command failure before an outcome.
 
 ```json
-{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.6","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.6","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.5","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}
@@ -1333,7 +1335,7 @@ Ambercast publishes these metadata and byte-identical files to the site and npm.
 | plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v2 snapshot retained for consumers of the retired contract. | available |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed current `PlanDocument`, including targets and steps. | available |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json` | 1 | `ambercast grounding schema v1` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.5"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.6"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
 Each `$id` equals its public-path URL; byte-identical schema files are published to the site and the npm `schemas/` export.
 
@@ -1346,7 +1348,7 @@ The current Astro configuration sets `site` to the `https://kotarotsubaki.github
 | `plan.schema.json` | A completed current `PlanDocument` with Plan `schemaVersion` 3, provenance source, targets, and steps. | Zod `PlanDocument` converted as JSON Schema 2020-12. | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 1, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.5. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.6. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 Running `npm run build` compiles the package and then runs `node dist/schema-gen.js`, which creates the schema directory recursively and writes exactly the four files above.
 
@@ -1364,7 +1366,7 @@ Validating only the generated Plan JSON Schema does not establish duplicate-step
 
 ## Report schema {#report-schema}
 
-`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.5. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
+`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.6. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
 
 ---
 
@@ -1986,7 +1988,7 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Plan `schemaVersion` | `3` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/core/ir/schema.ts#L58) |
 | Grounding `schemaVersion` | `1` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/core/ir/schema.ts#L65) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.5` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L42) |
+| Report `schemaVersion` | `3.6` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L42) |
 
 ## Reading order {#reading-order}
 
@@ -2686,6 +2688,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 | report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L30) | Report consumers MUST accept the current `3.4` contract, including the optional `BROWSER_LAUNCH_FAILED` details branch, rather than infer compatibility from the Plan version. [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L30) |
 | Plan v2 → v3 removes secret-grant provenance | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/core/ir/schema.ts#L674) | Producers and consumers MUST reject v2 and regenerate or report it stale; they MUST NOT migrate it in place. [src/core/ir/schema.ts:49](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/core/ir/schema.ts#L49) |
 | report 3.4 → 3.5 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L42) | Report consumers MUST accept the current `3.5` contract, including the three new secret-policy error codes (`SECRET_ENV_VAR_COLLISION`, `SECRET_CONSENT_REQUIRED`, `SECRET_SYNTAX_REJECTED`), the optional `GROUNDING_UNRESOLVED` details branch (`stepId`, `reason`), and the optional `GenerateResult.secrets`/`warnings` fields, rather than infer compatibility from the Plan version. [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L42) |
+| report 3.5 → 3.6 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L42) | Report consumers MUST accept the current `3.6` contract, including the optional `repairTrace` diagnostic field on all four completed heal-result branches. It projects each case's Stage 1, Stage 2, and Stage 3 attempt-and-outcome history (issue #383 / SPEC-9 through SPEC-12), rather than infer compatibility from the Plan version. [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.5.0/src/report/schema.ts#L42) |
 
 ## Compatibility policy {#compatibility-policy}
 

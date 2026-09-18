@@ -1,7 +1,8 @@
 import type { AmbercastError } from '#core/errors/types.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import type { FsIoError } from '#core/errors/fs-io-error.js';
-import type { StepResult } from '#report/schema.js';
+import { reportError } from '#report/error-mapping.js';
+import type { RepairTraceEntry, StepResult } from '#report/schema.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { RunCaseOutcome, RunDeps } from './run.js';
 import { run, validateTrustedInstructionCoveredPlanText } from './run.js';
@@ -206,6 +207,17 @@ export interface HealCaseOutcome {
 
   /** Classified failure attached to the replay supplying the retained evidence. */
   readonly finalReplayError: AmbercastError | undefined;
+
+  /**
+   * Ordered Stage 1/2/3 attempt-and-outcome entries recorded during this case's repair loop.
+   *
+   * Unlike the mode-independent measured fields, this diagnostic evidence lets
+   * a report alone explain a `--dry-run` versus `--yes` divergence. The
+   * producer will always populate it, including an empty array for
+   * `no-changes-needed`, while the report schema remains optional to tolerate
+   * external and legacy input.
+   */
+  readonly repairTrace: readonly RepairTraceEntry[];
 }
 
 /**
@@ -685,6 +697,18 @@ async function preflightCase(
   throw new FsIoErrorClass('The grounding artifact is not valid and current.');
 }
 
+/** The narrow outcome vocabulary a completed (non-interrupted) Stage 1 attempt reaches, per the return site that produced it. */
+type GroundingRepairOutcome = 'accepted' | 'no-advance' | 'not-eligible';
+
+/**
+ * `tryGroundingRepair`'s return shape uses a two-member discriminated union so
+ * the interrupted/outcome correlation is enforced by the type system instead
+ * of an optional field plus a non-null assertion at the call site.
+ */
+type GroundingRepairResult =
+  | { readonly measurement: Extract<ReplayMeasurement, { interrupted: true }>; readonly outcome: undefined }
+  | { readonly measurement: Extract<ReplayMeasurement, { interrupted: false }>; readonly outcome: GroundingRepairOutcome };
+
 /**
  * Attempts the shared Stage 1 recovery selected by the failing step kind.
  *
@@ -697,6 +721,13 @@ async function preflightCase(
  * the frontier, including an interruption, restores that snapshot so
  * speculative cache and grounding writes cannot influence the following
  * tail-repair decision.
+ *
+ * `GroundingRepairResult` derives its completed outcome from this function's
+ * return site: a baseline return for an out-of-range frontier, no recovery
+ * mode, or an ineligible AI retrace is `not-eligible`; a non-advancing
+ * replay is `no-advance`; and a new measurement is `accepted`. An
+ * interrupted measurement remains paired with no outcome, matching the
+ * union's interrupted member.
  */
 async function tryGroundingRepair(
   deps: HealDeps,
@@ -707,11 +738,11 @@ async function tryGroundingRepair(
   plan: TrustedPlan,
   baseline: ReplayMeasurement & { readonly interrupted: false },
   nextAttemptOrdinal: () => number,
-): Promise<ReplayMeasurement> {
-  if (baseline.firstFailureIndex < 0 || baseline.firstFailureIndex >= plan.steps.length) return baseline;
+): Promise<GroundingRepairResult> {
+  if (baseline.firstFailureIndex < 0 || baseline.firstFailureIndex >= plan.steps.length) return { measurement: baseline, outcome: 'not-eligible' };
   const failingStep = plan.steps[baseline.firstFailureIndex]!;
   const mode = groundingRecoveryModeForStep(failingStep);
-  if (mode === 'none') return baseline;
+  if (mode === 'none') return { measurement: baseline, outcome: 'not-eligible' };
 
   const grounding = JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')) as GroundingDocument;
   const entry = grounding.entries[failingStep.id];
@@ -720,7 +751,7 @@ async function tryGroundingRepair(
     // The shape check only limits Stage 1 work; executeAiStep repeats the full
     // safety scan before it can replay or send a trace to a provider.
     const eligible = entry === undefined || entry.kind !== 'ai' || isLegacyShapedTrace(entry.trace);
-    if (!eligible) return baseline;
+    if (!eligible) return { measurement: baseline, outcome: 'not-eligible' };
   }
 
   const snapshot = overlay.snapshot();
@@ -733,9 +764,9 @@ async function tryGroundingRepair(
   const measurement = await measureReplay(deps, options, file, overlay, plan, true, nextAttemptOrdinal());
   if (measurement.interrupted || measurement.firstFailureIndex <= baseline.firstFailureIndex) {
     overlay.restore(snapshot);
-    return measurement.interrupted ? measurement : baseline;
+    return measurement.interrupted ? { measurement, outcome: undefined } : { measurement: baseline, outcome: 'no-advance' };
   }
-  return measurement;
+  return { measurement, outcome: 'accepted' };
 }
 
 /**
@@ -1052,6 +1083,9 @@ async function tryFullPlanRepair(
  *
  * Full regeneration deliberately receives a binary pass rule because its new
  * step sequence has no stable index correspondence with the baseline plan.
+ * The `repairTrace` parameter preserves SPEC-10b's emission order: this
+ * function neither reorders, filters, nor otherwise transforms the case's
+ * accumulated trace, because the report exposes that exact array.
  */
 function caseOutcome(
   file: string,
@@ -1063,6 +1097,7 @@ function caseOutcome(
   fullPlanReplayed: boolean,
   stopReason: HealCaseOutcome['stopReason'],
   aiCalls: number,
+  repairTrace: readonly RepairTraceEntry[],
 ): HealCaseOutcome {
   const repairOutcome = fullPlanReplayed
     ? (measurement.firstFailureIndex === plan.steps.length ? 'healed' : 'unresolved')
@@ -1087,6 +1122,7 @@ function caseOutcome(
     stopReason,
     stage3Error,
     finalReplayError: measurement.replay.error,
+    repairTrace,
   };
 }
 
@@ -1185,6 +1221,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
   let stage3Required = baselineFirstFailureIndex !== plan.steps.length;
   const visitedFrontiers = new Set<number>();
   const repairHistory: RepairHistoryEntry[] = [];
+  const repairTrace: RepairTraceEntry[] = [];
 
   repairLoop: while (stage3Required && stopReason === 'settled') {
     if (measurement.firstFailureIndex === plan.steps.length) {
@@ -1212,9 +1249,15 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
       }
       case 'completed': {
         if (!stage1.result.ok) throw stage1.result.error;
-        const stage1Measurement = stage1.result.value;
-        if (stage1Measurement.interrupted) return stage1Measurement;
-        measurement = stage1Measurement;
+        // The result's literal `outcome === undefined` narrows its two-member
+        // union (equivalently, its measurement is interrupted) and drives
+        // this early return. After that return, the already-narrowed outcome
+        // is recorded once with the frontier step id, so no assertion can
+        // disconnect an entry from its result.
+        const stage1Result = stage1.result.value;
+        if (stage1Result.outcome === undefined) return stage1Result.measurement;
+        measurement = stage1Result.measurement;
+        repairTrace.push({ stage: 'stage1', stepId: plan.steps[frontier]!.id, outcome: stage1Result.outcome });
         break;
       }
       default: {
@@ -1252,7 +1295,17 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
       }
     }
     if (repaired.kind === 'interrupted') return { interrupted: true };
-    if (repaired.kind === 'rejected') break;
+    // An interruption emits no entry because it has no completed repair result
+    // to describe, matching `reject()`'s re-classification of an aborted
+    // rejection. The rejected entry, including its reason, is recorded with
+    // `beforePlan.steps[frontier]!.id` before this break; the accepted entry
+    // is recorded with the same id before the new plan proceeds, preserving
+    // emission before each corresponding control effect.
+    if (repaired.kind === 'rejected') {
+      repairTrace.push({ stage: 'stage2', stepId: beforePlan.steps[frontier]!.id, outcome: 'rejected', reason: repaired.reason });
+      break;
+    }
+    repairTrace.push({ stage: 'stage2', stepId: beforePlan.steps[frontier]!.id, outcome: 'accepted' });
     plan = repaired.plan;
     if (repaired.measurement.interrupted) return { interrupted: true };
     measurement = repaired.measurement;
@@ -1295,6 +1348,11 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
             }
             case 'secret-set-rejected': {
               overlay.restore(bestSnapshot);
+              // This immediate outcome literal appends the sole
+              // `{ stage: 'stage3', outcome: 'secret-set-rejected' }` entry to
+              // its `repairTrace` field by spreading the full accumulated
+              // Stage 1/2 history first. It is never pushed onto the shared
+              // array, so exactly one entry is added without dropping history.
               const outcome = {
                 id: file,
                 file,
@@ -1310,24 +1368,35 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
                 stage3Error: undefined,
                 stage3Rejection: full.stage3Rejection,
                 finalReplayError: bestMeasurement.replay.error,
+                repairTrace: [...repairTrace, { stage: 'stage3' as const, outcome: 'secret-set-rejected' as const }],
               };
               return { interrupted: false, outcome, commit: undefined };
             }
             case 'failed': {
+              // The shared trace appends `{ stage: 'stage3', outcome: 'failed' }`
+              // here, adding a code derived through `reportError` only when
+              // this error exists.
               stage3Error = full.stage3Error;
+              const code = full.stage3Error === undefined ? undefined : reportError(full.stage3Error, { scope: 'case', caseId: file }).code;
+              repairTrace.push({ stage: 'stage3', outcome: 'failed', ...(code === undefined ? {} : { code }) });
               overlay.restore(bestSnapshot);
               plan = bestPlan;
               measurement = bestMeasurement;
               break;
             }
             case 'replayed': {
+              // The `{ stage: 'stage3' }` trace reuses this pass equality: a
+              // pass records `accepted`, otherwise `not-passing` retains the
+              // unrounded failure index, including -1.
               if (full.measurement.firstFailureIndex === full.plan.steps.length) {
+                repairTrace.push({ stage: 'stage3', outcome: 'accepted' });
                 plan = full.plan;
                 measurement = full.measurement;
                 repairKind = 'full-plan';
                 fullPlanReplayed = true;
                 stopReason = 'settled';
               } else {
+                repairTrace.push({ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: full.measurement.firstFailureIndex });
                 overlay.restore(bestSnapshot);
                 plan = bestPlan;
                 measurement = bestMeasurement;
@@ -1356,6 +1425,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
     fullPlanReplayed,
     stopReason,
     budget.aiCalls,
+    repairTrace,
   );
   const commit = outcome.stage3Rejection === undefined && (outcome.repairOutcome === 'healed' || outcome.repairOutcome === 'partially-healed') && overlay.hasBufferedWrites()
     ? commitFor(file, planFile, overlay, repairKind ?? 'grounding-element')

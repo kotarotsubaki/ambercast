@@ -9,7 +9,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.5` |
+| `schemaVersion` | リテラル `3.6` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -76,6 +76,10 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 Stage 3 が論理シークレット名セットの変更を理由に完全な Plan 候補を拒否した場合、完了結果は `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }` となります。これはハード拒否です。アーティファクトはコミットされず、候補を黙って再帰属させるのではなく、ユーザーは同意を得て再生成する必要があります。
 
+すべての completed ブランチには、ケースごとの Stage 1、Stage 2、Stage 3 の試行と結果を順序どおりに投影する診断配列 `repairTrace` を任意で含められます。Stage 1 のエントリは `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`、Stage 2 のエントリは `{ stage: "stage2", stepId, outcome: "accepted" }` または `{ stage: "stage2", stepId, outcome: "rejected", reason }`（`reason` は `provider-error`、`response-shape`、`id-mismatch`、`secret-name-invalid`、`coverage-invalid`、`obligation-mismatch`、`literal-secret`、`no-advance` のいずれか）、Stage 3 のエントリは `{ stage: "stage3", outcome: "accepted" }`、`{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`、`{ stage: "stage3", outcome: "failed", code? }`、または `{ stage: "stage3", outcome: "secret-set-rejected" }` です。各エントリは厳格であり、別の stage や outcome に属するフィールドは許可されません。
+
+admission-denied フェーズは `repairTrace` エントリを追加しません。そのケースの `stopReason: "attempt-limit" | "deadline"` としてのみ表れます。中断（interrupted）された作業は completed 結果に一切到達せず、代わりに `skipped` として報告されるため、`repairTrace` エントリも `stopReason` も持ちません。
+
 ## 結果ステータスと共通構造 {#result-statuses}
 
 ステップおよび review 結果で共有される構造です。
@@ -128,19 +132,19 @@ Stage 3 が論理シークレット名セットの変更を理由に完全な Pl
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
 ```json
-{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.6","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.5","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.6","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.5","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.5","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}

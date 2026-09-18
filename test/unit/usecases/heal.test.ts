@@ -4283,3 +4283,239 @@ describe('heal interruption contract', () => {
     }
   });
 });
+
+describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
+  it('keeps every measured HealCaseOutcome field except durationMs mode-independent across fresh dry-run and apply fixtures', async () => {
+    const buildFixture = () => ({
+      sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT)]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
+        ? { data: { confirmed: true }, raw: '{}' }
+        : { data: { steps: [{ id: 'click-submit', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const dryRunScenario = await createScenario(buildFixture());
+    const applyScenario = await createScenario(buildFixture());
+
+    const [dryRun, apply] = await Promise.all([
+      heal(dryRunScenario.deps, { ...OPTIONS, dryRun: true }),
+      heal(applyScenario.deps, { ...OPTIONS, dryRun: false, yes: true }),
+    ]);
+    const withoutDuration = ({ durationMs: _durationMs, ...result }: typeof dryRun.outcome.results[number]) => result;
+
+    const dryRunTrace = dryRun.outcome.results[0]?.repairTrace;
+    expect(dryRunTrace).toBeDefined();
+    expect(dryRunTrace!.length).toBeGreaterThan(0);
+    expect(dryRun.outcome.results.map(withoutDuration)).toEqual(apply.outcome.results.map(withoutDuration));
+  });
+
+  it.each([
+    ['accepted', async () => {
+      let replay = 0;
+      return createScenario({
+        browserDriver: vi.fn(() => createFakeBrowserDriver(() => {
+          const entries = replay++ === 2 ? liveEntries(SUBMIT) : new Map();
+          return createFakeBrowserSession(entries, {
+            baseUrl: TARGETS.web.baseUrl,
+            currentUrl: TARGETS.web.baseUrl,
+            snapshot: healSnapshot(entries),
+          });
+        })),
+      });
+    }, { stage: 'stage1', stepId: 'click-submit', outcome: 'accepted' }],
+    ['no-advance', async () => createScenario(), { stage: 'stage1', stepId: 'click-submit', outcome: 'no-advance' }],
+    ['not-eligible', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {} }), { stage: 'stage1', stepId: 'repair-me', outcome: 'not-eligible' }],
+  ] as const)('records Stage 1 %s from its return-site outcome', async (_outcome, create, entry) => {
+    const scenario = await create();
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([entry]));
+  });
+
+  it.each([
+    ['provider-error', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {} }), (scenario: HealScenario) => ({ ...scenario.deps, resolveAiExecutor: vi.fn(async () => { throw new AiExecutorUnavailableError('Unavailable.'); }) })],
+    ['response-shape', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [], ambiguities: [] }, raw: '{}' }) }) }), (scenario: HealScenario) => scenario.deps],
+    ['id-mismatch', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/healed' }], ambiguities: [] }, raw: '{}' }) }) }), (scenario: HealScenario) => scenario.deps],
+    ['secret-name-invalid', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'fill-secret', target: SUBMIT, secretRef: '{{secrets.password}}' })], grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'repair-me', kind: 'action', action: 'fill-secret', target: PASSWORD, secret: { allowedName: 'not_projected' } }], ambiguities: [] }, raw: '{}' }) }) }), (scenario: HealScenario) => scenario.deps],
+    ['coverage-invalid', async () => createScenario({ prompt: PROMPT, steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'repair-me', kind: 'ai', instruction: 'Reach the dashboard.', instructionCoverage: [{ id: 'dashboard', kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 2, [GENERATED_INSTRUCTION_TEXT_FIELD]: 'not present in the prompt' }], verificationIntent: [{ criterionId: 'dashboard', assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' } }] }], ambiguities: [] }, raw: '{}' }) }) }), (scenario: HealScenario) => scenario.deps],
+    ['obligation-mismatch', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'repair-me', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [] }, raw: '{}' }) }) }), (scenario: HealScenario) => scenario.deps],
+    ['literal-secret', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'repair-me', kind: 'action', action: 'navigate', url: 'sk-abcdefghijklmnopqrstuvwxyz0123456789' }], ambiguities: [] }, raw: '{}' }) }) }), (scenario: HealScenario) => scenario.deps],
+    ['no-advance', async () => createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'repair-me', kind: 'action', action: 'navigate', url: 'http://[' }], ambiguities: [] }, raw: '{}' }) }) }), (scenario: HealScenario) => scenario.deps],
+  ] satisfies readonly [StageTwoRejectionReason, () => Promise<HealScenario>, (scenario: HealScenario) => HealDeps][])('records rejected Stage 2 reason %s', async (reason, create, depsFor) => {
+    const scenario = await create();
+    const result = await heal(depsFor(scenario), OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason }]));
+  });
+
+  it('records an accepted Stage 2 repair before proceeding', async () => {
+    const scenario = await createScenario({
+      sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT)]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
+        ? { data: { confirmed: true }, raw: '{}' }
+        : { data: { steps: [{ id: 'click-submit', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'click-submit', outcome: 'accepted' }]));
+  });
+
+  it('records Stage 3 accepted, not-passing, failed with and without a code, and secret-set-rejected outcomes', async () => {
+    const accepted = await createScenario({
+      steps: [
+        Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }),
+        Step.parse({ id: 'still-broken', kind: 'action', action: 'click', target: AFTER_SUBMIT }),
+      ],
+      grounding: {},
+      sessionEntries: new Map([
+        [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+        ...liveEntries(REPAIRED_SUBMIT),
+      ]),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: request.prompt.startsWith('Confirm whether')
+        ? { confirmed: true }
+        : stage2Frontier(request) === undefined
+          ? { steps: [{ id: 'regenerated-submit', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [] }
+          : { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] }, raw: '{}' }) }),
+    });
+    const failedWithoutCode = await createScenario({ grounding: {} });
+    const failedWithCode = await createScenario({ grounding: {} });
+    const secretSetRejected = await createScenario({
+      steps: [Step.parse({ id: 'broken', kind: 'action', action: 'navigate', url: 'http://[' }), Step.parse({ id: 'retained', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.password}}' })], grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: stage2Frontier(request) === undefined
+        ? { steps: [{ id: 'candidate', kind: 'action', action: 'fill-secret', target: PASSWORD, secret: { allowedName: 'other' } }], ambiguities: [] }
+        : { steps: [{ id: 'wrong-id', kind: 'action', action: 'navigate', url: '/ignored' }], ambiguities: [] }, raw: '{}' }) }),
+    });
+    generateRunObserver.afterGenerate = (outcome) => { (outcome as unknown as { results: Array<{ status: string; error?: Error }> }).results[0] = { status: 'failed' }; };
+    const withoutCodeResult = await heal(failedWithoutCode.deps, OPTIONS);
+    generateRunObserver.afterGenerate = (outcome) => { (outcome as unknown as { results: Array<{ status: string; error?: Error }> }).results[0] = { status: 'failed', error: new AiExecutorUnavailableError('offline') }; };
+    const withCodeResult = await heal(failedWithCode.deps, OPTIONS);
+    generateRunObserver.afterGenerate = undefined;
+    const [acceptedResult, secretSetRejectedResult] = await Promise.all([heal(accepted.deps, OPTIONS), heal({ ...secretSetRejected.deps, config: { ...secretSetRejected.deps.config, secrets: { allow: ['other', 'password'] } } }, OPTIONS)]);
+    const withoutCode = withoutCodeResult.outcome.results[0]?.repairTrace?.find((entry) => entry.stage === 'stage3' && entry.outcome === 'failed');
+    const withCode = withCodeResult.outcome.results[0]?.repairTrace?.find((entry) => entry.stage === 'stage3' && entry.outcome === 'failed');
+
+    expect(withCode).toEqual({ stage: 'stage3', outcome: 'failed', code: 'AI_EXECUTOR_UNAVAILABLE' });
+    expect(acceptedResult.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'accepted' }]));
+    expect(withoutCode).toEqual({ stage: 'stage3', outcome: 'failed' });
+    expect(secretSetRejectedResult.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'secret-set-rejected' }]));
+  });
+
+  it('records a Stage 3 not-passing replay index, including the -1 boundary', async () => {
+    const scenario = await createScenario({
+      grounding: {},
+      sessionEntries: liveEntries(REPAIRED_SUBMIT),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
+        data: stage2Frontier(request) === undefined
+          ? { steps: [{ id: 'regenerated-submit', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [] }
+          : { steps: [{ id: 'wrong-id', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [] },
+        raw: '{}',
+      }) }),
+    });
+    replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
+      if (options.resolve === true && outcome.results[0] !== undefined) {
+        (outcome.results[0] as { result: { steps: Array<{ status: string }> } }).result.steps.splice(0);
+      }
+    };
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: -1 }]));
+  });
+
+  it('uses an empty trace for no-changes-needed and deadline admission denial', async () => {
+    const noChanges = await createScenario({ sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: true, currentFingerprint: FINGERPRINT }]]) });
+    const denied = await createScenario();
+    const [noChangesResult, deniedResult] = await Promise.all([
+      heal(noChanges.deps, OPTIONS),
+      heal({ ...denied.deps, clock: { now: () => new Date(), monotonicMs: vi.fn().mockReturnValueOnce(0).mockReturnValue(2) }, config: { ...denied.deps.config, heal: { caseTimeoutMs: 1 } } }, OPTIONS),
+    ]);
+
+    expect(noChangesResult.outcome.results[0]?.repairTrace).toEqual([]);
+    expect(deniedResult.outcome.results[0]).toMatchObject({ stopReason: 'deadline' });
+    expect(deniedResult.outcome.results[0]?.repairTrace).toEqual([]);
+  });
+
+  it('interrupts after the first completed repair without attempting the second frontier', async () => {
+    const controller = new AbortController();
+    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => request.prompt.startsWith('Confirm whether')
+      ? { data: { confirmed: true }, raw: '{}' }
+      : { data: { steps: stage2Frontier(request)?.index === 0
+        ? [{ id: 'click-submit', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }]
+        : [{ id: 'click-after', kind: 'action', action: 'click', target: REPAIRED_AFTER_SUBMIT }], ambiguities: [] }, raw: '{}' });
+    const scenario = await createScenario({
+      signal: controller.signal,
+      steps: [Step.parse({ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }), Step.parse({ id: 'click-after', kind: 'action', action: 'click', target: AFTER_SUBMIT })],
+      sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT, REPAIRED_AFTER_SUBMIT)]),
+      aiExecutor: createFakeAiExecutor({ execute }),
+    });
+    let resolvedReplays = 0;
+    replayRunObserver.afterRun = (_deps, _storage, options) => {
+      if (options.resolve !== true) return;
+      resolvedReplays += 1;
+      if (resolvedReplays === 3) controller.abort();
+    };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome).toMatchObject({ interrupted: true, results: [], skipped: [{ file: OPTIONS.files[0] }] });
+    expect(execute.mock.calls.filter(([request]) => stage2Frontier(request)?.index === 0)).toHaveLength(1);
+    expect(execute.mock.calls.filter(([request]) => stage2Frontier(request)?.index === 1)).toHaveLength(0);
+  });
+
+  it('omits only the attempt-limit-denied Stage 2 entry while retaining non-chargeable and Stage 3 entries', async () => {
+    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
+      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (stage2Frontier(request)?.index === 0) return { data: { steps: [{ id: 'click-submit', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }], ambiguities: [] }, raw: '{}' };
+      throw new Error('Stage 3 remains unresolved.');
+    });
+    const candidateEntries = new Map([
+      [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+      [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+      ...liveEntries(REPAIRED_SUBMIT),
+    ]);
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }), Step.parse({ id: 'click-after', kind: 'action', action: 'click', target: AFTER_SUBMIT })],
+      sessionEntries: candidateEntries,
+      aiExecutor: createFakeAiExecutor({ execute }),
+    });
+    replayRunObserver.beforeRun = async (_deps, storage, options) => {
+      if (options.resolve !== true) return;
+      const plan = PlanDocument.parse(JSON.parse(await storage.readText(PLAN)));
+      const repaired = plan.steps[0];
+      if (repaired?.kind !== 'action' || repaired.action !== 'click' || elementRefKey(repaired.target) !== elementRefKey(REPAIRED_SUBMIT)) return;
+      await storage.writeText(GROUNDING, toCanonicalArtifactText({
+        schemaVersion: GROUNDING_SCHEMA_VERSION,
+        planDigest: computePlanDigest(plan),
+        entries: { 'click-submit': { kind: 'element', fingerprint: freshFingerprint(candidateEntries, REPAIRED_SUBMIT) } },
+      } as JsonValueT));
+    };
+
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 1 } } }, OPTIONS);
+
+    expect(result.outcome.results[0]).toMatchObject({ stopReason: 'attempt-limit' });
+    expect(result.outcome.results[0]?.repairTrace).toEqual([
+      { stage: 'stage1', stepId: 'click-submit', outcome: 'no-advance' },
+      { stage: 'stage2', stepId: 'click-submit', outcome: 'accepted' },
+      { stage: 'stage1', stepId: 'click-after', outcome: 'no-advance' },
+      { stage: 'stage3', outcome: 'failed', code: 'AI_EXECUTOR_UNAVAILABLE' },
+    ]);
+  });
+
+  it('preserves repair trace emission order across multiple frontiers', async () => {
+    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => request.prompt.startsWith('Confirm whether')
+      ? { data: { confirmed: true }, raw: '{}' }
+      : { data: { steps: stage2Frontier(request)?.index === 0
+        ? [{ id: 'click-submit', kind: 'action', action: 'click', target: REPAIRED_SUBMIT }]
+        : [{ id: 'click-after', kind: 'action', action: 'click', target: REPAIRED_AFTER_SUBMIT }], ambiguities: [] }, raw: '{}' });
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }), Step.parse({ id: 'click-after', kind: 'action', action: 'click', target: AFTER_SUBMIT })],
+      sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT, REPAIRED_AFTER_SUBMIT)]),
+      aiExecutor: createFakeAiExecutor({ execute }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual([
+      { stage: 'stage1', stepId: 'click-submit', outcome: 'no-advance' },
+      { stage: 'stage2', stepId: 'click-submit', outcome: 'accepted' },
+      { stage: 'stage1', stepId: 'click-after', outcome: 'no-advance' },
+      { stage: 'stage2', stepId: 'click-after', outcome: 'accepted' },
+    ]);
+  });
+});

@@ -9,7 +9,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.5` |
+| `schemaVersion` | 字面量 `3.6` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -74,6 +74,10 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 当 Stage 3 因逻辑机密名称集合变化而拒绝完整 Plan 候选项时，完成的结果为 `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`。这是硬拒绝：不会提交任何工件，用户必须在获得同意后重新生成，而不能悄然重新归属候选项。
 
+所有 completed 分支还可以包含可选的诊断数组 `repairTrace`，它按顺序投影该案例的 Stage 1、Stage 2 和 Stage 3 尝试及结果。Stage 1 条目为 `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`；Stage 2 条目为 `{ stage: "stage2", stepId, outcome: "accepted" }` 或 `{ stage: "stage2", stepId, outcome: "rejected", reason }`（`reason` 为以下之一：`provider-error`、`response-shape`、`id-mismatch`、`secret-name-invalid`、`coverage-invalid`、`obligation-mismatch`、`literal-secret`、`no-advance`）；Stage 3 条目为 `{ stage: "stage3", outcome: "accepted" }`、`{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`、`{ stage: "stage3", outcome: "failed", code? }` 或 `{ stage: "stage3", outcome: "secret-set-rejected" }`。每个条目都采用严格结构，不允许属于其他 stage 或 outcome 的字段。
+
+admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的 `stopReason: "attempt-limit" | "deadline"` 体现。被中断（interrupted）的工作完全不会产生 completed 结果，而是报告为 `skipped`，因此既没有 `repairTrace` 条目，也没有 `stopReason`。
+
 ## 结果状态 {#result-statuses}
 
 共享的步骤（step）与审查（review）结果结构。
@@ -125,16 +129,16 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
 ```json
-{"schemaVersion":"3.5","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.6","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.6","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.5","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.5","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.6","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}

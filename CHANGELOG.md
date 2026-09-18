@@ -5,7 +5,7 @@
 
 ### ⚠ BREAKING CHANGES
 
-* **mcp:** add schema-mismatch feedback and rejection counter to agentic MCP tools ([#384](https://github.com/kotarotsubaki/ambercast/issues/384))
+* **mcp:** Agentic MCP tool calls that fail schema validation no longer latch `INTEGRITY_VIOLATION` on the first mismatch: up to 3 consecutive rejections per case return a structured result with the remaining budget, and the 4th settles `AiResponseInvalidError`. The terminal error is reclassified from exit code 4 (integrity) to exit code 3 (environment): `report.kind` changes from `usage` to `environment` and `code` from `INTEGRITY_VIOLATION` to `AI_RESPONSE_INVALID`. `REPORT_SCHEMA_VERSION` is unchanged by this change ([#384](https://github.com/kotarotsubaki/ambercast/issues/384))
 
 ### Features
 

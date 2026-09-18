@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/kotarotsubaki/ambercast/compare/v0.5.0...v0.6.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** Agentic MCP tool calls that fail schema validation no longer latch `INTEGRITY_VIOLATION` on the first mismatch: up to 3 consecutive rejections per case return a structured result with the remaining budget, and the 4th settles `AiResponseInvalidError`. The terminal error is reclassified from exit code 4 (integrity) to exit code 3 (environment): `report.kind` changes from `usage` to `environment` and `code` from `INTEGRITY_VIOLATION` to `AI_RESPONSE_INVALID`. `REPORT_SCHEMA_VERSION` is unchanged by this change ([#384](https://github.com/kotarotsubaki/ambercast/issues/384))
+
+### Features
+
+* **heal:** expose repairTrace diagnostics and pin dry-run/apply invariance ([#387](https://github.com/kotarotsubaki/ambercast/issues/387)) ([d59d0aa](https://github.com/kotarotsubaki/ambercast/commit/d59d0aa3ed42035a83310bee8a39b57f77cb1d25))
+* **mcp:** add schema-mismatch feedback and rejection counter to agentic MCP tools ([#384](https://github.com/kotarotsubaki/ambercast/issues/384)) ([894cbc6](https://github.com/kotarotsubaki/ambercast/commit/894cbc61b07bc5a5fa434b026dca2192d4a38e10))
+* **run:** wait for element presence before resolution ([#386](https://github.com/kotarotsubaki/ambercast/issues/386)) ([670b1c9](https://github.com/kotarotsubaki/ambercast/commit/670b1c92540b5332ea823357fb486f33a2081f65))
+
 ## [0.5.0](https://github.com/kotarotsubaki/ambercast/compare/v0.4.0...v0.5.0) (2026-09-15)
 
 

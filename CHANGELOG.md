@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/kotarotsubaki/ambercast/compare/v0.5.0...v0.6.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** add schema-mismatch feedback and rejection counter to agentic MCP tools ([#384](https://github.com/kotarotsubaki/ambercast/issues/384))
+
+### Features
+
+* **heal:** expose repairTrace diagnostics and pin dry-run/apply invariance ([#387](https://github.com/kotarotsubaki/ambercast/issues/387)) ([d59d0aa](https://github.com/kotarotsubaki/ambercast/commit/d59d0aa3ed42035a83310bee8a39b57f77cb1d25))
+* **mcp:** add schema-mismatch feedback and rejection counter to agentic MCP tools ([#384](https://github.com/kotarotsubaki/ambercast/issues/384)) ([894cbc6](https://github.com/kotarotsubaki/ambercast/commit/894cbc61b07bc5a5fa434b026dca2192d4a38e10))
+* **run:** wait for element presence before resolution ([#386](https://github.com/kotarotsubaki/ambercast/issues/386)) ([670b1c9](https://github.com/kotarotsubaki/ambercast/commit/670b1c92540b5332ea823357fb486f33a2081f65))
+
 ## [0.5.0](https://github.com/kotarotsubaki/ambercast/compare/v0.4.0...v0.5.0) (2026-09-15)
 
 

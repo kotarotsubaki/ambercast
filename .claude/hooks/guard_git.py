@@ -11,34 +11,43 @@ Rejected: issues/12-, issues/12--a, issues/12-A, unicode digits.
 
 Everything else passes through (exit 0). Runs outside a work tree -> no-op.
 
-Directory resolution deliberately selects the first available trusted
-execution-context value (`data["cwd"]`, then `CLAUDE_PROJECT_DIR`, then the
-hook process's own cwd); it never derives a directory from shell command text.
-The hook still reads command text separately, elsewhere, to classify commit,
-push, and branch-switch operations -- but no command shape, a `-C <path>` flag,
-a leading `cd`, or anything else, changes which directory this resolution
-picks. Parsing command text cannot safely reproduce the combined Git and shell
-grammars, so using a command-derived path for resolution would create a bypass
-surface.
+Directory resolution starts with the first available trusted execution-context
+value (`data["cwd"]`, then `CLAUDE_PROJECT_DIR`, then the hook process's own
+cwd). An explicit worktree supersedes that tier only when the entire raw command
+has this grammar: optional leading spaces/tabs; `git`; one or more spaces/tabs;
+`-C`; zero or more spaces/tabs (so attached `-C/path` is allowed); an absolute
+plain path; one or more spaces/tabs; `commit` or `push`; zero or more plain
+arguments separated by one or more spaces/tabs; optional trailing spaces/tabs;
+and nothing else. Plain characters contain no whitespace of any kind and none
+of `'`, `"`, backticks, `\\`, `$`, `;`, `|`, `&`, `<`, `>`, `(`, `)`, `{`, `}`,
+`*`, `?`, `[`, `]`, `#`, `~`, or `!`. For example, `git -C /worktree commit -F
+/absolute/message.txt` and `git -C /worktree push -u origin issues/58` qualify.
+For a non-ambiguous commit or push, inherited repository-routing `GIT_*`
+environment blocks the operation and reports the trusted tier with an
+environment-refused branch. There are three kinds of Git probe: a trusted
+repository porcelain listing, candidate identity probes, and the branch probe.
+The candidate is used only after `git -C <trusted dir> worktree list
+--porcelain` proves that its realpath is a registered worktree of the trusted
+repository. Its identity probes then require its `--show-toplevel` result to be
+that realpath and its `--git-common-dir` to match the trusted directory's common
+dir. A registered candidate is promoted or blocked, never demoted to the
+trusted tier. The registered main worktree is included deliberately, so a
+command explicitly aimed at main remains blocked by the normal branch check.
+Probe environments remove repository-routing variables but retain
+`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, and `GIT_CONFIG_NOSYSTEM`.
 
-This does mean resolution cannot recover once its selected value is itself
-wrong. A missing directory, or one outside a Git worktree, is still observable:
-the branch probe below fails and the hook fails open. A directory that is
-merely the *wrong* checkout -- the main checkout, or another session's
-still-existing linked worktree -- is not: it is indistinguishable from the
-intended checkout using only execution-context signals, since both are real,
-valid checkouts of this repository. In that situation the branch check below
-runs against the wrong checkout, and a command's `-C` cannot correct it: `-C`
-only changes where *git* itself acts, never which directory the guard
-evaluates. That asymmetry cuts both ways -- it can produce a false-positive
-block on a correctly-checked-out directory, and, inversely, it can let the
-guard approve a command whose `-C` (or shell cwd) actually targets a different
-checkout than the one just evaluated. The former is judged the safer failure
-mode; closing the latter would require trusting command text.
+Any deviation from that promotion form falls back to the trusted tier (and,
+when `data.cwd` is present, reports `source: data.cwd`). Command text is not
+trusted for any other directory selection: `--git-dir`, `--work-tree`, `GIT_*`,
+shell expansion, wrappers, quoting, and a second command do not promote. `cd`
+keeps the remaining asymmetry: it changes the shell's eventual working directory
+but is not a verified Git worktree target, so the hook continues to evaluate the
+trusted execution-context tier.
 
-Every block reports that trusted directory, its source tier, and the observed
-branch so the affected teammate can hand off a single verified report instead
-of retrying a command whose context cannot change. Command classification is
+Every block reports the directory actually evaluated (the trusted tier or the
+promoted candidate), its source tier, and either the observed branch or an
+explicit `unavailable (...)` refusal state, so the affected teammate can hand
+off a single verified report instead of retrying. Command classification is
 separate from this resolution: a command-position lexer identifies actual Git
 operations, while quoted prose remains data rather than an invocation. A
 Git-bearing command whose shell grammar is too complex for that deliberately
@@ -70,14 +79,19 @@ named `git`) is also blocked. Both trade detection precision for closing a
 real bypass, consistent with this guard's bias toward over-blocking over
 silently missing an invocation.
 
-Residual bypasses that remain out of scope even with opaque-wrapper
-detection: shell functions and aliases that rename or wrap `git`, string-
-concatenation obfuscation of the literal `git` (e.g. `g""it`, `${x}git`),
-and `-C`/`--git-dir` pointing at a different repository -- the last one is a
-deliberate, unrevisited decision, not an oversight (see the resolution
-asymmetry discussed above). This hook is a best-effort lexer, not a security
-boundary: the actual enforcement is GitHub branch protection (pull request
-required, conversations resolved, force-push disabled).
+Residual bypasses that remain out of scope even with opaque-wrapper detection:
+shell functions and aliases that rename or wrap `git`, string-concatenation
+obfuscation of the literal `git` (e.g. `g""it`, `${x}git`), and targets that
+are not registered worktrees of the trusted repository. This hook is a
+best-effort lexer, not a security boundary: the actual enforcement is GitHub
+branch protection (pull request required, conversations resolved, force-push
+disabled). An external process can also re-point a symlink or HEAD after this
+guard verifies it and before Git executes; this residual race is not closed by
+the best-effort lexer.
+
+A party that can already rewrite this worktree's `.git` file or config can also
+edit any hook, so identity verification is a consistency check, not a security
+boundary — GitHub branch protection is the enforcement.
 """
 from __future__ import annotations
 
@@ -90,6 +104,20 @@ import sys
 
 
 ASSIGNMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*", re.S)
+PROMOTION_RE = re.compile(
+    r"[ \t]*git[ \t]+-C[ \t]*(?P<candidate>/[^\s'\"`\\$;|&<>(){}*?\[\]#~!]*)"
+    r"[ \t]+(?:commit|push)(?:[ \t]+[^\s'\"`\\$;|&<>(){}*?\[\]#~!]+)*[ \t]*\Z"
+)
+REPOSITORY_ENV_NAMES = {
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_NAMESPACE",
+    "GIT_CEILING_DIRECTORIES",
+}
 STRUCTURAL_SHELL_TOKENS = {
     "(", ")", "{", "}", "if", "then", "elif", "else", "fi", "while",
     "for", "until", "case", "do", "done", "esac", "select", "function",
@@ -120,16 +148,31 @@ WRAPPER_OPTIONS_WITH_VALUE = {
 OPAQUE_WRAPPER_COMMANDS = {"xargs", "find", "timeout"}
 
 
+class RegisteredWorktreeRefused(Exception):
+    """A listed worktree failed mandatory identity verification."""
+
+    def __init__(self, reason, path):
+        super().__init__(reason, path)
+        self.reason = reason
+        self.path = path
+
+
 # The resolver returns both the chosen path and a stable source label. The
-# label is diagnostic only; accepting `-C`, `cd`, or any shell-derived path
-# here would turn a helpful message into a branch-protection bypass.
-def resolve_target_dir(data: dict) -> tuple[str, str]:
-    """Return the trusted hook directory and its established fallbacks."""
+# label is diagnostic only; a command target can supersede the trusted tier
+# only after _explicit_worktree_dir verifies it through that tier's repository.
+def resolve_target_dir(data: dict, command=None) -> tuple[str, str]:
+    """Return the trusted hook directory or a verified explicit worktree."""
     if data.get("cwd"):
-        return data["cwd"], "data.cwd"
-    if os.environ.get("CLAUDE_PROJECT_DIR"):
-        return os.environ["CLAUDE_PROJECT_DIR"], "CLAUDE_PROJECT_DIR"
-    return os.getcwd(), "process cwd"
+        trusted_dir, tier = data["cwd"], "data.cwd"
+    elif os.environ.get("CLAUDE_PROJECT_DIR"):
+        trusted_dir, tier = os.environ["CLAUDE_PROJECT_DIR"], "CLAUDE_PROJECT_DIR"
+    else:
+        trusted_dir, tier = os.getcwd(), "process cwd"
+    if isinstance(command, str) and command:
+        worktree = _explicit_worktree_dir(command, trusted_dir)
+        if worktree:
+            return worktree, "git -C (registered worktree)"
+    return trusted_dir, tier
 
 
 def _contains_git(text):
@@ -228,8 +271,8 @@ def _skip_wrapper(tokens, index):
     return index
 
 
-def _git_subcommand(tokens, index):
-    """Return Git's first non-global option, which is its subcommand."""
+def _git_invocation(tokens, index):
+    """Return one Git subcommand."""
     index += 1
     while index < len(tokens):
         token = tokens[index]
@@ -239,13 +282,22 @@ def _git_subcommand(tokens, index):
             if index + 1 < len(tokens) and not _is_operator(tokens[index + 1]):
                 return tokens[index + 1]
             return None
+        if token == "-C":
+            if index + 1 < len(tokens) and not _is_operator(tokens[index + 1]):
+                index += 2
+            else:
+                return None
+            continue
+        if token.startswith("-C"):
+            index += 1
+            continue
         if token in GIT_OPTIONS_WITH_VALUE:
             if index + 1 < len(tokens) and not _is_operator(tokens[index + 1]):
                 index += 2
             else:
                 return None
             continue
-        if token.startswith(("-c", "-C")) and token not in {"-c", "-C"}:
+        if token.startswith("-c") and token != "-c":
             index += 1
             continue
         if token.startswith((
@@ -259,6 +311,11 @@ def _git_subcommand(tokens, index):
             continue
         return token
     return None
+
+
+def _git_subcommand(tokens, index):
+    """Return Git's first non-global option, which is its subcommand."""
+    return _git_invocation(tokens, index)
 
 
 def _opaque_wrapper_may_route_git(tokens, index):
@@ -303,18 +360,18 @@ def _is_ambiguous_shell(command, tokens):
     return False
 
 
-def classify(command):
-    """Classify protected Git operations without searching quoted argument text."""
+def _git_invocations(command):
+    """Reuse the command-position lexer to report Git invocations."""
     if not _contains_git(command):
-        return False, False, False, False
+        return [], False
     try:
         tokens = _shell_tokens(command)
     except ValueError:
-        return False, False, False, True
+        return [], True
     if _is_ambiguous_shell(command, tokens):
-        return False, False, False, True
+        return [], True
 
-    commit = push = branch_switch = False
+    invocations = []
     index = 0
     command_position = True
     while index < len(tokens):
@@ -346,19 +403,139 @@ def classify(command):
             if executable in OPAQUE_WRAPPER_COMMANDS and _opaque_wrapper_may_route_git(
                 tokens, index
             ):
-                return False, False, False, True
+                return [], True
             break
         if index < len(tokens) and _is_operator(tokens[index]):
             command_position = True
             continue
         if index < len(tokens) and _is_git_executable(tokens[index]):
-            subcommand = _git_subcommand(tokens, index)
-            commit = commit or subcommand == "commit"
-            push = push or subcommand == "push"
-            branch_switch = branch_switch or subcommand in {"checkout", "switch"}
+            invocations.append(_git_invocation(tokens, index))
         command_position = False
         index += 1
+    return invocations, False
+
+
+def classify(command):
+    """Classify protected Git operations without searching quoted argument text."""
+    invocations, ambiguous = _git_invocations(command)
+    if ambiguous:
+        return False, False, False, True
+    commit = any(subcommand == "commit" for subcommand in invocations)
+    push = any(subcommand == "push" for subcommand in invocations)
+    branch_switch = any(
+        subcommand in {"checkout", "switch"}
+        for subcommand in invocations
+    )
     return commit, push, branch_switch, False
+
+
+def _is_valid_worktree_porcelain(stdout):
+    """Accept only fully parseable `git worktree list --porcelain` output."""
+    for line in stdout.splitlines():
+        if not line:
+            continue
+        if line.startswith("worktree "):
+            if not line[len("worktree "):] or line[len("worktree "):].startswith('"'):
+                return False
+        elif line.startswith("HEAD "):
+            if not re.fullmatch(r"HEAD [0-9A-Fa-f]+", line):
+                return False
+        elif line.startswith("branch "):
+            if not line[len("branch "):]:
+                return False
+        elif line in {"bare", "detached", "locked", "prunable"}:
+            continue
+        elif line.startswith("locked ") and line[len("locked "):]:
+            continue
+        elif line.startswith("prunable ") and line[len("prunable "):]:
+            continue
+        else:
+            return False
+    return True
+
+
+def _is_repository_environment_name(name):
+    return (
+        name in REPOSITORY_ENV_NAMES
+        or name in {"GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"}
+        or name.startswith("GIT_CONFIG_KEY_")
+        or name.startswith("GIT_CONFIG_VALUE_")
+    )
+
+
+def _probe_env():
+    """Return the process environment without repository-routing variables."""
+    return {
+        name: value for name, value in os.environ.items()
+        if not _is_repository_environment_name(name)
+    }
+
+
+def _inherited_repository_environment_names():
+    """Return routing variable names in a deterministic diagnostic order."""
+    return sorted(
+        name for name in os.environ if _is_repository_environment_name(name)
+    )
+
+
+def _identity_probe_path(directory, argument):
+    """Return one required rev-parse path, resolving relative output locally."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", directory, "rev-parse", argument],
+            capture_output=True, text=True, timeout=5, env=_probe_env(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    output = result.stdout.strip()
+    if result.returncode != 0 or not output:
+        return None
+    if not os.path.isabs(output):
+        output = os.path.join(directory, output)
+    return os.path.realpath(output)
+
+
+def _explicit_worktree_dir(command, trusted_dir):
+    """Return a registered worktree only for the raw promotion form."""
+    match = PROMOTION_RE.fullmatch(command)
+    if not match or _inherited_repository_environment_names():
+        return None
+    candidate = match.group("candidate")
+    try:
+        result = subprocess.run(
+            ["git", "-C", trusted_dir, "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=5, env=_probe_env(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    if not _is_valid_worktree_porcelain(result.stdout):
+        return None
+    candidate_realpath = os.path.realpath(candidate)
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            registered = line[len("worktree "):]
+            if os.path.realpath(registered) == candidate_realpath:
+                top_level = _identity_probe_path(
+                    candidate_realpath, "--show-toplevel"
+                )
+                if top_level is None:
+                    raise RegisteredWorktreeRefused("probe", candidate_realpath)
+                if top_level != candidate_realpath:
+                    raise RegisteredWorktreeRefused("toplevel", candidate_realpath)
+                candidate_common_dir = _identity_probe_path(
+                    candidate_realpath, "--git-common-dir"
+                )
+                trusted_common_dir = _identity_probe_path(
+                    trusted_dir, "--git-common-dir"
+                )
+                if candidate_common_dir is None or trusted_common_dir is None:
+                    raise RegisteredWorktreeRefused("probe", candidate_realpath)
+                if candidate_common_dir != trusted_common_dir:
+                    raise RegisteredWorktreeRefused("common-dir", candidate_realpath)
+                return candidate_realpath
+    return None
 
 
 def _block_message(reason, proj, tier, branch):
@@ -379,11 +556,33 @@ def evaluate(command: str, data: dict) -> tuple[int, str] | None:
     if not (is_commit or is_push or ambiguous):
         return None
 
-    proj, tier = resolve_target_dir(data)
+    if ambiguous:
+        proj, tier = resolve_target_dir(data)
+    else:
+        inherited_environment = _inherited_repository_environment_names()
+        if inherited_environment:
+            proj, tier = resolve_target_dir(data)
+            return 2, _block_message(
+                "repository-routing GIT_* environment is inherited "
+                f"({', '.join(inherited_environment)}); unset it and retry",
+                proj,
+                tier,
+                "unavailable (environment refused)",
+            )
+        try:
+            proj, tier = resolve_target_dir(data, command)
+        except RegisteredWorktreeRefused as refused:
+            return 2, _block_message(
+                f"registered worktree {refused.path} failed identity verification "
+                f"({refused.reason}); repair the worktree before committing or pushing",
+                refused.path,
+                "git -C (registered worktree)",
+                "unavailable (identity refused)",
+            )
     try:
         res = subprocess.run(
             ["git", "-C", proj, "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=5, env=_probe_env(),
         )
     except (OSError, subprocess.SubprocessError):
         if ambiguous:

@@ -92,5 +92,5 @@ function emitUnclassifiedRejection(
   if (!readDebugEnvironment()) return;
   const step = event.stepId === undefined ? '' : ` ${event.stepId}`;
   const stack = event.stack === undefined ? '' : `${escapeStackControlChars(event.stack)}\n`;
-  stderr.write(`unclassified rejection in ${event.file}${step}: ${event.name}: ${escapeControlChars(event.message)}\n${stack}`);
+  stderr.write(`unclassified rejection in ${escapeControlChars(event.file)}${step}: ${event.name}: ${escapeControlChars(event.message)}\n${stack}`);
 }

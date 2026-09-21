@@ -125,6 +125,19 @@ function input(overrides: Partial<RunCommandInput> = {}): RunCommandInput {
   };
 }
 
+function createRecordingStderr(): { readonly stderr: NodeJS.WritableStream; readonly output: string[] } {
+  const output: string[] = [];
+  return {
+    stderr: {
+      write(chunk: string | Uint8Array): boolean {
+        output.push(String(chunk));
+        return true;
+      },
+    } as unknown as NodeJS.WritableStream,
+    output,
+  };
+}
+
 interface FactoryCallRecorder {
   readonly mock: { readonly calls: readonly (readonly unknown[])[] };
 }
@@ -1399,5 +1412,52 @@ describe('runRunCommand', () => {
     expect(mocks.buildRunReport).toHaveBeenCalledWith(expect.objectContaining({
       error: expect.any(UnexpectedCrashError),
     }));
+  });
+
+  it('TEST-8 keeps --json stdout byte-identical with AMBERCAST_DEBUG enabled or disabled', async () => {
+    const { createStderrProgressSink } = await vi.importActual<typeof import('#adapters/system/stderr-progress-sink.js')>(
+      '#adapters/system/stderr-progress-sink.js',
+    );
+    const output = reportOutput(0);
+    const configureRun = (stderr: NodeJS.WritableStream) => {
+      const storage = createInMemoryStorage();
+      mocks.createFsStorage.mockReturnValue(storage);
+      mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
+      mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+      mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
+      mocks.createStderrProgressSink.mockImplementation(createStderrProgressSink);
+      mocks.createAmbercast.mockReturnValue({
+        storage,
+        layout: { runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') },
+        clock: createFixedClock(new Date(), 1),
+        discoverTestFiles: vi.fn(async () => []),
+      });
+      mocks.run.mockImplementation(async (deps: { readonly events: { emit(event: { readonly type: 'unclassified-rejection'; readonly file: string; readonly stepId: string; readonly name: string; readonly message: string; readonly stack: string }): void } }) => {
+        deps.events.emit({
+          type: 'unclassified-rejection',
+          file: '/workspace/tests/login.test.md',
+          stepId: 'throw-generic-error',
+          name: 'Error',
+          message: 'Plain browser error.',
+          stack: 'Error: Plain browser error.\n    at run',
+        });
+        return { results: [], noTestsFound: false, listed: [] };
+      });
+      mocks.buildRunReport.mockReturnValue(output);
+      return runRunCommand(input({ stderr }));
+    };
+
+    const withoutDebugStderr = createRecordingStderr();
+    vi.stubEnv('AMBERCAST_DEBUG', '');
+    const withoutDebug = `${JSON.stringify((await configureRun(withoutDebugStderr.stderr)).envelope)}\n`;
+    const withDebugStderr = createRecordingStderr();
+    vi.stubEnv('AMBERCAST_DEBUG', '1');
+    const withDebug = `${JSON.stringify((await configureRun(withDebugStderr.stderr)).envelope)}\n`;
+
+    expect(withDebug).toBe(withoutDebug);
+    expect(withoutDebugStderr.output).toEqual([]);
+    expect(withDebugStderr.output.join('')).toContain(
+      'unclassified rejection in /workspace/tests/login.test.md throw-generic-error: Error: Plain browser error.',
+    );
   });
 });

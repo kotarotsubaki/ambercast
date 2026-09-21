@@ -1,33 +1,9 @@
 import type { Clock, EventSink } from '#ports/system.js';
 import { relativeWithinOrOriginal } from '#core/paths.js';
+import { escapeControlChars, escapeStackControlChars } from '#adapters/system/control-chars.js';
+import { readDebugEnvironment } from '#adapters/system/process-debug-environment.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
-
-/**
- * Escapes terminal control characters without changing ordinary path bytes.
- *
- * The progress sink mirrors the CLI renderer's display-only policy locally
- * because adapters cannot depend on the CLI layer. Backslashes remain
- * readable, while C0, DEL, and C1 controls cannot inject terminal behavior.
- */
-function escapeControlChars(value: string): string {
-  let escaped = '';
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    switch (code) {
-      case 0x08: escaped += '\\b'; break;
-      case 0x09: escaped += '\\t'; break;
-      case 0x0a: escaped += '\\n'; break;
-      case 0x0c: escaped += '\\f'; break;
-      case 0x0d: escaped += '\\r'; break;
-      default:
-        escaped += code <= 0x1f || code === 0x7f || (code >= 0x80 && code <= 0x9f)
-          ? `\\u${code.toString(16).padStart(4, '0')}`
-          : value[index]!;
-    }
-  }
-  return escaped;
-}
 
 /**
  * Writes human-readable provider progress to the command's injected stderr.
@@ -66,6 +42,10 @@ export function createStderrProgressSink(params: {
   return {
     emit(event): void {
       try {
+        if (event.type === 'unclassified-rejection') {
+          emitUnclassifiedRejection(params.stderr, event);
+          return;
+        }
         if (event.type === 'ai-result') {
           clearCall(event.callId);
           return;
@@ -95,4 +75,22 @@ export function createStderrProgressSink(params: {
     },
     close,
   };
+}
+
+/**
+ * Renders an unclassified case failure only when debug diagnostics are enabled.
+ *
+ * Reading the debug environment at emission time keeps the progress sink a
+ * passive event consumer and never changes report or JSON output. The renderer
+ * escapes message and stack control characters before writing because
+ * diagnostics can originate in hostile browser or provider values.
+ */
+function emitUnclassifiedRejection(
+  stderr: NodeJS.WritableStream,
+  event: Extract<Parameters<EventSink['emit']>[0], { readonly type: 'unclassified-rejection' }>,
+): void {
+  if (!readDebugEnvironment()) return;
+  const step = event.stepId === undefined ? '' : ` ${event.stepId}`;
+  const stack = event.stack === undefined ? '' : `${escapeStackControlChars(event.stack)}\n`;
+  stderr.write(`unclassified rejection in ${event.file}${step}: ${event.name}: ${escapeControlChars(event.message)}\n${stack}`);
 }

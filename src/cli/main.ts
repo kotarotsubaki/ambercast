@@ -41,6 +41,7 @@
 import { runGenerateCommand } from '#runtime/generate-command.js';
 import { runCheckCommand } from '#runtime/check-command.js';
 import { CLI_MANIFEST, flagLookup, renderUsage } from '#runtime/cli-manifest.js';
+import { escapeControlChars, escapeStackControlChars } from '#runtime/control-chars.js';
 import { readDebugEnvironment } from '#runtime/debug-environment.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runRunCommand } from '#runtime/run-command.js';
@@ -172,58 +173,6 @@ function writeUsage(stream: NodeJS.WritableStream): void {
 
 function colorize(value: string, color: string, enabled: boolean): string {
   return enabled ? `\u001B[${color}m${value}\u001B[0m` : value;
-}
-
-/**
- * Escapes C0 controls (0x00–0x1F), DEL (0x7F), and C1 controls (0x80–0x9F)
- * into display-safe visible forms. Backspace, tab, newline, form feed, and
- * carriage return use JSON's short escapes; every other affected value uses
- * a backslash, the letter u, and four lowercase hexadecimal digits.
- *
- * A literal backslash remains unescaped to favor readability over round-trip
- * safety. This display-time transform prevents untrusted filesystem-derived
- * strings from injecting terminal control sequences and never applies to
- * `--json` output.
- *
- * Only these three ranges change; everything else passes through byte-for-byte.
- */
-function escapeControlChars(value: string): string {
-  let escaped = '';
-
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    switch (code) {
-      case 0x08:
-        escaped += '\\b';
-        break;
-      case 0x09:
-        escaped += '\\t';
-        break;
-      case 0x0a:
-        escaped += '\\n';
-        break;
-      case 0x0c:
-        escaped += '\\f';
-        break;
-      case 0x0d:
-        escaped += '\\r';
-        break;
-      default:
-        if (code <= 0x1f || code === 0x7f || (code >= 0x80 && code <= 0x9f)) {
-          escaped += '\\u' + code.toString(16).padStart(4, '0');
-        } else {
-          escaped += value[index]!;
-        }
-    }
-  }
-
-  return escaped;
-}
-
-function escapeStackControlChars(value: string): string {
-  return value.split(/(\r\n|\r|\n)/u)
-    .map((part) => part === '\r\n' || part === '\r' || part === '\n' ? part : escapeControlChars(part))
-    .join('');
 }
 
 /**

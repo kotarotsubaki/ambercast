@@ -11,6 +11,7 @@ import type {
   TracePress,
 } from '#core/ir/schema.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
+import type { GroundingMissReason } from '#core/errors/grounding-miss-reason.js';
 
 /**
  * A browser engine that a target can select for a run.
@@ -242,19 +243,17 @@ export type GroundingQuery =
       readonly resolvedSecrets: Iterable<ReadonlySet<string>>;
     };
 
+export type { GroundingMissReason } from '#core/errors/grounding-miss-reason.js';
+
 /**
- * Reasons a current page cannot safely satisfy a grounding query.
+ * Describes why a previously bound element can no longer be used.
  *
- * This is shared by the browser port's resolution result and every caller
- * that turns a miss into user-facing control flow, so adding a new reason
- * remains a single contract change.
+ * The runtime error lives in `core` because adapters and use cases need its
+ * value identity without introducing a forbidden runtime dependency on this
+ * port. This type-only re-export keeps the browser contract discoverable to
+ * callers while preserving that layering boundary.
  */
-export type GroundingMissReason =
-  | 'fingerprint-mismatch'
-  | 'element-not-found'
-  | 'ambiguous-match'
-  | 'snapshot-invalid'
-  | 'secret-contaminated';
+export type { BoundElementRejectionReason } from '#core/errors/bound-element-rejected-error.js';
 
 /**
  * The result of binding an {@link ElementRef} against the current page.

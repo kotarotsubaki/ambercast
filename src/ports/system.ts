@@ -145,6 +145,15 @@ export type RunEvent =
       readonly outcome: 'ok' | 'error';
     }
   | {
+      /** Carries opt-in diagnostics for a case exception without changing report data. */
+      readonly type: 'unclassified-rejection';
+      readonly file: string;
+      readonly stepId?: StepId;
+      readonly name: string;
+      readonly message: string;
+      readonly stack?: string;
+    }
+  | {
       readonly type: 'heal-stage2-rejected';
       readonly stepId: StepId;
       readonly reason: StageTwoRejectionReason;

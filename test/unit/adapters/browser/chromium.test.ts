@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
+import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { parseAriaSnapshot } from '#core/ir/aria-snapshot.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
@@ -1070,9 +1071,14 @@ describe('ChromiumBrowserSession.fillSecret()', () => {
           session.fillSecret(target, MATERIALIZED_SECRET, ALLOWED_POLICY),
         );
 
-        expect(thrown).toBeInstanceOf(Error);
-        expect(thrown).not.toBeInstanceOf(IntegrityViolationError);
-        expect(thrown instanceof Error ? thrown.message : '').toContain('navigation');
+        expect(thrown).toBeInstanceOf(BoundElementRejectedError);
+        expect(thrown).toMatchObject({
+          reason: 'navigation-stale',
+        });
+        expect(thrown).toHaveProperty(
+          'message',
+          'Bound element navigation generation changed during physical acquisition.',
+        );
         expect(launcher.page.roleLocator.elementHandleCalls).toHaveLength(1);
         expect(launcher.page.roleLocator.fillValues).toEqual([]);
         expect(acquired.fillValues).toEqual([]);
@@ -1683,6 +1689,44 @@ describe('ChromiumBrowserSession bound-element re-verification', () => {
 
       await invoke(session, result.element);
       expectExactSubmitLookup(launcher);
+    });
+  });
+});
+
+describe('ChromiumBrowserSession TEST-2 typed rejections', () => {
+  it.each([
+    ['provenance-invalid', 'provenance', async (session: BrowserSession) => session.perform({ type: 'click', target: { ref: SUBMIT_BUTTON, fingerprint: fixtureFingerprint() } })],
+    ['navigation-stale', 'navigation', async (session: BrowserSession) => {
+      const target = await bindSubmit(session);
+      await session.perform({ type: 'navigate', url: '/next' });
+      return session.perform({ type: 'press', target, key: 'Enter' });
+    }],
+    ['fingerprint-verification-failed', 'fingerprint', async (session: BrowserSession, launcher: FakePlaywrightLauncher) => {
+      const target = await bindSubmit(session);
+      launcher.page.bodyLocator.ariaSnapshotText = CHANGED_SUBMIT_FIXTURE;
+      return session.perform({ type: 'press', target, key: 'Enter' });
+    }],
+  ] as const)('throws BoundElementRejectedError(%s) from re-verification', async (reason, messageFragment, invoke) => {
+    await withLaunchedSession({}, async (session, launcher) => {
+      const error = await captureRejection(invoke(session, launcher));
+      expect(error).toBeInstanceOf(BoundElementRejectedError);
+      expect(error).toMatchObject({
+        reason,
+        ...(reason === 'navigation-stale'
+          ? { message: 'Bound element navigation generation is stale.' }
+          : {}),
+      });
+      expect(error instanceof Error ? error.message : '').toContain(messageFragment);
+    });
+  });
+
+  it('throws BoundElementRejectedError(element-detached) when strict acquisition returns null', async () => {
+    await withLaunchedSession({}, async (session, launcher) => {
+      const target = await bindSubmit(session);
+      launcher.page.roleLocator.elementHandleOverride = async () => null as unknown as FakePlaywrightElementHandle;
+      const error = await captureRejection(session.fillSecret(target, MATERIALIZED_SECRET, ALLOWED_POLICY));
+      expect(error).toBeInstanceOf(BoundElementRejectedError);
+      expect(error).toMatchObject({ reason: 'element-detached', message: 'Strict element acquisition found no matching element.' });
     });
   });
 });

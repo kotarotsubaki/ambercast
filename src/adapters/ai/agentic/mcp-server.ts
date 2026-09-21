@@ -11,6 +11,11 @@ import { z } from 'zod';
 import { InstructionCriterionId, TraceAction, TraceAssert } from '#core/ir/schema.js';
 import { redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import {
+  AGENTIC_TARGET_REJECTION_LIMIT,
+  AgenticTargetRejection,
+  type AgenticToolName,
+} from '#core/errors/agentic-target-rejection.js';
 import type { InstructionCoverageAiActionController } from '#ports/ai.js';
 
 const PerformInput = z.strictObject({ action: TraceAction });
@@ -39,8 +44,7 @@ const tools = [
 ] as const;
 
 const AGENTIC_SCHEMA_REJECTION_LIMIT = 3;
-
-type AgenticToolName = typeof tools[number]['name'];
+const TARGET_REJECTION_HINT = 'Call ambercast_snapshot to observe the current page, then retry with a target taken from that snapshot.';
 
 const toolDescriptionByName: Record<AgenticToolName, string> = Object.fromEntries(
   tools.map((tool) => [tool.name, tool.description] as const),
@@ -71,6 +75,8 @@ interface LatchState {
   error?: unknown;
   status?: number;
   schemaRejections: number;
+  /** Counts recoverable target rejections independently from schema corrections. */
+  targetRejections: number;
 }
 
 /**
@@ -144,7 +150,7 @@ export async function startAgenticMcpServer(
   close(): Promise<void>;
 }> {
   const token = randomBytes(32).toString('base64url');
-  const latch: LatchState = { schemaRejections: 0 };
+  const latch: LatchState = { schemaRejections: 0, targetRejections: 0 };
   let activeRequests = 0;
   let closePromise: Promise<void> | undefined;
   let resolveDrain: (() => void) | undefined;
@@ -222,6 +228,42 @@ export async function startAgenticMcpServer(
     return { content: [{ type: 'text' as const, text: JSON.stringify(body) }], isError: true };
   };
 
+  /**
+   * Re-checks the latch first because a request can remain in flight while a
+   * different request exhausts the schema budget. The target-rejection budget
+   * remains independent so either budget can establish the terminal failure.
+   */
+  const rejectTarget = (
+    toolName: Exclude<AgenticToolName, 'ambercast_snapshot'>,
+    error: AgenticTargetRejection,
+  ): ReturnType<typeof toolError> => {
+    if (latch.error !== undefined) return toolError();
+    if (error.tool !== toolName) {
+      settleLatch(error);
+      return toolError();
+    }
+
+    latch.targetRejections += 1;
+    if (latch.targetRejections > AGENTIC_TARGET_REJECTION_LIMIT) {
+      settleLatch(new AgenticTargetRejection(toolName, error.reason, true));
+      return toolError();
+    }
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({
+          error: 'target-unresolved',
+          tool: toolName,
+          reason: error.reason,
+          rejectionsRemaining: AGENTIC_TARGET_REJECTION_LIMIT - latch.targetRejections,
+          hint: TARGET_REJECTION_HINT,
+        }),
+      }],
+      isError: true,
+    };
+  };
+
   const createMcpServer = () => {
     const mcpServer = new Server(
       { name: 'ambercast-agentic', version: '0.0.0' },
@@ -246,6 +288,7 @@ export async function startAgenticMcpServer(
           await controller.perform(parsed.data.action);
           return { content: [{ type: 'text' as const, text: 'null' }] };
         } catch (error) {
+          if (error instanceof AgenticTargetRejection) return rejectTarget(name, error);
           settleLatch(error);
           return toolError();
         }
@@ -260,6 +303,7 @@ export async function startAgenticMcpServer(
           const outcome = await controller.evaluateAssert(parsed.data.check, parsed.data.criterionId);
           return { content: [{ type: 'text' as const, text: JSON.stringify(outcome) }] };
         } catch (error) {
+          if (error instanceof AgenticTargetRejection) return rejectTarget(name, error);
           settleLatch(error);
           return toolError();
         }

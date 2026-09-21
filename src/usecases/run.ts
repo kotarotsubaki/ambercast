@@ -2,6 +2,11 @@ import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { composeAiDeadline, isAiDeadlineTimeout, type AiDeadline } from '#core/ai/ai-deadline.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import {
+  AGENTIC_TARGET_REJECTION_LIMIT,
+  AgenticTargetRejection,
+} from '#core/errors/agentic-target-rejection.js';
+import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import {
@@ -13,6 +18,7 @@ import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType } from '#core/errors/types.js';
+import { projectCauseName } from '#report/error-mapping.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computePlanDigest } from '#core/ir/digest.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
@@ -78,6 +84,7 @@ import type {
   GroundingMissReason,
   PerformableAction,
 } from '#ports/browser.js';
+import type { RunEvent } from '#ports/system.js';
 import type { BrowserDriverResolver } from '#ports/index.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink, SecretsProvider } from '#ports/system.js';
@@ -209,7 +216,16 @@ type TraceTrustContext = Pick<
 type TraceReplayMaterializationContext = Pick<
   DispatchContext,
   'session' | 'target' | 'secrets' | 'resolvedSecrets' | 'allowedRunRefs'
-> & { readonly runState: ReadonlyMap<RunVariableName, string> };
+> & {
+  readonly runState: ReadonlyMap<RunVariableName, string>;
+
+  /**
+   * Lets fresh agentic control replace a bind miss with its typed recovery
+   * rejection while deterministic replay leaves this hook absent and retains
+   * its existing plain-error behavior.
+   */
+  readonly onBindMiss?: (reason: GroundingMissReason) => never;
+};
 
 /**
  * Capabilities available to covered deterministic replay.
@@ -1025,6 +1041,7 @@ async function bindTraceTarget(
     resolvedSecrets: [...context.resolvedSecrets.values()],
   });
   if (resolved.kind === 'miss') {
+    context.onBindMiss?.(resolved.reason);
     throw new Error(`The trace target could not be bound: ${resolved.reason}.`);
   }
 
@@ -1875,10 +1892,14 @@ function redactedError(
   runState: ReadonlyMap<RunVariableName, string>,
 ): Error {
   const message = templateMaterializedValues(
-    error instanceof Error ? error.message : String(error),
+    readDiagnosticMessage(error),
     resolvedSecrets,
     runState,
   );
+
+  if (error instanceof AgenticTargetRejection) {
+    return new AgenticTargetRejection(error.tool, error.reason, error.exhausted);
+  }
 
   if (error instanceof AmbercastError) {
     const ErrorConstructor = error.constructor as new (
@@ -1894,6 +1915,73 @@ function redactedError(
   }
 
   return new Error(message);
+}
+
+/**
+ * Builds the diagnostic event for a rejected exception outside the established
+ * case-error vocabulary.
+ *
+ * Its `name` uses `projectCauseName`'s existing allow-list projection rather
+ * than the raw `error.name`. When a current step exists at the catch site, the
+ * event includes its `stepId`; only a pre-step failure omits that key entirely.
+ * Message and stack diagnostics tolerate hostile property getters and failed
+ * string conversion, then pass their extracted values through
+ * `templateMaterializedValues` before the event carries them. Keeping this
+ * construction pure makes the writer contract independently testable without
+ * requiring a case run or stderr adapter.
+ */
+export function buildUnclassifiedRejectionEvent(
+  file: string,
+  currentStep: Step | undefined,
+  error: unknown,
+  resolvedSecrets: ReadonlyMap<string, ReadonlySet<string>>,
+  runState: ReadonlyMap<RunVariableName, string>,
+): Extract<RunEvent, { readonly type: 'unclassified-rejection' }> {
+  const message = templateMaterializedValues(readDiagnosticMessage(error), resolvedSecrets, runState);
+  const stack = readDiagnosticStack(error);
+  return {
+    type: 'unclassified-rejection',
+    file,
+    ...(currentStep === undefined ? {} : { stepId: currentStep.id }),
+    name: projectCauseName(error),
+    message,
+    ...(stack === undefined ? {} : {
+      stack: templateMaterializedValues(stack, resolvedSecrets, runState),
+    }),
+  };
+}
+
+/**
+ * Extracts a hostile diagnostic value for paths that are never part of the
+ * public case explanation.
+ *
+ * `redactedError`'s non-`Error` branch and
+ * `buildUnclassifiedRejectionEvent` share this boundary so they cannot diverge
+ * in diagnostic safety. It guards both a throwing `message` property getter
+ * and a throwing or failing `String(error)` fallback; any failure in either
+ * path produces the literal `'unavailable'`, never propagates, and never
+ * returns `undefined`.
+ */
+function readDiagnosticMessage(error: unknown): string {
+  try {
+    const message = error !== null && (typeof error === 'object' || typeof error === 'function')
+      ? (error as { readonly message?: unknown }).message
+      : undefined;
+    return typeof message === 'string' ? message : String(error);
+  } catch {
+    return 'unavailable';
+  }
+}
+
+function readDiagnosticStack(error: unknown): string | undefined {
+  try {
+    const stack = error !== null && (typeof error === 'object' || typeof error === 'function')
+      ? (error as { readonly stack?: unknown }).stack
+      : undefined;
+    return typeof stack === 'string' ? stack : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -1992,6 +2080,12 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
   readonly #passedAssertionTags: Array<import('#core/ir/schema.js').InstructionCriterionId | undefined> = [];
   readonly #secretRefs: ReadonlySet<string>;
   #trailingPassedAssertRun = 0;
+  /**
+   * Records a recoverable target rejection until a new passing assertion
+   * supplies terminal evidence, preventing a later snapshot or failed
+   * assertion from converting that rejection into an unrecorded success.
+   */
+  #rejectionBarrier = false;
   #lastObservation: LastAgenticObservation = 'none';
 
   constructor(
@@ -2008,8 +2102,10 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
    *
    * External adapters can bypass TypeScript types, so zod validation happens
    * before materialization and a successful browser call is the only event
-   * that enters the journal. A perform always breaks terminal verification,
-   * even when the call later rejects and aborts the entire agentic execution.
+   * that enters the journal. A perform always breaks terminal verification.
+   * A recoverable target rejection is returned to the provider and prevents a
+   * nominal success from becoming a no-evidence pass until a new assertion
+   * passes.
    *
    * Its compute-mode bind is deliberately awaited inside the same rejection
    * boundary as the browser call. Unlike trace replay, fresh agentic control
@@ -2029,13 +2125,27 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
     this.#lastObservation = 'perform';
     assertNoMaterializedLiteral(parsed.data, this.context, this.context.resolvedSecrets);
     try {
+      const materializationContext: TraceReplayMaterializationContext = {
+        ...this.context,
+        onBindMiss: (reason) => { throw new AgenticTargetRejection('ambercast_perform', reason); },
+      };
       const materialized = await materializeTraceAction(
         parsed.data,
-        this.context,
+        materializationContext,
         this.#secretRefs,
       );
       await performMaterializedAction(materialized, this.context.session);
     } catch (error) {
+      if (error instanceof AgenticTargetRejection) {
+        this.#trailingPassedAssertRun = 0;
+        this.#rejectionBarrier = true;
+        throw error;
+      }
+      if (error instanceof BoundElementRejectedError && error.reason !== 'provenance-invalid') {
+        this.#trailingPassedAssertRun = 0;
+        this.#rejectionBarrier = true;
+        throw new AgenticTargetRejection('ambercast_perform', error.reason);
+      }
       throw scrubBrowserRejection(error, this.context.resolvedSecrets, this.context.runState);
     }
     this.#journal.push(parsed.data);
@@ -2049,10 +2159,11 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
    * in the value returned to the adapter, never in the unresolved record.
    *
    * A target-scoped compute-mode bind shares the evaluation's rejection
-   * boundary. Therefore a bind miss receives the same redaction and terminal
-   * agentic-failure treatment as an assertion browser rejection; it does not
-   * trigger the trace-replay fallback, which applies only before live agentic
-   * execution begins.
+   * boundary. Therefore a bind miss receives the same recoverable rejection
+   * treatment as an assertion browser rejection; it does not trigger the
+   * trace-replay fallback, which applies only before live agentic execution
+   * begins. A new passing assertion clears the rejection barrier, while every
+   * other outcome leaves it in place.
    */
   async evaluateAssert(
     check: TraceAssert,
@@ -2068,12 +2179,27 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
     assertNoMaterializedLiteral(parsed.data, this.context, this.context.resolvedSecrets);
     let outcome: AssertOutcome;
     try {
-      const materialized = await materializeTraceAssert(parsed.data, this.context);
+      const materializationContext: TraceReplayMaterializationContext = {
+        ...this.context,
+        onBindMiss: (reason) => { throw new AgenticTargetRejection('ambercast_evaluate_assert', reason); },
+      };
+      const materialized = await materializeTraceAssert(parsed.data, materializationContext);
       outcome = await this.context.session.evaluateAssert(materialized);
     } catch (error) {
+      if (error instanceof AgenticTargetRejection) {
+        this.#trailingPassedAssertRun = 0;
+        this.#rejectionBarrier = true;
+        throw error;
+      }
+      if (error instanceof BoundElementRejectedError && error.reason !== 'provenance-invalid') {
+        this.#trailingPassedAssertRun = 0;
+        this.#rejectionBarrier = true;
+        throw new AgenticTargetRejection('ambercast_evaluate_assert', error.reason);
+      }
       throw scrubBrowserRejection(error, this.context.resolvedSecrets, this.context.runState);
     }
     if (outcome.passed) {
+      this.#rejectionBarrier = false;
       this.#trailingPassedAssertRun += 1;
       this.#lastObservation = 'passed-assert';
       this.#journal.push(parsed.data);
@@ -2119,14 +2245,21 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
    * mutation, if any.
    *
    * A failure outcome discards the journal through the unified case-abort
-   * result, while a rejected execution never reaches this method. A successful
-   * result persists a trace only with terminal passing assertions; a snapshot
-   * or failed assertion completes terminal negative sensing without a record.
-   * A bare action or no observation produces the unified case-abort result.
+   * result. The provider can continue after a recoverable target rejection and
+   * reach this method; if the rejection barrier remains, nominal success aborts
+   * before it can become a no-evidence pass. Only a new passing assertion
+   * clears that barrier. A successful result persists a trace only with
+   * terminal passing assertions; a snapshot or failed assertion completes
+   * terminal negative sensing without a record. A bare action or no observation
+   * produces the unified case-abort result.
    */
   finalize(outcome: 'success' | 'failure'): DispatchOutcome {
     if (outcome === 'failure') {
       throw new CaseAbort('The AI-directed interaction did not complete successfully.');
+    }
+
+    if (this.#rejectionBarrier) {
+      throw new CaseAbort('The AI-directed interaction completed without terminal verification evidence.');
     }
 
     if (this.#trailingPassedAssertRun >= 1) {
@@ -2680,7 +2813,8 @@ async function captureObservedEvidence(
   let capture: AccessibilityCapture;
   try {
     capture = await session.accessibilitySnapshot();
-  } catch {
+  } catch (error) {
+    if (error instanceof IntegrityViolationError) throw error;
     // An uninspectable page cannot authorize a screenshot once this case knows a secret exists.
     return { captureContainsResolvedSecret: resolvedSecrets.size > 0 };
   }
@@ -3588,10 +3722,23 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         runState ?? new Map(),
       ) as AmbercastErrorType;
       result = resultForAbort(identity, planSteps, completed, currentStep, classifiedError.message, evidence);
+    } else if (classificationError instanceof CaseAbort) {
+      result = resultForAbort(identity, planSteps, completed, currentStep, classificationError.message, evidence);
+    } else if (classificationError instanceof AgenticTargetRejection) {
+      const explanation = classificationError.exhausted
+        ? `The AI-directed interaction exhausted its browser target budget: ${classificationError.tool} was rejected (${classificationError.reason}) after ${AGENTIC_TARGET_REJECTION_LIMIT} recoverable rejections.`
+        : `The AI-directed interaction was rejected by a browser target it could not resolve (${classificationError.tool}: ${classificationError.reason}).`;
+      result = resultForAbort(identity, planSteps, completed, currentStep, explanation, evidence);
     } else {
-      const explanation = classificationError instanceof CaseAbort
-        ? classificationError.message
-        : 'The browser session could not complete this case and no deterministic fallback is available.';
+      const name = projectCauseName(classificationError);
+      deps.events.emit(buildUnclassifiedRejectionEvent(
+        file,
+        currentStep,
+        classificationError,
+        resolvedSecrets ?? new Map(),
+        runState ?? new Map(),
+      ));
+      const explanation = `The browser session could not complete this case and no deterministic fallback is available (${name}).`;
       result = resultForAbort(identity, planSteps, completed, currentStep, explanation, evidence);
     }
   } finally {

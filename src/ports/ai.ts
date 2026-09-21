@@ -17,6 +17,18 @@ import type {
 
 import type { AssertOutcome } from './browser.js';
 
+/**
+ * Names the loopback tools that participate in agentic target recovery.
+ *
+ * The runtime rejection and its budget belong to `core` so adapters and use
+ * cases can share their value identity. Re-exporting only the contract types
+ * here documents the boundary without making this port a runtime dependency.
+ */
+export type {
+  AgenticTargetRejectionReason,
+  AgenticToolName,
+} from '#core/errors/agentic-target-rejection.js';
+
 declare const PRE_SCANNED_TRACE_RECORD: unique symbol;
 
 /**
@@ -158,6 +170,8 @@ export interface AiActionController {
    * or cannot be safely materialized.
    * @throws SecretUnresolvedError if an allowed secret reference cannot be
    * resolved.
+   * @throws AgenticTargetRejection if an element target cannot be resolved
+   * against the current page during agentic execution.
    * @throws If the browser cannot execute the action.
    */
   perform(action: TraceAction): Promise<void>;
@@ -169,6 +183,8 @@ export interface AiActionController {
    * @returns A passing or diagnosable failing outcome.
    * @throws IntegrityViolationError if the assertion violates trusted plan
    * grants or cannot be safely materialized.
+   * @throws AgenticTargetRejection if an element target cannot be resolved
+   * against the current page during agentic execution.
    * @throws If the browser cannot evaluate the assertion.
    */
   evaluateAssert(check: TraceAssert): Promise<AssertOutcome>;

@@ -8,7 +8,9 @@ import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import { AgenticTargetRejection } from '#core/errors/agentic-target-rejection.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
@@ -148,6 +150,54 @@ const HIGH_ENTROPY_TOKEN_LITERAL = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea';
 describe('classifyBrowserLaunchFailure', () => {
   const engine: BrowserEngine = 'chromium';
 
+  it('TEST-6a keeps the MCP-free controller rejection budget out of the case abort', async () => {
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+    const executor = createFakeAiExecutor({
+      async executeAgentic(request) {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          try {
+            await request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' });
+          } catch {
+            // The executor deliberately retries only to prove the usecase has no MCP budget.
+          }
+        }
+        return { outcome: 'failure' };
+      },
+    });
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    vi.spyOn(session, 'perform').mockRejectedValue(new AgenticTargetRejection('ambercast_perform', 'element-not-found'));
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction did not complete successfully.');
+  });
+
+  it('TEST-6d gives a capture-time integrity failure precedence over a target rejection', async () => {
+    const integrity = new IntegrityViolationError('Failure evidence violated an integrity boundary.');
+    const session = createFakeBrowserSession(new Map());
+    vi.spyOn(session, 'accessibilitySnapshot').mockRejectedValue(integrity);
+    const executor = createFakeAiExecutor({
+      async executeAgentic() {
+        throw new AgenticTargetRejection('ambercast_perform', 'element-not-found', true);
+      },
+    });
+    const { deps, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result.explanation).toBe(integrity.message);
+  });
+
   it.each([
     ['detects the executable-missing needle at the start', new Error("Executable doesn't exist at /path/to/chromium"), 'executable-missing'],
     ['detects the executable-missing needle in the middle of a message', new Error("Host system is missing dependencies.\nExecutable doesn't exist at /path"), 'executable-missing'],
@@ -156,6 +206,151 @@ describe('classifyBrowserLaunchFailure', () => {
     ['requires the trailing space in the executable-missing needle', new Error("Executable doesn't exist at"), 'launch-failed'],
   ] as const)('%s', (_name, error, reason) => {
     expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason, engine });
+  });
+
+  describe('SPEC-1 agentic target-rejection mapping', () => {
+    const computeMissReasons = [
+      'element-not-found',
+      'ambiguous-match',
+      'snapshot-invalid',
+      'secret-contaminated',
+    ] as const;
+    const postBindReasons = [
+      'navigation-stale',
+      'fingerprint-verification-failed',
+      'element-detached',
+    ] as const;
+
+    async function requestTargetRejection(
+      invoke: (request: AiAgenticRequest) => Promise<void>,
+      session: BrowserSession,
+      step = aiStep(),
+      secrets = createFakeSecretsProvider(new Map()),
+    ): Promise<{ readonly caught: unknown; readonly outcome: Awaited<ReturnType<typeof run>>; readonly session: BrowserSession }> {
+      let caught: unknown;
+      const executor = createFakeAiExecutor({
+        async executeAgentic(request) {
+          try {
+            await invoke(request);
+          } catch (error) {
+            caught = error;
+          }
+          return { outcome: 'failure' };
+        },
+      });
+      const { deps, recordingStorage } = createScenario({
+        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        resolveAiExecutor: async () => executor,
+        secrets,
+      });
+      const testPath = await writePrompt(recordingStorage.storage);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [step]);
+      const outcome = await run(deps, DEFAULT_OPTIONS);
+      return { caught, outcome, session };
+    }
+
+    it.each(computeMissReasons)('TEST-1a maps perform compute bind miss %s without journaling the action', async (reason) => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+      vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason });
+      const result = await requestTargetRejection(
+        (request) => request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' }),
+        session,
+      );
+
+      expect(result.caught).toMatchObject({ tool: 'ambercast_perform', reason, exhausted: false });
+      expect(result.caught).toBeInstanceOf(AgenticTargetRejection);
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+    });
+
+    it.each(computeMissReasons)('TEST-1b maps evaluateAssert compute bind miss %s', async (reason) => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+      vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason });
+      const result = await requestTargetRejection(
+        (request) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target: SUBMIT }).then(() => undefined),
+        session,
+      );
+
+      expect(result.caught).toMatchObject({ tool: 'ambercast_evaluate_assert', reason, exhausted: false });
+      expect(result.caught).toBeInstanceOf(AgenticTargetRejection);
+    });
+
+    it.each(postBindReasons)('TEST-1c maps post-bind perform rejection %s', async (reason) => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+      vi.spyOn(session, 'perform').mockRejectedValue(new BoundElementRejectedError(reason, `rejected: ${reason}`));
+      const result = await requestTargetRejection(
+        (request) => request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' }),
+        session,
+      );
+
+      expect(result.caught).toMatchObject({ tool: 'ambercast_perform', reason, exhausted: false });
+      expect(result.caught).toBeInstanceOf(AgenticTargetRejection);
+    });
+
+    it.each(postBindReasons)('TEST-1d maps post-bind evaluateAssert rejection %s', async (reason) => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+      vi.spyOn(session, 'evaluateAssert').mockRejectedValue(new BoundElementRejectedError(reason, `rejected: ${reason}`));
+      const result = await requestTargetRejection(
+        (request) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target: SUBMIT }).then(() => undefined),
+        session,
+      );
+
+      expect(result.caught).toMatchObject({ tool: 'ambercast_evaluate_assert', reason, exhausted: false });
+      expect(result.caught).toBeInstanceOf(AgenticTargetRejection);
+    });
+
+    it('TEST-1e maps a fill-secret generation rejection without exposing the resolved value', async () => {
+      const secretRef = '{{secrets.AMBERCAST_SECRET_DUMMY_TARGET_REJECTION}}';
+      const secretValue = 'AMBERCAST_SECRET_DUMMY_TARGET_REJECTION_VALUE';
+      const session = createFakeBrowserSession(liveEntries([PASSWORD]));
+      vi.spyOn(session, 'fillSecret').mockRejectedValue(new BoundElementRejectedError('navigation-stale', `rejected ${secretValue}`));
+      const result = await requestTargetRejection(
+        (request) => request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef }),
+        session,
+        aiStep('recorded-ai', [secretRef]),
+        createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+      );
+
+      expect(result.caught).toMatchObject({ tool: 'ambercast_perform', reason: 'navigation-stale', exhausted: false });
+      expect(result.caught).toBeInstanceOf(AgenticTargetRejection);
+      expect(result.caught instanceof Error ? result.caught.message : String(result.caught)).not.toContain(secretValue);
+    });
+
+    it.each([
+      ['perform', (request: AiAgenticRequest) => request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' })],
+      ['evaluateAssert', (request: AiAgenticRequest) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target: SUBMIT }).then(() => undefined)],
+    ] as const)('TEST-1f preserves provenance-invalid as a non-recoverable %s error', async (_operation, invoke) => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+      if (_operation === 'perform') {
+        vi.spyOn(session, 'perform').mockRejectedValue(new BoundElementRejectedError('provenance-invalid', 'invalid provenance'));
+      } else {
+        vi.spyOn(session, 'evaluateAssert').mockRejectedValue(new BoundElementRejectedError('provenance-invalid', 'invalid provenance'));
+      }
+      const result = await requestTargetRejection(invoke, session);
+
+      expect(result.caught).toBeInstanceOf(Error);
+      expect(result.caught).not.toBeInstanceOf(AgenticTargetRejection);
+    });
+  });
+
+  it.each([
+    [true, 'The AI-directed interaction exhausted its browser target budget: ambercast_perform was rejected (element-not-found) after 3 recoverable rejections.'],
+    [false, 'The AI-directed interaction was rejected by a browser target it could not resolve (ambercast_perform: element-not-found).'],
+  ] as const)('TEST-6b/c selects the case explanation for exhausted=%s', async (exhausted, explanation) => {
+    const executor = createFakeAiExecutor({
+      async executeAgentic() {
+        throw new AgenticTargetRejection('ambercast_perform', 'element-not-found', exhausted);
+      },
+    });
+    const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error', explanation, steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
+    });
+    expect(outcome.results[0]?.error).toBeUndefined();
   });
 
   it.each([
@@ -484,12 +679,16 @@ function expectAiTimeoutOutcome(outcome: Awaited<ReturnType<typeof run>>, stepId
   });
 }
 
-function expectUnclassifiedAbortOutcome(outcome: Awaited<ReturnType<typeof run>>, stepId: string): void {
+function expectUnclassifiedAbortOutcome(
+  outcome: Awaited<ReturnType<typeof run>>,
+  stepId: string,
+  name: 'Error' | 'TimeoutError' = 'Error',
+): void {
   expect(outcome.results[0]?.error).toBeUndefined();
   expect(outcome.results[0]?.result).toMatchObject({
     status: 'error',
     steps: [{ id: stepId, status: 'error', kind: 'environment' }],
-    explanation: GENERIC_ABORT_EXPLANATION,
+    explanation: `${GENERIC_ABORT_EXPLANATION.slice(0, -1)} (${name}).`,
   });
 }
 
@@ -2059,7 +2258,12 @@ describe('run', () => {
       { type: 'step-result', stepId: 'fill-first', via: 'grounding' },
       { type: 'step-start', stepId: 'click-submit' },
     ]);
-    expect(events.emitted()).toEqual(eventsAtSecondPerform);
+    expect(events.emitted()).toEqual([
+      ...eventsAtSecondPerform,
+      expect.objectContaining({
+        type: 'unclassified-rejection', stepId: 'click-submit', name: 'Error', message: 'detached element', stack: expect.any(String),
+      }),
+    ]);
   });
 
   it('continues a sibling case after a browser-launch failure', async () => {
@@ -3305,10 +3509,10 @@ describe('run agentic fallback pipeline', () => {
   });
 
   it.each([
-    ['an action', async (request: AiAgenticRequest) => {
+    ['an action', 'ambercast_perform', async (request: AiAgenticRequest) => {
       await request.controller.perform({ type: 'click', target: SUBMIT });
     }],
-    ['a target-scoped assertion', async (request: AiAgenticRequest) => {
+    ['a target-scoped assertion', 'ambercast_evaluate_assert', async (request: AiAgenticRequest) => {
       await request.controller.evaluateAssert({
         type: 'assert',
         check: 'text-equals',
@@ -3316,7 +3520,7 @@ describe('run agentic fallback pipeline', () => {
         text: 'Dashboard',
       });
     }],
-  ] as const)('treats a fresh agentic compute-bind miss for %s as a scrubbed browser rejection', async (_description, script) => {
+  ] as const)('reports a fresh agentic compute-bind miss for %s as a target rejection', async (_description, tool, script) => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded').mockResolvedValue({
       kind: 'miss',
@@ -3340,7 +3544,7 @@ describe('run agentic fallback pipeline', () => {
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
-      explanation: GENERIC_ABORT_EXPLANATION,
+      explanation: `The AI-directed interaction was rejected by a browser target it could not resolve (${tool}: element-not-found).`,
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
     expect(outcome.results[0]?.result.explanation).not.toBe(
@@ -3387,6 +3591,9 @@ describe('run agentic fallback pipeline', () => {
     expect(aiCalls(events)).toEqual([]);
     expect(events.emitted()).toEqual([
       { type: 'step-start', stepId: 'recorded-ai' },
+      expect.objectContaining({
+        type: 'unclassified-rejection', stepId: 'recorded-ai', name: 'Error', message: 'Stop trace replay.', stack: expect.any(String),
+      }),
     ]);
   });
 
@@ -4467,7 +4674,7 @@ describe('run AI call timeout composition', () => {
     controller.abort(reason);
     const outcome = await running;
 
-    expectUnclassifiedAbortOutcome(outcome, 'recorded-ai');
+    expectUnclassifiedAbortOutcome(outcome, 'recorded-ai', 'Error');
     expect(executor.agenticRequests[0]?.signal).not.toBe(controller.signal);
     expect(executor.agenticRequests[0]?.signal?.reason).toBe(reason);
   });
@@ -4505,7 +4712,7 @@ describe('run AI call timeout composition', () => {
     controller.abort(reason);
     const outcome = await running;
 
-    expectUnclassifiedAbortOutcome(outcome, 'click-submit');
+    expectUnclassifiedAbortOutcome(outcome, 'click-submit', 'Error');
     expect(executor.structuredRequests[0]?.signal).not.toBe(controller.signal);
     expect(executor.structuredRequests[0]?.signal?.reason).toBe(reason);
   });
@@ -4543,7 +4750,7 @@ describe('run AI call timeout composition', () => {
       const outcome = await running;
 
       expect(timeoutSpy).toHaveBeenCalledWith(60_000);
-      expectUnclassifiedAbortOutcome(outcome, 'recorded-ai');
+      expectUnclassifiedAbortOutcome(outcome, 'recorded-ai', 'TimeoutError');
       expect(executor.agenticRequests[0]?.signal).not.toBe(controller.signal);
       expect(executor.agenticRequests[0]?.signal?.reason).toBe(callerReason);
     } finally {
@@ -5209,6 +5416,73 @@ describe('run agentic wrapper state machine', () => {
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({});
   });
 
+  describe('TEST-12 rejection barrier', () => {
+    async function runAfterRecoverableRejection(
+      after: (request: InstructionCoveredAiAgenticRequest) => Promise<void>,
+      options: { readonly before?: (request: AiAgenticRequest) => Promise<void>; readonly fallback?: boolean; readonly assertOutcomes?: FakeBrowserSessionOptions['assertOutcomes'] } = {},
+    ) {
+      const session = createFakeBrowserSession(
+        liveEntries([SUBMIT]),
+        options.assertOutcomes === undefined ? {} : { assertOutcomes: options.assertOutcomes },
+      );
+      vi.spyOn(session, 'perform').mockRejectedValue(new AgenticTargetRejection('ambercast_perform', 'element-not-found'));
+      const executor = createFakeAiExecutor({
+        async executeAgentic(request) {
+          if (options.before !== undefined) await options.before(request);
+          try {
+            await request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' });
+          } catch {
+            // The recoverable controller error is intentionally handled by the provider script.
+          }
+          await after(request);
+          return { outcome: 'success' };
+        },
+      });
+      const { deps, recordingStorage } = createScenario({
+        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        resolveAiExecutor: async () => executor,
+      });
+      const testPath = await writePrompt(recordingStorage.storage);
+      const prior = options.fallback ? aiGrounding(legacyTrace([], [passingText('Cached trace')])) : {};
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()], prior);
+      return { outcome: await run(deps, DEFAULT_OPTIONS), storage: recordingStorage.storage, testPath };
+    }
+
+    it('a: rejects success after a passing assertion and target rejection without changing grounding', async () => {
+      const { outcome, storage, testPath } = await runAfterRecoverableRejection(
+        async () => undefined,
+        { before: (request) => request.controller.evaluateAssert(passingText('Dashboard')).then(() => undefined) },
+      );
+      expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect((await readGrounding(storage, testPath)).entries).toEqual({});
+    });
+
+    it('b: preserves fallback grounding after a rejection followed by snapshot', async () => {
+      const { outcome, storage, testPath } = await runAfterRecoverableRejection(
+        (request) => request.controller.snapshotForResolution().then(() => undefined),
+        { fallback: true, assertOutcomes: [{ passed: false, message: 'Cached trace missed.' }] },
+      );
+      expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect((await readGrounding(storage, testPath)).entries).toEqual(aiGrounding(legacyTrace([], [passingText('Cached trace')])));
+    });
+
+    it('c: rejects success after a rejection followed by a failed assertion', async () => {
+      const { outcome } = await runAfterRecoverableRejection(
+        (request) => request.controller.evaluateAssert(passingText('Not yet visible')).then(() => undefined),
+        { assertOutcomes: [{ passed: false, message: 'Not yet visible.' }] },
+      );
+      expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+    });
+
+    it('d: clears the barrier only after a new tagged passing assertion and records its trace', async () => {
+      const { outcome, storage, testPath } = await runAfterRecoverableRejection(
+        (request) => request.controller.evaluateAssert(passingText('Dashboard'), 'dashboard-reached').then(() => undefined),
+      );
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect((await readGrounding(storage, testPath)).entries).toEqual(aiGrounding(coveredTrace([], [passingText('Dashboard')])));
+    });
+  });
+
   it.each([
     ['a terminal snapshot', async (request: AiAgenticRequest) => request.controller.snapshotForResolution()],
     ['a terminal failed assertion', async (request: AiAgenticRequest) => request.controller.evaluateAssert(passingText('Not yet visible'))],
@@ -5532,7 +5806,7 @@ describe('run deterministic redaction boundary', () => {
         }
       },
     });
-    const { deps, recordingStorage } = createScenario({
+    const { deps, events, recordingStorage } = createScenario({
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
@@ -5547,11 +5821,48 @@ describe('run deterministic redaction boundary', () => {
     expect(outcome.results[0]).toMatchObject({
       result: {
         status: 'error',
-        explanation: 'The browser session could not complete this case and no deterministic fallback is available.',
+        explanation: 'The browser session could not complete this case and no deterministic fallback is available (Error).',
       },
     });
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(outcome.results[0]?.result.explanation).not.toContain(secretValue);
+    const rejection = events.emitted().find((event) => event.type === 'unclassified-rejection');
+    expect(rejection).toMatchObject({
+      type: 'unclassified-rejection', file: `${TEST_DIR}/login.test.md`, stepId: 'throw-generic-error',
+      name: 'Error', message: `Plain browser error exposed ${secretRef}.`,
+    });
+    expect(rejection).toMatchObject({ stack: expect.stringContaining(secretRef) });
+    expect(JSON.stringify(rejection)).not.toContain(secretValue);
+  });
+
+  it.each([
+    ['TimeoutError', new (class TimeoutError extends Error { constructor() { super('timeout'); this.name = 'TimeoutError'; } })(), 'TimeoutError', 'timeout'],
+    ['disallowed FooError', new (class FooError extends Error { constructor() { super('foo'); this.name = 'FooError'; } })(), 'Error', 'foo'],
+    ['empty Error name', Object.assign(new Error('empty'), { name: '' }), 'Error', 'empty'],
+    ['non-Error throw', 'string', 'Error', 'string'],
+    ['hostile message getter', Object.create(null, { name: { value: 'FooError' }, message: { get() { throw new Error('hostile'); } } }), 'Error', 'unavailable'],
+  ] as const)('TEST-7 projects %s to a safe generic explanation and diagnostic event', async (_label, thrown, projectedName, message) => {
+    const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
+      onPerform(action) {
+        if (action.type === 'navigate') throw thrown;
+      },
+    });
+    const { deps, events, recordingStorage } = createScenario({
+      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'throw-derived-generic-error', kind: 'action', action: 'navigate', url: '/dashboard' },
+    ], elementGrounding([]));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result.explanation).toBe(
+      `The browser session could not complete this case and no deterministic fallback is available (${projectedName}).`,
+    );
+    expect(events.emitted()).toContainEqual(expect.objectContaining({
+      type: 'unclassified-rejection', stepId: 'throw-derived-generic-error', name: projectedName, message,
+    }));
   });
 
   it('retains rotating path-A and first-pipeline secret values for a second independent AI pipeline', async () => {
@@ -6191,7 +6502,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
     expect(outcome.results[0]?.error).toBeUndefined();
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
-      explanation: 'The browser session could not complete this case and no deterministic fallback is available.',
+      explanation: 'The browser session could not complete this case and no deterministic fallback is available (Error).',
       steps: [
         { id: 'recorded-ai', status: 'passed' },
         { id: 'later-failure', status: 'error', kind: 'environment' },
@@ -7001,7 +7312,7 @@ describe('run failure evidence', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const step = outcome.results[0]?.result.steps[0];
 
-    expect(outcome.results[0]?.result.explanation).toBe('The browser session could not complete this case and no deterministic fallback is available.');
+    expect(outcome.results[0]?.result.explanation).toBe('The browser session could not complete this case and no deterministic fallback is available (Error).');
     expect(step).toMatchObject({ id: 'open-dashboard', status: 'error', kind: 'environment', screenshot: expect.any(String), observed: expect.any(Object) });
     expect(step).not.toHaveProperty('expected');
     expect(step).not.toHaveProperty('actual');

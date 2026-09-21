@@ -39,6 +39,7 @@ import type {
   PageSnapshot,
   PerformableAction,
 } from '#ports/browser.js';
+import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { extractDiscardedScalarValues, parseAriaSnapshot } from '#core/ir/aria-snapshot.js';
 import {
@@ -88,7 +89,7 @@ export interface PlaywrightLocatorHandle {
   inputValue(): Promise<string>;
   count(): Promise<number>;
   ariaSnapshot(): Promise<string>;
-  elementHandle(): Promise<PlaywrightElementHandle>;
+  elementHandle(): Promise<PlaywrightElementHandle | null>;
   first(): PlaywrightLocatorHandle;
   waitFor(options: { readonly state: 'visible'; readonly timeout: number }): Promise<void>;
 }
@@ -197,7 +198,7 @@ function adaptLocator(locator: PlaywrightLocator): PlaywrightLocatorHandle {
     elementHandle: async () => {
       const element = await locator.elementHandle();
       if (element === null) {
-        throw new Error('Strict element acquisition found no matching element.');
+        throw new BoundElementRejectedError('element-detached', 'Strict element acquisition found no matching element.');
       }
 
       return {
@@ -425,9 +426,13 @@ class ChromiumBrowserSession implements BrowserSession {
     try {
       try {
         const reverified = await this.reverifyBinding(target);
-        acquired = await reverified.locator.elementHandle();
+        const element = await reverified.locator.elementHandle();
+        if (element === null) {
+          throw new BoundElementRejectedError('element-detached', 'Strict element acquisition found no matching element.');
+        }
+        acquired = element;
         if (this.page.navigationGeneration() !== reverified.generation) {
-          throw new Error('Bound element navigation generation changed during physical acquisition.');
+          throw new BoundElementRejectedError('navigation-stale', 'Bound element navigation generation changed during physical acquisition.');
         }
       } catch (error) {
         this.assertSecretSinkOrigin(policy);
@@ -644,19 +649,19 @@ class ChromiumBrowserSession implements BrowserSession {
   private async reverifyBinding(target: BoundElement): Promise<ReverifiedBinding> {
     const record = this.#bindings.get(target);
     if (record === undefined) {
-      throw new Error('Bound element provenance is not valid for this browser session.');
+      throw new BoundElementRejectedError('provenance-invalid', 'Bound element provenance is not valid for this browser session.');
     }
 
     const before = this.page.navigationGeneration();
     const capture = await this.accessibilitySnapshot();
     const after = this.page.navigationGeneration();
     if (before !== record.generation || after !== record.generation) {
-      throw new Error('Bound element navigation generation is stale.');
+      throw new BoundElementRejectedError('navigation-stale', 'Bound element navigation generation is stale.');
     }
 
     const result = resolveAccessibilityFingerprint(capture.tree, record.ref, record.fingerprint);
     if (result !== 'hit') {
-      throw new Error(`Bound element fingerprint verification failed: ${result}.`);
+      throw new BoundElementRejectedError('fingerprint-verification-failed', `Bound element fingerprint verification failed: ${result}.`);
     }
 
     return {

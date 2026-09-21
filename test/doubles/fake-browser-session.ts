@@ -1,5 +1,6 @@
 import type { ElementRef, Fingerprint } from '../../src/core/ir/schema.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
+import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { isAllowedSecretSinkOrigin, type SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type {
   AssertCheck,
@@ -291,22 +292,22 @@ function resolveBinding(
 function requireCurrentBinding(state: FakeBrowserSessionState, element: BoundElement): FakeBindingRecord {
   const record = state.bindings.get(element);
   if (record === undefined) {
-    throw new Error('Bound element provenance is invalid for this browser session.');
+    throw new BoundElementRejectedError('provenance-invalid', 'Bound element provenance is invalid for this browser session.');
   }
 
   state.ariaSnapshotCalls += 1;
 
   if (record.generation !== state.generation) {
-    throw new Error('Bound element navigation generation is stale.');
+    throw new BoundElementRejectedError('navigation-stale', 'Bound element navigation generation is stale.');
   }
 
   const entry = state.entries.get(elementRefKey(record.ref));
   if (entry === undefined || !entry.exists) {
-    throw new Error('Bound element no longer exists on the current page.');
+    throw new BoundElementRejectedError('element-detached', 'Bound element no longer exists on the current page.');
   }
 
   if (!fingerprintsEqual(record.fingerprint, entry.currentFingerprint)) {
-    throw new Error('Bound element fingerprint no longer matches the current descriptor.');
+    throw new BoundElementRejectedError('fingerprint-verification-failed', 'Bound element fingerprint no longer matches the current descriptor.');
   }
 
   return record;

@@ -3,6 +3,7 @@ import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type { BoundElement, GroundingQuery } from '../../../src/ports/browser.js';
 import type { ElementRef, Fingerprint } from '../../../src/core/ir/schema.js';
 import { captureRejection } from '../../doubles/capture-rejection.js';
+import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { expectSecretSinkOriginViolation } from '../../doubles/expect-secret-sink-origin-violation.js';
 import {
   bindForTest,
@@ -61,6 +62,37 @@ async function expectTargetedOperationsToReject(
 }
 
 describe('createFakeBrowserSession', () => {
+  it.each([
+    ['provenance-invalid', (session: FakeBrowserSession, entry: FakeBrowserSessionEntry) => ({ ref: REF, fingerprint: entry.currentFingerprint })],
+    ['fingerprint-verification-failed', (session: FakeBrowserSession, entry: FakeBrowserSessionEntry) => {
+      const target = bindForTest(session, REF, entry.currentFingerprint);
+      entry.currentFingerprint = OTHER_FINGERPRINT;
+      return target;
+    }],
+    ['element-detached', (session: FakeBrowserSession, entry: FakeBrowserSessionEntry) => {
+      const target = bindForTest(session, REF, entry.currentFingerprint);
+      entry.exists = false;
+      return target;
+    }],
+  ] as const)('TEST-2 fake-session parity uses BoundElementRejectedError for %s', async (reason, arrange) => {
+    const entry: FakeBrowserSessionEntry = { exists: true, currentFingerprint: FINGERPRINT };
+    const session = createFakeBrowserSession(new Map([[REF_KEY, entry]]));
+    const target = arrange(session, entry);
+
+    const error = await captureRejection(session.perform({ type: 'click', target }));
+    expect(error).toBeInstanceOf(BoundElementRejectedError);
+    expect(error).toMatchObject({ reason });
+  });
+
+  it('TEST-2 fake-session parity classifies a navigation generation change as navigation-stale', async () => {
+    const session = createFakeBrowserSession(entries());
+    const target = bindForTest(session, REF, FINGERPRINT);
+    await session.perform({ type: 'navigate', url: 'https://example.test/next' });
+
+    const error = await captureRejection(session.perform({ type: 'click', target }));
+    expect(error).toBeInstanceOf(BoundElementRejectedError);
+    expect(error).toMatchObject({ reason: 'navigation-stale' });
+  });
   it('uses a structural accessibility key and compares both fingerprint fields', () => {
     expect(elementRefKey(REF)).toBe(REF_KEY);
     expect(elementRefKey({ ...REF })).toBe(REF_KEY);

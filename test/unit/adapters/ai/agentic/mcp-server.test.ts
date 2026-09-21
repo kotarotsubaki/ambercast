@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { startAgenticMcpServer } from '#adapters/ai/agentic/mcp-server.js';
 import { computePlanProducerBundleFingerprint, liveProducerBundleInputs } from '#core/ai/plan-producer-bundle.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { AgenticTargetRejection } from '#core/errors/agentic-target-rejection.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import type { InstructionCoverageAiActionController } from '#ports/ai.js';
@@ -65,6 +66,7 @@ const descriptions = {
   ambercast_evaluate_assert: 'Evaluate one assertion against the current page and return whether it passed. The check object always has type: "assert" and is discriminated by its check field: text-visible {text}, element-visible {target}, text-equals {target, text}, url-matches {pattern}, element-count {target, count}. Every target is {strategy: "accessibility", role, name} from ambercast_snapshot. Pass criterionId (the id of a trusted success criterion for this step) only on the terminal assertion that proves that criterion; omit it for intermediate checks.',
   ambercast_snapshot: 'Return the current page\'s accessibility snapshot (role and name tree). Call it before choosing a target so role and name match exactly. It takes no arguments.',
 } as const;
+const TARGET_REJECTION_HINT = 'Call ambercast_snapshot to observe the current page, then retry with a target taken from that snapshot.';
 
 function toolText(result: Awaited<ReturnType<Client['callTool']>>): string {
   const content = (result.content as readonly unknown[])[0];
@@ -78,6 +80,17 @@ function mismatchBody(tool: ToolName, issues: readonly SchemaMismatchIssue[], re
 
 function genericToolError(result: Awaited<ReturnType<Client['callTool']>>) {
   expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'Agentic MCP request failed.' }] });
+}
+
+function targetBody(
+  tool: Exclude<ToolName, 'ambercast_snapshot'>,
+  reason: string,
+  rejectionsRemaining: number,
+) {
+  return {
+    error: 'target-unresolved', tool, reason, rejectionsRemaining,
+    hint: TARGET_REJECTION_HINT,
+  };
 }
 
 type LatchCase = {
@@ -541,5 +554,134 @@ describe('startAgenticMcpServer', () => {
     expect((latched as AiResponseInvalidError).details!.issues).toStrictEqual(terminal.terminalIssues);
     await client.close();
     await server.close();
+  });
+
+  it('returns three target-resolution corrections, then latches the fourth and rejects later tools', async () => {
+    const { controller } = createController({
+      perform: async () => { throw new AgenticTargetRejection('ambercast_perform', 'element-not-found'); },
+    });
+    const server = await startAgenticMcpServer(controller);
+    const client = await connectClient(server.url, server.token);
+
+    for (const [index, remaining] of [2, 1, 0].entries()) {
+      const result = await client.callTool({ name: 'ambercast_perform', arguments: { action } });
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(toolText(result))).toStrictEqual(targetBody('ambercast_perform', 'element-not-found', remaining));
+      expect(server.peekLatchedError()).toBeUndefined();
+      expect(index).toBeLessThan(3);
+    }
+    genericToolError(await client.callTool({ name: 'ambercast_perform', arguments: { action } }));
+    expect(server.peekLatchedError()).toMatchObject({
+      tool: 'ambercast_perform', reason: 'element-not-found', exhausted: true,
+    });
+    expect(server.peekLatchedError()).toBeInstanceOf(AgenticTargetRejection);
+    genericToolError(await client.callTool({ name: 'ambercast_snapshot', arguments: {} }));
+    await client.close();
+    await server.close();
+  });
+
+  it('ignores an externally supplied exhausted flag but latches a mismatched tool identity immediately', async () => {
+    const recoverable = createController({
+      perform: async () => { throw new AgenticTargetRejection('ambercast_perform', 'element-not-found', true); },
+    });
+    const first = await startAgenticMcpServer(recoverable.controller);
+    const firstClient = await connectClient(first.url, first.token);
+    expect(JSON.parse(toolText(await firstClient.callTool({ name: 'ambercast_perform', arguments: { action } })))).toStrictEqual(
+      targetBody('ambercast_perform', 'element-not-found', 2),
+    );
+    await firstClient.close(); await first.close();
+
+    const mismatch = createController({
+      perform: async () => { throw new AgenticTargetRejection('ambercast_evaluate_assert', 'navigation-stale'); },
+    });
+    const second = await startAgenticMcpServer(mismatch.controller);
+    const secondClient = await connectClient(second.url, second.token);
+    genericToolError(await secondClient.callTool({ name: 'ambercast_perform', arguments: { action } }));
+    expect(second.peekLatchedError()).toMatchObject({ tool: 'ambercast_evaluate_assert', reason: 'navigation-stale' });
+    await secondClient.close(); await second.close();
+  });
+
+  it('does not reset target rejection budget after snapshot or a successful assertion', async () => {
+    let attempts = 0;
+    const { controller } = createController({
+      evaluateAssert: async () => {
+        attempts += 1;
+        if (attempts === 1 || attempts > 2) throw new AgenticTargetRejection('ambercast_evaluate_assert', 'navigation-stale');
+        return { passed: true };
+      },
+    });
+    const server = await startAgenticMcpServer(controller);
+    const client = await connectClient(server.url, server.token);
+    expect(JSON.parse(toolText(await client.callTool({ name: 'ambercast_evaluate_assert', arguments: { check } })))).toStrictEqual(
+      targetBody('ambercast_evaluate_assert', 'navigation-stale', 2),
+    );
+    expect((await client.callTool({ name: 'ambercast_snapshot', arguments: {} })).isError).not.toBe(true);
+    expect((await client.callTool({ name: 'ambercast_evaluate_assert', arguments: { check } })).isError).not.toBe(true);
+    for (const remaining of [1, 0]) {
+      expect(JSON.parse(toolText(await client.callTool({ name: 'ambercast_evaluate_assert', arguments: { check } })))).toStrictEqual(
+        targetBody('ambercast_evaluate_assert', 'navigation-stale', remaining),
+      );
+    }
+    genericToolError(await client.callTool({ name: 'ambercast_evaluate_assert', arguments: { check } }));
+    await client.close(); await server.close();
+  });
+
+  it('preserves the first exhausted budget across target and schema rejection budgets', async () => {
+    const targetThenSchema = createController({
+      perform: async () => { throw new AgenticTargetRejection('ambercast_perform', 'element-not-found'); },
+    });
+    const first = await startAgenticMcpServer(targetThenSchema.controller);
+    const firstClient = await connectClient(first.url, first.token);
+    for (let index = 0; index < 2; index += 1) await firstClient.callTool({ name: 'ambercast_perform', arguments: { action } });
+    for (let index = 0; index < 4; index += 1) await firstClient.callTool({ name: 'ambercast_perform', arguments: { action: 'wrong' } });
+    expect(first.peekLatchedError()).toBeInstanceOf(AiResponseInvalidError);
+    genericToolError(await firstClient.callTool({ name: 'ambercast_perform', arguments: { action } }));
+    await firstClient.close(); await first.close();
+
+    let targetAttempts = 0;
+    const schemaThenTarget = createController({
+      perform: async () => {
+        targetAttempts += 1;
+        throw new AgenticTargetRejection(
+          'ambercast_perform',
+          targetAttempts === 4 ? 'navigation-stale' : 'element-not-found',
+        );
+      },
+    });
+    const second = await startAgenticMcpServer(schemaThenTarget.controller);
+    const secondClient = await connectClient(second.url, second.token);
+    for (let index = 0; index < 3; index += 1) await secondClient.callTool({ name: 'ambercast_perform', arguments: { action: 'wrong' } });
+    for (let index = 0; index < 4; index += 1) await secondClient.callTool({ name: 'ambercast_perform', arguments: { action } });
+    expect(second.peekLatchedError()).toMatchObject({
+      exhausted: true,
+      reason: 'navigation-stale',
+    });
+    expect(second.peekLatchedError()).toBeInstanceOf(AgenticTargetRejection);
+    await secondClient.close(); await second.close();
+  });
+
+  it('latches a plain controller Error on its first throw', async () => {
+    const error = new Error('boom');
+    const { controller } = createController({ perform: async () => { throw error; } });
+    const server = await startAgenticMcpServer(controller);
+    const client = await connectClient(server.url, server.token);
+    genericToolError(await client.callTool({ name: 'ambercast_perform', arguments: { action } }));
+    expect(server.peekLatchedError()).toBe(error);
+    genericToolError(await client.callTool({ name: 'ambercast_snapshot', arguments: {} }));
+    await client.close(); await server.close();
+  });
+
+  it('serializes four concurrent target rejections into three corrections and one terminal latch', async () => {
+    const { controller } = createController({
+      perform: async () => { throw new AgenticTargetRejection('ambercast_perform', 'element-not-found'); },
+    });
+    const server = await startAgenticMcpServer(controller);
+    const client = await connectClient(server.url, server.token);
+    const results = await Promise.all(Array.from({ length: 4 }, () => client.callTool({ name: 'ambercast_perform', arguments: { action } })));
+    const remaining = results.filter((result) => toolText(result) !== 'Agentic MCP request failed.').map((result) => JSON.parse(toolText(result)).rejectionsRemaining).sort();
+    expect(remaining).toStrictEqual([0, 1, 2]);
+    expect(results.filter((result) => toolText(result) === 'Agentic MCP request failed.')).toHaveLength(1);
+    expect(server.peekLatchedError()).toBeInstanceOf(AgenticTargetRejection);
+    await client.close(); await server.close();
   });
 });

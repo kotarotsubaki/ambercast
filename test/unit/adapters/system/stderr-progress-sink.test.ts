@@ -79,6 +79,29 @@ describe('createStderrProgressSink()', () => {
     vi.useRealTimers();
   });
 
+  it('renders unclassified rejection diagnostics only with AMBERCAST_DEBUG and escapes controls', () => {
+    vi.stubEnv('AMBERCAST_DEBUG', '1');
+    const stderr = createRecordingStderr();
+    const sink = createStderrProgressSink({ command: 'run', stderr: stderr.stderr, projectRoot: '/workspace', isCI: false, clock: createMutableClock().clock });
+
+    sink.emit({
+      type: 'unclassified-rejection', file: 'login.test.md', stepId: 'step-x', name: 'TimeoutError',
+      message: 'bad\u001bmessage', stack: 'TimeoutError: bad\u001bmessage\n    at test',
+    });
+
+    expect(stderr.output).toEqual(['unclassified rejection in login.test.md step-x: TimeoutError: bad\\u001bmessage\nTimeoutError: bad\\u001bmessage\n    at test\n']);
+    sink.close();
+  });
+
+  it('omits the optional step label and is silent for unclassified rejections when debug is disabled', () => {
+    vi.stubEnv('AMBERCAST_DEBUG', '');
+    const stderr = createRecordingStderr();
+    const sink = createStderrProgressSink({ command: 'run', stderr: stderr.stderr, projectRoot: '/workspace', isCI: false, clock: createMutableClock().clock });
+    sink.emit({ type: 'unclassified-rejection', file: 'login.test.md', name: 'Error', message: 'ignored' });
+    expect(stderr.output).toEqual([]);
+    sink.close();
+  });
+
   it.each([
     {
       command: 'generate' as const,

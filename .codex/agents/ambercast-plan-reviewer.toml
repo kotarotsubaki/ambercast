@@ -1,6 +1,6 @@
 name = "ambercast_plan_reviewer"
 description = "Read-only Ambercast plan reviewer for exactly one required plan-review perspective."
-model = "gpt-5.6-sol"
+model = "gpt-6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """

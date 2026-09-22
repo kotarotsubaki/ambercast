@@ -51,3 +51,28 @@ jobs:
       - run: npm run build
       - run: node scripts/verify-pack.mjs
       - run: npm publish
+
+  build-website:
+    # Only a push that created a release reaches here, and only after npm
+    # publish succeeded, so the published site matches the npm release.
+    needs: [release-please, publish]
+    if: ${{ needs.release-please.outputs.release_created }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/website-build.yml
+
+  deploy-website:
+    needs: build-website
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        id: deployment

@@ -1,6 +1,6 @@
 name = "test_reviewer"
 description = "Read-only Ambercast test reviewer for specification coverage, failure observability, boundaries, and non-vacuous assertions."
-model = "gpt-5.6-sol"
+model = "gpt-6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """

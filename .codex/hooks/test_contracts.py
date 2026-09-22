@@ -2141,8 +2141,8 @@ class ProjectConfigurationContractTests(unittest.TestCase):
             {
                 "enabled": True,
                 "max_concurrent_threads_per_session": 8,
-                "default_subagent_model": "gpt-5.6-terra",
-                "default_subagent_reasoning_effort": "medium",
+                "default_subagent_model": "gpt-6-sol",
+                "default_subagent_reasoning_effort": "low",
                 "interrupt_message": True,
             },
         )
@@ -2157,12 +2157,12 @@ class ProjectConfigurationContractTests(unittest.TestCase):
 
     def test_standalone_roles_are_unique_and_match_model_matrix(self) -> None:
         expected = {
-            "ambercast-plan-reviewer.toml": ("ambercast_plan_reviewer", "gpt-5.6-sol", "high", "read-only"),
-            "ambercast-worker.toml": ("ambercast_worker", "gpt-5.6-sol", "high", "workspace-write"),
-            "review-mapper.toml": ("review_mapper", "gpt-5.6-luna", "medium", "read-only"),
-            "correctness-reviewer.toml": ("correctness_reviewer", "gpt-5.6-sol", "high", "read-only"),
-            "test-reviewer.toml": ("test_reviewer", "gpt-5.6-sol", "high", "read-only"),
-            "security-reviewer.toml": ("security_reviewer", "gpt-5.6-sol", "high", "read-only"),
+            "ambercast-plan-reviewer.toml": ("ambercast_plan_reviewer", "gpt-6-sol", "high", "read-only"),
+            "ambercast-worker.toml": ("ambercast_worker", "gpt-6-sol", "high", "workspace-write"),
+            "review-mapper.toml": ("review_mapper", "gpt-6-luna", "low", "read-only"),
+            "correctness-reviewer.toml": ("correctness_reviewer", "gpt-6-sol", "high", "read-only"),
+            "test-reviewer.toml": ("test_reviewer", "gpt-6-sol", "high", "read-only"),
+            "security-reviewer.toml": ("security_reviewer", "gpt-6-sol", "high", "read-only"),
         }
         files = sorted((REPO_ROOT / ".codex/agents").glob("*.toml"))
         self.assertEqual({path.name for path in files}, set(expected))

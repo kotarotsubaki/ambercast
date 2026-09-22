@@ -113,6 +113,17 @@ export type VersionlessCliManifest = Omit<CliManifest, 'version'>;
 export const CLI_MANIFEST: VersionlessCliManifest = {
   commands: [
     {
+      name: 'init',
+      summary: 'Scaffold config and a sample prompt',
+      positional: null,
+      flags: [
+        { name: 'dir', alias: null, value: '<path>', hidden: false, acceptedValues: null, shownValue: null, effect: 'project root to scaffold into', default: 'cwd', lineBreakAfter: false },
+        { name: 'yes', alias: 'y', value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'skip the confirmation prompt', default: 'false', lineBreakAfter: false },
+        { name: 'force', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'replace an existing ambercast.config.json', default: 'false', lineBreakAfter: false },
+        { name: 'no-color', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'disable ANSI', default: 'false', lineBreakAfter: false },
+      ],
+    },
+    {
       name: 'generate',
       summary: 'Generate deterministic plans',
       positional: { name: 'files', variadic: true, description: 'literal prompts; absent selects discovery' },

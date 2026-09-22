@@ -3,7 +3,7 @@ title: CLIの概要
 description: ambercast CLI のパーサー全体の仕様、コマンド体系、および自動探索の既定動作を解説します。
 ---
 
-`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `generate`、`run`、`check`、`heal` の 4 つのコマンドが実装されています。
+`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal` の 5 つのコマンドが実装されています。
 
 ## コマンド体系 {#command-surface}
 
@@ -11,10 +11,14 @@ description: ambercast CLI のパーサー全体の仕様、コマンド体系�
 Usage: ambercast <command> [options]
 
 Commands:
+  init                 Scaffold config and a sample prompt
   generate [files...]  Generate deterministic plans
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+
+Init options:
+  --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
   --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
@@ -35,11 +39,11 @@ AI configuration:
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
 
 Heal configuration:
-  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the fail-closed baseline and Stage 3.
+  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-実装されているコマンドは `generate`、`run`、`check`、`heal` です。
+実装されているコマンドは `init`、`generate`、`run`、`check`、`heal` です。
 
 トップレベルの `--help` および `--version` は、コマンドのディスパッチ前に処理を終了（ショートサーキット）します。不正な形式の引数が指定された場合は、レポートを出力せずに終了コード 2 で終了します。
 
@@ -47,6 +51,7 @@ Heal configuration:
 
 | コマンド | 位置引数 | 受け付けるオプション | 設定ファイルの探索優先順位 |
 | --- | --- | --- | --- |
+| init | なし | `dir`（対象ディレクトリ）、`yes`/`-y`（確認の省略）、`force`（既存設定の置換）、`no-color`（カラー無効化） | `--dir` 引数（未指定時は cwd） |
 | generate | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
 | run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 | check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
@@ -66,4 +71,4 @@ Heal configuration:
 
 探索処理は POSIX 相対パスを評価し、包含パターンのマッチ（inclusion match）を要求した上で、除外パターンのマッチ（ignore match）によって該当するパスを除外します。
 
-関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast init](/ambercast/ja/reference/cli/init/#flags)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)

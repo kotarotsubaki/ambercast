@@ -16,7 +16,7 @@ The `ambercast view` command defines the planned local results viewer, covering 
 
 ## Status {#status}
 
-`ambercast view` is not implemented in 0.3.1; the CLI parser accepts only `generate`, `run`, `check`, and `heal`, and rejects any other command. Its planned role as a local results viewer is established in the viewer design.
+`ambercast view` is not implemented in 0.3.1; the CLI parser accepts only `generate`, `run`, `check`, `heal`, and `init`, and rejects any other command. Its planned role as a local results viewer is established in the viewer design.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope).
 

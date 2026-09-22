@@ -16,7 +16,7 @@ sidebar:
 
 ## Status {#status}
 
-`ambercast baseline` and `ambercast restore` are not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, and `heal`, and rejects any other command. Their planned database boundary is defined by the DB reset design.
+`ambercast baseline` and `ambercast restore` are not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, `heal`, and `init`, and rejects any other command. Their planned database boundary is defined by the DB reset design.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Configuration](/ambercast/reference/configuration/#key-table).
 

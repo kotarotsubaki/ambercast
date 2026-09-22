@@ -30,6 +30,8 @@ If a configuration file exists, `$schema` is required; no-file configuration is 
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
+Alternatively, `npx ambercast init` scaffolds this same file together with a minimal `ambercast.config.json` and an AGENTS.md section; this tutorial stays on the no-config path so you can see the defaults at work.
+
 Its terminal `.test.md` suffix is eligible for companion-path resolution.
 
 2. Have a human or operator start and confirm the application at `http://localhost:3000`, then run `npx ambercast generate tests/ambercast/find-page.test.md`.

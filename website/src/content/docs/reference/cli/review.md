@@ -16,7 +16,7 @@ sidebar:
 
 ## Status {#status}
 
-`ambercast review` is not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, and `heal`, and rejects any other command. Its planned v2 role is defined by the CLI design.
+`ambercast review` is not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, `heal`, and `init`, and rejects any other command. Its planned v2 role is defined by the CLI design.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#result-shapes).
 

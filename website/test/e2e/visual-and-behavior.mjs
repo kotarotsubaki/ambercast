@@ -38,7 +38,6 @@ const PLANNED_PAGES = [
   'agents/mcp-server',
   'agents/official-skill',
   'reference/cli/baseline-restore',
-  'reference/cli/init',
   'reference/cli/mcp',
   'reference/cli/review',
   'reference/cli/view',
@@ -1572,7 +1571,6 @@ async function assertNoResidualWikilinks() {
 async function assertIssue298LlmsArtifacts(browser) {
   const plannedSlugs = [
     'reference/mcp-tools',
-    'reference/cli/init',
     'reference/cli/view',
     'reference/cli/review',
     'reference/cli/mcp',
@@ -1605,7 +1603,7 @@ async function assertIssue298LlmsArtifacts(browser) {
     for (const plannedUrl of artifactPlannedUrls) assert.equal(bodies.get(artifact).includes(plannedUrl), false, `${artifact} must omit planned page ${plannedUrl}.`);
   }
   const plannedLines = bodies.get('llms-planned.txt').trim().split('\n').filter(Boolean);
-  assert.equal(plannedLines.length, 8, 'llms-planned.txt must contain exactly eight planned entries.');
+  assert.equal(plannedLines.length, 7, 'llms-planned.txt must contain exactly seven planned entries.');
   for (const plannedUrl of plannedUrls) assert.ok(bodies.get('llms-planned.txt').includes(plannedUrl), `llms-planned.txt must contain ${plannedUrl}.`);
 }
 

@@ -293,14 +293,14 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-8 preserves the approved draft byte-for-byte', () => {
-    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('9517cdd1798dd9bbc4da4443c6b8f74c33abf45755f8aab8d5d98cd6746c42ef');
+    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('9fe69959f2be3cda05e1b5a295233b3d95ec152b4bb392b1c24a4d52d203de6d');
   });
 
   it('SPEC-9 and SPEC-10 keep skill flags aligned with the CLI usage contract', () => {
     const usage = renderUsage(CLI_MANIFEST);
 
     expect(usage).toBeDefined();
-    const sections = new Map([...usage!.matchAll(/^(Generate|Run|Check|Heal) options:\n([\s\S]*?)(?=\n\n|(?![\s\S]))/gm)]
+    const sections = new Map([...usage!.matchAll(/^(Init|Generate|Run|Check|Heal) options:\n([\s\S]*?)(?=\n\n|(?![\s\S]))/gm)]
       .map(([, command, options]) => [command!.toLowerCase(), new Set(extractFlagTokens(options!))]));
     expect(sections.get('run')).toContain('--ai');
     expect(usage!.match(/Run options:\n([^\n]+)\n([^\n]+)/)?.slice(1)).toStrictEqual([
@@ -309,13 +309,13 @@ describe('official ambercast skill', () => {
     ]);
 
     const allAllowed = new Set([...sections.values()].flatMap((flags) => [...flags]));
-    for (const match of skillText.matchAll(/npx ambercast (generate|run|check|heal)[^\n`]*/g)) {
+    for (const match of skillText.matchAll(/npx ambercast (init|generate|run|check|heal)[^\n`]*/g)) {
       for (const flag of extractFlagTokens(match[0]!)) expect(sections.get(match[1]!)!).toContain(flag);
     }
     for (const flag of extractFlagTokens(skillText)) expect(allAllowed).toContain(flag);
     for (const flag of skillText.match(/(?<![\w-])-[a-zA-Z](?![\w-])/g) ?? []) expect(flag).toBe('-y');
     for (const match of parseFrontmatter(skillText).body.matchAll(/\bambercast ([a-z][a-z-]*)\b/g)) {
-      expect(['generate', 'run', 'check', 'heal']).toContain(match[1]);
+      expect(['init', 'generate', 'run', 'check', 'heal']).toContain(match[1]);
     }
   });
 
@@ -398,7 +398,7 @@ describe('official ambercast skill', () => {
     const layout = agents.slice(agents.indexOf('## Repository layout'), agents.indexOf('## Core design decisions'));
     const commands = agents.slice(agents.indexOf('## Commands'));
 
-    expect(status.split('\n')[2]).toBe("0.x (the exact version is package.json's). `generate`, `run`, `check`, and `heal` are implemented and exercised by the test suite. Chromium only, local execution only; the results viewer, `init`, and an MCP server are not implemented yet. The official agent skill is bundled at skills/ambercast/SKILL.md.");
+    expect(status.split('\n')[2]).toBe("0.x (the exact version is package.json's). `generate`, `run`, `check`, `heal`, and `init` are implemented and exercised by the test suite. Chromium only, local execution only; the results viewer and an MCP server are not implemented yet. The official agent skill is bundled at skills/ambercast/SKILL.md.");
     expect(layout).toContain('files: ["bin", "dist", "skills"]');
     expect(layout).toContain('- `src/` — TypeScript sources, compiled by `tsdown` to `dist/` (gitignored, built on demand)\n- `skills/` — the official Agent Skills bundle published with the package; see skills/ambercast/SKILL.md');
     expect(layout).toContain('- `.claude-plugin/marketplace.json` — Claude Code plugin marketplace that points at `skills/ambercast`');

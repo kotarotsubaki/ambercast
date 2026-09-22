@@ -87,8 +87,8 @@ describe('writeGeneratedArtifacts', () => {
       {
         path: join('/dist-output', 'manifest', 'capabilities.json'),
         content: JSON.stringify({
-          commands: ['generate', 'run', 'check', 'heal'],
-          planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
+          commands: ['init', 'generate', 'run', 'check', 'heal'],
+          planned: ['view', 'review', 'mcp', 'baseline', 'restore'],
           schemaVersions: { plan: 3, grounding: 1, report: '3.6' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
@@ -149,8 +149,8 @@ describe('writeGeneratedArtifacts', () => {
     );
 
     expect(capabilities).toStrictEqual({
-      commands: ['generate', 'run', 'check', 'heal'],
-      planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
+      commands: ['init', 'generate', 'run', 'check', 'heal'],
+      planned: ['view', 'review', 'mcp', 'baseline', 'restore'],
       schemaVersions: { plan: 3, grounding: 1, report: '3.6' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
@@ -169,6 +169,15 @@ describe('writeGeneratedArtifacts', () => {
     expect(typeof capabilities.schemaVersions.report).toBe('string');
     expect(capabilities.errorCodes).toStrictEqual(EXPECTED_REPORT_ERROR_CODES);
     expect(capabilities.errorCodes).toStrictEqual(ReportErrorCode.options);
+  });
+
+  it('publishes init as available rather than planned', () => {
+    const capabilities = JSON.parse(
+      artifactContent(captureGeneratedArtifactWrites(), 'manifest/capabilities.json'),
+    );
+
+    expect(capabilities.commands).toContain('init');
+    expect(capabilities.planned).toStrictEqual(['view', 'review', 'mcp', 'baseline', 'restore']);
   });
 
   it('flattens every current raw-config leaf without inventing absent defaults', () => {

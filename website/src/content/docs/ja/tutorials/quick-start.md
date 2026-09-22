@@ -23,6 +23,8 @@ ambercast で最初のテストプロンプトを生成し、実行するまで�
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
+または、`npx ambercast init` を使うと、この同じファイルに加えて最小限の `ambercast.config.json` と AGENTS.md のセクションを生成できます。このチュートリアルでは、デフォルトの動作を確認できるよう、設定ファイルを作らない手順を続けます。
+
 末尾の `.test.md` サフィックスは、コンパニオンパス解決の対象となります。
 
 2. 人間またはオペレーターが `http://localhost:3000` でアプリケーションを起動して確認した後、`npx ambercast generate tests/ambercast/find-page.test.md` を実行します。

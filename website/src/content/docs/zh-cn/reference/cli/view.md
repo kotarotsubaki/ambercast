@@ -12,11 +12,11 @@ sidebar:
 `ambercast view` 尚未在 0.3.1 中实现。本文档为您呈现规划中的预期设计，而非当前已实现的功能。
 :::
 
-`ambercast view` 用于启动本地测试结果查看器，涵盖查看器的调用方式、端口选择策略以及在非交互式环境下的拒绝行为。该命令在 0.3.1 中尚未实现；当前命令行解析器仅接受 `generate`、`run`、`check` 和 `heal`，并会拒绝任何其他命令。
+`ambercast view` 用于启动本地测试结果查看器，涵盖查看器的调用方式、端口选择策略以及在非交互式环境下的拒绝行为。该命令在 0.3.1 中尚未实现；当前命令行解析器仅接受 `generate`、`run`、`check`、`heal` 和 `init`，并会拒绝任何其他命令。
 
 ## 状态 {#status}
 
-`ambercast view` 目前尚未在 0.3.1 中实现。命令行解析器仅接受 `generate`、`run`、`check` 与 `heal`，传入任何其他命令均会被拒绝。该命令作为本地查看器的角色定位由查看器设计定义。
+`ambercast view` 目前尚未在 0.3.1 中实现。命令行解析器仅接受 `generate`、`run`、`check`、`heal` 与 `init`，传入任何其他命令均会被拒绝。该命令作为本地查看器的角色定位由查看器设计定义。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)。
 

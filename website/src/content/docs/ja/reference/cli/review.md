@@ -16,7 +16,7 @@ sidebar:
 
 ## ステータス {#status}
 
-- `ambercast review` は 0.3.1 では実装されていません。パーサーは `generate`、`run`、`check`、`heal` のみを受け付け、それ以外のコマンドはすべて拒絶されます。本コマンドの役割は、v2 に向けたCLI設計で定義されています。
+- `ambercast review` は 0.3.1 では実装されていません。パーサーは `generate`、`run`、`check`、`heal`、`init` のみを受け付け、それ以外のコマンドはすべて拒絶されます。本コマンドの役割は、v2 に向けたCLI設計で定義されています。
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#result-shapes)
 

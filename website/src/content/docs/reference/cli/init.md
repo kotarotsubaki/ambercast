@@ -1,45 +1,57 @@
 ---
 title: ambercast init
-description: Planned scaffolding surface and unresolved design choices for the ambercast init command.
-status: planned
-sidebar:
-  badge:
-    text: Planned
-    variant: caution
+description: Command-line reference for ambercast init, which scaffolds a configuration file, sample prompt, and repository guidance.
 ---
 
-:::caution
-`ambercast init` is not implemented in 0.3.1. The interface described here reflects planned CLI behavior.
-:::
+## Usage {#usage}
 
-The `ambercast init` command defines the planned scaffolding interface and its unresolved design choices.
+```bash
+ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
+```
 
-## Status {#status}
+`ambercast init` scaffolds the minimum files needed to start using ambercast in a project. It plans the changes before writing anything and can target a directory other than the current working directory.
 
-`ambercast init` is not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, and `heal`, and rejects any other command. Its planned scaffolding interface is defined by the CLI design.
+## Flags {#flags}
 
-Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Your first test in 5 minutes](/ambercast/tutorials/quick-start/).
+| Flag | Value | Effect | Default |
+| --- | --- | --- | --- |
+| `--dir` | `<path>` | project root to scaffold into | cwd |
+| `--yes, -y` | boolean | skip the confirmation prompt | false |
+| `--force` | boolean | replace an existing ambercast.config.json | false |
+| `--no-color` | boolean | disable ANSI | false |
 
-## Planned interface {#planned-interface}
+## What it writes {#what-it-writes}
 
-| Syntax / behavior | Planned contract |
-| --- | --- |
-| `init [--dir <path>] [--yes]` | Prepare `ambercast.config.json` and a sample `test.md`. |
-| `--yes`, `-y` | Complete scaffolding non-interactively. |
-| Existing config | Warn and stop; the prose says `--force` overwrites it. |
-| CI workflow | Do not generate one. |
-| Design-wide flags | `--config <path>`, `--no-color`, `--version`, and `--help` are declared common to all planned commands. |
+The command plans four project-root-relative artifacts:
 
-The planned command exists to prepare configuration and a sample test, not to generate a Plan or run tests.
-
-The design's shared non-interactive test is `!process.stdout.isTTY || CI`; `CI` is active when defined and neither empty nor `"false"`.
-
-## Undecided items {#undecided-items}
-
-| State | Item | Why it remains open |
+| Artifact | When absent | When already present |
 | --- | --- | --- |
-| Gap | Exact `--force` surface | The command synopsis and command-flag matrix omit `--force`, while the same command description assigns overwrite behavior to it. |
-| Unspecified | Non-interactive refusal | The design calls `init` a consumer of the shared non-interactive rule but does not state whether missing `--yes` is rejected or what result/exit it produces. |
-| Explicitly undecided | None for `init` | The design labels only `baseline` and `restore` as `未決`; it does not label an `init` item that way. |
+| `ambercast.config.json` | created | skipped when it exactly matches the scaffold; otherwise rejected unless `--force` replaces it |
+| `tests/ambercast/find-page.test.md` | created | skipped without inspecting or replacing its contents |
+| `.gitignore` | created | skipped when it already contains `tests/ambercast/.runs/`; otherwise that line is appended |
+| `AGENTS.md` | created | skipped when its ambercast marker block matches; replaced when one valid marker pair differs, appended when no markers exist, and rejected for malformed markers |
 
-Links: [Configuration](/ambercast/reference/configuration/#file-selection), [Configure targets](/ambercast/how-to/configure-targets/).
+## Confirmation and non-interactive use {#confirmation}
+
+The complete plan is always printed to stderr. In an interactive terminal, ambercast then asks `Write these files? [y/N] `; `--yes` skips that prompt.
+
+In CI or another non-TTY environment, init rejects the invocation unless `--yes` is supplied. When a coding agent runs the command, `--yes` skips only the CLI prompt: it never substitutes for the human approval required for the four file changes. See the [operating contract](/ambercast/agents/operating-contract/#command-contract).
+
+## Exit codes {#exit-codes}
+
+- `0`: successful scaffolding, an all-skipped no-op, or a declined confirmation.
+- `2`: a preflight rejection, including invalid arguments, non-interactive use without `--yes`, a configuration conflict, or malformed `AGENTS.md` markers.
+- `3`: an I/O failure, interruption, or failure while applying the plan.
+
+For the shared process-status reference, see [Exit codes](/ambercast/reference/exit-codes/#exit-code-table).
+
+## Re-running {#re-running}
+
+After a successful run, repeating the same command is idempotent: all four artifacts are reported as `skipped`, ambercast prints `Nothing to do.`, and their bytes remain unchanged.
+
+## Related {#related}
+
+- [CLI overview](/ambercast/reference/cli/overview/#command-surface)
+- [Your first test in 5 minutes](/ambercast/tutorials/quick-start/)
+- [Configuration](/ambercast/reference/configuration/#file-selection)
+- [Operating contract](/ambercast/agents/operating-contract/#command-contract)

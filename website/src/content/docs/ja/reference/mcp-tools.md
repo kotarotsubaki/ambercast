@@ -16,7 +16,7 @@ MCP ツールは 0.3.1 では実装されていません。本ドキュメント
 
 ## 実装状況 {#status}
 
-MCP ツールは 0.3.1 では実装されていません。CLI パーサーが受け付けるコマンドは `generate`、`run`、`check`、`heal` のみであり、`mcp` サーバーコマンドは提供されていません。計画されている v2 ツールセットは、MCP 設計において定義されています。
+MCP ツールは 0.3.1 では実装されていません。CLI パーサーが受け付けるコマンドは `generate`、`run`、`check`、`heal`、`init` のみであり、`mcp` サーバーコマンドは提供されていません。計画されている v2 ツールセットは、MCP 設計において定義されています。
 
 関連リンク: [ambercast mcp](/ambercast/ja/reference/cli/mcp/#status)、[MCP サーバー](/ambercast/ja/agents/mcp-server/)。
 

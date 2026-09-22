@@ -771,7 +771,7 @@ function parseInit(argv: readonly string[], signal: AbortSignal): ParsedInitComm
  * remains a separate public contract from the structured report renderers.
  */
 export function renderInitOutput(output: InitCommandOutput): { stdout: string } {
-  const rows = output.states.map((state) => `  ${state.state.padEnd(13)}${escapeControlChars(state.path)}`);
+  const rows = output.states.map((state) => `  ${state.state.padEnd(14)}${escapeControlChars(state.path)}`);
   if (output.outcome === 'declined') {
     return { stdout: 'Nothing written.\n' };
   }

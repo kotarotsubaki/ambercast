@@ -923,7 +923,7 @@ describe('main()', () => {
         { path: '.gitignore', state: 'skipped' },
         { path: 'AGENTS.md', state: 'skipped' },
       ], message: null, exitCode: 0,
-    }, '  skipped      ambercast.config.json\n  skipped      tests/ambercast/find-page.test.md\n  skipped      .gitignore\n  skipped      AGENTS.md\nNothing to do.\n', '', 0],
+    }, '  skipped       ambercast.config.json\n  skipped       tests/ambercast/find-page.test.md\n  skipped       .gitignore\n  skipped       AGENTS.md\nNothing to do.\n', '', 0],
     ['interrupted before apply', { outcome: 'interrupted', phase: 'pre-apply', states: [], message: 'init was interrupted before writing anything.', exitCode: 3 }, '', 'init was interrupted before writing anything.\n', 3],
     ['interrupted while applying', {
       outcome: 'interrupted', phase: 'applying',
@@ -933,7 +933,7 @@ describe('main()', () => {
         { path: '.gitignore', state: 'not-attempted' },
         { path: 'AGENTS.md', state: 'not-attempted' },
       ], message: 'init was interrupted; see the file list above.', exitCode: 3,
-    }, '  written      ambercast.config.json\n  not-attemptedtests/ambercast/find-page.test.md\n  not-attempted.gitignore\n  not-attemptedAGENTS.md\n', 'init was interrupted; see the file list above.\n', 3],
+    }, '  written       ambercast.config.json\n  not-attempted tests/ambercast/find-page.test.md\n  not-attempted .gitignore\n  not-attempted AGENTS.md\n', 'init was interrupted; see the file list above.\n', 3],
     ['failed before apply', { outcome: 'failed', phase: 'pre-apply', states: [], message: 'init could not read AGENTS.md: denied', exitCode: 3 }, '', 'init could not read AGENTS.md: denied\n', 3],
     ['failed while applying with an escaped path', {
       outcome: 'failed', phase: 'applying',
@@ -943,7 +943,7 @@ describe('main()', () => {
         { path: '.gitignore', state: 'not-attempted' },
         { path: 'AGENTS.md', state: 'not-attempted' },
       ], message: 'init failed while writing unsafe\\nAGENTS.md: denied', exitCode: 3,
-    }, '  written      ambercast.config.json\n  failed       unsafe\\nAGENTS.md\n  not-attempted.gitignore\n  not-attemptedAGENTS.md\n', 'init failed while writing unsafe\\nAGENTS.md: denied\n', 3],
+    }, '  written       ambercast.config.json\n  failed        unsafe\\nAGENTS.md\n  not-attempted .gitignore\n  not-attempted AGENTS.md\n', 'init failed while writing unsafe\\nAGENTS.md: denied\n', 3],
     ['written', {
       outcome: 'written',
       states: [
@@ -952,7 +952,7 @@ describe('main()', () => {
         { path: '.gitignore', state: 'written' },
         { path: 'AGENTS.md', state: 'written' },
       ], message: null, exitCode: 0,
-    }, '  written      ambercast.config.json\n  written      tests/ambercast/find-page.test.md\n  written      .gitignore\n  written      AGENTS.md\n\nNext: start your app at http://localhost:3000, then run\n  npx ambercast generate tests/ambercast/find-page.test.md\nUsing Claude Code? Add `@AGENTS.md` to CLAUDE.md so it reads the ambercast section.\n', '', 0],
+    }, '  written       ambercast.config.json\n  written       tests/ambercast/find-page.test.md\n  written       .gitignore\n  written       AGENTS.md\n\nNext: start your app at http://localhost:3000, then run\n  npx ambercast generate tests/ambercast/find-page.test.md\nUsing Claude Code? Add `@AGENTS.md` to CLAUDE.md so it reads the ambercast section.\n', '', 0],
   ] as const)('renders the init %s outcome as its complete stdout and stderr golden', async (_name, output, stdout, stderr, exitCode) => {
     runInitCommand.mockResolvedValue(output);
 
@@ -1492,10 +1492,10 @@ describe('init end-to-end transcript', () => {
     + '  create  .gitignore\n'
     + '  create  AGENTS.md\n'
   );
-  const written = '  written      ambercast.config.json\n'
-    + '  written      tests/ambercast/find-page.test.md\n'
-    + '  written      .gitignore\n'
-    + '  written      AGENTS.md\n\n'
+  const written = '  written       ambercast.config.json\n'
+    + '  written       tests/ambercast/find-page.test.md\n'
+    + '  written       .gitignore\n'
+    + '  written       AGENTS.md\n\n'
     + 'Next: start your app at http://localhost:3000, then run\n'
     + '  npx ambercast generate tests/ambercast/find-page.test.md\n'
     + 'Using Claude Code? Add `@AGENTS.md` to CLAUDE.md so it reads the ambercast section.\n';

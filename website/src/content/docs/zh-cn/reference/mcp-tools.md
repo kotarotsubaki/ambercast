@@ -16,7 +16,7 @@ MCP 工具在 0.3.1 中尚未实现。本文档描述的是预期设计规范，
 
 ## 状态 {#status}
 
-- MCP 工具在 0.3.1 中尚未实现；CLI 解析器仅接受 `generate`、`run`、`check` 和 `heal`，不包含 `mcp` 服务命令。其规划中的 v2 工具集由 MCP 设计定义。
+- MCP 工具在 0.3.1 中尚未实现；CLI 解析器仅接受 `generate`、`run`、`check`、`heal` 和 `init`，不包含 `mcp` 服务命令。其规划中的 v2 工具集由 MCP 设计定义。
 
 链接：[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#status)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)。
 

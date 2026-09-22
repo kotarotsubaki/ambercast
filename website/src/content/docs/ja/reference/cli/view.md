@@ -16,7 +16,7 @@ sidebar:
 
 ## ステータス {#status}
 
-`ambercast view` は 0.3.1 では実装されていません。現在のコマンドパーサーは `generate`、`run`、`check`、`heal` のみを受け付け、それ以外のコマンドは拒絶します。本コマンドが担うローカルビューアとしての役割は、計画されているビューア設計で定義されています。
+`ambercast view` は 0.3.1 では実装されていません。現在のコマンドパーサーは `generate`、`run`、`check`、`heal`、`init` のみを受け付け、それ以外のコマンドは拒絶します。本コマンドが担うローカルビューアとしての役割は、計画されているビューア設計で定義されています。
 
 関連情報:
 - [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)

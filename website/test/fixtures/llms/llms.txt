@@ -49,6 +49,7 @@
 - [ambercast run](https://kotarotsubaki.github.io/ambercast/reference/cli/run/): Reference for the ambercast run command, covering CLI flags, replay paths, explicit AI resolution, grounding write-back, and report persistence.
 - [ambercast check](https://kotarotsubaki.github.io/ambercast/reference/cli/check/): Inspect the freshness and validity of Ambercast test plans and grounding artifacts from the CLI.
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/reference/cli/heal/): Command-line reference for ambercast heal, defining flags, repair execution boundaries, authorization, and side effects.
+- [ambercast init](https://kotarotsubaki.github.io/ambercast/reference/cli/init/): Command-line reference for ambercast init, which scaffolds a configuration file, sample prompt, and repository guidance.
 
 ## PLAN SPECIFICATION
 - [Ambercast Plan Specification](https://kotarotsubaki.github.io/ambercast/spec/overview/): This specification describes the artifacts accepted by ambercast 0.3.1.

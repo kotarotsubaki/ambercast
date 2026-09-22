@@ -49,6 +49,7 @@
 - [ambercast run](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/): 规范 ambercast run 的标志、回放路径、显式 AI 解析与运行写入行为。
 - [ambercast check](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/check/): 为 CLI 用户汇总检查状态。
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/): 规定 ambercast heal 命令的授权机制与运行时副作用，并提供选项、修复模型、限制及运行时行为的完整参考。
+- [ambercast init](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/init/): ambercast init 的命令行参考：用于创建配置文件、示例提示词和仓库操作指引。
 
 ## PLAN SPECIFICATION
 - [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.3.1 接受的工件。

@@ -3,11 +3,11 @@ title: Using ambercast from an AI agent
 description: Operational reading order and bounded execution loop for AI agents using ambercast.
 ---
 
-This guide defines the operational reading order, side effects, and action branching for AI agents using ambercast. The available CLI commands are `generate`, `run`, `check`, and `heal`.
+This guide defines the operational reading order, side effects, and action branching for AI agents using ambercast. The available CLI commands are `init`, `generate`, `run`, `check`, and `heal`.
 
 ## Read before acting {#read-before-acting}
 
-AI-agent documentation defines reading order, side effects, and action branching; Reference owns exact specifications and How-to owns procedures. The available CLI commands are `generate`, `run`, `check`, and `heal`. Before changing a test asset, establish the minimum required context:
+AI-agent documentation defines reading order, side effects, and action branching; Reference owns exact specifications and How-to owns procedures. The available CLI commands are `init`, `generate`, `run`, `check`, and `heal`. Before changing a test asset, establish the minimum required context:
 
 | Read | Reason |
 | --- | --- |

@@ -75,7 +75,7 @@ export function writeGeneratedArtifacts(deps: {
   deps.writeFile(join(deps.outDir, 'manifest', 'cli.json'), JSON.stringify(createCliManifest(__VERSION__)));
   deps.writeFile(join(deps.outDir, 'manifest', 'capabilities.json'), JSON.stringify({
     commands: CLI_MANIFEST.commands.map(({ name }) => name),
-    planned: ['init', 'view', 'review', 'mcp', 'baseline', 'restore'],
+    planned: ['view', 'review', 'mcp', 'baseline', 'restore'],
     schemaVersions: {
       plan: PLAN_SCHEMA_VERSION,
       grounding: GROUNDING_SCHEMA_VERSION,

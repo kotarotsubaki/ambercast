@@ -1,49 +1,57 @@
 ---
 title: ambercast init
-description: 計画されている ambercast init のスキャフォールディング機能と未決定の設計事項について説明します。
-status: planned
-sidebar:
-  badge:
-    text: Planned
-    variant: caution
+description: ambercast init が設定ファイル、サンプルプロンプト、およびリポジトリ向けのガイダンスを作成するためのコマンドラインリファレンスです。
 ---
 
-:::caution
-`ambercast init` はバージョン 0.3.1 では実装されていません。現行のパーサーは `generate`、`run`、`check`、`heal` のみを受け付け、その他のコマンドは拒否されます。本ページで説明している内容は計画中の設計仕様であり、現行の動作ではありません。
-:::
+## 使い方 {#usage}
 
-`ambercast init` は、プロジェクトの初期設定を行うスキャフォールディング機能として計画されているコマンドです。本リファレンスでは、計画されているインターフェース仕様と未決定の設計項目について説明します。
+```bash
+ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
+```
 
-## ステータス {#status}
+`ambercast init` は、プロジェクトで ambercast を使い始めるために必要な最小限のファイルを作成します。書き込みの前に変更計画を表示し、カレントワーキングディレクトリ以外のディレクトリも対象にできます。
 
-`ambercast init` はバージョン 0.3.1 では実装されていません。CLI パーサーは `generate`、`run`、`check`、`heal` のみを受け付け、それ以外のコマンドはすべて拒否します。計画されているスキャフォールディングのインターフェース仕様は、CLI 設計において定義されています。
+## フラグ {#flags}
 
-関連情報:
-- [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)
-- [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
+| フラグ | 値 | 効果 | デフォルト |
+| --- | --- | --- | --- |
+| `--dir` | `<path>` | スキャフォールディング先のプロジェクトルート | cwd |
+| `--yes, -y` | boolean | 確認プロンプトを省略 | false |
+| `--force` | boolean | 既存の ambercast.config.json を置き換え | false |
+| `--no-color` | boolean | ANSI を無効化 | false |
 
-## 計画されているインターフェース {#planned-interface}
+## 書き込む内容 {#what-it-writes}
 
-| 構文 / 動作 | 計画されている契約 |
-| --- | --- |
-| `init [--dir <path>] [--yes]` | `ambercast.config.json` およびサンプルの `test.md` を準備します。 |
-| `--yes`, `-y` | スキャフォールディングを非対話形式で完了します。 |
-| 既存の設定 | 警告を表示して停止します。説明文では `--force` で上書きするとされています。 |
-| CIワークフロー | 生成しません。 |
-| 設計共通フラグ | `--config <path>`、`--no-color`、`--version`、`--help` が、計画されている全コマンド共通として宣言されています。 |
+このコマンドは、プロジェクトルートからの相対パスで次の4つの成果物を計画します。
 
-計画されている本コマンドは設定ファイルおよびサンプルのテストファイルを準備するために存在し、Plan の生成やテストの実行は行いません。
-
-設計における共通の非対話判定ルールは `!process.stdout.isTTY || CI` です。`CI` は定義されており、かつ空でも `"false"` でもない場合にアクティブとみなされます。
-
-## 未決定の項目 {#undecided-items}
-
-| 状態 | 項目 | 未決のままとなっている理由 |
+| 成果物 | 不在の場合 | 既に存在する場合 |
 | --- | --- | --- |
-| ギャップ | `--force` の正確なインターフェース | コマンドの概要構文およびコマンドとフラグのマトリクスから `--force` が省略されている一方、同一コマンドの説明文では `--force` に上書き動作が割り当てられており、未確認の計画事項となっています。 |
-| 未規定 | 非対話時の拒否動作 | 設計上 `init` は共有非対話ルールのコンシューマと位置付けられていますが、`--yes` が指定されていない場合に拒否されるのか、あるいはどのような結果や終了ステータスになるのかは記載されておらず、未確認となっています。 |
-| 明示的に未決 | `init` に関してはなし | 設計において「未決」とラベル付けされているのは `baseline` と `restore` のみであり、`init` の項目にはそのラベルが付与されていません。 |
+| `ambercast.config.json` | 作成 | スキャフォールドと完全一致すればスキップ。それ以外は `--force` による置換がなければ拒否 |
+| `tests/ambercast/find-page.test.md` | 作成 | 内容を調べたり置き換えたりせずスキップ |
+| `.gitignore` | 作成 | `tests/ambercast/.runs/` が既にあればスキップ。それ以外はその行を追記 |
+| `AGENTS.md` | 作成 | ambercast のマーカーブロックが一致すればスキップ。正しいマーカー対で内容が異なれば置換、マーカーがなければ追記、不正なマーカーは拒否 |
 
-関連情報:
+## 確認と非対話的な利用 {#confirmation}
+
+完全な計画は常に stderr に表示されます。対話的な端末では、その後に ambercast が `Write these files? [y/N] ` と確認します。`--yes` を指定するとこのプロンプトを省略できます。
+
+CI または非 TTY の環境では、`--yes` を指定しない init は拒否されます。コーディングエージェントが実行する場合、`--yes` が省略するのは CLI の確認だけであり、4つのファイル変更に必要な人間の承認を代替するものではありません。[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)を参照してください。
+
+## 終了コード {#exit-codes}
+
+- `0`: スキャフォールディングの成功、すべてスキップされた no-op、または確認の辞退。
+- `2`: 不正な引数、`--yes` なしの非対話利用、設定の競合、不正な `AGENTS.md` マーカーなど、事前検査での拒否。
+- `3`: I/O 失敗、中断、または計画の適用中の失敗。
+
+共通のプロセスステータスについては、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)を参照してください。
+
+## 再実行 {#re-running}
+
+成功後に同じコマンドを再実行しても冪等です。4つの成果物はすべて `skipped` と表示され、ambercast は `Nothing to do.` を出力し、ファイルのバイト列は変わりません。
+
+## 関連リンク {#related}
+
+- [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
+- [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
 - [設定](/ambercast/ja/reference/configuration/#file-selection)
-- [ターゲットの設定](/ambercast/ja/how-to/configure-targets/)
+- [オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)

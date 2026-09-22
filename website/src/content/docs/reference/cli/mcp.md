@@ -16,7 +16,7 @@ The `ambercast mcp` command defines server launch and transport discipline for r
 
 ## Status {#status}
 
-`ambercast mcp` is not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, and `heal`, and rejects any other command. Its planned v2 server interface is defined by the MCP design.
+`ambercast mcp` is not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, `heal`, and `init`, and rejects any other command. Its planned v2 server interface is defined by the MCP design.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [MCP server](/ambercast/agents/mcp-server/).
 

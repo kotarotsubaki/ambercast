@@ -219,6 +219,8 @@ ambercast で最初のテストプロンプトを生成し、実行するまで�
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
+または、`npx ambercast init` を使うと、この同じファイルに加えて最小限の `ambercast.config.json` と AGENTS.md のセクションを生成できます。このチュートリアルでは、デフォルトの動作を確認できるよう、設定ファイルを作らない手順を続けます。
+
 末尾の `.test.md` サフィックスは、コンパニオンパス解決の対象となります。
 
 2. 人間またはオペレーターが `http://localhost:3000` でアプリケーションを起動して確認した後、`npx ambercast generate tests/ambercast/find-page.test.md` を実行します。
@@ -1716,7 +1718,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 # CLIの概要
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/
 
-`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `generate`、`run`、`check`、`heal` の 4 つのコマンドが実装されています。
+`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal` の 5 つのコマンドが実装されています。
 
 ## コマンド体系 {#command-surface}
 
@@ -1724,10 +1726,14 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/
 Usage: ambercast <command> [options]
 
 Commands:
+  init                 Scaffold config and a sample prompt
   generate [files...]  Generate deterministic plans
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+
+Init options:
+  --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
   --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
@@ -1748,11 +1754,11 @@ AI configuration:
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
 
 Heal configuration:
-  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the fail-closed baseline and Stage 3.
+  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-実装されているコマンドは `generate`、`run`、`check`、`heal` です。
+実装されているコマンドは `init`、`generate`、`run`、`check`、`heal` です。
 
 トップレベルの `--help` および `--version` は、コマンドのディスパッチ前に処理を終了（ショートサーキット）します。不正な形式の引数が指定された場合は、レポートを出力せずに終了コード 2 で終了します。
 
@@ -1760,6 +1766,7 @@ Heal configuration:
 
 | コマンド | 位置引数 | 受け付けるオプション | 設定ファイルの探索優先順位 |
 | --- | --- | --- | --- |
+| init | なし | `dir`（対象ディレクトリ）、`yes`/`-y`（確認の省略）、`force`（既存設定の置換）、`no-color`（カラー無効化） | `--dir` 引数（未指定時は cwd） |
 | generate | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
 | run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 | check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
@@ -1779,7 +1786,7 @@ Heal configuration:
 
 探索処理は POSIX 相対パスを評価し、包含パターンのマッチ（inclusion match）を要求した上で、除外パターンのマッチ（ignore match）によって該当するパスを除外します。
 
-関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast init](/ambercast/ja/reference/cli/init/#flags)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
 
 ---
 
@@ -1993,6 +2000,64 @@ Plan および Grounding コンパニオンへの書き込みは認可された�
 プロセス終了コードの値とその優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) が管理します。
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#heal-results)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)。
+
+---
+
+# ambercast init
+Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/init/
+
+## 使い方 {#usage}
+
+```bash
+ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
+```
+
+`ambercast init` は、プロジェクトで ambercast を使い始めるために必要な最小限のファイルを作成します。書き込みの前に変更計画を表示し、カレントワーキングディレクトリ以外のディレクトリも対象にできます。
+
+## フラグ {#flags}
+
+| フラグ | 値 | 効果 | デフォルト |
+| --- | --- | --- | --- |
+| `--dir` | `<path>` | スキャフォールディング先のプロジェクトルート | cwd |
+| `--yes, -y` | boolean | 確認プロンプトを省略 | false |
+| `--force` | boolean | 既存の ambercast.config.json を置き換え | false |
+| `--no-color` | boolean | ANSI を無効化 | false |
+
+## 書き込む内容 {#what-it-writes}
+
+このコマンドは、プロジェクトルートからの相対パスで次の4つの成果物を計画します。
+
+| 成果物 | 不在の場合 | 既に存在する場合 |
+| --- | --- | --- |
+| `ambercast.config.json` | 作成 | スキャフォールドと完全一致すればスキップ。それ以外は `--force` による置換がなければ拒否 |
+| `tests/ambercast/find-page.test.md` | 作成 | 内容を調べたり置き換えたりせずスキップ |
+| `.gitignore` | 作成 | `tests/ambercast/.runs/` が既にあればスキップ。それ以外はその行を追記 |
+| `AGENTS.md` | 作成 | ambercast のマーカーブロックが一致すればスキップ。正しいマーカー対で内容が異なれば置換、マーカーがなければ追記、不正なマーカーは拒否 |
+
+## 確認と非対話的な利用 {#confirmation}
+
+完全な計画は常に stderr に表示されます。対話的な端末では、その後に ambercast が `Write these files? [y/N] ` と確認します。`--yes` を指定するとこのプロンプトを省略できます。
+
+CI または非 TTY の環境では、`--yes` を指定しない init は拒否されます。コーディングエージェントが実行する場合、`--yes` が省略するのは CLI の確認だけであり、4つのファイル変更に必要な人間の承認を代替するものではありません。[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)を参照してください。
+
+## 終了コード {#exit-codes}
+
+- `0`: スキャフォールディングの成功、すべてスキップされた no-op、または確認の辞退。
+- `2`: 不正な引数、`--yes` なしの非対話利用、設定の競合、不正な `AGENTS.md` マーカーなど、事前検査での拒否。
+- `3`: I/O 失敗、中断、または計画の適用中の失敗。
+
+共通のプロセスステータスについては、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)を参照してください。
+
+## 再実行 {#re-running}
+
+成功後に同じコマンドを再実行しても冪等です。4つの成果物はすべて `skipped` と表示され、ambercast は `Nothing to do.` を出力し、ファイルのバイト列は変わりません。
+
+## 関連リンク {#related}
+
+- [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
+- [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
+- [設定](/ambercast/ja/reference/configuration/#file-selection)
+- [オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)
 
 ---
 
@@ -3122,7 +3187,7 @@ AIエージェントがテストアセットを変更するにあたり、事前
 
 ## 操作の前に読むべきドキュメント {#read-before-acting}
 
-AIエージェント向けのドキュメントでは、読む順序、副作用、およびアクションの分岐を定めています。正確な仕様はリファレンスが、手順はHow-toが扱います。利用可能なCLIコマンドは `generate`、`run`、`check`、`heal` です。
+AIエージェント向けのドキュメントでは、読む順序、副作用、およびアクションの分岐を定めています。正確な仕様はリファレンスが、手順はHow-toが扱います。利用可能なCLIコマンドは `init`、`generate`、`run`、`check`、`heal` です。
 
 | 参照ドキュメント | 理由 |
 | --- | --- |
@@ -3149,20 +3214,21 @@ AIエージェント向けのドキュメントでは、読む順序、副作用
 # オペレーション規約
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/
 
-本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `generate`、`run`、`check`、`heal` のみです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
+本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `init`、`generate`、`run`、`check`、`heal` の5つです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
 
 ## コマンド規約 {#command-contract}
 
-パーサーが実装済みコマンドとして公開しているのは、`generate`、`run`、`check`、`heal` の4つのコマンドのみです。`check` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
+パーサーが実装済みコマンドとして公開しているのは、`init`、`generate`、`run`、`check`、`heal` の5つのコマンドのみです。`check` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
 
 | コマンド | 前提条件 | 副作用 | 承認の要否 | CIで安全か |
 | --- | --- | --- | --- | --- |
+| init | 対象ディレクトリへの書き込み権限があること。 | 設定、サンプルプロンプト、`.gitignore` の1行、AGENTS.md のブロックからなる4つのアーティファクトを書き込む場合があります。 | ユーザーによる明示的な承認が必要です。`--yes` はエージェントへの権限付与ではありません。 | 既定では安全ではありません。非対話環境では `--yes` なしで拒否され、CIで使用する場合も承認境界は変わりません。 |
 | generate | 選択されたプロンプトとターゲットが有効であり、新たに提案されたシークレット名は許可リストにない限り同意が必要です。 | Plan および Grounding アーティファクトと、承認済みの名前を `secrets.allow` に書き込む場合があります。 | 同意と書き込みに必要です。コミット前に diff を提示してください。 | レビュー済みの名前が `secrets.allow` に事前登録されている場合に安全です。 |
 | run | 選択されたプロンプトに信頼できる plan が存在すること。 | 実行レポートを書き込みます。write-back コントラクトに基づき grounding を書き込む場合があります。 | 要求されたスコープで書き込みが未承認の場合は必要です。 | write-back ポリシーに従い、安全です。 |
 | check | 選択対象が検出可能であること。 | プロンプトとアーティファクトの読み取りのみを行います。 | ambercast アーティファクト書き込みの承認は不要です。 | 安全です。 |
 | heal | ターゲットが冪等であり、CI環境では実際の試行がCIで有効化されていること。 | runs ディレクトリ内に試行のエビデンスを書き込む場合があります。確認後にのみ、測定された plan/grounding 候補をコミットします。 | ユーザーによる明示的な承認が必要です。--yes はエージェントへの権限付与ではありません。 | 既定では安全ではありません（ci.heal: true の場合のみ）。 |
 
-関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/), [ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions), [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
+関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/), [ambercast init](/ambercast/ja/reference/cli/init/#confirmation), [ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions), [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
 
 ## 禁止事項 {#prohibitions}
 

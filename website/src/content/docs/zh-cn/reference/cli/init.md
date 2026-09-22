@@ -1,45 +1,57 @@
 ---
 title: ambercast init
-description: 记录 ambercast init 规划中的脚手架接口与尚未确定的设计选项。
-status: planned
-sidebar:
-  badge:
-    text: Planned
-    variant: caution
+description: ambercast init 的命令行参考：用于创建配置文件、示例提示词和仓库操作指引。
 ---
 
-:::caution
-`ambercast init` 为规划中的功能，在 0.3.1 版本中尚未实现。本文档描述的是预期的设计行为，而非当前已实现的行为。
-:::
+## 用法 {#usage}
 
-`ambercast init` 规划用于初始化项目脚手架。本文档记录该命令规划中的脚手架接口规范及其尚未确定的设计选项。
+```bash
+ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
+```
 
-## 状态 {#status}
+`ambercast init` 会创建在项目中开始使用 ambercast 所需的最小文件集。它会先显示变更计划，再执行任何写入，并且可将当前工作目录之外的目录作为目标。
 
-`ambercast init` 在 0.3.1 版本中尚未实现；解析器目前仅接受 `generate`、`run`、`check` 与 `heal`，并会拒绝任何其他命令。其规划中的脚手架接口由 CLI 设计定义。
+## 标志 {#flags}
 
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)。
+| 标志 | 取值 | 效果 | 默认值 |
+| --- | --- | --- | --- |
+| `--dir` | `<path>` | 要创建脚手架的项目根目录 | cwd |
+| `--yes, -y` | boolean | 跳过确认提示 | false |
+| `--force` | boolean | 替换现有的 ambercast.config.json | false |
+| `--no-color` | boolean | 禁用 ANSI | false |
 
-## 规划的接口 {#planned-interface}
+## 写入内容 {#what-it-writes}
 
-| 语法 / 行为 | 规划约定 |
-| --- | --- |
-| `init [--dir <path>] [--yes]` | 准备 `ambercast.config.json` 与示例 `test.md`。 |
-| `--yes`, `-y` | 以非交互方式完成脚手架生成。 |
-| 现有配置文件 | 发出警告并停止；说明文本指出 `--force` 会覆盖它。 |
-| CI 工作流 | 不生成 CI 工作流。 |
-| 全局设计标志 | `--config <path>`、`--no-color`、`--version` 与 `--help` 声明为所有规划命令的通用标志。 |
+该命令会为以下四个相对于项目根目录的工件创建计划：
 
-规划中的该命令用于准备配置与示例测试，而非生成 Plan 或运行测试。
-
-通用的非交互模式判断规则为 `!process.stdout.isTTY || CI`；当 `CI` 环境变量已定义且既非空也非 `"false"` 时即处于激活状态。
-
-## 未决事项 {#undecided-items}
-
-| 状态 | 事项 | 尚未确定的原因 |
+| 工件 | 不存在时 | 已存在时 |
 | --- | --- | --- |
-| 缺口 | `--force` 的确切参数形式 | 命令概要与命令标志矩阵中未列出 `--force`，而在同一命令的描述中却赋予了它覆盖行为；该接口目前尚未得到确认。 |
-| 未规定 | 非交互模式下的拒绝行为 | 设计中将 `init` 标为通用非交互规则的使用方，但未规定在缺失 `--yes` 时是否拒绝，亦未规定会产生何种结果或退出状态；该行为目前尚未确认。 |
-| 明确未决 | `init` 无此类事项 | 设计中仅将 `baseline` 与 `restore` 标注为 `未決`；并未对 `init` 的任何事项作此标注。 |
+| `ambercast.config.json` | 创建 | 与脚手架完全一致时跳过；否则除非以 `--force` 替换，否则拒绝 |
+| `tests/ambercast/find-page.test.md` | 创建 | 不检查或替换其内容，直接跳过 |
+| `.gitignore` | 创建 | 已含有 `tests/ambercast/.runs/` 时跳过；否则追加该行 |
+| `AGENTS.md` | 创建 | ambercast 标记块匹配时跳过；一个有效标记对但内容不同时替换；没有标记时追加；标记格式错误时拒绝 |
 
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection)、[配置目标环境](/ambercast/zh-cn/how-to/configure-targets/)。
+## 确认与非交互式使用 {#confirmation}
+
+完整计划始终会输出到 stderr。在交互式终端中，ambercast 随后会询问 `Write these files? [y/N] `；`--yes` 可跳过此提示。
+
+在 CI 或其他非 TTY 环境中，未提供 `--yes` 的 init 调用会被拒绝。由编码 Agent 执行时，`--yes` 仅跳过 CLI 提示，绝不替代这四项文件变更所需的人类批准。请参阅[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)。
+
+## 退出码 {#exit-codes}
+
+- `0`：脚手架创建成功、全部跳过的 no-op，或拒绝确认。
+- `2`：预检拒绝，包括无效参数、没有 `--yes` 的非交互调用、配置冲突或格式错误的 `AGENTS.md` 标记。
+- `3`：I/O 失败、中断，或应用计划时失败。
+
+有关通用进程状态，请参阅[退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
+
+## 再次运行 {#re-running}
+
+成功后使用相同命令再次运行是幂等的：四个工件都会报告为 `skipped`，ambercast 输出 `Nothing to do.`，其字节内容不会改变。
+
+## 相关链接 {#related}
+
+- [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)
+- [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)
+- [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
+- [操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)

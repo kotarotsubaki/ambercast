@@ -16,7 +16,7 @@ sidebar:
 
 ## ステータス {#status}
 
-`ambercast baseline` および `ambercast restore` はバージョン 0.3.1 には実装されていません。CLI パーサーは `generate`、`run`、`check`、`heal` のみを受け付け、それ以外のコマンドはすべて拒絶します。両コマンドの計画されているデータベース境界は、DB リセット設計によって定義されています。
+`ambercast baseline` および `ambercast restore` はバージョン 0.3.1 には実装されていません。CLI パーサーは `generate`、`run`、`check`、`heal`、`init` のみを受け付け、それ以外のコマンドはすべて拒絶します。両コマンドの計画されているデータベース境界は、DB リセット設計によって定義されています。
 
 リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface), [設定](/ambercast/ja/reference/configuration/#key-table)
 

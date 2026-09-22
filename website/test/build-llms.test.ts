@@ -16,7 +16,6 @@ import {
 
 const PLANNED_SLUGS = [
   'reference/mcp-tools',
-  'reference/cli/init',
   'reference/cli/view',
   'reference/cli/review',
   'reference/cli/mcp',
@@ -103,9 +102,9 @@ describe('llms artifact completeness oracles', () => {
       const orderedPlannedSlugs = orderedPages.filter(({ slug }) => discoveredPlannedSlugs.includes(slug)).map(({ slug }) => slug).sort();
 
       expect(discoveredPlannedSlugs).toEqual([...PLANNED_SLUGS].sort());
-      expect(discoveredAvailableSlugs.filter((slug) => !slug.startsWith('spec/'))).toHaveLength(50);
+      expect(discoveredAvailableSlugs.filter((slug) => !slug.startsWith('spec/'))).toHaveLength(51);
       expect(discoveredAvailableSlugs.filter((slug) => slug.startsWith('spec/'))).toHaveLength(11);
-      expect(discoveredAvailableSlugs).toHaveLength(61);
+      expect(discoveredAvailableSlugs).toHaveLength(62);
       expect(orderedAvailableSlugs).toEqual(discoveredAvailableSlugs);
       expect(orderedPlannedSlugs).toEqual(discoveredPlannedSlugs);
     });
@@ -221,11 +220,11 @@ describe('renderLlmsFullTxt', () => {
 });
 
 describe('renderLlmsPlannedTxt', () => {
-  it('renders exactly the fixed eight planned pages in supplied ordered-page order without headings', () => {
+  it('renders exactly the fixed seven planned pages in supplied ordered-page order without headings', () => {
     const records = PLANNED_SLUGS.map((slug, index) => page({ slug, title: `Planned ${index + 1}`, status: 'planned', url: buildPageUrl('en', slug) }));
     const rendered = renderLlmsPlannedTxt(records);
 
-    expect(rendered.split('\n').filter(Boolean)).toHaveLength(8);
+    expect(rendered.split('\n').filter(Boolean)).toHaveLength(7);
     expect(rendered).not.toMatch(/^#{1,3}\s/m);
     expect(rendered).toBe(records.map((record) => `- [${record.title}](${record.url}): ${record.description}`).join('\n') + '\n');
   });

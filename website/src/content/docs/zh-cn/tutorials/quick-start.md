@@ -25,6 +25,8 @@ description: 引导您生成并运行首个 ambercast 测试。
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
+或者，`npx ambercast init` 会生成同一个文件，以及最小的 `ambercast.config.json` 和一个 AGENTS.md 段落；本教程仍采用无配置文件的路径，以便您了解默认值如何生效。
+
 文件末尾的 `.test.md` 后缀符合伴生文件路径解析的条件。
 
 2. 请由人工或操作员启动并确认应用程序运行在 `http://localhost:3000`，然后运行：

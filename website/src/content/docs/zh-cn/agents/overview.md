@@ -3,7 +3,7 @@ title: 在 AI Agent 中使用 ambercast
 description: 为 AI Agent 提供修改测试资产前的操作阅读顺序、副作用范围与有界运行循环指引。
 ---
 
-在修改测试资产前，本文档为 AI Agent 梳理所需的操作阅读顺序、副作用范围与操作分支。可用的 CLI 命令包括 `generate`、`run`、`check` 和 `heal`；确切的规范归属 Reference，具体操作流程归属 How-to。
+在修改测试资产前，本文档为 AI Agent 梳理所需的操作阅读顺序、副作用范围与操作分支。可用的 CLI 命令包括 `init`、`generate`、`run`、`check` 和 `heal`；确切的规范归属 Reference，具体操作流程归属 How-to。
 
 ## 行动前阅读 {#read-before-acting}
 

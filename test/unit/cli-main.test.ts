@@ -1,20 +1,25 @@
 import { readFileSync } from 'node:fs';
-import { Writable } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ReportEnvelope, ReportError } from '#report/schema.js';
 import type { GenerateCommandInput, GenerateCommandOutput } from '#runtime/generate-command.js';
 import type { CheckCommandInput } from '#runtime/check-command.js';
 import type { HealCommandInput } from '#runtime/heal-command.js';
+import type { InitCommandOutput } from '#runtime/init-command.js';
+import { createInitConfirmationReader } from '#adapters/system/init-confirmation-reader.js';
+import type { StorageAdapter } from '#ports/storage.js';
 
 const runGenerateCommand = vi.hoisted(() => vi.fn());
 const runRunCommand = vi.hoisted(() => vi.fn());
 const runCheckCommand = vi.hoisted(() => vi.fn());
 const runHealCommand = vi.hoisted(() => vi.fn());
+const runInitCommand = vi.hoisted(() => vi.fn());
 vi.mock('#runtime/generate-command.js', () => ({ runGenerateCommand }));
 vi.mock('#runtime/run-command.js', () => ({ runRunCommand }));
 vi.mock('#runtime/check-command.js', () => ({ runCheckCommand }));
 vi.mock('#runtime/heal-command.js', () => ({ runHealCommand }));
+vi.mock('#runtime/init-command.js', () => ({ runInitCommand }));
 
 import { ERROR_DETAILS_KEY_ORDER, main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
@@ -115,6 +120,7 @@ afterEach(() => {
   runRunCommand.mockReset();
   runCheckCommand.mockReset();
   runHealCommand.mockReset();
+  runInitCommand.mockReset();
 });
 
 async function run(argv: readonly string[]) {
@@ -124,6 +130,41 @@ async function run(argv: readonly string[]) {
   await main(argv, stdout, stderr);
 
   return { stdout: stdout.text, stderr: stderr.text, exitCode: process.exitCode };
+}
+
+function createInitStorage(): StorageAdapter {
+  const files = new Map<string, string>();
+  const snapshot = (text: string) => ({ text, bytes: new TextEncoder().encode(text) });
+  return {
+    async readText(path) {
+      const text = files.get(path);
+      if (text === undefined) throw new Error(`missing ${path}`);
+      return text;
+    },
+    async readTextSnapshot(path) {
+      const text = files.get(path);
+      if (text === undefined) throw new Error(`missing ${path}`);
+      return snapshot(text);
+    },
+    async readTextSnapshotIfExists(path) {
+      const text = files.get(path);
+      return text === undefined ? null : snapshot(text);
+    },
+    async exists(path) { return files.has(path); },
+    async updateTextExclusive(path, updater) {
+      const next = await updater(files.get(path) ?? null);
+      if (next !== null) files.set(path, next);
+    },
+    async writeText(path, content) { files.set(path, content); },
+    async readBinary(path) {
+      const text = files.get(path);
+      if (text === undefined) throw new Error(`missing ${path}`);
+      return new TextEncoder().encode(text);
+    },
+    async writeBinary(path, content) { files.set(path, new TextDecoder().decode(content)); },
+    async listFiles() { return []; },
+    async ensureDir() {},
+  };
 }
 
 describe('main()', () => {
@@ -815,6 +856,113 @@ describe('main()', () => {
     expect(runHealCommand).not.toHaveBeenCalled();
   });
 
+  it('renders command-local init help from the fixture-backed usage contract', async () => {
+    const output: InitCommandOutput = { outcome: 'declined', states: [], message: null, exitCode: 0 };
+    runInitCommand.mockResolvedValue(output);
+
+    const help = await run(['init', '--help']);
+    expect(help.stdout).toBe(expectedUsage);
+    expect(help.stderr).toBe('');
+    expect(help.exitCode).toBe(0);
+    expect(runInitCommand).not.toHaveBeenCalled();
+  });
+
+  it('prioritizes init help over later unsupported flags without calling runtime', async () => {
+    const help = await run(['init', '--help', '--json']);
+
+    expect(help.stdout).toBe(expectedUsage);
+    expect(help.stderr).toBe('');
+    expect(help.exitCode).toBe(0);
+    expect(runInitCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['--json', ['init', '--json']],
+    ['--config', ['init', '--config', 'x']],
+    ['a positional argument', ['init', 'extra']],
+    ['a positional argument after --', ['init', '--', 'x']],
+    ['combined --dir syntax', ['init', '--dir=x']],
+  ] as const)('rejects the unsupported init %s option with exit 2', async (_description, argv) => {
+    const result = await run(argv);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Unknown init option');
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('treats a bare -- as the separator and rejects the first following positional', async () => {
+    runInitCommand.mockResolvedValue({ outcome: 'declined', states: [], message: null, exitCode: 0 });
+
+    await expect(run(['init', '--'])).resolves.toMatchObject({ exitCode: 0 });
+    expect(runInitCommand).toHaveBeenCalledOnce();
+
+    const rejected = await run(['init', '--', '--json']);
+    expect(rejected.stderr).toBe(`Unknown init option: --json.\n${expectedUsage}`);
+    expect(rejected.exitCode).toBe(2);
+  });
+
+  it('uses the last --dir value and consumes an option-shaped --dir value literally', async () => {
+    const output: InitCommandOutput = { outcome: 'declined', states: [], message: null, exitCode: 0 };
+    runInitCommand.mockResolvedValue(output);
+
+    await run(['init', '--dir', 'a', '--dir', 'b', '-y']);
+    expect(runInitCommand).toHaveBeenLastCalledWith(expect.objectContaining({ dir: 'b', yes: true }));
+
+    await run(['init', '--dir', '-y']);
+    expect(runInitCommand).toHaveBeenLastCalledWith(expect.objectContaining({ dir: '-y', yes: false }));
+  });
+
+  it.each([
+    ['rejected', { outcome: 'rejected', states: [], message: '--dir missing is not a directory.', exitCode: 2 }, '', '--dir missing is not a directory.\n', 2],
+    ['declined', { outcome: 'declined', states: [], message: null, exitCode: 0 }, 'Nothing written.\n', '', 0],
+    ['nothing-to-do', {
+      outcome: 'nothing-to-do',
+      states: [
+        { path: 'ambercast.config.json', state: 'skipped' },
+        { path: 'tests/ambercast/find-page.test.md', state: 'skipped' },
+        { path: '.gitignore', state: 'skipped' },
+        { path: 'AGENTS.md', state: 'skipped' },
+      ], message: null, exitCode: 0,
+    }, '  skipped      ambercast.config.json\n  skipped      tests/ambercast/find-page.test.md\n  skipped      .gitignore\n  skipped      AGENTS.md\nNothing to do.\n', '', 0],
+    ['interrupted before apply', { outcome: 'interrupted', phase: 'pre-apply', states: [], message: 'init was interrupted before writing anything.', exitCode: 3 }, '', 'init was interrupted before writing anything.\n', 3],
+    ['interrupted while applying', {
+      outcome: 'interrupted', phase: 'applying',
+      states: [
+        { path: 'ambercast.config.json', state: 'written' },
+        { path: 'tests/ambercast/find-page.test.md', state: 'not-attempted' },
+        { path: '.gitignore', state: 'not-attempted' },
+        { path: 'AGENTS.md', state: 'not-attempted' },
+      ], message: 'init was interrupted; see the file list above.', exitCode: 3,
+    }, '  written      ambercast.config.json\n  not-attemptedtests/ambercast/find-page.test.md\n  not-attempted.gitignore\n  not-attemptedAGENTS.md\n', 'init was interrupted; see the file list above.\n', 3],
+    ['failed before apply', { outcome: 'failed', phase: 'pre-apply', states: [], message: 'init could not read AGENTS.md: denied', exitCode: 3 }, '', 'init could not read AGENTS.md: denied\n', 3],
+    ['failed while applying with an escaped path', {
+      outcome: 'failed', phase: 'applying',
+      states: [
+        { path: 'ambercast.config.json', state: 'written' },
+        { path: 'unsafe\nAGENTS.md', state: 'failed' },
+        { path: '.gitignore', state: 'not-attempted' },
+        { path: 'AGENTS.md', state: 'not-attempted' },
+      ], message: 'init failed while writing unsafe\\nAGENTS.md: denied', exitCode: 3,
+    }, '  written      ambercast.config.json\n  failed       unsafe\\nAGENTS.md\n  not-attempted.gitignore\n  not-attemptedAGENTS.md\n', 'init failed while writing unsafe\\nAGENTS.md: denied\n', 3],
+    ['written', {
+      outcome: 'written',
+      states: [
+        { path: 'ambercast.config.json', state: 'written' },
+        { path: 'tests/ambercast/find-page.test.md', state: 'written' },
+        { path: '.gitignore', state: 'written' },
+        { path: 'AGENTS.md', state: 'written' },
+      ], message: null, exitCode: 0,
+    }, '  written      ambercast.config.json\n  written      tests/ambercast/find-page.test.md\n  written      .gitignore\n  written      AGENTS.md\n\nNext: start your app at http://localhost:3000, then run\n  npx ambercast generate tests/ambercast/find-page.test.md\nUsing Claude Code? Add `@AGENTS.md` to CLAUDE.md so it reads the ambercast section.\n', '', 0],
+  ] as const)('renders the init %s outcome as its complete stdout and stderr golden', async (_name, output, stdout, stderr, exitCode) => {
+    runInitCommand.mockResolvedValue(output);
+
+    const result = await run(['init', '--yes']);
+
+    expect(result.stdout).toBe(stdout);
+    expect(result.stderr).toBe(stderr);
+    expect(result.exitCode).toBe(exitCode);
+  });
+
   it('renders exactly one JSON heal envelope and forwards target selection to runtime', async () => {
     runHealCommand.mockResolvedValue({ exitCode: 1, envelope: HEAL_ENVELOPE });
 
@@ -1305,5 +1453,82 @@ describe('manifest-driven CLI parser compatibility boundaries', () => {
     expect(result.stdout).toBe('');
     expect(result.stderr).toBe(`Unknown ${command} option: ${flag}.\n${expectedUsage}`);
     expect(result.exitCode).toBe(2);
+  });
+});
+
+describe('init end-to-end transcript', () => {
+  async function runActualInit(
+    argv: readonly string[],
+    interactive: boolean,
+    answer?: string,
+  ): Promise<{ readonly stdout: string; readonly stderr: string; readonly exitCode: typeof process.exitCode }> {
+    vi.resetModules();
+    vi.doUnmock('#runtime/init-command.js');
+    const { main: actualMain } = await import('../../src/cli/main.js');
+    const stdin = new PassThrough();
+    const stdout = new MemoryWritable();
+    const stderr = new MemoryWritable();
+    const running = actualMain(argv, stdout, stderr, {
+      storage: createInitStorage(),
+      isCI: false,
+      isInteractive: () => interactive,
+      isDirectory: async () => true,
+      readConfirmationAnswer: createInitConfirmationReader({ stdin, stderr }),
+    });
+
+    if (answer !== undefined) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      stdin.end(answer);
+    }
+    await running;
+
+    return { stdout: stdout.text, stderr: stderr.text, exitCode: process.exitCode };
+  }
+
+  const plan = () => (
+    `ambercast init will write to ${process.cwd()}:\n`
+    + '  create  ambercast.config.json\n'
+    + '  create  tests/ambercast/find-page.test.md\n'
+    + '  create  .gitignore\n'
+    + '  create  AGENTS.md\n'
+  );
+  const written = '  written      ambercast.config.json\n'
+    + '  written      tests/ambercast/find-page.test.md\n'
+    + '  written      .gitignore\n'
+    + '  written      AGENTS.md\n\n'
+    + 'Next: start your app at http://localhost:3000, then run\n'
+    + '  npx ambercast generate tests/ambercast/find-page.test.md\n'
+    + 'Using Claude Code? Add `@AGENTS.md` to CLAUDE.md so it reads the ambercast section.\n';
+
+  it('uses the real main, runtime, usecase, core, and injected confirmation streams', async () => {
+    const result = await runActualInit(['init'], true, 'yes\n');
+
+    expect(result.stderr).toBe(`${plan()}Write these files? [y/N] `);
+    expect(result.stdout).toBe(written);
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('keeps the real reader transcript for decline and EOF', async () => {
+    const declined = await runActualInit(['init'], true, 'n\n');
+    expect(declined.stderr).toBe(`${plan()}Write these files? [y/N] `);
+    expect(declined.stdout).toBe('Nothing written.\n');
+    expect(declined.exitCode).toBe(0);
+
+    const eof = await runActualInit(['init'], true, '');
+    expect(eof.stderr).toBe(`${plan()}Write these files? [y/N] \n`);
+    expect(eof.stdout).toBe('Nothing written.\n');
+    expect(eof.exitCode).toBe(0);
+  });
+
+  it('keeps --yes and non-interactive rejection on the real runtime path', async () => {
+    const authorized = await runActualInit(['init', '--yes'], true);
+    expect(authorized.stderr).toBe(plan());
+    expect(authorized.stdout).toBe(written);
+    expect(authorized.exitCode).toBe(0);
+
+    const rejected = await runActualInit(['init'], false);
+    expect(rejected.stderr).toBe('init requires --yes when confirmation cannot be shown.\n');
+    expect(rejected.stdout).toBe('');
+    expect(rejected.exitCode).toBe(2);
   });
 });

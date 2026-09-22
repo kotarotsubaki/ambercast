@@ -3,20 +3,24 @@ title: CLI overview
 description: Reference for parser-wide CLI behavior, command-flag dispatch, and discovery defaults in ambercast.
 ---
 
-The `ambercast` command-line interface provides four commands for generating, running, checking, and repairing deterministic test plans, using per-command option parsing and configured discovery defaults.
+The `ambercast` command-line interface provides five commands for scaffolding a project and for generating, running, checking, and repairing deterministic test plans, using per-command option parsing and configured discovery defaults.
 
 ## Command surface {#command-surface}
 
-The implemented commands are `generate`, `run`, `check`, and `heal`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
+The implemented commands are `init`, `generate`, `run`, `check`, and `heal`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
 
 ```text
 Usage: ambercast <command> [options]
 
 Commands:
+  init                 Scaffold config and a sample prompt
   generate [files...]  Generate deterministic plans
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+
+Init options:
+  --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
   --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
@@ -37,7 +41,7 @@ AI configuration:
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
 
 Heal configuration:
-  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the fail-closed baseline and Stage 3.
+  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
@@ -45,6 +49,7 @@ Heal configuration:
 
 | command | positional | accepted options | configuration path |
 | --- | --- | --- | --- |
+| init | none | dir, yes/-y, force, no-color | --dir argument (cwd when omitted) |
 | generate | literal paths; no paths = discovery | strict, force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | run | literal paths; no paths = discovery | grep, target, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | literal paths; no paths = discovery | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
@@ -64,4 +69,4 @@ When you pass no literal files, every implemented command delegates test file se
 - Default exclusions include `.runs`, Plan, and Grounding companions.
 - Discovery evaluates POSIX-relative paths by requiring an inclusion match first, after which an ignore match excludes the path.
 
-Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), and [ambercast heal](/ambercast/reference/cli/heal/#flags).
+Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast init](/ambercast/reference/cli/init/#flags), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), and [ambercast heal](/ambercast/reference/cli/heal/#flags).

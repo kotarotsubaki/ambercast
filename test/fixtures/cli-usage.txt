@@ -1,10 +1,14 @@
 Usage: ambercast <command> [options]
 
 Commands:
+  init                 Scaffold config and a sample prompt
   generate [files...]  Generate deterministic plans
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+
+Init options:
+  --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
   --strict  --force  --dry-run  --target <name>  --ai <claude|codex>

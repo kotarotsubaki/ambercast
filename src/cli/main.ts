@@ -1,5 +1,5 @@
 /**
- * Parses CLI arguments, delegates parsed generate, run, check, and heal commands to
+ * Parses CLI arguments, delegates parsed init, generate, run, check, and heal commands to
  * runtime, and selects the only process-exit boundary in the product.
  *
  * The `generate [files...]` and `run [files...]` subcommands both treat
@@ -44,6 +44,7 @@ import { CLI_MANIFEST, flagLookup, renderUsage } from '#runtime/cli-manifest.js'
 import { escapeControlChars, escapeStackControlChars } from '#runtime/control-chars.js';
 import { readDebugEnvironment } from '#runtime/debug-environment.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
+import { runInitCommand, type InitCommandDeps, type InitCommandInput, type InitCommandOutput } from '#runtime/init-command.js';
 import { runRunCommand } from '#runtime/run-command.js';
 
 interface ParsedGenerateCommand {
@@ -117,6 +118,12 @@ interface ParsedHealCommand {
   readonly command: 'heal';
   readonly input: Omit<HealCommandInput, 'stderr'> & { readonly signal: AbortSignal };
   readonly json: boolean;
+  readonly color: boolean;
+}
+
+interface ParsedInitCommand {
+  readonly command: 'init';
+  readonly input: Omit<InitCommandInput, 'stderr'> & { readonly signal: AbortSignal };
   readonly color: boolean;
 }
 
@@ -694,10 +701,96 @@ function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealComm
   };
 }
 
+/**
+ * Parses init's intentionally narrow, non-positional flag grammar.
+ *
+ * A declared value flag consumes its next token before token classification,
+ * preserving the command-local parser convention that `--dir -y` names a
+ * directory literally rather than enabling confirmation bypass.
+ */
+function parseInit(argv: readonly string[], signal: AbortSignal): ParsedInitCommand | string {
+  const separator = argv.indexOf('--');
+  if (argv.slice(0, separator === -1 ? undefined : separator).includes('--help')) {
+    return 'help';
+  }
+
+  let dir: string | undefined;
+  let yes = false;
+  let force = false;
+  let color = true;
+  const flags = flagLookup(CLI_MANIFEST.commands.find((command) => command.name === 'init')!);
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]!;
+    if (argument === '--') {
+      const positional = argv[index + 1];
+      return positional === undefined
+        ? {
+            command: 'init',
+            input: { dir, yes, force, cwd: process.cwd(), signal },
+            color,
+          }
+        : `Unknown init option: ${positional}.`;
+    }
+    const flag = flags.get(argument);
+    if (flag !== undefined) {
+      if (flag.value === null) {
+        if (flag.name === 'yes') {
+          yes = true;
+        } else if (flag.name === 'force') {
+          force = true;
+        } else if (flag.name === 'no-color') {
+          color = false;
+        }
+      } else {
+        const value = argv[index + 1];
+        if (value === undefined || value.startsWith('--')) {
+          return `Missing value for ${argument}.`;
+        }
+        index += 1;
+        if (flag.name === 'dir') {
+          dir = value;
+        }
+      }
+      continue;
+    }
+    return `Unknown init option: ${argument}.`;
+  }
+
+  return {
+    command: 'init',
+    input: { dir, yes, force, cwd: process.cwd(), signal },
+    color,
+  };
+}
+
+/**
+ * Renders the init result protocol without projecting it into a report envelope.
+ *
+ * Init owns a fixed artifact list and human-oriented next step, so its output
+ * remains a separate public contract from the structured report renderers.
+ */
+export function renderInitOutput(output: InitCommandOutput): { stdout: string } {
+  const rows = output.states.map((state) => `  ${state.state.padEnd(13)}${escapeControlChars(state.path)}`);
+  if (output.outcome === 'declined') {
+    return { stdout: 'Nothing written.\n' };
+  }
+  if (output.outcome === 'nothing-to-do') {
+    return { stdout: `${rows.join('\n')}\nNothing to do.\n` };
+  }
+  if (output.outcome === 'written') {
+    return {
+      stdout: `${rows.join('\n')}\n\nNext: start your app at http://localhost:3000, then run\n  npx ambercast generate tests/ambercast/find-page.test.md\nUsing Claude Code? Add \`@AGENTS.md\` to CLAUDE.md so it reads the ambercast section.\n`,
+    };
+  }
+  return { stdout: rows.length === 0 ? '' : `${rows.join('\n')}\n` };
+}
+
 export async function main(
   argv: readonly string[] = process.argv.slice(2),
   stdout: NodeJS.WritableStream = process.stdout,
   stderr: NodeJS.WritableStream = process.stderr,
+  initDeps?: Partial<InitCommandDeps>,
 ): Promise<void> {
   if (argv.length === 0) {
     writeUsage(stdout);
@@ -715,7 +808,7 @@ export async function main(
     process.exitCode = 0;
     return;
   }
-  if (argv[0] !== 'generate' && argv[0] !== 'run' && argv[0] !== 'check' && argv[0] !== 'heal') {
+  if (argv[0] !== 'init' && argv[0] !== 'generate' && argv[0] !== 'run' && argv[0] !== 'check' && argv[0] !== 'heal') {
     stderr.write(`Unknown command: ${argv[0]}.\n`);
     writeUsage(stderr);
     process.exitCode = 2;
@@ -723,13 +816,15 @@ export async function main(
   }
 
   const controller = new AbortController();
-  const parsed = argv[0] === 'generate'
-    ? parseGenerate(argv.slice(1), controller.signal)
-    : argv[0] === 'run'
-      ? parseRun(argv.slice(1), controller.signal)
-      : argv[0] === 'check'
-        ? parseCheck(argv.slice(1), controller.signal)
-        : parseHeal(argv.slice(1), controller.signal);
+  const parsed = argv[0] === 'init'
+    ? parseInit(argv.slice(1), controller.signal)
+    : argv[0] === 'generate'
+      ? parseGenerate(argv.slice(1), controller.signal)
+      : argv[0] === 'run'
+        ? parseRun(argv.slice(1), controller.signal)
+        : argv[0] === 'check'
+          ? parseCheck(argv.slice(1), controller.signal)
+          : parseHeal(argv.slice(1), controller.signal);
   if (typeof parsed === 'string') {
     if (parsed === 'help') {
       writeUsage(stdout);
@@ -755,6 +850,18 @@ export async function main(
 
   try {
     try {
+      if (parsed.command === 'init') {
+        const initInput = { ...parsed.input, stderr };
+        const output = initDeps === undefined
+          ? await runInitCommand(initInput)
+          : await runInitCommand(initInput, initDeps);
+        stdout.write(renderInitOutput(output).stdout);
+        if (output.message !== null) {
+          stderr.write(`${output.message}\n`);
+        }
+        process.exitCode = output.exitCode;
+        return;
+      }
       const output = parsed.command === 'generate'
         ? await runGenerateCommand({ ...parsed.input, stderr })
         : parsed.command === 'run'

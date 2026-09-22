@@ -16,7 +16,7 @@ sidebar:
 
 ## ステータス {#status}
 
-`ambercast mcp` はバージョン 0.3.1 では実装されていません。パーサーが受け付けるコマンドは `generate`、`run`、`check`、`heal` のみであり、それ以外のコマンドは拒否されます。計画されている v2 サーバーインターフェースは、MCP 設計によって定義されています。
+`ambercast mcp` はバージョン 0.3.1 では実装されていません。パーサーが受け付けるコマンドは `generate`、`run`、`check`、`heal`、`init` のみであり、それ以外のコマンドは拒否されます。計画されている v2 サーバーインターフェースは、MCP 設計によって定義されています。
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)、[MCP サーバー](/ambercast/ja/agents/mcp-server/)。
 

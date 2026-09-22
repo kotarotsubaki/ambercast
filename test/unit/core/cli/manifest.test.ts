@@ -196,8 +196,19 @@ describe('CLI manifest', () => {
     }
   });
 
-  it('declares the plan-defined four CLI commands in the real manifest', () => {
-    expect(CLI_MANIFEST.commands).toHaveLength(4);
+  it('declares init first with its complete fixed descriptor literal', () => {
+    expect(CLI_MANIFEST.commands.map((command) => command.name)).toStrictEqual(['init', 'generate', 'run', 'check', 'heal']);
+    expect(CLI_MANIFEST.commands[0]).toStrictEqual({
+      name: 'init',
+      summary: 'Scaffold config and a sample prompt',
+      positional: null,
+      flags: [
+        { name: 'dir', alias: null, value: '<path>', hidden: false, acceptedValues: null, shownValue: null, effect: 'project root to scaffold into', default: 'cwd', lineBreakAfter: false },
+        { name: 'yes', alias: 'y', value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'skip the confirmation prompt', default: 'false', lineBreakAfter: false },
+        { name: 'force', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'replace an existing ambercast.config.json', default: 'false', lineBreakAfter: false },
+        { name: 'no-color', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'disable ANSI', default: 'false', lineBreakAfter: false },
+      ],
+    });
   });
 
   it('declares the independently transcribed command-local flag and alias sets', () => {
@@ -205,6 +216,15 @@ describe('CLI manifest', () => {
       name: command.name,
       flags: command.flags.map((flag) => ({ name: flag.name, alias: flag.alias })),
     }))).toStrictEqual([
+      {
+        name: 'init',
+        flags: [
+          { name: 'dir', alias: null },
+          { name: 'yes', alias: 'y' },
+          { name: 'force', alias: null },
+          { name: 'no-color', alias: null },
+        ],
+      },
       {
         name: 'generate',
         flags: [

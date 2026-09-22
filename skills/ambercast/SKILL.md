@@ -20,6 +20,7 @@ Confirm the prerequisites before running anything:
 - An authenticated AI provider CLI: either `claude` (Claude Code) or `codex` (Codex CLI). By default the CLI probes both and uses the one that responds; `--ai` pins one for a single invocation.
 - The app under test is running and reachable. The default base URL is `http://localhost:3000`.
 - `ambercast.config.json` in the project root is optional. Without it, the defaults listed in the next section apply.
+- `npx ambercast init --yes` scaffolds that config, a sample prompt, a `.gitignore` line, and an AGENTS.md section; it writes four files, so treat it like any other change: get the user's approval before running it, because `--yes` only skips the CLI prompt and is not that approval.
 
 Install `ambercast` as a dev dependency so that `npx ambercast <command>` resolves to the project's pinned version; do not rely on `npx` downloading it ad hoc.
 

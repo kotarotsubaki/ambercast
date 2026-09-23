@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { once } from 'node:events';
 import { chromium } from 'playwright-core';
+import { plannedPageSlugs } from '../../scripts/lib/capability-pages.mjs';
+import capabilityPagesMapping from '../../src/data/capability-pages.json' with { type: 'json' };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEBSITE_DIRECTORY = resolve(HERE, '../..');
@@ -34,15 +36,7 @@ const LOCALE_DEMO_LABELS = {
   '/ja/': { tryIt: '試してみる', generate: '生成 ›', run: '実行 ›', runAgain: 'もう一度実行 ›', reset: 'リセット' },
   '/zh-cn/': { tryIt: '试一试', generate: '生成 ›', run: '运行 ›', runAgain: '再次运行 ›', reset: '重置' },
 };
-const PLANNED_PAGES = [
-  'agents/mcp-server',
-  'agents/official-skill',
-  'reference/cli/baseline-restore',
-  'reference/cli/mcp',
-  'reference/cli/review',
-  'reference/cli/view',
-  'reference/mcp-tools',
-];
+const PLANNED_PAGES = plannedPageSlugs(capabilityPagesMapping);
 const RUN_H2_IDS = ['flags', 'replay', 'ai-calls', 'resolve', 'grounding-write-back', 'report-and-exits'];
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version;
 
@@ -1569,15 +1563,7 @@ async function assertNoResidualWikilinks() {
 }
 
 async function assertIssue298LlmsArtifacts(browser) {
-  const plannedSlugs = [
-    'reference/mcp-tools',
-    'reference/cli/view',
-    'reference/cli/review',
-    'reference/cli/mcp',
-    'reference/cli/baseline-restore',
-    'agents/official-skill',
-    'agents/mcp-server',
-  ];
+  const plannedSlugs = plannedPageSlugs(capabilityPagesMapping);
   const plannedUrls = plannedSlugs.map((slug) => `https://kotarotsubaki.github.io/ambercast/${slug}/`);
   const artifacts = ['llms.txt', 'llms-full.txt', 'ja/llms.txt', 'ja/llms-full.txt', 'zh-cn/llms.txt', 'zh-cn/llms-full.txt', 'llms-planned.txt'];
 

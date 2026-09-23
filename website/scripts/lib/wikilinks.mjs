@@ -13,6 +13,15 @@
  * is the original Markdown. `isCode` marks fenced and inline-code regions.
  */
 export function splitByCodeRegions(markdown) {
+  return splitFencedCodeRegions(markdown).flatMap((region) => region.isCode ? [region] : splitInlineCode(region.text));
+}
+
+/**
+ * Partitions fenced examples while preserving all source bytes and inline code.
+ * @param {string} markdown Markdown source.
+ * @returns {Array<{text: string, isCode: boolean}>} Fence and prose regions.
+ */
+export function splitFencedCodeRegions(markdown) {
   const regions = [];
   let proseStart = 0;
   let offset = 0;
@@ -56,7 +65,7 @@ export function splitByCodeRegions(markdown) {
     push(markdown.slice(proseStart), false);
   }
 
-  return regions.flatMap((region) => region.isCode ? [region] : splitInlineCode(region.text));
+  return regions;
 }
 
 function splitInlineCode(text) {

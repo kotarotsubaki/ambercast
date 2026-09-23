@@ -58,7 +58,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可します。指定しない場合、run はミスを拒絶します。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
 | `--clear` | `--clear` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1ベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
 | `--config` | `--config` はコマンドローカルのフラグであり、generateとcheckでのみ解析されます。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
-| `--dir` | `--dir` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 initパーサーセマンティクスはありません。 | [ambercast init](/ambercast/ja/reference/cli/init/#planned-interface) | 設定の `testDir` |
+| `--dir` | `--dir` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 initパーサーセマンティクスはありません。 | [ambercast init](/ambercast/ja/reference/cli/init/#flags) | 設定の `testDir` |
 | `--dry-run` | `--dry-run` は、generateおよびhealにおいてアーティファクトの書き込みを保留します。 | generate/heal; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` は、実装済みのgenerateコマンドにおいて最新のPlanの再利用を無効化します。 | `ambercast generate`; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | healの `--yes` |
 | `--host` | `--host` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 viewerパーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#undecided-items) | ターゲットの `baseUrl` |
@@ -96,7 +96,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `ambercast check` | `ambercast check` は実装済みの読み取り専用鮮度確認コマンドです。 | [ambercast check](/ambercast/ja/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` は実装済みのPlan生成コマンドです。 | [ambercast generate](/ambercast/ja/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` は実装済みの保護されたアーティファクト修復コマンドです。 | [ambercast heal](/ambercast/ja/reference/cli/heal/) | runフォールバック |
-| `ambercast init` | `ambercast init` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast init](/ambercast/ja/reference/cli/init/#status) | 実装済みコマンド |
+| `ambercast init` | `ambercast init` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | 実装済みコマンド |
 | `ambercast mcp` | `ambercast mcp` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#status) | MCPツール名 |
 | `ambercast restore` | `ambercast restore` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
 | `ambercast review` | `ambercast review` は計画中（0.3.1では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |

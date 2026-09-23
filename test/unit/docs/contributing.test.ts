@@ -9,6 +9,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { CLI_MANIFEST } from '#core/cli/manifest.js';
 
 const CONTRIBUTING_PATH = new URL('../../../CONTRIBUTING.md', import.meta.url);
 
@@ -16,7 +17,7 @@ const HEADINGS = ['## Current state', '## Development', '## How to contribute', 
 
 /** One literal-substring list per heading in `HEADINGS`, checked against that heading's own section body only. */
 const REQUIRED_SECTION_TEXT = [
-  ['v0.3.1', 'The CLI (`generate`, `run`, `check`, `heal`) is functional'],
+  ['is functional, but breaking changes can still land in a minor release'],
   ['npm test', 'npm run typecheck', 'npm run lint', 'the website build reads the generated schemas and the CLI/capabilities manifests that the root build writes to `dist/`'],
   [],
   [],
@@ -47,6 +48,13 @@ function splitSections(body: string): Array<{ heading: string; lines: string[] }
   return sections;
 }
 
+function assertCurrentState(text: string): void {
+  const current = splitSections(text).find(({ heading }) => heading === '## Current state')?.lines.join('\n');
+  expect(current).toBeDefined();
+  for (const command of CLI_MANIFEST.commands) expect(current).toContain(`\`${command.name}\``);
+  expect(current).not.toMatch(/\bv?\d+\.\d+\.\d+\b/);
+}
+
 describe('CONTRIBUTING.md', () => {
   it('exists', () => {
     expect(existsSync(CONTRIBUTING_PATH)).toBe(true);
@@ -66,6 +74,15 @@ describe('CONTRIBUTING.md', () => {
       const section = sections[index]!.lines.join('\n');
       for (const text of requiredText) expect(section).toContain(text);
     }
+    assertCurrentState(text);
+  });
+
+  it.each([
+    ['missing init', 'The CLI (`generate`, `run`, `check`, `heal`) is functional.'],
+    ['version with v', 'The CLI (`init`, `generate`, `run`, `check`, `heal`) is functional. v0.3.1'],
+    ['bare version', 'The CLI (`init`, `generate`, `run`, `check`, `heal`) is functional. 0.3.1'],
+  ])('rejects Current state with %s', (_name, body) => {
+    expect(() => assertCurrentState(`## Current state\n${body}\n`)).toThrow();
   });
 
   it('SPEC-F2 documents the root-build-then-website-build order as the two inline-code commands, in order', () => {

@@ -30,7 +30,7 @@ Or run it without installing:
 npx ambercast <command>
 ```
 
-You need Node.js >= 22.14, a Chromium binary (`npx playwright-core install chromium`), and an already-authenticated AI provider CLI, either [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) or [Codex CLI](https://github.com/openai/codex) (ambercast does not manage credentials; bring your own key) — take a look at the [Getting started guide](https://kotarotsubaki.github.io/ambercast/guides/getting-started/).
+You need Node.js >= 22.14, a Chromium binary (`npx playwright-core install chromium`), and an already-authenticated AI provider CLI, either [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) or [Codex CLI](https://github.com/openai/codex) (ambercast does not manage credentials; bring your own key) — take a look at the [Getting started guide](https://kotarotsubaki.github.io/ambercast/tutorials/quick-start/).
 
 ## Quick start
 
@@ -51,15 +51,15 @@ There is no `init` command yet; a prompt file is all you need, and defaults assu
    npx ambercast run
    ```
 
-`generate` writes `sign-in.ambercast.plan.json` and `sign-in.ambercast.grounding.json` next to the prompt; be sure to commit all three files. Every later `run` replays the plan with zero AI calls as long as the cached grounding is intact; a grounding miss falls back to AI for that step, and `--cache-only` makes it fail instead — take a look at the [Writing prompts](https://kotarotsubaki.github.io/ambercast/guides/writing-prompts/) guide.
+`generate` writes `sign-in.ambercast.plan.json` and `sign-in.ambercast.grounding.json` next to the prompt; be sure to commit all three files. Every later `run` replays the plan with zero AI calls as long as the cached grounding is intact; a grounding miss falls back to AI for that step, and `--cache-only` makes it fail instead — take a look at the [Writing prompts](https://kotarotsubaki.github.io/ambercast/how-to/write-effective-prompts/) guide.
 
 ## Learn more
 
-- [Commands](https://kotarotsubaki.github.io/ambercast/guides/commands/) — Overview of generate, run, check, and heal commands.
-- [Exit codes](https://kotarotsubaki.github.io/ambercast/guides/exit-codes/) — Exit codes 0–5 and priority order for mixed batch outcomes.
-- [Artifacts](https://kotarotsubaki.github.io/ambercast/guides/artifacts/) — Which generated files to commit and which to gitignore.
-- [Secrets](https://kotarotsubaki.github.io/ambercast/guides/secrets/) — How credentials reach a test without entering the prompt or plan.
-- [CI usage](https://kotarotsubaki.github.io/ambercast/guides/ci/) — Running on CI and why heal is blocked there.
+- [Commands](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/) — Overview of generate, run, check, and heal commands.
+- [Exit codes](https://kotarotsubaki.github.io/ambercast/reference/exit-codes/) — Exit codes 0–5 and priority order for mixed batch outcomes.
+- [Artifacts](https://kotarotsubaki.github.io/ambercast/how-to/manage-artifacts-in-git/) — Which generated files to commit and which to gitignore.
+- [Secrets](https://kotarotsubaki.github.io/ambercast/how-to/manage-secrets/) — How credentials reach a test without entering the prompt or plan.
+- [CI usage](https://kotarotsubaki.github.io/ambercast/explanation/determinism-in-ci/) — Running on CI and why heal is blocked there.
 - [Configuration reference](https://kotarotsubaki.github.io/ambercast/reference/configuration/) — Full reference for every `ambercast.config.json` field.
 
 ## Official skill

@@ -72,6 +72,19 @@ describe('mcp/server', () => {
     }
   });
 
+  it('describes purpose and required input near the start of each tool description (TEST-B3)', async () => {
+    const client = await connect(fakeDeps());
+    const { tools } = await client.listTools();
+    const purpose = [/generat/i, /run|replay/i, /check|validat/i, /heal|repair/i];
+    expect(tools).toHaveLength(purpose.length);
+    tools.forEach((tool, index) => {
+      const opening = tool.description?.slice(0, 500) ?? '';
+      expect(opening).toMatch(/ambercast/i);
+      expect(opening).toMatch(purpose[index]!);
+      expect(opening).toMatch(/(require|argument|input)/i);
+    });
+  });
+
   it.each(toolNames)('%s returns the SDK validation result for unknown input keys (TEST-B4)', async (name) => {
     const deps = fakeDeps();
     const client = await connect(deps);
@@ -102,6 +115,14 @@ describe('mcp/server', () => {
     for (const other of ['generate', 'run', 'check', 'healPreview'] as const) {
       if (other !== capability) expect(deps[other]).not.toHaveBeenCalled();
     }
+  });
+
+  it('fills the generate allowEmpty default after validating omitted input (TEST-B4)', async () => {
+    const deps = fakeDeps();
+    const client = await connect(deps);
+    await client.callTool({ name: 'ambercast_generate', arguments: {} });
+
+    expect(deps.generate).toHaveBeenCalledWith(expect.objectContaining({ allowEmpty: false }));
   });
 
   it.each([
@@ -142,6 +163,46 @@ describe('mcp/server', () => {
     }
     await Promise.all([first, second]);
     expect(calls).toEqual([firstName, secondName]);
+  });
+
+  it('skips a queued call cancelled by its client and starts the next call after release (TEST-B8)', async () => {
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const deps = fakeDeps({
+      run: vi.fn(async () => {
+        order.push('first');
+        firstStarted();
+        await blocked;
+        return { exitCode: 0, envelope: {} };
+      }),
+      check: vi.fn(async () => {
+        order.push('cancelled');
+        return { exitCode: 0, envelope: {} };
+      }),
+      generate: vi.fn(async () => {
+        order.push('third');
+        return { exitCode: 0, envelope: {} };
+      }),
+    });
+    const client = await connect(deps);
+    const first = client.callTool({ name: 'ambercast_run', arguments: {} });
+    await started;
+    const controller = new AbortController();
+    const cancelled = client.callTool({ name: 'ambercast_check', arguments: {} }, undefined, { signal: controller.signal });
+    const third = client.callTool({ name: 'ambercast_generate', arguments: {} });
+    controller.abort();
+    try {
+      await expect(cancelled).rejects.toThrow();
+      expect(order).toEqual(['first']);
+    } finally {
+      releaseFirst();
+    }
+    await Promise.all([first, third]);
+    expect(deps.check).not.toHaveBeenCalled();
+    expect(order).toEqual(['first', 'third']);
   });
 
   // TEST-B12: fake deps expose no interactive input capability, so this

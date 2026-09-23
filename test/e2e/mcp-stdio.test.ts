@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const binPath = fileURLToPath(new URL('../../bin/ambercast.js', import.meta.url));
 const temporaryDirectories: string[] = [];
-const children: ChildProcessWithoutNullStreams[] = [];
+const children: Array<{ child: ChildProcessWithoutNullStreams; exited: Promise<unknown> }> = [];
 
 interface ServerProcess {
   readonly child: ChildProcessWithoutNullStreams;
@@ -27,7 +27,6 @@ async function fixtureDirectory(): Promise<string> {
 
 function startServer(args: readonly string[], cwd = repoRoot): ServerProcess {
   const child = spawn(process.execPath, [binPath, 'mcp', ...args], { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
-  children.push(child);
   const lines: string[] = [];
   let errors = '';
   const reader = createInterface({ input: child.stdout });
@@ -38,6 +37,7 @@ function startServer(args: readonly string[], cwd = repoRoot): ServerProcess {
     child.once('error', reject);
     child.once('close', (code, signal) => resolve({ code, signal }));
   });
+  children.push({ child, exited });
 
   return {
     child,
@@ -75,9 +75,11 @@ function startServer(args: readonly string[], cwd = repoRoot): ServerProcess {
 }
 
 afterEach(async () => {
-  for (const child of children.splice(0)) {
+  const running = children.splice(0);
+  for (const { child } of running) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
   }
+  await Promise.allSettled(running.map(({ exited }) => exited));
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 

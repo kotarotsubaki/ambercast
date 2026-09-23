@@ -16,6 +16,7 @@ import { createConfirmationAnswerReader, type ConfirmationAnswer, type Confirmat
 import { createCryptoRandom } from '#adapters/system/crypto-random.js';
 import { createEnvSecretsProvider } from '#adapters/system/env-secrets-provider.js';
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
+import { createFanOutEventSink } from '#adapters/system/fan-out-event-sink.js';
 import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
@@ -259,7 +260,7 @@ export interface HealPreparation {
  * error rather than a fifth confirmation outcome.
  */
 export async function promptForHealConfirmation(
-  commits: ReadonlyMap<string, HealCaseCommit>,
+  commits: ReadonlyMap<string, Pick<HealCaseCommit, 'file' | 'healingSummary'>>,
   input: Pick<HealCommandInput, 'dryRun' | 'yes' | 'signal'>,
   deps: Pick<HealCommandDeps, 'isCI' | 'isInteractive' | 'readConfirmationAnswer'>,
 ): Promise<HealConfirmationOutcome> {
@@ -465,6 +466,11 @@ function settleHealOutcome(
   };
 }
 
+function finalizeHealOutput(built: ReturnType<typeof buildHealReport>, projectRoot: string): HealCommandOutput {
+  const finalized = finalizeReportEnvelope(built.envelope, projectRoot);
+  return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : built.exitCode, envelope: finalized };
+}
+
 /**
  * Measures healing candidates and returns a preview and settlement capability.
  *
@@ -490,66 +496,6 @@ function settleHealOutcome(
  * rendering-neutral command report contract rather than leaking raw errors.
  */
 export async function prepareHeal(input: HealCommandInput): Promise<HealPreparation> {
-  throw new Error('not implemented');
-}
-
-/**
- * Runs the composed healing command and produces its final report result.
- *
- * @param input - Parsed command arguments, working directory, and cancellation.
- * @returns A structured envelope and its selected process exit code.
- * @remarks
- * This composition has one deliberately ordered path. `heal()` owns
- * the early `--list` selection result, so this runtime lets it short-circuit
- * before consulting `ci.heal`; the shared list contract promises discovery
- * without a primary effect and an exit-zero result even when CI healing is
- * disabled. Only a real attempt reaches the `deps.config.ci.heal` refusal
- * gate, then `heal()` measures every case against its private overlay and
- * returns both its outcome and pending commit capabilities. Confirmation must
- * follow that measurement because no earlier boundary can truthfully describe
- * the files and repair kinds pending writes, yet it remains before the
- * first capability invocation so no real artifact write precedes consent.
- *
- * An empty `result.commits` map has no artifact write to authorize, so it
- * skips confirmation in every execution environment.
- *
- * A dry run never prompts and never invokes `commit()`, irrespective of
- * `--yes` or `-y`: it reports pending eligible repairs as preview-only while
- * leaving their buffered artifact changes unapplied. The two flag forms are
- * the same pre-authorization. Without either form, a non-interactive
- * caller receives the exit-2 refusal rather than a hidden prompt or implicit
- * write. Interactivity is supplied by the `isInteractive()`/
- * `createTtyInteractivityCheck` seam, not an inline
- * `process.stderr.isTTY` observation, so runtime tests can provide the host
- * fact deterministically and command policy remains independent of Node's
- * process-global state. The same internal composition constructs the
- * confirmation-answer reader
- * before delegating an interactive exchange to the confirmation policy.
- *
- * Cancellation covers the entire invocation rather than only healing. Before
- * an interactive confirmation has obtained consent, including while its yes/no
- * question is pending, no commit capability is called. If cancellation arrives
- * after case processing but before that prompt, the same zero-write outcome
- * preserves already-computed results and skipped identities. With
- * `--yes`/`-y`, authorization predates case processing, so that timing commits
- * exactly the already-terminal cases represented in `result.commits`; cases
- * marked skipped never acquire a capability. Once authorized commit settlement
- * has begun, every eligible capability settles, and a failed case cannot
- * prevent later independent commits; cancellation cannot rewrite an
- * already-started storage settlement into a different batch result.
- *
- * After authorized capabilities settle, this boundary first reconciles
- * failed commits, builds one candidate, and passes it through the shared
- * finalizer. Building after settlement prevents an initial report from
- * becoming stale and keeps a failed commit case-scoped; finalization then
- * rounds executed heal-case durations, normalizes the public identities, and
- * recomputes summary from the settled facts. The emergency singleton from
- * that shared boundary alone selects exit code 3, so every other semantic
- * exit code remains the report builder's decision.
- */
-export async function runHealCommand(
-  input: HealCommandInput,
-): Promise<HealCommandOutput> {
   let projectRoot = input.cwd;
   const clock = createSystemClock();
   const startedAt = reportTimestamp(clock.now());
@@ -572,13 +518,14 @@ export async function runHealCommand(
     const isCI = createProcessEnvironmentInfo().isCI();
     const uiExecutor = createUiExecutorResolver();
     const secrets = createEnvSecretsProvider();
-    const events = createStderrProgressSink({
+    const stderrSink = createStderrProgressSink({
       command: 'heal',
       stderr: input.stderr,
       projectRoot: config.projectRoot,
       isCI,
       clock,
     });
+    const events = input.events === undefined ? stderrSink : createFanOutEventSink([stderrSink, input.events]);
     const allocateCallId = createCallIdAllocator();
     try {
       const ambercast = createAmbercast({
@@ -613,8 +560,8 @@ export async function runHealCommand(
       };
       const options = {
         files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-        dryRun: input.dryRun,
-        yes: input.yes,
+        dryRun: true,
+        yes: false,
         allowEmpty: input.allowEmpty,
         list: input.list,
       };
@@ -624,54 +571,159 @@ export async function runHealCommand(
       }
 
       const result: HealBatchResult = await heal(deps, options);
-      const confirmation = await promptForHealConfirmation(result.commits, input, {
-        isCI,
-        isInteractive: () => createTtyInteractivityCheck()(),
-        readConfirmationAnswer: (commits, signal) => createConfirmationAnswerReader()(commits, signal),
-      });
-      const settlements: HealCommitSettlement[] = [];
-      if (!input.dryRun && confirmation === 'authorized') {
-        for (const [caseId, commit] of result.commits) {
+      const commitCaseIds = new Set(result.commits.keys());
+      let cachedPreview: HealCommandOutput | undefined;
+      const preview = (): HealCommandOutput => {
+        if (cachedPreview === undefined) {
           try {
-            settlements.push({ caseId, commit, result: await commit.commit() });
+            cachedPreview = finalizeHealOutput(
+              buildHealReport({
+                ...reportContext(),
+                outcome: settleHealOutcome(result.outcome, 'not-required', true, commitCaseIds, []),
+              }),
+              projectRoot,
+            );
           } catch (error) {
-            const partiallyWritten: ('plan' | 'grounding')[] = [];
-            const persisted = partiallyWritten.length === 0 ? 'no artifacts' : partiallyWritten.join(' and ');
-            settlements.push({
-              caseId,
-              commit,
-              result: {
-                outcome: 'failed',
-                error: new FsIoError(
-                  `Healing artifacts could not be committed after persisting ${persisted}.`,
-                  {
-                    ...(error instanceof FsIoError ? error.details ?? {} : {}),
-                    partiallyWritten: [...partiallyWritten],
-                  },
-                  { cause: error },
-                ),
-                partiallyWritten,
-              },
-            });
+            const classified = error instanceof AmbercastError
+              ? error
+              : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
+            cachedPreview = finalizeHealOutput(buildHealReport({ ...reportContext(), error: classified }), projectRoot);
           }
         }
-      }
-
-      const output = buildHealReport({
-        ...reportContext(),
-        outcome: settleHealOutcome(result.outcome, confirmation, input.dryRun, new Set(result.commits.keys()), settlements),
+        return cachedPreview;
+      };
+      const hasCommits = result.commits.size > 0;
+      const cases: { readonly caseId: string; readonly file: string; readonly healingSummary: string }[] = [];
+      result.commits.forEach(({ file, healingSummary }, caseId) => {
+        cases.push({ caseId, file, healingSummary });
       });
-      const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
-      return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+
+      let settled = false;
+      return {
+        preview,
+        hasCommits,
+        cases,
+        async settle(authorization) {
+          if (settled) {
+            throw new UnexpectedCrashError('Healing settlement was already consumed.');
+          }
+          settled = true;
+          if (!hasCommits) {
+            return preview();
+          }
+          try {
+            const settlements: HealCommitSettlement[] = [];
+            if (authorization === 'authorized') {
+              for (const [caseId, commit] of result.commits) {
+                try {
+                  settlements.push({ caseId, commit, result: await commit.commit() });
+                } catch (error) {
+                  const partiallyWritten: ('plan' | 'grounding')[] = [];
+                  const persisted = partiallyWritten.length === 0 ? 'no artifacts' : partiallyWritten.join(' and ');
+                  settlements.push({
+                    caseId,
+                    commit,
+                    result: {
+                      outcome: 'failed',
+                      error: new FsIoError(
+                        `Healing artifacts could not be committed after persisting ${persisted}.`,
+                        {
+                          ...(error instanceof FsIoError ? error.details ?? {} : {}),
+                          partiallyWritten: [...partiallyWritten],
+                        },
+                        { cause: error },
+                      ),
+                      partiallyWritten,
+                    },
+                  });
+                }
+              }
+            }
+            return finalizeHealOutput(
+              buildHealReport({
+                ...reportContext(),
+                outcome: settleHealOutcome(result.outcome, authorization, false, commitCaseIds, settlements),
+              }),
+              projectRoot,
+            );
+          } catch (error) {
+            const classified = error instanceof AmbercastError
+              ? error
+              : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
+            return finalizeHealOutput(buildHealReport({ ...reportContext(), error: classified }), projectRoot);
+          }
+        },
+      };
     } finally {
-      events.close();
+      stderrSink.close();
     }
   } catch (error) {
     const classified = error instanceof AmbercastError
       ? error
       : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
-    const output = buildHealReport({ ...reportContext(), error: classified });
-    const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
-    return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+    const crashOutput = finalizeHealOutput(buildHealReport({ ...reportContext(), error: classified }), projectRoot);
+    let settled = false;
+    return {
+      preview: () => crashOutput,
+      hasCommits: false,
+      cases: [],
+      async settle() {
+        if (settled) {
+          throw new UnexpectedCrashError('Healing settlement was already consumed.');
+        }
+        settled = true;
+        return crashOutput;
+      },
+    };
+  }
+}
+
+/**
+ * Runs the composed healing command and produces its final report result.
+ *
+ * @param input - Parsed command arguments, working directory, and cancellation.
+ * @returns A structured envelope and its selected process exit code.
+ * @remarks
+ * This is the CLI-facing composition of {@link prepareHeal}, the existing
+ * interactive confirmation policy, and {@link HealPreparation.settle}. A dry
+ * run and a genuinely empty commit set both skip confirmation and settlement
+ * entirely by returning the preparation's preview, since neither has an
+ * artifact write to authorize. Confirmation reconstructs its candidate map
+ * from the preparation's already-disclosed case summaries rather than from
+ * the private commit capabilities themselves, preserving the boundary that
+ * only `settle` may invoke a commit.
+ */
+export async function runHealCommand(
+  input: HealCommandInput,
+): Promise<HealCommandOutput> {
+  const preparation = await prepareHeal(input);
+  if (input.dryRun) {
+    return preparation.preview();
+  }
+  try {
+    const commits = new Map(preparation.cases.map(({ caseId, file, healingSummary }) => [caseId, { file, healingSummary }]));
+    const confirmation = await promptForHealConfirmation(commits, input, {
+      isCI: createProcessEnvironmentInfo().isCI(),
+      isInteractive: () => createTtyInteractivityCheck()(),
+      readConfirmationAnswer: (candidates, signal) => createConfirmationAnswerReader()(candidates, signal),
+    });
+    if (confirmation === 'not-required') {
+      return preparation.preview();
+    }
+    return await preparation.settle(confirmation);
+  } catch (error) {
+    const classified = error instanceof AmbercastError
+      ? error
+      : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
+    const clock = createSystemClock();
+    return finalizeHealOutput(
+      buildHealReport({
+        startedAt: reportTimestamp(clock.now()),
+        durationMs: 0,
+        options: { allowEmpty: input.allowEmpty, list: input.list },
+        error: classified,
+      }),
+      input.cwd,
+    );
   }
 }

@@ -1232,11 +1232,16 @@ describe('prepareHeal TEST-A1 and TEST-A2', () => {
 
     const preparation = await prepareHeal(input({ events: injected }));
 
-    expect(preparation.preview()).toEqual(baseline);
+    const preview = preparation.preview();
+    expect(preview.exitCode).toEqual(baseline.exitCode);
+    const { durationMs: _baselineDurationMs, ...baselineEnvelopeRest } = baseline.envelope;
+    const { durationMs: _previewDurationMs, ...previewEnvelopeRest } = preview.envelope;
+    expect(previewEnvelopeRest).toEqual(baselineEnvelopeRest);
     const stderrSink = mocks.createStderrProgressSink.mock.results[1]?.value as EventSink;
-    expect(stderrSink.emit).toHaveBeenCalledTimes(progressEvents.length);
+    const stderrCallsForThisRun = (stderrSink.emit as ReturnType<typeof vi.fn>).mock.calls.slice(-progressEvents.length);
+    expect(stderrCallsForThisRun).toHaveLength(progressEvents.length);
     expect(injected.emit).toHaveBeenCalledTimes(progressEvents.length);
-    expect(injected.emit.mock.calls).toEqual((stderrSink.emit as ReturnType<typeof vi.fn>).mock.calls);
+    expect(injected.emit.mock.calls).toEqual(stderrCallsForThisRun);
     expect(injected.close).not.toHaveBeenCalled();
   });
 

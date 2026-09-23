@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /*
  * Each tool has its own strict input boundary because its accepted shape
- * differs and SDK registration takes a schema per tool. Fields will remain
+ * differs and SDK registration takes a schema per tool. Fields remain
  * optional without schema defaults: handlers must see raw input before
  * refinement and then apply command defaults explicitly.
  */

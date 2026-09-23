@@ -1,3 +1,13 @@
+import { relativeWithinOrOriginal } from '#core/paths.js';
+
+type McpProgressEvent =
+  | { readonly type: 'step-start'; readonly stepId: string }
+  | { readonly type: 'ai-call'; readonly file: string; readonly stepId?: string; readonly attempt: number; readonly attemptLimit: number }
+  | { readonly type: 'ai-result'; readonly outcome: string }
+  | { readonly type: 'heal-stage2-rejected'; readonly stepId: string; readonly reason: string }
+  | { readonly type: 'unclassified-rejection' }
+  | { readonly type: 'step-result' };
+
 /**
  * Projects runtime events into MCP progress notifications.
  *
@@ -5,7 +15,7 @@
  * @returns An event sink whose flush waits for queued notifications to settle.
  * @remarks
  * Emission can enqueue asynchronous sends, so callers must await flush before
- * returning a tool response. The optional observer will let a job owner update
+ * returning a tool response. The optional observer lets a job owner update
  * progress counters; synchronous calls do not require that extra consumer.
  * emit projects each RunEvent into a fixed message and queues it, except that
  * unclassified-rejection is never sent. flush passes unsent notifications to
@@ -15,8 +25,6 @@
  * runs on every emit regardless of notification delivery and can update job
  * progress counters independently of sending.
  */
-import { relativeWithinOrOriginal } from '#core/paths.js';
-
 export function createMcpProgressSink(params: {
   readonly command: 'generate' | 'run' | 'heal';
   readonly sessionRoot: string;
@@ -27,11 +35,9 @@ export function createMcpProgressSink(params: {
   const queue: string[] = [];
 
   function emit(event: unknown): void {
-    const runEvent = event as import('#ports/system.js').RunEvent;
+    const runEvent = event as McpProgressEvent;
 
-    if (runEvent.type === 'unclassified-rejection') {
-      // unclassified-rejection is never sent
-    } else if (runEvent.type === 'step-start') {
+    if (runEvent.type === 'step-start') {
       queue.push(`${command}: step ${runEvent.stepId} started`);
     } else if (runEvent.type === 'ai-call') {
       const relativeFile = relativeWithinOrOriginal(sessionRoot, runEvent.file);
@@ -54,7 +60,6 @@ export function createMcpProgressSink(params: {
       try {
         await send(message);
       } catch {
-        // discard failed send and continue
       }
     }
   }

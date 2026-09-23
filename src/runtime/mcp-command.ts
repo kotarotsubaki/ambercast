@@ -25,6 +25,16 @@ export interface RunMcpCommandInput {
   readonly stderr: NodeJS.WritableStream;
 }
 
+function normalizeCommonMcpInput(args: Record<string, unknown>): Record<string, unknown> {
+  const { ai, ...rest } = args;
+  return {
+    ...rest,
+    files: args.files ?? [],
+    allowEmpty: args.allowEmpty ?? false,
+    ...(ai !== undefined ? { aiProviderOverride: ai } : {}),
+  };
+}
+
 /**
  * Runs the MCP command over caller-provided streams.
  *
@@ -41,6 +51,17 @@ export interface RunMcpCommandInput {
  * close() is called.
  */
 export async function runMcpCommand(input: RunMcpCommandInput): Promise<number> {
+  // Redirect incidental library logging before startup so stdout stays a JSON-RPC stream.
+  const originalConsoleLog = console.log;
+  console.log = (...args: unknown[]): void => { console.error(...args); };
+  try {
+    return await serveMcpCommand(input);
+  } finally {
+    console.log = originalConsoleLog;
+  }
+}
+
+async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
   const sessionRoot = resolve(process.cwd(), input.dir);
   let drainRequested = false;
   const requestEarlyDrain = (): void => { drainRequested = true; };
@@ -87,19 +108,39 @@ export async function runMcpCommand(input: RunMcpCommandInput): Promise<number> 
     sessionRoot,
     version: __VERSION__,
     stderr: input.stderr,
-    generate: (args) => track((signal) => runGenerateCommand({
-      ...(args as Record<string, unknown>), cwd: sessionRoot, stderr: input.stderr, list: false, signal,
-    } as unknown as GenerateCommandInput)),
-    run: (args) => track((signal) => runRunCommand({
-      ...(args as Record<string, unknown>), cwd: sessionRoot, stderr: input.stderr,
-      headed: false, list: false, stale: 'fail', signal,
-    } as unknown as RunCommandInput)),
-    check: (args) => track((signal) => runCheckCommand({
-      ...(args as Record<string, unknown>), cwd: sessionRoot, stderr: input.stderr, list: false, signal,
-    } as unknown as CheckCommandInput)),
+    generate: (args) => track((signal) => {
+      const inputArgs = args as Record<string, unknown>;
+      return runGenerateCommand({
+        ...normalizeCommonMcpInput(inputArgs),
+        strict: inputArgs.strict ?? false,
+        force: inputArgs.force ?? false,
+        dryRun: inputArgs.dryRun ?? false,
+        cwd: sessionRoot, stderr: input.stderr, list: false, signal,
+      } as unknown as GenerateCommandInput);
+    }),
+    run: (args) => track((signal) => {
+      const inputArgs = args as Record<string, unknown>;
+      const { grep, ...normalized } = normalizeCommonMcpInput(inputArgs);
+      return runRunCommand({
+        ...normalized,
+        ...(typeof grep === 'string' ? { grep: new RegExp(grep) } : {}),
+        resolve: inputArgs.resolve ?? false,
+        updateCache: inputArgs.updateCache ?? false,
+        cwd: sessionRoot, stderr: input.stderr,
+        headed: false, list: false, stale: 'fail', signal,
+      } as unknown as RunCommandInput);
+    }),
+    check: (args) => track((signal) => {
+      const inputArgs = args as Record<string, unknown>;
+      return runCheckCommand({
+        ...normalizeCommonMcpInput(inputArgs),
+        cwd: sessionRoot, stderr: input.stderr, list: false, signal,
+      } as unknown as CheckCommandInput);
+    }),
     healPreview: (args) => track(async (signal) => {
+      const inputArgs = args as Record<string, unknown>;
       const preparation = await prepareHeal({
-        ...(args as Record<string, unknown>), cwd: sessionRoot, stderr: input.stderr,
+        ...normalizeCommonMcpInput(inputArgs), cwd: sessionRoot, stderr: input.stderr,
         dryRun: true, yes: false, list: false, signal,
       } as unknown as HealCommandInput);
       return preparation.preview();

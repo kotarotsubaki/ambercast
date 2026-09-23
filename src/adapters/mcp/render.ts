@@ -66,7 +66,9 @@ export function renderToolResult(
  * completed or cancelled jobs retaining a result instead use the same
  * renderToolResult response format as the corresponding synchronous tool,
  * with the record attached at `_meta.job`. The job_status handler in
- * mcp-command.ts chooses between the two response formats.
+ * the server handler chooses between the two response formats. Progress counts
+ * runtime events without a client token: an internal token enables the sink,
+ * while notification forwarding uses only the client's real token.
  * Keeping the record contract here prevents its response formats from
  * drifting apart. A valid record yields isError: false,
  * structuredContent equal to the record, and _meta.jobId equal to its ID.
@@ -76,5 +78,14 @@ export function renderToolResult(
  * yield isError: true with an error message.
  */
 export function renderJobRecord(record: unknown): { isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: unknown; _meta: Record<string, unknown> } {
-  throw new Error('not implemented');
+  if (typeof record !== 'object' || record === null || !('jobId' in record) || !('status' in record) || !('statusMessage' in record)
+    || typeof record.jobId !== 'string' || typeof record.status !== 'string' || typeof record.statusMessage !== 'string') {
+    return { isError: true, content: [{ type: 'text', text: 'Invalid job record' }], structuredContent: undefined, _meta: {} };
+  }
+  return {
+    isError: false,
+    content: [{ type: 'text', text: `jobId: ${record.jobId}\nstatus: ${record.status}\n${record.statusMessage}` }],
+    structuredContent: record,
+    _meta: { jobId: record.jobId },
+  };
 }

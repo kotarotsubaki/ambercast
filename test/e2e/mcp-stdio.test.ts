@@ -136,6 +136,8 @@ describe('e2e/mcp-stdio', () => {
       { name: 'ambercast_run' },
       { name: 'ambercast_check' },
       { name: 'ambercast_heal' },
+      { name: 'ambercast_job_status' },
+      { name: 'ambercast_job_cancel' },
     ] });
     server.child.stdin.end();
 

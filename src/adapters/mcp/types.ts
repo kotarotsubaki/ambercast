@@ -22,8 +22,8 @@ export interface McpServerDeps {
   readonly sessionRoot: string;
   readonly version: string;
   readonly stderr: NodeJS.WritableStream;
-  readonly generate: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
-  readonly run: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
+  readonly generate: (input: unknown, progress: McpProgressContext, signal?: AbortSignal) => Promise<{ exitCode: number; envelope: unknown }>;
+  readonly run: (input: unknown, progress: McpProgressContext, signal?: AbortSignal) => Promise<{ exitCode: number; envelope: unknown }>;
   readonly check: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
-  readonly healPreview: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
+  readonly healPreview: (input: unknown, progress: McpProgressContext, signal?: AbortSignal) => Promise<{ exitCode: number; envelope: unknown }>;
 }

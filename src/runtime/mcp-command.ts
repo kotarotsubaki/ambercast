@@ -73,6 +73,8 @@ function progressSink(command: 'generate' | 'run' | 'heal', sessionRoot: string,
   return createMcpProgressSink({
     command,
     sessionRoot,
+    // Counting follows emit, because notification delivery is buffered until flush.
+    onEvent: () => { void progress.sendNotification({ method: 'internal/run-event' }); },
     send: (message) => progress.sendNotification({
       method: 'notifications/progress',
       params: { progressToken, progress: ++sequence, message },
@@ -155,7 +157,8 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     sessionRoot,
     version: __VERSION__,
     stderr: input.stderr,
-    generate: (args, progress) => track(async (signal) => {
+    generate: (args, progress, jobSignal) => track(async (drainSignal) => {
+      const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;
       const sink = progressSink('generate', sessionRoot, progress);
       try {
@@ -171,7 +174,8 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
         await sink?.flush();
       }
     }),
-    run: (args, progress) => track(async (signal) => {
+    run: (args, progress, jobSignal) => track(async (drainSignal) => {
+      const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;
       const { grep, ...normalized } = normalizeCommonMcpInput(inputArgs);
       const sink = progressSink('run', sessionRoot, progress);
@@ -196,7 +200,8 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
         cwd: sessionRoot, stderr: input.stderr, list: false, signal,
       } as unknown as CheckCommandInput);
     }),
-    healPreview: (args, progress) => track(async (signal) => {
+    healPreview: (args, progress, jobSignal) => track(async (drainSignal) => {
+      const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;
       const sink = progressSink('heal', sessionRoot, progress);
       try {
@@ -228,7 +233,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     }
   });
 
-  const server = createMcpServer(deps, { signal: drainController.signal });
+  const server = createMcpServer(deps, { signal: drainController.signal, syncWaitMs: input.syncWaitMs });
   const transport = new StdioServerTransport(proxy, input.stdout as Writable);
   const send = transport.send.bind(transport);
   let transportClosed = false;

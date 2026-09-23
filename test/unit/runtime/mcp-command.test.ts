@@ -333,7 +333,7 @@ describe('runtime/mcp-command', () => {
     expect((queued.structuredContent as JobRecord).status).toBe('working');
     expect(runRunCommand).toHaveBeenCalledTimes(1);
     sendRequest(io, 3, 'ambercast_job_cancel', { jobId: queuedId });
-    const cancelled = assertRecordResponse((await response(io, 3)).result, { tool: 'run', status: 'cancelled', statusMessage: 'cancelled', progress: 0 });
+    const cancelled = assertRecordResponse((await response(io, 3)).result, { tool: 'run', status: 'cancelled', statusMessage: 'cancelled before start', progress: 0 });
     expect(cancelled.jobId).toBe(queuedId);
     sendRequest(io, 4, 'ambercast_job_cancel', { jobId: queuedId });
     expect((await response(io, 4)).result).toEqual((await response(io, 3)).result);

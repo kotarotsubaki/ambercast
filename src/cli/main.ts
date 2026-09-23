@@ -922,6 +922,7 @@ export async function main(
           : argv[0] === 'view'
             ? parseView(argv.slice(1), controller.signal)
             : argv[0] === 'mcp'
+              // Wire the command first; dedicated --dir and --sync-wait-ms parsing follows after transport behavior is verified.
               ? { command: 'mcp' as const, dir: process.cwd(), syncWaitMs: 45000, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }
               : parseHeal(argv.slice(1), controller.signal);
   if (typeof parsed === 'string') {

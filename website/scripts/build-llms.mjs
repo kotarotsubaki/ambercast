@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { orderedPages } from '../src/sidebar.mjs';
 import { siteDescriptions } from '../src/data/site-descriptions.mjs';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
-import { buildPageUrl, inflateHowItWorks, renderLlmsFullTxt, renderLlmsPlannedTxt, renderLlmsTxt } from './lib/llms.mjs';
+import { LLMS_OUTPUT_PATHS, buildPageUrl, inflateHowItWorks, renderLlmsFullTxt, renderLlmsPlannedTxt, renderLlmsTxt } from './lib/llms.mjs';
 
 const websiteRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const locales = ['en', 'ja', 'zh-cn'];
@@ -49,10 +49,16 @@ const records = Object.fromEntries(locales.map((locale) => [locale, recordsFor(l
 const dist = join(websiteRoot, 'dist');
 const write = (relativePath, content) => writeFileSync(join(dist, relativePath), content);
 
-write('llms.txt', renderLlmsTxt(records.en, siteDescriptions.en));
-write('llms-full.txt', renderLlmsFullTxt(records.en));
-write('llms-planned.txt', renderLlmsPlannedTxt(records.en));
+function outputPath(name) {
+  const path = LLMS_OUTPUT_PATHS.find((candidate) => candidate === name);
+  if (!path) throw new Error(`Missing llms output path: ${name}`);
+  return path;
+}
+
+write(outputPath('llms.txt'), renderLlmsTxt(records.en, siteDescriptions.en));
+write(outputPath('llms-full.txt'), renderLlmsFullTxt(records.en));
+write(outputPath('llms-planned.txt'), renderLlmsPlannedTxt(records.en));
 for (const locale of ['ja', 'zh-cn']) {
-  write(`${locale}/llms.txt`, renderLlmsTxt(records[locale], siteDescriptions[locale]));
-  write(`${locale}/llms-full.txt`, renderLlmsFullTxt(records[locale]));
+  write(outputPath(`${locale}/llms.txt`), renderLlmsTxt(records[locale], siteDescriptions[locale]));
+  write(outputPath(`${locale}/llms-full.txt`), renderLlmsFullTxt(records[locale]));
 }

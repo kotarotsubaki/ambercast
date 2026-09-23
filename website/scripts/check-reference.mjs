@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { splitByCodeRegions } from './lib/wikilinks.mjs';
+import { parseFrontmatter } from './lib/frontmatter.mjs';
+import { plannedPageSlugs } from './lib/capability-pages.mjs';
 
 /**
  * Checks that reference tables describe the generated CLI, configuration, and error vocabulary
@@ -15,7 +17,7 @@ import { splitByCodeRegions } from './lib/wikilinks.mjs';
  * @typedef {{ check: string, page: string, rule: string, expected: string, actual: string }} Violation
  * @typedef {{ name: string, alias: string | null }} FlagIdentifier
  * @typedef {{ lines: string[], startLine: number }} MarkdownTable
- * @typedef {{ docsRoot?: string, publicRoot?: string, configDefaultsPath?: string }} CheckReferenceOptions
+ * @typedef {{ docsRoot?: string, publicRoot?: string, configDefaultsPath?: string, capabilityPagesPath?: string }} CheckReferenceOptions
  */
 
 /**
@@ -23,8 +25,9 @@ import { splitByCodeRegions } from './lib/wikilinks.mjs';
  *
  * Structured collection keeps presentation separate from validation. Omitted paths resolve from
  * the website working directory, and artifact failures remain hard failures rather than drift.
+ * Capability mapping is part of this checker's reference contract.
  *
- * @param {CheckReferenceOptions} [options] Optional fixture roots or defaults-artifact path.
+ * @param {CheckReferenceOptions} [options] Optional fixture roots and artifact paths.
  * @returns {Promise<Violation[]>} Every detected reference violation in deterministic order.
  */
 export async function checkReference(options = {}) {
@@ -32,17 +35,20 @@ export async function checkReference(options = {}) {
   const docsRoot = options.docsRoot ?? resolve(websiteRoot, 'src/content/docs');
   const publicRoot = options.publicRoot ?? resolve(websiteRoot, 'public');
   const configDefaultsPath = options.configDefaultsPath ?? resolve(websiteRoot, '../dist/manifest/config-defaults.json');
-  const [cliManifest, configSchema, capabilities, configDefaults] = await Promise.all([
+  const capabilityPagesPath = resolve(websiteRoot, options.capabilityPagesPath ?? 'src/data/capability-pages.json');
+  const [cliManifest, configSchema, capabilities, configDefaults, mapping] = await Promise.all([
     readGeneratedJson(join(publicRoot, 'manifest/cli.json')),
     readGeneratedJson(join(publicRoot, 'schemas/config.schema.json')),
     readGeneratedJson(join(publicRoot, 'capabilities.json')),
     readGeneratedJson(configDefaultsPath),
+    readGeneratedJson(capabilityPagesPath),
   ]);
   const violations = (await Promise.all([
     checkCliFlagTables(docsRoot, cliManifest),
     checkCommandFlagMatrix(docsRoot, cliManifest),
     checkConfigurationReference(docsRoot, configSchema, configDefaults),
     checkCodeVocabularies(docsRoot, capabilities),
+    checkPlannedPages(docsRoot, capabilities, mapping),
   ])).flat();
   return violations.sort(compareViolations);
 }
@@ -59,6 +65,78 @@ export async function checkReference(options = {}) {
  */
 async function readGeneratedJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
+}
+
+/**
+ * Checks English planned pages against the capability-to-page mapping; locale status
+ * parity remains the separate parity check's responsibility. The comparison
+ * reports missing and extra capability keys, missing or non-planned mapped pages,
+ * planned pages absent from the union of mapped slugs and unlisted keys, and missing
+ * or non-planned unlisted pages. It resolves slug Markdown/MDX files under docsRoot
+ * and reads status with the shared frontmatter parser. Each mismatch uses the existing
+ * reference violation shape and its dedicated planned-* or unlisted-* rule. The
+ * caller reads the injectable mapping path relative to the website cwd and preserves
+ * read failures as hard errors rather than treating them as drift.
+ *
+ * @param {string} docsRoot Root of the English documentation pages.
+ * @param {{ planned: string[] }} capabilities Generated capability artifact.
+ * @param {{ capabilities: Record<string, string[]>, unlisted: Record<string, object> }} mapping Planned-page mapping.
+ * @returns {Promise<Violation[]>} Planned-page mapping and status violations.
+ */
+export async function checkPlannedPages(docsRoot, capabilities, mapping) {
+  for (const key of ['capabilities', 'unlisted']) {
+    if (typeof mapping?.[key] !== 'object' || mapping[key] === null || Array.isArray(mapping[key])) {
+      throw new Error(`Invalid capability-pages mapping: "${key}" is not an object`);
+    }
+  }
+  const { readdir } = await import('node:fs/promises');
+  const violations = [];
+  const add = (page, rule, expected, actual) => violations.push({ check: 'reference', page, rule, expected, actual });
+  const planned = new Set(capabilities.planned);
+  for (const id of planned) if (!(id in mapping.capabilities)) add(id, 'planned-mapping-missing', 'mapped', 'missing');
+  for (const id of Object.keys(mapping.capabilities)) if (!planned.has(id)) add(id, 'planned-mapping-extra', 'planned capability', 'extra');
+  async function pageStatus(slug) {
+    for (const extension of ['.md', '.mdx']) {
+      try {
+        const markdown = await readFile(join(docsRoot, `${slug}${extension}`), 'utf8');
+        if (!markdown.startsWith('---\n') && !markdown.startsWith('---\r\n')) return 'available';
+        return parseFrontmatter(markdown.replace(/^---\r?\n/, '---\ntitle: Planned page\n')).status;
+      }
+      catch (error) {
+        if (error.code === 'ENOENT') continue;
+        const invalidStatus = /^Invalid frontmatter status: (.*)$/.exec(error.message);
+        if (invalidStatus) return invalidStatus[1];
+        if (error.message === 'Missing leading frontmatter block') return 'malformed';
+        throw error;
+      }
+    }
+    return 'missing';
+  }
+  const mapped = new Set(Object.values(mapping.capabilities).flat());
+  for (const slug of mapped) {
+    const status = await pageStatus(slug);
+    if (status !== 'planned') add(slug, 'planned-page-not-planned', 'planned', status);
+  }
+  for (const slug of Object.keys(mapping.unlisted)) {
+    const status = await pageStatus(slug);
+    if (status !== 'planned') add(slug, 'unlisted-not-planned', 'planned', status);
+  }
+  const known = new Set(plannedPageSlugs(mapping));
+  async function walk(directory, prefix = '') {
+    let children;
+    try { children = await readdir(directory, { withFileTypes: true }); }
+    catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    for (const child of children) {
+      if (prefix === '' && ['ja', 'zh-cn', 'spec'].includes(child.name) && child.isDirectory()) continue;
+      if (child.isDirectory()) await walk(join(directory, child.name), `${prefix}${child.name}/`);
+      else if (/\.mdx?$/.test(child.name)) {
+        const slug = `${prefix}${child.name.replace(/\.mdx?$/, '')}`;
+        if (!known.has(slug) && await pageStatus(slug) === 'planned') add(slug, 'planned-page-unmapped', 'mapped or unlisted', 'unmapped');
+      }
+    }
+  }
+  await walk(docsRoot);
+  return violations;
 }
 
 /**

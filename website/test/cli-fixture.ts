@@ -18,6 +18,6 @@ export function createDocsFixture(files: Record<string, string>) {
   };
 }
 
-export function runEntryPoint(script: URL, cwd: string) {
-  return spawnSync(process.execPath, [script.pathname], { cwd, encoding: 'utf8' });
+export function runEntryPoint(script: URL, cwd: string, args: string[] = []) {
+  return spawnSync(process.execPath, [script.pathname, ...args], { cwd, encoding: 'utf8' });
 }

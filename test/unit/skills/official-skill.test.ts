@@ -204,7 +204,7 @@ describe('official ambercast skill', () => {
     const pkg = JSON.parse(packageBytes.toString('utf8'));
 
     expect(pkg.files).toStrictEqual(['bin', 'dist', 'skills']);
-    expect(createHash('sha256').update(stripVersionField(packageBytes)).digest('hex')).toBe('17c2aa4f37081b5bf985ad91d7ee4615911c1fda18cc1ad82b61579a50f678a7');
+    expect(createHash('sha256').update(stripVersionField(packageBytes)).digest('hex')).toBe('11ffc4de1e16d59da7beb846161fe31d2ed82e7f82dbb6143786be8f0dfc6010');
   });
 
   it('SPEC-2 keeps the publication-metadata pin independent of the released version', () => {

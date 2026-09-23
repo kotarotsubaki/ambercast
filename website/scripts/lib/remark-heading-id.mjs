@@ -18,11 +18,18 @@ export default function remarkHeadingId() {
   };
 }
 
+/**
+ * Shares the rendered heading-anchor grammar with link validation. Only a trailing
+ * token in the last text child counts as an explicit id; an inline-code child that
+ * looks similar must follow ordinary slug generation instead.
+ */
+export const HEADING_ID_PATTERN = /\s*\{#([a-z0-9-]+)\}$/;
+
 function visit(node) {
   if (!node || typeof node !== 'object') return;
   if (node.type === 'heading' && Array.isArray(node.children)) {
     const lastChild = node.children.at(-1);
-    const match = lastChild?.type === 'text' && /\s*\{#([a-z0-9-]+)\}$/.exec(lastChild.value);
+    const match = lastChild?.type === 'text' && HEADING_ID_PATTERN.exec(lastChild.value);
     if (match) {
       lastChild.value = lastChild.value.slice(0, match.index);
       node.data ??= {};

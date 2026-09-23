@@ -30,7 +30,7 @@ npm install -D ambercast
 npx ambercast <command>
 ```
 
-前提条件として Node.js >= 22.14、Chromium（`npx playwright-core install chromium`）、および認証済みの [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) または [Codex CLI](https://github.com/openai/codex) が必要であり、ambercast は認証情報を管理しないため各自でキーを用意する必要があります（詳細は[入門ガイド](https://kotarotsubaki.github.io/ambercast/ja/guides/getting-started/)を参照してください）。
+前提条件として Node.js >= 22.14、Chromium（`npx playwright-core install chromium`）、および認証済みの [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) または [Codex CLI](https://github.com/openai/codex) が必要であり、ambercast は認証情報を管理しないため各自でキーを用意する必要があります（詳細は[入門ガイド](https://kotarotsubaki.github.io/ambercast/ja/tutorials/quick-start/)を参照してください）。
 
 ## クイックスタート
 
@@ -51,15 +51,15 @@ npx ambercast <command>
    npx ambercast run
    ```
 
-`generate` はプロンプトの隣に `sign-in.ambercast.plan.json` と `sign-in.ambercast.grounding.json` を書き出すため、3 ファイルすべてを git にコミットします。以降の `run` はキャッシュ済みの grounding が揃っている限りプランをリプレイするだけで AI 呼び出しはゼロです。grounding が欠けたステップは AI にフォールバックし、`--cache-only` を付けると代わりに失敗します（詳細は[プロンプトの書き方](https://kotarotsubaki.github.io/ambercast/ja/guides/writing-prompts/)を参照してください）。
+`generate` はプロンプトの隣に `sign-in.ambercast.plan.json` と `sign-in.ambercast.grounding.json` を書き出すため、3 ファイルすべてを git にコミットします。以降の `run` はキャッシュ済みの grounding が揃っている限りプランをリプレイするだけで AI 呼び出しはゼロです。grounding が欠けたステップは AI にフォールバックし、`--cache-only` を付けると代わりに失敗します（詳細は[プロンプトの書き方](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/)を参照してください）。
 
 ## もっと知る
 
-- [コマンド一覧](https://kotarotsubaki.github.io/ambercast/ja/guides/commands/) — `generate`、`run`、`check`、`heal` の各コマンドの使い方
-- [終了コード](https://kotarotsubaki.github.io/ambercast/ja/guides/exit-codes/) — 終了コード 0〜5 の定義と、結果が混在するバッチ実行時の優先順位
-- [アーティファクト](https://kotarotsubaki.github.io/ambercast/ja/guides/artifacts/) — どの生成ファイルをコミットし、どれを gitignore すべきかの指針
-- [シークレット管理](https://kotarotsubaki.github.io/ambercast/ja/guides/secrets/) — 認証情報をプロンプトやプランに含めずテストへ安全に渡す方法
-- [CI での実行](https://kotarotsubaki.github.io/ambercast/ja/guides/ci/) — CI パイプラインでの実行手順と、CI 上で heal がブロックされる仕様
+- [コマンド一覧](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/) — `generate`、`run`、`check`、`heal` の各コマンドの使い方
+- [終了コード](https://kotarotsubaki.github.io/ambercast/ja/reference/exit-codes/) — 終了コード 0〜5 の定義と、結果が混在するバッチ実行時の優先順位
+- [アーティファクト](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/) — どの生成ファイルをコミットし、どれを gitignore すべきかの指針
+- [シークレット管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/) — 認証情報をプロンプトやプランに含めずテストへ安全に渡す方法
+- [CI での実行](https://kotarotsubaki.github.io/ambercast/ja/explanation/determinism-in-ci/) — CI パイプラインでの実行手順と、CI 上で heal がブロックされる仕様
 - [設定リファレンス](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/) — `ambercast.config.json` で利用可能な全設定フィールドの一覧
 
 ## 公式スキル

@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import * as url from 'node:url';
 import { DEFAULT_RAW_CONFIG } from '#config/defaults.js';
 import { CLI_MANIFEST, createCliManifest } from '#core/cli/manifest.js';
+import { PLANNED_CAPABILITIES } from '#core/cli/capabilities.js';
 import { getConfigJsonSchema } from '#core/config/json-schema.js';
 import { EXIT_CODES } from '#core/errors/exit-codes.js';
 import { getGroundingJsonSchema, getPlanJsonSchema } from '#core/ir/json-schema.js';
@@ -75,7 +76,7 @@ export function writeGeneratedArtifacts(deps: {
   deps.writeFile(join(deps.outDir, 'manifest', 'cli.json'), JSON.stringify(createCliManifest(__VERSION__)));
   deps.writeFile(join(deps.outDir, 'manifest', 'capabilities.json'), JSON.stringify({
     commands: CLI_MANIFEST.commands.map(({ name }) => name),
-    planned: ['view', 'review', 'mcp', 'baseline', 'restore'],
+    planned: PLANNED_CAPABILITIES,
     schemaVersions: {
       plan: PLAN_SCHEMA_VERSION,
       grounding: GROUNDING_SCHEMA_VERSION,

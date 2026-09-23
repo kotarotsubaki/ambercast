@@ -1,0 +1,16 @@
+{
+  "capabilities": {
+    "view": ["reference/cli/view"],
+    "review": ["reference/cli/review"],
+    "mcp": ["reference/cli/mcp", "reference/mcp-tools", "agents/mcp-server"],
+    "baseline": ["reference/cli/baseline-restore"],
+    "restore": ["reference/cli/baseline-restore"]
+  },
+  "unlisted": {
+    "agents/official-skill": {
+      "reason": "official skill ships in the package; the page still describes it as planned",
+      "owner": "maintainer",
+      "removeWhen": "agents/official-skill is rewritten as an available page"
+    }
+  }
+}

@@ -30,7 +30,7 @@ npm install -D ambercast
 npx ambercast <command>
 ```
 
-使用前提为 Node.js >= 22.14、Chromium（`npx playwright-core install chromium`）以及已完成身份验证的 [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) 或 [Codex CLI](https://github.com/openai/codex)；ambercast 本身不管理凭据（请自备密钥），详情请参见[入门指南](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/getting-started/)。
+使用前提为 Node.js >= 22.14、Chromium（`npx playwright-core install chromium`）以及已完成身份验证的 [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) 或 [Codex CLI](https://github.com/openai/codex)；ambercast 本身不管理凭据（请自备密钥），详情请参见[入门指南](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/)。
 
 ## 快速开始
 
@@ -51,15 +51,15 @@ npx ambercast <command>
    npx ambercast run
    ```
 
-`generate` 会在提示词旁边生成 `sign-in.ambercast.plan.json` 和 `sign-in.ambercast.grounding.json`，请将这三个文件都提交到 git。此后每次 `run` 只要缓存的 grounding 完整，就仅重放该计划且零 AI 调用；缺失 grounding 的步骤会回退到 AI，加上 `--cache-only` 则会直接失败；详情请参见[编写提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/writing-prompts/)指南。
+`generate` 会在提示词旁边生成 `sign-in.ambercast.plan.json` 和 `sign-in.ambercast.grounding.json`，请将这三个文件都提交到 git。此后每次 `run` 只要缓存的 grounding 完整，就仅重放该计划且零 AI 调用；缺失 grounding 的步骤会回退到 AI，加上 `--cache-only` 则会直接失败；详情请参见[编写提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/)指南。
 
 ## 了解更多
 
-- [命令指南](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/commands/) — 介绍 generate、run、check 与 heal 命令的用法说明
-- [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/exit-codes/) — 详细说明 0 至 5 退出码含义及批次结果混合时的优先级判定
-- [生成文件](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/artifacts/) — 说明哪些生成文件应提交至 git，哪些应加入 gitignore
-- [机密凭据](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/secrets/) — 介绍确保凭据不进入提示词或计划的安全传递方式
-- [CI 运行](https://kotarotsubaki.github.io/ambercast/zh-cn/guides/ci/) — 介绍在 CI 环境运行测试的方法，以及在 CI 中阻止 heal 的机制
+- [命令指南](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/) — 介绍 generate、run、check 与 heal 命令的用法说明
+- [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/) — 详细说明 0 至 5 退出码含义及批次结果混合时的优先级判定
+- [生成文件](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/) — 说明哪些生成文件应提交至 git，哪些应加入 gitignore
+- [机密凭据](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/) — 介绍确保凭据不进入提示词或计划的安全传递方式
+- [CI 运行](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/) — 介绍在 CI 环境运行测试的方法，以及在 CI 中阻止 heal 的机制
 - [配置参考](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/) — 完整列出 `ambercast.config.json` 配置文件所支持的全部字段
 
 ## 官方技能

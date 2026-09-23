@@ -5,6 +5,7 @@ import { flattenDefaults, writeGeneratedArtifacts } from '../../../src/build-too
 import { getConfigJsonSchema } from '../../../src/core/config/json-schema.js';
 import { getGroundingJsonSchema, getPlanJsonSchema } from '../../../src/core/ir/json-schema.js';
 import { getReportJsonSchema } from '../../../src/report/json-schema.js';
+import { PLANNED_CAPABILITIES } from '../../../src/core/cli/capabilities.js';
 import { ReportErrorCode } from '../../../src/report/schema.js';
 
 interface CapturedWrite {
@@ -77,6 +78,9 @@ function artifactContent(writes: readonly CapturedWrite[], suffix: string): stri
 }
 
 describe('writeGeneratedArtifacts', () => {
+  it('keeps the planned capability contract pinned to its literal vocabulary', () => {
+    expect(PLANNED_CAPABILITIES).toStrictEqual(['view', 'review', 'mcp', 'baseline', 'restore']);
+  });
   it('writes the exact compact JSON from all schema and manifest producers', () => {
     const expectedWrites: CapturedWrite[] = [
       { path: join('/dist-output', 'schema', 'plan.schema.json'), content: JSON.stringify(getPlanJsonSchema()) },

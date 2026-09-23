@@ -5,6 +5,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { siteDescriptions } from '../src/data/site-descriptions.mjs';
 import { orderedPages } from '../src/sidebar.mjs';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
+import { plannedPageSlugs } from '../scripts/lib/capability-pages.mjs';
+import capabilityPagesMapping from '../src/data/capability-pages.json';
 import { main as syncSpec } from '../scripts/sync-spec.mjs';
 import {
   buildPageUrl,
@@ -14,15 +16,7 @@ import {
   renderLlmsTxt,
 } from '../scripts/lib/llms.mjs';
 
-const PLANNED_SLUGS = [
-  'reference/mcp-tools',
-  'reference/cli/view',
-  'reference/cli/review',
-  'reference/cli/mcp',
-  'reference/cli/baseline-restore',
-  'agents/official-skill',
-  'agents/mcp-server',
-];
+const PLANNED_SLUGS = () => plannedPageSlugs(capabilityPagesMapping);
 
 const docsDirectory = new URL('../src/content/docs/', import.meta.url);
 const specDirectory = new URL('../src/content/docs/spec/', import.meta.url);
@@ -101,7 +95,7 @@ describe('llms artifact completeness oracles', () => {
       const orderedAvailableSlugs = orderedPages.filter(({ slug }) => discoveredAvailableSlugs.includes(slug)).map(({ slug }) => slug).sort();
       const orderedPlannedSlugs = orderedPages.filter(({ slug }) => discoveredPlannedSlugs.includes(slug)).map(({ slug }) => slug).sort();
 
-      expect(discoveredPlannedSlugs).toEqual([...PLANNED_SLUGS].sort());
+      expect(new Set(discoveredPlannedSlugs)).toEqual(new Set(PLANNED_SLUGS()));
       expect(discoveredAvailableSlugs.filter((slug) => !slug.startsWith('spec/'))).toHaveLength(51);
       expect(discoveredAvailableSlugs.filter((slug) => slug.startsWith('spec/'))).toHaveLength(11);
       expect(discoveredAvailableSlugs).toHaveLength(62);
@@ -221,7 +215,7 @@ describe('renderLlmsFullTxt', () => {
 
 describe('renderLlmsPlannedTxt', () => {
   it('renders exactly the fixed seven planned pages in supplied ordered-page order without headings', () => {
-    const records = PLANNED_SLUGS.map((slug, index) => page({ slug, title: `Planned ${index + 1}`, status: 'planned', url: buildPageUrl('en', slug) }));
+    const records = PLANNED_SLUGS().map((slug, index) => page({ slug, title: `Planned ${index + 1}`, status: 'planned', url: buildPageUrl('en', slug) }));
     const rendered = renderLlmsPlannedTxt(records);
 
     expect(rendered.split('\n').filter(Boolean)).toHaveLength(7);

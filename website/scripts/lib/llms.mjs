@@ -1,4 +1,19 @@
 /**
+ * Names the llms artifacts that the site build publishes, so link validation recognizes
+ * generated outputs before they exist under public/. Keeping the writer and checker on
+ * this shared list prevents a valid generated link from being reported as missing.
+ */
+export const LLMS_OUTPUT_PATHS = [
+  'llms.txt',
+  'llms-full.txt',
+  'llms-planned.txt',
+  'ja/llms.txt',
+  'ja/llms-full.txt',
+  'zh-cn/llms.txt',
+  'zh-cn/llms-full.txt',
+];
+
+/**
  * Builds the canonical published URL for a documentation page. Root-locale URLs have no locale
  * segment, translated locales do, and every result ends in exactly one slash so index links and
  * full-document `Source:` lines cannot disagree about the site's canonical form.

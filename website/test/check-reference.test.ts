@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkReference } from '../scripts/check-reference.mjs';
 import { createDocsFixture, runEntryPoint } from './cli-fixture.ts';
+import capabilityPagesMapping from '../src/data/capability-pages.json';
 
 type Violation = { check: string, page: string, rule: string, expected: string, actual: string };
 type FixtureOptions = {
@@ -11,7 +12,9 @@ type FixtureOptions = {
   configSchema?: object;
   defaults?: Record<string, unknown>;
   capabilities?: object;
+  capabilityPages?: object;
   omit?: string[];
+  omitDocs?: string[];
 };
 
 const fixtures: ReturnType<typeof createDocsFixture>[] = [];
@@ -54,7 +57,14 @@ const defaults = {
 const capabilities = {
   exitCodes: [0, 1],
   errorCodes: ['CONFIG_INVALID', 'FS_IO_ERROR'],
+  planned: ['view', 'review', 'mcp', 'baseline', 'restore'],
 };
+
+const plannedDocs = Object.fromEntries([
+  'reference/cli/view', 'reference/cli/review', 'reference/cli/mcp',
+  'reference/cli/baseline-restore', 'reference/mcp-tools',
+  'agents/mcp-server', 'agents/official-skill',
+].map((slug) => [`${slug}.md`, '---\nstatus: planned\n---\n# Planned\n']));
 
 const flagTable = (rows: string[], anchored = true, prose = '') => [
   `## Flags${anchored ? ' {#flags}' : ''}`,
@@ -114,12 +124,14 @@ const referenceDocs = {
 };
 
 function createReferenceFixture(options: FixtureOptions = {}) {
-  const docs = { ...referenceDocs, ...options.docs };
+  const docs: Record<string, string> = { ...referenceDocs, ...plannedDocs, ...options.docs };
+  for (const path of options.omitDocs ?? []) delete docs[path];
   const generated = {
     'website/public/manifest/cli.json': JSON.stringify(options.cliManifest ?? cliManifest),
     'website/public/schemas/config.schema.json': JSON.stringify(options.configSchema ?? configSchema),
     'website/public/capabilities.json': JSON.stringify(options.capabilities ?? capabilities),
     'dist/manifest/config-defaults.json': JSON.stringify(options.defaults ?? defaults),
+    'website/src/data/capability-pages.json': JSON.stringify(options.capabilityPages ?? capabilityPagesMapping),
   };
   for (const path of options.omit ?? []) delete generated[path as keyof typeof generated];
   const fixture = createDocsFixture({
@@ -136,6 +148,7 @@ function checkFixture(fixture: ReturnType<typeof createDocsFixture>) {
     docsRoot: join(fixture.website, 'src/content/docs'),
     publicRoot: join(fixture.website, 'public'),
     configDefaultsPath: join(fixture.root, 'dist/manifest/config-defaults.json'),
+    capabilityPagesPath: join(fixture.website, 'src/data/capability-pages.json'),
   }) as Promise<Violation[]>;
 }
 
@@ -158,6 +171,59 @@ function expectDifference(violations: Violation[], pageEnd: string, values: stri
 }
 
 describe('checkReference', () => {
+  it('accepts the complete seven-page planned mapping', async () => {
+    expect(await checkFixture(createReferenceFixture())).toEqual([]);
+  });
+
+  it.each([
+    ['planned-mapping-missing', { capabilities: { ...capabilityPagesMapping.capabilities, view: undefined } }],
+    ['planned-mapping-extra', { capabilities: { ...capabilityPagesMapping.capabilities, invented: ['reference/cli/view'] } }],
+  ])('reports exactly one %s violation', async (rule, mapping) => {
+    const capabilities = Object.fromEntries(Object.entries(mapping.capabilities).filter(([, pages]) => pages !== undefined));
+    const result = await checkFixture(createReferenceFixture({ capabilityPages: { ...capabilityPagesMapping, capabilities } }));
+    expect(result.filter((v) => v.rule === rule)).toHaveLength(1);
+  });
+
+  it.each([
+    ['planned-page-not-planned', { 'reference/cli/view.md': '---\nstatus: available\n---\n# View\n' }],
+    ['planned-page-unmapped', { 'unmapped.md': '---\nstatus: planned\n---\n# Unmapped\n' }],
+  ])('reports exactly one %s violation', async (rule, docs) => {
+    const result = await checkFixture(createReferenceFixture({ docs }));
+    expect(result.filter((v) => v.rule === rule)).toHaveLength(1);
+  });
+
+  it('reports one missing mapped page', async () => {
+    const result = await checkFixture(createReferenceFixture({ omitDocs: ['reference/cli/view.md'] }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toHaveLength(1);
+  });
+
+  it('reports an unknown mapped page status as the actual value', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/view.md': '---\nstatus: draft\n---\n# View\n',
+    } }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
+      expect.objectContaining({ actual: 'draft' }),
+    ]);
+  });
+
+  it('reports malformed frontmatter as a planned-page violation instead of crashing the whole check', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/view.md': '---\nstatus: planned\n# View\n',
+    } }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
+      expect.objectContaining({ actual: 'malformed' }),
+    ]);
+  });
+
+  it('names the malformed capabilities mapping key', async () => {
+    const f = createReferenceFixture({ capabilityPages: { ...capabilityPagesMapping, capabilities: 'invalid' } });
+    await expect(checkFixture(f)).rejects.toThrow('Invalid capability-pages mapping: "capabilities" is not an object');
+  });
+
+  it('reports one unlisted page whose status became available', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: { 'agents/official-skill.md': '---\nstatus: available\n---\n# Skill\n' } }));
+    expect(result.filter((v) => v.rule === 'unlisted-not-planned')).toHaveLength(1);
+  });
   it('returns no violations for a complete internally consistent reference fixture', async () => {
     expect(await checkFixture(createReferenceFixture())).toEqual([]);
   });

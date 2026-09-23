@@ -1,0 +1,51 @@
+{
+  "commands": [
+    "init",
+    "generate",
+    "run",
+    "check",
+    "heal"
+  ],
+  "planned": [
+    "view",
+    "review",
+    "mcp",
+    "baseline",
+    "restore"
+  ],
+  "schemaVersions": {
+    "plan": 3,
+    "grounding": 1,
+    "report": "3.6"
+  },
+  "fingerprintAlgorithm": "a11y-neighborhood-v2",
+  "exitCodes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "errorCodes": [
+    "CONFIG_INVALID",
+    "SECRET_UNRESOLVED",
+    "TARGET_UNRESOLVED",
+    "PROMPT_PATH_INVALID",
+    "MISSING_PLAN",
+    "STALE_PLAN",
+    "INTEGRITY_VIOLATION",
+    "SECRET_LITERAL_REJECTED",
+    "SECRET_GRANT_UNATTRIBUTABLE",
+    "SECRET_ENV_VAR_COLLISION",
+    "SECRET_CONSENT_REQUIRED",
+    "SECRET_SYNTAX_REJECTED",
+    "GROUNDING_UNRESOLVED",
+    "BROWSER_LAUNCH_FAILED",
+    "AI_EXECUTOR_UNAVAILABLE",
+    "AI_RESPONSE_INVALID",
+    "FS_IO_ERROR",
+    "UNEXPECTED_CRASH",
+    "INTERRUPTED"
+  ]
+}

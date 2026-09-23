@@ -87,8 +87,9 @@ export interface HealCommandFlags {
  *
  * File paths remain literal until command composition makes them absolute,
  * following `run-command.ts`'s established `isAbsolutePath`/`joinPath`
- * against `cwd` precedent. Cancellation spans the complete invocation,
- * including confirmation and commit settlement.
+ * against `cwd` precedent. Cancellation spans measurement; a caller that
+ * also drives confirmation and settlement propagates the same signal
+ * through those later phases itself.
  */
 export type HealCommandInput = Omit<HealCommandFlags, 'json'> & {
   /** Literal prompt paths, or an empty list for configured discovery. */
@@ -164,9 +165,11 @@ export interface HealCommitSettlement {
 /**
  * Rendering-neutral result returned by the healing runtime.
  *
- * The envelope is produced once after authorization and every authorized
- * commit has settled, so a failed commit keeps its own result row and adds a
- * matching case-scoped error before report construction.
+ * A preview envelope reflects measured candidates before any authorization
+ * decision. A settled envelope is produced after authorization and every
+ * authorized commit has settled, so a failed commit keeps its own result
+ * row and adds a matching case-scoped error before report construction.
+ * Both forms share this same shape.
  */
 export interface HealCommandOutput {
   /**
@@ -466,6 +469,10 @@ function settleHealOutcome(
   };
 }
 
+interface HealPreparationInternal extends HealPreparation {
+  readonly toCrashOutput: (error: unknown) => HealCommandOutput;
+}
+
 function finalizeHealOutput(built: ReturnType<typeof buildHealReport>, projectRoot: string): HealCommandOutput {
   const finalized = finalizeReportEnvelope(built.envelope, projectRoot);
   return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : built.exitCode, envelope: finalized };
@@ -491,9 +498,11 @@ function finalizeHealOutput(built: ReturnType<typeof buildHealReport>, projectRo
  * `settle`.
  *
  * The command still applies its normal list short-circuit and CI healing
- * refusal at their established boundaries. Its eventual implementation
- * must preserve replay isolation and classify measurement failures into the
- * rendering-neutral command report contract rather than leaking raw errors.
+ * refusal at their established boundaries, and it preserves the existing
+ * replay-isolation check. A measurement failure never escapes as a raw
+ * thrown error: it is classified and routed through the same
+ * crash-conversion path a settlement failure uses, so every caller of
+ * `preview`/`settle` always receives a rendering-neutral report.
  */
 export async function prepareHeal(input: HealCommandInput): Promise<HealPreparation> {
   let projectRoot = input.cwd;
@@ -572,22 +581,26 @@ export async function prepareHeal(input: HealCommandInput): Promise<HealPreparat
 
       const result: HealBatchResult = await heal(deps, options);
       const commitCaseIds = new Set(result.commits.keys());
+      const measuredContext = reportContext();
+      const toCrashOutput = (error: unknown): HealCommandOutput => {
+        const classified = error instanceof AmbercastError
+          ? error
+          : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
+        return finalizeHealOutput(buildHealReport({ ...measuredContext, error: classified }), projectRoot);
+      };
       let cachedPreview: HealCommandOutput | undefined;
       const preview = (): HealCommandOutput => {
         if (cachedPreview === undefined) {
           try {
             cachedPreview = finalizeHealOutput(
               buildHealReport({
-                ...reportContext(),
+                ...measuredContext,
                 outcome: settleHealOutcome(result.outcome, 'not-required', true, commitCaseIds, []),
               }),
               projectRoot,
             );
           } catch (error) {
-            const classified = error instanceof AmbercastError
-              ? error
-              : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
-            cachedPreview = finalizeHealOutput(buildHealReport({ ...reportContext(), error: classified }), projectRoot);
+            cachedPreview = toCrashOutput(error);
           }
         }
         return cachedPreview;
@@ -603,6 +616,7 @@ export async function prepareHeal(input: HealCommandInput): Promise<HealPreparat
         preview,
         hasCommits,
         cases,
+        toCrashOutput,
         async settle(authorization) {
           if (settled) {
             throw new UnexpectedCrashError('Healing settlement was already consumed.');
@@ -653,7 +667,7 @@ export async function prepareHeal(input: HealCommandInput): Promise<HealPreparat
             return finalizeHealOutput(buildHealReport({ ...reportContext(), error: classified }), projectRoot);
           }
         },
-      };
+      } as HealPreparationInternal;
     } finally {
       stderrSink.close();
     }
@@ -667,6 +681,7 @@ export async function prepareHeal(input: HealCommandInput): Promise<HealPreparat
       preview: () => crashOutput,
       hasCommits: false,
       cases: [],
+      toCrashOutput: () => crashOutput,
       async settle() {
         if (settled) {
           throw new UnexpectedCrashError('Healing settlement was already consumed.');
@@ -674,7 +689,7 @@ export async function prepareHeal(input: HealCommandInput): Promise<HealPreparat
         settled = true;
         return crashOutput;
       },
-    };
+    } as HealPreparationInternal;
   }
 }
 
@@ -712,18 +727,6 @@ export async function runHealCommand(
     }
     return await preparation.settle(confirmation);
   } catch (error) {
-    const classified = error instanceof AmbercastError
-      ? error
-      : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
-    const clock = createSystemClock();
-    return finalizeHealOutput(
-      buildHealReport({
-        startedAt: reportTimestamp(clock.now()),
-        durationMs: 0,
-        options: { allowEmpty: input.allowEmpty, list: input.list },
-        error: classified,
-      }),
-      input.cwd,
-    );
+    return (preparation as unknown as { readonly toCrashOutput: (error: unknown) => HealCommandOutput }).toCrashOutput(error);
   }
 }

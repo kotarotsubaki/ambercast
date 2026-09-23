@@ -1383,4 +1383,30 @@ describe('prepareHeal TEST-A1 and TEST-A2', () => {
     expect(failed.commit).toHaveBeenCalledOnce();
     expect(succeeded.commit).toHaveBeenCalledOnce();
   });
+
+  it('fixes preview duration at measurement even when first read follows settlement (TEST-A2)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }), monotonic: [10, 12] });
+    await useActualBuildHealReport();
+    const preparation = await prepareHeal(input());
+    const clock = mocks.createSystemClock.mock.results[0]?.value as { monotonicMs: ReturnType<typeof vi.fn> };
+    clock.monotonicMs.mockReturnValue(110);
+
+    const settled = await preparation.settle('authorized');
+    const preview = preparation.preview();
+
+    expect(settled.envelope.durationMs).toBe(100);
+    expect(preview.envelope.durationMs).toBe(2);
+    expect(pending.commit).toHaveBeenCalledOnce();
+  });
+
+  it('does not commit during measurement even with yes enabled (TEST-A2)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+
+    const preparation = await prepareHeal(input({ yes: true }));
+
+    expect(preparation.hasCommits).toBe(true);
+    expect(pending.commit).not.toHaveBeenCalled();
+  });
 });

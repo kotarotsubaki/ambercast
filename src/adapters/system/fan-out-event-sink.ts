@@ -26,7 +26,6 @@ export function createFanOutEventSink(sinks: readonly EventSink[]): EventSink {
         try {
           sink.emit(event);
         } catch {
-          // Swallow per-sink failures; continue to remaining sinks
         }
       }
     },

@@ -206,6 +206,15 @@ describe('checkReference', () => {
     ]);
   });
 
+  it('reports malformed frontmatter as a planned-page violation instead of crashing the whole check', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/view.md': '---\nstatus: planned\n# View\n',
+    } }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
+      expect.objectContaining({ actual: 'malformed' }),
+    ]);
+  });
+
   it('names the malformed capabilities mapping key', async () => {
     const f = createReferenceFixture({ capabilityPages: { ...capabilityPagesMapping, capabilities: 'invalid' } });
     await expect(checkFixture(f)).rejects.toThrow('Invalid capability-pages mapping: "capabilities" is not an object');

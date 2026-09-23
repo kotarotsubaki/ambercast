@@ -110,6 +110,13 @@ describe('site links', () => {
     expect((await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule === 'link-missing-fragment')).toHaveLength(1);
   });
 
+  it('does not accept an id attribute inside a fenced code block as an anchor', async () => {
+    const f = fixture('[link](/ambercast/reference/cli/view/#x)', {
+      'website/src/content/docs/reference/cli/view.md': '```html\n<span id="x"></span>\n```\n',
+    });
+    expect((await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule === 'link-missing-fragment')).toHaveLength(1);
+  });
+
   it('resolves spec and generated/public artifacts and ignores fenced links', async () => {
     const f = fixture('[spec](/ambercast/spec/example/) [public](/ambercast/capabilities.json) [generated](/ambercast/ja/llms.txt)\n```md\n[missing](/ambercast/never/)\n```', {
       'docs/spec/example.md': '# Example\n',

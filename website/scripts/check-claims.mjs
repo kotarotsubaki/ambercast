@@ -17,7 +17,7 @@ async function readJson(path) {
 }
 
 function headingAnchors(markdown) {
-  const anchors = new Set([...markdown.matchAll(/(?<![\w-])id="([^"]+)"/g)].map((match) => match[1]));
+  const anchors = new Set([...maskForClaims(markdown).matchAll(/(?<![\w-])id="([^"]+)"/g)].map((match) => match[1]));
   const slugger = new GithubSlugger();
   function visit(node) {
     if (node.type === 'heading') {

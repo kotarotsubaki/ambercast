@@ -106,6 +106,7 @@ export async function checkPlannedPages(docsRoot, capabilities, mapping) {
         if (error.code === 'ENOENT') continue;
         const invalidStatus = /^Invalid frontmatter status: (.*)$/.exec(error.message);
         if (invalidStatus) return invalidStatus[1];
+        if (error.message === 'Missing leading frontmatter block') return 'malformed';
         throw error;
       }
     }

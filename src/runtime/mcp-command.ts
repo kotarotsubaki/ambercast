@@ -114,7 +114,9 @@ export async function runMcpCommand(input: RunMcpCommandInput): Promise<number> 
       return;
     }
     try {
-      if ((JSON.parse(line) as { method?: unknown }).method === 'tools/call') rejectedCalls += 1;
+      const message: unknown = JSON.parse(line);
+      if (typeof message === 'object' && message !== null && 'method' in message
+        && message.method === 'tools/call') rejectedCalls += 1;
     } catch {
       // Invalid input is already excluded from the protocol stream during drain.
     }

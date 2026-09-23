@@ -10,6 +10,14 @@
  * and metadata construction consistent across tools. Heal preview issues no
  * apply token; the optional parameter reserves the same response contract for
  * the later apply operation without making preview grant write authority.
+ * The result exitCode (from HealCommandOutput or an equivalent envelope)
+ * determines isError: generate and check treat 2 or 3
+ * as errors; run and heal treat 2, 3, or 4 as errors; all other codes are not
+ * errors. The result contains exactly one text content item. Its first line is
+ * `exitCode: <n>`, followed by `applyToken: <token>` only when supplied, then
+ * `JSON.stringify(envelope)` on the following lines. structuredContent is the
+ * envelope itself, and _meta.exitCode is its exitCode. The return shape can be
+ * used directly by a registerTool callback without exposing SDK types.
  */
 export function renderToolResult(
   tool: 'generate' | 'run' | 'check' | 'heal',

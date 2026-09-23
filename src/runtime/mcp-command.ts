@@ -18,6 +18,15 @@ export interface RunMcpCommandInput {
  *
  * @param input - Session directory, wait policy, and protocol streams.
  * @returns Exit status for the CLI process boundary.
+ * @remarks
+ * The first stdin end, SIGTERM, or SIGINT begins draining; later triggers are
+ * ignored. While draining, new tools/call requests receive no response. Active
+ * calls have their signals aborted, and shutdown waits at most 10,000 ms for
+ * all calls. If they finish in time, server.close() runs before exit code 0;
+ * otherwise the command exits with code 3. Results obtained after abort are
+ * sent only while the transport remains open; otherwise they are discarded.
+ * A failed send writes one line to stderr. Nothing is written to stdout after
+ * close() is called.
  */
 export async function runMcpCommand(input: RunMcpCommandInput): Promise<number> {
   throw new Error('not implemented');

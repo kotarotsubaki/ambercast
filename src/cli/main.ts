@@ -923,6 +923,10 @@ export async function main(
             ? parseView(argv.slice(1), controller.signal)
             : argv[0] === 'mcp'
               // Wire the command first; dedicated --dir and --sync-wait-ms parsing follows after transport behavior is verified.
+              // The eventual parseMcp uses process cwd when --dir is omitted and resolves relative paths against it.
+              // A missing or non-directory resolved path writes `ambercast mcp: --dir <resolved path> is not a directory.` to stderr and exits 2.
+              // --sync-wait-ms accepts positive integers and defaults to 45000; invalid values, unknown options, and positional arguments are usage errors on stderr with exit 2.
+              // --help takes precedence over every other argument, writes usage to stdout, and exits 0, as in parseCheck; these fixed scaffold values are temporary.
               ? { command: 'mcp' as const, dir: process.cwd(), syncWaitMs: 45000, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }
               : parseHeal(argv.slice(1), controller.signal);
   if (typeof parsed === 'string') {

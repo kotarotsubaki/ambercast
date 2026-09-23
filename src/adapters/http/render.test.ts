@@ -109,7 +109,11 @@ describe('renderRunDetail', () => {
       const html = renderRunDetail({ kind: 'unreadable', runId, reason });
       expect(html).toContain(VIEW_COPY.detail.unreadable.heading);
       expect(html).toContain(label);
-      expect(html).toContain(VIEW_COPY.detail.unreadable.rawJson);
+      if (reason === 'read-error') {
+        expect(html).not.toContain(VIEW_COPY.detail.unreadable.rawJson);
+      } else {
+        expect(html).toContain(VIEW_COPY.detail.unreadable.rawJson);
+      }
     }
   });
 

@@ -86,7 +86,6 @@ ambercast is pre-1.0 (0.x), and breaking changes can land in a minor release.
 - Chromium only (Firefox and WebKit are planned).
 - Local execution only — no hosted runner.
 - No `init` command yet — config and prompts are set up by hand.
-- No results viewer yet.
 - No MCP server yet.
 
 ## Contributing

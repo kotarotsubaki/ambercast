@@ -82,7 +82,9 @@ export function renderRunDetail(listing: RunListing): string {
   const copy = VIEW_COPY.detail;
   if (listing.kind !== 'readable') {
     const reason = listing.kind === 'unreadable' ? reasonText(listing.reason) : VIEW_COPY.list.cases.evidenceOnly;
-    return page(escapeHtml(runId), `<h1>${copy.unreadable.heading}</h1><p>${reason}</p>${rawLink(runId, copy.unreadable.rawJson)}`);
+    const link =
+      listing.kind === 'unreadable' && listing.reason !== 'read-error' ? rawLink(runId, copy.unreadable.rawJson) : '';
+    return page(escapeHtml(runId), `<h1>${copy.unreadable.heading}</h1><p>${reason}</p>${link}`);
   }
   const report = listing.envelope;
   const summary = report.summary;

@@ -32,10 +32,14 @@ export function isAllowedHost(
     const normalizedHostname = hostnameNoBrackets.endsWith('.') ? hostnameNoBrackets.slice(0, -1) : hostnameNoBrackets;
 
     // Allowed hostnames: localhost, 127.0.0.1, ::1 (IPv6), or bound host
-    // bound.bindHost may have brackets for IPv6, strip them for comparison
-    const boundHostNormalized = bound.bindHost.startsWith('[')
-      ? bound.bindHost.slice(1, -1)
-      : bound.bindHost;
+    // bound.bindHost may have brackets for IPv6, strip them for comparison; then
+    // canonicalize through the URL parser so a non-canonical IPv6 literal (e.g.
+    // 2001:DB8::1) still matches the lowercased, zero-compressed form the WHATWG
+    // URL parser produces from the incoming Host header.
+    const rawBoundHost = bound.bindHost.startsWith('[') ? bound.bindHost.slice(1, -1) : bound.bindHost;
+    const boundHostNormalized = rawBoundHost.includes(':')
+      ? new URL(`http://[${rawBoundHost}]`).hostname.slice(1, -1)
+      : rawBoundHost;
     if (
       normalizedHostname !== 'localhost' &&
       normalizedHostname !== '127.0.0.1' &&

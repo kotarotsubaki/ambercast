@@ -20,5 +20,15 @@ import type { EventSink, RunEvent } from '#ports/system.js';
  * runtime command invocation.
  */
 export function createFanOutEventSink(sinks: readonly EventSink[]): EventSink {
-  throw new Error('not implemented');
+  return {
+    emit(event): void {
+      for (const sink of sinks) {
+        try {
+          sink.emit(event);
+        } catch {
+          // Swallow per-sink failures; continue to remaining sinks
+        }
+      }
+    },
+  };
 }

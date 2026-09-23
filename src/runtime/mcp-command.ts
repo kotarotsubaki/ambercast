@@ -26,6 +26,30 @@ export interface RunMcpCommandInput {
   readonly stderr: NodeJS.WritableStream;
 }
 
+/**
+ * Job record for write operations (generate/run/heal-preview).
+ *
+ * @remarks
+ * Created when a write tool call is enqueued; read-only tools (check,
+ * job_status, job_cancel) never create records. Status transitions:
+ * queued → working → (completed/failed/cancelled). Terminal statuses
+ * (completed/failed/cancelled) remain fixed; a running job that is
+ * cancelled transitions to cancelled only when the runtime returns.
+ * A queued job cancelled before runtime invocation transitions to
+ * cancelled immediately via FIFO removal.
+ */
+export interface JobRecord {
+  readonly jobId: string;
+  readonly tool: 'generate' | 'run' | 'heal';
+  readonly status: 'working' | 'completed' | 'failed' | 'cancelled';
+  readonly statusMessage?: string;
+  readonly progress: number;
+  readonly createdAt: string;
+  readonly lastUpdatedAt: string;
+  readonly pollIntervalMs: number;
+  readonly ttlMs: number;
+}
+
 function normalizeCommonMcpInput(args: Record<string, unknown>): Record<string, unknown> {
   const { ai, ...rest } = args;
   return {

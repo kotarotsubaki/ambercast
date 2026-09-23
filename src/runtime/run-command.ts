@@ -16,6 +16,7 @@ import { createProcessEnvironmentInfo } from '#adapters/system/process-environme
 import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
+import { createFanOutEventSink } from '#adapters/system/fan-out-event-sink.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { loadConfig } from '#config/load.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
@@ -229,13 +230,16 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
     projectRoot = config.projectRoot;
     const uiExecutor = createUiExecutorResolver({ headed: input.headed });
     const secrets = createEnvSecretsProvider();
-    const events = createStderrProgressSink({
+    const stderrSink = createStderrProgressSink({
       command: 'run',
       stderr: input.stderr,
       projectRoot: config.projectRoot,
       isCI,
       clock,
     });
+    const events = input.events === undefined
+      ? stderrSink
+      : createFanOutEventSink([stderrSink, input.events]);
     const allocateCallId = createCallIdAllocator();
     try {
       const ambercast = createAmbercast({
@@ -295,7 +299,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
         return { exitCode, envelope: finalizedFailed };
       }
     } finally {
-      events.close();
+      stderrSink.close();
     }
   } catch (error) {
     const classified = error instanceof AmbercastError

@@ -12,6 +12,7 @@ import { readCommandEnvironment } from '#adapters/system/process-command-environ
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
 import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
+import { createFanOutEventSink } from '#adapters/system/fan-out-event-sink.js';
 import { createTtyInteractivityCheck } from '#adapters/system/tty-interactivity.js';
 import { loadConfig } from '#config/load.js';
 import { commitAllowlist } from '#config/write-secrets-allow.js';
@@ -168,13 +169,16 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
       ...(input.configPathOverride === undefined ? {} : { configPathOverride: input.configPathOverride }),
     });
     projectRoot = config.projectRoot;
-    const events = createStderrProgressSink({
+    const stderrSink = createStderrProgressSink({
       command: 'generate',
       stderr: input.stderr,
       projectRoot: config.projectRoot,
       isCI: createProcessEnvironmentInfo().isCI(),
       clock,
     });
+    const events = input.events === undefined
+      ? stderrSink
+      : createFanOutEventSink([stderrSink, input.events]);
     const allocateCallId = createCallIdAllocator();
     try {
       const ambercast = createAmbercast({ config, events });
@@ -235,7 +239,7 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
       const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
       return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
     } finally {
-      events.close();
+      stderrSink.close();
     }
   } catch (error) {
     const classified = error instanceof AmbercastError

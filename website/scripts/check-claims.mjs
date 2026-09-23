@@ -17,7 +17,7 @@ async function readJson(path) {
 }
 
 function headingAnchors(markdown) {
-  const anchors = new Set([...markdown.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
+  const anchors = new Set([...markdown.matchAll(/(?<![\w-])id="([^"]+)"/g)].map((match) => match[1]));
   const slugger = new GithubSlugger();
   function visit(node) {
     if (node.type === 'heading') {
@@ -43,8 +43,11 @@ function headingAnchors(markdown) {
 async function resolveLink(repoRoot, url, anchorsCache) {
   const withoutOrigin = url.replace(/^https:\/\/kotarotsubaki\.github\.io/, '');
   const [pathPart, fragment] = withoutOrigin.split(/(?<!\\)#/, 2);
-  const rest = pathPart.slice('/ambercast/'.length).replace(/\/+$/, '');
+  const rest = pathPart.split('?', 1)[0].slice('/ambercast/'.length).replace(/\/+$/, '');
   const finalSegment = rest.split('/').at(-1);
+  if (rest.split('/').some((segment) => segment === '.' || segment === '..')) {
+    return finalSegment?.includes('.') ? 'link-missing-artifact' : 'link-missing-page';
+  }
   if (finalSegment?.includes('.')) {
     const target = join(repoRoot, 'website/public', rest);
     try { await access(target); return null; }
@@ -80,10 +83,11 @@ function enumerations(line, vocabulary, locale) {
     const first = matches[0].index;
     const last = matches.at(-1).index + matches.at(-1)[0].length;
     const window = locale === 'ja' ? line.slice(last, last + 20) : line.slice(Math.max(0, first - 40), first);
-    const marker = locale === 'ja' ? /のみ|だけ/.exec(window) : locale === 'zh-cn' ? /仅|只|恰好/.exec(window) : /\b(?:only|exactly)\b/i.exec(window);
-    if (!marker) return false;
-    const between = locale === 'ja' ? window.slice(0, marker.index) : window.slice(marker.index + marker[0].length);
-    return !/\.\s|。|;/.test(between);
+    const markers = locale === 'ja' ? /のみ|だけ/g : locale === 'zh-cn' ? /仅|只|恰好/g : /\b(?:only|exactly)\b/gi;
+    return [...window.matchAll(markers)].some((marker) => {
+      const between = locale === 'ja' ? window.slice(0, marker.index) : window.slice(marker.index + marker[0].length);
+      return !/\.\s|。|;/.test(between);
+    });
   }).map((matches) => [...new Set(matches.map((match) => match[1]))].sort());
 }
 
@@ -151,8 +155,13 @@ export async function checkClaims({ repoRoot } = {}) {
   }
   checkClaims.lastCounts = { sources: sources.length, links };
   const valid = [];
-  for (const [index, entry] of allowlist.entries()) {
-    if (!required.every((key) => typeof entry?.[key] === 'string' && entry[key].trim()) || !['hard', 'advisory'].includes(entry.scope) || entry.rule === 'identifier-hit') {
+  if (!Array.isArray(allowlist)) add('website/docs-audit-allowlist.json', 0, 'allowlist-invalid', 'array', JSON.stringify(allowlist), '');
+  const hardRules = new Set(['command-enumeration', 'link-missing-page', 'link-missing-fragment', 'link-missing-artifact']);
+  const advisoryRules = new Set(['planned-claim', 'universal-claim']);
+  for (const [index, entry] of (Array.isArray(allowlist) ? allowlist : []).entries()) {
+    if (!required.every((key) => typeof entry?.[key] === 'string' && entry[key].trim()) ||
+        (entry.scope === 'hard' ? !hardRules.has(entry.rule) : entry.scope === 'advisory' ? !advisoryRules.has(entry.rule) : true) ||
+        !/^[0-9a-f]{16}$/.test(entry.claimHash)) {
       add('website/docs-audit-allowlist.json', index + 1, 'allowlist-invalid', 'complete valid entry', JSON.stringify(entry), '');
     } else valid.push(entry);
   }

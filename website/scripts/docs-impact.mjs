@@ -204,8 +204,10 @@ async function collectCandidates(input) {
       const normalized = normalizeClaimLine(line);
       for (const id of changed) if ((mode !== 'actual' || !changedPaths.has(path)) && hit(line, id)) add('identifier-hit', path, index + 1, id, role, original[index], normalized);
       if (role !== 'source') continue;
-      const token = [...line.matchAll(/`([^`]+)`/g)].find((match) => available.has(match[1]));
-      const planned = token && (locale === 'ja' ? /未実装|予定|まだ/.test(line) : locale === 'zh-cn' ? /计划|尚未|尚无|暂未/.test(line) : /\b(?:planned|not implemented|not yet|planned-only|rejected)\b/i.test(line) || /\bno\s+$/.test(line.slice(0, token.index)));
+      const token = [...line.matchAll(/`([^`]+)`/g)].find((match) => available.has(match[1]) &&
+        (locale === 'ja' ? /未実装|予定|まだ/.test(line) : locale === 'zh-cn' ? /计划|尚未|尚无|暂未/.test(line) :
+          /\b(?:planned|not implemented|not yet|planned-only|rejected)\b/i.test(line) || /\bno\s+$/i.test(line.slice(0, match.index))));
+      const planned = Boolean(token);
       if (planned) add('planned-claim', path, index + 1, `command:${token[1]}`, role, original[index], normalized, true);
       const universal = /\b(?:every|all|each|exactly|only|four|five|six|seven|eight|nine|ten)\b|[4-9]つ|[四五六七八九]个/i.test(line) && /command/i.test(line);
       if (universal) add('universal-claim', path, index + 1, '', role, original[index], normalized, true);

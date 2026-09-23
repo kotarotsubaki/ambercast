@@ -84,6 +84,11 @@ async function readGeneratedJson(path) {
  * @returns {Promise<Violation[]>} Planned-page mapping and status violations.
  */
 export async function checkPlannedPages(docsRoot, capabilities, mapping) {
+  for (const key of ['capabilities', 'unlisted']) {
+    if (typeof mapping?.[key] !== 'object' || mapping[key] === null || Array.isArray(mapping[key])) {
+      throw new Error(`Invalid capability-pages mapping: "${key}" is not an object`);
+    }
+  }
   const { readdir } = await import('node:fs/promises');
   const violations = [];
   const add = (page, rule, expected, actual) => violations.push({ check: 'reference', page, rule, expected, actual });
@@ -97,7 +102,12 @@ export async function checkPlannedPages(docsRoot, capabilities, mapping) {
         if (!markdown.startsWith('---\n') && !markdown.startsWith('---\r\n')) return 'available';
         return parseFrontmatter(markdown.replace(/^---\r?\n/, '---\ntitle: Planned page\n')).status;
       }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      catch (error) {
+        if (error.code === 'ENOENT') continue;
+        const invalidStatus = /^Invalid frontmatter status: (.*)$/.exec(error.message);
+        if (invalidStatus) return invalidStatus[1];
+        throw error;
+      }
     }
     return 'missing';
   }

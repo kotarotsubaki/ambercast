@@ -74,6 +74,16 @@ describe('docs-impact prospective mode', () => {
   });
 
   it.each([
+    ['No `init` command yet', 'command:init'],
+    ['`run` and no `init` command yet', 'command:init'],
+  ])('finds a planned claim in %s', (line, identifier) => {
+    const f = fixture({ 'README.md': `${line}\n` });
+    const result = run(f.root, ['--prospective', '--identifier', 'command:init']);
+    expect(result.status).toBe(0);
+    expect(records(result.stdout).filter((entry) => entry.rule === 'planned-claim').map((entry) => entry.identifier)).toEqual([identifier]);
+  });
+
+  it.each([
     ['missing identifier', ['--prospective']],
     ['conflicting modes', ['--prospective', '--actual', '--base', 'HEAD', '--identifier', 'command:init']],
     ['duplicate identifier', ['--prospective', '--identifier', 'command:init', '--identifier', 'command:init']],

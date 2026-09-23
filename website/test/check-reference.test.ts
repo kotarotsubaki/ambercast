@@ -197,6 +197,20 @@ describe('checkReference', () => {
     expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toHaveLength(1);
   });
 
+  it('reports an unknown mapped page status as the actual value', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/view.md': '---\nstatus: draft\n---\n# View\n',
+    } }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
+      expect.objectContaining({ actual: 'draft' }),
+    ]);
+  });
+
+  it('names the malformed capabilities mapping key', async () => {
+    const f = createReferenceFixture({ capabilityPages: { ...capabilityPagesMapping, capabilities: 'invalid' } });
+    await expect(checkFixture(f)).rejects.toThrow('Invalid capability-pages mapping: "capabilities" is not an object');
+  });
+
   it('reports one unlisted page whose status became available', async () => {
     const result = await checkFixture(createReferenceFixture({ docs: { 'agents/official-skill.md': '---\nstatus: available\n---\n# Skill\n' } }));
     expect(result.filter((v) => v.rule === 'unlisted-not-planned')).toHaveLength(1);

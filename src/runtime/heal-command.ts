@@ -43,6 +43,8 @@ import type {
   HealOutcome,
 } from '#usecases/heal.js';
 
+import type { EventSink } from '#ports/system.js';
+
 function reportTimestamp(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
@@ -99,6 +101,9 @@ export type HealCommandInput = Omit<HealCommandFlags, 'json'> & {
 
   /** Optional caller cancellation propagated to healing. */
   readonly signal?: AbortSignal;
+
+  /** Optional event sink for lifecycle events. */
+  readonly events?: EventSink;
 };
 
 /**
@@ -163,6 +168,23 @@ export interface HealCommandOutput {
 
   /** Structured report for either JSON serialization or text rendering. */
   readonly envelope: FinalizedReportEnvelope;
+}
+
+/**
+ * Preparation result for the healing command that enables authorization.
+ */
+export interface HealPreparation {
+  /** Returns the preview report for the user to review before committing. */
+  preview(): HealCommandOutput;
+
+  /** Settles the preparation with authorization and returns the final report. */
+  settle(authorization: 'authorized' | 'declined' | 'interrupted'): Promise<HealCommandOutput>;
+
+  /** Whether there are commits ready to be applied. */
+  readonly hasCommits: boolean;
+
+  /** The list of cases that can be healed with their repair summaries. */
+  readonly cases: readonly { readonly caseId: string; readonly file: string; readonly healingSummary: string }[];
 }
 
 /**
@@ -446,6 +468,10 @@ function settleHealOutcome(
  * that shared boundary alone selects exit code 3, so every other semantic
  * exit code remains the report builder's decision.
  */
+export async function prepareHeal(input: HealCommandInput): Promise<HealPreparation> {
+  throw new Error('not implemented');
+}
+
 export async function runHealCommand(
   input: HealCommandInput,
 ): Promise<HealCommandOutput> {

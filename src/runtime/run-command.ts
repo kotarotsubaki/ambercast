@@ -126,6 +126,9 @@ export interface RunCommandInput {
 
   /** Optional caller cancellation propagated to replay. */
   readonly signal?: AbortSignal;
+
+  /** Optional event sink for lifecycle events. */
+  readonly events?: import('#ports/system.js').EventSink;
 }
 
 /**

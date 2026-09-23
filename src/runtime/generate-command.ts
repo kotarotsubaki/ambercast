@@ -21,6 +21,7 @@ import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
 import { envVarNameFor } from '#core/secrets/env-var-name.js';
 import { generate } from '#usecases/generate.js';
+import type { EventSink } from '#ports/system.js';
 import type { FinalizedReportEnvelope } from '#usecases/report-finalization.js';
 import { finalizeReportEnvelope, isEmergencyFinalizedEnvelope } from '#usecases/report-finalization.js';
 import {
@@ -91,6 +92,9 @@ export interface GenerateCommandInput {
   readonly stderr: NodeJS.WritableStream;
   /** Optional caller cancellation propagated to generation. */
   readonly signal?: AbortSignal;
+
+  /** Optional event sink for lifecycle events. */
+  readonly events?: EventSink;
 }
 
 /**

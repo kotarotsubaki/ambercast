@@ -23,6 +23,7 @@ import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type ExitCode } from '#core/errors/types.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
+import type { EventSink } from '#ports/system.js';
 import { buildRunReport } from '#usecases/run-report.js';
 import type { FinalizedReportEnvelope } from '#usecases/report-finalization.js';
 import { finalizeReportEnvelope, isEmergencyFinalizedEnvelope } from '#usecases/report-finalization.js';
@@ -139,7 +140,7 @@ export interface RunCommandInput {
    * has no corresponding external progress subscription contract, so its
    * command input does not acquire this port.
    */
-  readonly events?: import('#ports/system.js').EventSink;
+  readonly events?: EventSink;
 }
 
 /**

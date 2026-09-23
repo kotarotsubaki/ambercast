@@ -200,7 +200,10 @@ export interface HealPreparation {
    * Preview performs no persistence and remains callable repeatedly, even
    * after settlement. A caller may need to retrieve the measured result again
    * while presenting or recording an approval decision; reading it never
-   * consumes the authority to settle.
+   * consumes the authority to settle. Each call returns the same snapshot
+   * fixed during measurement, regardless of whether settlement later runs or
+   * succeeds. Purity includes both the absence of side effects and this
+   * stable result.
    */
   preview(): HealCommandOutput;
 
@@ -215,7 +218,13 @@ export interface HealPreparation {
    * Settlement is one-shot even when authorization declines or interrupts:
    * accepting a second decision could apply the same buffered writes twice
    * or rewrite an already reported outcome. A second call fails with
-   * `UnexpectedCrashError`; preview remains available afterward.
+   * `UnexpectedCrashError`; preview remains available afterward. The decision
+   * is consumed synchronously as the first step of the call, before any await,
+   * so even near-simultaneous calls observe the consumed state in JavaScript's
+   * single-threaded execution model. Individual commit failures become
+   * case-scoped results in the final envelope rather than rejecting settle;
+   * the no-interruption guarantee after settlement starts concerns aborting
+   * the whole settlement, including by signal, not a failed case commit.
    */
   settle(authorization: 'authorized' | 'declined' | 'interrupted'): Promise<HealCommandOutput>;
 
@@ -468,7 +477,12 @@ function settleHealOutcome(
  * the same preparation while retaining its interactive confirmation flow.
  * This phase does not treat `dryRun` or `yes` as write authority: neither
  * flag may commit a candidate during measurement. Pending commit capabilities
- * stay private until a caller makes the explicit settlement choice.
+ * stay private until a caller makes the explicit settlement choice. Settlement
+ * depends only on its authorization argument and never consults the original
+ * `dryRun` input: `settle('authorized')` commits normally even for a dry-run
+ * preparation. A dry-run caller must choose preview instead of settlement;
+ * `runHealCommand` makes that choice by returning `preview()` without calling
+ * `settle`.
  *
  * The command still applies its normal list short-circuit and CI healing
  * refusal at their established boundaries. Its eventual implementation

@@ -34,7 +34,7 @@ npx ambercast <command>
 
 ## 快速开始
 
-目前尚无 `init` 命令，您只需准备一个提示词文件即可开始，默认假定应用运行在 `http://localhost:3000`（详情请参见[配置](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/)）。
+运行 `npx ambercast init` 可一步生成配置文件、示例提示词、`.gitignore` 条目和 `AGENTS.md` 小节——也可以跳过它，直接编写一个提示词文件即可开始，默认假定应用运行在 `http://localhost:3000`（详情请参见[配置](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/)）。
 
 1. 在 `tests/ambercast/sign-in.test.md` 中编写测试提示词：
 
@@ -51,11 +51,11 @@ npx ambercast <command>
    npx ambercast run
    ```
 
-`generate` 会在提示词旁边生成 `sign-in.ambercast.plan.json` 和 `sign-in.ambercast.grounding.json`，请将这三个文件都提交到 git。此后每次 `run` 只要缓存的 grounding 完整，就仅重放该计划且零 AI 调用；缺失 grounding 的步骤会回退到 AI，加上 `--cache-only` 则会直接失败；详情请参见[编写提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/)指南。
+`generate` 会在提示词旁边生成 `sign-in.ambercast.plan.json` 和 `sign-in.ambercast.grounding.json`，请将这三个文件都提交到 git。此后每次 `run` 只要缓存的 grounding 完整，就仅重放该计划且零 AI 调用；缺失 grounding 的步骤默认会直接失败并关闭，加上 `--resolve` 则会为该步骤启用实时 AI 解析；详情请参见[编写提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/)指南。
 
 ## 了解更多
 
-- [命令指南](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/) — 介绍 generate、run、check 与 heal 命令的用法说明
+- [命令指南](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/) — 介绍 init、generate、run、check 与 heal 命令的用法说明
 - [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/) — 详细说明 0 至 5 退出码含义及批次结果混合时的优先级判定
 - [生成文件](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/) — 说明哪些生成文件应提交至 git，哪些应加入 gitignore
 - [机密凭据](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/) — 介绍确保凭据不进入提示词或计划的安全传递方式
@@ -85,7 +85,6 @@ ambercast 目前处于 **0.x、pre-1.0** 版本：破坏性变更可能会出现
 
 - 目前仅支持 Chromium（对 Firefox 与 WebKit 的支持已在计划中）。
 - 目前仅支持本地执行——暂不提供托管的 runner。
-- 暂未提供 `init` 命令——请手动搭建配置与提示词。
 - 暂未提供结果查看器（viewer）。
 - 暂未提供 MCP server。
 

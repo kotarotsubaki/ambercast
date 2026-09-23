@@ -212,10 +212,26 @@ export function createFsStorage(): StorageAdapter {
     async readText(path: string): Promise<string> {
       return readFile(path, 'utf8');
     },
+    /**
+     * @remarks
+     * In this `FsStorage` implementation, default `TextDecoder` behavior
+     * (`ignoreBOM: false`) strips a leading BOM from `.text`, unlike the
+     * commit-time `current` supplied by `updateTextExclusive`. `planInit` uses
+     * `decodePreservingBom` on `.bytes` to align its classifications; other
+     * snapshot callers, including generate and heal, retain this behavior.
+     */
     async readTextSnapshot(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array }> {
       const bytes = new Uint8Array(await readFile(path));
       return { text: new TextDecoder().decode(bytes), bytes: new Uint8Array(bytes) };
     },
+    /**
+     * @remarks
+     * This `FsStorage` snapshot also uses default `TextDecoder` behavior
+     * (`ignoreBOM: false`), so `.text` omits a leading BOM even though
+     * `updateTextExclusive` preserves it in commit-time `current`. `planInit`
+     * decodes `.bytes` with `decodePreservingBom` for its pre-write decision;
+     * generate and heal continue using the existing snapshot behavior.
+     */
     async readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null> {
       try {
         const bytes = new Uint8Array(await readFile(path));
@@ -227,6 +243,15 @@ export function createFsStorage(): StorageAdapter {
         throw error;
       }
     },
+    /**
+     * @remarks
+     * In this `FsStorage` implementation, the updater's `current` comes from
+     * `readFile(path, 'utf8')`, which preserves a leading BOM as a literal
+     * character; snapshot `.text` instead strips it through default
+     * `TextDecoder` behavior (`ignoreBOM: false`). `planInit` uses
+     * `decodePreservingBom` on snapshot `.bytes` so pre-write and commit-time
+     * classifications agree, without changing generate or heal callers.
+     */
     async updateTextExclusive(
       path: string,
       updater: (current: string | null) => string | null | Promise<string | null>,

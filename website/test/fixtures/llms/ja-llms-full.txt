@@ -1639,16 +1639,16 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可します。指定しない場合、run はミスを拒絶します。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
 | `--clear` | `--clear` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1ベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
 | `--config` | `--config` はコマンドローカルのフラグであり、generateとcheckでのみ解析されます。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
-| `--dir` | `--dir` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 initパーサーセマンティクスはありません。 | [ambercast init](/ambercast/ja/reference/cli/init/#flags) | 設定の `testDir` |
+| `--dir` | `--dir` は `ambercast init` が scaffold 先とするディレクトリを指定します。 | `ambercast init`; [ambercast init](/ambercast/ja/reference/cli/init/#flags) | 設定の `testDir` |
 | `--dry-run` | `--dry-run` は、generateおよびhealにおいてアーティファクトの書き込みを保留します。 | generate/heal; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | `--list` |
-| `--force` | `--force` は、実装済みのgenerateコマンドにおいて最新のPlanの再利用を無効化します。 | `ambercast generate`; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | healの `--yes` |
+| `--force` | `--force` は、実装済みのgenerateコマンドにおいて最新のPlanの再利用を無効化します。`ambercast init` では既存の設定ファイルを拒否せず置き換えます。 | `ambercast generate`; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | healの `--yes` |
 | `--host` | `--host` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 viewerパーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#undecided-items) | ターゲットの `baseUrl` |
-| `--json` | `--json` は、実装済みコマンドの実行完了後にシリアライズされた構造化レポート出力を選択します。 | CLIレンダラー; [レポート](/ambercast/ja/reference/reports/#envelope) | MCP JSON-RPC |
-| `--list` | `--list` は実装されているすべてのコマンドで解析されます。一覧表示の結果セマンティクスは各コマンドのドキュメントが所有します。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
+| `--json` | `--json` は、`init` を除く実装済みコマンドの実行完了後にシリアライズされた構造化レポート出力を選択します。 | CLIレンダラー; [レポート](/ambercast/ja/reference/reports/#envelope) | MCP JSON-RPC |
+| `--list` | `--list` は `generate`、`run`、`check`、`heal` で解析されます。一覧表示の結果セマンティクスは各コマンドのドキュメントが所有します。`init` は受け付けません。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 runパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 viewerパーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#planned-interface) | 設定の `viewer.port` |
-| `--target` | `--target` は、実装されている各コマンドに対して設定済みの実行ターゲットを指定します。 | CLIパーサー / ターゲット解決ツール; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | ターゲット定義そのもの |
-| `--yes` | `--yes` は、対話的な確認なしでhealの適用を承認します。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#flags) | generateの `--force` |
+| `--target` | `--target` は、`generate`、`run`、`check`、`heal` に対して設定済みの実行ターゲットを指定します。`init` は受け付けません。 | CLIパーサー / ターゲット解決ツール; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | ターゲット定義そのもの |
+| `--yes` | `--yes` は、対話的な確認なしでhealの適用を承認し、initの確認プロンプトを省略します。いずれも利用者自身のレビューの代わりにはなりません。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | generateの `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` は、隣接するGroundingコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Planのサフィックス |
 | `.ambercast.plan.json` | `.ambercast.plan.json` は、隣接するPlanコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Groundingのサフィックス |
 | `.baseline` | `.baseline` は計画中（0.3.1では未実装）であり、0.3.1のレイアウト解決ツールが導出することはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-storage-and-freshness) | 実装済みの `.runs` |
@@ -1677,7 +1677,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `ambercast check` | `ambercast check` は実装済みの読み取り専用鮮度確認コマンドです。 | [ambercast check](/ambercast/ja/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` は実装済みのPlan生成コマンドです。 | [ambercast generate](/ambercast/ja/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` は実装済みの保護されたアーティファクト修復コマンドです。 | [ambercast heal](/ambercast/ja/reference/cli/heal/) | runフォールバック |
-| `ambercast init` | `ambercast init` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | 実装済みコマンド |
+| `ambercast init` | `ambercast init` は実装済みで、4つのファイルを書き込みます。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#status) | MCPツール名 |
 | `ambercast restore` | `ambercast restore` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
 | `ambercast review` | `ambercast review` は計画中（0.3.1では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
@@ -1782,11 +1782,11 @@ Heal configuration:
 
 ## 探索の既定動作 {#discovery-default}
 
-リテラルファイルが指定されていない場合、実装されているすべてのコマンドは対象の選択を設定済みの自動探索に委譲します。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
+リテラルファイルが指定されていない場合、`generate`、`run`、`check`、`heal` は対象の選択を設定済みの自動探索に委譲します。`init` は探索の対象になりません。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
 
 探索処理は POSIX 相対パスを評価し、包含パターンのマッチ（inclusion match）を要求した上で、除外パターンのマッチ（ignore match）によって該当するパスを除外します。
 
-関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast init](/ambercast/ja/reference/cli/init/#flags)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
 
 ---
 
@@ -3147,7 +3147,7 @@ ambercastの現在の実装境界を明確にし、実装済みの機能と今�
 
 ## 現行リリースで実装済み {#implemented}
 
-0.3.1 のCLIパーサーは、`generate`、`run`、`check`、および `heal` を公開しています。一方で、実装されているパーサーには init、viewer、または MCP サブコマンドは公開されていません。
+CLIパーサーは、`init`、`generate`、`run`、`check`、および `heal` を公開しています。実装されているパーサーには viewer または MCP サブコマンドは公開されていません。
 
 また、0.3.1 ではプロデューサ契約のフィンガープリントが変更されました。これにより、プロデューサバンドルおよび `inputsDigest` がstale（古くなった状態）になるため、0.3.1 では 0.1.0 のプランの再生成が必要です。
 
@@ -3158,14 +3158,12 @@ ambercastの現在の実装境界を明確にし、実装済みの機能と今�
 
 ## 現行境界以降の計画 {#planned-after-current-boundary}
 
-現行の実装境界以降に向けて、計画されているドキュメントは `init`、`view`、`review`、`mcp`、baseline/restore、MCPツール、および公式スキルを対象としています。
+現行の実装境界以降に向けて、計画されているドキュメントは `view`、`review`、`mcp`、baseline/restore、および MCPツールを対象としています。
 
 また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
 
 関連情報:
-- [ambercast init](/ambercast/ja/reference/cli/init/)
 - [ambercast view](/ambercast/ja/reference/cli/view/)
-- [official skill](/ambercast/ja/agents/official-skill/)
 - [MCP サーバー](/ambercast/ja/agents/mcp-server/)
 
 ## バージョン方針 {#version-policy}
@@ -3378,3 +3376,22 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-res
 本ドキュメントは、このリリースで公開されたアーティファクトを扱います。
 
 関連情報: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [JSON スキーマ](/ambercast/ja/reference/json-schemas/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
+
+---
+
+# official skill
+Source: https://kotarotsubaki.github.io/ambercast/ja/agents/official-skill/
+
+本ページでは、ambercast が同梱する official skill と、エージェント向けインターフェースにおけるその役割について説明します。
+
+## official skill とは {#what-it-is}
+
+ambercast は `skills/ambercast/SKILL.md` に `ambercast` という名前の [Agent Skills](https://agentskills.io) スキルを同梱しています。コーディングエージェントに `<name>.test.md` プロンプトの書き方、CLI を通じた `generate` / `run` / `check` / `heal` ループの回し方、`--json` レポートの読み取りと終了コードの処理、次に取るべき安全なアクションの選び方を教えます。
+
+インストール方法（Claude Code、Codex CLI、`gh skill` 対応エージェント、skills.sh、またはインストール済みパッケージからの手動コピー）は [README](https://github.com/kotarotsubaki/ambercast#official-skill) を参照してください。依頼されたテストを扱うエージェントに対しレビューを最優先とする境界を規定する、コピー＆ペースト可能な完全な運用プロンプトは [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/) を参照してください。
+
+## 想定される役割 {#intended-role}
+
+エージェントインターフェースの設計では、人間向けのプロンプトやビューアのサーフェスと並び、コーディングエージェントをファーストクラスのユーザーとして扱います。
+
+関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/), [MCP サーバー](/ambercast/ja/agents/mcp-server/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)

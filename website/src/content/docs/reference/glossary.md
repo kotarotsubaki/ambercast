@@ -58,16 +58,16 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
 | `--clear` | `--clear` is planned-only and has no accepted 0.3.1 baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
 | `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
-| `--dir` | `--dir` is planned-only and has no accepted 0.3.1 init parser semantics. | [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
+| `--dir` | `--dir` names the directory `ambercast init` scaffolds into. | `ambercast init`; [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
 | `--dry-run` | `--dry-run` withholds artifact writes for generate and heal. | generate/heal; [ambercast generate](/ambercast/reference/cli/generate/#flags) | `--list` |
-| `--force` | `--force` opts the implemented generate command out of fresh-Plan reuse. | `ambercast generate`; [ambercast generate](/ambercast/reference/cli/generate/#flags) | heal `--yes` |
+| `--force` | `--force` opts the implemented generate command out of fresh-Plan reuse; for `ambercast init` it replaces an existing configuration instead of rejecting it. | `ambercast generate`; [ambercast generate](/ambercast/reference/cli/generate/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | heal `--yes` |
 | `--host` | `--host` is planned-only and has no accepted 0.3.1 viewer parser semantics. | [ambercast view](/ambercast/reference/cli/view/#undecided-items) | target `baseUrl` |
-| `--json` | `--json` selects serialized structured-report output after an implemented command returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
-| `--list` | `--list` is parsed by every implemented command; each command page owns its listing result semantics. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
+| `--json` | `--json` selects serialized structured-report output after an implemented command other than `init` returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
+| `--list` | `--list` is parsed by `generate`, `run`, `check`, and `heal`; each command page owns its listing result semantics. `init` does not accept it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` is planned-only and has no accepted 0.3.1 run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` is planned-only and has no accepted 0.3.1 viewer parser semantics. | [ambercast view](/ambercast/reference/cli/view/#planned-interface) | config `viewer.port` |
-| `--target` | `--target` names a configured execution target for each implemented command. | CLI parser / target resolver; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | target definition itself |
-| `--yes` | `--yes` authorizes heal settlement without an interactive confirmation. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags) | generate `--force` |
+| `--target` | `--target` names a configured execution target for `generate`, `run`, `check`, and `heal`. `init` does not accept it. | CLI parser / target resolver; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | target definition itself |
+| `--yes` | `--yes` authorizes heal settlement without an interactive confirmation, and skips init's confirmation prompt; neither substitutes for the user's own review. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` is the exact adjacent Grounding companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Plan suffix |
 | `.ambercast.plan.json` | `.ambercast.plan.json` is the exact adjacent Plan companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Grounding suffix |
 | `.baseline` | `.baseline` is planned-only and no 0.3.1 layout resolver derives it. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-storage-and-freshness) | implemented `.runs` |
@@ -96,7 +96,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast check` | `ambercast check` is the implemented read-only freshness command. | [ambercast check](/ambercast/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
-| `ambercast init` | `ambercast init` is planned-only and rejected by the 0.3.1 parser. | [ambercast init](/ambercast/reference/cli/init/#usage) | implemented command |
+| `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` is planned-only and rejected by the 0.3.1 parser. | [ambercast mcp](/ambercast/reference/cli/mcp/#status) | MCP tool name |
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |

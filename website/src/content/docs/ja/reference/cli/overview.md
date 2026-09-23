@@ -67,8 +67,8 @@ Heal configuration:
 
 ## 探索の既定動作 {#discovery-default}
 
-リテラルファイルが指定されていない場合、実装されているすべてのコマンドは対象の選択を設定済みの自動探索に委譲します。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
+リテラルファイルが指定されていない場合、`generate`、`run`、`check`、`heal` は対象の選択を設定済みの自動探索に委譲します。`init` は探索の対象になりません。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
 
 探索処理は POSIX 相対パスを評価し、包含パターンのマッチ（inclusion match）を要求した上で、除外パターンのマッチ（ignore match）によって該当するパスを除外します。
 
-関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast init](/ambercast/ja/reference/cli/init/#flags)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)

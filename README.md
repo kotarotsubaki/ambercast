@@ -34,7 +34,7 @@ You need Node.js >= 22.14, a Chromium binary (`npx playwright-core install chrom
 
 ## Quick start
 
-There is no `init` command yet; a prompt file is all you need, and defaults assume your app is at `http://localhost:3000` ([configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/) has the details).
+Run `npx ambercast init` to scaffold a config, sample prompt, `.gitignore` entry, and `AGENTS.md` section in one step — or skip it and just write a prompt file; defaults assume your app is at `http://localhost:3000` ([configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/) has the details).
 
 1. Write a test prompt at `tests/ambercast/sign-in.test.md`:
 
@@ -51,11 +51,11 @@ There is no `init` command yet; a prompt file is all you need, and defaults assu
    npx ambercast run
    ```
 
-`generate` writes `sign-in.ambercast.plan.json` and `sign-in.ambercast.grounding.json` next to the prompt; be sure to commit all three files. Every later `run` replays the plan with zero AI calls as long as the cached grounding is intact; a grounding miss falls back to AI for that step, and `--cache-only` makes it fail instead — take a look at the [Writing prompts](https://kotarotsubaki.github.io/ambercast/how-to/write-effective-prompts/) guide.
+`generate` writes `sign-in.ambercast.plan.json` and `sign-in.ambercast.grounding.json` next to the prompt; be sure to commit all three files. Every later `run` replays the plan with zero AI calls as long as the cached grounding is intact; a grounding miss fails closed by default, and `--resolve` opts into live AI resolution for that step instead — take a look at the [Writing prompts](https://kotarotsubaki.github.io/ambercast/how-to/write-effective-prompts/) guide.
 
 ## Learn more
 
-- [Commands](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/) — Overview of generate, run, check, and heal commands.
+- [Commands](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/) — Overview of init, generate, run, check, and heal commands.
 - [Exit codes](https://kotarotsubaki.github.io/ambercast/reference/exit-codes/) — Exit codes 0–5 and priority order for mixed batch outcomes.
 - [Artifacts](https://kotarotsubaki.github.io/ambercast/how-to/manage-artifacts-in-git/) — Which generated files to commit and which to gitignore.
 - [Secrets](https://kotarotsubaki.github.io/ambercast/how-to/manage-secrets/) — How credentials reach a test without entering the prompt or plan.
@@ -85,7 +85,6 @@ ambercast is pre-1.0 (0.x), and breaking changes can land in a minor release.
 
 - Chromium only (Firefox and WebKit are planned).
 - Local execution only — no hosted runner.
-- No `init` command yet — config and prompts are set up by hand.
 - No results viewer yet.
 - No MCP server yet.
 

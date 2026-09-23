@@ -79,3 +79,4 @@
 - [Setup prompt](https://kotarotsubaki.github.io/ambercast/agents/setup-prompt/): Complete copy-pasteable operating prompt providing a thin, review-first boundary for an agent working on a requested test.
 - [Reading structured output](https://kotarotsubaki.github.io/ambercast/agents/reading-structured-output/): Branch on the report envelope, inspect reportPersistence and errors, and evaluate command-specific result statuses in ambercast.
 - [Machine-readable resources](https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/): Published machine-readable documentation artifacts and their availability rules for AI agents.
+- [Official skill](https://kotarotsubaki.github.io/ambercast/agents/official-skill/): The official Agent Skills skill ambercast ships for AI coding agents, and its role within the agent-facing interface.

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { classifyConfig } from '../../../../src/core/init/plan.js';
 import {
   AGENTS_BLOCK,
   CONFIG_TEMPLATE,
@@ -8,6 +9,18 @@ import {
 } from '../../../../src/core/init/templates.js';
 
 const expectedConfig = `{
+  "$schema": "./node_modules/ambercast/dist/schema/config.schema.json",
+  "testDir": "tests/ambercast",
+  "targets": {
+    "web-user": {
+      "baseUrl": "http://localhost:3000",
+      "browser": "chromium"
+    }
+  },
+  "defaultTarget": "web-user"
+}
+`;
+const oldConfig = `{
   "$schema": "./node_modules/ambercast/dist/schema/config.schema.json",
   "testDir": "tests/ambercast",
   "targets": {
@@ -33,6 +46,11 @@ const expectedAgentsBlock = `<!-- ambercast:begin -->
 describe('init scaffold templates', () => {
   it('keeps the config literal byte-for-byte, including its ordered keys and final LF', () => {
     expect(CONFIG_TEMPLATE).toBe(expectedConfig);
+  });
+
+  it('rejects the old config literal unless force replaces it with the current scaffold', () => {
+    expect(classifyConfig(oldConfig, false)).toStrictEqual({ kind: 'rejected', reason: 'config-conflict' });
+    expect(classifyConfig(oldConfig, true)).toStrictEqual({ kind: 'action', action: 'replace', nextText: CONFIG_TEMPLATE });
   });
 
   it('keeps the sample prompt literal byte-for-byte', () => {

@@ -8,7 +8,8 @@ export const CONFIG_TEMPLATE = `{
   "testDir": "tests/ambercast",
   "targets": {
     "web-user": {
-      "baseUrl": "http://localhost:3000"
+      "baseUrl": "http://localhost:3000",
+      "browser": "chromium"
     }
   },
   "defaultTarget": "web-user"

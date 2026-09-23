@@ -136,6 +136,24 @@ describe('planInit()', () => {
     expect(fake.reads).toEqual([targets.config]);
   });
 
+  it('classifies snapshot bytes instead of a divergent BOM-stripped text value', async () => {
+    const fake = createStorage({ [targets.config]: CONFIG_TEMPLATE });
+    const originalRead = fake.storage.readTextSnapshotIfExists.bind(fake.storage);
+    const storage: StorageAdapter = {
+      ...fake.storage,
+      async readTextSnapshotIfExists(path) {
+        if (path === targets.config) {
+          return { text: CONFIG_TEMPLATE, bytes: new TextEncoder().encode(`\uFEFF${CONFIG_TEMPLATE}`) };
+        }
+        return originalRead(path);
+      },
+    };
+
+    await expect(planInit(deps(storage), targets)).resolves.toEqual({
+      kind: 'rejected', path: targets.config, reason: 'config-conflict',
+    });
+  });
+
   it('reports malformed AGENTS markers after the preceding artifacts', async () => {
     const fake = createStorage({ [targets.agents]: '<!-- ambercast:begin -->\n' });
 

@@ -53,6 +53,7 @@ import { escapeControlChars, escapeStackControlChars } from '#runtime/control-ch
 import { readDebugEnvironment } from '#runtime/debug-environment.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runInitCommand, type InitCommandDeps, type InitCommandInput, type InitCommandOutput } from '#runtime/init-command.js';
+import { runMcpCommand } from '#runtime/mcp-command.js';
 import { runRunCommand } from '#runtime/run-command.js';
 import { AmbercastError, prepareViewCommand, VIEW_COPY } from '#runtime/view-command.js';
 import { startLocalReportServer } from '#adapters/http/local-report-server.js';
@@ -894,7 +895,15 @@ export async function main(
     process.exitCode = 0;
     return;
   }
-  if (argv[0] !== 'init' && argv[0] !== 'generate' && argv[0] !== 'run' && argv[0] !== 'check' && argv[0] !== 'heal' && argv[0] !== 'view') {
+  if (
+    argv[0] !== 'init'
+    && argv[0] !== 'generate'
+    && argv[0] !== 'run'
+    && argv[0] !== 'check'
+    && argv[0] !== 'heal'
+    && argv[0] !== 'view'
+    && argv[0] !== 'mcp'
+  ) {
     stderr.write(`Unknown command: ${argv[0]}.\n`);
     writeUsage(stderr);
     process.exitCode = 2;
@@ -912,7 +921,9 @@ export async function main(
           ? parseCheck(argv.slice(1), controller.signal)
           : argv[0] === 'view'
             ? parseView(argv.slice(1), controller.signal)
-            : parseHeal(argv.slice(1), controller.signal);
+            : argv[0] === 'mcp'
+              ? { command: 'mcp' as const, dir: process.cwd(), syncWaitMs: 45000, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }
+              : parseHeal(argv.slice(1), controller.signal);
   if (typeof parsed === 'string') {
     if (parsed === 'help') {
       writeUsage(stdout);
@@ -982,16 +993,25 @@ export async function main(
           ? await runRunCommand({ ...parsed.input, stderr })
           : parsed.command === 'check'
             ? await runCheckCommand({ ...parsed.input, stderr })
-            : await runHealCommand({ ...parsed.input, stderr });
+            : parsed.command === 'mcp'
+              ? await (async () => {
+                const exitCode = await runMcpCommand({ dir: parsed.dir, syncWaitMs: parsed.syncWaitMs, stdin: parsed.stdin, stdout: parsed.stdout, stderr: parsed.stderr });
+                process.exitCode = exitCode;
+                return { exitCode, envelope: null };
+              })()
+              : await runHealCommand({ ...parsed.input, stderr });
       if (
-        parsed.command === 'run'
+        output.envelope !== null
+        && parsed.command === 'run'
         && output.envelope.command === 'run'
         && output.envelope.reportPersistence === 'failed'
       ) {
         stderr.write(`${REPORT_PERSISTENCE_FAILED_WARNING}\n`);
       }
-      stdout.write(parsed.json ? `${JSON.stringify(output.envelope)}\n` : renderHumanReport(output.envelope, parsed.color));
-      process.exitCode = output.exitCode;
+      if (output.envelope !== null) {
+        stdout.write((parsed as { json?: boolean; color?: boolean }).json ? `${JSON.stringify(output.envelope)}\n` : renderHumanReport(output.envelope, (parsed as { color?: boolean }).color ?? true));
+        process.exitCode = output.exitCode;
+      }
     } catch (error) {
       /*
        * Opt-in diagnostics can contain sensitive data, but unavailable or

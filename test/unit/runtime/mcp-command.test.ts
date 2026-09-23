@@ -2,8 +2,30 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { PassThrough } from 'node:stream';
-import { afterEach, describe, expect, it } from 'vitest';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { McpServerDeps } from '#adapters/mcp/types.js';
 import { runMcpCommand } from '#runtime/mcp-command.js';
+
+const serverFake = vi.hoisted(() => ({ connected: vi.fn(), called: vi.fn() }));
+vi.mock('#adapters/mcp/server.js', () => ({
+  createMcpServer: (deps: McpServerDeps) => {
+    const server = new Server({ name: 'shutdown-test', version: '1.0.0' }, { capabilities: { tools: {} } });
+    server.setRequestHandler(CallToolRequestSchema, async () => {
+      serverFake.called();
+      const result = await deps.run({});
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result.envelope) }] };
+    });
+    return {
+      connect: async (transport: Parameters<typeof server.connect>[0]) => {
+        await server.connect(transport);
+        serverFake.connected();
+      },
+      close: () => server.close(),
+    };
+  },
+}));
 
 const temporaryDirectories: string[] = [];
 
@@ -31,6 +53,46 @@ afterEach(async () => {
 });
 
 describe('runtime/mcp-command', () => {
+  it('aborts an active call on SIGTERM and returns its INTERRUPTED envelope with exit 0 (TEST-B9)', async () => {
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io }).then((code) => ({ code }), (error: unknown) => ({ error }));
+    await vi.waitFor(() => expect(serverFake.connected).toHaveBeenCalled());
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } } })}\n`);
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`);
+    await vi.waitFor(() => expect(serverFake.called).toHaveBeenCalledTimes(1));
+    process.emit('SIGTERM');
+    expect(await running).toEqual({ code: 0 });
+    expect(io.output()).toContain('INTERRUPTED');
+  });
+
+  it('returns exit 3 when an active call ignores abort beyond ten seconds (TEST-B9)', async () => {
+    vi.useFakeTimers();
+    try {
+      const io = streams();
+      const directory = await fixtureDirectory();
+      const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io }).then((code) => ({ code }), (error: unknown) => ({ error }));
+      await vi.advanceTimersByTimeAsync(1);
+      io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`);
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(10_001);
+      expect(await running).toEqual({ code: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a new call during drain before it reaches the tool handler and logs its count (TEST-B9)', async () => {
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io }).then((code) => ({ code }), (error: unknown) => ({ error }));
+    await vi.waitFor(() => expect(serverFake.connected).toHaveBeenCalled());
+    process.emit('SIGTERM');
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`);
+    expect(await running).toEqual({ code: 0 });
+    expect(serverFake.called).not.toHaveBeenCalled();
+    expect(io.errors().trim().split('\n')).toEqual([expect.stringMatching(/1.*reject|reject.*1/i)]);
+  });
   it('rejects a missing --dir with the resolved path and exit 2 (TEST-B1)', async () => {
     const directory = await fixtureDirectory();
     const missing = join(directory, 'missing');

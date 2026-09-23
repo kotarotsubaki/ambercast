@@ -62,9 +62,13 @@ export function renderToolResult(
  * @returns Text and structured content with transport error and metadata fields.
  * @remarks
  * Job handles, non-terminal job_status, job_cancel, and queued cancellation
- * share one record response contract. Keeping that contract here prevents
- * their response formats from drifting apart; renderToolResult instead
- * renders command-result envelopes. A valid record yields isError: false,
+ * share one record response contract. Terminal job_status responses for
+ * completed or cancelled jobs retaining a result instead use the same
+ * renderToolResult response format as the corresponding synchronous tool,
+ * with the record attached at `_meta.job`. The job_status handler in
+ * mcp-command.ts chooses between the two response formats.
+ * Keeping the record contract here prevents its response formats from
+ * drifting apart. A valid record yields isError: false,
  * structuredContent equal to the record, and _meta.jobId equal to its ID.
  * Its text always has exactly three lines: `jobId: <id>`,
  * `status: <status>`, and `<statusMessage>`, in that order. The status message

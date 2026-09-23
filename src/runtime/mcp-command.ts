@@ -33,7 +33,10 @@ export interface RunMcpCommandInput {
  * A write call creates a record on enqueue. Queued and running jobs both
  * retain working status: a read derives `queued behind <N>` in statusMessage
  * for a queued job, so queue position does not require another status value.
- * Terminal status remains fixed. A running cancellation settles when the
+ * statusMessage is always non-empty: while running it is `running` until the
+ * first RunEvent, then a fixed progress phrase; at termination it becomes
+ * the same word as the terminal status. Terminal status remains fixed.
+ * A running cancellation settles when the
  * runtime returns; cancelling before invocation settles through FIFO removal.
  * Progress counts every RunEvent emitted by the runtime, regardless of
  * whether the client supplied a progressToken or received a notification.
@@ -45,7 +48,7 @@ export interface JobRecord {
   readonly jobId: string;
   readonly tool: 'generate' | 'run' | 'heal';
   readonly status: 'working' | 'completed' | 'failed' | 'cancelled';
-  readonly statusMessage?: string;
+  readonly statusMessage: string;
   readonly progress: number;
   readonly createdAt: string;
   readonly lastUpdatedAt: string;

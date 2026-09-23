@@ -90,10 +90,9 @@ describe('runtime/mcp-command', () => {
       const io = streams();
       const directory = await fixtureDirectory();
       const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io }).then((code) => ({ code }), (error: unknown) => ({ error }));
-      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => expect(serverFake.connected).toHaveBeenCalled());
       io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(serverFake.called).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(serverFake.called).toHaveBeenCalledTimes(1));
       process.emit('SIGTERM');
       await vi.advanceTimersByTimeAsync(10_001);
       expect(await running).toEqual({ code: 3 });

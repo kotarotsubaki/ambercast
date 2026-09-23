@@ -1338,4 +1338,44 @@ describe('prepareHeal TEST-A1 and TEST-A2', () => {
     });
     expect(pending.commit).toHaveBeenCalledOnce();
   });
+
+  it('applies an authorized settlement prepared with dryRun enabled (TEST-A2)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+    await useActualBuildHealReport();
+
+    const preparation = await prepareHeal(input({ dryRun: true }));
+    const settled = await preparation.settle('authorized');
+
+    expect(pending.commit).toHaveBeenCalledOnce();
+    expect(settled.envelope.results).toEqual([expect.objectContaining({ application: 'applied' })]);
+  });
+
+  it('reports a rejected commit per case and still applies the next case (TEST-A2)', async () => {
+    const failed = capability('failed.test.md');
+    vi.mocked(failed.commit).mockRejectedValue(new Error('rename failed'));
+    const succeeded = capability('committed.test.md');
+    configure({ result: batch({
+      outcome: outcome({ results: [caseResult('failed.test.md'), caseResult('committed.test.md')] }),
+      commits: commits(failed, succeeded),
+    }) });
+    await useActualBuildHealReport();
+
+    const preparation = await prepareHeal(input());
+    const settlement = preparation.settle('authorized');
+
+    await expect(settlement).resolves.toMatchObject({
+      envelope: {
+        results: [
+          expect.objectContaining({ id: 'tests/failed.test.md', application: 'apply-failed' }),
+          expect.objectContaining({ id: 'tests/committed.test.md', application: 'applied' }),
+        ],
+        errors: [expect.objectContaining({
+          scope: 'case', code: 'FS_IO_ERROR', caseId: 'tests/failed.test.md',
+        })],
+      },
+    });
+    expect(failed.commit).toHaveBeenCalledOnce();
+    expect(succeeded.commit).toHaveBeenCalledOnce();
+  });
 });

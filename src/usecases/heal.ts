@@ -421,6 +421,8 @@ function createHealOverlayStorage(
       throw new FsIoErrorClass('Config updates not permitted during heal.');
     },
     exists: async (path) => tracked(path) ? true : base.exists(path),
+    listDirectories: (path) => base.listDirectories(path),
+    realPath: (path) => base.realPath(path),
     writeText: async (path, text) => {
       if (tracked(path)) {
         buffered.set(path, text);

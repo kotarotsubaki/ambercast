@@ -15,9 +15,9 @@ const REPOSITORY_TSCONFIG = resolve('tsconfig.json');
 
 interface EdgeCase {
   readonly id: string;
-  readonly expectedRuleId: string;
-  readonly source: string;
-  readonly target: string | RegExp;
+  readonly expectedRuleId?: string;
+  readonly source?: string;
+  readonly target?: string | RegExp;
   readonly compliantSource: string;
   readonly compliantTarget: string;
 }
@@ -35,6 +35,29 @@ function expectedViolationTarget(target: string | RegExp) {
 }
 
 const edgeCases: readonly EdgeCase[] = [
+  { id: 'cli-http-boundary', compliantSource: 'src/cli/synthetic-cli.ts', compliantTarget: 'src/adapters/http/synthetic-http.ts' },
+  { id: 'http-self-boundary', compliantSource: 'src/adapters/http/synthetic-a.ts', compliantTarget: 'src/adapters/http/synthetic-b.ts' },
+  { id: 'http-core-boundary', compliantSource: 'src/adapters/http/synthetic-http.ts', compliantTarget: 'src/core/synthetic-token.ts' },
+  {
+    id: 'runtime-http-still-forbidden', expectedRuleId: 'adapters-http-runtime-only',
+    source: 'src/runtime/synthetic-runtime.ts', target: 'src/adapters/http/synthetic-http.ts',
+    compliantSource: 'src/adapters/http/synthetic-http.ts', compliantTarget: 'src/runtime/synthetic-runtime.ts',
+  },
+  {
+    id: 'http-no-node-fs', expectedRuleId: 'adapters-http-external-allowlist',
+    source: 'src/adapters/http/synthetic-http.ts', target: 'node:fs',
+    compliantSource: 'src/adapters/http/synthetic-http.ts', compliantTarget: 'node:http',
+  },
+  {
+    id: 'http-no-usecases', expectedRuleId: 'adapters-http-boundary',
+    source: 'src/adapters/http/synthetic-http.ts', target: 'src/usecases/synthetic-usecase.ts',
+    compliantSource: 'src/adapters/http/synthetic-http.ts', compliantTarget: 'src/core/synthetic-token.ts',
+  },
+  {
+    id: 'view-reachability', expectedRuleId: 'view-no-ai-or-browser-dependencies',
+    source: 'src/adapters/http/synthetic-http.ts', target: 'src/adapters/ai/synthetic-ai.ts',
+    compliantSource: 'src/adapters/http/synthetic-http.ts', compliantTarget: 'src/core/synthetic-token.ts',
+  },
   {
     id: 'core-boundary',
     expectedRuleId: 'core-is-leaf',
@@ -274,6 +297,7 @@ describe('dependency-cruiser architecture rules', () => {
       'node:crypto',
       'node:fs/promises',
       'node:http',
+      'node:net',
       'node:os',
       'node:path',
       '@modelcontextprotocol/sdk',
@@ -340,6 +364,32 @@ describe('dependency-cruiser architecture rules', () => {
     expect(rule.to.reachable).toBe(true);
   });
 
+  test('pins every view closure root, target, and reachability mode', () => {
+    const candidate = dependencyCruiserConfig.forbidden.find((rule: { readonly name: string }) => (
+      rule.name === 'view-no-ai-or-browser-dependencies'
+    ));
+    expect(candidate).toBeDefined();
+    if (candidate === undefined) {
+      throw new Error('Expected the view dependency closure rule to be configured.');
+    }
+    const rule = candidate as {
+      readonly from: { readonly path: string };
+      readonly to: { readonly path: string; readonly reachable: boolean };
+    };
+    expect(rule.from.path).toBe('^src/(usecases/get-run-report\\.ts|runtime/view-command\\.ts|adapters/http/.*)$');
+    expect(rule.to.path).toBe('^src/adapters/(ai|browser)/');
+    const sourcePattern = new RegExp(rule.from.path);
+    const targetPattern = new RegExp(rule.to.path);
+    for (const path of ['src/usecases/get-run-report.ts', 'src/runtime/view-command.ts', 'src/adapters/http/router.ts']) {
+      expect(sourcePattern.test(path)).toBe(true);
+    }
+    expect(sourcePattern.test('src/usecases/get-run-screenshot.ts')).toBe(false);
+    expect(targetPattern.test('src/adapters/ai/whatever.ts')).toBe(true);
+    expect(targetPattern.test('src/adapters/browser/whatever.ts')).toBe(true);
+    expect(targetPattern.test('src/adapters/system/whatever.ts')).toBe(false);
+    expect(rule.to.reachable).toBe(true);
+  });
+
   test('forbids every import from a flat adapters-root file', async () => {
     const result = await cruiseFixture(fixturePath('adapters-root-file', 'violation'));
 
@@ -366,12 +416,15 @@ describe('dependency-cruiser architecture rules', () => {
     expect(existsSync(REPOSITORY_TSCONFIG)).toBe(true);
   });
 
-  test.each(edgeCases)('$id rejects the exact forbidden edge', async ({
+  test.each(edgeCases.filter((edgeCase) => edgeCase.expectedRuleId !== undefined && edgeCase.id !== 'view-reachability'))('$id rejects the exact forbidden edge', async ({
     expectedRuleId,
     id,
     source,
     target,
   }) => {
+    if (expectedRuleId === undefined || source === undefined || target === undefined) {
+      throw new Error('Violation fixture requires an expected rule, source, and target.');
+    }
     const result = await cruiseFixture(fixturePath(id, 'violation'));
 
     expect(result.summary.violations).toEqual([
@@ -381,6 +434,15 @@ describe('dependency-cruiser architecture rules', () => {
         to: expectedViolationTarget(target),
       }),
     ]);
+  });
+
+  test('view-reachability rejects an AI dependency through an intermediate HTTP module', async () => {
+    const result = await cruiseFixture(fixturePath('view-reachability', 'violation'));
+    expect(result.summary.violations).toContainEqual(expect.objectContaining({
+      from: 'src/adapters/http/synthetic-http.ts',
+      rule: expect.objectContaining({ name: 'view-no-ai-or-browser-dependencies' }),
+      to: 'src/adapters/ai/synthetic-ai.ts',
+    }));
   });
 
   test.each(edgeCases)('$id permits its expected compliant edge', async ({

@@ -867,7 +867,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |
 | `ai.maxGenerateAttempts` | 正の整数 | `2` | 1〜5。ファイルごとの生成試行回数 | generate のみ。heal Stage 3 には適用しない |
 | `ai.timeoutMs` | 正の整数 | `600000` | 正の値 | generate、run のフォールバック、heal |
-| `viewer.port` | 整数 | `4600` | 1〜65535。viewer コマンドは計画段階です | 計画されている `view` のみ |
+| `viewer.port` | 整数 | `4600` | 1〜65535。開始候補ポート。`--port` で上書き可能 | view |
 | `ci.heal` | boolean | `false` | CI におけるリスト表示以外の heal のオプトイン | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI での書き戻しのオプトイン | run |
 | `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | 定義済みの語彙 | check |
@@ -1635,18 +1635,18 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `**` | `**` はパス区切り文字をまたぐ検出用ワイルドカードです。 | マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language) | 1セグメントの `*` |
 | `--` | `--` はオプション解析を終了し、後続のトークンをリテラルパスとして扱います。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--` で始まるファイル名 |
 | `--allow-empty` | `--allow-empty` は、このフラグを解析するコマンドにおいて空の選択を許容します。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--list` |
-| `--allow-headless` | `--allow-headless` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1パーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#planned-interface) | 実装済みの `--headed` |
+| `--allow-headless` | `--allow-headless` は view の非対話拒否を解除します。既に対話端末である場合は no-op です。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#interactive-gate) | 実装済みの `--headed` |
 | `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可します。指定しない場合、run はミスを拒絶します。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
 | `--clear` | `--clear` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1ベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
 | `--config` | `--config` はコマンドローカルのフラグであり、generateとcheckでのみ解析されます。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 initパーサーセマンティクスはありません。 | [ambercast init](/ambercast/ja/reference/cli/init/#flags) | 設定の `testDir` |
 | `--dry-run` | `--dry-run` は、generateおよびhealにおいてアーティファクトの書き込みを保留します。 | generate/heal; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` は、実装済みのgenerateコマンドにおいて最新のPlanの再利用を無効化します。 | `ambercast generate`; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | healの `--yes` |
-| `--host` | `--host` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 viewerパーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#undecided-items) | ターゲットの `baseUrl` |
+| `--host` | `--host` は view のバインドアドレスを選択します。具体的な IP または `localhost` のみで、ワイルドカードは不可です。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#host-binding) | ターゲットの `baseUrl` |
 | `--json` | `--json` は、実装済みコマンドの実行完了後にシリアライズされた構造化レポート出力を選択します。 | CLIレンダラー; [レポート](/ambercast/ja/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` は実装されているすべてのコマンドで解析されます。一覧表示の結果セマンティクスは各コマンドのドキュメントが所有します。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 runパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | `--force` |
-| `--port` | `--port` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 viewerパーサーセマンティクスはありません。 | [ambercast view](/ambercast/ja/reference/cli/view/#planned-interface) | 設定の `viewer.port` |
+| `--port` | `--port` は view を候補自動増分ではなく単一の厳格なポートに固定します。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#port-selection) | 設定の `viewer.port` |
 | `--target` | `--target` は、実装されている各コマンドに対して設定済みの実行ターゲットを指定します。 | CLIパーサー / ターゲット解決ツール; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | ターゲット定義そのもの |
 | `--yes` | `--yes` は、対話的な確認なしでhealの適用を承認します。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#flags) | generateの `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` は、隣接するGroundingコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Planのサフィックス |
@@ -1682,7 +1682,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `ambercast restore` | `ambercast restore` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
 | `ambercast review` | `ambercast review` は計画中（0.3.1では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
 | `ambercast run` | `ambercast run` は実装済みの決定論的リプレイコマンドです。 | [ambercast run](/ambercast/ja/reference/cli/run/) | `ambercast generate` |
-| `ambercast view` | `ambercast view` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast view](/ambercast/ja/reference/cli/view/#status) | 実装済みコマンド |
+| `ambercast view` | `ambercast view` は実装済みの読み取り専用ローカル結果ビューアです。 | [ambercast view](/ambercast/ja/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
 | `ambercast_generate` | `ambercast_generate` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
 | `ambercast_heal` | `ambercast_heal` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
@@ -1718,7 +1718,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 # CLIの概要
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/
 
-`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal` の 5 つのコマンドが実装されています。
+`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal`、`view` の 6 つのコマンドが実装されています。
 
 ## コマンド体系 {#command-surface}
 
@@ -1731,6 +1731,7 @@ Commands:
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+  view                 Browse run results in a browser
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -1749,6 +1750,9 @@ Check options:
 Heal options:
   --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
+View options:
+  --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -1758,7 +1762,7 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-実装されているコマンドは `init`、`generate`、`run`、`check`、`heal` です。
+実装されているコマンドは `init`、`generate`、`run`、`check`、`heal`、`view` です。
 
 トップレベルの `--help` および `--version` は、コマンドのディスパッチ前に処理を終了（ショートサーキット）します。不正な形式の引数が指定された場合は、レポートを出力せずに終了コード 2 で終了します。
 
@@ -1771,6 +1775,7 @@ Heal configuration:
 | run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 | check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
 | heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| view | なし | `port`（ポート指定）、`host`（バインドアドレス）、`allow-headless`（非対話許可）、`config`（設定パス）、`no-color`（カラー無効化） | `--port` > `viewer.port` > 4600 |
 
 `--` はオプション解析を終了し、後続のすべての引数をリテラルパスとして残します。
 
@@ -2058,6 +2063,56 @@ CI または非 TTY の環境では、`--yes` を指定しない init は拒否�
 - [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
 - [設定](/ambercast/ja/reference/configuration/#file-selection)
 - [オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)
+
+---
+
+# ambercast view
+Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/view/
+
+`ambercast view` は、設定済みの runs ディレクトリに永続化された run の結果を閲覧する、読み取り専用のローカル HTTP サーバーを起動します。テストを再実行したり AI 呼び出しを行ったりすることなく、開発者が run のケース・ステップ・スクリーンショットを確認できます。
+
+## フラグ {#flags}
+
+| フラグ | 値 | 効果 | デフォルト |
+| --- | --- | --- | --- |
+| `--port` | n | 希望するポート。未指定時は 20 候補まで自動増分 | 4600 |
+| `--host` | addr | バインドアドレス。具体的な IP または localhost、ワイルドカード不可 | 127.0.0.1 |
+| `--allow-headless` | boolean | 非対話端末での実行を許可 | false |
+| `--config` | path | 明示的な設定パス | 省略 |
+| `--no-color` | boolean | ANSI 出力を無効化 | false |
+
+## 対話ゲート {#interactive-gate}
+
+`view` は、他の確認ゲート付きコマンドと同じ対話判定に従い、stdin と stderr の両方が端末に接続され、かつ `CI` が設定されていない場合を除いて起動を拒否します。`--allow-headless` を指定しない非対話実行は、次のメッセージとともに終了コード 2 で終了します。
+
+```
+view requires --allow-headless when no interactive terminal is attached.
+```
+
+`--allow-headless` はこの拒否を解除します。既に対話端末である場合は no-op です。
+
+## ポート選択 {#port-selection}
+
+開始ポートは `--port`、次に設定済みの `viewer.port`、最後に 4600 の順で決まります。`--port` を指定しない場合、`view` は開始ポートから連続する最大 20 個のポートを試行し、`EADDRINUSE` のときだけ次の候補へ進み、実際にバインドしたポートを表示します。`--port` を指定した場合、そのポートは厳格に扱われます。使用中であれば別のポートを試さずに終了コード 3 で終了します。すべての候補を使い切った場合、または `EADDRINUSE` 以外のバインド失敗も同様に終了コード 3 です。
+
+## ホストバインド {#host-binding}
+
+`--host` は具体的な IP アドレスまたは `localhost`（`127.0.0.1` に正規化）を受け付けます。このサーバーは認証を持たないため、ワイルドカードアドレス（`0.0.0.0`、`::`、`[::]`）は終了コード 2 で拒否されます。すべてのリクエストはバインドされたホストとポートに対して `Host` ヘッダーで検査され、異なるホストを指定したリクエストは 403 で拒否されます。ループバック以外のアドレスへのバインドは、認証なしで到達可能である旨の警告を表示します。
+
+## ルート {#routes}
+
+| ルート | 内容 |
+| --- | --- |
+| `GET /` | run の一覧（新しい順）。状態・所要時間・ケース数を含む |
+| `GET /runs/<runId>` | 1 つの run のケース・ステップ・期待値/実際値・説明文・スクリーンショット |
+| `GET /runs/<runId>/report.json` | run が永続化した report の生バイト列 |
+| `GET /runs/<runId>/screenshots/<ref>` | run の report が実際に参照するスクリーンショット |
+
+すべての応答に `X-Content-Type-Options: nosniff` と `Cache-Control: no-store` が付与されます。HTML 応答と生データ応答には固定の `Content-Security-Policy` と `Referrer-Policy: no-referrer` も付与されます。画面はサーバーサイドでレンダリングされ、クライアント側 JavaScript や外部リクエストは一切含まれません。
+
+`report.json` を欠く run ディレクトリ（書き込み途中や永続化失敗など）は、壊れたリンクとしてではなく evidence only として一覧に表示されます。`report.json` の解析または検証に失敗した run も、一覧から消えることなく、生バイト列へのリンク付きで表示され続けます。
+
+関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)。
 
 ---
 
@@ -3147,7 +3202,7 @@ ambercastの現在の実装境界を明確にし、実装済みの機能と今�
 
 ## 現行リリースで実装済み {#implemented}
 
-0.3.1 のCLIパーサーは、`generate`、`run`、`check`、および `heal` を公開しています。一方で、実装されているパーサーには init、viewer、または MCP サブコマンドは公開されていません。
+0.3.1 のCLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、および `view` を公開しています。一方で、実装されているパーサーには MCP サブコマンドは公開されていません。
 
 また、0.3.1 ではプロデューサ契約のフィンガープリントが変更されました。これにより、プロデューサバンドルおよび `inputsDigest` がstale（古くなった状態）になるため、0.3.1 では 0.1.0 のプランの再生成が必要です。
 
@@ -3158,13 +3213,12 @@ ambercastの現在の実装境界を明確にし、実装済みの機能と今�
 
 ## 現行境界以降の計画 {#planned-after-current-boundary}
 
-現行の実装境界以降に向けて、計画されているドキュメントは `init`、`view`、`review`、`mcp`、baseline/restore、MCPツール、および公式スキルを対象としています。
+現行の実装境界以降に向けて、計画されているドキュメントは `review`、`mcp`、baseline/restore、MCPツール、および公式スキルを対象としています。
 
 また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
 
 関連情報:
-- [ambercast init](/ambercast/ja/reference/cli/init/)
-- [ambercast view](/ambercast/ja/reference/cli/view/)
+- [ambercast review](/ambercast/ja/reference/cli/review/)
 - [official skill](/ambercast/ja/agents/official-skill/)
 - [MCP サーバー](/ambercast/ja/agents/mcp-server/)
 
@@ -3214,11 +3268,11 @@ AIエージェント向けのドキュメントでは、読む順序、副作用
 # オペレーション規約
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/
 
-本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `init`、`generate`、`run`、`check`、`heal` の5つです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
+本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `init`、`generate`、`run`、`check`、`heal`、`view` の6つです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
 
 ## コマンド規約 {#command-contract}
 
-パーサーが実装済みコマンドとして公開しているのは、`init`、`generate`、`run`、`check`、`heal` の5つのコマンドのみです。`check` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
+パーサーが実装済みコマンドとして公開しているのは、`init`、`generate`、`run`、`check`、`heal`、`view` の6つのコマンドのみです。`check` と `view` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
 
 | コマンド | 前提条件 | 副作用 | 承認の要否 | CIで安全か |
 | --- | --- | --- | --- | --- |
@@ -3227,6 +3281,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/
 | run | 選択されたプロンプトに信頼できる plan が存在すること。 | 実行レポートを書き込みます。write-back コントラクトに基づき grounding を書き込む場合があります。 | 要求されたスコープで書き込みが未承認の場合は必要です。 | write-back ポリシーに従い、安全です。 |
 | check | 選択対象が検出可能であること。 | プロンプトとアーティファクトの読み取りのみを行います。 | ambercast アーティファクト書き込みの承認は不要です。 | 安全です。 |
 | heal | ターゲットが冪等であり、CI環境では実際の試行がCIで有効化されていること。 | runs ディレクトリ内に試行のエビデンスを書き込む場合があります。確認後にのみ、測定された plan/grounding 候補をコミットします。 | ユーザーによる明示的な承認が必要です。--yes はエージェントへの権限付与ではありません。 | 既定では安全ではありません（ci.heal: true の場合のみ）。 |
+| view | 対話端末、または `--allow-headless`。バインド可能な空きポートがあること。 | なし。永続化された run report を読み取るだけの HTTP サーバーです。 | ambercast アーティファクト書き込みの承認は不要です。 | 既定では安全ではありません。`--allow-headless` なしの非対話利用は拒否されます。 |
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/), [ambercast init](/ambercast/ja/reference/cli/init/#confirmation), [ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions), [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
 

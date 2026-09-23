@@ -67,6 +67,37 @@ export interface ReadStorageAdapter {
    * directories, and inspection failures return `false`.
    */
   exists(path: string): Promise<boolean>;
+
+  /**
+   * Lists regular directories directly inside a directory.
+   *
+   * @param dir - Opaque directory path to inspect; use `''` for the root
+   * directory.
+   * @returns Lexicographically ascending bare directory names. Regular files,
+   *   symlinks to directories, and directories starting with `.ambercast-tmp-`
+   *   are excluded; listing is not recursive. Missing directories resolve to
+   *   an empty array.
+   * @throws If an existing directory cannot be listed.
+   */
+  listDirectories(dir: string): Promise<readonly string[]>;
+
+  /**
+   * Resolves a path through any symlinks to its absolute canonical form.
+   *
+   * @param path - Opaque path to resolve.
+   * @returns The canonical absolute path, or `undefined` if the path is
+   *   missing.
+   * @throws An `Error` for a resolution failure that is not itself a
+   *   missing-path condition (for example, insufficient permissions, or a
+   *   symlink loop) — a broken symlink or any other ENOENT-shaped resolution
+   *   failure resolves to `undefined` instead, matching a plain missing path.
+   *
+   * @remarks
+   * This method is used for a path-containment safety check: by resolving
+   * symlinks, callers can verify a path is genuinely contained within a
+   * directory, which a purely textual/lexical path check cannot guarantee.
+   */
+  realPath(path: string): Promise<string | undefined>;
 }
 
 /**

@@ -522,7 +522,7 @@ function exportedType(
 
 describe('architecture guardrails', () => {
   test('keeps the reviewed integrity-construction and navigation-checkpoint inventory exact', async () => {
-    const sourceFiles = await findTypeScriptFiles(SOURCE_ROOT);
+    const sourceFiles = (await findTypeScriptFiles(SOURCE_ROOT)).filter((file) => !file.endsWith('.test.ts'));
     const tsconfigFileName = ts.sys.resolvePath('tsconfig.json');
     const configFile = ts.readConfigFile(tsconfigFileName, ts.sys.readFile);
     if (configFile.error !== undefined) throw new Error(`The architecture test could not read ${tsconfigFileName}.`);

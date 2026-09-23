@@ -172,6 +172,16 @@ const nondeterministicGlobalCases = [
 
 const boundariesFixtureCases: readonly BoundariesFixtureCase[] = [
   {
+    id: 'runtime-http-still-forbidden',
+    source: 'src/runtime/synthetic-runtime.ts',
+    expectedMessage: 'There is no policy allowing dependencies from elements of type "runtime" to elements of type "adapters-http"',
+  },
+  {
+    id: 'http-no-usecases',
+    source: 'src/adapters/http/synthetic-http.ts',
+    expectedMessage: 'There is no policy allowing dependencies from elements of type "adapters-http" to elements of type "usecases"',
+  },
+  {
     id: 'core-boundary',
     source: 'src/core/synthetic-core.ts',
     expectedMessage: 'There is no policy allowing dependencies from elements of type "core" to elements of type "adapters-root-file"',
@@ -317,6 +327,15 @@ describe('ESLint architecture and determinism rules', () => {
     },
   );
 
+  test.each([
+    ['cli-http-boundary', 'src/cli/synthetic-cli.ts'],
+    ['http-self-boundary', 'src/adapters/http/synthetic-a.ts'],
+    ['http-core-boundary', 'src/adapters/http/synthetic-http.ts'],
+  ])('%s permits its HTTP carve-out edge through boundaries/element-types', async (id, source) => {
+    const result = await boundariesMessagesForFixture(id, 'compliant', source);
+    expect(result.messages).toEqual([]);
+  });
+
   test.each(boundariesFixtureCases)(
     '$id permits the compliant fixture edge through boundaries/element-types',
     async ({ id, source }) => {
@@ -365,6 +384,19 @@ describe('ESLint architecture and determinism rules', () => {
     expect(policyRolesForSourcePath('src/index.ts')).toEqual(['public-entry']);
     expect(policyRolesForSourcePath('src/global.d.ts')).toEqual(['global-types']);
     expect(policyRolesForSourcePath('src/adapters/synthetic-adapter.ts')).toEqual(['adapters-root-file']);
+  });
+
+  test('keeps view source free of browser and AI capability references', async () => {
+    const files = [
+      new URL('usecases/get-run-report.ts', SOURCE_ROOT),
+      new URL('runtime/view-command.ts', SOURCE_ROOT),
+      ...((await findTypeScriptFiles(new URL('adapters/http/', SOURCE_ROOT).pathname))
+        .filter((file) => !file.endsWith('.test.ts')).map((file) => new URL(`file://${file}`))),
+    ];
+    for (const file of files) {
+      const source = await readFile(file, 'utf8');
+      expect(source).not.toMatch(/playwright|AiExecutor|BrowserDriver/);
+    }
   });
 
   test('reports no unknown-file diagnostic for every current source file', async () => {

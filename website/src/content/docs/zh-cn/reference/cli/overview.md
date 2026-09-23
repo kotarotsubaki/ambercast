@@ -3,7 +3,7 @@ title: CLI 概览
 description: 介绍 ambercast 命令行界面的全局解析规则、核心命令集、命令与标志支持矩阵以及默认文件发现机制。
 ---
 
-ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check 与 heal。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
+ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check、heal 与 view。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
 
 ## 命令界面 {#command-surface}
 
@@ -16,6 +16,7 @@ Commands:
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+  view                 Browse run results in a browser
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -34,6 +35,9 @@ Check options:
 Heal options:
   --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
+View options:
+  --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -43,7 +47,7 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-ambercast 当前已实现的命令包括 init、generate、run、check 以及 heal。
+ambercast 当前已实现的命令包括 init、generate、run、check、heal 以及 view。
 
 顶层标志 `--help` 与 `--version` 会在命令分发之前短路处理并退出；若传入格式错误的参数，程序将直接以退出码 2 终止退出，且不输出错误报告。
 
@@ -56,6 +60,7 @@ ambercast 当前已实现的命令包括 init、generate、run、check 以及 he
 | run | 字面路径；未指定路径则执行发现 | grep, target, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | 字面路径；未指定路径则执行发现 | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| view | 无 | port, host, allow-headless, config, no-color | --port > viewer.port > 4600 |
 
 除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
 

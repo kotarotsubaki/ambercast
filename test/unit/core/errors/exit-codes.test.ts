@@ -17,6 +17,7 @@ const ALL_ERROR_KINDS = [
   'integrity-violation',
   'grounding-unresolved',
   'browser-launch-failed',
+  'port-unavailable',
   'ai-executor-unavailable',
   'ai-response-invalid',
   'fs-io-error',
@@ -47,6 +48,7 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
     case 'secret-syntax-rejected':
       return 2;
     case 'browser-launch-failed':
+    case 'port-unavailable':
     case 'ai-executor-unavailable':
     case 'ai-response-invalid':
     case 'fs-io-error':

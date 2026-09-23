@@ -44,11 +44,12 @@
  *   having a closed external-dependency contract; the remaining product roles
  *   (`ports`, `usecases`, `report`, `config`, `runtime`, and `cli`) currently
  *   have none because none imports anything external today. This closed
- *   allowlist applies to that matcher only,
- *   not to the `adapters-http` carve-out, which remains outside this
- *   enforcement. An unrestricted standard-adapter external surface would be
- *   a live enforcement gap. The specialized `src/adapters/http` matcher may
- *   import `runtime` only. The standard adapter policy compares the captured
+ *   allowlist applies to that matcher only. The HTTP carve-out needs its own
+ *   closed list for server and URL handling, so its external dependencies do
+ *   not inherit permissions intended for other adapters. The specialized
+ *   `src/adapters/http` matcher may consume `runtime` and `core` and import
+ *   within its own role. It must not become a general route into other
+ *   adapter families or usecases. The standard adapter policy compares the captured
  *   adapter and port families, and fixture tests exercise that convention
  *   with synthetic names.
  * - `usecases` is rooted at `src/usecases` and may import `core`, `usecases`,
@@ -62,7 +63,8 @@
  * - `runtime` is rooted at `src/runtime` and may import `core`, `ports`,
  *   `usecases`, `config`, `runtime`, and concrete `adapters/**` other than
  *   `adapters/http`; it is the composition point for those concrete adapters.
- * - `cli` is rooted at `src/cli` and may import `runtime` only.
+ * - `cli` is rooted at `src/cli` and may import `runtime` and the HTTP
+ *   carve-out so it can start the local server after runtime preparation.
  * - `public-entry` is the exact file `src/index.ts`, classified by a file
  *   category rather than a folder element. It has no default product-layer
  *   target; a public API target, when needed, is an explicit allowance rather
@@ -128,6 +130,7 @@ export const LAYERS = Object.freeze({
       'node:crypto',
       'node:fs/promises',
       'node:http',
+      'node:net',
       'node:os',
       'node:path',
       '@modelcontextprotocol/sdk',
@@ -140,7 +143,8 @@ export const LAYERS = Object.freeze({
       root: 'src/adapters/http',
       path: '^src/adapters/http(?:/|$)',
       element: { type: 'adapters-http', pattern: 'src/adapters/http', partialMatch: false },
-      mayImport: [{ layer: 'runtime' }],
+      mayImport: [{ layer: 'runtime' }, { layer: 'core' }, { family: 'http' }],
+      externalAllow: ['node:http', 'node:url'],
     },
   },
   usecases: {
@@ -187,7 +191,7 @@ export const LAYERS = Object.freeze({
     root: 'src/cli',
     path: '^src/cli(?:/|$)',
     element: { type: 'cli', pattern: 'src/cli', partialMatch: false },
-    mayImport: [{ layer: 'runtime' }],
+    mayImport: [{ layer: 'runtime' }, { family: 'http' }],
   },
   'public-entry': {
     root: 'src/index.ts',

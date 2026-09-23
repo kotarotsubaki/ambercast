@@ -1,55 +1,49 @@
 ---
 title: ambercast view
-description: テスト結果ビューアの起動、ポート選択、および非対話型環境における実行制御の計画仕様を定義します。
-status: planned
-sidebar:
-  badge:
-    text: Planned
-    variant: caution
+description: ambercast view コマンドのリファレンス。フラグ、対話ゲート、ポート選択、ホストバインド、配信ルートを解説します。
 ---
 
-:::caution
-`ambercast view` は 0.3.1 では実装されていません。本ページに記載されている内容は、計画されている設計上の動作です。
-:::
+`ambercast view` は、設定済みの runs ディレクトリに永続化された run の結果を閲覧する、読み取り専用のローカル HTTP サーバーを起動します。テストを再実行したり AI 呼び出しを行ったりすることなく、開発者が run のケース・ステップ・スクリーンショットを確認できます。
 
-`ambercast view` は、ローカルでテスト結果を確認するためのビューアの起動、ポート選択、および非対話型環境での実行制御を行うコマンドです。
+## フラグ {#flags}
 
-## ステータス {#status}
+| フラグ | 値 | 効果 | デフォルト |
+| --- | --- | --- | --- |
+| `--port` | n | 希望するポート。未指定時は 20 候補まで自動増分 | 4600 |
+| `--host` | addr | バインドアドレス。具体的な IP または localhost、ワイルドカード不可 | 127.0.0.1 |
+| `--allow-headless` | boolean | 非対話端末での実行を許可 | false |
+| `--config` | path | 明示的な設定パス | 省略 |
+| `--no-color` | boolean | ANSI 出力を無効化 | false |
 
-`ambercast view` は 0.3.1 では実装されていません。現在のコマンドパーサーは `generate`、`run`、`check`、`heal`、`init` のみを受け付け、それ以外のコマンドは拒絶します。本コマンドが担うローカルビューアとしての役割は、計画されているビューア設計で定義されています。
+## 対話ゲート {#interactive-gate}
 
-関連情報:
-- [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)
-- [レポート](/ambercast/ja/reference/reports/#envelope)
+`view` は、他の確認ゲート付きコマンドと同じ対話判定に従い、stdin と stderr の両方が端末に接続され、かつ `CI` が設定されていない場合を除いて起動を拒否します。`--allow-headless` を指定しない非対話実行は、次のメッセージとともに終了コード 2 で終了します。
 
-## 計画されているインターフェース {#planned-interface}
+```
+view requires --allow-headless when no interactive terminal is attached.
+```
 
-| 構文 / 動作 | 計画されている仕様 |
+`--allow-headless` はこの拒否を解除します。既に対話端末である場合は no-op です。
+
+## ポート選択 {#port-selection}
+
+開始ポートは `--port`、次に設定済みの `viewer.port`、最後に 4600 の順で決まります。`--port` を指定しない場合、`view` は開始ポートから連続する最大 20 個のポートを試行し、`EADDRINUSE` のときだけ次の候補へ進み、実際にバインドしたポートを表示します。`--port` を指定した場合、そのポートは厳格に扱われます。使用中であれば別のポートを試さずに終了コード 3 で終了します。すべての候補を使い切った場合、または `EADDRINUSE` 以外のバインド失敗も同様に終了コード 3 です。
+
+## ホストバインド {#host-binding}
+
+`--host` は具体的な IP アドレスまたは `localhost`（`127.0.0.1` に正規化）を受け付けます。このサーバーは認証を持たないため、ワイルドカードアドレス（`0.0.0.0`、`::`、`[::]`）は終了コード 2 で拒否されます。すべてのリクエストはバインドされたホストとポートに対して `Host` ヘッダーで検査され、異なるホストを指定したリクエストは 403 で拒否されます。ループバック以外のアドレスへのバインドは、認証なしで到達可能である旨の警告を表示します。
+
+## ルート {#routes}
+
+| ルート | 内容 |
 | --- | --- |
-| `view [--port <n>] [--host <addr>] [--allow-headless]` | ローカル結果ビューアを起動します。 |
-| 既定のポート | 設定または既定のポートから開始し、空きポートが見つかるまでインクリメントして、実際のURLを出力します。 |
-| `--port` / 設定 | 固定ポートの指定を許可し、CI環境や固定ブックマークに対応します。 |
-| 非対話型環境での既定動作 | CI環境または非対話型ターミナルでは、終了コード 2 で実行を拒絶します。 |
-| `--allow-headless` | 非対話型環境での実行拒絶を明示的に解除します。 |
-| 設計共通フラグ | `--config <path>`、`--no-color`、`--version`、および `--help` はすべての計画コマンドに共通と宣言されています。マトリクス上、`view` に `--json` は割り当てられていません。 |
+| `GET /` | run の一覧（新しい順）。状態・所要時間・ケース数を含む |
+| `GET /runs/<runId>` | 1 つの run のケース・ステップ・期待値/実際値・説明文・スクリーンショット |
+| `GET /runs/<runId>/report.json` | run が永続化した report の生バイト列 |
+| `GET /runs/<runId>/screenshots/<ref>` | run の report が実際に参照するスクリーンショット |
 
-本ビューアは、テスト結果とスクリーンショットを確認するための、Storybookのようなローカルサーバーとして計画されています。
+すべての応答に `X-Content-Type-Options: nosniff` と `Cache-Control: no-store` が付与されます。HTML 応答と生データ応答には固定の `Content-Security-Policy` と `Referrer-Policy: no-referrer` も付与されます。画面はサーバーサイドでレンダリングされ、クライアント側 JavaScript や外部リクエストは一切含まれません。
 
-レンダリングされる構造は保存されたJSONとスクリーンショットによって決定され、AIの役割はテストの要約や失敗原因の説明といった自然言語コンテンツの生成に限定されます。
+`report.json` を欠く run ディレクトリ（書き込み途中や永続化失敗など）は、壊れたリンクとしてではなく evidence only として一覧に表示されます。`report.json` の解析または検証に失敗した run も、一覧から消えることなく、生バイト列へのリンク付きで表示され続けます。
 
-ブラウザの起動失敗は、計画されている共通終了コード規約に基づき、環境要因による終了コード 3 に分類されます。
-
-`view` は、Ambercastで計画されている機能の中でネットワークポートを消費する唯一の機能です（計画されているMCPサーバーはポートを使用しないstdio通信です）。
-
-## 未決定の項目 {#undecided-items}
-
-| 状態 | 項目 |
-| --- | --- |
-| 未規定 | `--host` の指定は挙げられていますが、バインディング、アドレス、外部公開に関するセマンティクスは定義されておらず、未確定です。 |
-| 未規定 | 既定のポート番号、インクリメントの上限、サーバーのライフサイクル、ルーティング、およびUIはビューア設計で固定されておらず、未確定です。 |
-| 明示的に未決 | `view` に関して明示的に未決とされている項目はありません（設計上、「未決」とラベル付けされているのは `baseline` と `restore` のみです）。 |
-
-関連情報:
-- [設定](/ambercast/ja/reference/configuration/#key-table)
-- [レポート](/ambercast/ja/reference/reports/#result-shapes)
-- [ambercast mcp](/ambercast/ja/reference/cli/mcp/#planned-interface)
+関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)。

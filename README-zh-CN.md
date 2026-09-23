@@ -55,7 +55,7 @@ npx ambercast <command>
 
 ## 了解更多
 
-- [命令指南](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/) — 介绍 generate、run、check 与 heal 命令的用法说明
+- [命令指南](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/) — 介绍 generate、run、check、heal 与 view 命令的用法说明
 - [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/) — 详细说明 0 至 5 退出码含义及批次结果混合时的优先级判定
 - [生成文件](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/) — 说明哪些生成文件应提交至 git，哪些应加入 gitignore
 - [机密凭据](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/) — 介绍确保凭据不进入提示词或计划的安全传递方式

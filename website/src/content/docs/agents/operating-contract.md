@@ -3,13 +3,13 @@ title: Operating contract
 description: Action boundaries, command preconditions, prohibitions, and next safe actions for invoking ambercast commands.
 ---
 
-This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly five implemented commands: `init`, `generate`, `run`, `check`, and `heal`.
+This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly six implemented commands: `init`, `generate`, `run`, `check`, `heal`, and `view`.
 
 ## Command contract {#command-contract}
 
-Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, and `heal` as implemented commands.
+Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, `heal`, and `view` as implemented commands.
 
-Among these commands, `check` has no mutable-storage, AI-provider, or browser dependency. Healing buffers only plan and grounding companion changes until confirmation, but its replay attempts may write contained evidence in the case run directory before approval and during dry runs.
+Among these commands, `check` and `view` have no mutable-storage, AI-provider, or browser dependency. Healing buffers only plan and grounding companion changes until confirmation, but its replay attempts may write contained evidence in the case run directory before approval and during dry runs.
 
 | Command | Precondition | Side effects | Needs approval? | Safe in CI? |
 | --- | --- | --- | --- | --- |
@@ -18,6 +18,7 @@ Among these commands, `check` has no mutable-storage, AI-provider, or browser de
 | `run` | A selected prompt has a trusted plan. | Writes invocation report; may write grounding under its write-back contract. | Yes when requested scope does not already authorize writes. | Yes, subject to write-back policy. |
 | `check` | A selection can be discovered. | Reads prompts and artifacts only. | No ambercast-artifact write approval required. | Yes. |
 | `heal` | Target is idempotent and a real attempt is CI-enabled when in CI. | May write attempt evidence in the runs directory; commits measured plan/grounding candidates only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | No by default; only with `ci.heal: true`. |
+| `view` | An interactive terminal, or `--allow-headless`; a free port to bind. | None; read-only HTTP server over persisted run reports. | No ambercast-artifact write approval required. | No by default; it rejects non-interactive use without `--allow-headless`. |
 
 Links: [CLI overview](/ambercast/reference/cli/overview/), [ambercast init](/ambercast/reference/cli/init/#confirmation), [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 

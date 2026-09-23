@@ -43,7 +43,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |
 | `ai.maxGenerateAttempts` | 正の整数 | `2` | 1〜5。ファイルごとの生成試行回数 | generate のみ。heal Stage 3 には適用しない |
 | `ai.timeoutMs` | 正の整数 | `600000` | 正の値 | generate、run のフォールバック、heal |
-| `viewer.port` | 整数 | `4600` | 1〜65535。viewer コマンドは計画段階です | 計画されている `view` のみ |
+| `viewer.port` | 整数 | `4600` | 1〜65535。開始候補ポート。`--port` で上書き可能 | view |
 | `ci.heal` | boolean | `false` | CI におけるリスト表示以外の heal のオプトイン | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI での書き戻しのオプトイン | run |
 | `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | 定義済みの語彙 | check |

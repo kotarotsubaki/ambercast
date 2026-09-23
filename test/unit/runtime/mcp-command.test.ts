@@ -15,7 +15,7 @@ vi.mock('#adapters/mcp/server.js', () => ({
     const server = new Server({ name: 'shutdown-test', version: '1.0.0' }, { capabilities: { tools: {} } });
     server.setRequestHandler(CallToolRequestSchema, async () => {
       serverFake.called();
-      const result = await deps.run({});
+      const result = await deps.run({}, { progressToken: undefined, sendNotification: async () => {} });
       return { content: [{ type: 'text' as const, text: JSON.stringify(result.envelope) }] };
     });
     return {

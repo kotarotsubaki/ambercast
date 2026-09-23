@@ -14,11 +14,13 @@ import {
 } from './descriptions.js';
 import { renderToolResult } from './render.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { ProgressNotification } from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Creates the MCP tool host from runtime-supplied capabilities.
  *
  * @param deps - Command capabilities and session-scoped values supplied by runtime.
+ * @param options - Optional server shutdown signal shared by queued calls.
  * @returns Transport lifecycle operations for the caller.
  * @remarks
  * SDK ownership stays inside this adapter. The narrow connect/close surface
@@ -31,9 +33,10 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
  *
  * FIFO serialization (B8): All tool calls are serialized through a single Promise
  * chain. When a call is cancelled (extra.signal.aborted), it is removed from the
- * queue and does not prevent subsequent calls from executing.
+ * queue and does not prevent subsequent calls from executing. A queued call
+ * also skips execution when the server begins draining before its turn.
  */
-export function createMcpServer(deps: McpServerDeps): { connect: (transport: unknown) => Promise<void>; close: () => Promise<void> } {
+export function createMcpServer(deps: McpServerDeps, options?: { readonly signal?: AbortSignal }): { connect: (transport: unknown) => Promise<void>; close: () => Promise<void> } {
   const mcpServer = new McpServer(
     { name: 'ambercast', version: deps.version },
     { instructions: 'Ambercast MCP server' }
@@ -45,7 +48,7 @@ export function createMcpServer(deps: McpServerDeps): { connect: (transport: unk
     toolName: 'generate' | 'run' | 'check' | 'heal',
     capability: 'generate' | 'run' | 'check' | 'healPreview'
   ) => {
-    return (args: unknown, extra: { signal?: AbortSignal }): Promise<{ isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: { [key: string]: unknown } | undefined; _meta: Record<string, unknown> }> => {
+    return (args: unknown, extra: { signal?: AbortSignal; _meta?: { progressToken?: string | number | undefined }; sendNotification: (notification: ProgressNotification) => Promise<void> }): Promise<{ isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: { [key: string]: unknown } | undefined; _meta: Record<string, unknown> }> => {
       if (extra.signal?.aborted) {
         return Promise.reject(new Error('Aborted'));
       }
@@ -58,12 +61,15 @@ export function createMcpServer(deps: McpServerDeps): { connect: (transport: unk
 
       const task = new Promise<{ isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: { [key: string]: unknown } | undefined; _meta: Record<string, unknown> }>((resolve, reject) => {
         const run = async () => {
-          if (extra.signal?.aborted) {
+          if (extra.signal?.aborted || options?.signal?.aborted) {
             reject(new Error('Aborted'));
             return;
           }
           try {
-            const result = await deps[capability](inputWithDefault);
+            const result = await deps[capability](inputWithDefault, {
+              progressToken: extra._meta?.progressToken,
+              sendNotification: (notification) => extra.sendNotification(notification as ProgressNotification),
+            });
             const rendered = renderToolResult(toolName, result);
             resolve(rendered as { isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: { [key: string]: unknown } | undefined; _meta: Record<string, unknown> });
           } catch (err) {

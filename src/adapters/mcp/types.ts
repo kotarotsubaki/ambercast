@@ -13,12 +13,17 @@
  * establish input validity. Each unknown envelope remains opaque until
  * renderToolResult in render.ts interprets it.
  */
+export interface McpProgressContext {
+  readonly progressToken: string | number | undefined;
+  readonly sendNotification: (notification: { readonly method: string; readonly params?: Record<string, unknown> }) => Promise<void>;
+}
+
 export interface McpServerDeps {
   readonly sessionRoot: string;
   readonly version: string;
   readonly stderr: NodeJS.WritableStream;
-  readonly generate: (input: unknown) => Promise<{ exitCode: number; envelope: unknown }>;
-  readonly run: (input: unknown) => Promise<{ exitCode: number; envelope: unknown }>;
-  readonly check: (input: unknown) => Promise<{ exitCode: number; envelope: unknown }>;
-  readonly healPreview: (input: unknown) => Promise<{ exitCode: number; envelope: unknown }>;
+  readonly generate: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
+  readonly run: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
+  readonly check: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
+  readonly healPreview: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
 }

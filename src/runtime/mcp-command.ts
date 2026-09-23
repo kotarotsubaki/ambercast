@@ -4,7 +4,8 @@ import { createInterface } from 'node:readline';
 import { PassThrough, type Readable, type Writable } from 'node:stream';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMcpServer } from '#adapters/mcp/server.js';
-import type { McpServerDeps } from '#adapters/mcp/types.js';
+import { createMcpProgressSink } from '#adapters/mcp/progress-sink.js';
+import type { McpProgressContext, McpServerDeps } from '#adapters/mcp/types.js';
 import { runCheckCommand, type CheckCommandInput } from '#runtime/check-command.js';
 import { runGenerateCommand, type GenerateCommandInput } from '#runtime/generate-command.js';
 import { prepareHeal, type HealCommandInput } from '#runtime/heal-command.js';
@@ -33,6 +34,20 @@ function normalizeCommonMcpInput(args: Record<string, unknown>): Record<string, 
     allowEmpty: args.allowEmpty ?? false,
     ...(ai !== undefined ? { aiProviderOverride: ai } : {}),
   };
+}
+
+function progressSink(command: 'generate' | 'run' | 'heal', sessionRoot: string, progress: McpProgressContext) {
+  if (progress.progressToken === undefined) return undefined;
+  const progressToken = progress.progressToken;
+  let sequence = 0;
+  return createMcpProgressSink({
+    command,
+    sessionRoot,
+    send: (message) => progress.sendNotification({
+      method: 'notifications/progress',
+      params: { progressToken, progress: ++sequence, message },
+    }),
+  });
 }
 
 /**
@@ -84,6 +99,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
   }
 
   let draining = false;
+  const drainController = new AbortController();
   let rejectedCalls = 0;
   const controllers = new Set<AbortController>();
   const active = new Set<Promise<void>>();
@@ -108,27 +124,39 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     sessionRoot,
     version: __VERSION__,
     stderr: input.stderr,
-    generate: (args) => track((signal) => {
+    generate: (args, progress) => track(async (signal) => {
       const inputArgs = args as Record<string, unknown>;
-      return runGenerateCommand({
-        ...normalizeCommonMcpInput(inputArgs),
-        strict: inputArgs.strict ?? false,
-        force: inputArgs.force ?? false,
-        dryRun: inputArgs.dryRun ?? false,
-        cwd: sessionRoot, stderr: input.stderr, list: false, signal,
-      } as unknown as GenerateCommandInput);
+      const sink = progressSink('generate', sessionRoot, progress);
+      try {
+        return await runGenerateCommand({
+          ...normalizeCommonMcpInput(inputArgs),
+          strict: inputArgs.strict ?? false,
+          force: inputArgs.force ?? false,
+          dryRun: inputArgs.dryRun ?? false,
+          cwd: sessionRoot, stderr: input.stderr, list: false, signal,
+          ...(sink === undefined ? {} : { events: sink }),
+        } as unknown as GenerateCommandInput);
+      } finally {
+        await sink?.flush();
+      }
     }),
-    run: (args) => track((signal) => {
+    run: (args, progress) => track(async (signal) => {
       const inputArgs = args as Record<string, unknown>;
       const { grep, ...normalized } = normalizeCommonMcpInput(inputArgs);
-      return runRunCommand({
-        ...normalized,
-        ...(typeof grep === 'string' ? { grep: new RegExp(grep) } : {}),
-        resolve: inputArgs.resolve ?? false,
-        updateCache: inputArgs.updateCache ?? false,
-        cwd: sessionRoot, stderr: input.stderr,
-        headed: false, list: false, stale: 'fail', signal,
-      } as unknown as RunCommandInput);
+      const sink = progressSink('run', sessionRoot, progress);
+      try {
+        return await runRunCommand({
+          ...normalized,
+          ...(typeof grep === 'string' ? { grep: new RegExp(grep) } : {}),
+          resolve: inputArgs.resolve ?? false,
+          updateCache: inputArgs.updateCache ?? false,
+          cwd: sessionRoot, stderr: input.stderr,
+          headed: false, list: false, stale: 'fail', signal,
+          ...(sink === undefined ? {} : { events: sink }),
+        } as unknown as RunCommandInput);
+      } finally {
+        await sink?.flush();
+      }
     }),
     check: (args) => track((signal) => {
       const inputArgs = args as Record<string, unknown>;
@@ -137,13 +165,19 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
         cwd: sessionRoot, stderr: input.stderr, list: false, signal,
       } as unknown as CheckCommandInput);
     }),
-    healPreview: (args) => track(async (signal) => {
+    healPreview: (args, progress) => track(async (signal) => {
       const inputArgs = args as Record<string, unknown>;
-      const preparation = await prepareHeal({
-        ...normalizeCommonMcpInput(inputArgs), cwd: sessionRoot, stderr: input.stderr,
-        dryRun: true, yes: false, list: false, signal,
-      } as unknown as HealCommandInput);
-      return preparation.preview();
+      const sink = progressSink('heal', sessionRoot, progress);
+      try {
+        const preparation = await prepareHeal({
+          ...normalizeCommonMcpInput(inputArgs), cwd: sessionRoot, stderr: input.stderr,
+          dryRun: true, yes: false, list: false, signal,
+          ...(sink === undefined ? {} : { events: sink }),
+        } as unknown as HealCommandInput);
+        return await preparation.preview();
+      } finally {
+        await sink?.flush();
+      }
     }),
   };
 
@@ -163,7 +197,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     }
   });
 
-  const server = createMcpServer(deps);
+  const server = createMcpServer(deps, { signal: drainController.signal });
   const transport = new StdioServerTransport(proxy, input.stdout as Writable);
   const send = transport.send.bind(transport);
   let transportClosed = false;
@@ -181,6 +215,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     if (draining) return;
     draining = true;
     for (const controller of controllers) controller.abort();
+    drainController.abort();
     beginDrain?.();
   };
   input.stdin.once('end', onDrain);

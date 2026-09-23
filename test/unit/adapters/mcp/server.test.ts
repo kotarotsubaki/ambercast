@@ -17,14 +17,19 @@ const toolNames = [
 
 function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
   const success = async () => ({ exitCode: 0, envelope: { summary: 'ok' } });
+  const fake = () => new Proxy(vi.fn(success), {
+    apply(target, thisArg, [input]) {
+      return Reflect.apply(target, thisArg, [input]);
+    },
+  });
   return {
     sessionRoot: '/workspace',
     version: '0.6.0',
     stderr: new PassThrough(),
-    generate: vi.fn(success),
-    run: vi.fn(success),
-    check: vi.fn(success),
-    healPreview: vi.fn(success),
+    generate: fake(),
+    run: fake(),
+    check: fake(),
+    healPreview: fake(),
     ...overrides,
   };
 }
@@ -32,9 +37,9 @@ function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
 type ConnectedServer = ReturnType<typeof createMcpServer>;
 const connections: Array<{ client: Client; server: ConnectedServer }> = [];
 
-async function connect(deps: McpServerDeps): Promise<Client> {
+async function connect(deps: McpServerDeps, options?: { readonly signal?: AbortSignal }): Promise<Client> {
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
-  const server = createMcpServer(deps);
+  const server = createMcpServer(deps, options);
   const client = new Client({ name: 'ambercast-server-test', version: '1.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   connections.push({ client, server });
@@ -125,6 +130,29 @@ describe('mcp/server', () => {
     expect(deps.generate).toHaveBeenCalledWith(expect.objectContaining({ allowEmpty: false }));
   });
 
+  it('delivers a run progress notification through the tool call context (TEST-B7)', async () => {
+    const received: unknown[] = [];
+    const run = vi.fn(async (_input: unknown, progress: Parameters<McpServerDeps['run']>[1]) => {
+      expect(progress.progressToken).toEqual(expect.any(Number));
+      await progress.sendNotification({
+        method: 'notifications/progress',
+        params: { progressToken: progress.progressToken, progress: 1, message: 'run: step one started' },
+      });
+      return { exitCode: 0, envelope: { summary: 'ok' } };
+    });
+    const client = await connect(fakeDeps({ run }));
+
+    const result = await client.callTool(
+      { name: 'ambercast_run', arguments: {} },
+      undefined,
+      { onprogress: (notification) => { received.push(notification); } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(received).toEqual([{ progress: 1, message: 'run: step one started' }]);
+  });
+
   it.each([
     ['ambercast_generate', 'ambercast_run'],
     ['ambercast_run', 'ambercast_check'],
@@ -203,6 +231,39 @@ describe('mcp/server', () => {
     await Promise.all([first, third]);
     expect(deps.check).not.toHaveBeenCalled();
     expect(order).toEqual(['first', 'third']);
+  });
+
+  it('skips a queued call when server drain begins before its turn (TEST-B8, TEST-B9)', async () => {
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const run = vi.fn(async () => {
+      firstStarted();
+      await blocked;
+      return { exitCode: 0, envelope: {} };
+    });
+    const check = vi.fn(async () => ({ exitCode: 0, envelope: {} }));
+    const drainController = new AbortController();
+    const client = await connect(fakeDeps({ run, check }), { signal: drainController.signal });
+    const first = client.callTool({ name: 'ambercast_run', arguments: {} });
+    await started;
+    const queued = client.callTool({ name: 'ambercast_check', arguments: {} });
+
+    try {
+      await setImmediate();
+      expect(check).not.toHaveBeenCalled();
+      drainController.abort();
+    } finally {
+      releaseFirst();
+    }
+
+    await expect(first).resolves.toMatchObject({ isError: false });
+    await expect(queued).resolves.toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: 'Aborted' }],
+    });
+    expect(check).not.toHaveBeenCalled();
   });
 
   // TEST-B12: fake deps expose no interactive input capability, so this

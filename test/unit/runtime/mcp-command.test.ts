@@ -7,6 +7,7 @@ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { McpServerDeps } from '#adapters/mcp/types.js';
 import { runMcpCommand } from '#runtime/mcp-command.js';
+import { runRunCommand, type RunCommandOutput } from '#runtime/run-command.js';
 
 const serverFake = vi.hoisted(() => ({ connected: vi.fn(), called: vi.fn() }));
 vi.mock('#adapters/mcp/server.js', () => ({
@@ -26,6 +27,10 @@ vi.mock('#adapters/mcp/server.js', () => ({
     };
   },
 }));
+vi.mock('#runtime/run-command.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#runtime/run-command.js')>();
+  return { ...actual, runRunCommand: vi.fn(actual.runRunCommand) };
+});
 
 const temporaryDirectories: string[] = [];
 
@@ -50,10 +55,22 @@ function streams() {
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  vi.clearAllMocks();
 });
 
 describe('runtime/mcp-command', () => {
   it('aborts an active call on SIGTERM and returns its INTERRUPTED envelope with exit 0 (TEST-B9)', async () => {
+    vi.mocked(runRunCommand).mockImplementationOnce(({ signal }) => new Promise<RunCommandOutput>((resolve) => {
+      signal?.addEventListener('abort', () => resolve({
+        exitCode: 4,
+        envelope: {
+          schemaVersion: '3.6', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+          summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 },
+          errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'Run interrupted.' }],
+          results: [], reportPersistence: 'not-attempted',
+        },
+      } as unknown as RunCommandOutput), { once: true });
+    }));
     const io = streams();
     const directory = await fixtureDirectory();
     const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io }).then((code) => ({ code }), (error: unknown) => ({ error }));
@@ -67,6 +84,7 @@ describe('runtime/mcp-command', () => {
   });
 
   it('returns exit 3 when an active call ignores abort beyond ten seconds (TEST-B9)', async () => {
+    vi.mocked(runRunCommand).mockImplementationOnce(() => new Promise<RunCommandOutput>(() => {}));
     vi.useFakeTimers();
     try {
       const io = streams();
@@ -74,6 +92,8 @@ describe('runtime/mcp-command', () => {
       const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io }).then((code) => ({ code }), (error: unknown) => ({ error }));
       await vi.advanceTimersByTimeAsync(1);
       io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(serverFake.called).toHaveBeenCalledTimes(1);
       process.emit('SIGTERM');
       await vi.advanceTimersByTimeAsync(10_001);
       expect(await running).toEqual({ code: 3 });
@@ -91,7 +111,10 @@ describe('runtime/mcp-command', () => {
     io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`);
     expect(await running).toEqual({ code: 0 });
     expect(serverFake.called).not.toHaveBeenCalled();
-    expect(io.errors().trim().split('\n')).toEqual([expect.stringMatching(/1.*reject|reject.*1/i)]);
+    expect(io.errors().trim().split('\n')).toEqual([
+      `ambercast mcp: serving ${directory}`,
+      expect.stringMatching(/1.*reject|reject.*1/i),
+    ]);
   });
   it('rejects a missing --dir with the resolved path and exit 2 (TEST-B1)', async () => {
     const directory = await fixtureDirectory();
@@ -128,7 +151,7 @@ describe('runtime/mcp-command', () => {
     const exitCode = await runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
 
     expect(exitCode).toBe(0);
-    expect(io.errors()).toBe('');
+    expect(io.errors()).toBe(`ambercast mcp: serving ${directory}\n`);
     expect(io.output()).toBe('');
   });
 });

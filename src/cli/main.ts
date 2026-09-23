@@ -20,9 +20,10 @@
  * commands or flags, malformed command arguments, and missing option values
  * write plain-text usage to stderr and exit 2 without a report envelope.
  *
- * For each valid command, this layer creates one `AbortController`, aborting
- * it when `SIGINT` or `SIGTERM` arrives, and passes its signal with the parsed
- * input to the matching runtime command. Runtime returns an envelope and
+ * For each valid non-MCP command, this layer creates one `AbortController`,
+ * aborting it when `SIGINT` or `SIGTERM` arrives, and passes its signal with
+ * the parsed input to the matching runtime command. MCP owns those signals
+ * in its runtime shutdown state machine. Runtime returns an envelope and
  * selected exit code; `--json` writes the `JSON.stringify(envelope)` payload
  * to the stream with a trailing newline appended at the write call, while human
  * output renders that same envelope with ANSI styling disabled by
@@ -147,6 +148,15 @@ interface ParsedViewCommand {
     readonly signal: AbortSignal;
   };
   readonly color: boolean;
+}
+
+interface ParsedMcpCommand {
+  readonly command: 'mcp';
+  readonly dir: string;
+  readonly syncWaitMs: number;
+  readonly stdin: NodeJS.ReadableStream;
+  readonly stdout: NodeJS.WritableStream;
+  readonly stderr: NodeJS.WritableStream;
 }
 
 const USAGE = renderUsage(CLI_MANIFEST);
@@ -633,6 +643,37 @@ function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCo
   };
 }
 
+/** MCP owns its process signals after argument validation, so this parser only selects streams and policy. */
+function parseMcp(argv: readonly string[], _signal: AbortSignal): ParsedMcpCommand | string {
+  if (argv.includes('--help')) return 'help';
+
+  let dir = process.cwd();
+  let syncWaitMs = 45_000;
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]!;
+    if (argument === '--dir' || argument === '--sync-wait-ms') {
+      const value = argv[index + 1];
+      if (value === undefined || value === '' || value.startsWith('--')) {
+        return `Missing value for ${argument}.`;
+      }
+      index += 1;
+      if (argument === '--dir') {
+        dir = value;
+      } else {
+        const parsed = Number(value);
+        if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed) || parsed <= 0) {
+          return `The ${argument} value must be a positive integer.`;
+        }
+        syncWaitMs = parsed;
+      }
+      continue;
+    }
+    return argument.startsWith('-') ? `Unknown mcp option: ${argument}.` : `Unexpected mcp argument: ${argument}.`;
+  }
+
+  return { command: 'mcp', dir, syncWaitMs, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr };
+}
+
 function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealCommand | string {
   const separator = argv.indexOf('--');
   if (argv.slice(0, separator === -1 ? undefined : separator).includes('--help')) {
@@ -922,12 +963,7 @@ export async function main(
           : argv[0] === 'view'
             ? parseView(argv.slice(1), controller.signal)
             : argv[0] === 'mcp'
-              // Wire the command first; dedicated --dir and --sync-wait-ms parsing follows after transport behavior is verified.
-              // The eventual parseMcp uses process cwd when --dir is omitted and resolves relative paths against it.
-              // A missing or non-directory resolved path writes `ambercast mcp: --dir <resolved path> is not a directory.` to stderr and exits 2.
-              // --sync-wait-ms accepts positive integers and defaults to 45000; invalid values, unknown options, and positional arguments are usage errors on stderr with exit 2.
-              // --help takes precedence over every other argument, writes usage to stdout, and exits 0, as in parseCheck; these fixed scaffold values are temporary.
-              ? { command: 'mcp' as const, dir: process.cwd(), syncWaitMs: 45000, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr }
+              ? parseMcp(argv.slice(1), controller.signal)
               : parseHeal(argv.slice(1), controller.signal);
   if (typeof parsed === 'string') {
     if (parsed === 'help') {
@@ -949,8 +985,10 @@ export async function main(
   };
   const onSigint = (): void => abort('SIGINT');
   const onSigterm = (): void => abort('SIGTERM');
-  process.once('SIGINT', onSigint);
-  process.once('SIGTERM', onSigterm);
+  if (parsed.command !== 'mcp') {
+    process.once('SIGINT', onSigint);
+    process.once('SIGTERM', onSigterm);
+  }
 
   try {
     try {

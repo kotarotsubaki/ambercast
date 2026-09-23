@@ -111,7 +111,7 @@ describe('mcp/server', () => {
     const result = await client.callTool({ name, arguments: {} });
 
     expect(result.isError).toBe(false);
-    expect(deps[capability]).toHaveBeenCalledExactlyOnceWith({});
+    expect(deps[capability]).toHaveBeenCalledExactlyOnceWith({ allowEmpty: false });
     for (const other of ['generate', 'run', 'check', 'healPreview'] as const) {
       if (other !== capability) expect(deps[other]).not.toHaveBeenCalled();
     }

@@ -15,11 +15,49 @@
  * runs on every emit regardless of notification delivery and can update job
  * progress counters independently of sending.
  */
+import { relativeWithinOrOriginal } from '#core/paths.js';
+
 export function createMcpProgressSink(params: {
   readonly command: 'generate' | 'run' | 'heal';
   readonly sessionRoot: string;
   readonly send: (message: string) => Promise<void>;
   readonly onEvent?: (event: unknown) => void;
 }): { emit: (event: unknown) => void; flush: () => Promise<void> } {
-  throw new Error('not implemented');
+  const { command, sessionRoot, send, onEvent } = params;
+  const queue: string[] = [];
+
+  function emit(event: unknown): void {
+    const runEvent = event as import('#ports/system.js').RunEvent;
+
+    if (runEvent.type === 'unclassified-rejection') {
+      // unclassified-rejection is never sent
+    } else if (runEvent.type === 'step-start') {
+      queue.push(`${command}: step ${runEvent.stepId} started`);
+    } else if (runEvent.type === 'ai-call') {
+      const relativeFile = relativeWithinOrOriginal(sessionRoot, runEvent.file);
+      const stepIdPart = runEvent.stepId !== undefined ? ` ${runEvent.stepId}` : '';
+      queue.push(`${command} ${relativeFile}${stepIdPart}: ai call ${runEvent.attempt}/${runEvent.attemptLimit}`);
+    } else if (runEvent.type === 'ai-result') {
+      queue.push(`${command}: ai call done (${runEvent.outcome})`);
+    } else if (runEvent.type === 'heal-stage2-rejected') {
+      queue.push(`${command}: step ${runEvent.stepId} repair attempt rejected (${runEvent.reason})`);
+    }
+
+    if (onEvent !== undefined) {
+      onEvent(event);
+    }
+  }
+
+  async function flush(): Promise<void> {
+    while (queue.length > 0) {
+      const message = queue.shift()!;
+      try {
+        await send(message);
+      } catch {
+        // discard failed send and continue
+      }
+    }
+  }
+
+  return { emit, flush };
 }

@@ -24,5 +24,33 @@ export function renderToolResult(
   result: { readonly exitCode: number; readonly envelope: unknown },
   applyToken?: string,
 ): { isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: unknown; _meta: Record<string, unknown> } {
-  throw new Error('not implemented');
+  const exitCode = result.exitCode;
+  let isError = false;
+  switch (tool) {
+    case 'generate':
+      isError = exitCode === 2 || exitCode === 3;
+      break;
+    case 'run':
+      isError = exitCode === 2 || exitCode === 3 || exitCode === 4;
+      break;
+    case 'check':
+      isError = exitCode === 2 || exitCode === 3;
+      break;
+    case 'heal':
+      isError = exitCode === 2 || exitCode === 3 || exitCode === 4;
+      break;
+  }
+
+  const lines = [`exitCode: ${exitCode}`];
+  if (applyToken !== undefined) {
+    lines.push(`applyToken: ${applyToken}`);
+  }
+  lines.push(JSON.stringify(result.envelope));
+
+  return {
+    isError,
+    content: [{ type: 'text', text: lines.join('\n') }],
+    structuredContent: result.envelope,
+    _meta: { exitCode },
+  };
 }

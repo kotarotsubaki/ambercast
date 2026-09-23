@@ -3104,6 +3104,27 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
         self.assertIn("sorted `.claude/impl/` relative paths and file bytes", self.skill)
         self.assertIn("tracked/untracked status", self.skill)
 
+    def test_docs_impact_flow_literals_are_present_and_correctly_scoped(self) -> None:
+        """Catch required docs impact phrases drifting to the wrong lines across the three flow files."""
+        def line_after(text: str, anchor: str) -> str:
+            return anchor + text.split(anchor, 1)[1].split("\n", 1)[0]
+
+        step3 = line_after(self.canonical, "3. **Plan**")
+        self.assertLess(step3.index("docs-impact.mjs --prospective"), step3.rindex("→"))
+        self.assertLess(step3.index("## Docs impact"), step3.rindex("→"))
+        self.assertTrue(step3.endswith("`step03_plan=done`"))
+
+        step12 = line_after(self.canonical, "12. **Code review**")
+        self.assertLess(step12.index("docs-impact.mjs --actual"), step12.rindex("→"))
+        self.assertLess(step12.index("## Docs impact"), step12.rindex("→"))
+        self.assertTrue(step12.endswith("`step12_code_review=done`"))
+
+        bullet = line_after(self.skill, "At each of steps 8, 10, and 12")
+        self.assertIn("docs-impact.mjs --actual", bullet)
+
+        bullet_line = next(line for line in self.rule.splitlines() if line.startswith("- User-facing docs are a deliverable"))
+        self.assertIn("User-facing docs are a deliverable", bullet_line)
+
 
 class PackageAndCiContractTests(unittest.TestCase):
     def test_agent_hook_script_runs_separate_claude_and_codex_discoveries(self) -> None:

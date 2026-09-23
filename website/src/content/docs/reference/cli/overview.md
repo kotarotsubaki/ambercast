@@ -9,6 +9,8 @@ The `ambercast` command-line interface provides five commands for scaffolding a 
 
 The implemented commands are `init`, `generate`, `run`, `check`, and `heal`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
 
+Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to operate on plans whose steps name their execution Targets.
+
 ```text
 Usage: ambercast <command> [options]
 
@@ -27,14 +29,14 @@ Generate options:
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
-  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list
+  --grep <pattern>  --headed  --resolve  --update-cache  --allow-empty  --list
   --stale <fail>  --ai <claude|codex>  --json  --no-color
 
 Check options:
-  --target <name>  --allow-empty  --list  --json  --config <path>  --no-color
+  --allow-empty  --list  --json  --config <path>  --no-color
 
 Heal options:
-  --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
+  --dry-run  --yes, -y  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
@@ -51,15 +53,15 @@ Heal configuration:
 | --- | --- | --- | --- |
 | init | none | dir, yes/-y, force, no-color | --dir argument (cwd when omitted) |
 | generate | literal paths; no paths = discovery | strict, force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| run | literal paths; no paths = discovery | grep, target, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| check | literal paths; no paths = discovery | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| heal | literal paths; no paths = discovery | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 
 Except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
 
 - Passing `--` terminates option parsing, leaving all subsequent arguments to be interpreted as literal paths.
 - The `--json` and `--no-color` flags are handled individually by each command rather than through a shared global-flag abstraction.
-- Target precedence follows a strict order: an explicit `--target` flag takes priority, followed by the configured default target, and finally resolving when exactly one configured target is present; otherwise, target selection fails.
+- `generate --target` restricts the Target definitions available to the generator. Run, check, and heal use the Target names recorded in each Plan.
 
 ## Discovery default {#discovery-default}
 

@@ -55,6 +55,19 @@ export interface Clock {
    * @returns A monotonic elapsed-time value in milliseconds.
    */
   monotonicMs(): number;
+
+  /**
+   * Waits for the given duration, aborting early if the signal is aborted.
+   *
+   * Polling uses this port so elapsed-time tests can be deterministic. An
+   * already-aborted or newly aborted signal rejects the wait; the fixed clock
+   * records requested durations and resolves immediately without real time.
+   *
+   * @param ms - The duration to sleep in milliseconds.
+   * @param signal - An optional abort signal to terminate the sleep early.
+   * @throws If the signal is aborted during the wait.
+   */
+  sleep(ms: number, signal?: AbortSignal): Promise<void>;
 }
 
 /**

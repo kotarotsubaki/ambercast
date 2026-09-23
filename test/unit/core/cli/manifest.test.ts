@@ -12,10 +12,17 @@ import type {
 } from '../../../../src/core/cli/manifest.js';
 
 const fixtureDirectory = new URL('../../../fixtures/', import.meta.url);
-const expectedUsage = readFileSync(new URL('cli-usage.txt', fixtureDirectory), 'utf8');
+// SPEC-9 removes target selection from replay commands; the v3 fixture stays frozen.
+const expectedUsage = readFileSync(new URL('cli-usage.txt', fixtureDirectory), 'utf8')
+  .replace('  --grep <pattern>  --target <name>  --headed', '  --grep <pattern>  --headed')
+  .replace('Check options:\n  --target <name>  --allow-empty', 'Check options:\n  --allow-empty')
+  .replace('  --dry-run  --yes, -y  --target <name>  --ai', '  --dry-run  --yes, -y  --ai');
 const fixtureManifest = JSON.parse(readFileSync(new URL('cli-manifest.json', fixtureDirectory), 'utf8')) as CliManifest;
 const fixtureUsageManifest: VersionlessCliManifest = {
-  commands: fixtureManifest.commands,
+  // SPEC-9: retain the v3 captured fixture while projecting removed replay flags.
+  commands: fixtureManifest.commands.map((command) => ['run', 'check', 'heal'].includes(command.name)
+    ? { ...command, flags: command.flags.filter((flag) => flag.name !== 'target') }
+    : command),
   helpFooter: fixtureManifest.helpFooter,
 };
 
@@ -244,7 +251,6 @@ describe('CLI manifest', () => {
         name: 'run',
         flags: [
           { name: 'grep', alias: null },
-          { name: 'target', alias: null },
           { name: 'headed', alias: null },
           { name: 'resolve', alias: null },
           { name: 'update-cache', alias: null },
@@ -259,7 +265,6 @@ describe('CLI manifest', () => {
       {
         name: 'check',
         flags: [
-          { name: 'target', alias: null },
           { name: 'allow-empty', alias: null },
           { name: 'list', alias: null },
           { name: 'json', alias: null },
@@ -272,7 +277,6 @@ describe('CLI manifest', () => {
         flags: [
           { name: 'dry-run', alias: null },
           { name: 'yes', alias: 'y' },
-          { name: 'target', alias: null },
           { name: 'ai', alias: null },
           { name: 'allow-empty', alias: null },
           { name: 'list', alias: null },

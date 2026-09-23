@@ -10,20 +10,55 @@ import type { TargetDefinition } from '#core/ir/schema.js';
 import type { ResolvedTargetConfigEntry } from '#core/config/schema.js';
 
 /**
+ * Projects the verified Plan's target names to their config-defined definitions.
+ *
+ * @param planTargetNames - The target names referenced by the verified Plan.
+ * @param configTargets - The resolved configuration's target definitions.
+ * @returns A record of target names to their digest-bound definitions, sorted
+ *   by target name.
+ * @remarks
+ * The input digest binds only definitions for targets referenced by the Plan.
+ * This helper projects those names from the resolved config into
+ * {@link TargetDefinition} values in deterministic name order; unrelated config
+ * targets do not affect freshness. Callers validate the Plan structure first,
+ * then report a missing configured name before comparing digests.
+ */
+export function projectPlanTargets(
+  planTargetNames: readonly string[],
+  configTargets: Readonly<Record<string, Readonly<ResolvedTargetConfigEntry>>>,
+): Record<string, Readonly<TargetDefinition>> {
+  const result: Record<string, Readonly<TargetDefinition>> = {};
+  for (const name of planTargetNames) {
+    const config = configTargets[name];
+    if (config !== undefined) {
+      result[name] = toTargetDefinition(config);
+    }
+  }
+  return Object.keys(result)
+    .sort()
+    .reduce((acc, key) => {
+      acc[key] = result[key]!;
+      return acc;
+    }, {} as Record<string, Readonly<TargetDefinition>>);
+}
+
+/**
  * Projects a resolved target to the plan and input-digest target definition.
  *
  * @param target - The fully resolved target, including runtime-only policy.
  * @returns The target fields whose changes define plan freshness.
  * @remarks
- * The projection explicitly picks `baseUrl`, `browser`, and
+ * The projection explicitly picks `baseUrl`, `surface`, and
  * `secretSinkOrigins` rather than relying on a structural cast. In particular,
  * `healReplayIsolation` governs whether healing may start against live state;
  * it must not alter a committed plan or make an otherwise fresh plan stale.
+ * In v4 the projection uses web `surface` in place of `browser`, so executor
+ * changes remain live runtime choices rather than Plan freshness changes.
  */
 export function toTargetDefinition(target: ResolvedTargetConfigEntry): TargetDefinition {
   return {
+    surface: 'web',
     baseUrl: target.baseUrl,
-    browser: target.browser,
     ...(target.secretSinkOrigins === undefined ? {} : { secretSinkOrigins: target.secretSinkOrigins }),
   };
 }
@@ -76,7 +111,7 @@ export interface TargetSelection {
 }
 
 /**
- * Selects the configured target shared by generate, run, and check.
+ * Selects the configured target used by `generate`'s explicit and default target selection.
  *
  * @param input - Resolved targets, the validated default, and any explicit
  * caller selection.
@@ -101,6 +136,9 @@ export interface TargetSelection {
  * throws the same classified value at its command-level selection boundary.
  * The shared `target-unresolved` kind maps to the public
  * `TARGET_UNRESOLVED` code and process exit 2.
+ * In v4 replay, heal, and check use the verified Plan's complete Target set
+ * through `projectPlanTargets`; this resolver remains the explicit generation
+ * restriction and fallback policy only.
  */
 export function resolveTarget(
   input: ResolveTargetInput,

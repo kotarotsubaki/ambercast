@@ -25,14 +25,14 @@ Generate options:
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
-  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list
+  --grep <pattern>  --headed  --resolve  --update-cache  --allow-empty  --list
   --stale <fail>  --ai <claude|codex>  --json  --no-color
 
 Check options:
-  --target <name>  --allow-empty  --list  --json  --config <path>  --no-color
+  --allow-empty  --list  --json  --config <path>  --no-color
 
 Heal options:
-  --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
+  --dry-run  --yes, -y  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.

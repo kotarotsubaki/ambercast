@@ -24,7 +24,11 @@ vi.mock('#runtime/init-command.js', () => ({ runInitCommand }));
 import { ERROR_DETAILS_KEY_ORDER, main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
 
-const expectedUsage = readFileSync(new URL('../fixtures/cli-usage.txt', import.meta.url), 'utf8');
+// SPEC-9: the captured v3 fixture still lists target selection for replay commands.
+const expectedUsage = readFileSync(new URL('../fixtures/cli-usage.txt', import.meta.url), 'utf8')
+  .replace('  --grep <pattern>  --target <name>  --headed', '  --grep <pattern>  --headed')
+  .replace('Check options:\n  --target <name>  --allow-empty', 'Check options:\n  --allow-empty')
+  .replace('  --dry-run  --yes, -y  --target <name>  --ai', '  --dry-run  --yes, -y  --ai');
 
 class MemoryWritable extends Writable {
   chunks: string[] = [];
@@ -40,7 +44,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.6' as const,
+  schemaVersion: '3.7' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -50,7 +54,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.6' as const,
+  schemaVersion: '3.7' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -61,7 +65,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.6' as const,
+  schemaVersion: '3.7' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -86,7 +90,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.6' as const,
+  schemaVersion: '3.7' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -172,7 +176,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.6', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.7', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -193,7 +197,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.6', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.7', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -451,8 +455,6 @@ describe('main()', () => {
       'checkout.test.md',
       '--grep',
       'login|checkout',
-      '--target',
-      'web',
       '--headed',
       '--json',
       '--resolve',
@@ -466,7 +468,6 @@ describe('main()', () => {
     expect(runRunCommand).toHaveBeenCalledWith(expect.objectContaining({
       files: ['login.test.md', 'checkout.test.md'],
       grep: expect.any(RegExp),
-      target: 'web',
       headed: true,
       resolve: true,
       updateCache: true,
@@ -652,8 +653,6 @@ describe('main()', () => {
       'check',
       'login.test.md',
       'checkout.test.md',
-      '--target',
-      'web',
       '--allow-empty',
       '--list',
       '--json',
@@ -664,7 +663,6 @@ describe('main()', () => {
 
     expect(runCheckCommand).toHaveBeenCalledWith(expect.objectContaining({
       files: ['login.test.md', 'checkout.test.md'],
-      target: 'web',
       allowEmpty: true,
       list: true,
       configPathOverride: 'ambercast.config.json',
@@ -708,7 +706,6 @@ describe('main()', () => {
   });
 
   it.each([
-    ['target', ['check', '--target']],
     ['config', ['check', '--config']],
   ] as const)('rejects a check %s flag missing its value before runtime composition', async (_name, argv) => {
     const result = await run(argv);
@@ -787,7 +784,6 @@ describe('main()', () => {
 
   it.each([
     ['dry-run', ['heal', '--dry-run'], { dryRun: true }],
-    ['target', ['heal', '--target', 'web'], { target: 'web' }],
     ['Claude provider', ['heal', '--ai', 'claude'], { aiProviderOverride: 'claude' }],
     ['Codex provider', ['heal', '--ai', 'codex'], { aiProviderOverride: 'codex' }],
     ['allow-empty', ['heal', '--allow-empty'], { allowEmpty: true }],
@@ -963,14 +959,12 @@ describe('main()', () => {
     expect(result.exitCode).toBe(exitCode);
   });
 
-  it('renders exactly one JSON heal envelope and forwards target selection to runtime', async () => {
+  it('renders exactly one JSON heal envelope', async () => {
     runHealCommand.mockResolvedValue({ exitCode: 1, envelope: HEAL_ENVELOPE });
 
-    const result = await run(['heal', '--json', '--target', 'web']);
+    const result = await run(['heal', '--json']);
 
-    expect(runHealCommand).toHaveBeenCalledWith(expect.objectContaining({
-      target: 'web',
-    } satisfies Partial<HealCommandInput>));
+    expect(runHealCommand).toHaveBeenCalledOnce();
     expect(ReportEnvelope.parse(JSON.parse(result.stdout))).toEqual(HEAL_ENVELOPE);
     expect(result.stderr).toBe('');
     expect(result.exitCode).toBe(1);
@@ -1421,14 +1415,23 @@ describe('manifest-driven CLI parser compatibility boundaries', () => {
   it.each([
     ['generate', ['generate', '--target', '--json'], '--target'],
     ['run', ['run', '--grep', '--json'], '--grep'],
-    ['check', ['check', '--target', '--json'], '--target'],
-    ['heal', ['heal', '--target', '--json'], '--target'],
   ] as const)('does not consume a following known flag as the missing %s value', async (command, argv, flag) => {
     const result = await run(argv);
 
     expect(result.stdout).toBe('');
     expect(result.stderr).toBe(`Missing value for ${flag}.\n${expectedUsage}`);
     expect(result.exitCode).toBe(2);
+  });
+
+  // SPEC-9: target selection is exclusive to generate; these fail as unknown options.
+  it.each(['run', 'check', 'heal'] as const)('rejects removed %s --target before runtime composition', async (command) => {
+    const result = await run([command, '--target', 'web']);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(`Unknown ${command} option: --target.\n${expectedUsage}`);
+    expect(result.exitCode).toBe(2);
+    expect(runRunCommand).not.toHaveBeenCalled();
+    expect(runCheckCommand).not.toHaveBeenCalled();
+    expect(runHealCommand).not.toHaveBeenCalled();
   });
 
   it.each([

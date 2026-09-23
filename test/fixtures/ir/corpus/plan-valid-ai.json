@@ -2,9 +2,16 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "baseUrl": "https://example.test",
+        "surface": "web"
+      }
+    },
     "steps": [
       {
         "id": "find-settings",
@@ -14,9 +21,15 @@
           {
             "id": "settings-open",
             "kind": "success",
-            "sourceSpan": { "startLine": 1, "startColumn": 1, "endLine": 1, "endColumn": 22 }
+            "sourceSpan": {
+              "startLine": 1,
+              "startColumn": 1,
+              "endLine": 1,
+              "endColumn": 22
+            }
           }
-        ]
+        ],
+        "target": "app"
       }
     ]
   }

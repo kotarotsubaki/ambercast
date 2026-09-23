@@ -56,13 +56,13 @@ function input(overrides: Partial<HealCommandInput> = {}): HealCommandInput {
   return { files: [], dryRun: false, yes: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides };
 }
 function report(exitCode: HealCommandOutput['exitCode']): HealCommandOutput {
-  return { exitCode, envelope: { schemaVersion: '3.6', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
+  return { exitCode, envelope: { schemaVersion: '3.7', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
 }
 function reportWithExecutionEvidence(root: string): HealCommandOutput {
   return {
     exitCode: 1,
     envelope: {
-      schemaVersion: '3.6', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
+      schemaVersion: '3.7', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
       summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
       errors: [{
         scope: 'case', kind: 'environment', code: 'FS_IO_ERROR',
@@ -75,18 +75,18 @@ function reportWithExecutionEvidence(root: string): HealCommandOutput {
         planFile: `${root}/tests/login.ambercast.plan.json`,
         status: 'completed', repairOutcome: 'unresolved', application: 'no-artifact-change', stopReason: 'settled',
         steps: [{
-          id: 'capture', type: 'capture', status: 'passed',
+          id: 'capture', type: 'capture', status: 'passed', target: 'web',
           screenshot: `${root}/tests/.runs/evidence.png`,
         }],
         explanation: 'The candidate did not repair the case.',
-        durationMs: 1.6,
+        durationMs: 1.6, sessions: { web: { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' } },
       }],
     },
   } as unknown as HealCommandOutput;
 }
 function caseResult(id: string, overrides: Partial<HealCaseOutcome> = {}): HealCaseOutcome {
   const file = `/workspace/tests/${id}`;
-  return { id: file, file, planFile: `/workspace/tests/${id}.ambercast.plan.json`, repairOutcome: 'healed', steps: [], explanation: 'The candidate repaired the case.', durationMs: 1.6, aiCalls: 0, baselineFirstFailureIndex: 0, finalFirstFailureIndex: 1, stopReason: 'settled', stage3Error: undefined, finalReplayError: undefined, repairTrace: [], ...overrides };
+  return { id: file, file, planFile: `/workspace/tests/${id}.ambercast.plan.json`, repairOutcome: 'healed', steps: [], sessions: {}, explanation: 'The candidate repaired the case.', durationMs: 1.6, aiCalls: 0, baselineFirstFailureIndex: 0, finalFirstFailureIndex: 1, stopReason: 'settled', stage3Error: undefined, finalReplayError: undefined, repairTrace: [], ...overrides };
 }
 function outcome(overrides: Partial<HealOutcome> = {}): HealOutcome {
   return { results: [caseResult('login.test.md')], errors: [], noTestsFound: false, listed: [], skipped: [], interrupted: false, ...overrides };
@@ -147,17 +147,14 @@ describe('runHealCommand', () => {
     expect(mocks.heal).toHaveBeenCalledWith(expect.objectContaining({ configSource }), expect.any(Object));
   });
 
-  it.each([false, true])('rejects a stateful target before an ineligible prompt can call heal for --dry-run=%s', async (dryRun) => {
+  // SPEC-21 places isolation preflight in the heal use case; command composition forwards it.
+  it.each([false, true])('forwards a stateful target to heal for --dry-run=%s', async (dryRun) => {
     configure({ config: { ...CONFIG, targets: { web: { ...CONFIG.targets.web!, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } } }, built: report(2) });
 
     await expect(runHealCommand(input({ dryRun, files: ['tests/ineligible.md'] }))).resolves.toMatchObject({ exitCode: 2 });
-    expect(mocks.heal).not.toHaveBeenCalled();
-    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({
-      error: expect.objectContaining({
-        kind: 'config-invalid',
-        message: 'Healing requires the selected target to set healReplayIsolation to idempotent.',
-      }),
-    }));
+    expect(mocks.heal).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ targets: expect.objectContaining({ web: expect.objectContaining({ healReplayIsolation: 'stateful' }) }) }),
+    }), expect.objectContaining({ dryRun }));
   });
 
   it('permits an idempotent target and leaves --list outside the isolation gate', async () => {
@@ -181,7 +178,7 @@ describe('runHealCommand', () => {
     }), expect.any(Object));
   });
 
-  it('checks replay isolation only on the selected target', async () => {
+  it('forwards all target definitions to heal without selecting one', async () => {
     configure({
       config: {
         ...CONFIG,
@@ -206,8 +203,8 @@ describe('runHealCommand', () => {
       },
       built: report(2),
     });
-    await expect(runHealCommand(input({ target: 'admin' }))).resolves.toMatchObject({ exitCode: 2 });
-    expect(mocks.heal).not.toHaveBeenCalled();
+    await expect(runHealCommand(input())).resolves.toMatchObject({ exitCode: 2 });
+    expect(mocks.heal).toHaveBeenCalledWith(expect.objectContaining({ config: expect.objectContaining({ targets: expect.objectContaining({ admin: expect.any(Object), web: expect.any(Object) }) }) }), expect.any(Object));
   });
 
   it.each([
@@ -247,7 +244,7 @@ describe('runHealCommand', () => {
     }));
   });
 
-  it('rejects an absent replay-isolation setting before dry-run repair work', async () => {
+  it('forwards an absent replay-isolation setting to the heal use case', async () => {
     const config = {
       ...CONFIG,
       targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } },
@@ -255,8 +252,7 @@ describe('runHealCommand', () => {
     configure({ config, built: report(2) });
 
     await expect(runHealCommand(input({ dryRun: true }))).resolves.toMatchObject({ exitCode: 2 });
-    expect(mocks.heal).not.toHaveBeenCalled();
-    expect(mocks.buildHealReport).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(ConfigInvalidError) }));
+    expect(mocks.heal).toHaveBeenCalledWith(expect.objectContaining({ config }), expect.objectContaining({ dryRun: true }));
   });
   it.each([['non-interactive', false], ['interactive but undeclined', true]] as const)('lets --list exit zero before disabled ci.heal in a %s environment', async (_name, interactive) => {
     const listed = batch({ outcome: outcome({ results: [], listed: [{ file: '/workspace/tests/login.test.md' }] }), commits: new Map() });

@@ -89,7 +89,7 @@ describe('heal confirmation gate through the built CLI', () => {
       const tests = join(project, 'tests');
       await mkdir(tests);
       const targetDefinitions = {
-        fixture: { baseUrl: `http://127.0.0.1:${port}`, browser: 'chromium' },
+        fixture: { surface: 'web', baseUrl: `http://127.0.0.1:${port}` },
       } as const satisfies Record<string, TargetDefinition>;
       const plan = PlanDocument.parse({
         schemaVersion: 3,

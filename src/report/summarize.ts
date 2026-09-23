@@ -77,7 +77,7 @@ export function summarizeReport(input: ReportSummaryInput): Summary {
   };
   const classifyRun = (result: RunResult): Classification => {
     switch (result.status) {
-      case 'passed': return 'passed'; case 'failed': return 'failed'; case 'error': return 'errored';
+      case 'passed': return 'passed'; case 'failed': return 'failed'; case 'error': case 'interrupted': return 'errored';
       case 'listed': case 'skipped': return 'skipped'; default: return assertNever(result);
     }
   };

@@ -67,6 +67,7 @@ describe('plan producer bundle', () => {
       steps: [{
         id: 'complete-sign-in',
         kind: 'ai',
+        target: 'web',
         instruction: 'Complete the sign-in flow.',
         instructionCoverage: [{
           id: 'submit-credentials',

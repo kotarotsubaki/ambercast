@@ -66,7 +66,6 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--list` | `--list` is parsed by every implemented command; each command page owns its listing result semantics. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` is planned-only and has no accepted 0.3.1 run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` is planned-only and has no accepted 0.3.1 viewer parser semantics. | [ambercast view](/ambercast/reference/cli/view/#planned-interface) | config `viewer.port` |
-| `--target` | `--target` names a configured execution target for each implemented command. | CLI parser / target resolver; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | target definition itself |
 | `--yes` | `--yes` authorizes heal settlement without an interactive confirmation. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` is the exact adjacent Grounding companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Plan suffix |
 | `.ambercast.plan.json` | `.ambercast.plan.json` is the exact adjacent Plan companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Grounding suffix |

@@ -11,7 +11,6 @@ description: Reference for the ambercast run command, covering CLI flags, replay
 | --- | --- | --- | --- |
 | files | path[] | literal prompts; absent selects discovery | discovery |
 | --grep | pattern | RegExp path filter | omitted |
-| --target | name | select target | omitted |
 | --headed | boolean | headed browser | false |
 | --resolve | boolean | opt into live AI resolution on a grounding miss | false |
 | --update-cache | boolean | request cache write | false |

@@ -135,7 +135,13 @@ export function planProducerBundleFingerprint(): string {
 export function liveProducerBundleInputs(): PlanProducerBundleInputs {
   return {
     generatorPromptTemplate: GENERATOR_PROMPT_TEMPLATE,
-    generatorTaskInstruction: GENERATE_PLAN_TASK_INSTRUCTION,
+    // The fixed branch texts are fingerprint inputs even though Target names are runtime values.
+    generatorTaskInstruction: JSON.stringify([
+      GENERATE_PLAN_TASK_INSTRUCTION,
+      '${…} ${…}',
+      '${…} Assign target: ${…} to every step. Do not report target ambiguity.',
+      '${…} Assign a target name to every step using the prompt and context.targets. If a step does not identify a target, use context.defaultTarget when provided; otherwise list that step in ambiguities.',
+    ]),
     generatedPlanResponseSchema: typedJsonSchema(GeneratedPlanResponseRequest) as unknown as JsonValueT,
     generatedPlanResponseLocalContract: typedJsonSchema(GeneratedPlanResponseForPolicy) as unknown as JsonValueT,
     instructionCoveragePolicyRevision: PLAN_PRODUCER_SEMANTIC_REVISIONS.instructionCoveragePolicy,

@@ -84,7 +84,7 @@ describe('hand-authored trace replay against real Chromium', () => {
 
       const baseUrl = `http://127.0.0.1:${address.port}`;
       const targets = {
-        fixture: { baseUrl, browser: 'chromium' },
+        fixture: { surface: 'web', baseUrl },
       } as const satisfies Record<string, TargetDefinition>;
       const plan = PlanDocument.parse({
         schemaVersion: 3,
@@ -161,7 +161,7 @@ describe('hand-authored trace replay against real Chromium', () => {
           testDir: TEST_DIR,
           testMatch: ['**/*.test.md'],
           testIgnore: ['**/.runs/**'],
-          targets: { fixture: { ...targets.fixture, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+          targets: { fixture: { ...targets.fixture, browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
           defaultTarget: 'fixture',
           ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
           ci: { heal: false, updateGroundingCache: false },

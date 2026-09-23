@@ -114,16 +114,8 @@ vi.mock('#core/ir/grounding-recovery-mode.js', async (importOriginal) => {
 
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
-const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
+const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test', browser: 'chromium' } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
-const MULTI_TARGETS = {
-  web: { baseUrl: 'https://example.test', browser: 'chromium' },
-  staging: { baseUrl: 'https://staging.example.test', browser: 'chromium' },
-} as const;
-const RESOLVED_MULTI_TARGETS = {
-  web: { ...MULTI_TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-  staging: { ...MULTI_TARGETS.staging, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-} as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const DEFAULT_INSTRUCTION_COVERAGE = [{
   id: 'dashboard-reached',
@@ -156,7 +148,7 @@ describe('classifyBrowserLaunchFailure', () => {
       async executeAgentic(request) {
         for (let attempt = 0; attempt < 4; attempt += 1) {
           try {
-            await request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' });
+            await request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' });
           } catch {
             // The executor deliberately retries only to prove the usecase has no MCP budget.
           }
@@ -253,7 +245,7 @@ describe('classifyBrowserLaunchFailure', () => {
       const session = createFakeBrowserSession(liveEntries([SUBMIT]));
       vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason });
       const result = await requestTargetRejection(
-        (request) => request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' }),
+        (request) => request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' }),
         session,
       );
 
@@ -266,7 +258,7 @@ describe('classifyBrowserLaunchFailure', () => {
       const session = createFakeBrowserSession(liveEntries([SUBMIT]));
       vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason });
       const result = await requestTargetRejection(
-        (request) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target: SUBMIT }).then(() => undefined),
+        (request) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', element: SUBMIT }).then(() => undefined),
         session,
       );
 
@@ -278,7 +270,7 @@ describe('classifyBrowserLaunchFailure', () => {
       const session = createFakeBrowserSession(liveEntries([SUBMIT]));
       vi.spyOn(session, 'perform').mockRejectedValue(new BoundElementRejectedError(reason, `rejected: ${reason}`));
       const result = await requestTargetRejection(
-        (request) => request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' }),
+        (request) => request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' }),
         session,
       );
 
@@ -290,7 +282,7 @@ describe('classifyBrowserLaunchFailure', () => {
       const session = createFakeBrowserSession(liveEntries([SUBMIT]));
       vi.spyOn(session, 'evaluateAssert').mockRejectedValue(new BoundElementRejectedError(reason, `rejected: ${reason}`));
       const result = await requestTargetRejection(
-        (request) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target: SUBMIT }).then(() => undefined),
+        (request) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', element: SUBMIT }).then(() => undefined),
         session,
       );
 
@@ -304,7 +296,7 @@ describe('classifyBrowserLaunchFailure', () => {
       const session = createFakeBrowserSession(liveEntries([PASSWORD]));
       vi.spyOn(session, 'fillSecret').mockRejectedValue(new BoundElementRejectedError('navigation-stale', `rejected ${secretValue}`));
       const result = await requestTargetRejection(
-        (request) => request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef }),
+        (request) => request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef }),
         session,
         aiStep('recorded-ai', [secretRef]),
         createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
@@ -316,8 +308,8 @@ describe('classifyBrowserLaunchFailure', () => {
     });
 
     it.each([
-      ['perform', (request: AiAgenticRequest) => request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' })],
-      ['evaluateAssert', (request: AiAgenticRequest) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target: SUBMIT }).then(() => undefined)],
+      ['perform', (request: AiAgenticRequest) => request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' })],
+      ['evaluateAssert', (request: AiAgenticRequest) => request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', element: SUBMIT }).then(() => undefined)],
     ] as const)('TEST-1f preserves provenance-invalid as a non-recoverable %s error', async (_operation, invoke) => {
       const session = createFakeBrowserSession(liveEntries([SUBMIT]));
       if (_operation === 'perform') {
@@ -421,7 +413,13 @@ interface Scenario {
   readonly resolveAiExecutor: ReturnType<typeof vi.fn<RunDeps['resolveAiExecutor']>>;
 }
 
-type TestStep = Step;
+type TestStep = Step extends infer Branch
+  ? Branch extends Step
+    ? 'element' extends keyof Branch
+      ? Omit<Branch, 'target' | 'element'> & { target?: string | ElementRef; element?: ElementRef }
+      : Omit<Branch, 'target'> & { target?: string }
+    : never
+  : never;
 
 function createRecordingStorage(): RecordingStorage {
   const backing = createInMemoryStorage();
@@ -512,19 +510,32 @@ async function createFreshPlan(
   steps: readonly TestStep[] = [],
   targetDefinitions: PlanDocument['targets'] = TARGETS,
 ): Promise<PlanDocument> {
-  const committedSteps = steps.map((step) => Step.parse(step));
+  const planTargets = Object.fromEntries(Object.entries(targetDefinitions).map(([name, definition]) => [
+    name,
+    { surface: 'web', baseUrl: definition.baseUrl, ...(definition.secretSinkOrigins === undefined ? {} : { secretSinkOrigins: definition.secretSinkOrigins }) },
+  ])) as PlanDocument['targets'];
+  // SPEC-9/10: v4 binds each Plan step to a named Target. Legacy fixture
+  // locators used `target`; keep their element meaning while migrating them.
+  const committedSteps = steps.map((step) => {
+    const legacy = step as unknown as Record<string, unknown>;
+    const target = typeof legacy.target === 'string' ? legacy.target : Object.keys(targetDefinitions)[0];
+    const element = typeof legacy.target === 'object' && legacy.target !== null
+      ? { element: legacy.target }
+      : {};
+    return Step.parse({ ...legacy, ...element, target });
+  });
   const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundleFingerprint(),
-    targetDefinitions,
+    targetDefinitions: planTargets,
   });
   const plan = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: { inputsDigest },
-    targets: targetDefinitions,
+    targets: planTargets,
     steps: committedSteps,
   } as unknown as PlanDocument;
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
@@ -543,7 +554,7 @@ async function seedFreshArtifacts(
   const plan = await createFreshPlan(storage, testPath, steps, targetDefinitions);
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding: GroundingDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     planDigest: computePlanDigest(plan),
     entries,
   };
@@ -565,7 +576,19 @@ function coveredTrace(
 }
 
 function aiGrounding(traceRecord: TraceRecord): GroundingDocument['entries'] {
-  return { 'recorded-ai': { kind: 'ai', trace: traceRecord } };
+  // SPEC-3/15: historical trace fixtures named their locator `target`.
+  // Normalize fixture data at the cache boundary to the v4 `element` field.
+  const migrate = (entry: TraceEntry | TraceAssert) => {
+    const legacy = entry as unknown as Record<string, unknown>;
+    if (typeof legacy.target !== 'object' || legacy.target === null) return entry;
+    const { target: element, ...rest } = legacy;
+    return { ...rest, element };
+  };
+  return { 'recorded-ai': { kind: 'ai', trace: {
+    ...traceRecord,
+    events: traceRecord.events.map(migrate),
+    verification: traceRecord.verification.map(migrate),
+  } as TraceRecord } };
 }
 
 function passingText(text: string): TraceAssert {
@@ -679,16 +702,16 @@ function expectAiTimeoutOutcome(outcome: Awaited<ReturnType<typeof run>>, stepId
   });
 }
 
-function expectUnclassifiedAbortOutcome(
+function expectCallerAbortOutcome(
   outcome: Awaited<ReturnType<typeof run>>,
   stepId: string,
-  name: 'Error' | 'TimeoutError' = 'Error',
 ): void {
   expect(outcome.results[0]?.error).toBeUndefined();
+  // SPEC-16: caller cancellation is the interrupted case path.
   expect(outcome.results[0]?.result).toMatchObject({
-    status: 'error',
+    status: 'interrupted',
     steps: [{ id: stepId, status: 'error', kind: 'environment' }],
-    explanation: `${GENERIC_ABORT_EXPLANATION.slice(0, -1)} (${name}).`,
+    explanation: 'The run was interrupted.',
   });
 }
 
@@ -812,7 +835,9 @@ describe('run', () => {
   it('reports a canonical plan with an old inputs digest as stale before resolving a browser driver', async () => {
     const { deps, browserDriver, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
-    const plan = await createFreshPlan(recordingStorage.storage, testPath);
+    const plan = await createFreshPlan(recordingStorage.storage, testPath, [
+      { id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
+    ]);
     await recordingStorage.storage.writeText(
       `${TEST_DIR}/login.ambercast.plan.json`,
       toCanonicalArtifactText({ ...plan, source: { inputsDigest: 'f'.repeat(64) } } as unknown as JsonValueT),
@@ -829,7 +854,7 @@ describe('run', () => {
     const { deps, browserDriver, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n@ambercast-${'secret'} {{secrets.FOO}}\n`);
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, target: 'missing' });
+    const outcome = await run(deps, DEFAULT_OPTIONS);
 
     // SPEC-C1 C1-12
     expect(outcome.results[0]?.error).toBeInstanceOf(SecretSyntaxRejectedError);
@@ -952,302 +977,7 @@ describe('run', () => {
     expect(browserDriver).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a plan fresh for its default target and rejects the same plan for another configured target', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario({
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: ['**/.runs/**'],
-        targets: RESOLVED_MULTI_TARGETS,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-    });
-    const testPath = await writePrompt(recordingStorage.storage);
-    await createFreshPlan(recordingStorage.storage, testPath, [], { web: MULTI_TARGETS.web });
-
-    const defaultTargetOutcome = await run(deps, DEFAULT_OPTIONS);
-    const overriddenTargetOutcome = await run(deps, { ...DEFAULT_OPTIONS, target: 'staging' });
-
-    expect(defaultTargetOutcome.results[0]?.result.status).toBe('passed');
-    expect(defaultTargetOutcome.results[0]?.error).toBeUndefined();
-    expect(overriddenTargetOutcome.results[0]?.error).toBeInstanceOf(StaleIrError);
-    expect(overriddenTargetOutcome.results[0]?.error).toMatchObject({ kind: 'stale-ir', exitCode: 4 });
-    expect(browserDriver).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    [
-      'an invalid explicit target',
-      {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets: RESOLVED_TARGETS,
-        defaultTarget: 'web',
-        ai: { provider: 'codex' as const, timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-      { target: 'missing' },
-      'The requested target is not configured.',
-      { target: 'missing' },
-    ],
-    [
-      'an ambiguous implicit target',
-      {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets: RESOLVED_MULTI_TARGETS,
-        ai: { provider: 'codex' as const, timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-      {},
-      'A target could not be selected from the configured targets.',
-      { target: '(default)', targetNames: ['staging', 'web'] },
-    ],
-  ] as const)('keeps two ordered case failures for %s without downstream work', async (
-    _description,
-    config,
-    optionOverride,
-    message,
-    details,
-  ) => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario({
-      config,
-      discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
-    });
-    const firstPath = await writePrompt(recordingStorage.storage, 'first.test.md', 'first');
-    const secondPath = await writePrompt(recordingStorage.storage, 'second.test.md', 'second');
-    recordingStorage.reads.length = 0;
-    recordingStorage.exists.length = 0;
-    recordingStorage.writes.length = 0;
-
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, ...optionOverride });
-
-    expect(outcome.results.map(({ result }) => ({ file: result.file, status: result.status }))).toEqual([
-      { file: firstPath, status: 'error' },
-      { file: secondPath, status: 'error' },
-    ]);
-    for (const caseOutcome of outcome.results) {
-      expect(caseOutcome.error).toBeInstanceOf(TargetUnresolvedError);
-      expect(caseOutcome.error).toMatchObject({
-        kind: 'target-unresolved',
-        exitCode: 2,
-        message,
-        details,
-      });
-      expect(caseOutcome.error?.details).toEqual(details);
-    }
-    expect(recordingStorage.reads).toEqual([firstPath, secondPath]);
-    expect(recordingStorage.exists).toEqual([]);
-    expect(recordingStorage.writes).toEqual([]);
-    expect(resolveAiExecutor).not.toHaveBeenCalled();
-    expect(browserDriver).not.toHaveBeenCalled();
-  });
-
-  it('rejects an inherited explicit target without falling back to a valid own default', async () => {
-    const inheritedName = 'inherited-replay';
-    const inheritedDefinition = {
-      baseUrl: 'https://inherited.example.test',
-      browser: 'chromium' as const,
-      healReplayIsolation: 'stateful' as const,
-      resolveTimeoutMs: 5000,
-    };
-    const prototype = Object.fromEntries([[inheritedName, inheritedDefinition]]);
-    const targets = Object.assign(
-      Object.create(prototype) as Record<string, Readonly<typeof inheritedDefinition>>,
-      { web: RESOLVED_TARGETS.web },
-    ) as RunDeps['config']['targets'];
-    expect(Object.hasOwn(targets, 'web')).toBe(true);
-    expect(Object.hasOwn(targets, inheritedName)).toBe(false);
-    expect(targets[inheritedName]).toBe(inheritedDefinition);
-
-    const { deps, browserDriver, events, recordingStorage, resolveAiExecutor } = createScenario({
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-      discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
-    });
-    const firstPath = await writePrompt(recordingStorage.storage, 'first.test.md', 'first');
-    const secondPath = await writePrompt(recordingStorage.storage, 'second.test.md', 'second');
-    recordingStorage.reads.length = 0;
-    recordingStorage.exists.length = 0;
-    recordingStorage.writes.length = 0;
-
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, target: inheritedName });
-
-    expect(outcome.results.map(({ result }) => ({ file: result.file, status: result.status }))).toEqual([
-      { file: firstPath, status: 'error' },
-      { file: secondPath, status: 'error' },
-    ]);
-    for (const caseOutcome of outcome.results) {
-      expect(caseOutcome.error).toBeInstanceOf(TargetUnresolvedError);
-      expect(caseOutcome.error).toMatchObject({
-        kind: 'target-unresolved',
-        exitCode: 2,
-        message: 'The requested target is not configured.',
-      });
-      expect(caseOutcome.error?.details).toEqual({ target: inheritedName });
-    }
-    expect(recordingStorage.reads).toEqual([firstPath, secondPath]);
-    expect(recordingStorage.exists).toEqual([]);
-    expect(recordingStorage.writes).toEqual([]);
-    expect(resolveAiExecutor).not.toHaveBeenCalled();
-    expect(browserDriver).not.toHaveBeenCalled();
-    expect(events.emitted()).toEqual([]);
-  });
-
-  it('replays a fresh plan through the sole implicit target and launches its exact definition', async () => {
-    const soleDefinition = {
-      baseUrl: 'https://replacement.example.test',
-      browser: 'chromium' as const,
-    };
-    const soleTargets = {
-      replacement: { ...soleDefinition, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-    };
-    const session = createFakeBrowserSession(new Map());
-    const launch = vi.fn<BrowserDriver['launch']>(async () => session);
-    const driver: BrowserDriver = { engine: 'chromium', launch };
-    const browserDriver = vi.fn<(engine: BrowserEngine) => BrowserDriver>(() => driver);
-    const { deps, recordingStorage } = createScenario({
-      browserDriver,
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets: soleTargets,
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-    });
-    const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [], {}, { replacement: soleDefinition });
-
-    const outcome = await run(deps, DEFAULT_OPTIONS);
-
-    expect(outcome.results[0]?.result.status).toBe('passed');
-    expect(outcome.results[0]?.error).toBeUndefined();
-    expect(launch).toHaveBeenCalledOnce();
-    expect(launch.mock.calls[0]?.[0]).toStrictEqual(soleDefinition);
-    expect(launch.mock.calls[0]?.[0]).not.toBe(soleDefinition);
-  });
-
-  it.each([
-    ['the configured default', undefined, 'web'],
-    ['an explicit override', 'staging', 'staging'],
-  ] as const)('launches the exact definition selected by %s', async (
-    _selection,
-    target,
-    expectedName,
-  ) => {
-    const session = createFakeBrowserSession(new Map());
-    const launch = vi.fn<BrowserDriver['launch']>(async () => session);
-    const driver: BrowserDriver = { engine: 'chromium', launch };
-    const browserDriver = vi.fn<(engine: BrowserEngine) => BrowserDriver>(() => driver);
-    const { deps, recordingStorage } = createScenario({
-      browserDriver,
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets: RESOLVED_MULTI_TARGETS,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-    });
-    const testPath = await writePrompt(recordingStorage.storage);
-    const expectedDefinition = MULTI_TARGETS[expectedName];
-    await seedFreshArtifacts(
-      recordingStorage.storage,
-      testPath,
-      [],
-      {},
-      { [expectedName]: expectedDefinition },
-    );
-
-    const outcome = await run(deps, {
-      ...DEFAULT_OPTIONS,
-      ...(target === undefined ? {} : { target }),
-    });
-
-    expect(outcome.results[0]?.result.status).toBe('passed');
-    expect(outcome.results[0]?.error).toBeUndefined();
-    expect(launch.mock.calls[0]?.[0]).toStrictEqual(expectedDefinition);
-    expect(launch.mock.calls[0]?.[0]).not.toBe(expectedDefinition);
-  });
-
-  it('treats a selected target change as stale while ignoring an unrelated target change', async () => {
-    const selectedChanged = {
-      web: { baseUrl: 'https://changed.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-      staging: { ...MULTI_TARGETS.staging, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-    };
-    const changedScenario = createScenario({
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets: selectedChanged,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-    });
-    const changedPath = await writePrompt(changedScenario.recordingStorage.storage);
-    await createFreshPlan(changedScenario.recordingStorage.storage, changedPath, [], { web: TARGETS.web });
-
-    const changedOutcome = await run(changedScenario.deps, DEFAULT_OPTIONS);
-
-    expect(changedOutcome.results[0]?.error).toBeInstanceOf(StaleIrError);
-    expect(changedScenario.browserDriver).not.toHaveBeenCalled();
-
-    const unrelatedChanged = {
-      web: RESOLVED_TARGETS.web,
-      staging: { baseUrl: 'https://changed-staging.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-    };
-    const unrelatedScenario = createScenario({
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets: unrelatedChanged,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      },
-    });
-    const unrelatedPath = await writePrompt(unrelatedScenario.recordingStorage.storage);
-    await seedFreshArtifacts(
-      unrelatedScenario.recordingStorage.storage,
-      unrelatedPath,
-      [],
-      {},
-      { web: TARGETS.web },
-    );
-
-    const unrelatedOutcome = await run(unrelatedScenario.deps, DEFAULT_OPTIONS);
-
-    expect(unrelatedOutcome.results[0]?.result.status).toBe('passed');
-    expect(unrelatedOutcome.results[0]?.error).toBeUndefined();
-    expect(unrelatedScenario.browserDriver).toHaveBeenCalledOnce();
-  });
-
+  // SPEC-9/10: run has no selected Target; Plan targets define execution.
   it('reports a source prompt read failure as a pre-dispatch filesystem error', async () => {
     const { deps, browserDriver, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage);
@@ -1261,7 +991,7 @@ describe('run', () => {
     expect(browserDriver).not.toHaveBeenCalled();
   });
 
-  it('resolves the target before attempting plan work that follows digest computation', async () => {
+  it('SPEC-10 rejects a plan target missing from config before digest comparison', async () => {
     const { deps, browserDriver, recordingStorage } = createScenario({
       config: {
         testDir: TEST_DIR,
@@ -1274,13 +1004,14 @@ describe('run', () => {
       },
     });
     const testPath = await writePrompt(recordingStorage.storage);
+    await createFreshPlan(recordingStorage.storage, testPath, [
+      { id: 'open-dashboard', kind: 'action', action: 'navigate', target: 'not-configured', url: '/dashboard' },
+    ], { 'not-configured': { surface: 'web', baseUrl: 'https://other.example.test' } });
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, target: 'not-configured' });
+    const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(TargetUnresolvedError);
-    expect(outcome.results[0]?.error).toMatchObject({ kind: 'target-unresolved', exitCode: 2 });
-    expect(recordingStorage.reads).toEqual([testPath]);
-    expect(recordingStorage.exists).toEqual([]);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'target-unresolved', exitCode: 2, details: { target: 'not-configured' } });
     expect(browserDriver).not.toHaveBeenCalled();
   });
 
@@ -1657,7 +1388,7 @@ describe('run', () => {
       const resolve = vi.spyOn(secrets, 'resolve');
       const executor = createFakeAiExecutor({
         async executeAgentic(request) {
-          await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
+          await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
           return { outcome: 'success' };
         },
       });
@@ -1775,7 +1506,7 @@ describe('run', () => {
         recordingStorage.storage,
         testPath,
         [aiStep('recorded-ai', [SECRET_REF])],
-        aiGrounding(coveredTrace([{ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF }], [passingText('Dashboard')])),
+        aiGrounding(coveredTrace([{ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF }], [passingText('Dashboard')])),
       );
 
       const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -1952,7 +1683,12 @@ describe('run', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(BrowserLaunchFailedError);
-    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [] });
+    // SPEC-14/25: launch fails before a session opens, while the attempted step records the error.
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [{ id: 'open-home', status: 'error', kind: 'environment', target: 'web' }],
+      sessions: { web: { state: 'not-opened' } },
+    });
     expect(launch).toHaveBeenCalledTimes(1);
     expect(sessionFactory).not.toHaveBeenCalled();
   });
@@ -2134,7 +1870,7 @@ describe('run', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
-    const steps: Step[] = [
+    const steps: TestStep[] = [
       { id: 'before-grounding', kind: 'action', action: 'navigate', url: '/before' },
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT },
       { id: 'after-grounding', kind: 'action', action: 'navigate', url: '/after' },
@@ -2153,14 +1889,14 @@ describe('run', () => {
   });
 
   it.each([
-    ['no grounding file', async (storage: StorageAdapter, testPath: string, steps: readonly Step[]) => {
+    ['no grounding file', async (storage: StorageAdapter, testPath: string, steps: readonly TestStep[]) => {
       await createFreshPlan(storage, testPath, steps);
     }],
-    ['malformed grounding JSON', async (storage: StorageAdapter, testPath: string, steps: readonly Step[]) => {
+    ['malformed grounding JSON', async (storage: StorageAdapter, testPath: string, steps: readonly TestStep[]) => {
       await seedFreshArtifacts(storage, testPath, steps, elementGrounding(['click-submit']));
       await storage.writeText(`${TEST_DIR}/login.ambercast.grounding.json`, '{ malformed');
     }],
-    ['a grounding document with a stale plan digest', async (storage: StorageAdapter, testPath: string, steps: readonly Step[]) => {
+    ['a grounding document with a stale plan digest', async (storage: StorageAdapter, testPath: string, steps: readonly TestStep[]) => {
       await seedFreshArtifacts(storage, testPath, steps, elementGrounding(['click-submit']));
       await storage.writeText(
         `${TEST_DIR}/login.ambercast.grounding.json`,
@@ -2179,7 +1915,7 @@ describe('run', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
-    const steps: Step[] = [
+    const steps: TestStep[] = [
       { id: 'before-grounding', kind: 'action', action: 'navigate', url: '/before' },
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT },
       { id: 'after-grounding', kind: 'action', action: 'navigate', url: '/after' },
@@ -2234,7 +1970,7 @@ describe('run', () => {
       browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
-    const steps: Step[] = [
+    const steps: TestStep[] = [
       { id: 'fill-first', kind: 'action', action: 'fill', target: EMAIL, value: 'person@example.test' },
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT },
       { id: 'after-browser-error', kind: 'action', action: 'navigate', url: '/after' },
@@ -2409,7 +2145,9 @@ describe('run', () => {
       let testPath: string | undefined;
       if (!noTestsFound) {
         testPath = await writePrompt(recordingStorage.storage);
-        await createFreshPlan(recordingStorage.storage, testPath);
+        await createFreshPlan(recordingStorage.storage, testPath, [
+          { id: 'open-home', kind: 'action', action: 'navigate', url: '/' },
+        ]);
       }
 
       const outcome = await run(deps, { ...DEFAULT_OPTIONS, allowEmpty, list });
@@ -2506,7 +2244,9 @@ describe('run', () => {
   it('processes a boundary-valid direct child of testDir without a prompt-path error', async () => {
     const { deps, recordingStorage } = createScenario();
     const path = await writePrompt(recordingStorage.storage, 'x.test.md');
-    await seedFreshArtifacts(recordingStorage.storage, path, []);
+    await seedFreshArtifacts(recordingStorage.storage, path, [
+      { id: 'open-home', kind: 'action', action: 'navigate', url: '/' },
+    ]);
 
     await expect(run(deps, { ...DEFAULT_OPTIONS, files: [path] })).resolves.toMatchObject({
       results: [{ result: { file: path, status: 'passed' } }],
@@ -2575,7 +2315,9 @@ describe('run', () => {
   it('filters an ineligible path out with grep before eligibility validation', async () => {
     const { deps, recordingStorage } = createScenario();
     const eligiblePath = await writePrompt(recordingStorage.storage, 'matching/login.test.md');
-    await seedFreshArtifacts(recordingStorage.storage, eligiblePath, []);
+    await seedFreshArtifacts(recordingStorage.storage, eligiblePath, [
+      { id: 'open-home', kind: 'action', action: 'navigate', url: '/' },
+    ]);
     const excludedIneligiblePath = `${TEST_DIR}/other/skip.md`;
 
     await expect(run(deps, {
@@ -2654,8 +2396,10 @@ describe('run interruption contract', () => {
     const { deps, recordingStorage } = createScenario({ signal: controller.signal, browserDriver });
     const first = await writePrompt(recordingStorage.storage, 'first.test.md');
     const second = await writePrompt(recordingStorage.storage, 'second.test.md');
-    await seedFreshArtifacts(recordingStorage.storage, first);
-    await seedFreshArtifacts(recordingStorage.storage, second);
+    // SPEC-14: a Target session launches only when its first step is reached.
+    const steps: TestStep[] = [{ id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' }];
+    await seedFreshArtifacts(recordingStorage.storage, first, steps);
+    await seedFreshArtifacts(recordingStorage.storage, second, steps);
     recordingStorage.reads.splice(0);
 
     const running = run(deps, { ...DEFAULT_OPTIONS, files: [first, second] });
@@ -2665,7 +2409,7 @@ describe('run interruption contract', () => {
 
     await expect(running).resolves.toMatchObject({
       interrupted: true,
-      results: [expect.objectContaining({ result: expect.objectContaining({ id: first, status: 'passed' }) })],
+      results: [expect.objectContaining({ result: expect.objectContaining({ id: first, status: 'interrupted' }) })],
       skipped: [{ file: second }],
     });
     expect(browserDriver).toHaveBeenCalledOnce();
@@ -2917,7 +2661,7 @@ describe('run agentic fallback pipeline', () => {
       {
         ...elementGrounding(['capture-token']),
         ...aiGrounding(coveredTrace(
-          [{ type: 'fill', target: EMAIL, value: 'token: {{run.token}}' }],
+          [{ type: 'fill', element: EMAIL, value: 'token: {{run.token}}' }],
           [passingText('Dashboard')],
         )),
       },
@@ -2973,7 +2717,7 @@ describe('run agentic fallback pipeline', () => {
       [aiStep('recorded-ai', [secretRef])],
       aiGrounding(coveredTrace(
         [
-          { type: 'fill-secret', target: PASSWORD, secretRef },
+          { type: 'fill-secret', element: PASSWORD, secretRef },
           { type: 'navigate', url: '/must-not-run' },
         ],
         [passingText('Cached dashboard')],
@@ -3060,7 +2804,7 @@ describe('run agentic fallback pipeline', () => {
       testPath,
       [aiStep('recorded-ai', [secretRef])],
       aiGrounding(coveredTrace(
-        [{ type: 'fill-secret', target: PASSWORD, secretRef }],
+        [{ type: 'fill-secret', element: PASSWORD, secretRef }],
         [passingText('Cached dashboard')],
       )),
     );
@@ -3135,7 +2879,7 @@ describe('run agentic fallback pipeline', () => {
       [aiStep('recorded-ai', [secretRef])],
       aiGrounding(coveredTrace(
         [
-          { type: 'fill-secret', target: PASSWORD, secretRef },
+          { type: 'fill-secret', element: PASSWORD, secretRef },
           { type: 'navigate', url: '/must-not-run-after-classified-error' },
         ],
         [passingText('Cached dashboard')],
@@ -3213,7 +2957,7 @@ describe('run agentic fallback pipeline', () => {
     const secretValue = 'ISSUE_167_LATER_FALLBACK_VALUE';
     const priorTrace = coveredTrace(
       [
-        { type: 'fill-secret', target: PASSWORD, secretRef },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
         { type: 'navigate', url: '/cached-route' },
       ],
       [passingText('Cached dashboard')],
@@ -3269,7 +3013,7 @@ describe('run agentic fallback pipeline', () => {
     const secretRef = '{{secrets.ISSUE_167_BIND_MISS}}';
     const secretValue = 'ISSUE_167_BIND_MISS_VALUE';
     const priorTrace = coveredTrace(
-      [{ type: 'fill-secret', target: PASSWORD, secretRef }],
+      [{ type: 'fill-secret', element: PASSWORD, secretRef }],
       [passingText('Cached dashboard')],
     );
     const session = createFakeBrowserSession(new Map());
@@ -3321,7 +3065,7 @@ describe('run agentic fallback pipeline', () => {
     let controllerRejection: unknown;
     const executeAgentic = vi.fn(async (request: AiAgenticRequest) => {
       try {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
       } catch (error) {
         controllerRejection = error;
         return { outcome: 'failure' as const };
@@ -3398,7 +3142,7 @@ describe('run agentic fallback pipeline', () => {
     ] });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' });
+        await request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' });
         await request.controller.evaluateAssert(passingText('Refreshed dashboard'), 'dashboard-reached');
         return { outcome: 'success' };
       },
@@ -3474,7 +3218,7 @@ describe('run agentic fallback pipeline', () => {
   });
 
   it('continues from a replay compute-bind miss into fresh agentic execution through the same bind primitive', async () => {
-    const priorTrace = coveredTrace([{ type: 'click', target: SUBMIT }], [passingText('Cached dashboard')]);
+    const priorTrace = coveredTrace([{ type: 'click', element: SUBMIT }], [passingText('Cached dashboard')]);
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
     const originalResolveGrounded = session.resolveGrounded.bind(session);
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded')
@@ -3482,7 +3226,7 @@ describe('run agentic fallback pipeline', () => {
       .mockImplementation(originalResolveGrounded);
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'click', target: SUBMIT });
+        await request.controller.perform({ type: 'click', element: SUBMIT });
         await request.controller.evaluateAssert(passingText('Refreshed dashboard'), 'dashboard-reached');
         return { outcome: 'success' };
       },
@@ -3510,13 +3254,13 @@ describe('run agentic fallback pipeline', () => {
 
   it.each([
     ['an action', 'ambercast_perform', async (request: AiAgenticRequest) => {
-      await request.controller.perform({ type: 'click', target: SUBMIT });
+      await request.controller.perform({ type: 'click', element: SUBMIT });
     }],
     ['a target-scoped assertion', 'ambercast_evaluate_assert', async (request: AiAgenticRequest) => {
       await request.controller.evaluateAssert({
         type: 'assert',
         check: 'text-equals',
-        target: SUBMIT,
+        element: SUBMIT,
         text: 'Dashboard',
       });
     }],
@@ -3583,18 +3327,15 @@ describe('run agentic fallback pipeline', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeUndefined();
+    // SPEC-16: cancellation has its own case status while preserving the step error.
     expect(outcome.results[0]?.result).toMatchObject({
-      status: 'error',
+      status: 'interrupted',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(aiCalls(events)).toEqual([]);
-    expect(events.emitted()).toEqual([
-      { type: 'step-start', stepId: 'recorded-ai' },
-      expect.objectContaining({
-        type: 'unclassified-rejection', stepId: 'recorded-ai', name: 'Error', message: 'Stop trace replay.', stack: expect.any(String),
-      }),
-    ]);
+    // SPEC-16: cancellation does not emit an ordinary rejection diagnostic.
+    expect(events.emitted()).toEqual([{ type: 'step-start', stepId: 'recorded-ai' }]);
   });
 
   it('reports a grounding-unresolved error for a behavioral trace fallback in cache-only mode', async () => {
@@ -4674,7 +4415,7 @@ describe('run AI call timeout composition', () => {
     controller.abort(reason);
     const outcome = await running;
 
-    expectUnclassifiedAbortOutcome(outcome, 'recorded-ai', 'Error');
+    expectCallerAbortOutcome(outcome, 'recorded-ai');
     expect(executor.agenticRequests[0]?.signal).not.toBe(controller.signal);
     expect(executor.agenticRequests[0]?.signal?.reason).toBe(reason);
   });
@@ -4712,7 +4453,7 @@ describe('run AI call timeout composition', () => {
     controller.abort(reason);
     const outcome = await running;
 
-    expectUnclassifiedAbortOutcome(outcome, 'click-submit', 'Error');
+    expectCallerAbortOutcome(outcome, 'click-submit');
     expect(executor.structuredRequests[0]?.signal).not.toBe(controller.signal);
     expect(executor.structuredRequests[0]?.signal?.reason).toBe(reason);
   });
@@ -4750,7 +4491,7 @@ describe('run AI call timeout composition', () => {
       const outcome = await running;
 
       expect(timeoutSpy).toHaveBeenCalledWith(60_000);
-      expectUnclassifiedAbortOutcome(outcome, 'recorded-ai', 'TimeoutError');
+      expectCallerAbortOutcome(outcome, 'recorded-ai');
       expect(executor.agenticRequests[0]?.signal).not.toBe(controller.signal);
       expect(executor.agenticRequests[0]?.signal?.reason).toBe(callerReason);
     } finally {
@@ -4813,7 +4554,7 @@ describe('run path-C pre-scan', () => {
       [aiStep()],
       aiGrounding(legacyTrace(
         [
-          { type: 'click', target: SUBMIT },
+          { type: 'click', element: SUBMIT },
           { type: 'navigate', url: '/users/{{run.never-captured}}' },
         ],
         [passingText('Verified')],
@@ -4835,7 +4576,7 @@ describe('run path-C pre-scan', () => {
       legacyTrace(
         [
           { type: 'navigate', url: '/valid-first' },
-          { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.other.password}}' },
+          { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.other.password}}' },
         ],
         [passingText('Verified')],
       ),
@@ -5030,7 +4771,7 @@ describe('run path-C pre-scan', () => {
       recordingStorage.storage,
       testPath,
       [aiStep('recorded-ai', [secretRef])],
-      aiGrounding(coveredTrace([{ type: 'fill-secret', target: PASSWORD, secretRef }], [passingText('Verified')])),
+      aiGrounding(coveredTrace([{ type: 'fill-secret', element: PASSWORD, secretRef }], [passingText('Verified')])),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -5046,34 +4787,34 @@ describe('run path-C pre-scan', () => {
     ['navigate URL before fill-secret', (secretRef: string, secretValue: string) => legacyTrace(
       [
         { type: 'navigate', url: `/account/${secretValue}/settings` },
-        { type: 'fill-secret', target: PASSWORD, secretRef },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
       ],
       [passingText('Dashboard')],
     )],
     ['navigate URL', (secretRef: string, secretValue: string) => legacyTrace(
       [
-        { type: 'fill-secret', target: PASSWORD, secretRef },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
         { type: 'navigate', url: `/account/${secretValue}/settings` },
       ],
       [passingText('Dashboard')],
     )],
     ['fill value', (secretRef: string, secretValue: string) => legacyTrace(
       [
-        { type: 'fill-secret', target: PASSWORD, secretRef },
-        { type: 'fill', target: EMAIL, value: `token=${secretValue}` },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
+        { type: 'fill', element: EMAIL, value: `token=${secretValue}` },
       ],
       [passingText('Dashboard')],
     )],
     ['assertion text', (secretRef: string, secretValue: string) => legacyTrace(
-      [{ type: 'fill-secret', target: PASSWORD, secretRef }],
+      [{ type: 'fill-secret', element: PASSWORD, secretRef }],
       [{ type: 'assert', check: 'text-visible', text: `Welcome ${secretValue}.` }],
     )],
     ['assertion text equals', (secretRef: string, secretValue: string) => legacyTrace(
-      [{ type: 'fill-secret', target: PASSWORD, secretRef }],
-      [{ type: 'assert', check: 'text-equals', target: PASSWORD, text: `Welcome ${secretValue}.` }],
+      [{ type: 'fill-secret', element: PASSWORD, secretRef }],
+      [{ type: 'assert', check: 'text-equals', element: PASSWORD, text: `Welcome ${secretValue}.` }],
     )],
     ['assertion URL pattern', (secretRef: string, secretValue: string) => legacyTrace(
-      [{ type: 'fill-secret', target: PASSWORD, secretRef }],
+      [{ type: 'fill-secret', element: PASSWORD, secretRef }],
       [{ type: 'assert', check: 'url-matches', pattern: `/account/${secretValue}/.*` }],
     )],
   ] as const)('rejects a materialized secret literal in a prior trace %s before replay begins', async (_description, buildTrace) => {
@@ -5109,7 +4850,7 @@ describe('run path-C pre-scan', () => {
     const secretValue = 'sk-AMBERCAST_SECRET_DUMMY';
     const priorTrace = legacyTrace(
       [
-        { type: 'fill-secret', target: PASSWORD, secretRef },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
         { type: 'navigate', url: `/account/${secretValue}/settings` },
       ],
       [passingText('Cached dashboard')],
@@ -5148,23 +4889,23 @@ describe('run path-C pre-scan', () => {
 
   it.each([
     ['click', (secretRef: string, target: ElementRef) => legacyTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef },
-      { type: 'click', target },
+      { type: 'fill-secret', element: PASSWORD, secretRef },
+      { type: 'click', element: target },
     ], [passingText('Dashboard')])],
     ['press', (secretRef: string, target: ElementRef) => legacyTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef },
-      { type: 'press', target, key: 'Enter' },
+      { type: 'fill-secret', element: PASSWORD, secretRef },
+      { type: 'press', element: target, key: 'Enter' },
     ], [passingText('Dashboard')])],
     ['fill-secret', (secretRef: string, target: ElementRef) => legacyTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef },
-      { type: 'fill-secret', target, secretRef },
+      { type: 'fill-secret', element: PASSWORD, secretRef },
+      { type: 'fill-secret', element: target, secretRef },
     ], [passingText('Dashboard')])],
     ['element-visible', (secretRef: string, target: ElementRef) => legacyTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef },
-    ], [{ type: 'assert', check: 'element-visible', target }])],
+      { type: 'fill-secret', element: PASSWORD, secretRef },
+    ], [{ type: 'assert', check: 'element-visible', element: target }])],
     ['element-count', (secretRef: string, target: ElementRef) => legacyTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef },
-    ], [{ type: 'assert', check: 'element-count', target, count: 1 }])],
+      { type: 'fill-secret', element: PASSWORD, secretRef },
+    ], [{ type: 'assert', check: 'element-count', element: target, count: 1 }])],
   ] as const)('rejects a materialized secret in a stored-trace %s target role before replay', async (_description, buildTrace) => {
     const secretRef = '{{secrets.auth.target_role}}';
     const secretValue = 'TARGET-ROLE-SECRET-VALUE';
@@ -5333,12 +5074,12 @@ describe('run agentic wrapper state machine', () => {
   it.each([
     [
       'an action',
-      async (request: AiAgenticRequest) => request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' }),
+      async (request: AiAgenticRequest) => request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' }),
       [{ passed: true }, { passed: true }] as const,
       [
         { type: 'navigate', url: '/dashboard' },
         passingText('Earlier dashboard'),
-        { type: 'press', target: SUBMIT, key: 'Enter' },
+        { type: 'press', element: SUBMIT, key: 'Enter' },
       ] as const,
     ],
     [
@@ -5383,7 +5124,7 @@ describe('run agentic wrapper state machine', () => {
     ['a perform after an earlier passed assertion', async (request: AiAgenticRequest) => {
       await request.controller.perform({ type: 'navigate', url: '/dashboard' });
       await request.controller.evaluateAssert(passingText('Dashboard'));
-      await request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' });
+      await request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' });
     }],
     ['only a bare perform', async (request: AiAgenticRequest) => {
       await request.controller.perform({ type: 'navigate', url: '/dashboard' });
@@ -5430,7 +5171,7 @@ describe('run agentic wrapper state machine', () => {
         async executeAgentic(request) {
           if (options.before !== undefined) await options.before(request);
           try {
-            await request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' });
+            await request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' });
           } catch {
             // The recoverable controller error is intentionally handled by the provider script.
           }
@@ -5603,7 +5344,10 @@ describe('run agentic wrapper state machine', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.result.status).toBe('error');
+    // SPEC-16: an explicit cancellation ends the case as interrupted.
+    expect(outcome.results[0]?.result.status).toBe(
+      _description === 'cancellation after partial observations' ? 'interrupted' : 'error',
+    );
     expect(recordingStorage.writes).toEqual([]);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(aiGrounding(staleTrace));
   });
@@ -5897,7 +5641,7 @@ describe('run deterministic redaction boundary', () => {
       async executeAgentic(request) {
         if (agenticInvocation === 0) {
           agenticInvocation += 1;
-          await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+          await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
           await evaluateTerminalAssert(request, passingText('First AI pipeline verification'));
           return { outcome: 'success' };
         }
@@ -5922,7 +5666,8 @@ describe('run deterministic redaction boundary', () => {
       { id: 'fill-path-a-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef },
       aiStep('resolve-rotated-secret', [secretRef]),
       aiStep('observe-rotated-secrets'),
-      { id: 'assert-after-pipelines', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Signed in' },
+      // SPEC-17: keep this diagnostic fixture to its first failed observation.
+      { id: 'assert-after-pipelines', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Signed in', timeoutMs: 0 },
     ], elementGrounding(['fill-path-a-secret', 'assert-after-pipelines']));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -5950,12 +5695,12 @@ describe('run deterministic redaction boundary', () => {
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       aiStep('replay-secret-trace', [secretRef]),
-      { id: 'assert-after-trace-replay', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Signed in' },
+      { id: 'assert-after-trace-replay', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Signed in', timeoutMs: 0 },
     ], {
       'replay-secret-trace': {
         kind: 'ai',
         trace: coveredTrace(
-          [{ type: 'fill-secret', target: PASSWORD, secretRef }],
+          [{ type: 'fill-secret', element: PASSWORD, secretRef }],
           [passingText('Cached trace verification')],
         ),
       },
@@ -5997,7 +5742,7 @@ describe('run agentic materialization boundary', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
         resolutionSnapshot = await request.controller.snapshotForResolution();
         return { outcome: 'success' };
       },
@@ -6047,7 +5792,7 @@ describe('run agentic materialization boundary', () => {
     });
     const successfulExecutor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
         const assertion = await evaluateTerminalAssert(request, {
           type: 'assert',
           check: 'text-visible',
@@ -6111,8 +5856,8 @@ describe('run agentic materialization boundary', () => {
     });
     const failingExecutor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.perform({ type: 'fill', target: EMAIL, value: '{{run.token}}' });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill', element: EMAIL, value: '{{run.token}}' });
         return { outcome: 'success' };
       },
     });
@@ -6166,8 +5911,8 @@ describe('run agentic materialization boundary', () => {
       await request.controller.perform({ type: 'navigate', url: 'RUN-LITERAL-SENTINEL' });
     }],
     ['a resolved secret value', async (request: AiAgenticRequest) => {
-      await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.auth.literal}}' });
-      await request.controller.perform({ type: 'fill', target: EMAIL, value: 'SECRET-LITERAL-SENTINEL' });
+      await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.auth.literal}}' });
+      await request.controller.perform({ type: 'fill', element: EMAIL, value: 'SECRET-LITERAL-SENTINEL' });
     }],
   ] as const)('rejects a provider echo of %s as a literal before it reaches the browser journal', async (_description, script) => {
     const secretRef = '{{secrets.auth.literal}}';
@@ -6219,8 +5964,8 @@ describe('run agentic materialization boundary', () => {
     const session = createFakeBrowserSession(liveEntries([EMAIL, PASSWORD]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.perform({ type: 'fill', target: EMAIL, value: candidate });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill', element: EMAIL, value: candidate });
         await evaluateTerminalAssert(request, passingText('Dashboard'));
         return { outcome: 'success' };
       },
@@ -6259,7 +6004,7 @@ describe('run agentic materialization boundary', () => {
       await request.controller.perform({ type: 'navigate', url: `/users/${runValue}/settings` });
     }],
     ['fill value', async (request: AiAgenticRequest, runValue: string) => {
-      await request.controller.perform({ type: 'fill', target: PASSWORD, value: `welcome-${runValue}` });
+      await request.controller.perform({ type: 'fill', element: PASSWORD, value: `welcome-${runValue}` });
     }],
     ['assertion text', async (request: AiAgenticRequest, runValue: string) => {
       await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: `Welcome ${runValue}.` });
@@ -6314,7 +6059,7 @@ describe('run agentic materialization boundary', () => {
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
         if (secretValue !== undefined) {
-          await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+          await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
         }
         const outcome = await evaluateTerminalAssert(request, passingText('Visible'));
         adapterMessage = outcome.message;
@@ -6362,8 +6107,8 @@ describe('run agentic materialization boundary', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: tiedSecretRef });
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: longSecretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: tiedSecretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: longSecretRef });
         const outcome = await evaluateTerminalAssert(request, passingText('Visible'));
         adapterMessage = outcome.message;
         return { outcome: 'success' };
@@ -6432,7 +6177,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
         await evaluateTerminalAssert(request, passingText('Dashboard'));
         return { outcome: 'success' };
       },
@@ -6640,7 +6385,7 @@ describe('run grounding write-back posture integration', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: PASSWORD, value: secretValue });
+        await request.controller.perform({ type: 'fill', element: PASSWORD, value: secretValue });
         await evaluateTerminalAssert(request, passingText('Dashboard'));
         return { outcome: 'success' };
       },
@@ -6695,21 +6440,22 @@ describe('run failure evidence', () => {
     const screenshotBytes = new Uint8Array([7, 8, 9]);
     const storage = createFsStorage();
     const layout = createLayoutResolver({ testDir, runsDir });
+    const planTargets = { web: { surface: 'web', baseUrl: TARGETS.web.baseUrl } } as const;
 
     try {
       await storage.writeText(testPath, PROMPT);
       const plan = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         source: {
           inputsDigest: computeInputsDigest({
-            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 3,
-            generatorPromptTemplateFingerprint: promptTemplateFingerprint(), planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: TARGETS,
+            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
+            generatorPromptTemplateFingerprint: promptTemplateFingerprint(), planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: planTargets,
           }),
         },
-        targets: TARGETS,
+        targets: planTargets,
         steps: [
-          { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
-          { id: 'later-step', kind: 'action', action: 'navigate', url: '/later' },
+          { id: 'assert-dashboard', kind: 'assert', target: 'web', check: 'text-visible', text: 'Dashboard' },
+          { id: 'later-step', kind: 'action', target: 'web', action: 'navigate', url: '/later' },
         ],
       } as unknown as PlanDocument;
       await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
@@ -6733,7 +6479,8 @@ describe('run failure evidence', () => {
       const step = result?.steps[0];
       const screenshotPath = join(runsDir, runId, 'login', 'assert-dashboard.png');
 
-      expect(RunResult.safeParse(result).success).toBe(true);
+      const parsed = RunResult.safeParse(result);
+      expect(parsed.success ? [] : parsed.error.issues).toEqual([]);
       expect(step).toMatchObject({
         expected: 'Text "Dashboard" is visible.', actual: 'The dashboard is absent.', screenshot: screenshotPath,
         observed: { note: OBSERVED_NOTE, accessibilitySnapshot: '{"role":"document","name":"Sign in"}' },
@@ -7492,7 +7239,8 @@ describe('run failure evidence', () => {
     expect(step?.observed?.accessibilitySnapshot).toContain('{{run.token}}');
     expect(JSON.stringify(result)).not.toContain(secretValue);
     expect(JSON.stringify(result)).not.toContain(capturedValue);
-    expect(RunResult.safeParse(result).success).toBe(true);
+    const parsed = RunResult.safeParse(result);
+    expect(parsed.success ? [] : parsed.error.issues).toEqual([]);
   });
 
   it('returns a pre-launch error without attempting to attach browser evidence', async () => {
@@ -7504,7 +7252,11 @@ describe('run failure evidence', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [] });
+    // SPEC-14: launch is attempted at the first step, so that step owns the error.
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [{ id: 'open-dashboard', status: 'error', kind: 'environment', target: 'web' }],
+    });
   });
 
   it('does not capture failure evidence for passing or duplicate literal cases', async () => {
@@ -7530,7 +7282,7 @@ describe('run credential-literal symmetry', () => {
     const session = createFakeBrowserSession(liveEntries([EMAIL]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: EMAIL, value });
+        await request.controller.perform({ type: 'fill', element: EMAIL, value });
         await request.controller.evaluateAssert(passingText('Dashboard'));
         return { outcome: 'success' };
       },
@@ -7566,7 +7318,7 @@ describe('run credential-literal symmetry', () => {
       recordingStorage.storage,
       testPath,
       [aiStep()],
-      aiGrounding(legacyTrace([{ type: 'fill', target: EMAIL, value }], [passingText('Dashboard')])),
+      aiGrounding(legacyTrace([{ type: 'fill', element: EMAIL, value }], [passingText('Dashboard')])),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7585,7 +7337,7 @@ describe('run credential-literal symmetry', () => {
     const session = createFakeBrowserSession(liveEntries([EMAIL]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: EMAIL, value });
+        await request.controller.perform({ type: 'fill', element: EMAIL, value });
         await evaluateTerminalAssert(request, passingText('Dashboard'));
         return { outcome: 'success' };
       },
@@ -7611,13 +7363,13 @@ describe('run credential-literal symmetry', () => {
       await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: literal });
     }],
     ['text-equals assertion text', async (request: AiAgenticRequest, target: ElementRef, literal: string) => {
-      await request.controller.evaluateAssert({ type: 'assert', check: 'text-equals', target, text: literal });
+      await request.controller.evaluateAssert({ type: 'assert', check: 'text-equals', element: target, text: literal });
     }],
     ['URL-match assertion pattern', async (request: AiAgenticRequest, _target: ElementRef, literal: string) => {
       await request.controller.evaluateAssert({ type: 'assert', check: 'url-matches', pattern: literal });
     }],
     ['fill target name', async (request: AiAgenticRequest, target: ElementRef) => {
-      await request.controller.perform({ type: 'fill', target, value: 'ordinary fill value' });
+      await request.controller.perform({ type: 'fill', element: target, value: 'ordinary fill value' });
     }],
   ] as const)('does not apply the fill-value heuristic to fresh-agentic %s', async (_description, script) => {
     const literal = 'sk-scope-exclusion-value';
@@ -7655,14 +7407,14 @@ describe('run credential-literal symmetry', () => {
     )],
     ['text-equals assertion text', (target: ElementRef, literal: string) => coveredTrace(
       [],
-      [{ type: 'assert', check: 'text-equals', target, text: literal }],
+      [{ type: 'assert', check: 'text-equals', element: target, text: literal }],
     )],
     ['URL-match assertion pattern', (_target: ElementRef, literal: string) => coveredTrace(
       [{ type: 'assert', check: 'url-matches', pattern: literal }],
       [passingText('Dashboard')],
     )],
     ['fill target name', (target: ElementRef) => coveredTrace(
-      [{ type: 'fill', target, value: 'ordinary fill value' }],
+      [{ type: 'fill', element: target, value: 'ordinary fill value' }],
       [passingText('Dashboard')],
     )],
   ] as const)('does not apply the fill-value heuristic to stored-trace %s', async (_description, buildTrace) => {
@@ -7697,8 +7449,8 @@ describe('run credential-literal symmetry', () => {
     const session = createFakeBrowserSession(liveEntries([EMAIL, PASSWORD]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.perform({ type: 'fill', target: EMAIL, value: secretValue });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill', element: EMAIL, value: secretValue });
         return { outcome: 'success' };
       },
     });
@@ -7735,8 +7487,8 @@ describe('run credential-literal symmetry', () => {
       testPath,
       [aiStep('recorded-ai', [secretRef])],
       aiGrounding(legacyTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef },
-        { type: 'fill', target: EMAIL, value: secretValue },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
+        { type: 'fill', element: EMAIL, value: secretValue },
       ], [passingText('Dashboard')])),
     );
 
@@ -7752,10 +7504,10 @@ describe('run credential-literal symmetry', () => {
 
   it.each([
     ['click', async (request: AiAgenticRequest, target: ElementRef) => {
-      await request.controller.perform({ type: 'click', target });
+      await request.controller.perform({ type: 'click', element: target });
     }],
     ['press', async (request: AiAgenticRequest, target: ElementRef) => {
-      await request.controller.perform({ type: 'press', target, key: 'Enter' });
+      await request.controller.perform({ type: 'press', element: target, key: 'Enter' });
     }],
   ] as const)('rejects a resolved secret echoed in a fresh-agentic %s target name', async (_description, perform) => {
     const secretRef = '{{secrets.auth.target_name}}';
@@ -7764,7 +7516,7 @@ describe('run credential-literal symmetry', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD, secretNamedTarget]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
         await perform(request, secretNamedTarget);
         await request.controller.evaluateAssert(passingText('Dashboard'));
         return { outcome: 'success' };
@@ -7790,12 +7542,12 @@ describe('run credential-literal symmetry', () => {
 
   it.each([
     ['click', (target: ElementRef) => legacyTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.auth.target_name}}' },
-      { type: 'click', target },
+      { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.auth.target_name}}' },
+      { type: 'click', element: target },
     ], [passingText('Dashboard')])],
     ['press', (target: ElementRef) => legacyTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.auth.target_name}}' },
-      { type: 'press', target, key: 'Enter' },
+      { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.auth.target_name}}' },
+      { type: 'press', element: target, key: 'Enter' },
     ], [passingText('Dashboard')])],
   ] as const)('rejects a resolved secret echoed in a stored-trace %s target name before replay', async (_description, buildTrace) => {
     const secretRef = '{{secrets.auth.target_name}}';
@@ -7834,31 +7586,31 @@ describe('run credential-literal symmetry', () => {
       'type',
       new Map([['{{secrets.trace.type}}', 'click']]),
       coveredTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.trace.type}}' },
-        { type: 'click', target: SUBMIT },
+        { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.trace.type}}' },
+        { type: 'click', element: SUBMIT },
       ], [passingText('Dashboard')]),
     ],
     [
       'check',
       new Map([['{{secrets.trace.check}}', 'element-visible']]),
       coveredTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.trace.check}}' },
-      ], [{ type: 'assert', check: 'element-visible', target: SUBMIT }]),
+        { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.trace.check}}' },
+      ], [{ type: 'assert', check: 'element-visible', element: SUBMIT }]),
     ],
     [
       'target.strategy',
       new Map([['{{secrets.trace.strategy}}', 'accessibility']]),
       coveredTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.trace.strategy}}' },
-        { type: 'click', target: SUBMIT },
+        { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.trace.strategy}}' },
+        { type: 'click', element: SUBMIT },
       ], [passingText('Dashboard')]),
     ],
     [
       'key',
       new Map([['{{secrets.trace.key}}', 'Enter']]),
       coveredTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.trace.key}}' },
-        { type: 'press', target: SUBMIT, key: 'Enter' },
+        { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.trace.key}}' },
+        { type: 'press', element: SUBMIT, key: 'Enter' },
       ], [passingText('Dashboard')]),
     ],
     [
@@ -7868,8 +7620,8 @@ describe('run credential-literal symmetry', () => {
         ['{{secrets.trace.tok}}', 'tok'],
       ]),
       coveredTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.trace.token}}' },
-        { type: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.trace.tok}}' },
+        { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.trace.token}}' },
+        { type: 'fill-secret', element: PASSWORD, secretRef: '{{secrets.trace.tok}}' },
       ], [passingText('Dashboard')]),
     ],
   ] as const)('permits incidental resolved-secret matches in stored-trace %s closed vocabulary', async (_path, secretValues, priorTrace) => {
@@ -7926,32 +7678,32 @@ describe('run credential-literal symmetry', () => {
       'type',
       new Map([['{{secrets.trace.type}}', 'click']]),
       async (request: AiAgenticRequest, secretRefs: readonly string[]) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: secretRefs[0]! });
-        await request.controller.perform({ type: 'click', target: SUBMIT });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: secretRefs[0]! });
+        await request.controller.perform({ type: 'click', element: SUBMIT });
       },
     ],
     [
       'check',
       new Map([['{{secrets.trace.check}}', 'element-visible']]),
       async (request: AiAgenticRequest, secretRefs: readonly string[]) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: secretRefs[0]! });
-        await request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target: SUBMIT });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: secretRefs[0]! });
+        await request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', element: SUBMIT });
       },
     ],
     [
       'target.strategy',
       new Map([['{{secrets.trace.strategy}}', 'accessibility']]),
       async (request: AiAgenticRequest, secretRefs: readonly string[]) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: secretRefs[0]! });
-        await request.controller.perform({ type: 'click', target: SUBMIT });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: secretRefs[0]! });
+        await request.controller.perform({ type: 'click', element: SUBMIT });
       },
     ],
     [
       'key',
       new Map([['{{secrets.trace.key}}', 'Enter']]),
       async (request: AiAgenticRequest, secretRefs: readonly string[]) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: secretRefs[0]! });
-        await request.controller.perform({ type: 'press', target: SUBMIT, key: 'Enter' });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: secretRefs[0]! });
+        await request.controller.perform({ type: 'press', element: SUBMIT, key: 'Enter' });
       },
     ],
     [
@@ -7961,8 +7713,8 @@ describe('run credential-literal symmetry', () => {
         ['{{secrets.trace.token}}', 'first-secret-value'],
       ]),
       async (request: AiAgenticRequest, secretRefs: readonly string[]) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: secretRefs[0]! });
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: secretRefs[1]! });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: secretRefs[0]! });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: secretRefs[1]! });
       },
     ],
   ] as const)('permits incidental resolved-secret matches in fresh-agentic %s closed vocabulary', async (_path, secretValues, performOffendingCalls) => {
@@ -7996,8 +7748,8 @@ describe('run credential-literal symmetry', () => {
     const secretRef = '{{secrets.trace.object_key}}';
     const secretValue = 'target';
     const priorTrace = coveredTrace([
-      { type: 'fill-secret', target: PASSWORD, secretRef },
-      { type: 'click', target: SUBMIT },
+      { type: 'fill-secret', element: PASSWORD, secretRef },
+      { type: 'click', element: SUBMIT },
     ], [passingText('Dashboard')]);
     const scannedValues = [
       'fill-secret', PASSWORD.strategy, PASSWORD.role, PASSWORD.name, secretRef,
@@ -8035,7 +7787,7 @@ describe('run credential-literal symmetry', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
         await request.controller.snapshotForResolution();
         return { outcome: 'success' };
       },
@@ -8070,7 +7822,7 @@ describe('run credential-literal symmetry', () => {
       testPath,
       [aiStep('recorded-ai', [secretRef])],
       aiGrounding(coveredTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
       ], [passingText('Dashboard')])),
     );
 
@@ -8087,8 +7839,8 @@ describe('run credential-literal symmetry', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD, secretNamedTarget]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.perform({ type: 'fill-secret', target: secretNamedTarget, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: secretNamedTarget, secretRef });
         return { outcome: 'success' };
       },
     });
@@ -8132,8 +7884,8 @@ describe('run credential-literal symmetry', () => {
     [
       'click',
       (secretRef: string, target: ElementRef) => async (request: AiAgenticRequest) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.perform({ type: 'click', target });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'click', element: target });
       },
       'perform',
       0,
@@ -8141,8 +7893,8 @@ describe('run credential-literal symmetry', () => {
     [
       'press',
       (secretRef: string, target: ElementRef) => async (request: AiAgenticRequest) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.perform({ type: 'press', target, key: 'Enter' });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'press', element: target, key: 'Enter' });
       },
       'perform',
       0,
@@ -8150,8 +7902,8 @@ describe('run credential-literal symmetry', () => {
     [
       'fill-secret',
       (secretRef: string, target: ElementRef) => async (request: AiAgenticRequest) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.perform({ type: 'fill-secret', target, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.perform({ type: 'fill-secret', element: target, secretRef });
       },
       'fill-secret',
       1,
@@ -8159,8 +7911,8 @@ describe('run credential-literal symmetry', () => {
     [
       'element-visible',
       (secretRef: string, target: ElementRef) => async (request: AiAgenticRequest) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', target });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', element: target });
       },
       'evaluate-assert',
       0,
@@ -8168,8 +7920,8 @@ describe('run credential-literal symmetry', () => {
     [
       'element-count',
       (secretRef: string, target: ElementRef) => async (request: AiAgenticRequest) => {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef });
-        await request.controller.evaluateAssert({ type: 'assert', check: 'element-count', target, count: 1 });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+        await request.controller.evaluateAssert({ type: 'assert', check: 'element-count', element: target, count: 1 });
       },
       'evaluate-assert',
       0,
@@ -8223,8 +7975,8 @@ describe('run credential-literal symmetry', () => {
       testPath,
       [aiStep('recorded-ai', [secretRef])],
       aiGrounding(legacyTrace([
-        { type: 'fill-secret', target: PASSWORD, secretRef },
-        { type: 'fill-secret', target: secretNamedTarget, secretRef },
+        { type: 'fill-secret', element: PASSWORD, secretRef },
+        { type: 'fill-secret', element: secretNamedTarget, secretRef },
       ], [passingText('Dashboard')])),
     );
 
@@ -8242,13 +7994,13 @@ describe('run credential-literal symmetry', () => {
 
   it.each([
     ['fill value', async (request: AiAgenticRequest, runValue: string) => {
-      await request.controller.perform({ type: 'fill', target: PASSWORD, value: runValue });
+      await request.controller.perform({ type: 'fill', element: PASSWORD, value: runValue });
     }],
     ['text-visible assertion text', async (request: AiAgenticRequest, runValue: string) => {
       await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: runValue });
     }],
     ['text-equals assertion text', async (request: AiAgenticRequest, runValue: string) => {
-      await request.controller.evaluateAssert({ type: 'assert', check: 'text-equals', target: PASSWORD, text: runValue });
+      await request.controller.evaluateAssert({ type: 'assert', check: 'text-equals', element: PASSWORD, text: runValue });
     }],
     ['URL-match assertion pattern', async (request: AiAgenticRequest, runValue: string) => {
       await request.controller.evaluateAssert({ type: 'assert', check: 'url-matches', pattern: runValue });
@@ -8292,7 +8044,7 @@ describe('run credential-literal symmetry', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: PASSWORD, value: `welcome-${runValue}` });
+        await request.controller.perform({ type: 'fill', element: PASSWORD, value: `welcome-${runValue}` });
         await evaluateTerminalAssert(request, passingText('Dashboard'));
         return { outcome: 'success' };
       },
@@ -8329,7 +8081,7 @@ describe('run credential-literal symmetry', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: PASSWORD, value: `welcome-${capturedToken}` });
+        await request.controller.perform({ type: 'fill', element: PASSWORD, value: `welcome-${capturedToken}` });
         await evaluateTerminalAssert(request, passingText('Dashboard'));
         return { outcome: 'success' };
       },
@@ -8378,7 +8130,7 @@ describe('run credential-literal symmetry', () => {
       {
         ...elementGrounding(['capture-token']),
         ...aiGrounding(coveredTrace([
-          { type: 'fill', target: PASSWORD, value: `welcome-${runValue}` },
+          { type: 'fill', element: PASSWORD, value: `welcome-${runValue}` },
         ], [passingText('Dashboard')])),
       },
     );
@@ -8402,7 +8154,7 @@ describe('run credential-literal symmetry', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: PASSWORD, value: `${literal}-${runValue}` });
+        await request.controller.perform({ type: 'fill', element: PASSWORD, value: `${literal}-${runValue}` });
         return { outcome: 'success' };
       },
     });
@@ -8453,7 +8205,7 @@ describe('run credential-literal symmetry', () => {
       {
         ...elementGrounding(['capture-token']),
         ...aiGrounding(legacyTrace([
-          { type: 'fill', target: PASSWORD, value: `${literal}-${runValue}` },
+          { type: 'fill', element: PASSWORD, value: `${literal}-${runValue}` },
         ], [passingText('Dashboard')])),
       },
     );
@@ -8474,7 +8226,7 @@ describe('run credential-literal symmetry', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: PASSWORD, value: `${capturedValue}${fabricatedValue}` });
+        await request.controller.perform({ type: 'fill', element: PASSWORD, value: `${capturedValue}${fabricatedValue}` });
         return { outcome: 'success' };
       },
     });
@@ -8522,7 +8274,7 @@ describe('run credential-literal symmetry', () => {
       {
         ...elementGrounding(['capture-token']),
         ...aiGrounding(legacyTrace([
-          { type: 'fill', target: PASSWORD, value: `${capturedValue}${fabricatedValue}` },
+          { type: 'fill', element: PASSWORD, value: `${capturedValue}${fabricatedValue}` },
         ], [passingText('Dashboard')])),
       },
     );
@@ -8548,7 +8300,7 @@ describe('run credential-literal symmetry', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill', target: PASSWORD, value: secretShapedValue });
+        await request.controller.perform({ type: 'fill', element: PASSWORD, value: secretShapedValue });
         await evaluateTerminalAssert(request, passingText('Dashboard'));
         return { outcome: 'success' };
       },

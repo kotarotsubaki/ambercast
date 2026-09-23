@@ -62,6 +62,7 @@ interface InvalidPlanReason {
 }
 
 const INVALID_PLAN_REASONS = {
+  'plan-invalid-v3-retired.json': { code: 'invalid_value', path: ['schemaVersion'] },
   'plan-invalid-ai-embedded-secret-ref.json': { code: 'invalid_format', path: ['steps', 0, 'instruction'] },
   'plan-invalid-ai-trace.json': { code: 'unrecognized_keys', path: ['steps', 0], key: 'trace' },
   'plan-invalid-assert-embedded-secret-ref.json': { code: 'invalid_format', path: ['steps', 0, 'text'] },
@@ -73,7 +74,7 @@ const INVALID_PLAN_REASONS = {
   'plan-invalid-missing-action.json': { code: 'invalid_union', path: ['steps', 0, 'action'] },
   'plan-invalid-missing-check.json': { code: 'invalid_union', path: ['steps', 0, 'check'] },
   'plan-invalid-missing-kind.json': { code: 'invalid_union', path: ['steps', 0, 'kind'] },
-  'plan-invalid-missing-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'target', 'strategy'] },
+  'plan-invalid-missing-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'element', 'strategy'] },
   'plan-invalid-secret-ref-embedded.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
   'plan-invalid-secret-ref-invalid-character.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
   'plan-invalid-secret-ref-missing-braces.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
@@ -84,7 +85,7 @@ const INVALID_PLAN_REASONS = {
   'plan-invalid-unknown-check.json': { code: 'invalid_union', path: ['steps', 0, 'check'] },
   'plan-invalid-unknown-kind.json': { code: 'invalid_union', path: ['steps', 0, 'kind'] },
   'plan-invalid-unknown-plan-property.json': { code: 'unrecognized_keys', path: [], key: 'unexpected' },
-  'plan-invalid-unknown-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'target', 'strategy'] },
+  'plan-invalid-unknown-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'element', 'strategy'] },
   'plan-invalid-unknown-target-property.json': { code: 'unrecognized_keys', path: ['targets', 'app'], key: 'unexpected' },
   'plan-invalid-wrong-field-type.json': { code: 'invalid_type', path: ['steps', 0, 'url'] },
 } as const satisfies Record<string, InvalidPlanReason>;
@@ -112,7 +113,7 @@ describe('IR JSON Schema corpus equivalence', () => {
   });
 
   // SPEC-C1 C1-1
-  it.each(corpus.filter((fixture) => fixture.document === 'plan' && fixture.expected === 'invalid'))(
+  it.each(corpus.filter((fixture) => fixture.document === 'plan' && fixture.expected === 'invalid' && fixture.name !== 'plan-invalid-v3-retired.json'))(
     '$name remains invalid for a schema reason other than the retired schemaVersion literal',
     (fixture) => {
       const result = PlanDocument.safeParse(fixture.value);
@@ -171,8 +172,8 @@ describe('IR JSON Schema documents', () => {
       getPlanJsonSchema,
       {
         // SPEC-C1 C1-2
-        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json',
-        title: 'ambercast plan schema v3',
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json',
+        title: 'ambercast plan schema v4',
         description: 'Validates the complete generated plan document that is reviewed and committed beside its source test prompt.',
       },
     ],
@@ -180,8 +181,8 @@ describe('IR JSON Schema documents', () => {
       'grounding',
       getGroundingJsonSchema,
       {
-        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json',
-        title: 'ambercast grounding schema v1',
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json',
+        title: 'ambercast grounding schema v2',
         description: 'Validates the committed grounding cache associated with one plan digest.',
       },
     ],
@@ -194,14 +195,15 @@ describe('IR JSON Schema documents', () => {
   });
 
   // SPEC-C1 C1-2
-  it('publishes Plan v3 instruction coverage and additive Grounding-v1 trace coverage', () => {
-    const planV3 = {
-      schemaVersion: 3,
+  it('publishes Plan v4 instruction coverage and Grounding-v2 trace coverage (SPEC-1, SPEC-3, SPEC-7)', () => {
+    const planV4 = {
+      schemaVersion: 4,
       source: { inputsDigest: 'a'.repeat(64) },
-      targets: { app: { baseUrl: 'https://example.test', browser: 'chromium' } },
+      targets: { app: { surface: 'web', baseUrl: 'https://example.test' } },
       steps: [{
         id: 'reach-dashboard',
         kind: 'ai',
+        target: 'app',
         instruction: 'Reach the dashboard.',
         instructionCoverage: [{
           id: 'dashboard-reached',
@@ -210,8 +212,8 @@ describe('IR JSON Schema documents', () => {
         }],
       }],
     };
-    const coveredGroundingV1 = {
-      schemaVersion: 1,
+    const coveredGroundingV2 = {
+      schemaVersion: 2,
       planDigest: 'b'.repeat(64),
       entries: {
         'reach-dashboard': {
@@ -225,15 +227,15 @@ describe('IR JSON Schema documents', () => {
       },
     };
 
-    expect(PlanDocument.safeParse(planV3).success).toBe(true);
-    expect(validators.plan(planV3)).toBe(true);
-    const { instructionCoverage: _coverage, ...aiStepWithoutCoverage } = planV3.steps[0]!;
-    const planWithoutCoverage = { ...planV3, steps: [aiStepWithoutCoverage] };
+    expect(PlanDocument.safeParse(planV4).success).toBe(true);
+    expect(validators.plan(planV4)).toBe(true);
+    const { instructionCoverage: _coverage, ...aiStepWithoutCoverage } = planV4.steps[0]!;
+    const planWithoutCoverage = { ...planV4, steps: [aiStepWithoutCoverage] };
     expect(PlanDocument.safeParse(planWithoutCoverage).success).toBe(false);
     expect(validators.plan(planWithoutCoverage)).toBe(false);
-    expect(PlanDocument.safeParse({ ...planV3, schemaVersion: 1 }).success).toBe(false);
-    expect(validators.plan({ ...planV3, schemaVersion: 1 })).toBe(false);
-    expect(GroundingDocument.safeParse(coveredGroundingV1).success).toBe(true);
-    expect(validators.grounding(coveredGroundingV1)).toBe(true);
+    expect(PlanDocument.safeParse({ ...planV4, schemaVersion: 3 }).success).toBe(false);
+    expect(validators.plan({ ...planV4, schemaVersion: 3 })).toBe(false);
+    expect(GroundingDocument.safeParse(coveredGroundingV2).success).toBe(true);
+    expect(validators.grounding(coveredGroundingV2)).toBe(true);
   });
 });

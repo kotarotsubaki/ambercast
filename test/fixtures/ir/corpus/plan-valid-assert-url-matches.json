@@ -2,11 +2,24 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "baseUrl": "https://example.test",
+        "surface": "web"
+      }
+    },
     "steps": [
-      { "id": "dashboard-url", "kind": "assert", "check": "url-matches", "pattern": "/dashboard$" }
+      {
+        "id": "dashboard-url",
+        "kind": "assert",
+        "check": "url-matches",
+        "pattern": "/dashboard$",
+        "target": "app"
+      }
     ]
   }
 }

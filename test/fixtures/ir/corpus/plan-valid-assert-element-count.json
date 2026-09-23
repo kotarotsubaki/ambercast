@@ -2,11 +2,29 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "baseUrl": "https://example.test",
+        "surface": "web"
+      }
+    },
     "steps": [
-      { "id": "one-alert", "kind": "assert", "check": "element-count", "target": { "strategy": "accessibility", "role": "alert", "name": "Status" }, "count": 1 }
+      {
+        "id": "one-alert",
+        "kind": "assert",
+        "check": "element-count",
+        "count": 1,
+        "element": {
+          "strategy": "accessibility",
+          "role": "alert",
+          "name": "Status"
+        },
+        "target": "app"
+      }
     ]
   }
 }

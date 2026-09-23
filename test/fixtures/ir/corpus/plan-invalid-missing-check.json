@@ -2,9 +2,23 @@
   "document": "plan",
   "expected": "invalid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": {},
-    "steps": [{ "id": "missing-check", "kind": "assert", "text": "Ready" }]
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "surface": "web",
+        "baseUrl": "https://example.test"
+      }
+    },
+    "steps": [
+      {
+        "id": "missing-check",
+        "kind": "assert",
+        "text": "Ready",
+        "target": "app"
+      }
+    ]
   }
 }

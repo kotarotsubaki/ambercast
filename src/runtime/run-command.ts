@@ -66,8 +66,6 @@ export interface RunCommandInput {
   /** Optional already-validated path filter supplied by the CLI parser. */
   readonly grep?: RegExp;
 
-  /** Optional configured target override. */
-  readonly target?: string;
 
   /** Whether browser construction should request visible execution. */
   readonly headed: boolean;
@@ -256,7 +254,6 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
       }, {
         files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
         ...(input.grep === undefined ? {} : { grep: input.grep }),
-        ...(input.target === undefined ? {} : { target: input.target }),
         resolve: input.resolve,
         updateCache: input.updateCache,
         allowEmpty: input.allowEmpty,

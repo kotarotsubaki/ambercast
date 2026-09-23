@@ -2,7 +2,7 @@
 
 ## Inputs digest {#inputs-digest}
 
-`inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`. Member insertion order has no meaning because canonical JSON sorts object keys. [repo:src/core/ir/digest.ts:93] [repo:src/core/ir/digest.ts:105] [repo:src/core/ir/canonical-json.ts:147] The input object itself MUST NOT be hashed directly. [repo:src/core/ir/digest.ts:97] The producer-bundle fingerprint independently represents plan-semantic producer configuration, so template bytes alone are insufficient. [repo:src/core/ir/digest.ts:70]
+`inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`. Only referenced Target definitions from `Plan.targets` are projected into `targetDefinitions`, sorted by name. Changing an unreferenced Target does not stale the plan or change its digest. The config `browser` value is not included in the digest. Member insertion order has no meaning because canonical JSON sorts object keys. [repo:src/core/ir/digest.ts:93] [repo:src/core/ir/digest.ts:105] [repo:src/core/ir/canonical-json.ts:147] The input object itself MUST NOT be hashed directly. [repo:src/core/ir/digest.ts:97] The producer-bundle fingerprint independently represents plan-semantic producer configuration, so template bytes alone are insufficient. [repo:src/core/ir/digest.ts:70]
 
 ## Plan digest {#plan-digest}
 
@@ -39,4 +39,4 @@ The problem is deciding whether a derived plan still represents the inputs and p
 
 The chosen closed preimage includes producer-bundle provenance and a separate plan-to-grounding digest join. It makes every invalidation input explicit and preserves a one-plan/one-current-grounding association. 
 
-One rejected alternative omitted producer provenance; it was rejected because changed generation behavior could masquerade as fresh. Another used timestamps; it was rejected because they neither identify content nor permit deterministic cache reuse.  
+One rejected alternative omitted producer provenance; it was rejected because changed generation behavior could masquerade as fresh. Another used timestamps; it was rejected because they neither identify content nor permit deterministic cache reuse.

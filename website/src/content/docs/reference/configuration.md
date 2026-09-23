@@ -17,7 +17,7 @@ A supplied `targets` object replaces, rather than deep-merges with, default targ
 
 ## Targets {#targets}
 
-A target configuration supplies a browser destination; its `healReplayIsolation` and `resolveTimeoutMs` settings are resolved live (before heal, and before element resolution respectively) and are not Plan or inputs-digest fields.
+A target configuration supplies a web surface and a browser destination; its `healReplayIsolation` and `resolveTimeoutMs` settings are resolved live (before heal, and before element resolution respectively) and are not Plan or inputs-digest fields.
 
 ## Key table {#key-table}
 
@@ -29,12 +29,14 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher; every pattern must end in `.test.md` or config loading fails with `CONFIG_INVALID` | generate, run, check, heal discovery |
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | excludes after inclusion match | generate, run, check, heal discovery |
 | `secrets.allow` | `SecretName[] \| "*"` | `[]` | an empty array requires consent for every secret name; `"*"` allows every name without consent (not recommended); a non-empty array allows exactly those names | generate, run, heal |
-| `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate, run, check, heal target selection |
-| `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | target field | generate, run, heal browser composition; check (freshness) |
+| `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate input; run, check, heal referenced Plan targets |
+| `targets.<name>.surface` | `web` | `web` | only `web` in TP1 | generate and Plan target definition |
+| `targets.<name>.description` | string | absent | optional generation context | generate |
+| `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | live executor setting; excluded from Plan digest | run and heal browser composition |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |
-| `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires selected `idempotent` target | heal |
+| `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires every Plan-referenced target to be `idempotent` | heal |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
-| `defaultTarget` | string | `web-user` | must resolve to a target | generate, run, check, heal target selection |
+| `defaultTarget` | string | `web-user` | must resolve to a target; generator uses it when the prompt does not identify a step Target | generate |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `600000` | positive | generate; run fallback; heal |

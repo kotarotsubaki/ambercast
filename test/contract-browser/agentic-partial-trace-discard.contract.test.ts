@@ -59,7 +59,7 @@ async function waitForFile(path: string): Promise<void> {
 async function writeFixture(project: string, baseUrl: string): Promise<string> {
   const tests = join(project, 'tests');
   await mkdir(tests);
-  const targets = { fixture: { baseUrl, browser: 'chromium' } } as const satisfies Record<string, TargetDefinition>;
+  const targets = { fixture: { surface: 'web', baseUrl } } as const satisfies Record<string, TargetDefinition>;
   const plan = PlanDocument.parse({
     schemaVersion: 3,
     source: {

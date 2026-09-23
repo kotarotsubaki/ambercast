@@ -9,7 +9,7 @@ Expect to land on the dashboard and see a "Welcome" heading.`;
 
 /** The schema-validated plan rendered by the landing-page demonstration. */
 export const demoPlan = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   source: {
     inputsDigest: '0000000000000000000000000000000000000000000000000000000000000000',
   },
@@ -18,17 +18,19 @@ export const demoPlan = {
       action: 'navigate',
       id: 'open-login',
       kind: 'action',
+      target: 'app',
       url: 'https://example.test/login',
     },
     {
       action: 'fill',
-      id: 'fill-email',
-      kind: 'action',
-      target: {
+      element: {
         name: 'Email',
         role: 'textbox',
         strategy: 'accessibility',
       },
+      id: 'fill-email',
+      kind: 'action',
+      target: 'app',
       value: 'mika@example.com',
     },
     {
@@ -36,39 +38,43 @@ export const demoPlan = {
       id: 'fill-password',
       kind: 'action',
       secretRef: '{{secrets.password}}',
-      target: {
+      element: {
         name: 'Password',
         role: 'textbox',
         strategy: 'accessibility',
       },
+      target: 'app',
     },
     {
       action: 'click',
       id: 'click-sign-in',
       kind: 'action',
-      target: {
+      element: {
         name: 'Sign in',
         role: 'button',
         strategy: 'accessibility',
       },
+      target: 'app',
     },
     {
       check: 'url-matches',
       id: 'assert-dashboard-url',
       kind: 'assert',
       pattern: '/dashboard$',
+      target: 'app',
     },
     {
       check: 'text-visible',
       id: 'assert-welcome-mika',
       kind: 'assert',
       text: 'Welcome, Mika',
+      target: 'app',
     },
   ],
   targets: {
     app: {
       baseUrl: 'https://example.test',
-      browser: 'chromium',
+      surface: 'web',
     },
   },
 } satisfies PlanDocument;

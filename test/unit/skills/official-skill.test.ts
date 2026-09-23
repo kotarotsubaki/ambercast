@@ -304,7 +304,7 @@ describe('official ambercast skill', () => {
       .map(([, command, options]) => [command!.toLowerCase(), new Set(extractFlagTokens(options!))]));
     expect(sections.get('run')).toContain('--ai');
     expect(usage!.match(/Run options:\n([^\n]+)\n([^\n]+)/)?.slice(1)).toStrictEqual([
-      '  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list',
+      '  --grep <pattern>  --headed  --resolve  --update-cache  --allow-empty  --list',
       '  --stale <fail>  --ai <claude|codex>  --json  --no-color',
     ]);
 

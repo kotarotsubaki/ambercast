@@ -6,7 +6,7 @@ export interface BrowserDriverContractHarness {
   dispose?(): void | Promise<void>;
 }
 
-const TARGET = { baseUrl: 'https://example.test', browser: 'chromium' } as const;
+const TARGET = { surface: 'web', baseUrl: 'https://example.test' } as const;
 
 export function registerBrowserDriverContract(harness: BrowserDriverContractHarness): void {
   describe('BrowserDriver contract', () => {

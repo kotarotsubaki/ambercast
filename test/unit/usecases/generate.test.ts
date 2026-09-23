@@ -83,8 +83,8 @@ afterEach(() => {
 
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
-const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
+const TARGETS = { web: { surface: 'web' as const, baseUrl: 'https://example.test' } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
@@ -94,6 +94,7 @@ const coveredResponse = {
   steps: [{
     id: 'reach-dashboard',
     kind: 'ai',
+    target: 'web',
     instruction: 'Reach the dashboard.',
     instructionCoverage: [{
       id: 'dashboard-reached',
@@ -211,7 +212,7 @@ function createScenario(overrides: Partial<GenerateDeps> = {}) {
     layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
     resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
     events: events.sink,
-    clock: { now: () => new Date(0), monotonicMs: () => 0 },
+    clock: { now: () => new Date(0), monotonicMs: () => 0, sleep: async () => undefined },
     allocateCallId: createCallIdAllocator(),
     discoverTestFiles: vi.fn(async () => ['login.test.md']),
     config: {
@@ -240,6 +241,7 @@ function sequenceClock(readings: readonly number[]): Clock {
   let index = 0;
   return {
     now: () => new Date(0),
+    sleep: async () => undefined,
     monotonicMs() {
       const reading = readings[index];
       index += 1;
@@ -315,17 +317,21 @@ async function createFreshPlan(
 ): Promise<PlanDocument> {
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
+  const referencedTargetNames = new Set(steps.map((step) => step.target));
+  const planTargets = Object.fromEntries(
+    Object.entries(targetDefinitions).filter(([name]) => referencedTargetNames.has(name)),
+  ) as PlanDocument['targets'];
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundle.planProducerBundleFingerprint(),
-    targetDefinitions,
+    targetDefinitions: planTargets,
   });
   const plan = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: { inputsDigest },
-    targets: targetDefinitions,
+    targets: planTargets,
     steps: [...steps],
   } as unknown as PlanDocument;
 
@@ -341,7 +347,7 @@ async function seedFreshArtifacts(
 ): Promise<void> {
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const plan = await createFreshPlan(storage, testPath, steps, targetDefinitions);
-  const grounding: GroundingDocument = { schemaVersion: 1, planDigest: computePlanDigest(plan), entries: {} };
+  const grounding: GroundingDocument = { schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} };
 
   await storage.writeText(
     layout.groundingPathFor(testPath),
@@ -390,7 +396,7 @@ describe('generate', () => {
       const planText = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
       const plan = JSON.parse(planText) as Record<string, unknown>;
       expect(plan).toMatchObject({
-        schemaVersion: 3,
+        schemaVersion: 4,
         steps: [{
           id: 'reach-dashboard',
           kind: 'ai',
@@ -416,7 +422,7 @@ describe('generate', () => {
     ], ['verificationIntent', 1, 'criterionId'], 'intent-id-duplicate'],
     ['unsupported assertion shape', [{
       criterionId: 'dashboard-reached',
-      assertion: { type: 'assert', check: 'element-count', target: PASSWORD_TARGET, min: 0 },
+      assertion: { type: 'assert', check: 'element-count', element: PASSWORD_TARGET, min: 0 },
     }], ['verificationIntent', 0, 'assertion'], 'intent-assertion-unsupported'],
     ['terminal url intent', [{ criterionId: 'dashboard-reached', assertion: { type: 'assert', check: 'url-matches', pattern: '/dashboard$' } }], ['verificationIntent', 0, 'assertion'], 'terminal-url-matches-forbidden'],
   ] as const)(
@@ -517,7 +523,7 @@ describe('generate', () => {
   });
 
   it('redacts the dynamic target name and field when final PlanDocument validation rejects a target', async () => {
-    const response = { steps: [], ambiguities: [] } as GeneratedPlanResponse;
+    const response = { steps: [{ id: 'visit', kind: 'action', target: 'web', action: 'navigate', url: '/' }], ambiguities: [] } as GeneratedPlanResponse;
     const raw = 'RAW:target-plan-failure';
     const { deps, recordingStorage } = createScenario({
       resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw }) }),
@@ -549,6 +555,7 @@ describe('generate', () => {
       steps: [{
         id: 'reach-dashboard',
         kind: 'ai',
+        target: 'web',
         instruction: 'Reach the dashboard.',
         instructionCoverage: [
           {
@@ -705,9 +712,9 @@ describe('generate', () => {
 
   it.each([
     ['text-visible', { type: 'assert', check: 'text-visible', text: 'Dashboard' }],
-    ['text-equals', { type: 'assert', check: 'text-equals', target: PASSWORD_TARGET, text: 'Dashboard' }],
-    ['element-visible', { type: 'assert', check: 'element-visible', target: PASSWORD_TARGET }],
-    ['element-count exact zero', { type: 'assert', check: 'element-count', target: PASSWORD_TARGET, count: 0 }],
+    ['text-equals', { type: 'assert', check: 'text-equals', element: PASSWORD_TARGET, text: 'Dashboard' }],
+    ['element-visible', { type: 'assert', check: 'element-visible', element: PASSWORD_TARGET }],
+    ['element-count exact zero', { type: 'assert', check: 'element-count', element: PASSWORD_TARGET, count: 0 }],
   ] as const)('accepts provider terminal intent vocabulary %s', async (_name, assertion) => {
     const response = {
       ...coveredResponse,
@@ -741,11 +748,12 @@ describe('generate', () => {
     await generate(deps, DEFAULT_OPTIONS);
 
     expect(request?.prompt).toBe(
-      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan.`,
+      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan. Assign target: web to every step. Do not report target ambiguity.`, // SPEC-11
     );
     expect(request?.context).toEqual({
       testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
       targets: TARGETS,
+      defaultTarget: 'web',
       allowedSecretNames: [], // SPEC-C1 C1-10
     });
     expect(request?.responseSchema).toMatchObject({
@@ -841,12 +849,7 @@ describe('generate', () => {
 
     const plan = PlanDocument.parse(JSON.parse(await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.plan.json`)));
     expect(plan.targets).toEqual({
-      web: {
-        baseUrl: targets.web.baseUrl,
-        browser: targets.web.browser,
-        secretSinkOrigins: targets.web.secretSinkOrigins,
-      },
-    });
+    }); // SPEC-13: the empty response references no target.
   });
 
   it.each([
@@ -1025,7 +1028,7 @@ describe('generate', () => {
     });
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(JSON.parse(await recordingStorage.storage.readText(`${TEST_DIR}/first.ambercast.grounding.json`))).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       planDigest: computePlanDigest(firstPlan),
       entries: {},
     });
@@ -1256,6 +1259,7 @@ describe('generate', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: 'reach-dashboard',
       kind: 'ai',
+      target: 'web',
       instruction: 'Reach the dashboard.',
       instructionCoverage: [{
         id: 'dashboard-reached',
@@ -1343,7 +1347,8 @@ describe('generate', () => {
       id: 'fill-password',
       kind: 'action',
       action: 'fill-secret',
-      target: PASSWORD_TARGET,
+      target: 'web',
+      element: PASSWORD_TARGET,
       secretRef,
     }]);
     scenario.recordingStorage.reset();
@@ -1383,10 +1388,10 @@ describe('generate', () => {
     const { deps, recordingStorage, execute } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
-      { id: 'z-first', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Z first' }, secretRef: '{{secrets.Z}}' },
-      { id: 'z-second', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Z second' }, secretRef: '{{secrets.Z}}' },
-      { id: 'a-first', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'A first' }, secretRef: '{{secrets.a}}' },
-      { id: 'a-second', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'A second' }, secretRef: '{{secrets.a}}' },
+      { id: 'z-first', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Z first' }, secretRef: '{{secrets.Z}}' },
+      { id: 'z-second', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Z second' }, secretRef: '{{secrets.Z}}' },
+      { id: 'a-first', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'A first' }, secretRef: '{{secrets.a}}' },
+      { id: 'a-second', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'A second' }, secretRef: '{{secrets.a}}' },
     ] as unknown as Step[]);
     recordingStorage.reset();
 
@@ -1434,7 +1439,7 @@ describe('generate', () => {
       readonly entries: unknown;
     };
     expect(rewrittenGrounding).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2, // SPEC-3: a v1 cache is replaced by the current v2 cache.
       planDigest: computePlanDigest(plan),
     });
     expect(rewrittenGrounding.entries).toStrictEqual({});
@@ -1541,20 +1546,14 @@ describe('generate', () => {
     };
     expect(Object.keys(context.targets)).toEqual(['replacement']);
     expect(context.targets.replacement).toEqual({
+      surface: 'web',
       baseUrl: soleTargets.replacement.baseUrl,
-      browser: soleTargets.replacement.browser,
     });
     expect(context.targets.replacement).not.toHaveProperty('healReplayIsolation');
     const plan = PlanDocument.parse(JSON.parse(
       await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.plan.json`),
     ));
-    expect(Object.keys(plan.targets)).toEqual(['replacement']);
-    expect(plan.targets).toEqual({
-      replacement: {
-        baseUrl: soleTargets.replacement.baseUrl,
-        browser: soleTargets.replacement.browser,
-      },
-    });
+    expect(plan.targets).toEqual({}); // SPEC-13: the empty response references no target.
   });
 
   it.each([
@@ -1571,22 +1570,6 @@ describe('generate', () => {
       { target: 'missing' },
       'The requested target is not configured.',
       { target: 'missing' },
-    ],
-    [
-      'an ambiguous implicit target',
-      {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: [],
-        targets: {
-          web: RESOLVED_TARGETS.web,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-        },
-        ai: { provider: 'codex' as const, timeoutMs: 100, maxGenerateAttempts: 2 },
-      },
-      {},
-      'A target could not be selected from the configured targets.',
-      { target: '(default)', targetNames: ['admin', 'web'] },
     ],
   ] as const)('records two ordered shared failures for %s without downstream work', async (
     _description,
@@ -1624,6 +1607,26 @@ describe('generate', () => {
     expect(recordingStorage.writes).toEqual([]);
     expect(execute).not.toHaveBeenCalled();
     expect(events.emitted()).toEqual([]);
+  });
+
+  it('offers all configured targets without a default to the generator (SPEC-8, SPEC-11, SPEC-12)', async () => {
+    const scenario = createScenario({ config: {
+      testDir: TEST_DIR,
+      testMatch: ['**/*.test.md'],
+      testIgnore: [],
+      targets: {
+        web: RESOLVED_TARGETS.web,
+        admin: { surface: 'web', baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+      },
+      ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
+    } });
+    await writePrompt(scenario.recordingStorage.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    const context = scenario.execute.mock.calls[0]?.[0].context as Record<string, unknown>;
+    expect(Object.keys(context.targets as object).sort()).toEqual(['admin', 'web']);
+    expect(context).not.toHaveProperty('defaultTarget');
   });
 
   it('rejects an inherited explicit target without falling back to a valid own default', async () => {
@@ -1708,26 +1711,25 @@ describe('generate', () => {
 
     expect(execute).toHaveBeenCalledOnce();
     const expectedDefinition = {
+      surface: 'web',
       baseUrl: targets[expectedName].baseUrl,
-      browser: targets[expectedName].browser,
     };
     const otherName = expectedName === 'web' ? 'admin' : 'web';
     const context = execute.mock.calls[0]?.[0].context as {
       readonly targets: GenerateDeps['config']['targets'];
     };
-    expect(Object.keys(context.targets)).toEqual([expectedName]);
+    expect(Object.keys(context.targets)).toEqual(target === undefined ? ['web', 'admin'] : [expectedName]); // SPEC-11
     expect(context.targets[expectedName]).toEqual(expectedDefinition);
     expect(context.targets[expectedName]).not.toHaveProperty('healReplayIsolation');
-    expect(Object.hasOwn(context.targets, otherName)).toBe(false);
+    expect(Object.hasOwn(context.targets, otherName)).toBe(target === undefined); // SPEC-11
     const plan = PlanDocument.parse(JSON.parse(
       await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.plan.json`),
     ));
-    expect(Object.keys(plan.targets)).toEqual([expectedName]);
-    expect(plan.targets[expectedName]).toEqual(expectedDefinition);
+    expect(Object.keys(plan.targets)).toEqual([]); // SPEC-13: the empty response references no target.
     expect(Object.hasOwn(plan.targets, otherName)).toBe(false);
   });
 
-  it('regenerates for a changed selected target but ignores an unrelated target change', async () => {
+  it('regenerates for a changed referenced target but ignores an unrelated target change (SPEC-5)', async () => {
     const selectedChanged = {
       web: { baseUrl: 'https://changed.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
       admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
@@ -1748,7 +1750,9 @@ describe('generate', () => {
       },
     });
     const changedPath = await writePrompt(changedScenario.recordingStorage.storage);
-    await createFreshPlan(changedScenario.recordingStorage.storage, changedPath, [], TARGETS);
+    await createFreshPlan(changedScenario.recordingStorage.storage, changedPath, [
+      { id: 'visit', kind: 'action', target: 'web', action: 'navigate', url: '/' } as Step,
+    ], TARGETS);
     changedScenario.recordingStorage.reset();
 
     await expect(generate(changedScenario.deps, DEFAULT_OPTIONS)).resolves.toMatchObject({
@@ -1767,7 +1771,9 @@ describe('generate', () => {
       },
     });
     const unrelatedPath = await writePrompt(unrelatedScenario.recordingStorage.storage);
-    await createFreshPlan(unrelatedScenario.recordingStorage.storage, unrelatedPath, [], TARGETS);
+    await createFreshPlan(unrelatedScenario.recordingStorage.storage, unrelatedPath, [
+      { id: 'visit', kind: 'action', target: 'web', action: 'navigate', url: '/' } as Step,
+    ], TARGETS);
     unrelatedScenario.recordingStorage.reset();
 
     await expect(generate(unrelatedScenario.deps, DEFAULT_OPTIONS)).resolves.toMatchObject({
@@ -2078,7 +2084,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 1, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 2, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -2103,7 +2109,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 1, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 2, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -2151,17 +2157,17 @@ describe('generate', () => {
     expect(recordingStorage.writes).toEqual([expect.objectContaining({ path: groundingPath })]);
   });
 
-  it('preserves provider ambiguities for generated and previewed plans regardless of strict policy', async () => {
+  it('rejects provider ambiguities before generated or previewed plans are written (SPEC-12)', async () => {
     const { deps, recordingStorage } = createScenario({
       resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: { steps: [], ambiguities: ['unclear target'] }, raw: '{...}' }) }),
     });
     await writePrompt(recordingStorage.storage);
 
     await expect(generate(deps, { ...DEFAULT_OPTIONS, strict: true })).resolves.toMatchObject({
-      results: [{ status: 'generated', ambiguities: ['unclear target'] }],
+      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
     });
     await expect(generate(deps, { ...DEFAULT_OPTIONS, dryRun: true, strict: false, force: true })).resolves.toMatchObject({
-      results: [{ status: 'would-generate', ambiguities: ['unclear target'] }],
+      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
     });
   });
 
@@ -2210,8 +2216,8 @@ describe('generate', () => {
   it('classifies duplicate assembled plan step IDs as a final PlanDocument validation failure', async () => {
     const duplicateResponse: GeneratedPlanResponse = {
       steps: [
-        { id: 'open-home', kind: 'action', action: 'navigate', url: 'https://example.test/one' },
-        { id: 'open-home', kind: 'action', action: 'navigate', url: 'https://example.test/two' },
+        { id: 'open-home', kind: 'action', action: 'navigate', target: 'web', url: 'https://example.test/one' },
+        { id: 'open-home', kind: 'action', action: 'navigate', target: 'web', url: 'https://example.test/two' },
       ],
       ambiguities: [],
     };
@@ -2235,7 +2241,8 @@ describe('generate', () => {
         id: 'fill-password',
         kind: 'action',
         action: 'fill-secret',
-        target: PASSWORD_TARGET,
+        target: 'web',
+        element: PASSWORD_TARGET,
         secret: { nameHint: 'login_password' },
       }],
       ambiguities: [],
@@ -2307,7 +2314,12 @@ describe('generate', () => {
     const liveInputs = vi.spyOn(planProducerBundle, 'liveProducerBundleInputs')
       .mockReturnValueOnce(firstSnapshot)
       .mockReturnValueOnce(secondSnapshot);
-    const { deps, recordingStorage } = createScenario();
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({
+        data: { steps: [{ id: 'visit', kind: 'action', target: 'web', action: 'navigate', url: '/' }], ambiguities: [] },
+        raw: 'named',
+      }) }),
+    });
     const testPath = await writePrompt(recordingStorage.storage);
 
     try {
@@ -2325,7 +2337,7 @@ describe('generate', () => {
       });
       expect(artifact.source.inputsDigest).toBe(computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 3,
+        schemaVersion: 4,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: firstFingerprint,
         targetDefinitions: TARGETS,
@@ -2690,11 +2702,12 @@ describe('generate', () => {
       expect(execute).toHaveBeenCalledTimes(2);
       expect(aiCallEvents(events.emitted())).toHaveLength(2);
       expect(aiEvents(events.emitted())).toHaveLength(4);
-      expect(Object.keys(firstContext)).toEqual(['testMd', 'targets', 'allowedSecretNames']); // SPEC-C1 C1-10
-      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'allowedSecretNames', 'previousAttempts']); // SPEC-C1 C1-10
+      expect(Object.keys(firstContext)).toEqual(['testMd', 'targets', 'defaultTarget', 'allowedSecretNames']); // SPEC-11
+      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'defaultTarget', 'allowedSecretNames', 'previousAttempts']); // SPEC-11
       expect(secondContext).toEqual({
         testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
         targets: TARGETS,
+        defaultTarget: 'web', // SPEC-11
         allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [{
           attempt: 1,
@@ -2735,6 +2748,7 @@ describe('generate', () => {
       expect(thirdContext).toEqual({
         testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
         targets: TARGETS,
+        defaultTarget: 'web', // SPEC-11
         allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [
           {
@@ -2904,10 +2918,11 @@ describe('generate', () => {
 
       expect(outcome.results).toMatchObject([{ status: 'generated' }]);
       expect(execute).toHaveBeenCalledTimes(2);
-      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'allowedSecretNames', 'previousAttempts']); // SPEC-C1 C1-10
+      expect(Object.keys(secondContext)).toEqual(['testMd', 'targets', 'defaultTarget', 'allowedSecretNames', 'previousAttempts']); // SPEC-11
       expect(secondContext).toEqual({
         testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
         targets: TARGETS,
+        defaultTarget: 'web', // SPEC-11
         allowedSecretNames: [], // SPEC-C1 C1-10
         previousAttempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }],
       });
@@ -3203,13 +3218,14 @@ describe('generate', () => {
 
 describe('generate secret naming and consent boundaries', () => {
   const namedResponse = (secret: unknown): GeneratedPlanResponse => ({
-    steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD_TARGET, ...(secret === undefined ? {} : { secret }) }],
+    steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD_TARGET, ...(secret === undefined ? {} : { secret }) }],
     ambiguities: [],
   } as unknown as GeneratedPlanResponse);
 
   const committedAiSecretStep = (name: string): Step => ({
     id: 'fill-password',
-    kind: 'ai',
+      kind: 'ai',
+      target: 'web',
     instruction: 'Reach the dashboard.',
     secrets: [{ ref: `{{secrets.${name}}}` }],
     instructionCoverage: [{
@@ -3261,13 +3277,13 @@ describe('generate secret naming and consent boundaries', () => {
   it('retries provider naming violation secret-conflicting-target-names as AI_RESPONSE_INVALID', async () => {
     const conflictingResponse = {
       steps: [
-        { id: 'first-name', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Account' } },
-        { id: 'other-target', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Password' } },
+        { id: 'first-name', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Account' } },
+        { id: 'other-target', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Password' } },
         {
           id: 'conflicting-later',
           kind: 'action',
           action: 'fill-secret',
-          target: { ...PASSWORD_TARGET, name: 'Account' },
+          target: 'web', element: { ...PASSWORD_TARGET, name: 'Account' },
           secret: { allowedName: 'password' },
         },
       ],
@@ -3343,8 +3359,8 @@ describe('generate secret naming and consent boundaries', () => {
 
   it('treats environment-name collisions as terminal and omits them from retry feedback', async () => {
     const response = { steps: [
-      { id: 'fill-one', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Token one' }, secret: { nameHint: 'token_one' } },
-      { id: 'fill-two', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Token two' }, secret: { nameHint: 'token_two' } },
+      { id: 'fill-one', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Token one' }, secret: { nameHint: 'token_one' } },
+      { id: 'fill-two', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Token two' }, secret: { nameHint: 'token_two' } },
     ], ambiguities: [] } as unknown as GeneratedPlanResponse;
     const execute = vi.fn(async () => ({ data: response, raw: 'collision' }));
     const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
@@ -3371,8 +3387,8 @@ describe('generate secret naming and consent boundaries', () => {
     const scenario = createScenario();
     const file = await writePrompt(scenario.recordingStorage.storage);
     await seedFreshArtifacts(scenario.recordingStorage.storage, file, [
-      { id: 'fill-dot', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Dot' }, secretRef: '{{secrets.foo.bar}}' },
-      { id: 'fill-underscore', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Underscore' }, secretRef: '{{secrets.foo_bar}}' },
+      { id: 'fill-dot', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Dot' }, secretRef: '{{secrets.foo.bar}}' },
+      { id: 'fill-underscore', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Underscore' }, secretRef: '{{secrets.foo_bar}}' },
     ] as unknown as Step[]);
     const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
     const commitAllowlist = vi.fn(async () => undefined);
@@ -3435,7 +3451,8 @@ describe('generate secret naming and consent boundaries', () => {
           id: 'fill-password',
           kind: 'action',
           action: 'fill-secret',
-          target: PASSWORD_TARGET,
+          target: 'web',
+          element: PASSWORD_TARGET,
           secret: { nameHint: 'password' },
         },
       ],
@@ -3579,8 +3596,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('rejects a simultaneous cross-occurrence rename set whose destinations collide as environment variables', async () => {
     const response = {
       steps: [
-        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
-        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
+        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
+        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -3634,8 +3651,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('keeps an unedited use at a merged destination marked with its original selection source', async () => {
     const response = {
       steps: [
-        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
-        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
+        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
+        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -3795,7 +3812,8 @@ describe('generate secret naming and consent boundaries', () => {
       id: 'fill-password',
       kind: 'action',
       action: 'fill-secret',
-      target: PASSWORD_TARGET,
+      target: 'web',
+      element: PASSWORD_TARGET,
       secretRef: '{{secrets.password}}',
     }] as unknown as Step[]);
     const planPath = scenario.deps.layout.planPathFor(file);
@@ -3923,7 +3941,8 @@ describe('generate secret naming and consent boundaries', () => {
       id: 'fill-password',
       kind: 'action',
       action: 'fill-secret',
-      target: previousTarget,
+      target: 'web',
+      element: previousTarget,
       secretRef: '{{secrets.password}}',
     }] as unknown as Step[]);
 
@@ -4344,8 +4363,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('reports the exact not-interactive consent remedy and ordered multi-use details', async () => {
     const response = {
       steps: [
-        { id: 'fill-first', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'First' }, secret: { nameHint: 'first_name' } },
-        { id: 'fill-second', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Second' }, secret: { nameHint: 'second_name' } },
+        { id: 'fill-first', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'First' }, secret: { nameHint: 'first_name' } },
+        { id: 'fill-second', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Second' }, secret: { nameHint: 'second_name' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -4374,8 +4393,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('commits every final candidate name when a concurrently held config removes an initially allowed name', async () => {
     const response = {
       steps: [
-        { id: 'fill-retained', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Retained' }, secret: { nameHint: 'retained' } },
-        { id: 'fill-added', kind: 'action', action: 'fill-secret', target: { ...PASSWORD_TARGET, name: 'Added' }, secret: { nameHint: 'added' } },
+        { id: 'fill-retained', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Retained' }, secret: { nameHint: 'retained' } },
+        { id: 'fill-added', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Added' }, secret: { nameHint: 'added' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -4416,7 +4435,7 @@ describe('generate interruption contract', () => {
   it('keeps every started duplicate as an individual skipped row when interruption lands at the in-flight consent gate', async () => {
     const controller = new AbortController();
     const response = {
-      steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD_TARGET }],
+      steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD_TARGET }],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
     const execute = vi.fn(async () => ({ data: response, raw: 'named' }));

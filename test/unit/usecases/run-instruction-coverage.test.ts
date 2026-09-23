@@ -31,8 +31,8 @@ const TEST_DIR = '/workspace/instruction-coverage';
 const RUNS_DIR = `${TEST_DIR}/.runs`;
 const TEST_PATH = `${TEST_DIR}/covered.test.md`;
 const PROMPT = '# Covered replay\n\nReach the dashboard.\n';
-const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' as const } };
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } };
+const TARGETS = { web: { surface: 'web' as const, baseUrl: 'https://example.test' } };
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } };
 const OPTIONS: RunOptions = {
   files: [TEST_PATH],
   resolve: true,
@@ -104,11 +104,11 @@ const DEFAULT_CRITERIA: readonly Criterion[] = [{
 
 function coveredPlan(criteria: readonly Criterion[] = DEFAULT_CRITERIA): PlanDocument {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 3,
+        schemaVersion: 4,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions: TARGETS,
@@ -118,6 +118,7 @@ function coveredPlan(criteria: readonly Criterion[] = DEFAULT_CRITERIA): PlanDoc
     steps: [{
       id: 'reach-dashboard',
       kind: 'ai',
+      target: 'web',
       instruction: 'Use the UI to satisfy the locally cited success condition.',
       instructionCoverage: criteria,
     }],
@@ -135,7 +136,7 @@ function coveredTrace(overrides: Partial<TraceRecord & { verificationCoverage: R
 
 function duplicateReaderFailureGroundingRaw(plan: PlanDocument = coveredPlan()): string {
   const deepButValidJson = `${'['.repeat(15_000)}0${']'.repeat(15_000)}`;
-  return `{"entries":{},"readerStress":${deepButValidJson},"planDigest":"${computePlanDigest(plan)}","schemaVersion":1}`;
+  return `{"entries":{},"readerStress":${deepButValidJson},"planDigest":"${computePlanDigest(plan)}","schemaVersion":2}`;
 }
 
 async function arrangeArtifacts(
@@ -147,7 +148,7 @@ async function arrangeArtifacts(
 ): Promise<void> {
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     planDigest: computePlanDigest(plan),
     entries: {
       ...additionalEntries,
@@ -174,7 +175,7 @@ async function arrangeRawGrounding(
   await storage.writeText(
     layout.groundingPathFor(TEST_PATH),
     options.raw ?? toCanonicalArtifactText({
-      schemaVersion: 1,
+      schemaVersion: 2,
       planDigest: options.planDigest ?? computePlanDigest(plan),
       entries,
     } as unknown as JsonValueT),
@@ -524,7 +525,7 @@ describe('run instruction coverage trust boundary', () => {
       await arrangeArtifacts(recording.storage, {
         events: [{
           type: 'fill',
-          target: { strategy: 'accessibility', role: 'textbox', name: 'Token' },
+          element: { strategy: 'accessibility', role: 'textbox', name: 'Token' },
           value: 'sk-live-secret-value',
         }],
         verification: [READY_ASSERTION],
@@ -681,17 +682,17 @@ describe('run instruction coverage trust boundary', () => {
       events: [], verification: [{ type: 'assert', check: 'text-visible', text: '{{run.missing}}' }],
     }, /run|grant|reference/i],
     ['ungranted secret reference in events', {
-      events: [{ type: 'fill-secret', target: STATUS_TARGET, secretRef: '{{secrets.UNGRANTED}}' }],
+      events: [{ type: 'fill-secret', element: STATUS_TARGET, secretRef: '{{secrets.UNGRANTED}}' }],
       verification: [READY_ASSERTION],
     }, /secret|grant|reference/i],
     ['ungranted secret reference in verification', {
       events: [],
-      verification: [{ type: 'assert', check: 'element-visible', target: { ...STATUS_TARGET, name: '{{secrets.UNGRANTED}}' } }],
+      verification: [{ type: 'assert', check: 'element-visible', element: { ...STATUS_TARGET, name: '{{secrets.UNGRANTED}}' } }],
     }, /secret|grant|reference/i],
     ['literal before ungranted fill-secret', {
       events: [
-        { type: 'fill', target: STATUS_TARGET, value: 'sk-live-secret-value' },
-        { type: 'fill-secret', target: STATUS_TARGET, secretRef: '{{secrets.UNGRANTED}}' },
+        { type: 'fill', element: STATUS_TARGET, value: 'sk-live-secret-value' },
+        { type: 'fill-secret', element: STATUS_TARGET, secretRef: '{{secrets.UNGRANTED}}' },
       ],
       verification: [READY_ASSERTION],
     }, /secret|literal|grant/i],
@@ -809,7 +810,7 @@ describe('run instruction coverage trust boundary', () => {
       const covered = JSON.stringify(coveredTrace());
       const legacy = JSON.stringify({ events: [], verification: [READY_ASSERTION] });
       const planDigest = computePlanDigest(coveredPlan());
-      const raw = `{"entries":{${entriesBody(covered, legacy)}},"planDigest":"${planDigest}","schemaVersion":1}`;
+      const raw = `{"entries":{${entriesBody(covered, legacy)}},"planDigest":"${planDigest}","schemaVersion":2}`;
       await arrangeRawGrounding(recording.storage, {}, { raw });
       recording.resetMutations();
       const arranged = scenario(recording);
@@ -842,7 +843,7 @@ describe('run instruction coverage trust boundary', () => {
         'reach-dashboard': { kind: 'ai', trace: coveredTrace() },
       });
       const planDigest = computePlanDigest(coveredPlan());
-      const raw = `{"entries":${coveredEntries},"entries":${laterEntries},"planDigest":"${planDigest}","schemaVersion":1}`;
+      const raw = `{"entries":${coveredEntries},"entries":${laterEntries},"planDigest":"${planDigest}","schemaVersion":2}`;
       await arrangeRawGrounding(recording.storage, {}, { raw });
       recording.resetMutations();
       const arranged = scenario(recording);
@@ -920,14 +921,14 @@ describe('run instruction coverage trust boundary', () => {
     ['locator value', false, (sentinel: string) => ({
       events: [{
         type: 'click',
-        target: { strategy: 'accessibility', role: 'button', name: `Open ${sentinel}` },
+        element: { strategy: 'accessibility', role: 'button', name: `Open ${sentinel}` },
       }],
       verification: [READY_ASSERTION],
     }), undefined],
     ['locator value', true, (sentinel: string) => ({
       events: [{
         type: 'click',
-        target: { strategy: 'accessibility', role: 'button', name: `Open ${sentinel}` },
+        element: { strategy: 'accessibility', role: 'button', name: `Open ${sentinel}` },
       }],
       verification: [READY_ASSERTION],
     }), undefined],
@@ -950,14 +951,14 @@ describe('run instruction coverage trust boundary', () => {
     ['short locator substring', false, (sentinel: string) => ({
       events: [{
         type: 'click',
-        target: { strategy: 'accessibility', role: 'button', name: `before-${sentinel}-after` },
+        element: { strategy: 'accessibility', role: 'button', name: `before-${sentinel}-after` },
       }],
       verification: [READY_ASSERTION],
     }), 'Q7'],
     ['short locator substring', true, (sentinel: string) => ({
       events: [{
         type: 'click',
-        target: { strategy: 'accessibility', role: 'button', name: `before-${sentinel}-after` },
+        element: { strategy: 'accessibility', role: 'button', name: `before-${sentinel}-after` },
       }],
       verification: [READY_ASSERTION],
     }), 'Q7'],
@@ -970,7 +971,7 @@ describe('run instruction coverage trust boundary', () => {
       const plan = {
         ...basePlan,
         steps: [
-          { id: 'capture-value', kind: 'capture', target: STATUS_TARGET, variable: 'captured' },
+          { id: 'capture-value', kind: 'capture', target: 'web', element: STATUS_TARGET, variable: 'captured' },
           ...basePlan.steps,
         ],
       } as unknown as PlanDocument;
@@ -1017,7 +1018,7 @@ describe('run instruction coverage trust boundary', () => {
 
   it.each([
     ['event type', 'click', {
-      events: [{ type: 'click', target: STATUS_TARGET }],
+      events: [{ type: 'click', element: STATUS_TARGET }],
       verification: [{ ...READY_ASSERTION, text: 'Cached dashboard' }],
     }],
     ['verification check', 'text-visible', {
@@ -1029,7 +1030,7 @@ describe('run instruction coverage trust boundary', () => {
     const plan = {
       ...basePlan,
       steps: [
-        { id: 'capture-value', kind: 'capture', target: STATUS_TARGET, variable: 'captured' },
+        { id: 'capture-value', kind: 'capture', target: 'web', element: STATUS_TARGET, variable: 'captured' },
         ...basePlan.steps,
       ],
     } as unknown as PlanDocument;
@@ -1156,9 +1157,9 @@ describe('run instruction coverage trust boundary', () => {
 
   it.each([
     ['text-visible', { type: 'assert', check: 'text-visible', text: 'Dashboard' }],
-    ['text-equals', { type: 'assert', check: 'text-equals', target: STATUS_TARGET, text: 'Dashboard' }],
-    ['element-visible', { type: 'assert', check: 'element-visible', target: STATUS_TARGET }],
-    ['element-count exact zero', { type: 'assert', check: 'element-count', target: STATUS_TARGET, count: 0 }],
+    ['text-equals', { type: 'assert', check: 'text-equals', element: STATUS_TARGET, text: 'Dashboard' }],
+    ['element-visible', { type: 'assert', check: 'element-visible', element: STATUS_TARGET }],
+    ['element-count exact zero', { type: 'assert', check: 'element-count', element: STATUS_TARGET, count: 0 }],
   ] as const)('persists supported tagged %s terminal proof through fresh finalization', async (_name, assertion) => {
     const recording = recordingStorage();
     await arrangeArtifacts(recording.storage);
@@ -1203,12 +1204,12 @@ describe('run instruction coverage trust boundary', () => {
     }],
     ['canonical key-order repeated structured proof', async (controller: InstructionCoverageAiActionController) => {
       await controller.evaluateAssert({
-        type: 'assert', check: 'text-equals', target: STATUS_TARGET, text: 'Dashboard',
+        type: 'assert', check: 'text-equals', element: STATUS_TARGET, text: 'Dashboard',
       });
       await controller.perform({ type: 'navigate', url: '/' });
       await controller.evaluateAssert({
         text: 'Dashboard',
-        target: { name: 'Dashboard', role: 'status', strategy: 'accessibility' },
+        element: { name: 'Dashboard', role: 'status', strategy: 'accessibility' },
         check: 'text-equals',
         type: 'assert',
       }, 'dashboard-reached');
@@ -1221,7 +1222,7 @@ describe('run instruction coverage trust boundary', () => {
       ? {
           ...basePlan,
           steps: [
-            { id: 'capture-user', kind: 'capture', target: STATUS_TARGET, variable: 'user' },
+            { id: 'capture-user', kind: 'capture', target: 'web', element: STATUS_TARGET, variable: 'user' },
             ...basePlan.steps,
           ],
         } as unknown as PlanDocument

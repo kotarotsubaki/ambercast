@@ -38,6 +38,7 @@ const STEP_RESULT = {
   id: 'assert-welcome',
   type: 'assert',
   status: 'failed',
+  target: 'web',
   kind: 'assertion',
   expected: 'Welcome',
   actual: 'Hello',
@@ -48,6 +49,7 @@ const MINIMAL_STEP_RESULT = {
   id: 'capture-home',
   type: 'capture',
   status: 'passed',
+  target: 'web',
 };
 const RUN_RESULT = {
   id: 'login-succeeds',
@@ -56,6 +58,7 @@ const RUN_RESULT = {
   status: 'passed',
   durationMs: 42,
   steps: [STEP_RESULT],
+  sessions: { web: { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' } },
   explanation: 'The login flow completed successfully.',
 };
 const LISTED_RUN_RESULT = {
@@ -73,6 +76,7 @@ const HEAL_RESULT = {
   stopReason: 'settled',
   durationMs: 42,
   steps: [STEP_RESULT],
+  sessions: { web: { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' } },
   explanation: 'The updated locator was grounded successfully.',
 };
 const GENERATE_RESULT = {
@@ -119,6 +123,37 @@ const CASE_FS_IO_ERROR = {
   caseId: 'login-succeeds',
 };
 
+describe('TEST-20 report schema 3.7', () => {
+  const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
+  const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
+  const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
+
+  it('requires target on every step, including skipped steps, and limits variable to capture', () => {
+    expectAccepted(StepResult, step);
+    expectRejected(StepResult, without(step, 'target'));
+    expectRejected(StepResult, { id: 'visit-a', type: 'action', status: 'passed', target: 'A', variable: 'name' });
+    expectAccepted(StepResult, { id: 'visit-a', type: 'action', status: 'skipped', target: 'A' });
+    expectRejected(StepResult, { id: 'visit-a', type: 'action', status: 'skipped' });
+  });
+
+  it('requires a complete session inventory with the fixed state vocabulary', () => {
+    expectAccepted(RunResult, executed);
+    expectRejected(RunResult, without(executed, 'sessions'));
+    for (const state of ['not-opened', 'closed', 'close-failed']) {
+      expectAccepted(RunResult, { ...executed, sessions: { A: { ...session, state } } });
+    }
+    expectRejected(RunResult, { ...executed, sessions: { A: { ...session, state: 'open' } } });
+    expectAccepted(HealResult, { ...HEAL_RESULT, steps: [step], sessions: { A: session } });
+    expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
+  });
+
+  it('pins the shared report version to 3.7', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.7' }));
+    expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
+  });
+});
+
 function expectAccepted(schema: SchemaUnderTest, value: unknown): void {
   expect(schema.safeParse(value).success).toBe(true);
 }
@@ -135,7 +170,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.6',
+    schemaVersion: '3.7',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -366,11 +401,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.6', () => {
+  it('requires schema version 3.7', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.6' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.7' });
   });
 });
 
@@ -378,8 +413,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.6', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.6');
+  it('exports schema version 3.7', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -883,7 +918,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.6');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
   });
 
   it.each(generateBranches)(

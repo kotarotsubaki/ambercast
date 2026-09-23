@@ -5,8 +5,8 @@ import type { AiResolutionSnapshot } from '../../../src/ports/ai.js';
 import { createFakeAiActionController } from '../../doubles/fake-ai-action-controller.js';
 
 const REF: ElementRef = { strategy: 'accessibility', role: 'button', name: 'Submit' };
-const ACTION: TraceAction = { type: 'click', target: REF };
-const CHECK: TraceAssert = { type: 'assert', check: 'element-visible', target: REF };
+const ACTION: TraceAction = { type: 'click', element: REF };
+const CHECK: TraceAssert = { type: 'assert', check: 'element-visible', element: REF };
 const OUTCOME: AssertOutcome = { passed: true, message: 'Visible' };
 const SNAPSHOT: AiResolutionSnapshot = {
   accessibilityTree: { role: 'document' },

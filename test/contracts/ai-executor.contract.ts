@@ -48,12 +48,12 @@ const EXECUTE_RESULT: AiExecuteResult<unknown> = {
 };
 const AGENTIC_RESULT: AiAgenticResult = { outcome: 'success' };
 const EMPTY_SNAPSHOT: AiResolutionSnapshot = { accessibilityTree: {} };
-const ACTION_A: TraceAction = { type: 'click', target: { strategy: 'accessibility', role: 'button', name: 'Submit' } };
+const ACTION_A: TraceAction = { type: 'click', element: { strategy: 'accessibility', role: 'button', name: 'Submit' } };
 const ACTION_B: TraceAction = { type: 'navigate', url: 'https://example.test/second-action' };
-const CHECK: TraceAssert = { type: 'assert', check: 'element-visible', target: ACTION_A.target };
+const CHECK: TraceAssert = { type: 'assert', check: 'element-visible', element: ACTION_A.element };
 const SECRET_FILL_ACTION: TraceAction = {
   type: 'fill-secret',
-  target: ACTION_A.target,
+  element: ACTION_A.element,
   secretRef: '{{secrets.LOGIN_PASSWORD}}',
 };
 

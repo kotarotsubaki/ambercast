@@ -5,7 +5,7 @@ import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { ReportEnvelope, type ReportError } from '#report/schema.js';
 import {
-  runRunCommand,
+  runRunCommand as executeRunCommand,
   type RunCommandInput,
   type RunCommandOutput,
 } from '#runtime/run-command.js';
@@ -87,7 +87,7 @@ function reportOutput(exitCode: RunCommandOutput['exitCode'], errors: ReportErro
   const output = {
     exitCode,
     envelope: {
-      schemaVersion: '3.6' as const,
+      schemaVersion: '3.7' as const,
       command: 'run',
       startedAt: '2026-08-09T00:00:00Z',
       durationMs: 1,
@@ -102,8 +102,34 @@ function reportOutput(exitCode: RunCommandOutput['exitCode'], errors: ReportErro
   return output;
 }
 
+const webSession = { surface: 'web' as const, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, state: 'closed' as const };
+
+function withReport37Fields<T>(value: T): T {
+  if (Array.isArray(value)) { value.forEach(withReport37Fields); return value; }
+  if (value === null || typeof value !== 'object') return value;
+  const fields = value as Record<string, unknown>;
+  Object.values(fields).forEach(withReport37Fields);
+  if ('steps' in fields && Array.isArray(fields.steps) && 'status' in fields && 'durationMs' in fields) {
+    fields.sessions ??= { web: webSession };
+    fields.steps.forEach((step: Record<string, unknown>) => { step.target ??= 'web'; });
+  }
+  return fields as T;
+}
+
+async function runRunCommand(commandInput: RunCommandInput): Promise<RunCommandOutput> {
+  const runFixture = mocks.run.getMockImplementation();
+  if (runFixture) mocks.run.mockImplementation(async (...args: unknown[]) => withReport37Fields(await runFixture(...args)));
+  const reportFixture = mocks.buildRunReport.getMockImplementation();
+  if (reportFixture) mocks.buildRunReport.mockImplementation((...args: unknown[]) => withReport37Fields(reportFixture(...args)));
+  return executeRunCommand(commandInput);
+}
+
+function prepareRealReportFixture<T>(outcome: T): T {
+  return withReport37Fields(outcome);
+}
+
 const rawRunEnvelopeForRendererBoundary = ReportEnvelope.parse({
-  schemaVersion: '3.6', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+  schemaVersion: '3.7', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
   summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [], reportPersistence: 'not-attempted',
 }) as Extract<ReportEnvelope, { command: 'run' }>;
 // @ts-expect-error The renderer-derived run output cannot carry an unbranded envelope.
@@ -357,7 +383,7 @@ describe('runRunCommand', () => {
       ...baseOutput,
       envelope: {
         ...baseOutput.envelope,
-        schemaVersion: '3.6',
+        schemaVersion: '3.7',
         results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'passed', durationMs: 1, explanation: 'passed', steps: [] }],
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
       },
@@ -391,7 +417,7 @@ describe('runRunCommand', () => {
       ...baseOutput,
       envelope: {
         ...baseOutput.envelope,
-        schemaVersion: '3.6',
+        schemaVersion: '3.7',
         results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'passed', durationMs: 1, explanation: 'passed', steps: [] }],
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
       },
@@ -474,7 +500,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.6' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 2, passed: 1, failed: 1, errored: 0, skipped: 0 }, errors: [], results: persistedResults,
         reportPersistence: 'not-attempted',
       },
@@ -545,7 +571,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.6' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{
           id: 'tests/login.test.md',
@@ -623,7 +649,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.6' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{
           id: 'tests/login.test.md', file: 'tests/login.test.md', planFile: 'tests/login.ambercast.plan.json',
@@ -734,6 +760,7 @@ describe('runRunCommand', () => {
           durationMs: 1,
           explanation: 'The case configuration is invalid.',
           steps: [],
+          sessions: { web: webSession },
         },
         error: new ConfigInvalidError('The case configuration is invalid.'),
       }],
@@ -752,6 +779,7 @@ describe('runRunCommand', () => {
           durationMs: 1,
           explanation: 'The case stopped before completion.',
           steps: [],
+          sessions: { web: webSession },
         },
       }],
     } satisfies RunOutcome],
@@ -955,7 +983,6 @@ describe('runRunCommand', () => {
     await expect(runRunCommand(input({
       files: ['login.test.md'],
       grep,
-      target: 'web',
       headed: true,
       resolve: false,
       aiProviderOverride: 'codex',
@@ -986,7 +1013,6 @@ describe('runRunCommand', () => {
     }, {
       files: ['/workspace/login.test.md'],
       grep,
-      target: 'web',
       resolve: false,
       updateCache: false,
       allowEmpty: false,
@@ -1134,13 +1160,14 @@ describe('runRunCommand', () => {
           durationMs: 4,
           explanation: 'Replay completed successfully.',
           steps: [],
+          sessions: { web: webSession },
         },
       }],
     } satisfies RunOutcome;
     const output = {
       exitCode: 0,
       envelope: {
-        schemaVersion: '3.6' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [],
         results: [outcome.results[0]!.result], reportPersistence: 'not-attempted',
       },
@@ -1192,6 +1219,7 @@ describe('runRunCommand', () => {
           durationMs: 4,
           explanation: 'Replay completed successfully.',
           steps: [],
+          sessions: { web: webSession },
         },
       }, {
         result: {
@@ -1202,6 +1230,7 @@ describe('runRunCommand', () => {
           durationMs: 6,
           explanation: 'Replay completed successfully.',
           steps: [],
+          sessions: { web: webSession },
         },
       }],
     } satisfies RunOutcome;
@@ -1251,6 +1280,7 @@ describe('runRunCommand', () => {
           durationMs: 4,
           explanation: 'Replay completed successfully.',
           steps: [],
+          sessions: { web: webSession },
         },
       }],
     } satisfies RunOutcome;
@@ -1266,6 +1296,7 @@ describe('runRunCommand', () => {
     vi.resetModules();
     const { runRunCommand: runRunCommandWithRealReport } = await import('#runtime/run-command.js');
 
+    prepareRealReportFixture(outcome);
     const output = await runRunCommandWithRealReport(input());
 
     expect(output.exitCode).toBe(0);
@@ -1332,6 +1363,7 @@ describe('runRunCommand', () => {
           durationMs: 4,
           explanation: 'The case configuration is invalid.',
           steps: [],
+          sessions: { web: webSession },
         },
         error: outsideError,
       }, {
@@ -1343,6 +1375,7 @@ describe('runRunCommand', () => {
           durationMs: 6,
           explanation: 'The case configuration is invalid.',
           steps: [],
+          sessions: { web: webSession },
         },
         error: insideError,
       }],
@@ -1359,6 +1392,7 @@ describe('runRunCommand', () => {
     vi.resetModules();
     const { runRunCommand: runRunCommandWithRealReport } = await import('#runtime/run-command.js');
 
+    prepareRealReportFixture(outcome);
     const output = await runRunCommandWithRealReport(input());
 
     expect(output.exitCode).toBe(2);

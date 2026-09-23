@@ -10,7 +10,6 @@
 
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
-import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
@@ -23,7 +22,7 @@ import {
 import { GROUNDING_SUFFIX, PLAN_SUFFIX, type LayoutResolver } from '#core/layout/resolve.js';
 import { matchesTestPatterns } from '#core/discovery/pattern-match.js';
 import { joinPath, relativeWithin } from '#core/paths.js';
-import { resolveTarget } from '#core/target/resolve.js';
+import { projectPlanTargets } from '#core/target/resolve.js';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 import type { CheckResult } from '#report/schema.js';
 import type {
@@ -300,17 +299,6 @@ export interface CheckOutcome {
 export async function check(deps: CheckDeps, options: CheckOptions): Promise<CheckOutcome> {
   const tracker = new BatchInterruptionTracker(deps.signal);
   try {
-  const explicitSelection = options.target === undefined
-    ? undefined
-    : resolveTarget({
-      targets: deps.config.targets,
-      defaultTarget: deps.config.defaultTarget,
-      explicitTarget: options.target,
-    });
-  if (explicitSelection instanceof TargetUnresolvedError) {
-    throw explicitSelection;
-  }
-
   const selectedTestFiles = options.files.length === 0
     ? (await deps.discoverTestFiles({
       testDir: deps.config.testDir,
@@ -342,15 +330,6 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
   const errors: CheckFileError[] = [];
 
   if (selectedTestFiles.length > 0) {
-    const targetSelection = explicitSelection ?? resolveTarget({
-      targets: deps.config.targets,
-      defaultTarget: deps.config.defaultTarget,
-      explicitTarget: undefined,
-    });
-    if (targetSelection instanceof TargetUnresolvedError) {
-      throw targetSelection;
-    }
-
     for (const [index, file] of selectedTestFiles.entries()) tracker.addDiscovered(`selected:${index}:${file}`, file);
     for (const [index, file] of selectedTestFiles.entries()) {
       const workKey = `selected:${index}:${file}`;
@@ -405,6 +384,13 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
         results.push({ ...identity, status: 'stale', reason: 'The plan is not canonically serialized.' });
         continue;
       }
+      const targetNames = Object.keys(parsedPlan.data.targets).sort();
+      const targetDefinitions = projectPlanTargets(targetNames, deps.config.targets);
+      const missingTarget = targetNames.find((name) => !Object.hasOwn(targetDefinitions, name));
+      if (missingTarget !== undefined) {
+        results.push({ ...identity, status: 'stale', reason: `The plan references a target that is not configured: ${missingTarget}` });
+        continue;
+      }
 
       let testMd: string;
       try {
@@ -429,7 +415,7 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
       }
       const inputsDigest = deriveCurrentPlanInputProvenance({
         normalizedTestMd,
-        targetDefinitions: targetSelection.definitions,
+        targetDefinitions,
       }).inputsDigest;
       if (parsedPlan.data.source.inputsDigest === inputsDigest) {
         /*

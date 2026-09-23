@@ -2,11 +2,29 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "baseUrl": "https://example.test",
+        "surface": "web"
+      }
+    },
     "steps": [
-      { "id": "press-enter", "kind": "action", "action": "press", "target": { "strategy": "accessibility", "role": "textbox", "name": "Search" }, "key": "Enter" }
+      {
+        "id": "press-enter",
+        "kind": "action",
+        "action": "press",
+        "key": "Enter",
+        "element": {
+          "strategy": "accessibility",
+          "role": "textbox",
+          "name": "Search"
+        },
+        "target": "app"
+      }
     ]
   }
 }

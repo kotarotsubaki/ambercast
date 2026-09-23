@@ -27,8 +27,8 @@ const ABSOLUTE_COMMAND_CONFIG_PATH = '/workspace/explicit/command.json';
 const ABSOLUTE_ENVIRONMENT_CONFIG_PATH = '/workspace/explicit/environment.json';
 const APP_TARGET = { baseUrl: 'http://app.test', browser: 'chromium' } as const;
 const ADMIN_TARGET = { baseUrl: 'http://admin.test', browser: 'chromium' } as const;
-const RESOLVED_APP_TARGET = { ...APP_TARGET, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
-const RESOLVED_ADMIN_TARGET = { ...ADMIN_TARGET, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
+const RESOLVED_APP_TARGET = { ...APP_TARGET, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
+const RESOLVED_ADMIN_TARGET = { ...ADMIN_TARGET, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
 
 interface LoadOptions {
   readonly cwd?: string | undefined;
@@ -49,6 +49,7 @@ function expectedDefaults(configRoot: string): ResolvedConfig {
       'web-user': {
         baseUrl: 'http://localhost:3000',
         browser: 'chromium',
+        surface: 'web',
         healReplayIsolation: 'stateful',
         resolveTimeoutMs: 5000,
       },

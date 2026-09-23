@@ -46,23 +46,25 @@ const RUN_REF_PATTERN = /^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
  * contract.
  *
  * @remarks
- * Plan version 3 removes prompt-grant provenance from secret uses and makes
- * deterministic local naming the boundary between provider intent and a
- * committed reference. Earlier plans are regenerated or reported stale at
- * their existing command boundary; they are never migrated in place.
- * Grounding remains version 1 because this plan-shape change does not alter
- * its trace-record contract.
+ * Plan version 4 makes every step target a required field (to select the
+ * session pool entry) and renames all element locators from `target` to
+ * `element`. The Plan's `browser` field is removed from the schema and
+ * `targetDefinitions` digest; `surface: 'web'` is required instead.
+ * Grounding version 2 updates its trace records to use `element` instead
+ * of `target` for element locators.
  *
  * Every Plan schema and digest caller shares this literal.
  */
-export const PLAN_SCHEMA_VERSION = 3 as const;
+export const PLAN_SCHEMA_VERSION = 4 as const;
 
 /**
- * The unchanged Grounding IR version after trace coverage is added.
+ * The Grounding IR version after element-locator renaming.
  *
- * Grounding construction and validation share this literal.
+ * Grounding construction and validation share this literal. Version 2
+ * updates trace records to use `element` instead of `target` for element
+ * locators, matching the Plan v4 changes.
  */
-export const GROUNDING_SCHEMA_VERSION = 1 as const;
+export const GROUNDING_SCHEMA_VERSION = 2 as const;
 
 /**
  * Validates a whole secret reference.
@@ -166,13 +168,11 @@ export const InterpolatableText = z.string().regex(NO_SECRETS_LITERAL_PATTERN);
 export type InterpolatableText = z.infer<typeof InterpolatableText>;
 
 /**
- * Validates the browser target shared by `PlanDocument.targets`,
- * `RawConfig.targets`, and `ResolvedConfig.targets`.
+ * Validates the web target definition shared by `PlanDocument.targets`.
  *
- * A portable regex, rather than `z.url()`, preserves the HTTP(S) restriction
- * in generated JSON Schema without requiring AJV format support. Keeping the
- * browser explicit makes schema evolution visible rather than hiding it in a
- * runtime constant.
+ * The `surface` field identifies the platform family, while `baseUrl` provides
+ * the entry point URL. Executor choice (`browser` in config, `kind: 'playwright'`
+ * in reports) remains a live runtime decision, not a Plan commitment.
  *
  * @remarks
  * A separate `.regex()` composes the HTTP(S) restriction with a
@@ -198,13 +198,13 @@ export type InterpolatableText = z.infer<typeof InterpolatableText>;
  * always the runtime authority for allowed origins.
  */
 export const TargetDefinition = z.strictObject({
+  surface: z.literal('web'),
   baseUrl: z.string().regex(HTTP_URL_PATTERN).regex(NO_SECRETS_LITERAL_PATTERN),
-  browser: z.literal('chromium'),
   secretSinkOrigins: z.record(SecretRef, z.array(SecretSinkOrigin)).optional(),
 });
 
 /**
- * The parsed browser-target shape used by plans and digest inputs.
+ * The parsed web target shape used by plans and digest inputs.
  */
 export type TargetDefinition = z.infer<typeof TargetDefinition>;
 
@@ -392,15 +392,36 @@ export const RunRef = z.string().regex(RUN_REF_PATTERN);
  */
 export type RunRef = z.infer<typeof RunRef>;
 
-const StepBase = { id: StepId };
-const ClickFields = { target: ElementRef };
+/**
+ * Validates a Plan target name, used by every step to select its execution
+ * session.
+ */
+const TargetName = z.string().min(1);
+
+/**
+ * The parsed Plan target name used by steps.
+ */
+export type TargetName = z.infer<typeof TargetName>;
+
+/**
+ * The base fields shared by all Plan steps.
+ *
+ * In v4, every step must include a `target` field that names the Plan target
+ * whose session will execute the step. There is no Plan default: an absent
+ * assignment fails at the schema boundary.
+ */
+const StepBase = { id: StepId, target: TargetName };
+
+// In v4 these shared locator bundles use `element`, including the matching
+// trace actions. This leaves `target` exclusively for the step's Target name.
+const ClickFields = { element: ElementRef };
 const NavigateFields = { url: InterpolatableText };
 const PressFields = {
-  target: ElementRef,
+  element: ElementRef,
   key: z.enum(['Enter', 'Tab', 'Escape', 'ArrowDown', 'ArrowUp']),
 };
-const FillFields = { target: ElementRef, value: InterpolatableText };
-const FillSecretFields = { target: ElementRef, secretRef: SecretRef };
+const FillFields = { element: ElementRef, value: InterpolatableText };
+const FillSecretFields = { element: ElementRef, secretRef: SecretRef };
 // Provider-facing and committed AI steps share their execution contract; only
 // secret naming intent is unresolved on the provider-facing side. One bundle
 // prevents those common fields from drifting across the two representations.
@@ -412,10 +433,16 @@ const AiStepFields = {
 // Assertion steps and recorded verification use one field contract so an
 // assertion cannot change meaning when it moves from a plan into a trace.
 const TextVisibleFields = { text: InterpolatableText };
-const ElementVisibleFields = { target: ElementRef };
-const TextEqualsFields = { target: ElementRef, text: InterpolatableText };
+// The locator-bearing assertion bundles use `element` in v4 as well; traces
+// share that spelling, while text-visible and url-matches need no locator.
+const ElementVisibleFields = { element: ElementRef };
+const TextEqualsFields = { element: ElementRef, text: InterpolatableText };
 const UrlMatchesFields = { pattern: InterpolatableText };
-const ElementCountFields = { target: ElementRef, count: z.int().nonnegative() };
+const ElementCountFields = { element: ElementRef, count: z.int().nonnegative() };
+// Plan assertions gain an optional timing bundle in v4, shared by all five
+// checks but excluded from TraceAssert: a replay observation records evidence,
+// not the Plan's polling budget. The bound is an integer from 0 to 120000 ms.
+const AssertTimingFields = { timeoutMs: z.int().min(0).max(120000).optional() };
 
 /**
  * Validates an executable `click` action step.
@@ -548,6 +575,7 @@ export const TextVisibleCheck = z.strictObject({
   kind: z.literal('assert'),
   check: z.literal('text-visible'),
   ...TextVisibleFields,
+  ...AssertTimingFields,
 });
 
 /**
@@ -567,6 +595,7 @@ export const ElementVisibleCheck = z.strictObject({
   kind: z.literal('assert'),
   check: z.literal('element-visible'),
   ...ElementVisibleFields,
+  ...AssertTimingFields,
 });
 
 /**
@@ -586,6 +615,7 @@ export const TextEqualsCheck = z.strictObject({
   kind: z.literal('assert'),
   check: z.literal('text-equals'),
   ...TextEqualsFields,
+  ...AssertTimingFields,
 });
 
 /**
@@ -606,6 +636,7 @@ export const UrlMatchesCheck = z.strictObject({
   kind: z.literal('assert'),
   check: z.literal('url-matches'),
   ...UrlMatchesFields,
+  ...AssertTimingFields,
 });
 
 /**
@@ -625,6 +656,7 @@ export const ElementCountCheck = z.strictObject({
   kind: z.literal('assert'),
   check: z.literal('element-count'),
   ...ElementCountFields,
+  ...AssertTimingFields,
 });
 
 /**
@@ -662,7 +694,7 @@ export type AssertStep = z.infer<typeof AssertStep>;
 export const CaptureStep = z.strictObject({
   ...StepBase,
   kind: z.literal('capture'),
-  target: ElementRef,
+  element: ElementRef,
   variable: RunVariableName,
 });
 
@@ -749,7 +781,7 @@ interface AttributedFillSecretAction {
   readonly id: StepId;
   readonly kind: 'action';
   readonly action: 'fill-secret';
-  readonly target: ElementRef;
+  readonly element: ElementRef;
   readonly secret?: SecretNameChoice;
 }
 
@@ -787,7 +819,8 @@ export const GeneratedFillSecretAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('fill-secret'),
-  target: ElementRef,
+  // Provider output uses the same `element` locator spelling as committed IR.
+  element: ElementRef,
   secret: SecretNameChoice.optional(),
 });
 
@@ -898,6 +931,9 @@ export const GeneratedStep = z.discriminatedUnion('kind', [
   CaptureStep,
   GeneratedAiStep,
 ]);
+// In v4 both requested and policy-validated response schemas require each
+// GeneratedStep's Target name. A missing name is invalid even with one Target;
+// the generation use case does not fill it in after validation.
 
 /**
  * The provider-facing outer step union narrowed by its `kind` discriminant.
@@ -1209,6 +1245,9 @@ export const JsonValue: z.ZodType<JsonValueT> = z.lazy(() => z.union([
  * That version enters `inputsDigest`; older versions are rejected rather than
  * retained as compatibility union branches.
  */
+// The v4 refinement also rejects a step naming an absent Target and a Target
+// key unused by every step. These two directions keep the Plan's Target set
+// exact before config projection or digest comparison; no default fills a gap.
 export const PlanDocument = z.strictObject({
   schemaVersion: z.literal(PLAN_SCHEMA_VERSION),
   source: z.strictObject({ inputsDigest: HexSha256 }),
@@ -1217,6 +1256,7 @@ export const PlanDocument = z.strictObject({
   steps: z.array(Step),
 }).superRefine((plan, ctx) => {
   const seen = new Set<string>();
+  const targetNames = new Set(Object.keys(plan.targets));
 
   for (const [index, step] of plan.steps.entries()) {
     if (seen.has(step.id)) {
@@ -1226,7 +1266,25 @@ export const PlanDocument = z.strictObject({
         path: ['steps', index, 'id'],
       });
     }
+    if (!targetNames.has(step.target)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `step target is not defined: ${step.target}`,
+        path: ['steps', index, 'target'],
+      });
+    }
     seen.add(step.id);
+  }
+
+  for (const targetName of targetNames) {
+    const usedByStep = plan.steps.some((step) => step.target === targetName);
+    if (!usedByStep) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `unused target: ${targetName}`,
+        path: ['targets', targetName],
+      });
+    }
   }
 });
 
@@ -1249,10 +1307,11 @@ export type InstructionCoveredPlanDocument = PlanDocument;
 /**
  * Validates only the provider-authored portion of a generated plan response.
  *
- * Provider output deliberately excludes local provenance, target selection,
- * and schema versioning. The generation use case adds those deterministic
- * fields before validating the completed {@link PlanDocument}, preserving the
- * provider boundary's smaller and more trustworthy responsibility.
+ * In v4, every response step must include a target name selected by the
+ * provider. The generation use case projects the available Target definitions
+ * into the provider context and does not fill in missing step targets. Local
+ * provenance and schema versioning are added before validating the completed
+ * {@link PlanDocument}.
  */
 export const GeneratedPlanResponse = z.strictObject({
   steps: z.array(GeneratedStep),

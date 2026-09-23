@@ -167,9 +167,20 @@ describe('allowlist and CLI contract', () => {
     expect(result.stderr).toContain(path);
   });
 
-  it('exits 2 without partial JSONL when a source file is unreadable', () => {
+  it('exits 2 without partial JSONL when a source file is unreadable', (context) => {
     const f = fixture('source');
-    chmodSync(`${f.root}/README.md`, 0);
+    const sourcePath = `${f.root}/README.md`;
+    chmodSync(sourcePath, 0);
+    let directReadError: unknown;
+    try {
+      readFileSync(sourcePath, 'utf8');
+    } catch (error) {
+      directReadError = error;
+    }
+    if (directReadError === undefined) {
+      context.skip('File permissions are not enforced; cannot exercise the source-file read error.');
+      return;
+    }
     const result = run(f.root);
     expect(result.status).toBe(2);
     expect(result.stdout).toBe('');

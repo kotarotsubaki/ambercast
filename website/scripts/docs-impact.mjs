@@ -185,8 +185,9 @@ async function collectCandidates(input) {
       return line.includes(`\`${name}\``) || new RegExp(`\\bambercast ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(line);
     }
     if (kind === 'flag') {
-      const name = parts.at(-1);
-      return new RegExp(`(?<![\\w-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`).test(line);
+      const name = parts.at(-1).replace(/^-+/, '');
+      const dashes = name.length === 1 ? '--?' : '--';
+      return new RegExp(`(?<![\\w-])${dashes}${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`).test(line);
     }
     if (kind === 'config') {
       const path = parts.join(':');

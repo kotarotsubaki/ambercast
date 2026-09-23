@@ -65,6 +65,14 @@ describe('docs-impact prospective mode', () => {
     expect(records(first.stdout).map((entry) => entry.id)).toEqual(records(second.stdout).map((entry) => entry.id));
   });
 
+  it('matches a single-dash flag alias without matching a different long flag', () => {
+    const f = fixture({ 'README.md': 'Run `ambercast init -y` to accept the defaults.\n' });
+    const result = run(f.root, ['--prospective', '--identifier', 'flag:init:--y', '--identifier', 'flag:init:--yes']);
+    expect(result.status).toBe(0);
+    const hits = records(result.stdout).filter((entry) => entry.rule === 'identifier-hit');
+    expect(hits.map(({ identifier }) => identifier)).toEqual(['flag:init:--y']);
+  });
+
   it.each([
     ['missing identifier', ['--prospective']],
     ['conflicting modes', ['--prospective', '--actual', '--base', 'HEAD', '--identifier', 'command:init']],

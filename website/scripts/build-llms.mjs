@@ -49,11 +49,16 @@ const records = Object.fromEntries(locales.map((locale) => [locale, recordsFor(l
 const dist = join(websiteRoot, 'dist');
 const write = (relativePath, content) => writeFileSync(join(dist, relativePath), content);
 
-write(LLMS_OUTPUT_PATHS[0], renderLlmsTxt(records.en, siteDescriptions.en));
-write(LLMS_OUTPUT_PATHS[1], renderLlmsFullTxt(records.en));
-write(LLMS_OUTPUT_PATHS[2], renderLlmsPlannedTxt(records.en));
+function outputPath(name) {
+  const path = LLMS_OUTPUT_PATHS.find((candidate) => candidate === name);
+  if (!path) throw new Error(`Missing llms output path: ${name}`);
+  return path;
+}
+
+write(outputPath('llms.txt'), renderLlmsTxt(records.en, siteDescriptions.en));
+write(outputPath('llms-full.txt'), renderLlmsFullTxt(records.en));
+write(outputPath('llms-planned.txt'), renderLlmsPlannedTxt(records.en));
 for (const locale of ['ja', 'zh-cn']) {
-  const offset = locale === 'ja' ? 3 : 5;
-  write(LLMS_OUTPUT_PATHS[offset], renderLlmsTxt(records[locale], siteDescriptions[locale]));
-  write(LLMS_OUTPUT_PATHS[offset + 1], renderLlmsFullTxt(records[locale]));
+  write(outputPath(`${locale}/llms.txt`), renderLlmsTxt(records[locale], siteDescriptions[locale]));
+  write(outputPath(`${locale}/llms-full.txt`), renderLlmsFullTxt(records[locale]));
 }

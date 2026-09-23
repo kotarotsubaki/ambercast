@@ -93,7 +93,17 @@ export interface GenerateCommandInput {
   /** Optional caller cancellation propagated to generation. */
   readonly signal?: AbortSignal;
 
-  /** Optional event sink for lifecycle events. */
+  /**
+   * Receives generation lifecycle events in addition to stderr progress.
+   * Without a subscriber, stderr output remains byte-for-byte identical to
+   * the current command behavior; a caller need not supply this port.
+   *
+   * @remarks
+   * Runtime fans events out to its own progress sink and this caller-owned
+   * sink, keeping protocol-specific subscribers such as MCP progress outside
+   * the runtime dependency graph. Check is read-only and has no external
+   * progress subscription need, so its input deliberately lacks this port.
+   */
   readonly events?: EventSink;
 }
 

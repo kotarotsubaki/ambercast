@@ -127,7 +127,18 @@ export interface RunCommandInput {
   /** Optional caller cancellation propagated to replay. */
   readonly signal?: AbortSignal;
 
-  /** Optional event sink for lifecycle events. */
+  /**
+   * Receives replay lifecycle events alongside the default stderr progress
+   * output. Omitting this sink leaves the existing stderr bytes unchanged;
+   * providing one adds a subscriber rather than replacing that output.
+   *
+   * @remarks
+   * The caller owns the injected sink and its lifetime. This optional port
+   * lets adapters such as an MCP progress reporter observe replay without
+   * making runtime depend on the adapter's protocol. Check is read-only and
+   * has no corresponding external progress subscription contract, so its
+   * command input does not acquire this port.
+   */
   readonly events?: import('#ports/system.js').EventSink;
 }
 

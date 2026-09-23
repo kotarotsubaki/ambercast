@@ -102,7 +102,16 @@ export type HealCommandInput = Omit<HealCommandFlags, 'json'> & {
   /** Optional caller cancellation propagated to healing. */
   readonly signal?: AbortSignal;
 
-  /** Optional event sink for lifecycle events. */
+  /**
+   * Receives healing lifecycle events alongside the default stderr progress
+   * stream. Omitting it preserves the existing stderr output byte for byte.
+   *
+   * @remarks
+   * The caller owns this sink and its lifetime. Fan-out permits an adapter,
+   * including an MCP progress reporter, to subscribe without teaching this
+   * runtime about its transport. Check is read-only and needs no external
+   * progress subscription, so its command input has no matching field.
+   */
   readonly events?: EventSink;
 };
 
@@ -171,19 +180,52 @@ export interface HealCommandOutput {
 }
 
 /**
- * Preparation result for the healing command that enables authorization.
+ * Measured healing candidates and the separate authority to settle them.
+ *
+ * @remarks
+ * A caller can inspect whether any write is possible and which cases would
+ * change before requesting consent. This boundary serves callers that need a
+ * preview and later approval, while the CLI can retain its own interactive
+ * confirmation policy over the same measured candidates. Measurement must
+ * not itself authorize persistence. The returned object retains pending
+ * commit capabilities privately; exposing only summaries prevents a caller
+ * from committing a case outside the single settlement boundary.
  */
 export interface HealPreparation {
-  /** Returns the preview report for the user to review before committing. */
+  /**
+   * Builds a report of measured changes without applying them.
+   *
+   * @returns A rendering-neutral preview report for consent or inspection.
+   * @remarks
+   * Preview performs no persistence and remains callable repeatedly, even
+   * after settlement. A caller may need to retrieve the measured result again
+   * while presenting or recording an approval decision; reading it never
+   * consumes the authority to settle.
+   */
   preview(): HealCommandOutput;
 
-  /** Settles the preparation with authorization and returns the final report. */
+  /**
+   * Resolves the measured candidates under one explicit authorization.
+   *
+   * @param authorization - Whether the caller approved, declined, or was
+   * interrupted before applying pending changes.
+   * @returns The final report after the authorized commits have settled, or
+   * after the non-applying decision has been recorded.
+   * @remarks
+   * Settlement is one-shot even when authorization declines or interrupts:
+   * accepting a second decision could apply the same buffered writes twice
+   * or rewrite an already reported outcome. A second call fails with
+   * `UnexpectedCrashError`; preview remains available afterward.
+   */
   settle(authorization: 'authorized' | 'declined' | 'interrupted'): Promise<HealCommandOutput>;
 
-  /** Whether there are commits ready to be applied. */
+  /** Whether consent could lead to at least one artifact write. */
   readonly hasCommits: boolean;
 
-  /** The list of cases that can be healed with their repair summaries. */
+  /**
+   * Case identities, files, and repair summaries available before consent.
+   * These describe prospective changes without exposing commit capabilities.
+   */
   readonly cases: readonly { readonly caseId: string; readonly file: string; readonly healingSummary: string }[];
 }
 
@@ -415,6 +457,29 @@ function settleHealOutcome(
 }
 
 /**
+ * Measures healing candidates and returns a preview and settlement capability.
+ *
+ * @param input - Selected prompts, command policy, project directory, and
+ * optional cancellation and progress subscribers.
+ * @returns Measured cases with a repeatable preview and one settlement choice.
+ * @remarks
+ * Separating measurement from settlement lets a two-stage caller present the
+ * exact proposed repairs for approval before applying them. The CLI can use
+ * the same preparation while retaining its interactive confirmation flow.
+ * This phase does not treat `dryRun` or `yes` as write authority: neither
+ * flag may commit a candidate during measurement. Pending commit capabilities
+ * stay private until a caller makes the explicit settlement choice.
+ *
+ * The command still applies its normal list short-circuit and CI healing
+ * refusal at their established boundaries. Its eventual implementation
+ * must preserve replay isolation and classify measurement failures into the
+ * rendering-neutral command report contract rather than leaking raw errors.
+ */
+export async function prepareHeal(input: HealCommandInput): Promise<HealPreparation> {
+  throw new Error('not implemented');
+}
+
+/**
  * Runs the composed healing command and produces its final report result.
  *
  * @param input - Parsed command arguments, working directory, and cancellation.
@@ -468,10 +533,6 @@ function settleHealOutcome(
  * that shared boundary alone selects exit code 3, so every other semantic
  * exit code remains the report builder's decision.
  */
-export async function prepareHeal(input: HealCommandInput): Promise<HealPreparation> {
-  throw new Error('not implemented');
-}
-
 export async function runHealCommand(
   input: HealCommandInput,
 ): Promise<HealCommandOutput> {

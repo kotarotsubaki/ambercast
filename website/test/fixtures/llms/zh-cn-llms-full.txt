@@ -860,7 +860,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；绝不用于 heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `600000` | 正数 | generate；run 兜底；heal |
-| `viewer.port` | integer | `4600` | 1–65535；viewer 命令处于计划中 | 仅用于计划中的 `view` |
+| `viewer.port` | integer | `4600` | 1–65535；起始候选端口，可被 `--port` 覆盖 | view |
 | `ci.heal` | boolean | `false` | 在 CI 中选择开启非 list 的 heal | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI 回写选择启用项 | run |
 | `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | 有限取值集合 | check |
@@ -1597,18 +1597,18 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `**` | `**` 是可跨越路径分隔符的发现通配符。 | 匹配器；[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#pattern-language) | 单段 `*` |
 | `--` | `--` 终止选项解析，并将其后的词元保留为字面量路径。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | 以 `--` 开头的文件名 |
 | `--allow-empty` | `--allow-empty` 使得解析该选项的命令在选择集为空时仍被允许执行。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--list` |
-| `--allow-headless` | `--allow-headless` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 解析器语义。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#planned-interface) | 已实现的 `--headed` |
+| `--allow-headless` | `--allow-headless` 解除 view 的非交互式拒绝；若终端已经处于交互式，则为空操作。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#interactive-gate) | 已实现的 `--headed` |
 | `--resolve` | `--resolve` 会在 grounding 缺失时显式允许 run 使用实时 AI 解析；未传入时，run 会拒绝该未命中。 | `ambercast run`；[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags) | 离线测试发现 |
 | `--clear` | `--clear` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 baseline 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | 当前命令执行的文件删除 |
 | `--config` | `--config` 是命令局部选项，仅由 generate 和 check 命令解析。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 init 解析器语义。 | [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags) | 配置 `testDir` |
 | `--dry-run` | `--dry-run` 会阻止 generate 与 heal 命令写入工件。 | generate/heal；[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` 使已实现的 generate 命令退出对新鲜 Plan 的复用逻辑。 | `ambercast generate`；[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags) | heal `--yes` |
-| `--host` | `--host` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 viewer 解析器语义。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#undecided-items) | 目标的 `baseUrl` |
+| `--host` | `--host` 选择 view 的绑定地址；必须是具体 IP 或 `localhost`，不允许通配地址。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#host-binding) | 目标的 `baseUrl` |
 | `--json` | `--json` 在已实现的命令返回后选择序列化的结构化报告输出。 | CLI 渲染器；[报告](/ambercast/zh-cn/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` 由每个已实现的命令解析；各命令页面拥有各自的列表结果语义。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 run 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | `--force` |
-| `--port` | `--port` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 viewer 解析器语义。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#planned-interface) | 配置 `viewer.port` |
+| `--port` | `--port` 将 view 固定为单一的严格端口，而非自动递增尝试候选端口。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#port-selection) | 配置 `viewer.port` |
 | `--target` | `--target` 为每个已实现的命令指定命名的已配置执行目标。 | CLI 解析器 / 目标解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | 目标定义本身 |
 | `--yes` | `--yes` 授权 heal 在无需交互式确认的情况下直接完成结算。 | `ambercast heal`；[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` 是确切的相邻 Grounding 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Plan 后缀 |
@@ -1644,7 +1644,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `ambercast restore` | `ambercast restore` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
 | `ambercast review` | `ambercast review` 处于规划阶段（在 0.3.1 中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
 | `ambercast run` | `ambercast run` 是已实现的确定性重放命令。 | [ambercast run](/ambercast/zh-cn/reference/cli/run/) | `ambercast generate` |
-| `ambercast view` | `ambercast view` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#status) | 已实现的命令 |
+| `ambercast view` | `ambercast view` 是已实现的只读本地结果查看器。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
 | `ambercast_generate` | `ambercast_generate` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
 | `ambercast_heal` | `ambercast_heal` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
@@ -1680,7 +1680,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 # CLI 概览
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/
 
-ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check 与 heal。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
+ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check、heal 与 view。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
 
 ## 命令界面 {#command-surface}
 
@@ -1693,6 +1693,7 @@ Commands:
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+  view                 Browse run results in a browser
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -1711,6 +1712,9 @@ Check options:
 Heal options:
   --dry-run  --yes, -y  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
+View options:
+  --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -1720,7 +1724,7 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-ambercast 当前已实现的命令包括 init、generate、run、check 以及 heal。
+ambercast 当前已实现的命令包括 init、generate、run、check、heal 以及 view。
 
 顶层标志 `--help` 与 `--version` 会在命令分发之前短路处理并退出；若传入格式错误的参数，程序将直接以退出码 2 终止退出，且不输出错误报告。
 
@@ -1733,6 +1737,7 @@ ambercast 当前已实现的命令包括 init、generate、run、check 以及 he
 | run | 字面路径；未指定路径则执行发现 | grep, target, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | 字面路径；未指定路径则执行发现 | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| view | 无 | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 
 除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
 
@@ -2011,6 +2016,56 @@ ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
 - [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)
 - [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
 - [操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)
+
+---
+
+# ambercast view
+Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/view/
+
+`ambercast view` 启动一个只读的本地 HTTP 服务器，用于浏览持久化在已配置 runs 目录下的运行结果，开发者无需重新运行测试或产生任何 AI 调用，即可查看某次 run 的用例、步骤与截图。
+
+## 标志 {#flags}
+
+| 标志 | 值 | 效果 | 默认值 |
+| --- | --- | --- | --- |
+| `--port` | n | 首选端口；未指定时最多自动递增尝试 20 个候选端口 | 4600 |
+| `--host` | addr | 绑定地址；必须是具体 IP 或 localhost，不允许通配地址 | 127.0.0.1 |
+| `--allow-headless` | boolean | 允许在非交互式终端中运行 | false |
+| `--config` | path | 显式配置路径 | 省略 |
+| `--no-color` | boolean | 禁用 ANSI 输出 | false |
+
+## 交互门控 {#interactive-gate}
+
+`view` 遵循与其他带确认门控的命令相同的交互性判定：只有当 stdin 与 stderr 均连接到终端且未设置 `CI` 时才会启动。在未指定 `--allow-headless` 的非交互式调用中，命令将以退出码 2 终止，并输出：
+
+```
+view requires --allow-headless when no interactive terminal is attached.
+```
+
+`--allow-headless` 会解除该拒绝；若已处于交互式终端，则该标志为空操作。
+
+## 端口选择 {#port-selection}
+
+起始端口依次取自 `--port`、已配置的 `viewer.port`，最后回退到 4600。未指定 `--port` 时，`view` 会从起始端口开始最多尝试 20 个连续端口，仅在遇到 `EADDRINUSE` 时才前进到下一个候选，并打印实际绑定的端口。指定 `--port` 时，该端口按严格模式处理：若被占用，不会尝试其他端口，而是以退出码 3 终止。所有候选均耗尽，或出现 `EADDRINUSE` 以外的绑定失败，同样以退出码 3 终止。
+
+## 主机绑定 {#host-binding}
+
+`--host` 接受具体 IP 地址或 `localhost`（会被规范化为 `127.0.0.1`）。由于该服务器不提供任何身份验证，通配地址（`0.0.0.0`、`::`、`[::]`）会以退出码 2 被拒绝。每个请求都会依据绑定的主机与端口检查其 `Host` 请求头；指向其他主机的请求将被以 403 拒绝。绑定到非回环地址时，会打印一条警告，说明该服务器在无身份验证的情况下即可被访问。
+
+## 路由 {#routes}
+
+| 路由 | 提供内容 |
+| --- | --- |
+| `GET /` | 运行列表，按最新优先排序，包含状态、耗时与用例计数 |
+| `GET /runs/<runId>` | 单次运行的用例、步骤、期望/实际值、说明文字与截图 |
+| `GET /runs/<runId>/report.json` | 该次运行持久化的原始 report 字节内容 |
+| `GET /runs/<runId>/screenshots/<ref>` | 该次运行的 report 实际引用的截图 |
+
+每个响应都携带 `X-Content-Type-Options: nosniff` 与 `Cache-Control: no-store`；HTML 与原始数据响应还携带固定的 `Content-Security-Policy` 与 `Referrer-Policy: no-referrer`。页面完全在服务端渲染，不包含任何客户端 JavaScript 或外部请求。
+
+缺少 `report.json` 的运行目录（例如写入过程中或持久化失败）会在列表中显示为仅有证据（evidence only），而不是一个失效链接。`report.json` 解析或校验失败的运行仍会保留在列表中，并提供指向其原始字节内容的链接，而不会从列表中消失。
+
+相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
 
 ---
 
@@ -3049,7 +3104,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-r
 
 ## 当前版本已实现 {#implemented}
 
-在 0.3.1 中，CLI 解析器所暴露的子命令包括 `generate`、`run`、`check` 和 `heal`。当前已实现的解析器并未暴露 init、viewer 或 MCP 子命令。
+在 0.3.1 中，CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`、`heal` 和 `view`。当前已实现的解析器并未暴露 MCP 子命令。
 
 对于在早期版本中生成的产物，0.3.1 要求重新生成 0.1.0 的计划。这是因为 producer-contract 的指纹发生了变更，致使既有的 producer bundle 以及 `inputsDigest` 处于 `stale`（已过期）状态。
 
@@ -3057,11 +3112,11 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-r
 
 ## 当前边界之后的规划 {#planned-after-current-boundary}
 
-在当前实现的边界之外，项目规划中的文档涵盖了 `init`、`view`、`review`、`mcp`、baseline/restore、MCP 工具以及官方 skill。
+在当前实现的边界之外，项目规划中的文档涵盖了 `review`、`mcp`、baseline/restore、MCP 工具以及官方 skill。
 
 在浏览器平台支持方面，Firefox 和 WebKit 计划在 1.0 达成。
 
-相关链接：[ambercast init](/ambercast/zh-cn/reference/cli/init/)、[ambercast view](/ambercast/zh-cn/reference/cli/view/)、[official skill](/ambercast/zh-cn/agents/official-skill/)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
+相关链接：[ambercast review](/ambercast/zh-cn/reference/cli/review/)、[official skill](/ambercast/zh-cn/agents/official-skill/)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
 
 ## 版本策略 {#version-policy}
 
@@ -3103,11 +3158,11 @@ Agent 所需的基础循环为：实现 → 编写或调整所请求的 `.test.m
 # 操作契约
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/operating-contract/
 
-ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check` 与 `heal`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
+ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal` 与 `view`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
 
 ## 命令契约 {#command-contract}
 
-解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check` 与 `heal`。其中，`check` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
+解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal` 与 `view`。其中，`check` 与 `view` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
 
 | 命令 | 前提条件 | 副作用 | 是否需要批准？ | CI 中是否安全？ |
 | --- | --- | --- | --- | --- |
@@ -3116,6 +3171,7 @@ ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`
 | run | 所选 prompt 具有受信任的计划。 | 写入调用报告；可在其回写契约下写入 grounding。 | 当请求的范围未预先授权写入时需要。 | 安全，遵循回写策略。 |
 | check | 所选目标可被发现。 | 仅读取 prompt 与工件。 | 不需要 ambercast 工件写入批准。 | 安全。 |
 | heal | 目标具备幂等性，且在 CI 中时已启用真实尝试。 | 可能在 runs 目录中写入尝试证据；仅在确认后提交测得的计划/grounding 候选变更。 | 需要用户明确批准；--yes 不构成 agent 授权。 | 默认不安全；仅在 ci.heal: true 时安全。 |
+| view | 具备交互式终端，或指定 `--allow-headless`；具有可绑定的空闲端口。 | 无；仅读取已持久化的 run report 的 HTTP 服务器。 | 不需要 ambercast 工件写入批准。 | 默认不安全；未指定 `--allow-headless` 的非交互使用会被拒绝。 |
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[ambercast init](/ambercast/zh-cn/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 

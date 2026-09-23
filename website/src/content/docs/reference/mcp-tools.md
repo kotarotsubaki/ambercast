@@ -9,14 +9,14 @@ sidebar:
 ---
 
 :::caution
-MCP tools are not implemented in 0.3.1. The CLI parser accepts only `generate`, `run`, `check`, `heal`, and `init`, and provides no `mcp` server command. The tool definitions and behaviors documented on this page describe planned v2 behavior rather than current behavior.
+MCP tools are not implemented in 0.3.1. The CLI parser accepts only `generate`, `run`, `check`, `heal`, `init`, and `view`, and provides no `mcp` server command. The tool definitions and behaviors documented on this page describe planned v2 behavior rather than current behavior.
 :::
 
 This reference defines the planned tool contracts for ambercast Model Context Protocol (MCP) workflows.
 
 ## Status {#status}
 
-MCP tools are not implemented in 0.3.1; the CLI parser accepts only `generate`, `run`, `check`, `heal`, and `init`, and no `mcp` server command. Their planned v2 tool set is defined for v2.
+MCP tools are not implemented in 0.3.1; the CLI parser accepts only `generate`, `run`, `check`, `heal`, `init`, and `view`, and no `mcp` server command. Their planned v2 tool set is defined for v2.
 
 Links: [ambercast mcp](/ambercast/reference/cli/mcp/#status), [MCP server](/ambercast/agents/mcp-server/).
 

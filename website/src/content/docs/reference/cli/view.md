@@ -1,48 +1,49 @@
 ---
 title: ambercast view
-description: Command reference for ambercast view, defining the planned local test results viewer, port selection, and non-interactive refusal.
-status: planned
-sidebar:
-  badge:
-    text: Planned
-    variant: caution
+description: Command-line reference for ambercast view, defining flags, the interactive gate, port selection, host binding, and the served routes.
 ---
 
-:::caution
-`ambercast view` is not implemented in 0.3.1. The design details documented on this page represent planned behavior.
-:::
+The `ambercast view` command starts a read-only local HTTP server that browses run results persisted under the configured runs directory, so a developer can inspect a run's cases, steps, and screenshots without re-running tests or making any AI calls.
 
-The `ambercast view` command defines the planned local results viewer, covering viewer invocation, port selection, and non-interactive refusal.
+## Flags {#flags}
 
-## Status {#status}
+| Flag | Value | Effect | Default |
+| --- | --- | --- | --- |
+| `--port` | n | preferred port; auto-increments through 20 candidates unless set | 4600 |
+| `--host` | addr | bind address; a concrete IP or localhost, no wildcards | 127.0.0.1 |
+| `--allow-headless` | boolean | permit a non-interactive terminal | false |
+| `--config` | path | explicit config | omitted |
+| `--no-color` | boolean | disable ANSI | false |
 
-`ambercast view` is not implemented in 0.3.1; the CLI parser accepts only `generate`, `run`, `check`, `heal`, and `init`, and rejects any other command. Its planned role as a local results viewer is established in the viewer design.
+## Interactive gate {#interactive-gate}
 
-Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope).
+`view` refuses to start unless stdin and stderr are both attached to a terminal and `CI` is not set, matching every other confirmation-gated command's interactivity check. Without `--allow-headless`, a non-interactive invocation exits 2 with:
 
-## Planned interface {#planned-interface}
+```
+view requires --allow-headless when no interactive terminal is attached.
+```
 
-| Syntax / behavior | Planned contract |
+`--allow-headless` lifts this refusal; it is a no-op in an already-interactive terminal.
+
+## Port selection {#port-selection}
+
+The starting port is `--port`, then the configured `viewer.port`, then 4600. Without `--port`, `view` tries up to 20 consecutive ports starting there, advancing only on `EADDRINUSE`, and prints the port it actually bound. With `--port`, that single port is strict: if it is occupied, `view` exits 3 rather than trying another port. Exhausting every candidate, or any bind failure other than `EADDRINUSE`, also exits 3.
+
+## Host binding {#host-binding}
+
+`--host` accepts a concrete IP address or `localhost` (normalized to `127.0.0.1`); a wildcard address (`0.0.0.0`, `::`, `[::]`) exits 2, since this server has no authentication. Every request is checked against the bound host and port through its `Host` header; a request naming a different host is refused with 403. Binding to a non-loopback address prints a warning that the server is reachable without authentication.
+
+## Routes {#routes}
+
+| Route | Serves |
 | --- | --- |
-| `view [--port <n>] [--host <addr>] [--allow-headless]` | Start the local results viewer. |
-| Default port | Start from the configured/default port, increment until a free port is found, and print the actual URL. |
-| `--port` / configuration | Allow a fixed port, supporting CI or stable bookmarks. |
-| Non-interactive default | Refuse in CI or a non-interactive terminal with exit 2. |
-| `--allow-headless` | Explicitly lift the non-interactive refusal. |
-| Design-wide flags | `--config <path>`, `--no-color`, `--version`, and `--help` are declared common to all planned commands; the matrix does not assign `--json` to `view`. |
+| `GET /` | The run list, newest first, with status, duration, and case counts. |
+| `GET /runs/<runId>` | One run's cases, steps, expected/actual values, explanations, and screenshots. |
+| `GET /runs/<runId>/report.json` | The run's raw persisted report bytes. |
+| `GET /runs/<runId>/screenshots/<ref>` | A screenshot the run's report actually references. |
 
-The viewer is planned as a local Storybook-like server for test results and screenshots. Stored JSON and screenshots determine the rendered structure; AI is limited to natural-language content such as test summaries and failure explanations.
+Every response carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`; HTML and raw responses also carry a fixed `Content-Security-Policy` and `Referrer-Policy: no-referrer`. The page renders server-side with no client JavaScript and no external requests.
 
-Browser startup failure is classified as environment exit 3 by the planned common exit-code contract.
+A run directory missing its `report.json` (for example, mid-write, or after a failed persist) shows as evidence-only in the list rather than a broken link. A run whose `report.json` fails to parse or validate still appears, with its raw bytes reachable, rather than disappearing from the list.
 
-`view` is the only planned Ambercast feature that consumes a network port; the planned MCP server is portless stdio.
-
-## Undecided items {#undecided-items}
-
-| State | Item |
-| --- | --- |
-| Unspecified | `--host` is named, but binding/address/public-exposure semantics are not defined. |
-| Unspecified | The default port number, increment limit, server lifecycle, routes, and UI are not fixed by the viewer design. |
-| Explicitly undecided | None for `view`; the design labels only `baseline` and `restore` as `未決`. |
-
-Links: [Configuration](/ambercast/reference/configuration/#key-table), [Reports](/ambercast/reference/reports/#result-shapes), [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface).
+Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table).

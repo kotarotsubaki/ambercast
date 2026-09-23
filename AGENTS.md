@@ -10,7 +10,7 @@ Test cases are written as natural-language Markdown prompts; the prompt is the s
 
 ## Status
 
-0.x (the exact version is package.json's). `generate`, `run`, `check`, `heal`, and `init` are implemented and exercised by the test suite. Chromium only, local execution only; the results viewer and an MCP server are not implemented yet. The official agent skill is bundled at skills/ambercast/SKILL.md.
+0.x (the exact version is package.json's). `generate`, `run`, `check`, `heal`, `init`, and `view` are implemented and exercised by the test suite. Chromium only, local execution only; an MCP server is not implemented yet. The official agent skill is bundled at skills/ambercast/SKILL.md.
 
 ## Repository layout
 

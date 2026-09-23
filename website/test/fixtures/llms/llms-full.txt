@@ -869,7 +869,7 @@ A target configuration supplies a web surface and a browser destination; its `he
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `600000` | positive | generate; run fallback; heal |
-| `viewer.port` | integer | `4600` | 1–65535; viewer command is planned | planned `view` only |
+| `viewer.port` | integer | `4600` | 1–65535; starting candidate, overridden by `--port` | view |
 | `ci.heal` | boolean | `false` | opt-in to non-list heal in CI | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI write-back opt-in | run |
 | `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | finite vocabulary | check |
@@ -1610,18 +1610,18 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `**` | `**` is the discovery wildcard that crosses path separators. | matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#pattern-language) | one-segment `*` |
 | `--` | `--` ends option parsing and leaves following tokens as literal paths. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | a filename beginning `--` |
 | `--allow-empty` | `--allow-empty` makes an empty selection permissible for commands that parse it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--list` |
-| `--allow-headless` | `--allow-headless` is planned-only and has no accepted 0.3.1 parser semantics. | [ambercast view](/ambercast/reference/cli/view/#planned-interface) | implemented `--headed` |
+| `--allow-headless` | `--allow-headless` lifts view's non-interactive refusal; it is a no-op when the terminal is already interactive. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#interactive-gate) | implemented `--headed` |
 | `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
 | `--clear` | `--clear` is planned-only and has no accepted 0.3.1 baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
 | `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` is planned-only and has no accepted 0.3.1 init parser semantics. | [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
 | `--dry-run` | `--dry-run` withholds artifact writes for generate and heal. | generate/heal; [ambercast generate](/ambercast/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` opts the implemented generate command out of fresh-Plan reuse. | `ambercast generate`; [ambercast generate](/ambercast/reference/cli/generate/#flags) | heal `--yes` |
-| `--host` | `--host` is planned-only and has no accepted 0.3.1 viewer parser semantics. | [ambercast view](/ambercast/reference/cli/view/#undecided-items) | target `baseUrl` |
+| `--host` | `--host` selects view's bind address; a concrete IP or `localhost`, never a wildcard. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#host-binding) | target `baseUrl` |
 | `--json` | `--json` selects serialized structured-report output after an implemented command returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` is parsed by every implemented command; each command page owns its listing result semantics. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` is planned-only and has no accepted 0.3.1 run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
-| `--port` | `--port` is planned-only and has no accepted 0.3.1 viewer parser semantics. | [ambercast view](/ambercast/reference/cli/view/#planned-interface) | config `viewer.port` |
+| `--port` | `--port` fixes view to a single strict port instead of auto-incrementing through candidates. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#port-selection) | config `viewer.port` |
 | `--yes` | `--yes` authorizes heal settlement without an interactive confirmation. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` is the exact adjacent Grounding companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Plan suffix |
 | `.ambercast.plan.json` | `.ambercast.plan.json` is the exact adjacent Plan companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Grounding suffix |
@@ -1656,7 +1656,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
 | `ambercast run` | `ambercast run` is the implemented deterministic replay command. | [ambercast run](/ambercast/reference/cli/run/) | `ambercast generate` |
-| `ambercast view` | `ambercast view` is planned-only and rejected by the 0.3.1 parser. | [ambercast view](/ambercast/reference/cli/view/#status) | implemented command |
+| `ambercast view` | `ambercast view` is the implemented read-only local results viewer. | [ambercast view](/ambercast/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
 | `ambercast_generate` | `ambercast_generate` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
 | `ambercast_heal` | `ambercast_heal` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
@@ -1692,11 +1692,11 @@ See also: [CLI overview](/ambercast/reference/cli/overview/), [Configuration](/a
 # CLI overview
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/overview/
 
-The `ambercast` command-line interface provides five commands for scaffolding a project and for generating, running, checking, and repairing deterministic test plans, using per-command option parsing and configured discovery defaults.
+The `ambercast` command-line interface provides six commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, and browsing run results, using per-command option parsing and configured discovery defaults.
 
 ## Command surface {#command-surface}
 
-The implemented commands are `init`, `generate`, `run`, `check`, and `heal`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
+The implemented commands are `init`, `generate`, `run`, `check`, `heal`, and `view`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
 
 Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to operate on plans whose steps name their execution Targets.
 
@@ -1709,6 +1709,7 @@ Commands:
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+  view                 Browse run results in a browser
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -1726,6 +1727,9 @@ Check options:
 
 Heal options:
   --dry-run  --yes, -y  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
+
+View options:
+  --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
@@ -1745,6 +1749,7 @@ Heal configuration:
 | run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| view | none | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 
 Except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
 
@@ -2024,6 +2029,56 @@ After a successful run, repeating the same command is idempotent: all four artif
 - [Your first test in 5 minutes](/ambercast/tutorials/quick-start/)
 - [Configuration](/ambercast/reference/configuration/#file-selection)
 - [Operating contract](/ambercast/agents/operating-contract/#command-contract)
+
+---
+
+# ambercast view
+Source: https://kotarotsubaki.github.io/ambercast/reference/cli/view/
+
+The `ambercast view` command starts a read-only local HTTP server that browses run results persisted under the configured runs directory, so a developer can inspect a run's cases, steps, and screenshots without re-running tests or making any AI calls.
+
+## Flags {#flags}
+
+| Flag | Value | Effect | Default |
+| --- | --- | --- | --- |
+| `--port` | n | preferred port; auto-increments through 20 candidates unless set | 4600 |
+| `--host` | addr | bind address; a concrete IP or localhost, no wildcards | 127.0.0.1 |
+| `--allow-headless` | boolean | permit a non-interactive terminal | false |
+| `--config` | path | explicit config | omitted |
+| `--no-color` | boolean | disable ANSI | false |
+
+## Interactive gate {#interactive-gate}
+
+`view` refuses to start unless stdin and stderr are both attached to a terminal and `CI` is not set, matching every other confirmation-gated command's interactivity check. Without `--allow-headless`, a non-interactive invocation exits 2 with:
+
+```
+view requires --allow-headless when no interactive terminal is attached.
+```
+
+`--allow-headless` lifts this refusal; it is a no-op in an already-interactive terminal.
+
+## Port selection {#port-selection}
+
+The starting port is `--port`, then the configured `viewer.port`, then 4600. Without `--port`, `view` tries up to 20 consecutive ports starting there, advancing only on `EADDRINUSE`, and prints the port it actually bound. With `--port`, that single port is strict: if it is occupied, `view` exits 3 rather than trying another port. Exhausting every candidate, or any bind failure other than `EADDRINUSE`, also exits 3.
+
+## Host binding {#host-binding}
+
+`--host` accepts a concrete IP address or `localhost` (normalized to `127.0.0.1`); a wildcard address (`0.0.0.0`, `::`, `[::]`) exits 2, since this server has no authentication. Every request is checked against the bound host and port through its `Host` header; a request naming a different host is refused with 403. Binding to a non-loopback address prints a warning that the server is reachable without authentication.
+
+## Routes {#routes}
+
+| Route | Serves |
+| --- | --- |
+| `GET /` | The run list, newest first, with status, duration, and case counts. |
+| `GET /runs/<runId>` | One run's cases, steps, expected/actual values, explanations, and screenshots. |
+| `GET /runs/<runId>/report.json` | The run's raw persisted report bytes. |
+| `GET /runs/<runId>/screenshots/<ref>` | A screenshot the run's report actually references. |
+
+Every response carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`; HTML and raw responses also carry a fixed `Content-Security-Policy` and `Referrer-Policy: no-referrer`. The page renders server-side with no client JavaScript and no external requests.
+
+A run directory missing its `report.json` (for example, mid-write, or after a failed persist) shows as evidence-only in the list rather than a broken link. A run whose `report.json` fails to parse or validate still appears, with its raw bytes reachable, rather than disappearing from the list.
+
+Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table).
 
 ---
 
@@ -3057,11 +3112,11 @@ Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Trust a
 # Status and roadmap
 Source: https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/
 
-ambercast 0.3.1 establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes four core subcommands—`generate`, `run`, `check`, and `heal`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
+ambercast 0.3.1 establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes six subcommands—`init`, `generate`, `run`, `check`, `heal`, and `view`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
 
 ## Implemented in current release {#implemented}
 
-The 0.3.1 CLI parser exposes `generate`, `run`, `check`, and `heal`. The implemented parser exposes no init, viewer, or MCP subcommand, keeping the operational interface focused on compiling, executing, validating, and repairing test plans.
+The 0.3.1 CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, and `view`. The implemented parser exposes no MCP subcommand, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, and browsing the results of test plans.
 
 When working across versions, 0.3.1 requires regeneration of 0.1.0 plans. This requirement exists because the producer-contract fingerprint changed between releases, making the producer bundle and `inputsDigest` from 0.1.0 stale under 0.3.1.
 
@@ -3069,9 +3124,9 @@ Links: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambe
 
 ## Planned after the current boundary {#planned-after-current-boundary}
 
-Several surfaces and tools lie outside the 0.3.1 implementation. Planned documentation covers `init`, `view`, `review`, `mcp`, baseline/restore, MCP tools, and an official skill. On the execution side, support for Firefox and WebKit is planned by 1.0.
+Several surfaces and tools lie outside the 0.3.1 implementation. Planned documentation covers `review`, `mcp`, baseline/restore, MCP tools, and an official skill. On the execution side, support for Firefox and WebKit is planned by 1.0.
 
-Links: [ambercast init](/ambercast/reference/cli/init/), [ambercast view](/ambercast/reference/cli/view/), [Official skill](/ambercast/agents/official-skill/), [MCP server](/ambercast/agents/mcp-server/)
+Links: [ambercast review](/ambercast/reference/cli/review/), [Official skill](/ambercast/agents/official-skill/), [MCP server](/ambercast/agents/mcp-server/)
 
 ## Version policy {#version-policy}
 
@@ -3113,13 +3168,13 @@ Links: [Setup prompt](/ambercast/agents/setup-prompt/), [Operating contract](/am
 # Operating contract
 Source: https://kotarotsubaki.github.io/ambercast/agents/operating-contract/
 
-This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly five implemented commands: `init`, `generate`, `run`, `check`, and `heal`.
+This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly six implemented commands: `init`, `generate`, `run`, `check`, `heal`, and `view`.
 
 ## Command contract {#command-contract}
 
-Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, and `heal` as implemented commands.
+Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, `heal`, and `view` as implemented commands.
 
-Among these commands, `check` has no mutable-storage, AI-provider, or browser dependency. Healing buffers only plan and grounding companion changes until confirmation, but its replay attempts may write contained evidence in the case run directory before approval and during dry runs.
+Among these commands, `check` and `view` have no mutable-storage, AI-provider, or browser dependency. Healing buffers only plan and grounding companion changes until confirmation, but its replay attempts may write contained evidence in the case run directory before approval and during dry runs.
 
 | Command | Precondition | Side effects | Needs approval? | Safe in CI? |
 | --- | --- | --- | --- | --- |
@@ -3128,6 +3183,7 @@ Among these commands, `check` has no mutable-storage, AI-provider, or browser de
 | `run` | A selected prompt has a trusted plan. | Writes invocation report; may write grounding under its write-back contract. | Yes when requested scope does not already authorize writes. | Yes, subject to write-back policy. |
 | `check` | A selection can be discovered. | Reads prompts and artifacts only. | No ambercast-artifact write approval required. | Yes. |
 | `heal` | Target is idempotent and a real attempt is CI-enabled when in CI. | May write attempt evidence in the runs directory; commits measured plan/grounding candidates only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | No by default; only with `ci.heal: true`. |
+| `view` | An interactive terminal, or `--allow-headless`; a free port to bind. | None; read-only HTTP server over persisted run reports. | No ambercast-artifact write approval required. | No by default; it rejects non-interactive use without `--allow-headless`. |
 
 Links: [CLI overview](/ambercast/reference/cli/overview/), [ambercast init](/ambercast/reference/cli/init/#confirmation), [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 

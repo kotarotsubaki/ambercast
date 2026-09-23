@@ -54,18 +54,18 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `**` | `**` is the discovery wildcard that crosses path separators. | matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#pattern-language) | one-segment `*` |
 | `--` | `--` ends option parsing and leaves following tokens as literal paths. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | a filename beginning `--` |
 | `--allow-empty` | `--allow-empty` makes an empty selection permissible for commands that parse it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--list` |
-| `--allow-headless` | `--allow-headless` is planned-only and has no accepted 0.3.1 parser semantics. | [ambercast view](/ambercast/reference/cli/view/#planned-interface) | implemented `--headed` |
+| `--allow-headless` | `--allow-headless` lifts view's non-interactive refusal; it is a no-op when the terminal is already interactive. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#interactive-gate) | implemented `--headed` |
 | `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
 | `--clear` | `--clear` is planned-only and has no accepted 0.3.1 baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
 | `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` is planned-only and has no accepted 0.3.1 init parser semantics. | [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
 | `--dry-run` | `--dry-run` withholds artifact writes for generate and heal. | generate/heal; [ambercast generate](/ambercast/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` opts the implemented generate command out of fresh-Plan reuse. | `ambercast generate`; [ambercast generate](/ambercast/reference/cli/generate/#flags) | heal `--yes` |
-| `--host` | `--host` is planned-only and has no accepted 0.3.1 viewer parser semantics. | [ambercast view](/ambercast/reference/cli/view/#undecided-items) | target `baseUrl` |
+| `--host` | `--host` selects view's bind address; a concrete IP or `localhost`, never a wildcard. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#host-binding) | target `baseUrl` |
 | `--json` | `--json` selects serialized structured-report output after an implemented command returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` is parsed by every implemented command; each command page owns its listing result semantics. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` is planned-only and has no accepted 0.3.1 run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
-| `--port` | `--port` is planned-only and has no accepted 0.3.1 viewer parser semantics. | [ambercast view](/ambercast/reference/cli/view/#planned-interface) | config `viewer.port` |
+| `--port` | `--port` fixes view to a single strict port instead of auto-incrementing through candidates. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#port-selection) | config `viewer.port` |
 | `--yes` | `--yes` authorizes heal settlement without an interactive confirmation. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` is the exact adjacent Grounding companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Plan suffix |
 | `.ambercast.plan.json` | `.ambercast.plan.json` is the exact adjacent Plan companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Grounding suffix |
@@ -100,7 +100,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
 | `ambercast run` | `ambercast run` is the implemented deterministic replay command. | [ambercast run](/ambercast/reference/cli/run/) | `ambercast generate` |
-| `ambercast view` | `ambercast view` is planned-only and rejected by the 0.3.1 parser. | [ambercast view](/ambercast/reference/cli/view/#status) | implemented command |
+| `ambercast view` | `ambercast view` is the implemented read-only local results viewer. | [ambercast view](/ambercast/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
 | `ambercast_generate` | `ambercast_generate` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
 | `ambercast_heal` | `ambercast_heal` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |

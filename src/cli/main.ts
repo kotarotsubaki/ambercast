@@ -33,10 +33,18 @@
  * confirmation and persistence policy belong to runtime composition rather
  * than requiring a second top-level CLI shape.
  *
+ * The `view` subcommand accepts no positional paths or JSON report mode. Its
+ * parser rejects positionals as `view takes no arguments.` before classifying
+ * unknown options, so a stray path gets the command's specific usage error.
+ * After dispatch, view keeps the server alive until its signal closes it;
+ * its own AmbercastError catch writes the error message and exit code directly,
+ * outside the report envelope and the generic unexpected-crash catch.
+ *
  * The parser stays hand-written because the small fixed flag surface needs no
- * dependency or a second command grammar. This layer imports only runtime:
- * configuration, provider selection, errors, and report construction remain
- * on the composition side of that boundary.
+ * dependency or a second command grammar. View's server adapter is the narrow
+ * exception to this layer's runtime-only imports; configuration, provider
+ * selection, errors, and report construction remain on the composition side
+ * of that boundary.
  */
 import { runGenerateCommand } from '#runtime/generate-command.js';
 import { runCheckCommand } from '#runtime/check-command.js';
@@ -46,6 +54,8 @@ import { readDebugEnvironment } from '#runtime/debug-environment.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runInitCommand, type InitCommandDeps, type InitCommandInput, type InitCommandOutput } from '#runtime/init-command.js';
 import { runRunCommand } from '#runtime/run-command.js';
+import { AmbercastError, prepareViewCommand } from '#runtime/view-command.js';
+import { startLocalReportServer } from '#adapters/http/local-report-server.js';
 
 interface ParsedGenerateCommand {
   readonly command: 'generate';
@@ -122,6 +132,19 @@ interface ParsedHealCommand {
 interface ParsedInitCommand {
   readonly command: 'init';
   readonly input: Omit<InitCommandInput, 'stderr'> & { readonly signal: AbortSignal };
+  readonly color: boolean;
+}
+
+interface ParsedViewCommand {
+  readonly command: 'view';
+  readonly input: {
+    readonly port?: number;
+    readonly host?: string;
+    readonly allowHeadless: boolean;
+    readonly configPathOverride?: string;
+    readonly cwd: string;
+    readonly signal: AbortSignal;
+  };
   readonly color: boolean;
 }
 
@@ -751,6 +774,82 @@ function parseInit(argv: readonly string[], signal: AbortSignal): ParsedInitComm
 }
 
 /**
+ * Parses view's non-positional flags, leaving bind and terminal policy to the
+ * runtime and HTTP layers. Port syntax is validated here so malformed input
+ * follows the ordinary usage-error path before any server work begins.
+ */
+function parseView(argv: readonly string[], signal: AbortSignal): ParsedViewCommand | string {
+  const separator = argv.indexOf('--');
+  if (argv.slice(0, separator === -1 ? undefined : separator).includes('--help')) {
+    return 'help';
+  }
+
+  let port: number | undefined;
+  let host: string | undefined;
+  let allowHeadless = false;
+  let configPathOverride: string | undefined;
+  let color = true;
+  const flags = flagLookup(CLI_MANIFEST.commands.find((command) => command.name === 'view')!);
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]!;
+    if (argument === '--') {
+      return argv[index + 1] === undefined ? {
+        command: 'view',
+        input: {
+          ...(port === undefined ? {} : { port }),
+          ...(host === undefined ? {} : { host }),
+          allowHeadless,
+          ...(configPathOverride === undefined ? {} : { configPathOverride }),
+          cwd: process.cwd(),
+          signal,
+        },
+        color,
+      } : 'view takes no arguments.';
+    }
+    const flag = flags.get(argument);
+    if (flag !== undefined) {
+      if (flag.value === null) {
+        if (flag.name === 'allow-headless') allowHeadless = true;
+        else if (flag.name === 'no-color') color = false;
+      } else {
+        const value = argv[index + 1];
+        if (value === undefined || value.startsWith('--')) {
+          return `Missing value for ${argument}.`;
+        }
+        index += 1;
+        if (flag.name === 'port') {
+          if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535) {
+            return 'The --port value must be an integer from 1 to 65535.';
+          }
+          port = Number(value);
+        } else if (flag.name === 'host') {
+          host = value;
+        } else if (flag.name === 'config') {
+          configPathOverride = value;
+        }
+      }
+      continue;
+    }
+    if (!argument.startsWith('--')) return 'view takes no arguments.';
+    return `Unknown view option: ${argument}.`;
+  }
+
+  return {
+    command: 'view',
+    input: {
+      ...(port === undefined ? {} : { port }),
+      ...(host === undefined ? {} : { host }),
+      allowHeadless,
+      ...(configPathOverride === undefined ? {} : { configPathOverride }),
+      cwd: process.cwd(),
+      signal,
+    },
+    color,
+  };
+}
+
+/**
  * Renders the init result protocol without projecting it into a report envelope.
  *
  * Init owns a fixed artifact list and human-oriented next step, so its output
@@ -794,7 +893,7 @@ export async function main(
     process.exitCode = 0;
     return;
   }
-  if (argv[0] !== 'init' && argv[0] !== 'generate' && argv[0] !== 'run' && argv[0] !== 'check' && argv[0] !== 'heal') {
+  if (argv[0] !== 'init' && argv[0] !== 'generate' && argv[0] !== 'run' && argv[0] !== 'check' && argv[0] !== 'heal' && argv[0] !== 'view') {
     stderr.write(`Unknown command: ${argv[0]}.\n`);
     writeUsage(stderr);
     process.exitCode = 2;
@@ -810,7 +909,9 @@ export async function main(
         ? parseRun(argv.slice(1), controller.signal)
         : argv[0] === 'check'
           ? parseCheck(argv.slice(1), controller.signal)
-          : parseHeal(argv.slice(1), controller.signal);
+          : argv[0] === 'view'
+            ? parseView(argv.slice(1), controller.signal)
+            : parseHeal(argv.slice(1), controller.signal);
   if (typeof parsed === 'string') {
     if (parsed === 'help') {
       writeUsage(stdout);
@@ -846,6 +947,31 @@ export async function main(
           stderr.write(`${output.message}\n`);
         }
         process.exitCode = output.exitCode;
+        return;
+      }
+      if (parsed.command === 'view') {
+        try {
+          const plan = await prepareViewCommand({ ...parsed.input, stderr });
+          const { url, closed } = await startLocalReportServer(plan, {
+            signal: parsed.input.signal,
+            stderr,
+          });
+          if (url !== '') {
+            stderr.write(`Listening on ${url}\n`);
+            if (plan.warn) {
+              stderr.write(`Warning: reachable without authentication at ${url}\n`);
+            }
+          }
+          await closed;
+          process.exitCode = 0;
+        } catch (error) {
+          if (error instanceof AmbercastError) {
+            stderr.write(`${error.message}\n`);
+            process.exitCode = error.exitCode;
+            return;
+          }
+          throw error;
+        }
         return;
       }
       const output = parsed.command === 'generate'

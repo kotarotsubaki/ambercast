@@ -1,50 +1,49 @@
 ---
 title: ambercast view
-description: 定义本地测试结果查看器的调用方式、端口选择以及非交互式环境下的拒绝策略。
-status: planned
-sidebar:
-  badge:
-    text: Planned
-    variant: caution
+description: ambercast view 命令参考，定义标志、交互门控、端口选择、主机绑定以及提供的路由。
 ---
 
-:::caution
-`ambercast view` 尚未在 0.3.1 中实现。本文档为您呈现规划中的预期设计，而非当前已实现的功能。
-:::
+`ambercast view` 启动一个只读的本地 HTTP 服务器，用于浏览持久化在已配置 runs 目录下的运行结果，开发者无需重新运行测试或产生任何 AI 调用，即可查看某次 run 的用例、步骤与截图。
 
-`ambercast view` 用于启动本地测试结果查看器，涵盖查看器的调用方式、端口选择策略以及在非交互式环境下的拒绝行为。该命令在 0.3.1 中尚未实现；当前命令行解析器仅接受 `generate`、`run`、`check`、`heal` 和 `init`，并会拒绝任何其他命令。
+## 标志 {#flags}
 
-## 状态 {#status}
+| 标志 | 值 | 效果 | 默认值 |
+| --- | --- | --- | --- |
+| `--port` | n | 首选端口；未指定时最多自动递增尝试 20 个候选端口 | 4600 |
+| `--host` | addr | 绑定地址；必须是具体 IP 或 localhost，不允许通配地址 | 127.0.0.1 |
+| `--allow-headless` | boolean | 允许在非交互式终端中运行 | false |
+| `--config` | path | 显式配置路径 | 省略 |
+| `--no-color` | boolean | 禁用 ANSI 输出 | false |
 
-`ambercast view` 目前尚未在 0.3.1 中实现。命令行解析器仅接受 `generate`、`run`、`check`、`heal` 与 `init`，传入任何其他命令均会被拒绝。该命令作为本地查看器的角色定位由查看器设计定义。
+## 交互门控 {#interactive-gate}
 
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)。
+`view` 遵循与其他带确认门控的命令相同的交互性判定：只有当 stdin 与 stderr 均连接到终端且未设置 `CI` 时才会启动。在未指定 `--allow-headless` 的非交互式调用中，命令将以退出码 2 终止，并输出：
 
-## 规划的接口 {#planned-interface}
+```
+view requires --allow-headless when no interactive terminal is attached.
+```
 
-| 语法 / 行为 | 规划约定 |
+`--allow-headless` 会解除该拒绝；若已处于交互式终端，则该标志为空操作。
+
+## 端口选择 {#port-selection}
+
+起始端口依次取自 `--port`、已配置的 `viewer.port`，最后回退到 4600。未指定 `--port` 时，`view` 会从起始端口开始最多尝试 20 个连续端口，仅在遇到 `EADDRINUSE` 时才前进到下一个候选，并打印实际绑定的端口。指定 `--port` 时，该端口按严格模式处理：若被占用，不会尝试其他端口，而是以退出码 3 终止。所有候选均耗尽，或出现 `EADDRINUSE` 以外的绑定失败，同样以退出码 3 终止。
+
+## 主机绑定 {#host-binding}
+
+`--host` 接受具体 IP 地址或 `localhost`（会被规范化为 `127.0.0.1`）。由于该服务器不提供任何身份验证，通配地址（`0.0.0.0`、`::`、`[::]`）会以退出码 2 被拒绝。每个请求都会依据绑定的主机与端口检查其 `Host` 请求头；指向其他主机的请求将被以 403 拒绝。绑定到非回环地址时，会打印一条警告，说明该服务器在无身份验证的情况下即可被访问。
+
+## 路由 {#routes}
+
+| 路由 | 提供内容 |
 | --- | --- |
-| `view [--port <n>] [--host <addr>] [--allow-headless]` | 启动本地结果查看器。 |
-| 默认端口 | 从配置的或默认端口开始，逐次递增直至找到可用端口，并输出实际 URL。 |
-| `--port` / 配置 | 允许指定固定端口，以支持 CI 环境或方便您保存稳定的书签。 |
-| 非交互式默认行为 | 在 CI 或非交互式终端中默认拒绝运行，退出代码为 2。 |
-| `--allow-headless` | 显式解除非交互式环境下的拒绝限制。 |
-| 通用设计标志 | `--config <path>`、`--no-color`、`--version` 和 `--help` 被声明为所有规划命令的通用标志；命令矩阵未将 `--json` 分配给 view。 |
+| `GET /` | 运行列表，按最新优先排序，包含状态、耗时与用例计数 |
+| `GET /runs/<runId>` | 单次运行的用例、步骤、期望/实际值、说明文字与截图 |
+| `GET /runs/<runId>/report.json` | 该次运行持久化的原始 report 字节内容 |
+| `GET /runs/<runId>/screenshots/<ref>` | 该次运行的 report 实际引用的截图 |
 
-查看器规划为一个用于展示测试结果和屏幕截图的本地类 Storybook 服务器。
+每个响应都携带 `X-Content-Type-Options: nosniff` 与 `Cache-Control: no-store`；HTML 与原始数据响应还携带固定的 `Content-Security-Policy` 与 `Referrer-Policy: no-referrer`。页面完全在服务端渲染，不包含任何客户端 JavaScript 或外部请求。
 
-在呈现方式上，存储的 JSON 与屏幕截图决定渲染的结构；AI 的作用严格限定于生成测试摘要和失败解释等自然语言内容。
+缺少 `report.json` 的运行目录（例如写入过程中或持久化失败）会在列表中显示为仅有证据（evidence only），而不是一个失效链接。`report.json` 解析或校验失败的运行仍会保留在列表中，并提供指向其原始字节内容的链接，而不会从列表中消失。
 
-根据规划的通用退出代码约定，浏览器启动失败被归类为环境错误，退出代码为 3。
-
-view 是 Ambercast 规划中唯一消耗网络端口的功能；规划中的 MCP 服务器采用无端口的 stdio。
-
-## 未决事项 {#undecided-items}
-
-| 状态 | 事项 |
-| --- | --- |
-| 未规定 | 规划中虽然命名了 `--host`，但其绑定地址、网络接口及公网暴露等语义尚未定义。 |
-| 未规定 | 默认端口号、递增上限、服务器生命周期、路由以及 UI 均尚未在查看器设计中固定。 |
-| 明确未决 | `view` 无明确未决事项；设计中仅将 `baseline` 和 `restore` 标记为未决。 |
-
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#key-table)，[报告](/ambercast/zh-cn/reference/reports/#result-shapes)，[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#planned-interface)。
+相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)。

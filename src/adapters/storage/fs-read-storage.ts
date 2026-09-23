@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 
 /*
@@ -50,6 +50,31 @@ export function createFsReadStorage(): ReadStorageAdapter {
         return (await stat(path)).isFile();
       } catch {
         return false;
+      }
+    },
+    async listDirectories(dir: string): Promise<readonly string[]> {
+      try {
+        const entries = await readdir(dir || '.', { withFileTypes: true });
+        return entries
+          .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.ambercast-tmp-'))
+          .map((entry) => entry.name)
+          .sort();
+      } catch (error: unknown) {
+        if (isMissingPathError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    },
+    async realPath(path: string): Promise<string | undefined> {
+      try {
+        return await realpath(path);
+      } catch (error: unknown) {
+        if (isMissingPathError(error)) {
+          return undefined;
+        }
+        throw error;
       }
     },
   };

@@ -49,18 +49,18 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `**` | `**` 是可跨越路径分隔符的发现通配符。 | 匹配器；[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#pattern-language) | 单段 `*` |
 | `--` | `--` 终止选项解析，并将其后的词元保留为字面量路径。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | 以 `--` 开头的文件名 |
 | `--allow-empty` | `--allow-empty` 使得解析该选项的命令在选择集为空时仍被允许执行。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--list` |
-| `--allow-headless` | `--allow-headless` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 解析器语义。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#planned-interface) | 已实现的 `--headed` |
+| `--allow-headless` | `--allow-headless` 解除 view 的非交互式拒绝；若终端已经处于交互式，则为空操作。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#interactive-gate) | 已实现的 `--headed` |
 | `--resolve` | `--resolve` 会在 grounding 缺失时显式允许 run 使用实时 AI 解析；未传入时，run 会拒绝该未命中。 | `ambercast run`；[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags) | 离线测试发现 |
 | `--clear` | `--clear` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 baseline 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | 当前命令执行的文件删除 |
 | `--config` | `--config` 是命令局部选项，仅由 generate 和 check 命令解析。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 init 解析器语义。 | [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags) | 配置 `testDir` |
 | `--dry-run` | `--dry-run` 会阻止 generate 与 heal 命令写入工件。 | generate/heal；[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` 使已实现的 generate 命令退出对新鲜 Plan 的复用逻辑。 | `ambercast generate`；[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags) | heal `--yes` |
-| `--host` | `--host` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 viewer 解析器语义。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#undecided-items) | 目标的 `baseUrl` |
+| `--host` | `--host` 选择 view 的绑定地址；必须是具体 IP 或 `localhost`，不允许通配地址。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#host-binding) | 目标的 `baseUrl` |
 | `--json` | `--json` 在已实现的命令返回后选择序列化的结构化报告输出。 | CLI 渲染器；[报告](/ambercast/zh-cn/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` 由每个已实现的命令解析；各命令页面拥有各自的列表结果语义。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 run 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | `--force` |
-| `--port` | `--port` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 viewer 解析器语义。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#planned-interface) | 配置 `viewer.port` |
+| `--port` | `--port` 将 view 固定为单一的严格端口，而非自动递增尝试候选端口。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#port-selection) | 配置 `viewer.port` |
 | `--target` | `--target` 为每个已实现的命令指定命名的已配置执行目标。 | CLI 解析器 / 目标解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | 目标定义本身 |
 | `--yes` | `--yes` 授权 heal 在无需交互式确认的情况下直接完成结算。 | `ambercast heal`；[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` 是确切的相邻 Grounding 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Plan 后缀 |
@@ -96,7 +96,7 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `ambercast restore` | `ambercast restore` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
 | `ambercast review` | `ambercast review` 处于规划阶段（在 0.3.1 中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
 | `ambercast run` | `ambercast run` 是已实现的确定性重放命令。 | [ambercast run](/ambercast/zh-cn/reference/cli/run/) | `ambercast generate` |
-| `ambercast view` | `ambercast view` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/#status) | 已实现的命令 |
+| `ambercast view` | `ambercast view` 是已实现的只读本地结果查看器。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
 | `ambercast_generate` | `ambercast_generate` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
 | `ambercast_heal` | `ambercast_heal` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |

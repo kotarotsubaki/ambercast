@@ -569,7 +569,7 @@ describe('check', () => {
       return storage.readText(path);
     });
 
-    const outcome = await check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists } }, {
+    const outcome = await check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists, listDirectories: vi.fn(async () => []), realPath: vi.fn(async () => undefined) } }, {
       ...OPTIONS,
       files: [missingPath, failingPath, stalePath],
     });
@@ -948,7 +948,7 @@ describe('check', () => {
       return storage.readText(path);
     });
 
-    await expect(check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists } }, { ...OPTIONS, files: [testPath] }))
+    await expect(check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists, listDirectories: vi.fn(async () => []), realPath: vi.fn(async () => undefined) } }, { ...OPTIONS, files: [testPath] }))
       .resolves.toMatchObject({
         results: [],
         errors: [{ file: testPath, error: { kind: 'fs-io-error' } }],
@@ -968,7 +968,7 @@ describe('check', () => {
       return storage.readText(path);
     });
 
-    await expect(check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists } }, { ...OPTIONS, files: [testPath] }))
+    await expect(check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists, listDirectories: vi.fn(async () => []), realPath: vi.fn(async () => undefined) } }, { ...OPTIONS, files: [testPath] }))
       .resolves.toMatchObject({
         results: [],
         errors: [{ file: testPath, error: { kind: 'fs-io-error' } }],
@@ -1054,7 +1054,7 @@ describe('check', () => {
       return content;
     });
 
-    await expect(check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists } }, {
+    await expect(check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists: storage.exists, listDirectories: vi.fn(async () => []), realPath: vi.fn(async () => undefined) } }, {
       ...OPTIONS,
       files: [freshPath, stalePath],
     })).resolves.toMatchObject({
@@ -1342,7 +1342,7 @@ describe('check grounding lifecycle integration', () => {
       return storage.readText(path);
     });
 
-    await expect(check({ ...deps, storage: { exists, readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists } }, { ...OPTIONS, files: [testPath] })).resolves.toMatchObject({
+    await expect(check({ ...deps, storage: { exists, readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, listDirectories: vi.fn(async () => []), realPath: vi.fn(async () => undefined) } }, { ...OPTIONS, files: [testPath] })).resolves.toMatchObject({
       results: [{ id: testPath, status }], errors: [],
     });
     expect(exists).not.toHaveBeenCalledWith(groundingPath);
@@ -1385,7 +1385,7 @@ describe('check grounding lifecycle integration', () => {
       return storage.readText(path);
     });
 
-    const outcome = await check({ ...deps, storage: { exists, readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists } }, {
+    const outcome = await check({ ...deps, storage: { exists, readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, listDirectories: vi.fn(async () => []), realPath: vi.fn(async () => undefined) } }, {
       ...OPTIONS,
       files: [testPath, laterPath],
     });
@@ -1536,7 +1536,7 @@ describe('check interruption contract', () => {
       return storage.readText(path);
     });
     const exists = vi.fn(async (path: string) => path === layout.planPathFor(testPath));
-    const outcome = await check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists } }, { ...OPTIONS, files: [testPath] });
+    const outcome = await check({ ...deps, storage: { readText, readTextSnapshotIfExists: storage.readTextSnapshotIfExists, exists, listDirectories: vi.fn(async () => []), realPath: vi.fn(async () => undefined) } }, { ...OPTIONS, files: [testPath] });
 
     expect(outcome.results).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: testPath, status: 'orphaned-plan' }),

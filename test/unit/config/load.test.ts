@@ -427,6 +427,8 @@ describe('loadConfig', () => {
       const selectedPath = `${CWD}/ambercast.config.json`;
       const sentinelError = new Error('sentinel storage read failure');
       const storage: StorageAdapter = {
+        listDirectories: async () => [],
+        realPath: async () => undefined,
         async readText(): Promise<string> {
           throw sentinelError;
         },

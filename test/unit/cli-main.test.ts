@@ -8,6 +8,8 @@ import type { CheckCommandInput } from '#runtime/check-command.js';
 import type { HealCommandInput } from '#runtime/heal-command.js';
 import type { InitCommandOutput } from '#runtime/init-command.js';
 import { createInitConfirmationReader } from '#adapters/system/init-confirmation-reader.js';
+import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
+import type { ViewPlan } from '#runtime/view-command.js';
 import type { StorageAdapter } from '#ports/storage.js';
 
 const runGenerateCommand = vi.hoisted(() => vi.fn());
@@ -15,11 +17,18 @@ const runRunCommand = vi.hoisted(() => vi.fn());
 const runCheckCommand = vi.hoisted(() => vi.fn());
 const runHealCommand = vi.hoisted(() => vi.fn());
 const runInitCommand = vi.hoisted(() => vi.fn());
+const prepareViewCommand = vi.hoisted(() => vi.fn());
+const startLocalReportServer = vi.hoisted(() => vi.fn());
 vi.mock('#runtime/generate-command.js', () => ({ runGenerateCommand }));
 vi.mock('#runtime/run-command.js', () => ({ runRunCommand }));
 vi.mock('#runtime/check-command.js', () => ({ runCheckCommand }));
 vi.mock('#runtime/heal-command.js', () => ({ runHealCommand }));
 vi.mock('#runtime/init-command.js', () => ({ runInitCommand }));
+vi.mock('#runtime/view-command.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('#runtime/view-command.js')>(),
+  prepareViewCommand,
+}));
+vi.mock('#adapters/http/local-report-server.js', () => ({ startLocalReportServer }));
 
 import { ERROR_DETAILS_KEY_ORDER, main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
@@ -125,6 +134,8 @@ afterEach(() => {
   runCheckCommand.mockReset();
   runHealCommand.mockReset();
   runInitCommand.mockReset();
+  prepareViewCommand.mockReset();
+  startLocalReportServer.mockReset();
 });
 
 async function run(argv: readonly string[]) {
@@ -140,6 +151,8 @@ function createInitStorage(): StorageAdapter {
   const files = new Map<string, string>();
   const snapshot = (text: string) => ({ text, bytes: new TextEncoder().encode(text) });
   return {
+    listDirectories: async () => [],
+    realPath: async () => undefined,
     async readText(path) {
       const text = files.get(path);
       if (text === undefined) throw new Error(`missing ${path}`);
@@ -1361,6 +1374,7 @@ describe('manifest-driven CLI parser contracts', () => {
     ['run command-local help', ['run', '--help']],
     ['check command-local help', ['check', '--help']],
     ['heal command-local help', ['heal', '--help']],
+    ['view command-local help', ['view', '--help']],
   ] as const)('writes the captured usage bytes for %s', async (_description, argv) => {
     const result = await run(argv);
 
@@ -1377,6 +1391,7 @@ describe('manifest-driven CLI parser contracts', () => {
     ['check', ['check', '--yes'], '--yes'],
     ['heal', ['heal', '--config', 'ambercast.config.json'], '--config'],
     ['heal', ['heal', '--headed'], '--headed'],
+    ['view', ['view', '--json'], '--json'],
   ] as const)('rejects the foreign %s option %s through that command\'s own manifest lookup', async (command, argv, flag) => {
     const result = await run(argv);
 
@@ -1415,6 +1430,7 @@ describe('manifest-driven CLI parser compatibility boundaries', () => {
   it.each([
     ['generate', ['generate', '--target', '--json'], '--target'],
     ['run', ['run', '--grep', '--json'], '--grep'],
+    ['view', ['view', '--port', '--host', 'localhost'], '--port'],
   ] as const)('does not consume a following known flag as the missing %s value', async (command, argv, flag) => {
     const result = await run(argv);
 
@@ -1432,6 +1448,27 @@ describe('manifest-driven CLI parser compatibility boundaries', () => {
     expect(runRunCommand).not.toHaveBeenCalled();
     expect(runCheckCommand).not.toHaveBeenCalled();
     expect(runHealCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a positional argument', ['view', 'extra'], 'view takes no arguments.'],
+    ['an absent port value', ['view', '--port'], 'Missing value for --port.'],
+  ] as const)('rejects view with %s before dispatch', async (_description, argv, message) => {
+    const result = await run(argv);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(`${message}\n${expectedUsage}`);
+    expect(result.exitCode).toBe(2);
+    expect(prepareViewCommand).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', '65536', '80abc', '80.5', '-1'])('rejects invalid view port %s before dispatch', async (port) => {
+    const result = await run(['view', '--port', port]);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe(`The --port value must be an integer from 1 to 65535.\n${expectedUsage}`);
+    expect(result.exitCode).toBe(2);
+    expect(prepareViewCommand).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1533,5 +1570,67 @@ describe('init end-to-end transcript', () => {
     expect(rejected.stderr).toBe('init requires --yes when confirmation cannot be shown.\n');
     expect(rejected.stdout).toBe('');
     expect(rejected.exitCode).toBe(2);
+  });
+});
+
+describe('view command transcript', () => {
+  const plan = (warn: boolean): ViewPlan => ({
+    bindHost: warn ? '192.0.2.10' : '127.0.0.1',
+    candidates: [4600],
+    strict: false,
+    warn,
+    reader: {
+      list: async () => [],
+      get: async () => ({ kind: 'not-found' }),
+      bytes: async () => ({ kind: 'not-found' }),
+      screenshot: async () => ({ kind: 'not-found' }),
+    },
+  });
+
+  it('reports a preparation policy error through the view-specific error path', async () => {
+    prepareViewCommand.mockRejectedValue(new ConfigInvalidError('view requires --allow-headless when no interactive terminal is attached.'));
+
+    const result = await run(['view']);
+
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('view requires --allow-headless when no interactive terminal is attached.\n');
+    expect(result.exitCode).toBe(2);
+    expect(startLocalReportServer).not.toHaveBeenCalled();
+  });
+
+  it('passes a valid explicit port to preparation and starts the server', async () => {
+    const viewPlan = plan(false);
+    prepareViewCommand.mockResolvedValue(viewPlan);
+    startLocalReportServer.mockResolvedValue({ url: 'http://127.0.0.1:4700/', closed: Promise.resolve() });
+
+    const result = await run(['view', '--port', '4700', '--allow-headless']);
+
+    expect(prepareViewCommand).toHaveBeenCalledWith(expect.objectContaining({ port: 4700, allowHeadless: true }));
+    expect(startLocalReportServer).toHaveBeenCalledWith(viewPlan, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('Listening on http://127.0.0.1:4700/\n');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('writes the exact loopback startup line without an envelope', async () => {
+    prepareViewCommand.mockResolvedValue(plan(false));
+    startLocalReportServer.mockResolvedValue({ url: 'http://127.0.0.1:4600/', closed: Promise.resolve() });
+
+    const result = await run(['view', '--allow-headless']);
+
+    expect(result.stderr).toBe('Listening on http://127.0.0.1:4600/\n');
+    expect(result.stdout).toBe('');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('writes the non-loopback warning after the startup line', async () => {
+    prepareViewCommand.mockResolvedValue(plan(true));
+    startLocalReportServer.mockResolvedValue({ url: 'http://192.0.2.10:4600/', closed: Promise.resolve() });
+
+    const result = await run(['view', '--host', '192.0.2.10', '--allow-headless']);
+
+    expect(result.stderr).toBe('Listening on http://192.0.2.10:4600/\nWarning: reachable without authentication at http://192.0.2.10:4600/\n');
+    expect(result.stdout).toBe('');
+    expect(result.exitCode).toBe(0);
   });
 });

@@ -16,7 +16,7 @@ sidebar:
 
 ## 状态 {#status}
 
-`ambercast mcp` 在 0.3.1 版本中尚未实现；命令行解析器仅接受 `generate`、`run`、`check`、`heal` 以及 `init`，并会拒绝任何其他命令。其计划中的 v2 服务器接口由 MCP 设计所定义。
+`ambercast mcp` 在 0.3.1 版本中尚未实现；命令行解析器仅接受 `generate`、`run`、`check`、`heal`、`init` 以及 `view`，并会拒绝任何其他命令。其计划中的 v2 服务器接口由 MCP 设计所定义。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)。
 

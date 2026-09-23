@@ -204,7 +204,7 @@ describe('CLI manifest', () => {
   });
 
   it('declares init first with its complete fixed descriptor literal', () => {
-    expect(CLI_MANIFEST.commands.map((command) => command.name)).toStrictEqual(['init', 'generate', 'run', 'check', 'heal']);
+    expect(CLI_MANIFEST.commands.map((command) => command.name)).toStrictEqual(['init', 'generate', 'run', 'check', 'heal', 'view']);
     expect(CLI_MANIFEST.commands[0]).toStrictEqual({
       name: 'init',
       summary: 'Scaffold config and a sample prompt',
@@ -281,6 +281,16 @@ describe('CLI manifest', () => {
           { name: 'allow-empty', alias: null },
           { name: 'list', alias: null },
           { name: 'json', alias: null },
+          { name: 'no-color', alias: null },
+        ],
+      },
+      {
+        name: 'view',
+        flags: [
+          { name: 'port', alias: null },
+          { name: 'host', alias: null },
+          { name: 'allow-headless', alias: null },
+          { name: 'config', alias: null },
           { name: 'no-color', alias: null },
         ],
       },

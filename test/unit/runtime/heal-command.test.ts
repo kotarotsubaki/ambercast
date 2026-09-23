@@ -5,9 +5,11 @@ import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
+import type { EventSink, RunEvent } from '#ports/system.js';
 import { ReportEnvelope } from '#report/schema.js';
-import { runHealCommand, type HealCommandInput, type HealCommandOutput } from '#runtime/heal-command.js';
-import type { HealBatchResult, HealCaseCommit, HealCaseOutcome, HealCommitOutcome, HealOutcome } from '#usecases/heal.js';
+import { prepareHeal, runHealCommand, type HealCommandInput, type HealCommandOutput } from '#runtime/heal-command.js';
+import type { HealBatchResult, HealCaseCommit, HealCaseOutcome, HealCommitOutcome, HealDeps, HealOutcome } from '#usecases/heal.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 
@@ -1172,5 +1174,168 @@ describe('runHealCommand', () => {
       exitCode: 3,
       envelope: built.envelope,
     });
+  });
+});
+
+describe('prepareHeal TEST-A1 and TEST-A2', () => {
+  const progressEvents: readonly RunEvent[] = [
+    { type: 'ai-call', callId: 'heal-ai-1', file: '/workspace/tests/login.test.md', attempt: 1, attemptLimit: 1 },
+    { type: 'ai-result', callId: 'heal-ai-1', durationMs: 2, outcome: 'ok' },
+  ];
+
+  function emitDuringMeasurement(result: HealBatchResult = batch()): void {
+    mocks.heal.mockImplementation(async (deps: HealDeps) => {
+      for (const event of progressEvents) deps.events.emit(event);
+      return result;
+    });
+  }
+
+  it('preserves the exact heal stderr bytes when no additional event sink is supplied (TEST-A1)', async () => {
+    const chunks: string[] = [];
+    const stderr = { write: vi.fn((chunk: string) => { chunks.push(chunk); return true; }) } as unknown as NodeJS.WritableStream;
+    const { createStderrProgressSink } = await vi.importActual<typeof import('#adapters/system/stderr-progress-sink.js')>('#adapters/system/stderr-progress-sink.js');
+    mocks.createStderrProgressSink.mockImplementation(createStderrProgressSink);
+    emitDuringMeasurement();
+
+    const preparation = await prepareHeal(input({ stderr }));
+    preparation.preview();
+
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledExactlyOnceWith({
+      command: 'heal', stderr, projectRoot: CONFIG.projectRoot, isCI: false,
+      clock: mocks.createSystemClock.mock.results[0]?.value,
+    });
+    expect(chunks).toEqual(['heal tests/login.test.md: ai call 1/1\n']);
+  });
+
+  it('delivers measurement events to stderr and the injected sink in the same order without closing the injected sink (TEST-A1)', async () => {
+    const injected = { emit: vi.fn(), close: vi.fn() } satisfies EventSink & { close: () => void };
+    emitDuringMeasurement();
+
+    await prepareHeal(input({ events: injected }));
+
+    const stderrSink = mocks.createStderrProgressSink.mock.results[0]?.value as EventSink;
+    expect(stderrSink.emit).toHaveBeenCalledTimes(progressEvents.length);
+    expect(injected.emit).toHaveBeenCalledTimes(progressEvents.length);
+    expect(injected.emit.mock.calls.map(([event]) => event)).toEqual(progressEvents);
+    expect(injected.emit.mock.calls).toEqual((stderrSink.emit as ReturnType<typeof vi.fn>).mock.calls);
+    expect(injected.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps the preview unchanged when the injected sink throws on its first event (TEST-A1)', async () => {
+    await useActualBuildHealReport();
+    emitDuringMeasurement();
+    const baseline = (await prepareHeal(input())).preview();
+    const injected = {
+      emit: vi.fn().mockImplementationOnce(() => { throw new Error('subscriber failed'); }),
+      close: vi.fn(),
+    } satisfies EventSink & { close: () => void };
+
+    const preparation = await prepareHeal(input({ events: injected }));
+
+    expect(preparation.preview()).toEqual(baseline);
+    const stderrSink = mocks.createStderrProgressSink.mock.results[1]?.value as EventSink;
+    expect(stderrSink.emit).toHaveBeenCalledTimes(progressEvents.length);
+    expect(injected.emit).toHaveBeenCalledTimes(progressEvents.length);
+    expect(injected.emit.mock.calls).toEqual((stderrSink.emit as ReturnType<typeof vi.fn>).mock.calls);
+    expect(injected.close).not.toHaveBeenCalled();
+  });
+
+  it('returns the same preview twice without invoking a pending commit (TEST-A2-a)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+    await useActualBuildHealReport();
+
+    const preparation = await prepareHeal(input());
+    const first = preparation.preview();
+    const second = preparation.preview();
+
+    expect(preparation.hasCommits).toBe(true);
+    expect(preparation.cases).toEqual([{ caseId: pending.file, file: pending.file, healingSummary: pending.healingSummary }]);
+    expect(first).toEqual(second);
+    expect(first.envelope.results).toEqual([expect.objectContaining({ application: 'preview-only' })]);
+    expect(pending.commit).not.toHaveBeenCalled();
+  });
+
+  it('applies an authorized commit once and keeps preview available afterward (TEST-A2-b)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+    await useActualBuildHealReport();
+
+    const preparation = await prepareHeal(input());
+    const preview = preparation.preview();
+    const settled = await preparation.settle('authorized');
+
+    expect(pending.commit).toHaveBeenCalledOnce();
+    expect(settled.envelope.results).toEqual([expect.objectContaining({ application: 'applied' })]);
+    expect(preparation.preview()).toEqual(preview);
+    await expect(preparation.settle('authorized')).rejects.toBeInstanceOf(UnexpectedCrashError);
+    expect(pending.commit).toHaveBeenCalledOnce();
+  });
+
+  it('reports a declined commit with exit code 1 and no writes (TEST-A2-c)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+    await useActualBuildHealReport();
+
+    const settled = await (await prepareHeal(input())).settle('declined');
+
+    expect(settled).toMatchObject({
+      exitCode: 1,
+      envelope: { results: [expect.objectContaining({ application: 'declined' })] },
+    });
+    expect(pending.commit).not.toHaveBeenCalled();
+  });
+
+  it('reports interruption without invoking a pending commit (TEST-A2-d)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+    await useActualBuildHealReport();
+
+    const settled = await (await prepareHeal(input())).settle('interrupted');
+
+    expect(settled).toMatchObject({
+      exitCode: 3,
+      envelope: {
+        results: [expect.objectContaining({ application: 'not-applied-interrupted' })],
+        errors: [expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' })],
+      },
+    });
+    expect(pending.commit).not.toHaveBeenCalled();
+  });
+
+  it('maps a measurement failure to a zero-commit preview and not-required settlement (TEST-A2-e)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+    await useActualBuildHealReport();
+    mocks.heal.mockRejectedValue(new Error('measurement failed'));
+
+    const preparation = await prepareHeal(input());
+    const preview = preparation.preview();
+    const settled = await preparation.settle('authorized');
+
+    expect(preparation.hasCommits).toBe(false);
+    expect(preparation.cases).toEqual([]);
+    expect(preview).toMatchObject({
+      exitCode: 3,
+      envelope: { errors: [expect.objectContaining({ code: 'UNEXPECTED_CRASH' })] },
+    });
+    expect(settled).toEqual(preview);
+    expect(pending.commit).not.toHaveBeenCalled();
+  });
+
+  it('consumes settlement synchronously before the first settlement promise resolves (TEST-A2)', async () => {
+    const pending = capability('login.test.md');
+    configure({ result: batch({ commits: commits(pending) }) });
+    await useActualBuildHealReport();
+    const preparation = await prepareHeal(input());
+
+    const first = preparation.settle('authorized');
+    const second = preparation.settle('declined');
+
+    await expect(second).rejects.toBeInstanceOf(UnexpectedCrashError);
+    await expect(first).resolves.toMatchObject({
+      envelope: { results: [expect.objectContaining({ application: 'applied' })] },
+    });
+    expect(pending.commit).toHaveBeenCalledOnce();
   });
 });

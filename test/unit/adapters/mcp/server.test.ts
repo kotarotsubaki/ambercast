@@ -79,8 +79,8 @@ describe('mcp/server', () => {
       { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-      expect.objectContaining({ readOnlyHint: true }),
-      expect.objectContaining({ readOnlyHint: false }),
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     ]);
     for (const tool of tools) {
       expect(tool.outputSchema).toBeUndefined();
@@ -132,6 +132,21 @@ describe('mcp/server', () => {
       { type: 'text', text: expect.stringMatching(/^MCP error -32602: Input validation error/) },
     ]);
     expect(deps.run).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['ambercast_job_status', { jobId: 'job', unknown: 1 }],
+    ['ambercast_job_cancel', { jobId: 'job', unknown: 1 }],
+    ['ambercast_job_status', { jobId: 'job', waitMs: -1 }],
+    ['ambercast_job_status', { jobId: 'job', waitMs: 1e9 }],
+    ['ambercast_job_status', { jobId: '' }],
+  ] as const)('%s rejects invalid job input through SDK validation (TEST-C2, TEST-C8)', async (name, args) => {
+    const client = await connect(fakeDeps());
+    const result = await client.callTool({ name, arguments: args });
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: expect.stringMatching(/^MCP error -32602: Input validation error/) }],
+    });
   });
 
   it.each([

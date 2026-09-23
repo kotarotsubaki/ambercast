@@ -30,13 +30,16 @@ export interface RunMcpCommandInput {
  * Job record for write operations (generate/run/heal-preview).
  *
  * @remarks
- * Created when a write tool call is enqueued; read-only tools (check,
- * job_status, job_cancel) never create records. Status transitions:
- * queued → working → (completed/failed/cancelled). Terminal statuses
- * (completed/failed/cancelled) remain fixed; a running job that is
- * cancelled transitions to cancelled only when the runtime returns.
- * A queued job cancelled before runtime invocation transitions to
- * cancelled immediately via FIFO removal.
+ * A write call creates a record on enqueue. Queued and running jobs both
+ * retain working status: a read derives `queued behind <N>` in statusMessage
+ * for a queued job, so queue position does not require another status value.
+ * Terminal status remains fixed. A running cancellation settles when the
+ * runtime returns; cancelling before invocation settles through FIFO removal.
+ * Progress counts every RunEvent emitted by the runtime, regardless of
+ * whether the client supplied a progressToken or received a notification.
+ * The polling recommendation and post-terminal retention period are fixed
+ * protocol contracts, so neither varies by job: pollIntervalMs is 2000 ms
+ * and ttlMs is 1800000 ms.
  */
 export interface JobRecord {
   readonly jobId: string;

@@ -56,19 +56,20 @@ export function renderToolResult(
 }
 
 /**
- * Renders a JobRecord into the shared MCP response shape for handle and
- * non-terminal status/cancel responses.
+ * Renders a job record for handle, status, and cancellation responses.
  *
  * @param record - The job record to render (unknown for defensive parsing).
  * @returns Text and structured content with transport error and metadata fields.
  * @remarks
- * Shared response shape for: (1) job handle returned at enqueue time for
- * async jobs, (2) non-terminal job_status responses, (3) queued-cancel
- * job_cancel responses. The record's status determines whether the job
- * is terminal (completed/failed/cancelled) or non-terminal (working).
- * Non-terminal records include statusMessage derived at read time (e.g.,
- * "queued behind N"). This function validates shape before rendering;
- * invalid records return isError: true with an error message.
+ * Job handles, non-terminal job_status, job_cancel, and queued cancellation
+ * share one record response contract. Keeping that contract here prevents
+ * their response formats from drifting apart; renderToolResult instead
+ * renders command-result envelopes. A valid record yields isError: false,
+ * structuredContent equal to the record, and _meta.jobId equal to its ID.
+ * Its text always has exactly three lines: `jobId: <id>`,
+ * `status: <status>`, and `<statusMessage>`, in that order. The status message
+ * can express queue position without adding a queued status. Invalid records
+ * yield isError: true with an error message.
  */
 export function renderJobRecord(record: unknown): { isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: unknown; _meta: Record<string, unknown> } {
   throw new Error('not implemented');

@@ -29,7 +29,7 @@ function isSymbolicLinkPermissionError(error: unknown): error is { readonly code
 }
 
 // Issue #193 derives this set from the storage adapter so coverage follows future method additions or renames.
-const readOnlyMethodNames = ['readText', 'readTextSnapshotIfExists', 'exists'] as const;
+const readOnlyMethodNames = ['listDirectories', 'readText', 'readTextSnapshotIfExists', 'realPath', 'exists'] as const;
 const allStorageMethodNames = Object.keys(createFsStorage());
 const nonReadStorageMethodNames = allStorageMethodNames.filter(
   (name) => !(readOnlyMethodNames as readonly string[]).includes(name),
@@ -141,9 +141,9 @@ describe('createFsReadStorage()', () => {
     });
   });
 
-  it('exposes exactly the three read-only operations as own properties', () => {
+  it('exposes exactly the five read-only operations as own properties', () => {
     expect([...Reflect.ownKeys(createFsReadStorage())].sort()).toEqual(
-      ['exists', 'readText', 'readTextSnapshotIfExists'].sort(),
+      ['exists', 'listDirectories', 'readText', 'readTextSnapshotIfExists', 'realPath'].sort(),
     );
   });
 

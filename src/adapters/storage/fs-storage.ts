@@ -10,7 +10,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, rename, rm, realpath, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import type { StorageAdapter } from '#ports/storage.js';
@@ -307,6 +307,31 @@ export function createFsStorage(): StorageAdapter {
           return [];
         }
 
+        throw error;
+      }
+    },
+    async listDirectories(dir: string): Promise<readonly string[]> {
+      try {
+        const entries = await readdir(dir || '.', { withFileTypes: true });
+        return entries
+          .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.ambercast-tmp-'))
+          .map((entry) => entry.name)
+          .sort();
+      } catch (error: unknown) {
+        if (isMissingPathError(error)) {
+          return [];
+        }
+
+        throw error;
+      }
+    },
+    async realPath(path: string): Promise<string | undefined> {
+      try {
+        return await realpath(path);
+      } catch (error: unknown) {
+        if (isMissingPathError(error)) {
+          return undefined;
+        }
         throw error;
       }
     },

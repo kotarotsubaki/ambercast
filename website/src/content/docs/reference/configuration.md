@@ -38,7 +38,7 @@ A target configuration supplies a browser destination; its `healReplayIsolation`
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `600000` | positive | generate; run fallback; heal |
-| `viewer.port` | integer | `4600` | 1–65535; viewer command is planned | planned `view` only |
+| `viewer.port` | integer | `4600` | 1–65535; starting candidate, overridden by `--port` | view |
 | `ci.heal` | boolean | `false` | opt-in to non-list heal in CI | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI write-back opt-in | run |
 | `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | finite vocabulary | check |

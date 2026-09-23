@@ -189,7 +189,9 @@ describe('inspectGroundingArtifact', () => {
 
   it('propagates a storage read failure instead of classifying it as invalid', async () => {
     const readFailure = new Error('disk unavailable');
-    const storage: Pick<StorageAdapter, 'readText' | 'readTextSnapshotIfExists' | 'exists'> = {
+    const storage: Pick<StorageAdapter, 'readText' | 'readTextSnapshotIfExists' | 'exists' | 'listDirectories' | 'realPath'> = {
+      listDirectories: vi.fn(async () => []),
+      realPath: vi.fn(async () => undefined),
       exists: vi.fn(async () => true),
       readText: vi.fn(async () => { throw readFailure; }),
       readTextSnapshotIfExists: vi.fn(async () => { throw readFailure; }),

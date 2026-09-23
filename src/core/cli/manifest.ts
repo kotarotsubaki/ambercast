@@ -186,6 +186,18 @@ export const CLI_MANIFEST: VersionlessCliManifest = {
         { name: 'no-color', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'disable ANSI', default: 'false', lineBreakAfter: false },
       ],
     },
+    {
+      name: 'view',
+      summary: 'Browse run results in a browser',
+      positional: null,
+      flags: [
+        { name: 'port', alias: null, value: '<n>', hidden: false, acceptedValues: null, shownValue: null, effect: 'preferred port; auto-increments through 20 candidates unless set', default: '4600', lineBreakAfter: false },
+        { name: 'host', alias: null, value: '<addr>', hidden: false, acceptedValues: null, shownValue: null, effect: 'bind address; a concrete IP or localhost, no wildcards', default: '127.0.0.1', lineBreakAfter: false },
+        { name: 'allow-headless', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'permit a non-interactive terminal', default: 'false', lineBreakAfter: false },
+        { name: 'config', alias: null, value: '<path>', hidden: false, acceptedValues: null, shownValue: null, effect: 'explicit config', default: 'omitted', lineBreakAfter: false },
+        { name: 'no-color', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'disable ANSI', default: 'false', lineBreakAfter: false },
+      ],
+    },
   ],
   helpFooter: 'AI configuration:\n  ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.\n  ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.\n\nHeal configuration:\n  heal.maxStepRepairs: Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.\n  heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.\n',
 };

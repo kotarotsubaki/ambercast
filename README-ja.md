@@ -55,7 +55,7 @@ npx ambercast <command>
 
 ## もっと知る
 
-- [コマンド一覧](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/) — `generate`、`run`、`check`、`heal` の各コマンドの使い方
+- [コマンド一覧](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/) — `generate`、`run`、`check`、`heal`、`view` の各コマンドの使い方
 - [終了コード](https://kotarotsubaki.github.io/ambercast/ja/reference/exit-codes/) — 終了コード 0〜5 の定義と、結果が混在するバッチ実行時の優先順位
 - [アーティファクト](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/) — どの生成ファイルをコミットし、どれを gitignore すべきかの指針
 - [シークレット管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/) — 認証情報をプロンプトやプランに含めずテストへ安全に渡す方法
@@ -86,7 +86,6 @@ ambercast は **0.x、pre-1.0** です: マイナーリリースで破壊的変�
 - Chromium のみ対応です（Firefox と WebKit は計画中です）。
 - ローカル実行のみ — ホスト型のランナーはありません。
 - `init` コマンドはまだありません — config とプロンプトは手動でセットアップしてください。
-- 結果ビューアはまだありません。
 - MCP サーバーはまだありません。
 
 ## コントリビューション

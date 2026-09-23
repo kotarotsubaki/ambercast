@@ -55,7 +55,7 @@ There is no `init` command yet; a prompt file is all you need, and defaults assu
 
 ## Learn more
 
-- [Commands](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/) — Overview of generate, run, check, and heal commands.
+- [Commands](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/) — Overview of generate, run, check, heal, and view commands.
 - [Exit codes](https://kotarotsubaki.github.io/ambercast/reference/exit-codes/) — Exit codes 0–5 and priority order for mixed batch outcomes.
 - [Artifacts](https://kotarotsubaki.github.io/ambercast/how-to/manage-artifacts-in-git/) — Which generated files to commit and which to gitignore.
 - [Secrets](https://kotarotsubaki.github.io/ambercast/how-to/manage-secrets/) — How credentials reach a test without entering the prompt or plan.
@@ -86,7 +86,6 @@ ambercast is pre-1.0 (0.x), and breaking changes can land in a minor release.
 - Chromium only (Firefox and WebKit are planned).
 - Local execution only — no hosted runner.
 - No `init` command yet — config and prompts are set up by hand.
-- No results viewer yet.
 - No MCP server yet.
 
 ## Contributing

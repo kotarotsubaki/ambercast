@@ -143,6 +143,61 @@ export function registerStorageContract(harness: StorageContractHarness): void {
       });
     });
 
+    it('lists no directories when the parent contains only regular files', async () => {
+      await withStorage(harness, async (storage) => {
+        await storage.writeText('runs/first.json', '{}');
+        await storage.writeText('runs/second.json', '{}');
+
+        await expect(storage.listDirectories('runs')).resolves.toEqual([]);
+      });
+    });
+
+    it('lists only direct regular directories as sorted bare names', async () => {
+      await withStorage(harness, async (storage) => {
+        await storage.ensureDir('runs/zeta');
+        await storage.ensureDir('runs/alpha');
+        await storage.ensureDir('runs/alpha/nested');
+        await storage.writeText('runs/report.json', '{}');
+
+        await expect(storage.listDirectories('runs')).resolves.toEqual(['alpha', 'zeta']);
+      });
+    });
+
+    it('lists a missing directory as empty', async () => {
+      await withStorage(harness, async (storage) => {
+        await expect(storage.listDirectories('missing')).resolves.toEqual([]);
+      });
+    });
+
+    it('excludes temporary directory names from directory listings', async () => {
+      await withStorage(harness, async (storage) => {
+        await storage.ensureDir('runs/.ambercast-tmp-abc123');
+        await storage.ensureDir('runs/normal');
+
+        await expect(storage.listDirectories('runs')).resolves.toEqual(['normal']);
+      });
+    });
+
+    it('returns undefined when resolving a missing path', async () => {
+      await withStorage(harness, async (storage) => {
+        await expect(storage.realPath('missing')).resolves.toBeUndefined();
+      });
+    });
+
+    it('resolves existing regular files and directories to non-empty paths', async () => {
+      await withStorage(harness, async (storage) => {
+        await storage.ensureDir('runs/one');
+        await storage.writeText('runs/one/report.json', '{}');
+
+        const directory = await storage.realPath('runs/one');
+        const file = await storage.realPath('runs/one/report.json');
+        expect(directory).toEqual(expect.any(String));
+        expect(file).toEqual(expect.any(String));
+        expect(directory?.length).toBeGreaterThan(0);
+        expect(file?.length).toBeGreaterThan(0);
+      });
+    });
+
     it('overwrites the same file with the latest write', async () => {
       await withStorage(harness, async (storage) => {
         await storage.writeText('artifact.txt', 'first');

@@ -398,7 +398,7 @@ describe('official ambercast skill', () => {
     const layout = agents.slice(agents.indexOf('## Repository layout'), agents.indexOf('## Core design decisions'));
     const commands = agents.slice(agents.indexOf('## Commands'));
 
-    expect(status.split('\n')[2]).toBe("0.x (the exact version is package.json's). `generate`, `run`, `check`, `heal`, and `init` are implemented and exercised by the test suite. Chromium only, local execution only; the results viewer and an MCP server are not implemented yet. The official agent skill is bundled at skills/ambercast/SKILL.md.");
+    expect(status.split('\n')[2]).toBe("0.x (the exact version is package.json's). `generate`, `run`, `check`, `heal`, `init`, and `view` are implemented and exercised by the test suite. Chromium only, local execution only; an MCP server is not implemented yet. The official agent skill is bundled at skills/ambercast/SKILL.md.");
     expect(layout).toContain('files: ["bin", "dist", "skills"]');
     expect(layout).toContain('- `src/` — TypeScript sources, compiled by `tsdown` to `dist/` (gitignored, built on demand)\n- `skills/` — the official Agent Skills bundle published with the package; see skills/ambercast/SKILL.md');
     expect(layout).toContain('- `.claude-plugin/marketplace.json` — Claude Code plugin marketplace that points at `skills/ambercast`');

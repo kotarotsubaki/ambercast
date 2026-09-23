@@ -58,4 +58,5 @@ export const ERROR_EXIT_CODES = {
   // Zero-match runs are structural report outcomes, but this kind stays mapped
   // so process-status selection remains exhaustive.
   'no-tests-found': 5,
+  'port-unavailable': 3,
 } as const satisfies Record<ErrorKind, ErrorExitCode>;

@@ -13,6 +13,8 @@ const toolNames = [
   'ambercast_run',
   'ambercast_check',
   'ambercast_heal',
+  'ambercast_job_status',
+  'ambercast_job_cancel',
 ] as const;
 
 function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
@@ -67,7 +69,7 @@ describe('mcp/server', () => {
     }
   });
 
-  it('lists the four synchronous tools in order with explicit safety annotations (TEST-B3)', async () => {
+  it('lists the six tools in the fixed order with explicit safety annotations (TEST-B3, TEST-C8)', async () => {
     const client = await connect(fakeDeps());
     const { tools } = await client.listTools();
 
@@ -77,6 +79,8 @@ describe('mcp/server', () => {
       { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      expect.objectContaining({ readOnlyHint: true }),
+      expect.objectContaining({ readOnlyHint: false }),
     ]);
     for (const tool of tools) {
       expect(tool.outputSchema).toBeUndefined();
@@ -93,7 +97,7 @@ describe('mcp/server', () => {
   it('describes purpose and required input near the start of each tool description (TEST-B3)', async () => {
     const client = await connect(fakeDeps());
     const { tools } = await client.listTools();
-    const purpose = [/generat/i, /run|replay/i, /check|validat/i, /heal|repair/i];
+    const purpose = [/generat/i, /run|replay/i, /check|validat/i, /heal|repair/i, /job|status/i, /job|cancel/i];
     expect(tools).toHaveLength(purpose.length);
     tools.forEach((tool, index) => {
       const opening = tool.description?.slice(0, 500) ?? '';
@@ -103,7 +107,7 @@ describe('mcp/server', () => {
     });
   });
 
-  it.each(toolNames)('%s returns the SDK validation result for unknown input keys (TEST-B4)', async (name) => {
+  it.each(toolNames.slice(0, 4))('%s returns the SDK validation result for unknown input keys (TEST-B4)', async (name) => {
     const deps = fakeDeps();
     const client = await connect(deps);
     const result = await client.callTool({ name, arguments: { unknown: 1 } });
@@ -178,10 +182,22 @@ describe('mcp/server', () => {
     expect(received).toEqual([{ progress: 1, message: 'run: step one started' }]);
   });
 
+  it('returns a synchronous run result when the runtime finishes within the wait (TEST-C1)', async () => {
+    const envelope = { summary: 'finished within wait' };
+    const client = await connect(fakeDeps({ run: vi.fn(async () => ({ exitCode: 4, envelope })) }));
+    const result = await client.callTool({ name: 'ambercast_run', arguments: {} });
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: `exitCode: 4\n${JSON.stringify(envelope)}` }],
+      structuredContent: envelope,
+      _meta: { exitCode: 4 },
+    });
+  });
+
+
   it.each([
     ['ambercast_generate', 'ambercast_run'],
-    ['ambercast_run', 'ambercast_check'],
-    ['ambercast_check', 'ambercast_heal'],
+    ['ambercast_run', 'ambercast_heal'],
     ['ambercast_heal', 'ambercast_generate'],
   ] as const)('serializes %s before %s while the first call is pending (TEST-B8)', async (firstName, secondName) => {
     const calls: string[] = [];
@@ -231,7 +247,7 @@ describe('mcp/server', () => {
         await blocked;
         return { exitCode: 0, envelope: {} };
       }),
-      check: vi.fn(async () => {
+      healPreview: vi.fn(async () => {
         order.push('cancelled');
         return { exitCode: 0, envelope: {} };
       }),
@@ -244,7 +260,7 @@ describe('mcp/server', () => {
     const first = client.callTool({ name: 'ambercast_run', arguments: {} });
     await started;
     const controller = new AbortController();
-    const cancelled = client.callTool({ name: 'ambercast_check', arguments: {} }, undefined, { signal: controller.signal });
+    const cancelled = client.callTool({ name: 'ambercast_heal', arguments: {} }, undefined, { signal: controller.signal });
     const third = client.callTool({ name: 'ambercast_generate', arguments: {} });
     controller.abort();
     try {
@@ -254,7 +270,7 @@ describe('mcp/server', () => {
       releaseFirst();
     }
     await Promise.all([first, third]);
-    expect(deps.check).not.toHaveBeenCalled();
+    expect(deps.healPreview).not.toHaveBeenCalled();
     expect(order).toEqual(['first', 'third']);
   });
 
@@ -268,16 +284,16 @@ describe('mcp/server', () => {
       await blocked;
       return { exitCode: 0, envelope: {} };
     });
-    const check = vi.fn(async () => ({ exitCode: 0, envelope: {} }));
+    const healPreview = vi.fn(async () => ({ exitCode: 0, envelope: {} }));
     const drainController = new AbortController();
-    const client = await connect(fakeDeps({ run, check }), { signal: drainController.signal });
+    const client = await connect(fakeDeps({ run, healPreview }), { signal: drainController.signal });
     const first = client.callTool({ name: 'ambercast_run', arguments: {} });
     await started;
-    const queued = client.callTool({ name: 'ambercast_check', arguments: {} });
+    const queued = client.callTool({ name: 'ambercast_heal', arguments: {} });
 
     try {
       await setImmediate();
-      expect(check).not.toHaveBeenCalled();
+      expect(healPreview).not.toHaveBeenCalled();
       drainController.abort();
     } finally {
       releaseFirst();
@@ -288,7 +304,7 @@ describe('mcp/server', () => {
       isError: true,
       content: [{ type: 'text', text: 'Aborted' }],
     });
-    expect(check).not.toHaveBeenCalled();
+    expect(healPreview).not.toHaveBeenCalled();
   });
 
   // TEST-B12: fake deps expose no interactive input capability, so this

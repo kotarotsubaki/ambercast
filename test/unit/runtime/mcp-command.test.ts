@@ -8,10 +8,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { McpServerDeps } from '#adapters/mcp/types.js';
 import { runMcpCommand } from '#runtime/mcp-command.js';
 import { runRunCommand, type RunCommandOutput } from '#runtime/run-command.js';
+import { runCheckCommand } from '#runtime/check-command.js';
 
-const serverFake = vi.hoisted(() => ({ connected: vi.fn(), called: vi.fn(), connectFailure: null as unknown }));
-vi.mock('#adapters/mcp/server.js', () => ({
-  createMcpServer: (deps: McpServerDeps) => {
+const serverFake = vi.hoisted(() => ({ connected: vi.fn(), called: vi.fn(), connectFailure: null as unknown, useReal: false }));
+vi.mock('#adapters/mcp/server.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#adapters/mcp/server.js')>();
+  return { createMcpServer: (deps: McpServerDeps, options?: Parameters<typeof actual.createMcpServer>[1]) => {
+    if (serverFake.useReal) return actual.createMcpServer(deps, options);
     const server = new Server({ name: 'shutdown-test', version: '1.0.0' }, { capabilities: { tools: {} } });
     server.setRequestHandler(CallToolRequestSchema, async () => {
       serverFake.called();
@@ -26,11 +29,15 @@ vi.mock('#adapters/mcp/server.js', () => ({
       },
       close: () => server.close(),
     };
-  },
-}));
+  } };
+});
 vi.mock('#runtime/run-command.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('#runtime/run-command.js')>();
   return { ...actual, runRunCommand: vi.fn(actual.runRunCommand) };
+});
+vi.mock('#runtime/check-command.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#runtime/check-command.js')>();
+  return { ...actual, runCheckCommand: vi.fn(actual.runCheckCommand) };
 });
 
 const temporaryDirectories: string[] = [];
@@ -58,7 +65,28 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
   serverFake.connectFailure = null;
   vi.clearAllMocks();
+  serverFake.useReal = false;
 });
+
+function sendRequest(io: ReturnType<typeof streams>, id: number, name: string, args: Record<string, unknown> = {}): void {
+  io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } })}\n`);
+}
+
+async function initialize(io: ReturnType<typeof streams>): Promise<void> {
+  io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1000, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'job-test', version: '1' } } })}\n`);
+  await response(io, 1000);
+  io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+}
+
+async function response(io: ReturnType<typeof streams>, id: number): Promise<Record<string, unknown>> {
+  let message: Record<string, unknown> | undefined;
+  await vi.waitFor(() => {
+    message = io.output().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((entry) => entry.id === id);
+    expect(message).toBeDefined();
+  });
+  return message!;
+}
 
 describe('runtime/mcp-command', () => {
   it.each([
@@ -83,6 +111,113 @@ describe('runtime/mcp-command', () => {
     expect(serverFake.connected).not.toHaveBeenCalled();
   });
 
+  it('returns a non-terminal job handle, then the terminal run response with job metadata (TEST-C1, TEST-C2)', async () => {
+    serverFake.useReal = true;
+    let release!: (value: RunCommandOutput) => void;
+    vi.mocked(runRunCommand).mockImplementationOnce(() => new Promise<RunCommandOutput>((resolve) => { release = resolve; }));
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    const handle = (await response(io, 1)).result as Record<string, unknown>;
+    const job = handle.structuredContent as Record<string, unknown>;
+    expect(handle).toMatchObject({ isError: false, _meta: { jobId: expect.any(String) } });
+    expect(job).toMatchObject({ status: 'working', tool: 'run', statusMessage: 'running' });
+    sendRequest(io, 2, 'ambercast_job_status', { jobId: job.jobId, waitMs: 0 });
+    expect((await response(io, 2)).result).toMatchObject({ structuredContent: { status: 'working', jobId: job.jobId } });
+    const envelope = { summary: 'completed', errors: [] };
+    release({ exitCode: 0, envelope } as unknown as RunCommandOutput);
+    sendRequest(io, 3, 'ambercast_job_status', { jobId: job.jobId, waitMs: 1000 });
+    expect((await response(io, 3)).result).toMatchObject({
+      isError: false, structuredContent: envelope, _meta: { exitCode: 0, job: { jobId: job.jobId, status: 'completed' } },
+    });
+    io.stdin.end();
+    expect(await running).toBe(0);
+  });
+
+  it('reports missing job IDs for status and cancel (TEST-C2, TEST-C3)', async () => {
+    serverFake.useReal = true;
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
+    await initialize(io);
+    for (const [id, name] of [[1, 'ambercast_job_status'], [2, 'ambercast_job_cancel']] as const) {
+      sendRequest(io, id, name, { jobId: 'missing-job' });
+      const result = (await response(io, id)).result as Record<string, unknown>;
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([{ type: 'text', text: expect.stringMatching(/^JOB_NOT_FOUND: missing-job/) }]);
+    }
+    io.stdin.end();
+    expect(await running).toBe(0);
+  });
+
+  it('runs check synchronously while a write job is working (TEST-C6)', async () => {
+    serverFake.useReal = true;
+    let release!: (value: RunCommandOutput) => void;
+    vi.mocked(runRunCommand).mockImplementationOnce(() => new Promise<RunCommandOutput>((resolve) => { release = resolve; }));
+    vi.mocked(runCheckCommand).mockResolvedValueOnce({ exitCode: 0, envelope: { summary: 'checked' } } as unknown as Awaited<ReturnType<typeof runCheckCommand>>);
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    sendRequest(io, 2, 'ambercast_check');
+    try {
+      expect((await response(io, 2)).result).toMatchObject({ isError: false, structuredContent: { summary: 'checked' }, _meta: { exitCode: 0 } });
+      expect(runCheckCommand).toHaveBeenCalledTimes(1);
+    } finally {
+      release({ exitCode: 0, envelope: { errors: [] } } as unknown as RunCommandOutput);
+      io.stdin.end();
+      await running;
+    }
+  });
+
+  it('cancels a running job by aborting its runtime signal (TEST-C3)', async () => {
+    serverFake.useReal = true;
+    let aborted = false;
+    vi.mocked(runRunCommand).mockImplementationOnce(({ signal }) => new Promise<RunCommandOutput>((resolve) => {
+      signal?.addEventListener('abort', () => {
+        aborted = true;
+        resolve({ exitCode: 4, envelope: { errors: [{ scope: 'run', code: 'INTERRUPTED' }] } } as unknown as RunCommandOutput);
+      }, { once: true });
+    }));
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    const handle = (await response(io, 1)).result as Record<string, unknown>;
+    const jobId = (handle.structuredContent as Record<string, unknown>).jobId;
+    sendRequest(io, 2, 'ambercast_job_cancel', { jobId });
+    expect((await response(io, 2)).result).toMatchObject({ isError: false, structuredContent: { jobId, status: 'cancelled' } });
+    expect(aborted).toBe(true);
+    io.stdin.end();
+    expect(await running).toBe(0);
+  });
+
+  it('aborts the running job and skips queued work during shutdown (TEST-C4)', async () => {
+    serverFake.useReal = true;
+    let aborted = false;
+    vi.mocked(runRunCommand).mockImplementationOnce(({ signal }) => new Promise<RunCommandOutput>((resolve) => {
+      signal?.addEventListener('abort', () => {
+        aborted = true;
+        resolve({ exitCode: 4, envelope: { errors: [{ scope: 'run', code: 'INTERRUPTED' }] } } as unknown as RunCommandOutput);
+      }, { once: true });
+    }));
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    await response(io, 1);
+    sendRequest(io, 2, 'ambercast_run');
+    await response(io, 2);
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    expect(aborted).toBe(true);
+    expect(runRunCommand).toHaveBeenCalledTimes(1);
+  });
   it('aborts an active call on SIGTERM and returns its INTERRUPTED envelope with exit 0 (TEST-B9)', async () => {
     vi.mocked(runRunCommand).mockImplementationOnce(({ signal }) => new Promise<RunCommandOutput>((resolve) => {
       signal?.addEventListener('abort', () => resolve({

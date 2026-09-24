@@ -55,7 +55,9 @@ describe('renderRunList', () => {
     const html = renderRunList(rows);
     expect(html).toContain('<title>Runs · ambercast</title>');
     for (const label of Object.values(VIEW_COPY.list.columnHeaders)) expect(html).toContain(label);
-    for (const label of Object.values(VIEW_COPY.list.rowStatus)) expect(html).toContain(label);
+    for (const [key, cls] of [['failed', 'fail'], ['error', 'fail'], ['passed', 'pass'], ['empty', 'skip'], ['noReport', 'fail'], ['unreadable', 'fail']] as const) {
+      expect(html).toContain(`<span class="${cls}">${VIEW_COPY.list.rowStatus[key]}</span>`);
+    }
     for (const reason of Object.values(VIEW_COPY.list.cases.unreadableReasons)) expect(html).toContain(reason);
     expect(html).toContain('12 passed · 2 failed · 1 error');
     expect(html).toContain('1 error · 1 skipped');
@@ -84,6 +86,61 @@ describe('renderRunList', () => {
 });
 
 describe('renderRunDetail', () => {
+  it('uses dark inline style tokens without external references', () => {
+    const style = renderRunList([]).match(/<style>([\s\S]*?)<\/style>/)?.[1];
+    expect(style).toBeDefined();
+    for (const token of ['#181310', '#F1EBE2', '#3B332C', '#7FC8A9', '#E8875E', '#3D6FA6', '#E8B063']) expect(style).toContain(token);
+    for (const token of ['#ddd', '#087e72', '#9a6700', 'http://', 'https://', '@import']) expect(style).not.toContain(token);
+  });
+
+  it('marks only numeric table columns with the num class', () => {
+    const list = renderRunList([readable()]);
+    expect(list).toContain('<th class="num">Duration</th>');
+    expect(list).toMatch(/<td class="num">850 ms<\/td>/);
+    for (const label of ['Status', 'Run', 'Cases']) expect(list).toMatch(new RegExp(`<th(?![^>]*class="[^"]*num)[^>]*>${label}</th>`));
+    const listCells = list.match(/<tbody><tr>(.*?)<\/tr><\/tbody>/)?.[1]?.match(/<td[^>]*>[\s\S]*?<\/td>/g);
+    expect(listCells).toHaveLength(5);
+    for (const index of [0, 1, 4]) expect(listCells?.[index]).not.toMatch(/class="[^"]*num/);
+
+    const detail = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'one', type: 'assert', target: 'default', status: 'passed' }] })] }));
+    expect(detail).toContain('<th class="num">#</th>');
+    const stepCells = detail.match(/<tbody><tr>(.*?)<\/tr>/)?.[1]?.match(/<td[^>]*>[\s\S]*?<\/td>/g);
+    expect(stepCells).toHaveLength(4);
+    expect(stepCells?.[0]).toBe('<td class="num">1</td>');
+    for (const cell of stepCells?.slice(1) ?? []) expect(cell).not.toMatch(/class="[^"]*num/);
+    for (const label of ['Step', 'Type', 'Status']) expect(detail).toMatch(new RegExp(`<th(?![^>]*class="[^"]*num)[^>]*>${label}</th>`));
+  });
+
+  it('renders status badges in their own step rows and all case contexts', () => {
+    const statuses = [
+      ['passed', '<span class="pass">✓ Passed</span>'],
+      ['failed', '<span class="fail">✗ Failed</span>'],
+      ['error', '<span class="fail">! Error</span>'],
+      ['skipped', '<span class="skip">– Skipped</span>'],
+    ] as const;
+    const detail = renderRunDetail(readable({ results: [executed({ steps: statuses.map(([status], index) => ({ id: `step-${index + 1}`, type: 'assert', target: 'default', status })) })] }));
+    const rows = [...detail.matchAll(/<tr>(.*?)<\/tr>/gs)].map((match) => match[1]);
+    const stepRows = rows.filter((row) => row?.includes('step-'));
+    expect(stepRows).toHaveLength(4);
+    statuses.forEach(([, badge], index) => expect(stepRows[index]).toContain(`<td>${badge}</td>`));
+    expect(detail).not.toMatch(/>(?:failed|passed)</);
+    expect(detail).toContain('<h2><span class="fail">✗ Failed</span> · case.test.md');
+    expect(renderRunList([readable({ summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } })])).toContain('<td><span class="pass">✓ Passed</span></td>');
+    const oneLiners = renderRunDetail(readable({ results: [
+      { id: 'listed', file: 'listed.test.md', status: 'listed' },
+      { id: 'skipped', file: 'skipped.test.md', status: 'skipped' },
+    ] }));
+    expect(oneLiners).toContain('<p><span class="skip">· Listed</span> listed.test.md</p>');
+    expect(oneLiners).toContain('<p><span class="skip">– Skipped</span> skipped.test.md</p>');
+  });
+
+  it('omits zero counts in detail headers and names an all-zero summary', () => {
+    const mixed = renderRunDetail(readable({ summary: { total: 3, passed: 1, failed: 0, errored: 2, skipped: 0 } }));
+    expect(mixed).toContain('1 passed · 2 error');
+    expect(mixed).not.toContain('0 failed');
+    expect(mixed).not.toContain('0 skipped');
+    expect(renderRunDetail(readable({ summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 } }))).toContain('0 cases');
+  });
   it('places scoped run errors before cases and renders the header', () => {
     const html = renderRunDetail(readable({
       errors: [
@@ -162,8 +219,8 @@ describe('renderRunDetail', () => {
       { id: 'listed', file: 'listed.test.md', status: 'listed' },
       { id: 'skipped', file: 'skipped.test.md', status: 'skipped' },
     ] }));
-    expect(html).toContain(`${VIEW_COPY.detail.listedSkipped.listedPrefix}listed.test.md`);
-    expect(html).toContain(`${VIEW_COPY.detail.listedSkipped.skippedPrefix}skipped.test.md`);
+    expect(html).toContain('<span class="skip">· Listed</span> listed.test.md');
+    expect(html).toContain('<span class="skip">– Skipped</span> skipped.test.md');
     expect(html).not.toContain('<table');
   });
 });
@@ -242,7 +299,10 @@ describe('deterministic rendering', () => {
       { kind: 'no-report', runId: 'missing-run' },
       { kind: 'unreadable', runId: 'unreadable-run', reason: 'invalid-json' },
     ])
-      + renderRunDetail(readable({ results: [executed()] }));
+      + renderRunDetail(readable({ results: [executed(),
+        { id: 'listed', file: 'listed.test.md', status: 'listed' },
+        { id: 'skipped', file: 'skipped.test.md', status: 'skipped' },
+      ] }));
     const chrome = [
       ...Object.values(VIEW_COPY.list.columnHeaders),
       ...Object.values(VIEW_COPY.list.rowStatus),

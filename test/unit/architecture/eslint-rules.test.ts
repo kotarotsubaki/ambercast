@@ -399,6 +399,11 @@ describe('ESLint architecture and determinism rules', () => {
     }
   });
 
+  test('keeps view transcript copy out of the CLI source', async () => {
+    const source = await readFile(new URL('cli/main.ts', SOURCE_ROOT), 'utf8');
+    expect(source).not.toMatch(/Listening on|Warning: reachable/);
+  });
+
   test('reports no unknown-file diagnostic for every current source file', async () => {
     const sourceFiles = await findTypeScriptFiles(SOURCE_ROOT.pathname);
     const linter = new Linter({ configType: 'flat' });

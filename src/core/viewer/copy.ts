@@ -23,6 +23,8 @@ export const VIEW_COPY = {
       empty: '– Empty',
       noReport: '! No report',
       unreadable: '! Unreadable',
+      skipped: '– Skipped',
+      listed: '· Listed',
     },
     cases: {
       evidenceOnly: 'Evidence only',
@@ -76,10 +78,6 @@ export const VIEW_COPY = {
     snapshotAltPrefix: 'Screenshot of step ',
     snapshotDetails: {
       summary: 'Snapshot',
-    },
-    listedSkipped: {
-      listedPrefix: '· Listed ',
-      skippedPrefix: '– Skipped ',
     },
     unreadable: {
       heading: 'Unreadable report',

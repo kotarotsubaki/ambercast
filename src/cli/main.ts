@@ -155,8 +155,6 @@ interface ParsedMcpCommand {
   readonly dir: string;
   readonly syncWaitMs: number;
   readonly stdin: NodeJS.ReadableStream;
-  readonly stdout: NodeJS.WritableStream;
-  readonly stderr: NodeJS.WritableStream;
 }
 
 const USAGE = renderUsage(CLI_MANIFEST);
@@ -671,7 +669,7 @@ function parseMcp(argv: readonly string[], _signal: AbortSignal): ParsedMcpComma
     return argument.startsWith('-') ? `Unknown mcp option: ${argument}.` : `Unexpected mcp argument: ${argument}.`;
   }
 
-  return { command: 'mcp', dir, syncWaitMs, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr };
+  return { command: 'mcp', dir, syncWaitMs, stdin: process.stdin };
 }
 
 function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealCommand | string {
@@ -1038,7 +1036,7 @@ export async function main(
             ? await runCheckCommand({ ...parsed.input, stderr })
             : parsed.command === 'mcp'
               ? await (async () => {
-                const exitCode = await runMcpCommand({ dir: parsed.dir, syncWaitMs: parsed.syncWaitMs, stdin: parsed.stdin, stdout: parsed.stdout, stderr: parsed.stderr });
+                const exitCode = await runMcpCommand({ dir: parsed.dir, syncWaitMs: parsed.syncWaitMs, stdin: parsed.stdin, stdout, stderr });
                 process.exitCode = exitCode;
                 return { exitCode, envelope: null };
               })()

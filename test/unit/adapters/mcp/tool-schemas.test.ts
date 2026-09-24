@@ -8,6 +8,13 @@ import {
 } from '#adapters/mcp/tool-schemas.js';
 
 describe('mcp/tool-schemas', () => {
+  it('reports malformed run grep as a validation error', () => {
+    const result = runInputSchema.safeParse({ grep: '(' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe('Invalid regex pattern');
+    }
+  });
   it.each([
     ['generate', generateInputSchema],
     ['run', runInputSchema],

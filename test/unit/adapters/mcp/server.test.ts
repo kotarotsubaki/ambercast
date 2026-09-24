@@ -118,6 +118,18 @@ describe('mcp/server', () => {
     expect(deps.healPreview).not.toHaveBeenCalled();
   });
 
+  it('returns an input validation error for malformed run grep (TEST-B4)', async () => {
+    const deps = fakeDeps();
+    const client = await connect(deps);
+    const result = await client.callTool({ name: 'ambercast_run', arguments: { grep: '(' } });
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: 'text', text: expect.stringMatching(/^MCP error -32602: Input validation error/) },
+    ]);
+    expect(deps.run).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['ambercast_generate', 'generate'],
     ['ambercast_run', 'run'],

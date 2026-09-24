@@ -23,8 +23,12 @@ export const runInputSchema = z.object({
   allowEmpty: z.boolean().optional(),
   grep: z.string().optional().refine((v) => {
     if (v === undefined) return true;
-    new RegExp(v);
-    return true;
+    try {
+      new RegExp(v);
+      return true;
+    } catch {
+      return false;
+    }
   }, { message: 'Invalid regex pattern' }),
   resolve: z.boolean().optional(),
   updateCache: z.boolean().optional(),

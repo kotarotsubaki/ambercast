@@ -39,6 +39,14 @@ describe('parseFrontmatter', () => {
     expect(() => parseFrontmatter('---\ndescription: Missing title\n---\nBody')).toThrow(/title/i);
   });
 
+  it('rejects frontmatter containing syntactically invalid YAML', () => {
+    expect(() => parseFrontmatter('---\ntitle: Foo\ntags: [a, b\nstatus: available\n---\nBody')).toThrow(/frontmatter/i);
+  });
+
+  it('rejects frontmatter containing an unclosed quoted scalar', () => {
+    expect(() => parseFrontmatter('---\ntitle: "Foo\nstatus: available\n---\nBody')).toThrow(/frontmatter/i);
+  });
+
   it('rejects a status outside the publication domain', () => {
     expect(() => parseFrontmatter('---\ntitle: Invalid\nstatus: draft\n---\nBody')).toThrow(/status/i);
   });

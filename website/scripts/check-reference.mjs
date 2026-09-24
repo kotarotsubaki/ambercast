@@ -132,13 +132,18 @@ export async function checkPlannedPages(docsRoot, capabilities, mapping) {
       try {
         const markdown = await readFile(join(docsRoot, `${slug}${extension}`), 'utf8');
         if (!markdown.startsWith('---\n') && !markdown.startsWith('---\r\n')) return 'available';
-        return parseFrontmatter(markdown.replace(/^---\r?\n/, '---\ntitle: Planned page\n')).status;
+        try {
+          return parseFrontmatter(markdown).status;
+        } catch (error) {
+          if (error.message !== 'Frontmatter title is required') throw error;
+          return parseFrontmatter(markdown.replace(/^---\r?\n/, '---\ntitle: Planned page\n')).status;
+        }
       }
       catch (error) {
         if (error.code === 'ENOENT') continue;
         const invalidStatus = /^Invalid frontmatter status: (.*)$/.exec(error.message);
         if (invalidStatus) return invalidStatus[1];
-        if (error.message === 'Missing leading frontmatter block') return 'malformed';
+        if (error.message === 'Missing leading frontmatter block' || error.message === 'Malformed frontmatter YAML') return 'malformed';
         throw error;
       }
     }

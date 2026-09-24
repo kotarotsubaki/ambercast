@@ -223,6 +223,31 @@ describe('checkReference', () => {
     ]);
   });
 
+  it('accepts a planned mapped page without a title through the placeholder retry', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/review.md': '---\nstatus: planned\n---\n# Planned\n',
+    } }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([]);
+  });
+
+  it('reports an empty mapped-page title as malformed', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/review.md': '---\ntitle: ""\nstatus: planned\n---\n# Planned\n',
+    } }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
+      expect.objectContaining({ actual: 'malformed' }),
+    ]);
+  });
+
+  it('treats syntactically invalid YAML frontmatter as a malformed mapped-page status', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/review.md': '---\ntitle: Review\ntags: [a, b\nstatus: planned\n---\n# Review\n',
+    } }));
+    expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
+      expect.objectContaining({ actual: 'malformed' }),
+    ]);
+  });
+
   it('names the malformed capabilities mapping key', async () => {
     const f = createReferenceFixture({ capabilityPages: { ...capabilityPagesMapping, capabilities: 'invalid' } });
     const message = 'Invalid capability-pages mapping: "capabilities" is not an object';
@@ -421,6 +446,7 @@ describe('page-frontmatter-invalid', () => {
   it.each([
     ['missing closing delimiter', '---\ntitle: X\n# Body\n', 'malformed'],
     ['missing title', '---\nstatus: available\n---\n# Body\n', 'malformed'],
+    ['unclosed flow sequence', '---\ntitle: X\ntags: [a, b\nstatus: available\n---\n# Body\n', 'malformed'],
     ['draft status', '---\ntitle: X\nstatus: draft\n---\n# Body\n', 'draft'],
     ['empty status', '---\ntitle: X\nstatus: ""\n---\n# Body\n', ''],
   ])('reports an unmapped page with %s', async (_case, content, actual) => {

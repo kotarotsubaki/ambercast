@@ -122,6 +122,7 @@ describe('site links', () => {
     ['indented code', '    <a id="x">\n'],
     ['an HTML comment', '<!-- <a id="x"> -->\n'],
     ['another attribute value', '<span title=\'id="x"\'>\n'],
+    ['a literal > inside a quoted attribute value', '<a title="<span id=\'x\'>">\n'],
   ])('does not accept an id inside %s as a fragment anchor', async (_context, page) => {
     const f = fixture('[link](/ambercast/reference/cli/view/#x)', {
       'website/src/content/docs/reference/cli/view.md': page,
@@ -132,6 +133,7 @@ describe('site links', () => {
   it.each([
     ['a block HTML tag', '<a id="x"></a>\n'],
     ['a single-quoted id attribute', "<a id='x'>\n"],
+    ['an unquoted id attribute', '<a id=x>\n'],
   ])('resolves a fragment anchor in %s', async (_context, page) => {
     const f = fixture('[link](/ambercast/reference/cli/view/#x)', {
       'website/src/content/docs/reference/cli/view.md': page,

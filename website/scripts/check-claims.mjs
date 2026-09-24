@@ -11,8 +11,8 @@ const separator = /^(?:[\s,、，]*(?:(?:and\/or|and|or|および|及び|と|和
 const linkPattern = /\]\(((?:\/ambercast\/|https:\/\/kotarotsubaki\.github\.io\/ambercast\/)[^\s)]*)\)/g;
 const required = ['rule', 'path', 'claimHash', 'scope', 'reason', 'owner', 'removeWhen'];
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
-const START_TAG_PATTERN = /<[A-Za-z][^>]*>/g;
-const ATTRIBUTE_PATTERN = /([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+const START_TAG_PATTERN = /<[A-Za-z][-A-Za-z0-9]*(?:\s+[A-Za-z_:][-A-Za-z0-9_:.]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>/g;
+const ATTRIBUTE_PATTERN = /([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^ \t\n\f\r"'`=<>]+))/g;
 
 async function readJson(path) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
@@ -23,12 +23,12 @@ async function readJson(path) {
  * Collects literal IDs from one mdast html node's raw source, whether the node is a
  * block-level HTML region or inline HTML in a paragraph. HTML comments are stripped
  * first so tag-shaped text such as `<!-- <a id="x"> -->` cannot become an anchor.
- * Each start tag matching `<[A-Za-z][^>]*>` has its attributes tokenized in sequence;
- * consuming each quoted name=value pair whole prevents `id="x"` inside another
+ * A quote-aware start-tag scan keeps `>` inside a quoted attribute value within
+ * its tag. Attributes are tokenized in sequence; consuming each quoted name=value
+ * pair whole prevents `id="x"` inside another
  * attribute's value, such as `title='id="x"'`, from being counted as an id attribute.
  * Only attributes named exactly `id` contribute values; values may use single or
- * double quotes. The tag-boundary pattern does not handle an unescaped `>` inside an
- * attribute value, as in `<a title="a > b" id="x">`.
+ * double quotes or the HTML5 unquoted-value character class.
  *
  * @param {string} value Raw source text of one mdast html node.
  * @returns {string[]} Values of literal id attributes on matched start tags.
@@ -38,7 +38,7 @@ function idsFromHtml(value) {
   const ids = [];
   for (const tag of withoutComments.match(START_TAG_PATTERN) ?? []) {
     for (const attribute of tag.matchAll(ATTRIBUTE_PATTERN)) {
-      if (attribute[1] === 'id') ids.push(attribute[2] ?? attribute[3]);
+      if (attribute[1] === 'id') ids.push(attribute[2] ?? attribute[3] ?? attribute[4]);
     }
   }
   return ids;

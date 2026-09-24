@@ -31,14 +31,15 @@ import type {
   AssertOutcome,
   AccessibilityCapture,
   BoundElement,
-  BrowserDriver,
   BrowserSession,
   CaptureMode,
   GroundedResolution,
   GroundingQuery,
   PageSnapshot,
   PerformableAction,
+  UiExecutor,
 } from '#ports/browser.js';
+import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
 import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { extractDiscardedScalarValues, parseAriaSnapshot } from '#core/ir/aria-snapshot.js';
@@ -47,6 +48,7 @@ import {
   resolveAccessibilityFingerprint,
 } from '#core/ir/fingerprint.js';
 import type { ElementRef, Fingerprint, TargetDefinition } from '#core/ir/schema.js';
+import type { ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import { isAllowedSecretSinkOrigin } from '#core/secrets/sink-policy.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 
@@ -159,15 +161,14 @@ export interface PlaywrightLauncher {
 }
 
 /**
- * Construction choices for the Chromium driver.
+ * Construction choices for the Playwright UI executor.
  *
  * @remarks
- * This strict superset of the registry's `BrowserLaunchOptions` preserves the
- * registry factory's `(options?: BrowserLaunchOptions) => BrowserDriver`
- * assignability while keeping the adapter-only launcher seam out of registry
- * and port types.
+ * The optional launcher seam stays local to this adapter, while registry
+ * callers supply only the shared launch policy. This keeps Playwright's
+ * lifecycle objects out of the resolver and port contracts.
  */
-export interface CreateChromiumBrowserDriverOptions {
+export interface CreatePlaywrightUiExecutorOptions {
   /** Requests a visible browser rather than Playwright headless mode. */
   readonly headed?: boolean;
 
@@ -769,7 +770,7 @@ class ChromiumBrowserSession implements BrowserSession {
    * Releases the session context and the browser launched for this session.
    *
    * @remarks
-   * Each `driver.launch()` call creates one dedicated browser instance for its
+   * Each UI executor `launch()` call creates one dedicated browser instance for its
    * session. Closing only the context would leave that browser process alive,
    * so closure releases both resources.
    *
@@ -793,10 +794,14 @@ class ChromiumBrowserSession implements BrowserSession {
 }
 
 /**
- * Launches Chromium sessions for targets that select the Chromium engine.
+ * Launches Playwright sessions for targets that select the Playwright executor.
  */
-class ChromiumBrowserDriver implements BrowserDriver {
-  readonly engine = 'chromium' as const;
+class PlaywrightUiExecutor implements UiExecutor {
+  readonly kind = 'playwright' as const;
+
+  readonly surface = 'web' as const;
+
+  readonly capabilities: ReadonlySet<UiCapability> = new Set(UI_CAPABILITIES);
 
   constructor(
     private readonly launcher: PlaywrightLauncher,
@@ -812,7 +817,7 @@ class ChromiumBrowserDriver implements BrowserDriver {
    * creation independent of fixture availability and leaves navigation under
    * the run step that requested it.
    *
-   * @throws If Chromium cannot start a browser session for the target.
+   * @throws If Playwright cannot start a browser session for the target.
    */
   async launch(target: TargetDefinition): Promise<BrowserSession> {
     const browser = await this.launcher.launch({ headless: !this.headed });
@@ -841,11 +846,12 @@ class ChromiumBrowserDriver implements BrowserDriver {
 }
 
 /**
- * Creates the Chromium implementation of `BrowserDriver`.
+ * Creates the Playwright UI executor backed by Chromium.
  *
+ * @param executor - Resolved target executor selection.
  * @param options - Launch policy and, for tests, an optional structural
  *   Playwright lifecycle seam.
- * @returns A driver whose sessions satisfy the browser port without exposing
+ * @returns An executor whose sessions satisfy the browser port without exposing
  * Playwright implementation objects.
  *
  * @remarks
@@ -853,16 +859,16 @@ class ChromiumBrowserDriver implements BrowserDriver {
  * factory uses. Otherwise a thin launcher dynamically imports
  * `playwright-core` at first launch and wraps its browser/context/page objects
  * into this module's structural handles. The factory retains one options bag
- * so its signature stays assignable to the registry's existing browser-launch
- * factory type; callers that know only `headed` need not know this adapter-
- * local seam. Browser-start failures reject the returned driver's `launch()`
+ * so registry callers that know only `headed` need not know this adapter-local
+ * seam. Browser-start failures reject the returned executor's `launch()`
  * call, not this construction function.
  */
-export function createChromiumBrowserDriver(
-  options: CreateChromiumBrowserDriverOptions = {},
-): BrowserDriver {
-  return new ChromiumBrowserDriver(
-    options.launcher ?? createDefaultPlaywrightLauncher(),
-    options.headed ?? false,
+export function createPlaywrightUiExecutor(
+  executor: ResolvedUiExecutorConfig,
+  options?: CreatePlaywrightUiExecutorOptions,
+): UiExecutor {
+  return new PlaywrightUiExecutor(
+    options?.launcher ?? createDefaultPlaywrightLauncher(),
+    options?.headed ?? false,
   );
 }

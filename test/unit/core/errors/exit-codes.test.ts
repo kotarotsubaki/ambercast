@@ -5,6 +5,7 @@ import type { ErrorKind } from '../../../../src/core/errors/types.js';
 const ALL_ERROR_KINDS = [
   'assertion-failed',
   'config-invalid',
+  'executor-unsupported',
   'secret-unresolved',
   'target-unresolved',
   'prompt-path-invalid',
@@ -39,6 +40,7 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
     case 'assertion-failed':
       return 1;
     case 'config-invalid':
+    case 'executor-unsupported':
     case 'secret-unresolved':
     case 'target-unresolved':
     case 'prompt-path-invalid':

@@ -52,6 +52,7 @@ export const ERROR_EXIT_CODES = {
   'browser-launch-failed': 3,
   'ai-executor-unavailable': 3,
   'ai-response-invalid': 3,
+  'executor-unsupported': 2,
   'fs-io-error': 3,
   'unexpected-crash': 3,
   interrupted: 3,

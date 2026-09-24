@@ -23,14 +23,14 @@ import { baseUrlSecretPolicy } from '../../doubles/base-url-secret-policy.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession, elementRefKey } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TEST_PATH = `${TEST_DIR}/login.test.md`;
-const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
+const TARGETS = { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const GENERATED_RESPONSE: GeneratedPlanResponse = {
@@ -172,7 +172,7 @@ describe('fake vertical slice', () => {
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
       allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver: () => createFakeBrowserDriver(() => session),
+      uiExecutor: () => createFakeUiExecutor(() => session),
       secrets: createFakeSecretsProvider(new Map()),
       resolveAiExecutor: async () => createFakeAiExecutor({
         async executeAgentic(request) {
@@ -255,7 +255,7 @@ describe('fake vertical slice', () => {
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
       allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver: () => createFakeBrowserDriver(() => recordingSession),
+      uiExecutor: () => createFakeUiExecutor(() => recordingSession),
       secrets: createFakeSecretsProvider(new Map()),
       resolveAiExecutor: async () => createFakeAiExecutor({
         async executeAgentic(request) {
@@ -295,7 +295,7 @@ describe('fake vertical slice', () => {
     const events = createRecordingEventSink();
     const replay = await run({
       ...initialRunDeps,
-      browserDriver: () => createFakeBrowserDriver(() => replaySession),
+      uiExecutor: () => createFakeUiExecutor(() => replaySession),
       resolveAiExecutor: async () => {
         throw new Error('The coverage-grounded vertical slice must not resolve an AI executor.');
       },
@@ -356,7 +356,7 @@ describe('fake vertical slice', () => {
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
       allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver: () => createFakeBrowserDriver(() => session),
+      uiExecutor: () => createFakeUiExecutor(() => session),
       secrets: createFakeSecretsProvider(new Map()),
       resolveAiExecutor: async () => createFakeAiExecutor({
         async executeAgentic(request) {
@@ -488,7 +488,7 @@ describe('fake vertical slice', () => {
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
       allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver: () => createFakeBrowserDriver(() => session),
+      uiExecutor: () => createFakeUiExecutor(() => session),
       secrets: createFakeSecretsProvider(new Map()),
       resolveAiExecutor: async () => {
         throw new Error('The fully grounded vertical slice must not resolve an AI executor.');
@@ -609,7 +609,7 @@ describe('fake vertical slice', () => {
       clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
       allocateCallId: createCallIdAllocator(),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver: () => createFakeBrowserDriver(() => session),
+      uiExecutor: () => createFakeUiExecutor(() => session),
       secrets: createFakeSecretsProvider(new Map([['{{secrets.secret_step_1_1}}', 'resolved-at-run-time']])),
       resolveAiExecutor,
       events: events.sink,

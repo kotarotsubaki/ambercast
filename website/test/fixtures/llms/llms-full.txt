@@ -283,12 +283,12 @@ This tutorial walks you through repairing an existing generated test on a dispos
 
 ## Steps {#steps}
 
-Preserve your existing configuration and change only the selected target's `healReplayIsolation` key. Keep its target name, `baseUrl`, `browser`, and any `secretSinkOrigins` unchanged; do not add, remove, rename, or otherwise edit a target. A supplied `targets` record replaces the defaults, target names and definitions participate in `inputsDigest`, and `healReplayIsolation` is deliberately outside that digest contract.
+Preserve your existing configuration and change only the selected target's `healReplayIsolation` key. Keep its target name, `baseUrl`, `executor` (including `executor.browser`), and any `secretSinkOrigins` unchanged; do not add, remove, rename, or otherwise edit a target. A supplied `targets` record replaces the defaults, target names and definitions participate in `inputsDigest`, and `healReplayIsolation` is deliberately outside that digest contract.
 
 1. In `ambercast.config.json`, edit the existing selected target entry so that only `healReplayIsolation` becomes `"idempotent"`. For the unconfigured default target, the equivalent preservation is:
 
 ```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","browser":"chromium","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
 ```
 
 The existing Plan remains fresh because its target name and digest-participating definition are unchanged; only its live healing policy changes. The file meets `RawConfig`'s required `$schema`, and the Schema URL is the published configuration Schema URL.
@@ -447,7 +447,7 @@ Configure targets in ambercast. A present config file requires a string `$schema
 
 ## Steps {#steps}
 
-1. Write `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","browser":"chromium"},"admin":{"baseUrl":"https://admin.example.test","browser":"chromium"}},"defaultTarget":"staging"}`. This is the published configuration Schema URL; `targets` and `defaultTarget` have an accepted config shape.
+1. Write `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}`. This is the published configuration Schema URL; `targets` and `defaultTarget` have an accepted config shape.
 2. Add `"healReplayIsolation":"idempotent"` only to a disposable target. The accepted isolation values are `idempotent` and `stateful`; the default value of `healReplayIsolation` is `stateful`.
 3. Set `"resolveTimeoutMs":<ms>` on a target to wait for element presence during resolution. The default is `5000`; accepted values range from `0` to `60000`.
 4. Add `"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}` when a secret may be filled away from `baseUrl`. `secretSinkOrigins` maps each secret reference to its allowed-origin array; a configured mapping replaces the default origin policy (the base-URL origin), and each origin is normalized.
@@ -861,7 +861,8 @@ A target configuration supplies a web surface and a browser destination; its `he
 | `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate input; run, check, heal referenced Plan targets |
 | `targets.<name>.surface` | `web` | absent | only `web` in TP1; the optional field resolves to `web` at use, not via a schema default | generate and Plan target definition |
 | `targets.<name>.description` | string | absent | optional generation context | generate |
-| `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | live executor setting; excluded from Plan digest | run and heal browser composition |
+| `targets.<name>.executor.kind` | `playwright` | `playwright` | live UI executor kind; excluded from Plan digest | run and heal executor composition |
+| `targets.<name>.executor.browser` | `chromium` | `chromium` | live executor browser; excluded from Plan digest | run and heal executor composition |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires every Plan-referenced target to be `idempotent` | heal |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
@@ -1195,6 +1196,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | PROMPT_PATH_INVALID | usage | run only | 2 | selected prompt path ineligible |
 | SECRET_UNRESOLVED | usage | run/case | 2 | unresolved secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | target cannot resolve |
+| EXECUTOR_UNSUPPORTED | usage | case | 2 | executor lacks a capability or surface the plan needs |
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
@@ -1211,7 +1213,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | UNEXPECTED_CRASH | environment | run/case | 3 | uncategorized crash |
 | INTERRUPTED | environment | run only | 3 | batch cancellation |
 
-A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing`, `engine-unregistered`, or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
+A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing`, `executor-unregistered`, or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
 
 ---
 
@@ -2603,7 +2605,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/freshness/
 
 ## Inputs digest {#inputs-digest}
 
-`inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`. Only referenced Target definitions from `Plan.targets` are projected into `targetDefinitions`, sorted by name. Changing an unreferenced Target does not stale the plan or change its digest. The config `browser` value is not included in the digest. Member insertion order has no meaning because canonical JSON sorts object keys. [src/core/ir/digest.ts:93](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L93) [src/core/ir/digest.ts:105](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L105) [src/core/ir/canonical-json.ts:147](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/canonical-json.ts#L147) The input object itself MUST NOT be hashed directly. [src/core/ir/digest.ts:97](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L97) The producer-bundle fingerprint independently represents plan-semantic producer configuration, so template bytes alone are insufficient. [src/core/ir/digest.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L70)
+`inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`. Only referenced Target definitions from `Plan.targets` are projected into `targetDefinitions`, sorted by name. Changing an unreferenced Target does not stale the plan or change its digest. The config `executor` value is not included in the digest. Member insertion order has no meaning because canonical JSON sorts object keys. [src/core/ir/digest.ts:93](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L93) [src/core/ir/digest.ts:105](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L105) [src/core/ir/canonical-json.ts:147](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/canonical-json.ts#L147) The input object itself MUST NOT be hashed directly. [src/core/ir/digest.ts:97](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L97) The producer-bundle fingerprint independently represents plan-semantic producer configuration, so template bytes alone are insufficient. [src/core/ir/digest.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L70)
 
 ## Plan digest {#plan-digest}
 
@@ -2818,6 +2820,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| TP2 changes target config from `targets.<name>.browser` to `targets.<name>.executor` and adds the `EXECUTOR_UNSUPPORTED` report error code; the Plan schema is unchanged | repo:src/core/config/schema.ts, repo:src/report/error-mapping.ts | Replace the old target browser key with `executor: { kind: "playwright", browser: "chromium" }` when explicit executor selection is needed. Report consumers must recognize `EXECUTOR_UNSUPPORTED`; Plan regeneration is not required by this schema change. |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
 | report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |

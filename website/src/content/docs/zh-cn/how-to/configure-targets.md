@@ -11,7 +11,7 @@ description: 配置 ambercast 测试运行的目标环境，包括基础 URL、�
 
 ## 操作步骤 {#steps}
 
-1. 写入 `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","browser":"chromium"},"admin":{"baseUrl":"https://admin.example.test","browser":"chromium"}},"defaultTarget":"staging"}`。这是已发布的配置 Schema URL；`targets` 与 `defaultTarget` 符合受支持的配置结构。
+1. 写入 `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}`。这是已发布的配置 Schema URL；`targets` 与 `defaultTarget` 符合受支持的配置结构。
 2. 仅向一次性目标环境添加 `"healReplayIsolation":"idempotent"`。受支持的隔离值为 `idempotent` 与 `stateful`；`healReplayIsolation` 的默认值为 `stateful`。
 3. 在目标上设置 `"resolveTimeoutMs":<ms>`，以便在解析期间等待元素出现。默认值为 `5000`；可接受的范围为 `0` 至 `60000`。
 4. 当密钥可能需要在 `baseUrl` 之外填入时，添加 `"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}`。`secretSinkOrigins` 会将每个密钥引用映射至其允许的源数组；配置该映射将替换默认的源策略（基于 `baseUrl` 的源），且每个源都会进行规范化。

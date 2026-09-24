@@ -1,7 +1,8 @@
-import type { BrowserDriver, BrowserSession } from '../../src/ports/browser.js';
+import type { UiExecutor, BrowserSession } from '../../src/ports/browser.js';
 import type { TargetDefinition } from '../../src/core/ir/schema.js';
+import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
 
-export interface RecordingFakeBrowserDriver extends BrowserDriver {
+export interface RecordingFakeUiExecutor extends UiExecutor {
   readonly launches: TargetDefinition[];
 }
 
@@ -13,19 +14,23 @@ export interface RecordingFakeBrowserDriver extends BrowserDriver {
  * @param sessionFactory - Creates the session returned from each launch.
  * @returns A Chromium driver, the only engine the IR defines.
  */
-export function createFakeBrowserDriver(
+export function createFakeUiExecutor(
   sessionFactory: Readonly<Record<string, () => BrowserSession>>,
   definitions?: Readonly<Record<string, TargetDefinition>>,
-): RecordingFakeBrowserDriver;
-export function createFakeBrowserDriver(sessionFactory: () => BrowserSession): BrowserDriver;
-export function createFakeBrowserDriver(
+  capabilities?: ReadonlySet<UiCapability>,
+): RecordingFakeUiExecutor;
+export function createFakeUiExecutor(sessionFactory: () => BrowserSession, definitions?: Readonly<Record<string, TargetDefinition>>, capabilities?: ReadonlySet<UiCapability>): RecordingFakeUiExecutor;
+export function createFakeUiExecutor(
   sessionFactory: (() => BrowserSession) | Readonly<Record<string, () => BrowserSession>>,
   definitions: Readonly<Record<string, TargetDefinition>> = {},
-): RecordingFakeBrowserDriver {
+  capabilities: ReadonlySet<UiCapability> = new Set(UI_CAPABILITIES),
+): RecordingFakeUiExecutor {
   const launches: TargetDefinition[] = [];
   const namedDefinitions = Object.entries(definitions);
   return {
-    engine: 'chromium',
+    kind: 'playwright',
+    surface: 'web',
+    capabilities,
     launches,
     async launch(definition: TargetDefinition): Promise<BrowserSession> {
       launches.push(definition);

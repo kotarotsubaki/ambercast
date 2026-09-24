@@ -278,12 +278,12 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/tutorials/repair-your-first
 
 ## 手順 {#steps}
 
-作業スコープとして、既存の設定を維持し、選択したターゲットの `healReplayIsolation` キーのみを変更します。ターゲット名、`baseUrl`、`browser`、およびすべての `secretSinkOrigins` は変更しないでください。ターゲットの追加、削除、名前変更、その他の編集も行ってはいけません。指定された `targets` レコードはデフォルト設定を置き換えます。ターゲット名とその定義は `inputsDigest` の計算対象となりますが、`healReplayIsolation` は意図的にそのダイジェスト契約の対象外とされています。
+作業スコープとして、既存の設定を維持し、選択したターゲットの `healReplayIsolation` キーのみを変更します。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、およびすべての `secretSinkOrigins` は変更しないでください。ターゲットの追加、削除、名前変更、その他の編集も行ってはいけません。指定された `targets` レコードはデフォルト設定を置き換えます。ターゲット名とその定義は `inputsDigest` の計算対象となりますが、`healReplayIsolation` は意図的にそのダイジェスト契約の対象外とされています。
 
 1. `ambercast.config.json` において、選択した既存ターゲットのエントリを編集し、`healReplayIsolation` のみを `"idempotent"` に変更します。設定ファイルが存在しないデフォルトターゲットの場合、同等の維持設定は次のとおりです。
 
 ```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","browser":"chromium","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
 ```
 
 ターゲット名およびダイジェストに参加する定義が変更されていないため、既存の Plan の鮮度（freshness）は保たれます。変更されるのはライブ修復ポリシーのみです。このファイルは `RawConfig` で必須とされている `$schema` を満たしており、Schema URL は公開されている設定用 Schema URL です。
@@ -446,7 +446,7 @@ ambercastの設定ファイルにターゲット（targets）を定義し、各�
 
 ## 手順 {#steps}
 
-1. `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","browser":"chromium"},"admin":{"baseUrl":"https://admin.example.test","browser":"chromium"}},"defaultTarget":"staging"}` を記述します。これは公開されている設定スキーマURLであり、`targets` および `defaultTarget` は受け入れられる設定形式を持ちます。
+1. `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}` を記述します。これは公開されている設定スキーマURLであり、`targets` および `defaultTarget` は受け入れられる設定形式を持ちます。
 2. 破棄可能なターゲットにのみ `"healReplayIsolation":"idempotent"` を追加します。受け入れられる分離設定の値は `idempotent` と `stateful` であり、`healReplayIsolation` の既定値は `stateful` です。
 3. 解決中に要素の出現を待機するには、ターゲットに `"resolveTimeoutMs":<ms>` を設定します。既定値は `5000` で、指定できる値の範囲は `0`〜`60000` です。
 4. シークレットが `baseUrl` 以外のオリジンに入力される可能性がある場合は、`"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}` を追加します。`secretSinkOrigins` は各シークレット参照を許可されたオリジンの配列へとマッピングします。設定されたマッピングは既定のオリジンポリシー（`baseUrl` のオリジン）を置き換え、各オリジンは正規化されます。
@@ -861,7 +861,8 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
 | `targets.<name>.surface` | `web` | absent | TP1 では `web` のみ | generate と Plan のターゲット定義 |
 | `targets.<name>.description` | string | なし | 任意の生成コンテキスト | generate |
-| `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |
+| `targets.<name>.executor.kind` | `playwright` | `playwright` | 実行時に選ぶ UI executor の種類。Plan ダイジェストの対象外 | run、heal の executor 構成 |
+| `targets.<name>.executor.browser` | `chromium` | `chromium` | 実行時に使うブラウザ。Plan ダイジェストの対象外 | run、heal の executor 構成 |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal には選択された `idempotent` ターゲットが必要 | heal |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
@@ -1202,6 +1203,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | PROMPT_PATH_INVALID | usage | run only | 2 | selected prompt path ineligible |
 | SECRET_UNRESOLVED | usage | run/case | 2 | unresolved secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | target cannot resolve |
+| EXECUTOR_UNSUPPORTED | usage | case | 2 | executor が Plan に必要な能力または surface を備えていない |
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
@@ -1220,7 +1222,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 
 利用エラー（usage）と環境エラー（environment）は独立したレポート語彙を持ちます。`SECRET_GRANT_UNATTRIBUTABLE` はレガシーの例外です。以前のツールバージョンが生成したレポートとの後方互換性のためにレポートコードスキーマに残されていますが、現在の `ErrorKind` やレポートエラー分岐はありません。
 
-caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`engine-unregistered`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
+caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`executor-unregistered`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
 
 レポートの構造については [レポート](/ambercast/ja/reference/reports/#errors)、終了コードの一覧については [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、トラブルシューティングの手順については [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/) を参照してください。
 
@@ -2849,6 +2851,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| TP2: ターゲット設定を `targets.<name>.browser` から `targets.<name>.executor` に変更し、`EXECUTOR_UNSUPPORTED` エラーコードを追加。Plan schema は不変 | repo:src/core/config/schema.ts, repo:src/report/error-mapping.ts | 明示的な executor 指定が必要な場合は旧 browser キーを `executor: { kind: "playwright", browser: "chromium" }` に置き換える。レポート利用側は `EXECUTOR_UNSUPPORTED` を認識する。今回の schema 変更による Plan の再生成は不要。 |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
 | report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |

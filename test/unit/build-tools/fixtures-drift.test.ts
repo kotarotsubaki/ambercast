@@ -27,6 +27,13 @@ describe('committed artifact goldens', () => {
     expect(actual).not.toStrictEqual(mutated);
   });
 
+  it('pins the target executor contract in the config golden', () => {
+    const target = fixture('config-schema.json').properties.targets.additionalProperties;
+    expect(target.required).toStrictEqual(['baseUrl']);
+    expect(target.properties.executor.properties.kind.enum).toStrictEqual(['playwright']);
+    expect(target.properties).not.toHaveProperty('browser');
+  });
+
   it('pins the slugger package in both dependency graphs and resolves it at root', () => {
     const root = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'));
     const website = JSON.parse(readFileSync(new URL('../../../website/package.json', import.meta.url), 'utf8'));

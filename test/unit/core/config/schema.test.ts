@@ -6,7 +6,7 @@ interface SchemaUnderTest {
 }
 
 const CONFIG_SCHEMA_URL = 'https://ambercast.dev/schema/config.json';
-const TARGET = { baseUrl: 'https://example.test', browser: 'chromium' } as const;
+const TARGET = { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } as const;
 
 function expectAccepted(schema: SchemaUnderTest, value: unknown): void {
   expect(schema.safeParse(value).success).toBe(true);
@@ -106,7 +106,7 @@ describe('RawConfig', () => {
     ['testIgnore member', { $schema: CONFIG_SCHEMA_URL, testIgnore: [false] }],
     ['targets', { $schema: CONFIG_SCHEMA_URL, targets: [] }],
     ['targets.app.baseUrl', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, baseUrl: 42 } } }],
-    ['targets.app.browser', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, browser: 1 } } }],
+    ['targets.app.executor.browser', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, executor: { kind: 'playwright', browser: 1 } } } }],
     ['defaultTarget', { $schema: CONFIG_SCHEMA_URL, defaultTarget: 1 }],
     ['ai', { $schema: CONFIG_SCHEMA_URL, ai: 'auto' }],
     ['ai.provider', { $schema: CONFIG_SCHEMA_URL, ai: { provider: 1 } }],
@@ -128,8 +128,8 @@ describe('RawConfig', () => {
       $schema: CONFIG_SCHEMA_URL,
       targets: { app: { ...TARGET, secretSinkOrigins: { '{{secrets.app.password}}': ['https://idp.example.test'] } } },
     });
-    expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, browser: 'firefox' } } });
-    expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, browser: 'webkit' } } });
+    expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, targets: { app: { baseUrl: TARGET.baseUrl, executor: { kind: 'playwright', browser: 'firefox' } } } });
+    expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, targets: { app: { baseUrl: TARGET.baseUrl, executor: { kind: 'playwright', browser: 'webkit' } } } });
     expectRejected(RawConfig, { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, baseUrl: 'https://example.com/{{secrets.TOKEN}}' } } });
     expectRejected(RawConfig, {
       $schema: CONFIG_SCHEMA_URL,

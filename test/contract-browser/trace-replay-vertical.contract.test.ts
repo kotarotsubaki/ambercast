@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chromium } from 'playwright-core';
-import { createChromiumBrowserDriver } from '#adapters/browser/chromium.js';
+import { createPlaywrightUiExecutor } from '#adapters/browser/chromium.js';
+const EXECUTOR_CONFIG = { kind: 'playwright', browser: 'chromium' } as const;
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
@@ -153,7 +154,7 @@ describe('hand-authored trace replay against real Chromium', () => {
         clock: createFixedClock(new Date('2026-08-10T00:00:00.000Z'), 0),
         allocateCallId: createCallIdAllocator(),
         runId: '2026-08-10T000000Z-550e8400-e29b-41d4-a716-446655440000',
-        browserDriver: () => createChromiumBrowserDriver(),
+        uiExecutor: () => createPlaywrightUiExecutor(EXECUTOR_CONFIG),
         secrets: createFakeSecretsProvider(new Map()),
         resolveAiExecutor,
         events: events.sink,
@@ -162,7 +163,7 @@ describe('hand-authored trace replay against real Chromium', () => {
           testDir: TEST_DIR,
           testMatch: ['**/*.test.md'],
           testIgnore: ['**/.runs/**'],
-          targets: { fixture: { ...targets.fixture, browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+          targets: { fixture: { ...targets.fixture, executor: EXECUTOR_CONFIG, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
           defaultTarget: 'fixture',
           ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
           ci: { heal: false, updateGroundingCache: false },

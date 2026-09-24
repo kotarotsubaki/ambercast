@@ -1,6 +1,6 @@
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { composeAiDeadline, isAiDeadlineTimeout, type AiDeadline } from '#core/ai/ai-deadline.js';
-import type { ResolvedConfig } from '#core/config/schema.js';
+import type { ResolvedConfig, ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import {
   AGENTIC_TARGET_REJECTION_LIMIT,
@@ -8,6 +8,7 @@ import {
 } from '#core/errors/agentic-target-rejection.js';
 import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
+import { ExecutorUnsupportedError } from '#core/errors/executor-unsupported-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import {
   GroundingUnresolvedError,
@@ -20,6 +21,7 @@ import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType } from '#core/errors/types.js';
 import { projectCauseName } from '#report/error-mapping.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
+import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import { computePlanDigest } from '#core/ir/digest.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import { matchRunReferenceTokens } from '#core/ir/run-ref.js';
@@ -80,13 +82,13 @@ import type {
   AssertOutcome,
   AccessibilityCapture,
   BoundElement,
-  BrowserEngine,
   BrowserSession,
+  UiExecutor,
   GroundingMissReason,
   PerformableAction,
 } from '#ports/browser.js';
 import type { RunEvent } from '#ports/system.js';
-import type { BrowserDriverResolver } from '#ports/index.js';
+import type { UiExecutorResolver } from '#ports/index.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink, SecretsProvider } from '#ports/system.js';
 import { OBSERVED_NOTE, type ExecutedRunResult, type Observed, type StepResult } from '#report/schema.js';
@@ -3165,14 +3167,14 @@ export interface RunDeps {
   readonly runId: string;
 
   /**
-   * Selects a driver after this case's target has been resolved.
+   * Selects an executor after this case's targets have been resolved.
    *
    * The resolver captures batch-wide launch policy such as `--headed` during
-   * composition, while the engine remains unknown until this case is ready to
-   * launch. Replay therefore calls `deps.browserDriver(resolvedTarget.browser)`
-   * per case rather than choosing a driver while composing the command.
+   * composition, while each target's executor configuration belongs to the
+   * case. Preflight resolves `deps.uiExecutor(target.config.executor)` once per
+   * target and shares that instance with session startup.
    */
-  readonly browserDriver: BrowserDriverResolver;
+  readonly uiExecutor: UiExecutorResolver;
 
   /** Resolves a `fill-secret` reference only at the point that needs its value. */
   readonly secrets: SecretsProvider;
@@ -3293,17 +3295,6 @@ export interface RunCaseOutcome {
    * duration and steps without first narrowing a discovery-only result.
    */
   readonly result: ExecutedRunResult;
-
-  /**
-   * The browser engine resolved for this replayed case, when execution reached
-   * target selection.
-   *
-   * Launch diagnostics retain the resolved engine without making non-browser
-   * outcomes invent one. The report handoff uses this optional
-   * boundary value only when it exists, preserving the execution-derived
-   * evidence invariant.
-   */
-  readonly engine?: BrowserEngine;
 
   /** The first classified failure that aborted this case, when one exists. */
   readonly error?: AmbercastError;
@@ -3470,8 +3461,8 @@ export async function run(deps: RunDeps, options: RunOptions): Promise<RunOutcom
  */
 export function classifyBrowserLaunchFailure(
   error: unknown,
-  engine: BrowserEngine,
-): { readonly reason: 'executable-missing' | 'launch-failed'; readonly engine: BrowserEngine } {
+  executor: ResolvedUiExecutorConfig,
+): { readonly reason: 'executable-missing' | 'launch-failed'; readonly engine: ResolvedUiExecutorConfig['browser'] } {
   let reason: 'executable-missing' | 'launch-failed' = 'launch-failed';
 
   try {
@@ -3483,7 +3474,7 @@ export function classifyBrowserLaunchFailure(
     // Unsafe inspection retains the conservative launch-failed classification.
   }
 
-  return { reason, engine };
+  return { reason, engine: executor.browser };
 }
 
 /**
@@ -3518,7 +3509,6 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   // preserve every writer in execution order so reports can reconstruct it.
   let runState: Map<RunVariableName, CapturedRunValue> | undefined;
   let context: DispatchContext | undefined;
-  let engine: BrowserEngine | undefined;
 
   try {
     let testMd: string;
@@ -3559,8 +3549,6 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       throw new TargetUnresolvedError('The plan references a target that is not configured.', { target: missingTarget });
     }
     sessionTargets = Object.fromEntries(targetNames.map((name) => [name, { definition: resolvedTargets[name]!, config: deps.config.targets[name]! }]));
-    sessions = createSessionPool(sessionTargets, deps.browserDriver);
-    engine = deps.config.targets[targetNames[0]!]!.browser;
 
     const inputsDigest = deriveCurrentPlanInputProvenance({
       normalizedTestMd,
@@ -3593,6 +3581,33 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         );
       }
     }
+    const requiredCapabilities = deriveRequiredCapabilities(plan, loadedGrounding, { resolve: options.resolve });
+    const executors: Record<string, UiExecutor> = {};
+    for (const name of targetNames) {
+      const executor = deps.uiExecutor(sessionTargets[name]!.config.executor);
+      executors[name] = executor;
+      const targetSurface = sessionTargets[name]!.definition.surface;
+      if (targetSurface !== executor.surface) {
+        throw new ExecutorUnsupportedError('The configured executor does not support this plan.', {
+          target: name,
+          executor: executor.kind,
+          reason: 'surface-mismatch',
+          missing: [],
+          surface: { target: targetSurface, executor: executor.surface },
+        });
+      }
+      const missing = UI_CAPABILITIES.filter((capability) =>
+        requiredCapabilities[name]!.has(capability) && !executor.capabilities.has(capability));
+      if (missing.length > 0) {
+        throw new ExecutorUnsupportedError('The configured executor does not support this plan.', {
+          target: name,
+          executor: executor.kind,
+          reason: 'capability-missing',
+          missing,
+        });
+      }
+    }
+    sessions = createSessionPool(sessionTargets, executors);
     resolvedSecrets = new Map<string, Set<string>>();
     const preflightAllowedRunRefs = new Set<RunVariableName>();
     const preflightRunState = new Map<RunVariableName, string>();
@@ -3711,7 +3726,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         session = await sessions.acquire(originalStep.target);
       } catch (error) {
         if (error instanceof BrowserLaunchFailedError) throw error;
-        throw new BrowserLaunchFailedError('The browser session could not be launched.', classifyBrowserLaunchFailure(error, sessionTargets[originalStep.target]!.config.browser), { cause: error });
+        throw new BrowserLaunchFailedError('The browser session could not be launched.', classifyBrowserLaunchFailure(error, sessionTargets[originalStep.target]!.config.executor), { cause: error });
       }
       signal?.throwIfAborted();
       // A v4 ordinary fill whose materialized value equals any resolved
@@ -3919,11 +3934,10 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       aiCalls: context?.aiCalls ?? 0,
       sessions: Object.fromEntries(Object.entries(sessionTargets).map(([name, target]) => [name, {
         surface: target.definition.surface,
-        executor: { kind: 'playwright', browser: target.config.browser },
+        executor: target.config.executor,
         state: sessions?.states()[name] ?? 'not-opened',
       }])),
     } as ExecutedRunResult,
-    ...(engine === undefined ? {} : { engine }),
     ...(classifiedError === undefined ? {} : { error: classifiedError }),
   };
 }

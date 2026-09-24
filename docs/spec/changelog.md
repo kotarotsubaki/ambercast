@@ -4,6 +4,7 @@
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| TP2 changes target config from `targets.<name>.browser` to `targets.<name>.executor` and adds the `EXECUTOR_UNSUPPORTED` report error code; the Plan schema is unchanged | repo:src/core/config/schema.ts, repo:src/report/error-mapping.ts | Replace the old target browser key with `executor: { kind: "playwright", browser: "chromium" }` when explicit executor selection is needed. Report consumers must recognize `EXECUTOR_UNSUPPORTED`; Plan regeneration is not required by this schema change. |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
 | report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |

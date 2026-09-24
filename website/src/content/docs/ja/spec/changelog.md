@@ -7,6 +7,7 @@ description: "アーティファクトのバージョン受け入れは、リリ
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| TP2: ターゲット設定を `targets.<name>.browser` から `targets.<name>.executor` に変更し、`EXECUTOR_UNSUPPORTED` エラーコードを追加。Plan schema は不変 | repo:src/core/config/schema.ts, repo:src/report/error-mapping.ts | 明示的な executor 指定が必要な場合は旧 browser キーを `executor: { kind: "playwright", browser: "chromium" }` に置き換える。レポート利用側は `EXECUTOR_UNSUPPORTED` を認識する。今回の schema 変更による Plan の再生成は不要。 |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
 | report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |

@@ -11,8 +11,8 @@ import { createRecordingEventSink } from '../../doubles/create-recording-event-s
 
 const prompt = '# Visit B\n\nOpen the dashboard.\n';
 const file = '/workspace/tests/dashboard.test.md';
-const targetA = { baseUrl: 'https://a.example.test', browser: 'chromium' as const, surface: 'web' as const, description: 'Admin app', healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
-const targetB = { baseUrl: 'https://b.example.test', browser: 'chromium' as const, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
+const targetA = { baseUrl: 'https://a.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, surface: 'web' as const, description: 'Admin app', healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
+const targetB = { baseUrl: 'https://b.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
 const stepB = { id: 'visit-b', kind: 'action', action: 'navigate', target: 'B', url: 'https://b.example.test/dashboard' };
 const options: GenerateOptions = { files: [file], strict: false, force: false, maxAttempts: 1, dryRun: false, allowEmpty: false, list: false };
 

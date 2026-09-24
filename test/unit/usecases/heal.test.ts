@@ -15,6 +15,7 @@ import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
+import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
 import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
@@ -31,7 +32,8 @@ import {
   type Fingerprint,
 } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
-import type { AssertOutcome, BrowserEngine, BrowserSession } from '#ports/browser.js';
+import { reportError } from '#report/error-mapping.js';
+import type { AssertOutcome, BrowserSession } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { EventSink, RunEvent, StageTwoRejectionReason } from '#ports/system.js';
 import {
@@ -47,7 +49,7 @@ import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession, elementRefKey, type FakeBrowserSessionEntry } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 
@@ -154,7 +156,7 @@ const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, browser: 'chromium' as const, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 } } as const;
 const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) };
 const SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Submit' };
 const REPAIRED_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Continue' };
@@ -334,7 +336,7 @@ async function createScenario(options: {
   readonly aiExecutor?: ReturnType<typeof createFakeAiExecutor>;
   readonly secrets?: ReadonlyMap<string, string>;
   readonly signal?: AbortSignal;
-  readonly browserDriver?: HealDeps['browserDriver'];
+  readonly uiExecutor?: HealDeps['uiExecutor'];
   readonly assertOutcome?: AssertOutcome;
   readonly targets?: PlanDocument['targets'];
 } = {}): Promise<HealScenario> {
@@ -387,12 +389,12 @@ async function createScenario(options: {
       layout,
       clock: createFixedClock(new Date('2026-08-25T00:00:00.000Z'), 0),
       runId: '2026-08-25T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver: options.browserDriver ?? vi.fn<(engine: BrowserEngine) => ReturnType<typeof createFakeBrowserDriver>>(() => options.launchFailure
+      uiExecutor: options.uiExecutor ?? vi.fn<HealDeps['uiExecutor']>(() => options.launchFailure
         ? {
-          engine: 'chromium',
+          kind: 'playwright', surface: 'web', capabilities: new Set(UI_CAPABILITIES),
           async launch() { throw new Error('Chromium is unavailable for this fixture.'); },
         }
-        : createFakeBrowserDriver(sessionFactory)),
+        : createFakeUiExecutor(sessionFactory)),
       secrets: createFakeSecretsProvider(options.secrets ?? new Map()),
       resolveAiExecutor: vi.fn(async () => options.aiExecutor ?? createFakeAiExecutor({
         execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
@@ -431,6 +433,58 @@ async function createBothArtifactRepairScenario(storage?: StorageAdapter): Promi
     aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: repaired, raw: JSON.stringify(repaired) }) }),
   });
 }
+
+describe('heal executor preflight (TEST-12)', () => {
+  it.each([
+    ['action capability', new Set<UiCapability>(UI_CAPABILITIES.filter((capability) => capability !== 'click')), ['click']],
+    ['resolve-only snapshot capability', new Set<UiCapability>(UI_CAPABILITIES.filter((capability) => capability !== 'snapshot')), ['snapshot']],
+  ] as const)('stops before baseline replay when the executor lacks %s', async (_case, capabilities, missing) => {
+    const scenario = await createScenario();
+    const executor = createFakeUiExecutor(scenario.sessionFactory, {}, capabilities);
+    const uiExecutor = vi.fn<HealDeps['uiExecutor']>(() => executor);
+    const events = createRecordingEventSink();
+    const replayStarts = vi.fn();
+    replayRunObserver.beforeRun = replayStarts;
+    const groundingBefore = await scenario.storage.readText(GROUNDING);
+    const result = await heal({ ...scenario.deps, uiExecutor, events: events.sink }, OPTIONS);
+
+    expect(result.outcome.results).toEqual([]);
+    expect(result.outcome.errors).toHaveLength(1);
+    expect(result.outcome.errors[0]).toMatchObject({
+      file: OPTIONS.files[0],
+      error: {
+        kind: 'executor-unsupported',
+        exitCode: 2,
+        details: { target: 'web', executor: 'playwright', reason: 'capability-missing', missing },
+      },
+    });
+    expect(reportError(result.outcome.errors[0]!.error, { scope: 'case', caseId: OPTIONS.files[0]! })).toMatchObject({
+      scope: 'case', kind: 'usage', code: 'EXECUTOR_UNSUPPORTED',
+      details: { target: 'web', executor: 'playwright', reason: 'capability-missing', missing },
+    });
+    expect(uiExecutor).toHaveBeenCalledWith(RESOLVED_TARGETS.web.executor);
+    expect(executor.launches).toEqual([]);
+    expect(scenario.sessionFactory).not.toHaveBeenCalled();
+    expect(replayStarts).not.toHaveBeenCalled();
+    expect(events.emitted().filter((event) => event.type === 'ai-call')).toEqual([]);
+    expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
+    expect(scenario.textWrites).not.toHaveBeenCalled();
+    await expect(scenario.storage.readText(GROUNDING)).resolves.toBe(groundingBefore);
+    expect(result.commits.size).toBe(0);
+  });
+
+  it('continues through preflight when the executor provides all required capabilities', async () => {
+    const scenario = await createScenario({ sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: true, currentFingerprint: FINGERPRINT }]]) });
+    const executor = createFakeUiExecutor(scenario.sessionFactory);
+    const uiExecutor = vi.fn<HealDeps['uiExecutor']>(() => executor);
+    const result = await heal({ ...scenario.deps, uiExecutor }, OPTIONS);
+
+    expect(result.outcome.errors).toEqual([]);
+    expect(result.outcome.results[0]).toMatchObject({ file: OPTIONS.files[0] });
+    expect(uiExecutor).toHaveBeenCalled();
+    expect(executor.launches.length).toBeGreaterThan(0);
+  });
+});
 
 describe('heal validated overlay capability', () => {
   it('exposes tracked snapshots only through successful heal preflight', async () => {
@@ -556,14 +610,14 @@ describe('heal state-machine contract', () => {
       planDigest: computePlanDigest(PlanDocument.parse(plan)),
       entries: {},
     } as JsonValueT));
-    const driver = createFakeBrowserDriver({ A: () => createFakeBrowserSession(new Map()) }, definitions);
-    const browserDriver = vi.fn<HealDeps['browserDriver']>(() => driver);
+    const driver = createFakeUiExecutor({ A: () => createFakeBrowserSession(new Map()) }, definitions);
+    const uiExecutor = vi.fn<HealDeps['uiExecutor']>(() => driver);
     const targets = {
-      A: { ...definitions.A, browser: 'chromium' as const, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 },
-      B: { ...definitions.B, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-      C: { surface: 'web' as const, baseUrl: 'https://c.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      A: { ...definitions.A, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 },
+      B: { ...definitions.B, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      C: { surface: 'web' as const, baseUrl: 'https://c.example.test', executor: { kind: 'playwright' as const, browser: 'chromium' as const }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
-    const result = await heal({ ...scenario.deps, browserDriver, config: { ...scenario.deps.config, targets, defaultTarget: 'A' } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, uiExecutor, config: { ...scenario.deps.config, targets, defaultTarget: 'A' } }, OPTIONS);
     expect(result.outcome.errors).toEqual([expect.objectContaining({
       error: expect.objectContaining({
         kind: 'config-invalid', exitCode: 2,
@@ -572,16 +626,16 @@ describe('heal state-machine contract', () => {
       }),
     })]);
     expect(driver.launches).toEqual([]);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
 
     const replayOperations: string[] = [];
-    const replayDriver = createFakeBrowserDriver({
+    const replayDriver = createFakeUiExecutor({
       A: () => createFakeBrowserSession(new Map(), { baseUrl: definitions.A.baseUrl, onPerform: () => replayOperations.push('A') }),
       B: () => createFakeBrowserSession(new Map(), { baseUrl: definitions.B.baseUrl, onPerform: () => replayOperations.push('B') }),
     }, definitions);
     const replay = await heal({
       ...scenario.deps,
-      browserDriver: () => replayDriver,
+      uiExecutor: () => replayDriver,
       config: { ...scenario.deps.config, targets: { ...targets, B: { ...targets.B, healReplayIsolation: 'idempotent' } }, defaultTarget: 'A' },
     }, OPTIONS);
     expect(replay.outcome.errors).toEqual([]);
@@ -854,7 +908,7 @@ describe('heal state-machine contract', () => {
       grounding: {},
       aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: candidate, raw: JSON.stringify(candidate) }) }),
       assertOutcome: { passed: false, message: 'Dashboard is absent.' },
-      browserDriver: vi.fn<HealDeps['browserDriver']>(() => createFakeBrowserDriver(() => createFakeBrowserSession(new Map(), {
+      uiExecutor: vi.fn<HealDeps['uiExecutor']>(() => createFakeUiExecutor(() => createFakeBrowserSession(new Map(), {
         baseUrl: TARGETS.web.baseUrl,
         currentUrl: TARGETS.web.baseUrl,
         snapshot: healSnapshot(new Map()),
@@ -1018,7 +1072,7 @@ describe('heal state-machine contract', () => {
     const violation = new IntegrityViolationError('Interrupted replay still observed a containment escape.');
     let performs = 0;
     let replayInterrupted = false;
-    const browserDriver = vi.fn<HealDeps['browserDriver']>(() => createFakeBrowserDriver(() => createFakeBrowserSession(liveEntries(SUBMIT), {
+    const uiExecutor = vi.fn<HealDeps['uiExecutor']>(() => createFakeUiExecutor(() => createFakeBrowserSession(liveEntries(SUBMIT), {
       baseUrl: TARGETS.web.baseUrl,
       currentUrl: TARGETS.web.baseUrl,
       snapshot: healSnapshot(liveEntries(SUBMIT)),
@@ -1032,7 +1086,7 @@ describe('heal state-machine contract', () => {
     })));
     const scenario = await createScenario({
       signal: controller.signal,
-      browserDriver,
+      uiExecutor,
       grounding: {},
     });
     replayRunObserver.afterRun = (_deps, _storage, _options, outcome) => {
@@ -1275,7 +1329,7 @@ describe('heal state-machine contract', () => {
       details: { hint: 'Delete the offending line(s) and re-run `ambercast generate`.' },
     });
     expect(trackedReads).toEqual([]);
-    expect(scenario.deps.browserDriver).not.toHaveBeenCalled();
+    expect(scenario.deps.uiExecutor).not.toHaveBeenCalled();
     expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
   });
 
@@ -1287,7 +1341,7 @@ describe('heal state-machine contract', () => {
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: [] } } }, OPTIONS);
 
     expect(result.outcome.errors[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
-    expect(scenario.deps.browserDriver).not.toHaveBeenCalled();
+    expect(scenario.deps.uiExecutor).not.toHaveBeenCalled();
     expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
   });
 
@@ -1300,7 +1354,7 @@ describe('heal state-machine contract', () => {
     const result = await heal({ ...scenario.deps, config: configWithoutSecrets }, OPTIONS);
 
     expect(result.outcome.errors[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
-    expect(scenario.deps.browserDriver).not.toHaveBeenCalled();
+    expect(scenario.deps.uiExecutor).not.toHaveBeenCalled();
     expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
   });
 
@@ -1314,7 +1368,7 @@ describe('heal state-machine contract', () => {
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: '*' } } }, OPTIONS);
 
     expect(result.outcome.errors[0]?.error).not.toBeInstanceOf(SecretConsentRequiredError);
-    expect(scenario.deps.browserDriver).toHaveBeenCalled();
+    expect(scenario.deps.uiExecutor).toHaveBeenCalled();
   });
 
   it('projects wildcard consent to an empty Stage-2 allowed-name context without exposing retained names', async () => {
@@ -1354,7 +1408,7 @@ describe('heal state-machine contract', () => {
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: '*' } } }, OPTIONS);
 
     expect(result.outcome.errors[0]?.error).toBeInstanceOf(SecretEnvVarCollisionError);
-    expect(scenario.deps.browserDriver).not.toHaveBeenCalled();
+    expect(scenario.deps.uiExecutor).not.toHaveBeenCalled();
     expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
   });
 
@@ -1508,7 +1562,7 @@ describe('heal state-machine contract', () => {
     expect(result.outcome.errors).toHaveLength(1);
     expect(result.outcome.errors[0]).toMatchObject({ file: OPTIONS.files[0] });
     expect(result.outcome.errors[0]?.error).toBeInstanceOf(error);
-    expect(deps.browserDriver).not.toHaveBeenCalled();
+    expect(deps.uiExecutor).not.toHaveBeenCalled();
     expect(containWrites).not.toHaveBeenCalled();
   });
 
@@ -1525,7 +1579,7 @@ describe('heal state-machine contract', () => {
     const result = await heal(scenario.deps, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ baselineFirstFailureIndex: 0 });
-    expect(scenario.deps.browserDriver).toHaveBeenCalledTimes(2);
+    expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(3);
     expect(writeBinary).toHaveBeenCalledTimes(2);
   });
 
@@ -1537,7 +1591,7 @@ describe('heal state-machine contract', () => {
     const result = await heal(scenario.deps, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved' });
-    expect(scenario.deps.browserDriver).toHaveBeenCalledTimes(3);
+    expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(4);
     expect(scenario.deps.resolveAiExecutor).toHaveBeenCalledOnce();
   });
 
@@ -1558,7 +1612,7 @@ describe('heal state-machine contract', () => {
     const result = await heal(scenario.deps, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed', finalFirstFailureIndex: scenario.plan.steps.length });
-    expect(scenario.deps.browserDriver).toHaveBeenCalledTimes(2);
+    expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(3);
     const commit = result.commits.get(result.outcome.results[0]!.id);
     expect(commit).toBeDefined();
     await expect(commit!.commit()).resolves.toEqual({ outcome: 'committed' });
@@ -1598,7 +1652,7 @@ describe('heal state-machine contract', () => {
     const result = await heal(scenario.deps, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed', finalFirstFailureIndex: 1 });
-    expect(scenario.deps.browserDriver).toHaveBeenCalledOnce();
+    expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(3);
     expect(executor.agenticRequests).toHaveLength(1);
     const recordedEntry = grounding['recorded-ai'];
     if (traceKind === 'legacy' && recordedEntry?.kind === 'ai') {
@@ -1628,7 +1682,7 @@ describe('heal state-machine contract', () => {
 
     await heal(scenario.deps, OPTIONS);
 
-    expect(scenario.deps.browserDriver).toHaveBeenCalledTimes(2);
+    expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(3);
   });
 
   it('keeps none-classified navigate failures out of Stage 1 even with an element entry', async () => {
@@ -1639,7 +1693,7 @@ describe('heal state-machine contract', () => {
 
     await heal(scenario.deps, OPTIONS);
 
-    expect(scenario.deps.browserDriver).toHaveBeenCalledOnce();
+    expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the plan digest unchanged while Stage 1 re-resolves one changed element grounding entry', async () => {
@@ -1676,7 +1730,7 @@ describe('heal state-machine contract', () => {
     try {
       await heal(scenario.deps, OPTIONS);
 
-      expect(scenario.deps.browserDriver).toHaveBeenCalledTimes(3);
+      expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(4);
       expect(stageOneOverlay).toBeDefined();
       await expect(stageOneOverlay!.readText(GROUNDING)).resolves.toBe(originalGrounding);
     } finally {
@@ -2255,7 +2309,7 @@ describe('heal state-machine contract', () => {
       aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
         ? { data: { confirmed: true }, raw: '{"confirmed":true}' }
         : { data: response, raw: JSON.stringify(response) } }),
-      browserDriver: vi.fn<HealDeps['browserDriver']>(() => createFakeBrowserDriver(() => createFakeBrowserSession(candidateEntries, {
+      uiExecutor: vi.fn<HealDeps['uiExecutor']>(() => createFakeUiExecutor(() => createFakeBrowserSession(candidateEntries, {
         baseUrl: TARGETS.web.baseUrl,
         currentUrl: TARGETS.web.baseUrl,
         snapshot: healSnapshot(candidateEntries),
@@ -4087,7 +4141,7 @@ describe('heal interruption contract', () => {
 
     expect(result.outcome).toMatchObject({ interrupted: true, results: [], errors: [] });
     expect(result.outcome.skipped).toEqual([{ file: first }, { file: second }]);
-    expect(scenario.deps.browserDriver).not.toHaveBeenCalled();
+    expect(scenario.deps.uiExecutor).not.toHaveBeenCalled();
     expect(scenario.deps.resolveAiExecutor).not.toHaveBeenCalled();
     expect(scenario.textWrites).not.toHaveBeenCalled();
   });
@@ -4121,7 +4175,7 @@ describe('heal interruption contract', () => {
       expect(result.outcome.results).toHaveLength(1);
       expect(result.outcome.results[0]).toMatchObject({ file: first, repairOutcome: 'no-changes-needed' });
       expect(result.outcome.skipped).toEqual([{ file: second }]);
-      expect(scenario.deps.browserDriver).toHaveBeenCalledOnce();
+      expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(2);
       expect(scenario.textWrites).not.toHaveBeenCalled();
     } finally {
       markTerminal.mockRestore();
@@ -4134,14 +4188,14 @@ describe('heal interruption contract', () => {
     let releaseLaunch: ((session: BrowserSession) => void) | undefined;
     let notifyLaunchStarted: (() => void) | undefined;
     const launchStarted = new Promise<void>((resolve) => { notifyLaunchStarted = resolve; });
-    const browserDriver = vi.fn<HealDeps['browserDriver']>(() => ({
-      engine: 'chromium',
+    const uiExecutor = vi.fn<HealDeps['uiExecutor']>(() => ({
+      kind: 'playwright', surface: 'web', capabilities: new Set(UI_CAPABILITIES),
       launch: () => new Promise<BrowserSession>((resolve) => {
         releaseLaunch = resolve;
         notifyLaunchStarted?.();
       }),
     }));
-    const scenario = await createScenario({ signal: controller.signal, sessionEntries: entries, browserDriver });
+    const scenario = await createScenario({ signal: controller.signal, sessionEntries: entries, uiExecutor });
     const first = OPTIONS.files[0]!;
     const second = '/workspace/tests/second.test.md';
 
@@ -4162,7 +4216,7 @@ describe('heal interruption contract', () => {
         skipped: [{ file: first }, { file: second }],
       },
     });
-    expect(browserDriver).toHaveBeenCalledOnce();
+    expect(uiExecutor).toHaveBeenCalledTimes(2);
   });
 
   it('restores the Stage-1 snapshot when its replay is interrupted', async () => {
@@ -4172,8 +4226,8 @@ describe('heal interruption contract', () => {
     let markStageOneStarted: (() => void) | undefined;
     const stageOneStarted = new Promise<void>((resolve) => { markStageOneStarted = resolve; });
     let launches = 0;
-    const browserDriver = vi.fn<HealDeps['browserDriver']>(() => ({
-      engine: 'chromium',
+    const uiExecutor = vi.fn<HealDeps['uiExecutor']>(() => ({
+      kind: 'playwright', surface: 'web', capabilities: new Set(UI_CAPABILITIES),
       launch: () => {
         launches += 1;
         if (launches !== 2) {
@@ -4189,7 +4243,7 @@ describe('heal interruption contract', () => {
         });
       },
     }));
-    const scenario = await createScenario({ signal: controller.signal, browserDriver });
+    const scenario = await createScenario({ signal: controller.signal, uiExecutor });
     const originalGrounding = await scenario.storage.readText(GROUNDING);
     replayRunObserver.afterRun = async (_deps, storage, options) => {
       if (options.resolve === true) stageOneOverlay = storage;
@@ -4208,7 +4262,7 @@ describe('heal interruption contract', () => {
       await expect(running).resolves.toMatchObject({
         outcome: { interrupted: true, results: [], errors: [], skipped: [{ file: OPTIONS.files[0] }] },
       });
-      expect(browserDriver).toHaveBeenCalledTimes(2);
+      expect(uiExecutor).toHaveBeenCalledTimes(3);
       expect(stageOneOverlay).toBeDefined();
       await expect(stageOneOverlay!.readText(GROUNDING)).resolves.toBe(originalGrounding);
     } finally {
@@ -4267,8 +4321,8 @@ describe('heal interruption contract', () => {
     let releaseCandidateReplay: ((session: BrowserSession) => void) | undefined;
     let markCandidateReplayStarted: (() => void) | undefined;
     const candidateReplayStarted = new Promise<void>((resolve) => { markCandidateReplayStarted = resolve; });
-    const browserDriver = vi.fn<HealDeps['browserDriver']>(() => ({
-      engine: 'chromium',
+    const uiExecutor = vi.fn<HealDeps['uiExecutor']>(() => ({
+      kind: 'playwright', surface: 'web', capabilities: new Set(UI_CAPABILITIES),
       launch: () => {
         launchCount += 1;
         if (launchCount !== 3) {
@@ -4291,7 +4345,7 @@ describe('heal interruption contract', () => {
     });
     const scenario = await createScenario({
       signal: controller.signal,
-      browserDriver,
+      uiExecutor,
       steps: [Step.parse({ id: 'repair-me', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
       grounding: {},
       aiExecutor: createFakeAiExecutor({ execute }),
@@ -4381,7 +4435,7 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
     ['accepted', async () => {
       let replay = 0;
       return createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => {
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => {
           const entries = replay++ === 2 ? liveEntries(SUBMIT) : new Map();
           return createFakeBrowserSession(entries, {
             baseUrl: TARGETS.web.baseUrl,

@@ -2,7 +2,9 @@
  * Groups the application-facing port dependencies used at composition time.
  */
 import type { AiExecutor } from './ai.js';
-import type { BrowserDriver, BrowserEngine } from './browser.js';
+import type { UiExecutor } from './browser.js';
+import type { UiExecutorKind } from '#core/config/schema.js';
+import type { ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import type { StorageAdapter } from './storage.js';
 import type {
   Clock,
@@ -13,18 +15,18 @@ import type {
 } from './system.js';
 
 /**
- * Resolves the browser driver selected by a target engine.
+ * Resolves the UI executor selected by a target executor config.
  *
- * @param engine - Engine requested by the run's target definition.
- * @returns The driver that can launch that engine.
- * @throws If composition cannot provide a compatible driver.
+ * @param executor - Executor config requested by the run's target definition.
+ * @returns The executor that can launch that executor kind.
+ * @throws If composition cannot provide a compatible executor.
  *
  * @remarks
- * Browser selection occurs only after the target is known. A resolver keeps
+ * Executor selection occurs only after the target is known. A resolver keeps
  * that deferred selection explicit, while the other ports are already chosen
  * direct dependencies.
  */
-export type BrowserDriverResolver = (engine: BrowserEngine) => BrowserDriver;
+export type UiExecutorResolver = (executor: ResolvedUiExecutorConfig) => UiExecutor;
 
 /**
  * The immutable port dependencies supplied to application orchestration.
@@ -35,8 +37,8 @@ export type BrowserDriverResolver = (engine: BrowserEngine) => BrowserDriver;
  * for runtime composition, not an adapter import shortcut.
  */
 export interface Ports {
-  /** Resolves the driver compatible with the target's selected browser engine. */
-  readonly browserDriver: BrowserDriverResolver;
+  /** Resolves the executor compatible with the target's executor config. */
+  readonly uiExecutor: UiExecutorResolver;
 
   /** Performs the application's structured and browser-directed AI calls. */
   readonly aiExecutor: AiExecutor;

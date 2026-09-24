@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { classifyConfig } from '../../../../src/core/init/plan.js';
+import { RawConfig } from '../../../../src/core/config/schema.js';
 import {
   AGENTS_BLOCK,
   CONFIG_TEMPLATE,
@@ -13,8 +14,7 @@ const expectedConfig = `{
   "testDir": "tests/ambercast",
   "targets": {
     "web-user": {
-      "baseUrl": "http://localhost:3000",
-      "browser": "chromium"
+      "baseUrl": "http://localhost:3000"
     }
   },
   "defaultTarget": "web-user"
@@ -25,7 +25,8 @@ const oldConfig = `{
   "testDir": "tests/ambercast",
   "targets": {
     "web-user": {
-      "baseUrl": "http://localhost:3000"
+      "baseUrl": "http://localhost:3000",
+      "browser": "chromium"
     }
   },
   "defaultTarget": "web-user"
@@ -46,6 +47,13 @@ const expectedAgentsBlock = `<!-- ambercast:begin -->
 describe('init scaffold templates', () => {
   it('keeps the config literal byte-for-byte, including its ordered keys and final LF', () => {
     expect(CONFIG_TEMPLATE).toBe(expectedConfig);
+  });
+
+  it('leaves executor selection to defaults and is valid raw config', () => {
+    const parsed = JSON.parse(CONFIG_TEMPLATE);
+    expect(Object.keys(parsed.targets['web-user'])).toStrictEqual(['baseUrl']);
+    expect(CONFIG_TEMPLATE).not.toMatch(/"(?:browser|executor)"/);
+    expect(RawConfig.safeParse(parsed).success).toBe(true);
   });
 
   it('rejects the old config literal unless force replaces it with the current scaffold', () => {

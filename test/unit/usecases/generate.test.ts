@@ -84,7 +84,7 @@ afterEach(() => {
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { surface: 'web' as const, baseUrl: 'https://example.test' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
@@ -825,7 +825,7 @@ describe('generate', () => {
     const targets = {
       web: {
         baseUrl: 'https://example.test',
-        browser: 'chromium' as const,
+        executor: { kind: 'playwright', browser: 'chromium' } as const,
         secretSinkOrigins: { '{{secrets.app.password}}': ['https://idp.example.test'] },
         healReplayIsolation: 'stateful' as const,
         resolveTimeoutMs: 5000,
@@ -1524,7 +1524,7 @@ describe('generate', () => {
 
   it('selects the sole own target when configuration omits defaultTarget', async () => {
     const soleTargets = {
-      replacement: { baseUrl: 'https://replacement.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      replacement: { baseUrl: 'https://replacement.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const { deps, execute, recordingStorage } = createScenario({
       config: {
@@ -1616,7 +1616,7 @@ describe('generate', () => {
       testIgnore: [],
       targets: {
         web: RESOLVED_TARGETS.web,
-        admin: { surface: 'web', baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+        admin: { surface: 'web', baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
       },
       ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
     } });
@@ -1633,7 +1633,7 @@ describe('generate', () => {
     const inheritedName = 'inherited-preview';
     const inheritedDefinition = {
       baseUrl: 'https://inherited.example.test',
-      browser: 'chromium' as const,
+      executor: { kind: 'playwright', browser: 'chromium' } as const,
       healReplayIsolation: 'stateful' as const,
       resolveTimeoutMs: 5000,
     };
@@ -1693,7 +1693,7 @@ describe('generate', () => {
   ) => {
     const targets = {
       web: RESOLVED_TARGETS.web,
-      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      admin: { baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const { deps, execute, recordingStorage } = createScenario({
       config: {
@@ -1731,12 +1731,12 @@ describe('generate', () => {
 
   it('regenerates for a changed referenced target but ignores an unrelated target change (SPEC-5)', async () => {
     const selectedChanged = {
-      web: { baseUrl: 'https://changed.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      web: { baseUrl: 'https://changed.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      admin: { baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     const unrelatedChanged = {
       web: RESOLVED_TARGETS.web,
-      admin: { baseUrl: 'https://changed-admin.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      admin: { baseUrl: 'https://changed-admin.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
 
     const changedScenario = createScenario({

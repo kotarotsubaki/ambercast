@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { RawConfig } from '../../../src/core/config/schema.js';
 
 const expected = JSON.parse(readFileSync(new URL('../../fixtures/docs-v4-expectations.json', import.meta.url), 'utf8')) as {
   versions: { plan: string; grounding: string; report: string };
@@ -9,6 +10,7 @@ const expected = JSON.parse(readFileSync(new URL('../../fixtures/docs-v4-expecta
 };
 const spec = (name: string) => readFileSync(new URL(`../../../docs/spec/${name}.md`, import.meta.url), 'utf8');
 const reference = (name: string) => readFileSync(new URL(`../../../website/src/content/docs/reference/${name}.md`, import.meta.url), 'utf8');
+const localizedDoc = (locale: string, name: string) => readFileSync(new URL(`../../../website/src/content/docs/${locale}${name}.md`, import.meta.url), 'utf8');
 
 describe('TEST-21 v4 documentation golden expectations', () => {
   it('documents target names and element references in all eight step examples', () => {
@@ -51,7 +53,7 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     const freshness = spec('freshness');
     expect(freshness).toMatch(/(?:referenced|used)[^\n]*Target/i);
     expect(freshness).toMatch(/(?:unreferenced|unused)[^\n]*(?:stale|digest)/i);
-    expect(freshness).toMatch(/browser[^\n]*(?:not|excluded|omit)/i);
+    expect(freshness).toMatch(/executor[^\n]*(?:not|excluded|omit)/i);
     const conformance = spec('conformance');
     for (const row of ['CON-19', 'CON-22']) {
       const line = conformance.split('\n').find((value) => value.startsWith(`| ${row} |`));
@@ -76,6 +78,37 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     const config = reference('configuration');
     expect(config).toContain('`targets.<name>.surface`');
     expect(config).toContain('`targets.<name>.description`');
+    expect(config).toContain('`targets.<name>.executor.kind`');
+    expect(config).toContain('`targets.<name>.executor.browser`');
+    expect(config).not.toContain('`targets.<name>.browser`');
     expect(config).toMatch(/`defaultTarget`[^\n]*(?:generat|prompt)/i);
+  });
+
+  it('keeps localized target examples valid under the executor config contract', () => {
+    for (const locale of ['', 'ja/', 'zh-cn/']) {
+      const configuration = localizedDoc(locale, 'reference/configuration');
+      const errorCodes = localizedDoc(locale, 'reference/error-codes');
+      expect(configuration, locale).toContain('`targets.<name>.executor.kind`');
+      expect(configuration, locale).toContain('`targets.<name>.executor.browser`');
+      expect(configuration, locale).not.toContain('`targets.<name>.browser`');
+      expect(errorCodes, locale).toMatch(/^\| EXECUTOR_UNSUPPORTED \| usage \| case \| 2 \|/m);
+      expect(errorCodes, locale).toContain('`executor-unregistered`');
+      const howTo = localizedDoc(locale, 'how-to/configure-targets');
+      const tutorial = localizedDoc(locale, 'tutorials/repair-your-first-drift');
+      const inlineExample = howTo.match(/`(\{"\$schema":.+?\})`/)?.[1];
+      const fencedExample = tutorial.match(/```json\n([^\n]+)\n```/)?.[1];
+      expect(inlineExample, locale).toBeDefined();
+      expect(fencedExample, locale).toBeDefined();
+      for (const example of [inlineExample, fencedExample]) {
+        const parsed = JSON.parse(example!);
+        expect(RawConfig.safeParse(parsed).success, locale).toBe(true);
+        expect(parsed.targets?.staging?.browser, locale).toBeUndefined();
+        expect(parsed.targets?.admin?.browser, locale).toBeUndefined();
+        expect(parsed.targets?.['web-user']?.browser, locale).toBeUndefined();
+      }
+      expect(inlineExample, locale).toContain('"executor":{"kind":"playwright","browser":"chromium"}');
+    }
+    expect(spec('freshness')).toContain('config `executor`');
+    expect(spec('changelog')).toContain('TP2');
   });
 });

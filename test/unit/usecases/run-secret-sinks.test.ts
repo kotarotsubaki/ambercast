@@ -40,7 +40,7 @@ import { buildRunReport } from '#usecases/run-report.js';
 import { baseUrlSecretPolicy } from '../../doubles/base-url-secret-policy.js';
 import { boundTarget } from '../../doubles/bound-target.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import {
   createFakeBrowserSession as createRawFakeBrowserSession,
   elementRefKey,
@@ -55,7 +55,7 @@ import { createFakeCommandRunner } from '../../doubles/create-fake-command-runne
 
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
-const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
+const TARGETS = { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const SECRET_REF = '{{secrets.AMBERCAST_SECRET_DUMMY}}';
@@ -217,7 +217,7 @@ function createRunScenario(
       clock: createFixedClock(new Date('2026-08-10T00:00:00.000Z'), 0),
       allocateCallId: createCallIdAllocator(),
       runId: '2026-08-10T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(secrets),
       resolveAiExecutor: async () => executor,
       events: events.sink,

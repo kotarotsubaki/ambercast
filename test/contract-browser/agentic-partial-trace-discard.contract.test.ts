@@ -86,7 +86,7 @@ async function writeFixture(project: string, baseUrl: string): Promise<string> {
   await Promise.all([
     writeFile(join(project, 'ambercast.config.json'), JSON.stringify({
       $schema: 'https://ambercast.dev/schema/config.json', testDir: 'tests', runsDir: 'tests/.runs',
-      targets: { fixture: { ...targets.fixture, browser: 'chromium' } },
+      targets: { fixture: { ...targets.fixture, executor: { kind: 'playwright', browser: 'chromium' } } },
       defaultTarget: 'fixture', ai: { provider: 'claude' }, ci: { heal: false },
     })),
     writeFile(join(tests, 'agentic-partial.test.md'), PROMPT),

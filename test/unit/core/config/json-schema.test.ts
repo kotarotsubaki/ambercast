@@ -4,7 +4,7 @@ import { getConfigJsonSchema } from '#core/config/json-schema.js';
 import { RawConfig } from '#core/config/schema.js';
 
 const CONFIG_SCHEMA_URL = 'https://ambercast.dev/schema/config.json';
-const TARGET = { baseUrl: 'https://example.test', browser: 'chromium' } as const;
+const TARGET = { baseUrl: 'https://example.test' } as const;
 
 describe('config JSON Schema document', () => {
   it('returns a strict-compilable JSON Schema 2020-12 document', () => {
@@ -34,9 +34,13 @@ describe('config JSON Schema document', () => {
     ['a minimal present config file', { $schema: CONFIG_SCHEMA_URL }, true],
     ['a document missing its required $schema', {}, false],
     ['an unknown top-level key', { $schema: CONFIG_SCHEMA_URL, unexpected: true }, false],
-    ['a Chromium target', { $schema: CONFIG_SCHEMA_URL, targets: { app: TARGET } }, true],
+    ['a target using the default executor', { $schema: CONFIG_SCHEMA_URL, targets: { app: TARGET } }, true],
+    ['an explicit Playwright executor', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, executor: { kind: 'playwright', browser: 'chromium' } } } }, true],
+    ['an unsupported executor kind', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, executor: { kind: 'stagehand' } } } }, false],
+    ['an unknown executor key', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, executor: { kind: 'playwright', unexpected: true } } } }, false],
     ['a target with a secret-sink origin', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, secretSinkOrigins: { '{{secrets.app.password}}': ['https://idp.example.test'] } } } }, true],
-    ['a bad target entry', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, browser: 'firefox' } } }, false],
+    ['a legacy target browser', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, browser: 'chromium' } } }, false],
+    ['an unsupported browser', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, executor: { kind: 'playwright', browser: 'firefox' } } } }, false],
     ['a target URL embedding a secret reference', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, baseUrl: 'https://example.com/{{secrets.TOKEN}}' } } }, false],
     ['a target secret-sink origin with a path', { $schema: CONFIG_SCHEMA_URL, targets: { app: { ...TARGET, secretSinkOrigins: { '{{secrets.app.password}}': ['https://idp.example.test/path'] } } } }, false],
     ['a supported AI provider', { $schema: CONFIG_SCHEMA_URL, ai: { provider: 'codex' } }, true],
@@ -96,5 +100,12 @@ describe('config JSON Schema document', () => {
     });
     const aiSchema = (schema as unknown as { properties: { ai: { required?: readonly string[] } } }).properties.ai;
     expect(aiSchema.required ?? []).not.toContain('maxGenerateAttempts');
+  });
+
+  it('publishes optional target executor and the supported kind', () => {
+    const schema = getConfigJsonSchema() as any;
+    const target = schema.properties.targets.additionalProperties;
+    expect(target.required).toStrictEqual(['baseUrl']);
+    expect(target.properties.executor.properties.kind.enum).toStrictEqual(['playwright']);
   });
 });

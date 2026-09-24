@@ -25,10 +25,10 @@ const COMMAND_CONFIG_PATH = `${CWD}/settings/command.json`;
 const ENVIRONMENT_CONFIG_PATH = `${CWD}/settings/environment.json`;
 const ABSOLUTE_COMMAND_CONFIG_PATH = '/workspace/explicit/command.json';
 const ABSOLUTE_ENVIRONMENT_CONFIG_PATH = '/workspace/explicit/environment.json';
-const APP_TARGET = { baseUrl: 'http://app.test', browser: 'chromium' } as const;
-const ADMIN_TARGET = { baseUrl: 'http://admin.test', browser: 'chromium' } as const;
-const RESOLVED_APP_TARGET = { ...APP_TARGET, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
-const RESOLVED_ADMIN_TARGET = { ...ADMIN_TARGET, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
+const APP_TARGET = { baseUrl: 'http://app.test' } as const;
+const ADMIN_TARGET = { baseUrl: 'http://admin.test' } as const;
+const RESOLVED_APP_TARGET = { ...APP_TARGET, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
+const RESOLVED_ADMIN_TARGET = { ...ADMIN_TARGET, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, surface: 'web' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 };
 
 interface LoadOptions {
   readonly cwd?: string | undefined;
@@ -48,7 +48,7 @@ function expectedDefaults(configRoot: string): ResolvedConfig {
     targets: {
       'web-user': {
         baseUrl: 'http://localhost:3000',
-        browser: 'chromium',
+        executor: { kind: 'playwright', browser: 'chromium' },
         surface: 'web',
         healReplayIsolation: 'stateful',
         resolveTimeoutMs: 5000,
@@ -460,6 +460,42 @@ describe('loadConfig', () => {
   });
 
   describe('merging and target validation', () => {
+    it.each([
+      ['omitted', undefined],
+      ['kind only', { kind: 'playwright' }],
+      ['explicit browser', { kind: 'playwright', browser: 'chromium' }],
+    ] as const)('resolves the %s executor to Playwright Chromium', async (_description, executor) => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, {
+        targets: { app: { ...APP_TARGET, ...(executor === undefined ? {} : { executor }) } },
+        defaultTarget: 'app',
+      });
+      expect((await load(storage)).targets.app?.executor).toStrictEqual({ kind: 'playwright', browser: 'chromium' });
+    });
+
+    it.each([
+      ['unknown kind', { kind: 'stagehand' }, ['targets', 'app', 'executor', 'kind']],
+      ['unsupported browser', { kind: 'playwright', browser: 'firefox' }, ['targets', 'app', 'executor', 'browser']],
+      ['unknown key', { kind: 'playwright', extra: true }, ['targets', 'app', 'executor']],
+    ] as const)('rejects an executor with %s', async (_description, executor, issuePath) => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, `${CWD}/ambercast.config.json`, { targets: { app: { ...APP_TARGET, executor } } });
+      const error = await expectConfigInvalid(load(storage));
+      expect(containsIssuePath(error.details, issuePath)).toBe(true);
+    });
+
+    it.each([
+      [{ app: { ...APP_TARGET, browser: 'chromium' } }, 'app'],
+      [{ admin: ADMIN_TARGET, app: { ...APP_TARGET, browser: 'chromium' } }, 'app'],
+    ] as const)('reports the legacy browser key for target %s', async (targets, target) => {
+      const storage = createInMemoryStorage();
+      const configPath = `${CWD}/ambercast.config.json`;
+      await writeConfig(storage, configPath, { targets });
+      const error = await expectConfigInvalid(load(storage));
+      expect(error.message).toBe(`targets.${target}.browser has moved to targets.${target}.executor.browser.`);
+      expect(error.details).toStrictEqual({ configPath, target });
+    });
+
     it('defaults an omitted resolveTimeoutMs to 5000 and keeps it equivalent to an explicit default', async () => {
       const omittedStorage = createInMemoryStorage();
       const explicitStorage = createInMemoryStorage();
@@ -788,7 +824,7 @@ describe('loadConfig', () => {
       const mutableFirst = first as unknown as {
         testMatch: string[];
         testIgnore: string[];
-        targets: Record<string, { baseUrl: string; browser: 'chromium' }>;
+        targets: Record<string, { baseUrl: string; executor: { kind: 'playwright'; browser: 'chromium' } }>;
         ai: { provider: 'claude' | 'codex' | 'auto' };
         viewer: { port: number };
         ci: { heal: boolean; updateGroundingCache: boolean };
@@ -827,7 +863,7 @@ describe('loadConfig', () => {
       const mutableFirst = first as unknown as {
         testMatch: string[];
         testIgnore: string[];
-        targets: Record<string, { baseUrl: string; browser: 'chromium' }>;
+        targets: Record<string, { baseUrl: string; executor: { kind: 'playwright'; browser: 'chromium' } }>;
         ai: { provider: 'claude' | 'codex' | 'auto' };
         viewer: { port: number };
         ci: { heal: boolean; updateGroundingCache: boolean };

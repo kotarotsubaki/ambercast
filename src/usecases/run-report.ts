@@ -1,6 +1,6 @@
 import type { AmbercastError, ExitCode } from '#core/errors/types.js';
 import { reportError } from '#report/error-mapping.js';
-import { REPORT_SCHEMA_VERSION, type ReportEnvelope, type RunResult } from '#report/schema.js';
+import { BrowserLaunchFailedDetails, REPORT_SCHEMA_VERSION, type ReportEnvelope, type RunResult } from '#report/schema.js';
 import { summarizeReport } from '#report/summarize.js';
 import { InterruptedError } from '#core/errors/interrupted-error.js';
 import { selectExitCode } from './exit-code-priority.js';
@@ -144,13 +144,17 @@ export function buildRunReport(input: RunReportInput): RunReportOutput {
     ...outcome.skipped
       .map(({ file }): RunResult => ({ id: file, file, status: 'skipped' })),
   ];
-  const errors = outcome.results.flatMap(({ result, error, engine }) => (
-    error === undefined ? [] : [reportError(error, {
+  const errors = outcome.results.flatMap(({ result, error }) => {
+    if (error === undefined) return [];
+    const engine = error.kind === 'browser-launch-failed'
+      ? BrowserLaunchFailedDetails.safeParse(error.details).data?.engine
+      : undefined;
+    return [reportError(error, {
       scope: 'case',
       caseId: result.id,
       ...(engine === undefined ? {} : { engine }),
-    })]
-  ));
+    })];
+  });
   const interrupted = outcome.interrupted;
   if (interrupted) errors.push(reportError(new InterruptedError(), { scope: 'run' }));
   const candidates: ExitCode[] = outcome.results.flatMap<ExitCode>(({ result, error }) => {

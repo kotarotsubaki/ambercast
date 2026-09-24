@@ -20,7 +20,7 @@ import {
 } from '#usecases/run.js';
 import type { CoveredTraceRecord } from '#usecases/instruction-coverage-policy.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession, elementRefKey } from '../../doubles/fake-browser-session.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
@@ -32,7 +32,7 @@ const RUNS_DIR = `${TEST_DIR}/.runs`;
 const TEST_PATH = `${TEST_DIR}/covered.test.md`;
 const PROMPT = '# Covered replay\n\nReach the dashboard.\n';
 const TARGETS = { web: { surface: 'web' as const, baseUrl: 'https://example.test' } };
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } };
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } };
 const OPTIONS: RunOptions = {
   files: [TEST_PATH],
   resolve: true,
@@ -199,7 +199,7 @@ function scenario(
     ...(options.captureValues === undefined ? {} : { captureValues: options.captureValues }),
     ...(options.assertOutcomes === undefined ? {} : { assertOutcomes: options.assertOutcomes }),
   });
-  const browserDriver = vi.fn(() => createFakeBrowserDriver(() => session));
+  const uiExecutor = vi.fn(() => createFakeUiExecutor(() => session));
   const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => {
     throw new Error('The scenario did not permit AI resolution.');
   });
@@ -209,7 +209,7 @@ function scenario(
     layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
     clock: createFixedClock(new Date('2026-08-21T00:00:00.000Z'), 0),
     runId: '2026-08-21T000000Z-550e8400-e29b-41d4-a716-446655440000',
-    browserDriver,
+    uiExecutor,
     secrets: createFakeSecretsProvider(new Map()),
     resolveAiExecutor,
     events: events.sink,
@@ -228,7 +228,7 @@ function scenario(
     ...overrides,
     allocateCallId: overrides.allocateCallId ?? createCallIdAllocator(),
   };
-  return { deps, session, browserDriver, resolveAiExecutor, events };
+  return { deps, session, uiExecutor, resolveAiExecutor, events };
 }
 
 describe('run instruction coverage trust boundary', () => {
@@ -511,7 +511,7 @@ describe('run instruction coverage trust boundary', () => {
       status: 'error',
     });
     expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-    expect(arranged.browserDriver).not.toHaveBeenCalled();
+    expect(arranged.uiExecutor).toHaveBeenCalledOnce();
     expect(arranged.session.operations()).toEqual([]);
     expect(recording.writes).toEqual([]);
     expect(recording.binaryWrites).toEqual([]);
@@ -538,7 +538,7 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/secret|literal/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).toHaveBeenCalledOnce();
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
@@ -563,7 +563,7 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|canonical/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).not.toHaveBeenCalled();
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
@@ -593,7 +593,7 @@ describe('run instruction coverage trust boundary', () => {
       });
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|canonical/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).not.toHaveBeenCalled();
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
@@ -630,7 +630,11 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|verification|terminal/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      if (_name === 'wrong claim kind') {
+        expect(arranged.uiExecutor).not.toHaveBeenCalled();
+      } else {
+        expect(arranged.uiExecutor).toHaveBeenCalledOnce();
+      }
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
@@ -661,7 +665,7 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/instruction|coverage|source span/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).not.toHaveBeenCalled();
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
       expect(recording.ensuredDirectories).toEqual([]);
@@ -710,7 +714,7 @@ describe('run instruction coverage trust boundary', () => {
         expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
         expect(outcome.results[0]?.error?.message).toMatch(message);
         expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-        expect(arranged.browserDriver).not.toHaveBeenCalled();
+        expect(arranged.uiExecutor).toHaveBeenCalledOnce();
         expect(recording.writes).toEqual([]);
         expect(recording.binaryWrites).toEqual([]);
         expect(recording.ensuredDirectories).toEqual([]);
@@ -745,7 +749,7 @@ describe('run instruction coverage trust boundary', () => {
         expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
         expect(outcome.results[0]?.error?.message).toMatch(/coverage|grounding|verification/i);
         expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-        expect(arranged.browserDriver).not.toHaveBeenCalled();
+        expect(arranged.uiExecutor).not.toHaveBeenCalled();
         expect(arranged.session.operations()).toEqual([]);
         expect(recording.writes).toEqual([]);
         expect(recording.binaryWrites).toEqual([]);
@@ -778,7 +782,7 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|grounding|integrity/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).not.toHaveBeenCalled();
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
@@ -820,7 +824,7 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|duplicate|grounding|verification/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).not.toHaveBeenCalled();
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
@@ -853,7 +857,7 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|duplicate|grounding|verification/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).not.toHaveBeenCalled();
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);
@@ -893,7 +897,7 @@ describe('run instruction coverage trust boundary', () => {
       expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
       expect(outcome.results[0]?.error?.message).toMatch(/coverage|verification|terminal/i);
       expect(arranged.resolveAiExecutor).not.toHaveBeenCalled();
-      expect(arranged.browserDriver).not.toHaveBeenCalled();
+      expect(arranged.uiExecutor).toHaveBeenCalledOnce();
       expect(arranged.session.operations()).toEqual([]);
       expect(recording.writes).toEqual([]);
       expect(recording.binaryWrites).toEqual([]);

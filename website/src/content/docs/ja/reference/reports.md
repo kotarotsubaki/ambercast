@@ -132,6 +132,8 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 - `failed`: 書き込みが失敗し、部分的なファイル内容が外部から見えない状態を示します。
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
+現行スキーマ版に固定されるのは書き込み側のみです。viewer は 3.x のレポートをすべて寛容に読み取ります。
+
 ```json
 {"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```

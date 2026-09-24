@@ -33,6 +33,7 @@ export const VIEW_COPY = {
         schemaMismatch: 'Schema mismatch',
         notRunReport: 'Not a run report',
         readFailed: 'Read failed',
+        unsupportedVersion: 'Unsupported version',
       },
     },
     runLinks: {
@@ -50,6 +51,7 @@ export const VIEW_COPY = {
       duration: 'Duration',
       reportPersisted: 'Report: persisted',
       reportFailed: 'Report: failed',
+      schema: 'Schema',
       rawJson: 'Raw JSON',
     },
     runErrors: {

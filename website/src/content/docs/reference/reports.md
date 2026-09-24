@@ -131,6 +131,8 @@ The `reportPersistence` property tracks the write outcome:
 - `failed` follows a write failure with no partial content visible.
 - `not-attempted` applies when a write is never tried, including a command failure before an outcome.
 
+Only the writer is pinned to the current schema version; the viewer reads any 3.x report leniently.
+
 ```json
 {"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```

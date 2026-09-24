@@ -1167,6 +1167,8 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 - `failed`: 書き込みが失敗し、部分的なファイル内容が外部から見えない状態を示します。
 - `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
 
+現行スキーマ版に固定されるのは書き込み側のみです。viewer は 3.x のレポートをすべて寛容に読み取ります。
+
 ```json
 {"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
@@ -2113,6 +2115,8 @@ view requires --allow-headless when no interactive terminal is attached.
 すべての応答に `X-Content-Type-Options: nosniff` と `Cache-Control: no-store` が付与されます。HTML 応答と生データ応答には固定の `Content-Security-Policy` と `Referrer-Policy: no-referrer` も付与されます。画面はサーバーサイドでレンダリングされ、クライアント側 JavaScript や外部リクエストは一切含まれません。
 
 `report.json` を欠く run ディレクトリ（書き込み途中や永続化失敗など）は、壊れたリンクとしてではなく evidence only として一覧に表示されます。`report.json` の解析または検証に失敗した run も、一覧から消えることなく、生バイト列へのリンク付きで表示され続けます。
+
+`ambercast view` は `schemaVersion` が 3.x であるレポートをすべて読み取ります。現行 CLI と異なるマイナー版で書かれたレポートは、run 詳細ヘッダに「Schema `<version>`」と表示されます。異なるメジャー版のレポートは「Unsupported version `<version>`」として一覧に表示され、開くことはできません。
 
 関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)。
 

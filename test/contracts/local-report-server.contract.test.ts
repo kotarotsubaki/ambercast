@@ -1,6 +1,6 @@
 import http from 'node:http';
 import net from 'node:net';
-import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -94,6 +94,32 @@ afterEach(async () => {
 });
 
 describe('local report server real HTTP contract', () => {
+  it('serves a legacy 3.6 report detail and preserves its raw JSON bytes', async () => {
+    const legacyId = 'fixture-run';
+    const legacyRef = '.runs/fixture-run/case-d/step-submit.png';
+    const bytes = await readFile(join(process.cwd(), 'test/fixtures/reports/legacy/3.6.report.json'));
+    await mkdir(join(runsDir, legacyId), { recursive: true });
+    await writeFile(join(runsDir, legacyId, 'report.json'), bytes);
+    await mkdir(join(projectRoot, '.runs/fixture-run/case-d'), { recursive: true });
+    await writeFile(join(projectRoot, legacyRef), png);
+
+    const base = await start();
+    const detail = await fetch(url(base, `/runs/${legacyId}`));
+    const raw = await fetch(url(base, `/runs/${legacyId}/report.json`));
+    const screenshot = await fetch(url(base, `/runs/${legacyId}/screenshots/${encodeURIComponent(legacyRef)}`));
+    const detailHtml = await detail.text();
+    const rawBytes = Buffer.from(await raw.arrayBuffer());
+    const imageBytes = new Uint8Array(await screenshot.arrayBuffer());
+    expect(detail.status).toBe(200);
+    expect(detailHtml).toContain('Schema 3.6');
+    expect(raw.status).toBe(200);
+    expect(raw.headers.get('content-type')).toBe('application/json');
+    expect(rawBytes).toEqual(bytes);
+    expect(screenshot.status).toBe(200);
+    expect(screenshot.headers.get('content-type')).toBe('image/png');
+    expect(imageBytes).toEqual(png);
+  });
+
   it('routes exact paths, ignores queries, and gives method rejection priority over unknown paths', async () => {
     const base = await start();
     const cases: Array<[string, number, string | undefined]> = [

@@ -1,6 +1,7 @@
 // HTML renderers for the ambercast viewer HTTP adapter.
 
 import { VIEW_COPY } from '#core/viewer/copy.js';
+import { REPORT_SCHEMA_VERSION } from '#runtime/view-command.js';
 import type { RunListing } from '#runtime/view-command.js';
 
 /**
@@ -24,12 +25,16 @@ export function escapeHtml(value: string): string {
 
 const page = (title: string, body: string): string => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title} · ambercast</title><style>body{background:#181310;color:#F1EBE2;font-family:system-ui,sans-serif;max-width:70rem;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%}th,td{padding:.5rem;border-bottom:1px solid #3B332C;text-align:left}th.num,td.num{text-align:right}a{color:inherit;text-decoration:underline}.pass{color:#7FC8A9}.fail{color:#E8875E}.skip{color:#3D6FA6}.verdigris{color:#7FC8A9}.amber{color:#E8B063}pre{white-space:pre-wrap}</style></head><body><header>${VIEW_COPY.pageHeader.brand}</header>${body}</body></html>`;
 const duration = (ms: number): string => ms < 1000 ? `${ms} ms` : `${(Math.round(ms / 100) / 10).toFixed(1)} s`;
-const reasonText = (reason: Extract<RunListing, { kind: 'unreadable' }>['reason']): string => ({
-  'invalid-json': VIEW_COPY.list.cases.unreadableReasons.invalidJson,
-  'schema-mismatch': VIEW_COPY.list.cases.unreadableReasons.schemaMismatch,
-  'not-run-report': VIEW_COPY.list.cases.unreadableReasons.notRunReport,
-  'read-error': VIEW_COPY.list.cases.unreadableReasons.readFailed,
-})[reason];
+/** Receives the unreadable branch intact because unsupported versions need their associated version text as well as the reason. */
+const reasonText = (listing: Extract<RunListing, { kind: 'unreadable' }>): string => {
+  if (listing.reason === 'unsupported-version') return `${VIEW_COPY.list.cases.unreadableReasons.unsupportedVersion} ${escapeHtml(listing.version)}`;
+  return ({
+    'invalid-json': VIEW_COPY.list.cases.unreadableReasons.invalidJson,
+    'schema-mismatch': VIEW_COPY.list.cases.unreadableReasons.schemaMismatch,
+    'not-run-report': VIEW_COPY.list.cases.unreadableReasons.notRunReport,
+    'read-error': VIEW_COPY.list.cases.unreadableReasons.readFailed,
+  } as const)[listing.reason];
+};
 const rawLink = (runId: string, label: string): string => `<a href="/runs/${escapeHtml(runId)}/report.json">${label}</a>`;
 type BadgeStatus = 'passed' | 'failed' | 'error' | 'skipped' | 'listed' | 'empty' | 'no-report' | 'unreadable';
 
@@ -96,7 +101,7 @@ export function renderRunList(listings: readonly RunListing[]): string {
     const { runId } = listing;
     if (listing.kind !== 'readable') {
       const status = statusBadge(listing.kind === 'no-report' ? 'no-report' : 'unreadable');
-      const cases = listing.kind === 'no-report' ? copy.cases.evidenceOnly : reasonText(listing.reason);
+      const cases = listing.kind === 'no-report' ? copy.cases.evidenceOnly : reasonText(listing);
       const link = listing.kind === 'unreadable' && listing.reason !== 'read-error' ? ` ${rawLink(runId, copy.runLinks.rawJson)}` : '';
       return `<tr><td>${status}</td><td>${escapeHtml(runId)}${link}</td><td>—</td><td>—</td><td>${cases}</td></tr>`;
     }
@@ -125,7 +130,7 @@ export function renderRunDetail(listing: RunListing): string {
   const { runId } = listing;
   const copy = VIEW_COPY.detail;
   if (listing.kind !== 'readable') {
-    const reason = listing.kind === 'unreadable' ? reasonText(listing.reason) : VIEW_COPY.list.cases.evidenceOnly;
+    const reason = listing.kind === 'unreadable' ? reasonText(listing) : VIEW_COPY.list.cases.evidenceOnly;
     const link =
       listing.kind === 'unreadable' && listing.reason !== 'read-error' ? rawLink(runId, copy.unreadable.rawJson) : '';
     return page(escapeHtml(runId), `<h1>${copy.unreadable.heading}</h1><p>${reason}</p>${link}`);
@@ -133,7 +138,10 @@ export function renderRunDetail(listing: RunListing): string {
   const report = listing.envelope;
   const summary = report.summary;
   const totals = formatCounts(summary);
-  const header = `<h1>${escapeHtml(runId)}</h1><p>${copy.header.started} ${escapeHtml(report.startedAt)} · ${copy.header.duration} ${duration(report.durationMs)} · ${totals} · ${report.reportPersistence === 'failed' ? copy.header.reportFailed : copy.header.reportPersisted} · ${rawLink(runId, copy.header.rawJson)}</p>`;
+  // Detail pages identify report formats differing from the current version, whether older or newer; the list stays compact and current reports need no schema label.
+  const persistedLabel = report.reportPersistence === 'failed' ? copy.header.reportFailed : copy.header.reportPersisted;
+  const schemaSegment = listing.envelope.schemaVersion !== REPORT_SCHEMA_VERSION ? ` · ${copy.header.schema} ${escapeHtml(listing.envelope.schemaVersion)}` : '';
+  const header = `<h1>${escapeHtml(runId)}</h1><p>${copy.header.started} ${escapeHtml(report.startedAt)} · ${copy.header.duration} ${duration(report.durationMs)} · ${totals} · ${persistedLabel}${schemaSegment} · ${rawLink(runId, copy.header.rawJson)}</p>`;
   const errors = report.errors.length ? `<section><h2>${copy.runErrors.headingPrefix}${report.errors.length})</h2><ul>${report.errors.map((error) => `<li>${escapeHtml(error.code)} · ${error.scope === 'run' ? 'run' : `case · ${escapeHtml(error.caseId)}`} ${escapeHtml(error.message)}</li>`).join('')}</ul></section>` : '';
   const cases = report.results.length ? report.results.map((result) => {
     if (result.status === 'listed' || result.status === 'skipped') return `<p>${statusBadge(result.status)} ${escapeHtml(result.file)}</p>`;

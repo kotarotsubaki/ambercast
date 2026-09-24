@@ -46,4 +46,6 @@ view requires --allow-headless when no interactive terminal is attached.
 
 缺少 `report.json` 的运行目录（例如写入过程中或持久化失败）会在列表中显示为仅有证据（evidence only），而不是一个失效链接。`report.json` 解析或校验失败的运行仍会保留在列表中，并提供指向其原始字节内容的链接，而不会从列表中消失。
 
+`ambercast view` 会读取 `schemaVersion` 为 3.x 的所有报告。由与当前 CLI 不同的次版本写入的报告，会在运行详情标题中显示"Schema `<version>`"；来自其他主版本的报告会在列表中显示为"Unsupported version `<version>`"，且无法打开。
+
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)。

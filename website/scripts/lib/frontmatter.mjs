@@ -1,5 +1,7 @@
+import { load } from 'js-yaml';
+
 /**
- * Parses the site's deliberately small YAML-frontmatter subset into the metadata needed by
+ * Validates YAML syntax, then extracts the site's small frontmatter field subset needed by
  * the llms artifacts. The parser follows the parity checker's CRLF-tolerant leading-block
  * convention so both build-time consumers agree about where document content begins.
  *
@@ -11,11 +13,14 @@
  * @returns {{ title: string, description: string | undefined, status: 'available' | 'planned', body: string }}
  * Parsed metadata and the source after its frontmatter block, without modifying that body.
  * @throws {Error} If the leading frontmatter block or its `title` is missing, or if a supplied
- * `status` is not `available` or `planned`.
+ * `status` is not `available` or `planned`, or the frontmatter YAML is syntactically invalid.
  */
 export function parseFrontmatter(markdown) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) throw new Error('Missing leading frontmatter block');
+
+  try { load(match[1]); }
+  catch { throw new Error('Malformed frontmatter YAML'); }
 
   const valueFor = (key) => {
     const value = new RegExp(`^${key}:\\s*(.+)$`, 'm').exec(match[1])?.[1]?.trim();

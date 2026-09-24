@@ -5,8 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { siteDescriptions } from '../src/data/site-descriptions.mjs';
 import { orderedPages } from '../src/sidebar.mjs';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
-import { plannedPageSlugs } from '../scripts/lib/capability-pages.mjs';
-import capabilityPagesMapping from '../src/data/capability-pages.json';
+import { plannedPageSlugs, readCapabilityPages } from '../scripts/lib/capability-pages.mjs';
 import { main as syncSpec } from '../scripts/sync-spec.mjs';
 import {
   buildPageUrl,
@@ -16,6 +15,7 @@ import {
   renderLlmsTxt,
 } from '../scripts/lib/llms.mjs';
 
+const capabilityPagesMapping = await readCapabilityPages(fileURLToPath(new URL('../src/data/capability-pages.json', import.meta.url)));
 const PLANNED_SLUGS = () => plannedPageSlugs(capabilityPagesMapping);
 
 const docsDirectory = new URL('../src/content/docs/', import.meta.url);

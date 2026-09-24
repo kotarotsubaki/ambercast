@@ -10,14 +10,58 @@ import { LLMS_OUTPUT_PATHS } from './lib/llms.mjs';
 const separator = /^(?:[\s,、，]*(?:(?:and\/or|and|or|および|及び|と|和|与|以及|或)[\s,、，]*)?)$/i;
 const linkPattern = /\]\(((?:\/ambercast\/|https:\/\/kotarotsubaki\.github\.io\/ambercast\/)[^\s)]*)\)/g;
 const required = ['rule', 'path', 'claimHash', 'scope', 'reason', 'owner', 'removeWhen'];
+const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
+const START_TAG_PATTERN = /<[A-Za-z][^>]*>/g;
+const ATTRIBUTE_PATTERN = /([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 async function readJson(path) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
   catch (error) { throw new Error(`check-claims: cannot read ${path}: ${error.message}`); }
 }
 
+/**
+ * Collects literal IDs from one mdast html node's raw source, whether the node is a
+ * block-level HTML region or inline HTML in a paragraph. HTML comments are stripped
+ * first so tag-shaped text such as `<!-- <a id="x"> -->` cannot become an anchor.
+ * Each start tag matching `<[A-Za-z][^>]*>` has its attributes tokenized in sequence;
+ * consuming each quoted name=value pair whole prevents `id="x"` inside another
+ * attribute's value, such as `title='id="x"'`, from being counted as an id attribute.
+ * Only attributes named exactly `id` contribute values; values may use single or
+ * double quotes. The tag-boundary pattern does not handle an unescaped `>` inside an
+ * attribute value, as in `<a title="a > b" id="x">`.
+ *
+ * @param {string} value Raw source text of one mdast html node.
+ * @returns {string[]} Values of literal id attributes on matched start tags.
+ */
+function idsFromHtml(value) {
+  const withoutComments = value.replace(HTML_COMMENT_PATTERN, '');
+  const ids = [];
+  for (const tag of withoutComments.match(START_TAG_PATTERN) ?? []) {
+    for (const attribute of tag.matchAll(ATTRIBUTE_PATTERN)) {
+      if (attribute[1] === 'id') ids.push(attribute[2] ?? attribute[3]);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Parses markdown once into an mdast tree and collects literal IDs from html nodes
+ * alongside heading anchors. Headings retain explicit `{#id}` precedence; otherwise
+ * their text and inline-code content feeds github-slugger in document order. Distinct
+ * html, inlineCode, and code node types keep `id="…"` in inline or block code out of
+ * the HTML anchor collection without a separate masking pass.
+ *
+ * @param {string} markdown Complete Markdown source for one page.
+ * @returns {Set<string>} Literal HTML IDs and heading-derived anchors.
+ */
 function headingAnchors(markdown) {
-  const anchors = new Set([...maskForClaims(markdown).matchAll(/(?<![\w-])id="([^"]+)"/g)].map((match) => match[1]));
+  const tree = fromMarkdown(markdown);
+  const anchors = new Set();
+  function collectHtmlIds(node) {
+    if (node.type === 'html') for (const id of idsFromHtml(node.value)) anchors.add(id);
+    for (const child of node.children ?? []) collectHtmlIds(child);
+  }
+  collectHtmlIds(tree);
   const slugger = new GithubSlugger();
   function visit(node) {
     if (node.type === 'heading') {
@@ -36,7 +80,7 @@ function headingAnchors(markdown) {
     }
     for (const child of node.children ?? []) visit(child);
   }
-  visit(fromMarkdown(markdown));
+  visit(tree);
   return anchors;
 }
 
@@ -108,8 +152,9 @@ function enumerations(line, vocabulary, locale) {
  * otherwise resolves spec pages or the first existing Markdown/MDX page candidate.
  * Target-page fragments use ATX headings: a trailing text-child explicit anchor takes
  * precedence; otherwise text and inline-code descendants feed one github-slugger
- * instance per file in document order. Literal id attributes also count. Missing
- * artifacts, pages, and fragments remain distinct violations.
+ * instance per file in document order. Literal id attributes count only on real HTML
+ * tags, not in inline or block code, HTML comments, or another attribute's quoted
+ * value. Missing artifacts, pages, and fragments remain distinct violations.
  *
  * Hard allowlist entries suppress only matching rule/path/claimHash findings. Invalid
  * entries, including every identifier-hit entry, violate allowlist-invalid; unmatched

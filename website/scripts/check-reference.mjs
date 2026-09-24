@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { splitByCodeRegions } from './lib/wikilinks.mjs';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
-import { plannedPageSlugs } from './lib/capability-pages.mjs';
+import { plannedPageSlugs, readCapabilityPages } from './lib/capability-pages.mjs';
 
 /**
  * Checks that reference tables describe the generated CLI, configuration, and error vocabulary
@@ -36,12 +36,12 @@ export async function checkReference(options = {}) {
   const publicRoot = options.publicRoot ?? resolve(websiteRoot, 'public');
   const configDefaultsPath = options.configDefaultsPath ?? resolve(websiteRoot, '../dist/manifest/config-defaults.json');
   const capabilityPagesPath = resolve(websiteRoot, options.capabilityPagesPath ?? 'src/data/capability-pages.json');
-  const [cliManifest, configSchema, capabilities, configDefaults, mapping] = await Promise.all([
+  const mapping = await readCapabilityPages(capabilityPagesPath);
+  const [cliManifest, configSchema, capabilities, configDefaults] = await Promise.all([
     readGeneratedJson(join(publicRoot, 'manifest/cli.json')),
     readGeneratedJson(join(publicRoot, 'schemas/config.schema.json')),
     readGeneratedJson(join(publicRoot, 'capabilities.json')),
     readGeneratedJson(configDefaultsPath),
-    readGeneratedJson(capabilityPagesPath),
   ]);
   const violations = (await Promise.all([
     checkCliFlagTables(docsRoot, cliManifest),
@@ -68,12 +68,44 @@ async function readGeneratedJson(path) {
 }
 
 /**
+ * Checks a page's frontmatter directly with the shared parser, independent of any
+ * capability mapping. A page without a leading frontmatter block remains available and
+ * is not a violation; accepted frontmatter also returns null. Parser rejections return
+ * the invalid status text from `Invalid frontmatter status: …`, or `malformed` otherwise.
+ * Missing closing delimiters, missing titles, and future parser failures share that
+ * generic value because page-frontmatter-invalid only needs to report that the
+ * frontmatter cannot be trusted, rather than identify the structural defect.
+ *
+ * Unlike pageStatus, which inserts a placeholder title to ask whether a mapped page is
+ * planned, this helper parses markdown as-is to ask whether its own frontmatter is valid.
+ *
+ * @param {string} markdown Complete Markdown source for one page.
+ * @returns {string | null} The invalid status or `malformed`, or null for valid or absent frontmatter.
+ */
+function frontmatterInvalidActual(markdown) {
+  if (!markdown.startsWith('---\n') && !markdown.startsWith('---\r\n')) return null;
+  try {
+    parseFrontmatter(markdown);
+    return null;
+  } catch (error) {
+    const invalidStatus = /^Invalid frontmatter status: (.*)$/.exec(error.message);
+    return invalidStatus ? invalidStatus[1] : 'malformed';
+  }
+}
+
+/**
  * Checks English planned pages against the capability-to-page mapping; locale status
  * parity remains the separate parity check's responsibility. The comparison
  * reports missing and extra capability keys, missing or non-planned mapped pages,
  * planned pages absent from the union of mapped slugs and unlisted keys, and missing
- * or non-planned unlisted pages. It resolves slug Markdown/MDX files under docsRoot
- * and reads status with the shared frontmatter parser. Each mismatch uses the existing
+ * or non-planned unlisted pages. The walk also checks every page's own frontmatter with
+ * frontmatterInvalidActual, whether mapped or not. This separate read leaves pageStatus's
+ * existing .md-before-.mdx precedence intact for mapped and unmapped status checks.
+ * For each walked .md or .mdx file, a non-null frontmatterInvalidActual result adds a
+ * page-frontmatter-invalid violation whose actual field is that returned value,
+ * regardless of whether the page appears in the capability mapping.
+ * It resolves slug Markdown/MDX files under docsRoot and reads status with the shared
+ * frontmatter parser. Each mismatch uses the existing
  * reference violation shape and its dedicated planned-* or unlisted-* rule. The
  * caller reads the injectable mapping path relative to the website cwd and preserves
  * read failures as hard errors rather than treating them as drift.
@@ -131,6 +163,9 @@ export async function checkPlannedPages(docsRoot, capabilities, mapping) {
       if (child.isDirectory()) await walk(join(directory, child.name), `${prefix}${child.name}/`);
       else if (/\.mdx?$/.test(child.name)) {
         const slug = `${prefix}${child.name.replace(/\.mdx?$/, '')}`;
+        const markdown = await readFile(join(directory, child.name), 'utf8');
+        const invalidActual = frontmatterInvalidActual(markdown);
+        if (invalidActual !== null) add(slug, 'page-frontmatter-invalid', 'valid frontmatter', invalidActual);
         if (!known.has(slug) && await pageStatus(slug) === 'planned') add(slug, 'planned-page-unmapped', 'mapped or unlisted', 'unmapped');
       }
     }

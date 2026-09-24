@@ -1,9 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFile as mockedReadFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkReference } from '../scripts/check-reference.mjs';
 import { createDocsFixture, runEntryPoint } from './cli-fixture.ts';
 import capabilityPagesMapping from '../src/data/capability-pages.json';
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 
 type Violation = { check: string, page: string, rule: string, expected: string, actual: string };
 type FixtureOptions = {
@@ -64,7 +72,7 @@ const plannedDocs = Object.fromEntries([
   'reference/cli/review', 'reference/cli/mcp',
   'reference/cli/baseline-restore', 'reference/mcp-tools',
   'agents/mcp-server',
-].map((slug) => [`${slug}.md`, '---\nstatus: planned\n---\n# Planned\n']));
+].map((slug) => [`${slug}.md`, '---\ntitle: Planned\nstatus: planned\n---\n# Planned\n']));
 
 const flagTable = (rows: string[], anchored = true, prose = '') => [
   `## Flags${anchored ? ' {#flags}' : ''}`,
@@ -217,7 +225,21 @@ describe('checkReference', () => {
 
   it('names the malformed capabilities mapping key', async () => {
     const f = createReferenceFixture({ capabilityPages: { ...capabilityPagesMapping, capabilities: 'invalid' } });
-    await expect(checkFixture(f)).rejects.toThrow('Invalid capability-pages mapping: "capabilities" is not an object');
+    const message = 'Invalid capability-pages mapping: "capabilities" is not an object';
+    await expect(checkFixture(f)).rejects.toThrow(new RegExp(`^${escapeRegExp(message)}$`));
+  });
+
+  it('reads no documentation page when the capability-pages mapping is invalid', async () => {
+    const f = createReferenceFixture({
+      capabilityPages: { ...capabilityPagesMapping, capabilities: { ...capabilityPagesMapping.capabilities, review: [] } },
+    });
+    const readFileMock = vi.mocked(mockedReadFile);
+    readFileMock.mockClear();
+    const message = 'capability-pages.json: capabilities.review must be a non-empty array of non-empty strings';
+    await expect(checkFixture(f)).rejects.toThrow(new RegExp(`^${escapeRegExp(message)}$`));
+    const docsRootPrefix = join(f.website, 'src/content/docs');
+    const docsReads = readFileMock.mock.calls.filter(([path]) => String(path).startsWith(docsRootPrefix));
+    expect(docsReads).toEqual([]);
   });
 
   it('reports one unlisted page whose status became available', async () => {
@@ -392,6 +414,37 @@ describe('checkReference', () => {
 
     expect(violations.length).toBeGreaterThanOrEqual(3);
     expect(violations).toEqual([...violations].sort((left, right) => left.check.localeCompare(right.check) || left.page.localeCompare(right.page) || left.rule.localeCompare(right.rule)));
+  });
+});
+
+describe('page-frontmatter-invalid', () => {
+  it.each([
+    ['missing closing delimiter', '---\ntitle: X\n# Body\n', 'malformed'],
+    ['missing title', '---\nstatus: available\n---\n# Body\n', 'malformed'],
+    ['draft status', '---\ntitle: X\nstatus: draft\n---\n# Body\n', 'draft'],
+    ['empty status', '---\ntitle: X\nstatus: ""\n---\n# Body\n', ''],
+  ])('reports an unmapped page with %s', async (_case, content, actual) => {
+    const result = await checkFixture(createReferenceFixture({ docs: { 'not-mapped.md': content } }));
+    expect(result.filter((violation) => violation.rule === 'page-frontmatter-invalid')).toStrictEqual([{
+      check: 'reference', page: 'not-mapped', rule: 'page-frontmatter-invalid',
+      expected: 'valid frontmatter', actual,
+    }]);
+  });
+
+  it('accepts an unmapped page without frontmatter', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: { 'not-mapped.md': '# Body\n' } }));
+    expect(result.filter((violation) => violation.page === 'not-mapped' && violation.rule === 'page-frontmatter-invalid')).toStrictEqual([]);
+  });
+
+  it('reports malformed frontmatter before the mapped planned-page violation', async () => {
+    const result = await checkFixture(createReferenceFixture({ docs: {
+      'reference/cli/review.md': '---\ntitle: X\n# Body\n',
+    } }));
+    expect(result.filter((violation) => violation.page === 'reference/cli/review' &&
+      ['page-frontmatter-invalid', 'planned-page-not-planned'].includes(violation.rule))).toStrictEqual([
+      { check: 'reference', page: 'reference/cli/review', rule: 'page-frontmatter-invalid', expected: 'valid frontmatter', actual: 'malformed' },
+      { check: 'reference', page: 'reference/cli/review', rule: 'planned-page-not-planned', expected: 'planned', actual: 'malformed' },
+    ]);
   });
 });
 

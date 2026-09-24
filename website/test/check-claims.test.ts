@@ -117,6 +117,28 @@ describe('site links', () => {
     expect((await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule === 'link-missing-fragment')).toHaveLength(1);
   });
 
+  it.each([
+    ['inline code', '`<span id="x"></span>`\n'],
+    ['indented code', '    <a id="x">\n'],
+    ['an HTML comment', '<!-- <a id="x"> -->\n'],
+    ['another attribute value', '<span title=\'id="x"\'>\n'],
+  ])('does not accept an id inside %s as a fragment anchor', async (_context, page) => {
+    const f = fixture('[link](/ambercast/reference/cli/view/#x)', {
+      'website/src/content/docs/reference/cli/view.md': page,
+    });
+    expect((await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule === 'link-missing-fragment')).toHaveLength(1);
+  });
+
+  it.each([
+    ['a block HTML tag', '<a id="x"></a>\n'],
+    ['a single-quoted id attribute', "<a id='x'>\n"],
+  ])('resolves a fragment anchor in %s', async (_context, page) => {
+    const f = fixture('[link](/ambercast/reference/cli/view/#x)', {
+      'website/src/content/docs/reference/cli/view.md': page,
+    });
+    expect((await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule.startsWith('link-'))).toEqual([]);
+  });
+
   it('resolves spec and generated/public artifacts and ignores fenced links', async () => {
     const f = fixture('[spec](/ambercast/spec/example/) [public](/ambercast/capabilities.json) [generated](/ambercast/ja/llms.txt)\n```md\n[missing](/ambercast/never/)\n```', {
       'docs/spec/example.md': '# Example\n',

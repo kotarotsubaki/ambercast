@@ -8,8 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { once } from 'node:events';
 import { chromium } from 'playwright-core';
-import { plannedPageSlugs } from '../../scripts/lib/capability-pages.mjs';
-import capabilityPagesMapping from '../../src/data/capability-pages.json' with { type: 'json' };
+import { plannedPageSlugs, readCapabilityPages } from '../../scripts/lib/capability-pages.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEBSITE_DIRECTORY = resolve(HERE, '../..');
@@ -36,6 +35,7 @@ const LOCALE_DEMO_LABELS = {
   '/ja/': { tryIt: '試してみる', generate: '生成 ›', run: '実行 ›', runAgain: 'もう一度実行 ›', reset: 'リセット' },
   '/zh-cn/': { tryIt: '试一试', generate: '生成 ›', run: '运行 ›', runAgain: '再次运行 ›', reset: '重置' },
 };
+const capabilityPagesMapping = await readCapabilityPages(fileURLToPath(new URL('../../src/data/capability-pages.json', import.meta.url)));
 const PLANNED_PAGES = plannedPageSlugs(capabilityPagesMapping);
 const RUN_H2_IDS = ['flags', 'replay', 'ai-calls', 'resolve', 'grounding-write-back', 'report-and-exits'];
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version;

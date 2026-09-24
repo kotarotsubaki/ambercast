@@ -446,7 +446,7 @@ function forbiddenCheckImports(sourceFile: ts.SourceFile): string[] {
     const forbidden = isAiOrBrowserPortSpecifier(specifier)
       || [
         'fake-ai-executor',
-        'fake-browser-driver',
+        'fake-ui-executor',
         'fake-ai-action-controller',
         'fake-browser-session',
         'fake-secrets-provider',
@@ -1649,7 +1649,7 @@ describe('architecture guardrails', () => {
           ts.isCallExpression(node)
           && ts.isPropertyAccessExpression(node.expression)
           && node.expression.name.text === 'launch'
-          && checker.getTypeAtLocation(node.expression.expression).getProperty('engine') !== undefined
+          && checker.getTypeAtLocation(node.expression.expression).getProperty('capabilities') !== undefined
         ) {
           sites.push(`${file}:${activeSource.getLineAndCharacterOfPosition(node.getStart(activeSource)).line + 1}`);
         }
@@ -1659,6 +1659,22 @@ describe('architecture guardrails', () => {
     }
     expect(sites).toHaveLength(1);
     expect(sites[0]?.startsWith(`${SESSION_POOL_MODULE_FILE}:`)).toBe(true);
+  });
+
+  test('contains no legacy browser driver identifiers in source', async () => {
+    const forbidden = new Set(['BrowserDriver', 'BrowserEngine', 'browserDriver', 'BrowserDriverResolver']);
+    const occurrences: string[] = [];
+    for (const file of await findTypeScriptFiles(SOURCE_ROOT)) {
+      const source = ts.createSourceFile(file, await readFile(file, 'utf8'), ts.ScriptTarget.Latest, true);
+      function visit(node: ts.Node): void {
+        if (ts.isIdentifier(node) && forbidden.has(node.text)) {
+          occurrences.push(`${relative(SOURCE_ROOT, file)}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}:${node.text}`);
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+    }
+    expect(occurrences).toEqual([]);
   });
 
   test('restricts detection-only accessibility capture fields to the run detector and excludes them from persisted shapes', async () => {

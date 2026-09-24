@@ -28,6 +28,7 @@ const EXPECTED_REPORT_ERROR_DETAILS = {
   'integrity-violation': { kind: 'usage', code: 'INTEGRITY_VIOLATION' },
   'grounding-unresolved': { kind: 'usage', code: 'GROUNDING_UNRESOLVED', hint: 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.' },
   'browser-launch-failed': { kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', hint: BROWSER_LAUNCH_FAILED_HINT },
+  'executor-unsupported': { kind: 'usage', code: 'EXECUTOR_UNSUPPORTED' },
   'ai-executor-unavailable': { kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE' },
   'ai-response-invalid': { kind: 'environment', code: 'AI_RESPONSE_INVALID' },
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
@@ -203,7 +204,7 @@ describe('reportError', () => {
     });
   });
 
-  it.each(['executable-missing', 'engine-unregistered', 'launch-failed'] as const)('projects matching browser-launch %s reason and engine unchanged', (reason) => {
+  it.each(['executable-missing', 'executor-unregistered', 'launch-failed'] as const)('projects matching browser-launch %s reason and engine unchanged', (reason) => {
     const error = new BrowserLaunchFailedError('browser failed', {
       reason, engine: 'chromium', ignored: 'not reportable',
     });

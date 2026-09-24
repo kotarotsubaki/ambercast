@@ -8,7 +8,7 @@ export const EXPECTED_DEFAULT_CONFIG = {
   targets: {
     'web-user': {
       baseUrl: 'http://localhost:3000',
-      browser: 'chromium',
+      executor: { kind: 'playwright', browser: 'chromium' },
       healReplayIsolation: 'stateful',
       resolveTimeoutMs: 5000,
     },

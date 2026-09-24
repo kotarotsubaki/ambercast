@@ -8,8 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { once } from 'node:events';
 import { chromium } from 'playwright-core';
-import { plannedPageSlugs } from '../../scripts/lib/capability-pages.mjs';
-import capabilityPagesMapping from '../../src/data/capability-pages.json' with { type: 'json' };
+import { plannedPageSlugs, readCapabilityPages } from '../../scripts/lib/capability-pages.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEBSITE_DIRECTORY = resolve(HERE, '../..');
@@ -36,6 +35,7 @@ const LOCALE_DEMO_LABELS = {
   '/ja/': { tryIt: '試してみる', generate: '生成 ›', run: '実行 ›', runAgain: 'もう一度実行 ›', reset: 'リセット' },
   '/zh-cn/': { tryIt: '试一试', generate: '生成 ›', run: '运行 ›', runAgain: '再次运行 ›', reset: '重置' },
 };
+const capabilityPagesMapping = await readCapabilityPages(fileURLToPath(new URL('../../src/data/capability-pages.json', import.meta.url)));
 const PLANNED_PAGES = plannedPageSlugs(capabilityPagesMapping);
 const RUN_H2_IDS = ['flags', 'replay', 'ai-calls', 'resolve', 'grounding-write-back', 'report-and-exits'];
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version;
@@ -1588,8 +1588,11 @@ async function assertIssue298LlmsArtifacts(browser) {
     const artifactPlannedUrls = plannedSlugs.map((slug) => `https://kotarotsubaki.github.io/ambercast/${localePrefix}${slug}/`);
     for (const plannedUrl of artifactPlannedUrls) assert.equal(bodies.get(artifact).includes(plannedUrl), false, `${artifact} must omit planned page ${plannedUrl}.`);
   }
+  // Deriving the expected count instead of hardcoding it means this
+  // assertion tracks capability-pages.json automatically whenever a planned
+  // page is added, removed, or promoted out of "planned".
   const plannedLines = bodies.get('llms-planned.txt').trim().split('\n').filter(Boolean);
-  assert.equal(plannedLines.length, 7, 'llms-planned.txt must contain exactly seven planned entries.');
+  assert.equal(plannedLines.length, plannedSlugs.length, 'llms-planned.txt must contain one entry per planned page.');
   for (const plannedUrl of plannedUrls) assert.ok(bodies.get('llms-planned.txt').includes(plannedUrl), `llms-planned.txt must contain ${plannedUrl}.`);
 }
 

@@ -1,5 +1,4 @@
-import type { BrowserSession } from '#ports/browser.js';
-import type { BrowserDriverResolver } from '#ports/index.js';
+import type { BrowserSession, UiExecutor } from '#ports/browser.js';
 import type { ResolvedTargetConfigEntry } from '#core/config/schema.js';
 import type { TargetDefinition } from '#core/ir/schema.js';
 
@@ -53,10 +52,16 @@ export interface SessionPool {
   states(): Record<string, 'not-opened' | 'closed' | 'close-failed'>;
 }
 
-/** Owns lazy browser sessions and records every acquired session's close outcome. */
+/**
+ * Owns lazy browser sessions and records every acquired session's close outcome.
+ *
+ * @remarks
+ * Each session launches from its Target's pre-resolved `UiExecutor` instance;
+ * preflight resolves every instance once before this pool exists.
+ */
 export function createSessionPool(
   targets: Readonly<Record<string, { readonly definition: TargetDefinition; readonly config: ResolvedTargetConfigEntry }>>,
-  browserDriver: BrowserDriverResolver,
+  executors: Readonly<Record<string, UiExecutor>>,
 ): SessionPool {
   const sessions = new Map<string, BrowserSession>();
   const closeResults: Record<string, 'closed' | 'close-failed'> = {};
@@ -66,7 +71,7 @@ export function createSessionPool(
       if (existing !== undefined) return existing;
       const target = targets[name];
       if (target === undefined) throw new Error(`Unknown target: ${name}`);
-      const session = await browserDriver(target.config.browser).launch(target.definition);
+      const session = await executors[name]!.launch(target.definition);
       sessions.set(name, session);
       return session;
     },

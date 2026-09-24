@@ -1,7 +1,7 @@
 /**
- * Declares the browser boundary used by run orchestration and browser
+ * Declares the UI executor boundary used by run orchestration and executor
  * adapters. The caller materializes run data before crossing this boundary,
- * keeping browser implementations independent of secret and run-state ports.
+ * keeping executor implementations independent of secret and run-state ports.
  */
 import type {
   ElementRef,
@@ -10,18 +10,10 @@ import type {
   TargetDefinition,
   TracePress,
 } from '#core/ir/schema.js';
-import type { ResolvedTargetConfigEntry } from '#core/config/schema.js';
+import type { UiExecutorKind } from '#core/config/schema.js';
+import type { UiCapability } from '#core/ir/capabilities.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type { GroundingMissReason } from '#core/errors/grounding-miss-reason.js';
-
-/**
- * A browser engine that a target can select for a run.
- *
- * @remarks
- * Deriving this union from the target contract keeps target validation and
- * driver selection aligned as browser support grows.
- */
-export type BrowserEngine = ResolvedTargetConfigEntry['browser'];
 
 /**
  * Paired browser evidence captured at the same point in a session.
@@ -508,21 +500,27 @@ export interface BrowserSession {
 }
 
 /**
- * Launches browser sessions for one supported engine.
+ * Launches browser sessions for one supported executor.
  *
  * @remarks
- * Driver selection happens outside this port. That lets a run select the
+ * Executor selection happens outside this port. That lets a run select the
  * adapter matching its IR target without exposing adapter construction to
- * browser-session consumers.
+ * executor-session consumers.
  */
-export interface BrowserDriver {
-  /** Identifies the engine this driver is selected to launch. */
-  readonly engine: BrowserEngine;
+export interface UiExecutor {
+  /** Identifies the executor kind this instance is selected to launch. */
+  readonly kind: UiExecutorKind;
+
+  /** The surface this executor operates on. */
+  readonly surface: 'web';
+
+  /** The set of capabilities this executor supports. */
+  readonly capabilities: ReadonlySet<UiCapability>;
 
   /**
-   * Starts a session for a target that selects this driver's engine.
+   * Starts a session for a target that selects this executor.
    *
-   * @param target - The target that supplies the base URL and browser engine.
+   * @param target - The target that supplies the base URL.
    * @returns A session the caller must later close.
    * @throws If the target cannot be launched.
    */

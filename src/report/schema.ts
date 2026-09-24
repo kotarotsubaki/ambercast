@@ -39,6 +39,27 @@ const ElementRef = z.discriminatedUnion('strategy', [z.strictObject({
 })]);
 
 /**
+ * Report-local equivalent of the core IR UiCapability schema.
+ *
+ * Reports may type-import from core but must keep runtime validation local.
+ */
+const UiCapability = z.enum([
+  'click',
+  'navigate',
+  'press',
+  'fill',
+  'fill-secret',
+  'text-visible',
+  'element-visible',
+  'text-equals',
+  'url-matches',
+  'element-count',
+  'capture',
+  'snapshot',
+  'agentic',
+]);
+
+/**
  * Version shared by every structured report envelope.
  *
  * V4 execution evidence introduces required step Target identity and the
@@ -72,6 +93,7 @@ const USAGE_REPORT_ERROR_CODES = [
   'SECRET_CONSENT_REQUIRED',
   'SECRET_SYNTAX_REJECTED',
   'GROUNDING_UNRESOLVED',
+  'EXECUTOR_UNSUPPORTED',
 ] as const;
 
 const ENVIRONMENT_REPORT_ERROR_CODES = [
@@ -234,8 +256,26 @@ export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ n
  * independent from the closed reason vocabulary.
  */
 export const BrowserLaunchFailedDetails = z.strictObject({
-  reason: z.enum(['executable-missing', 'engine-unregistered', 'launch-failed']),
+  reason: z.enum(['executable-missing', 'executor-unregistered', 'launch-failed']),
   engine: NonWhitespaceString,
+});
+
+/**
+ * Stable executor-unsupported evidence accepted by the report contract.
+ *
+ * @remarks
+ * The reason uses a closed vocabulary. The executor field is a string to
+ * remain independent from the executor kind vocabulary at the report layer.
+ */
+export const ExecutorUnsupportedDetails = z.strictObject({
+  target: NonWhitespaceString,
+  executor: NonWhitespaceString,
+  reason: z.enum(['surface-mismatch', 'capability-missing']),
+  missing: z.array(UiCapability),
+  surface: z.strictObject({
+    target: z.literal('web'),
+    executor: NonWhitespaceString,
+  }).optional(),
 });
 
 const ReportErrorMessageFields = {
@@ -298,6 +338,7 @@ const CaseUsageReportError = z.discriminatedUnion('code', [
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_CONSENT_REQUIRED'), details: SecretConsentRequiredDetails.optional() }),
   CaseUsageErrorBase.extend({ code: z.literal('SECRET_SYNTAX_REJECTED'), details: SecretSyntaxRejectedDetails.optional() }),
   CaseUsageErrorBase.extend({ code: z.literal('GROUNDING_UNRESOLVED'), details: GroundingUnresolvedDetails.optional() }),
+  CaseUsageErrorBase.extend({ code: z.literal('EXECUTOR_UNSUPPORTED'), details: ExecutorUnsupportedDetails.optional() }),
 ]);
 
 const CaseOtherEnvironmentReportError = z.discriminatedUnion('code', [

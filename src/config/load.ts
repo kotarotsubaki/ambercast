@@ -314,6 +314,7 @@ export function parseAndValidateRawConfig(text: string, path: string): RawConfig
   }
 
   rejectUnsafeRawKeys(document, path);
+  rejectLegacyBrowserKey(document, path);
   const result = RawConfig.safeParse(document);
   if (!result.success) {
     throw new ConfigInvalidError(
@@ -349,6 +350,34 @@ function rejectUnsafeRawKeys(document: unknown, configPath: string): void {
 }
 
 /**
+ * The pre-check rejects a raw own `browser` key under any target, which has
+ * moved to `executor.browser`. This must run before `RawConfig.safeParse`
+ * because `RawConfig` uses `z.strictObject` and would emit a generic
+ * "unknown key" error instead of the specific legacy-key message.
+ */
+function rejectLegacyBrowserKey(document: unknown, configPath: string): void {
+  if (document === null || typeof document !== 'object') {
+    return;
+  }
+
+  const targets = 'targets' in document ? document.targets : undefined;
+  if (targets === null || typeof targets !== 'object') {
+    return;
+  }
+
+  for (const [name, target] of Object.entries(targets)) {
+    if (target !== null && typeof target === 'object') {
+      if (Object.hasOwn(target, 'browser')) {
+        throw new ConfigInvalidError(
+          `targets.${name}.browser has moved to targets.${name}.executor.browser.`,
+          { configPath, target: name }
+        );
+      }
+    }
+  }
+}
+
+/**
  * Copies resolved targets while preserving their live-only settings.
  *
  * Configuration loading must default `healReplayIsolation` before runtime
@@ -363,12 +392,18 @@ function rejectUnsafeRawKeys(document: unknown, configPath: string): void {
  */
 function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedConfig['targets']): ResolvedConfig['targets'] {
   return Object.fromEntries(
-    Object.entries(source).map(([name, target]) => [name, {
-      ...target,
-      surface: target.surface ?? 'web',
-      healReplayIsolation: target.healReplayIsolation ?? 'stateful',
-      resolveTimeoutMs: target.resolveTimeoutMs ?? 5000,
-    }]),
+    Object.entries(source).map(([name, target]) => {
+      return [name, {
+        ...target,
+        surface: target.surface ?? 'web',
+        executor: {
+          kind: target.executor?.kind ?? 'playwright',
+          browser: target.executor?.browser ?? 'chromium',
+        },
+        healReplayIsolation: target.healReplayIsolation ?? 'stateful',
+        resolveTimeoutMs: target.resolveTimeoutMs ?? 5000,
+      }];
+    }),
   );
 }
 

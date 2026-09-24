@@ -31,6 +31,31 @@ export const AI_MAX_GENERATE_ATTEMPTS_DESCRIPTION = 'Maximum provider attempts p
 export const AI_TIMEOUT_MS_DESCRIPTION = 'Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.';
 
 /**
+ * The executor kind vocabulary for UI executors.
+ *
+ * @remarks
+ * The single-member enum keeps the vocabulary closed while giving future
+ * executor kinds one explicit place to extend it, rather than letting
+ * consumers assume that the current literal is the permanent contract.
+ */
+export const UiExecutorKind = z.enum(['playwright']);
+export type UiExecutorKind = z.infer<typeof UiExecutorKind>;
+
+/**
+ * The executor configuration shape for a target.
+ *
+ * @remarks
+ * The kind is explicit so a configuration file selects an executor, while
+ * the browser may be omitted. Loading supplies the browser default before
+ * runtime consumers receive {@link ResolvedUiExecutorConfig}.
+ */
+export const UiExecutorConfig = z.strictObject({
+  kind: UiExecutorKind,
+  browser: z.literal('chromium').optional(),
+});
+export type UiExecutorConfig = z.infer<typeof UiExecutorConfig>;
+
+/**
  * Schema for a target as it may appear in a partial configuration file.
  *
  * @remarks
@@ -45,16 +70,16 @@ export const AI_TIMEOUT_MS_DESCRIPTION = 'Deadline in milliseconds for one provi
  * `toTargetDefinition` keeps its three-field projection free of this
  * live-only setting so it never becomes a plan or input-digest dependency.
  * In v4 configuration accepts an optional web surface and description while
- * retaining browser for runtime driver selection. The Plan projection omits
- * description and browser; the optional surface resolves to web before the
- * strict Plan definition is formed.
+ * using `executor` for runtime UI executor selection.
+ * The Plan projection omits description and executor; the optional surface
+ * resolves to web before the strict Plan definition is formed.
  */
 export const TargetConfigEntry = z.strictObject({
   surface: z.literal('web').optional(),
   description: z.string().optional(),
   baseUrl: TargetDefinition.shape.baseUrl,
   secretSinkOrigins: TargetDefinition.shape.secretSinkOrigins,
-  browser: z.literal('chromium'),
+  executor: UiExecutorConfig.optional(),
   healReplayIsolation: z.enum(['idempotent', 'stateful']).optional(),
   resolveTimeoutMs: z.int().min(0).max(60000).optional(),
 });
@@ -63,10 +88,9 @@ export const TargetConfigEntry = z.strictObject({
  * Fully resolved target settings available to command and runtime selection.
  *
  * Unlike {@link TargetConfigEntry}, this type requires
- * `healReplayIsolation`: callers use it to reject healing against a stateful
- * target before browser or provider work starts. Digest-bound consumers must
- * project it back to {@link TargetDefinition}, which intentionally has no
- * live-only replay-isolation field.
+ * `healReplayIsolation` and `executor`: callers use it to reject healing
+ * against a stateful target before executor work starts, and the executor
+ * default is resolved during loading.
  * `resolveTimeoutMs` is likewise required here because `copyTargets` resolves
  * an omitted configuration value to 5000 ms before runtime selection. Like
  * `healReplayIsolation`, it stays outside `toTargetDefinition`'s three-field
@@ -76,7 +100,21 @@ export type ResolvedTargetConfigEntry =
   Omit<z.infer<typeof TargetConfigEntry>, 'healReplayIsolation' | 'resolveTimeoutMs'> & {
     readonly healReplayIsolation: 'idempotent' | 'stateful';
     readonly resolveTimeoutMs: number;
+    readonly executor: ResolvedUiExecutorConfig;
   };
+
+/**
+ * The fully resolved executor configuration.
+ *
+ * @remarks
+ * This is a plain type because loading has already parsed the untrusted
+ * {@link UiExecutorConfig} and supplied its browser default. Runtime consumers
+ * can therefore rely on both fields being present without parsing them again.
+ */
+export type ResolvedUiExecutorConfig = {
+  readonly kind: 'playwright';
+  readonly browser: 'chromium';
+};
 
 /**
  * Validates the parsed contents of a present Ambercast configuration file.

@@ -3,6 +3,7 @@ import { IntegrityViolationError } from '#core/errors/integrity-violation-error.
 import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { parseAriaSnapshot } from '#core/ir/aria-snapshot.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
+import { UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type {
   ElementRef,
@@ -17,7 +18,7 @@ import type {
   GroundingQuery,
 } from '../../../../src/ports/browser.js';
 import {
-  createChromiumBrowserDriver,
+  createPlaywrightUiExecutor,
   type PlaywrightBrowserHandle,
   type PlaywrightContextHandle,
   type PlaywrightLauncher,
@@ -26,7 +27,7 @@ import {
 } from '../../../../src/adapters/browser/chromium.js';
 import { captureRejection } from '../../../doubles/capture-rejection.js';
 import { expectSecretSinkOriginViolation } from '../../../doubles/expect-secret-sink-origin-violation.js';
-import { registerBrowserDriverContract } from '../../../contracts/browser-driver.contract.js';
+import { registerUiExecutorContract } from '../../../contracts/ui-executor.contract.js';
 import {
   registerBrowserSessionContract,
   type BrowserSessionContractSetup,
@@ -36,6 +37,7 @@ const TARGET = {
   baseUrl: 'https://example.test',
   surface: 'web',
 } as const satisfies TargetDefinition;
+const EXECUTOR_CONFIG = { kind: 'playwright', browser: 'chromium' } as const;
 
 const SUBMIT_BUTTON: ElementRef = {
   strategy: 'accessibility',
@@ -475,7 +477,7 @@ async function launchSession(
   headed?: boolean,
 ): Promise<BrowserSession> {
   const options = headed === undefined ? { launcher } : { launcher, headed };
-  return createChromiumBrowserDriver(options).launch(TARGET);
+  return createPlaywrightUiExecutor(EXECUTOR_CONFIG, options).launch(TARGET);
 }
 
 async function withLaunchedSession(
@@ -598,8 +600,8 @@ async function bindSubmit(session: BrowserSession, query: GroundingQuery = VERIF
   return result.element;
 }
 
-registerBrowserDriverContract({
-  createDriver: () => createChromiumBrowserDriver({ launcher: new FakePlaywrightLauncher() }),
+registerUiExecutorContract({
+  createExecutor: () => createPlaywrightUiExecutor(EXECUTOR_CONFIG, { launcher: new FakePlaywrightLauncher() }),
 });
 
 const chromiumContractLaunchers = new WeakMap<BrowserSession, FakePlaywrightLauncher>();
@@ -646,11 +648,13 @@ registerBrowserSessionContract({
   },
 });
 
-describe('createChromiumBrowserDriver()', () => {
-  it('declares Chromium as its browser engine', () => {
-    const driver = createChromiumBrowserDriver({ launcher: new FakePlaywrightLauncher() });
+describe('createPlaywrightUiExecutor()', () => {
+  it('declares Playwright as a web executor with all capabilities', () => {
+    const driver = createPlaywrightUiExecutor(EXECUTOR_CONFIG, { launcher: new FakePlaywrightLauncher() });
 
-    expect(driver.engine).toBe('chromium');
+    expect(driver.kind).toBe('playwright');
+    expect(driver.surface).toBe('web');
+    expect([...driver.capabilities]).toEqual(UI_CAPABILITIES);
   });
 
   it.each([
@@ -688,7 +692,7 @@ describe('createChromiumBrowserDriver()', () => {
     const failure = new Error('Chromium could not start');
     launcher.launchFailure = failure;
 
-    await expect(createChromiumBrowserDriver({ launcher }).launch(TARGET)).rejects.toBe(failure);
+    await expect(createPlaywrightUiExecutor(EXECUTOR_CONFIG, { launcher }).launch(TARGET)).rejects.toBe(failure);
     expect(launcher.launchOptions).toEqual([{ headless: true }]);
   });
 });

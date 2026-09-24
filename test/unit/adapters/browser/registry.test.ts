@@ -1,53 +1,57 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BrowserDriver, BrowserEngine } from '../../../../src/ports/browser.js';
+import type { UiExecutor } from '../../../../src/ports/browser.js';
+import type { ResolvedUiExecutorConfig } from '../../../../src/core/config/schema.js';
+import { UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import { BrowserLaunchFailedError } from '../../../../src/core/errors/browser-launch-failed-error.js';
 
 const mocks = vi.hoisted(() => ({
-  createChromiumBrowserDriver: vi.fn(),
+  createPlaywrightUiExecutor: vi.fn(),
 }));
 
 vi.mock('../../../../src/adapters/browser/chromium.js', () => ({
-  createChromiumBrowserDriver: mocks.createChromiumBrowserDriver,
+  createPlaywrightUiExecutor: mocks.createPlaywrightUiExecutor,
 }));
 
-import { createBrowserDriverResolver } from '../../../../src/adapters/browser/registry.js';
+import { createUiExecutorResolver } from '../../../../src/adapters/browser/registry.js';
 
 afterEach(() => {
   vi.resetAllMocks();
 });
 
-function chromiumDriver(): BrowserDriver {
-  return { engine: 'chromium', launch: vi.fn() };
+const config = { kind: 'playwright', browser: 'chromium' } as const;
+
+function playwrightExecutor(): UiExecutor {
+  return { kind: 'playwright', surface: 'web', capabilities: new Set(UI_CAPABILITIES), launch: vi.fn() };
 }
 
-describe('createBrowserDriverResolver()', () => {
-  it('resolves chromium through the registered driver factory', () => {
-    const driver = chromiumDriver();
-    mocks.createChromiumBrowserDriver.mockReturnValue(driver);
+describe('createUiExecutorResolver()', () => {
+  it('resolves Playwright through its registered factory', () => {
+    const executor = playwrightExecutor();
+    mocks.createPlaywrightUiExecutor.mockReturnValue(executor);
 
-    const resolved = createBrowserDriverResolver()('chromium');
-
-    expect(resolved).toBe(driver);
+    expect(createUiExecutorResolver()(config)).toBe(executor);
+    expect(mocks.createPlaywrightUiExecutor).toHaveBeenCalledExactlyOnceWith(config, undefined);
   });
 
-  it('passes headed browser construction policy through to the Chromium factory', () => {
-    const driver = chromiumDriver();
-    mocks.createChromiumBrowserDriver.mockReturnValue(driver);
+  it('forwards headed policy and declares all thirteen capabilities', () => {
+    const executor = playwrightExecutor();
+    mocks.createPlaywrightUiExecutor.mockReturnValue(executor);
 
-    const resolved = createBrowserDriverResolver({ headed: true })('chromium');
-
-    expect(resolved).toBe(driver);
-    expect(mocks.createChromiumBrowserDriver).toHaveBeenCalledWith({ headed: true });
+    expect(createUiExecutorResolver({ headed: true })(config)).toBe(executor);
+    expect(mocks.createPlaywrightUiExecutor).toHaveBeenCalledExactlyOnceWith(config, { headed: true });
+    expect(executor).toMatchObject({ kind: 'playwright', surface: 'web' });
+    expect([...executor.capabilities]).toEqual(UI_CAPABILITIES);
+    expect(executor.capabilities.size).toBe(13);
   });
 
-  it('throws BrowserLaunchFailedError for an unregistered engine', () => {
-    const resolver = createBrowserDriverResolver();
-    // BrowserEngine is a single-member literal type, so this is defensive forward-compatible coverage with no reachable production value.
-    const unregisteredEngine = 'firefox' as unknown as BrowserEngine;
+  it.each(['stagehand', ''] as const)('throws BrowserLaunchFailedError for unregistered kind %j', (kind) => {
+    const resolver = createUiExecutorResolver();
+    const unknown = { ...config, kind } as unknown as ResolvedUiExecutorConfig;
 
-    expect(() => resolver(unregisteredEngine)).toThrow(BrowserLaunchFailedError);
-    expect(() => resolver(unregisteredEngine)).toThrow(expect.objectContaining({
-      details: { reason: 'engine-unregistered', engine: unregisteredEngine },
+    expect(() => resolver(unknown)).toThrow(BrowserLaunchFailedError);
+    expect(() => resolver(unknown)).toThrow(expect.objectContaining({
+      details: { reason: 'executor-unregistered', engine: kind },
     }));
+    expect(mocks.createPlaywrightUiExecutor).not.toHaveBeenCalled();
   });
 });

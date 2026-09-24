@@ -37,7 +37,8 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
 | `targets.<name>.surface` | `web` | absent | TP1 では `web` のみ | generate と Plan のターゲット定義 |
 | `targets.<name>.description` | string | なし | 任意の生成コンテキスト | generate |
-| `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |
+| `targets.<name>.executor.kind` | `playwright` | `playwright` | 実行時に選ぶ UI executor の種類。Plan ダイジェストの対象外 | run、heal の executor 構成 |
+| `targets.<name>.executor.browser` | `chromium` | `chromium` | 実行時に使うブラウザ。Plan ダイジェストの対象外 | run、heal の executor 構成 |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal には選択された `idempotent` ターゲットが必要 | heal |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |

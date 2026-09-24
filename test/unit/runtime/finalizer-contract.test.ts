@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   buildRunReport: vi.fn(),
   check: vi.fn(),
   createAmbercast: vi.fn(),
-  createBrowserDriverResolver: vi.fn(),
+  createUiExecutorResolver: vi.fn(),
   createConfirmationAnswerReader: vi.fn(),
   createCryptoRandom: vi.fn(),
   createEnvSecretsProvider: vi.fn(),
@@ -39,7 +39,7 @@ vi.mock('#adapters/ai/registry.js', () => ({
   AI_EXECUTOR_FACTORIES: { claude: vi.fn(), codex: vi.fn() },
 }));
 vi.mock('#adapters/browser/registry.js', () => ({
-  createBrowserDriverResolver: mocks.createBrowserDriverResolver,
+  createUiExecutorResolver: mocks.createUiExecutorResolver,
 }));
 vi.mock('#adapters/storage/fs-read-storage.js', () => ({
   createFsReadStorage: mocks.createFsReadStorage,
@@ -90,7 +90,7 @@ const CONFIG: ResolvedConfig = {
   projectRoot: '/workspace',
   testMatch: ['**/*.test.md'],
   testIgnore: ['**/.runs/**'],
-  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+  targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
   defaultTarget: 'web',
   secrets: { allow: [] },
   ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
@@ -151,7 +151,7 @@ beforeEach(() => {
   mocks.createSystemClock.mockReturnValue(clock);
   mocks.createCryptoRandom.mockReturnValue({ uuid: () => '550e8400-e29b-41d4-a716-446655440000' });
   mocks.createProcessEnvironmentInfo.mockReturnValue({ isCI: () => false });
-  mocks.createBrowserDriverResolver.mockReturnValue({});
+  mocks.createUiExecutorResolver.mockReturnValue({});
   mocks.createEnvSecretsProvider.mockReturnValue({});
   mocks.createNoopEventSink.mockReturnValue({ emit: vi.fn() });
   mocks.createStderrProgressSink.mockReturnValue({ emit: vi.fn(), close: vi.fn() });

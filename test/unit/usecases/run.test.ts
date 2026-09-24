@@ -46,7 +46,7 @@ import {
 } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
 import type { AiAgenticRequest, InstructionCoveredAiAgenticRequest } from '#ports/ai.js';
-import type { BrowserDriver, BrowserEngine, BrowserSession, PerformableAction } from '#ports/browser.js';
+import type { BrowserSession, PerformableAction } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
 import { classifyBrowserLaunchFailure, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
@@ -60,7 +60,7 @@ import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { expectSecretSinkOriginViolation } from '../../doubles/expect-secret-sink-origin-violation.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import {
   createFakeBrowserSession as createRawFakeBrowserSession,
   awaitElementPresenceCalls,
@@ -114,7 +114,7 @@ vi.mock('#core/ir/grounding-recovery-mode.js', async (importOriginal) => {
 
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
-const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test', browser: 'chromium' } } as const;
+const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const DEFAULT_INSTRUCTION_COVERAGE = [{
@@ -140,7 +140,8 @@ const GENERIC_ABORT_EXPLANATION = 'The browser session could not complete this c
 const HIGH_ENTROPY_TOKEN_LITERAL = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea';
 
 describe('classifyBrowserLaunchFailure', () => {
-  const engine: BrowserEngine = 'chromium';
+  const engine = 'chromium';
+  const executor = { kind: 'playwright', browser: engine } as const;
 
   it('TEST-6a keeps the MCP-free controller rejection budget out of the case abort', async () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
@@ -157,7 +158,7 @@ describe('classifyBrowserLaunchFailure', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     vi.spyOn(session, 'perform').mockRejectedValue(new AgenticTargetRejection('ambercast_perform', 'element-not-found'));
@@ -179,7 +180,7 @@ describe('classifyBrowserLaunchFailure', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -197,7 +198,7 @@ describe('classifyBrowserLaunchFailure', () => {
     ['rejects alternate executable-missing wording', new Error('Executable does not exist at /path'), 'launch-failed'],
     ['requires the trailing space in the executable-missing needle', new Error("Executable doesn't exist at"), 'launch-failed'],
   ] as const)('%s', (_name, error, reason) => {
-    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason, engine });
+    expect(classifyBrowserLaunchFailure(error, executor)).toEqual({ reason, engine });
   });
 
   describe('SPEC-1 agentic target-rejection mapping', () => {
@@ -231,7 +232,7 @@ describe('classifyBrowserLaunchFailure', () => {
         },
       });
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         resolveAiExecutor: async () => executor,
         secrets,
       });
@@ -351,12 +352,12 @@ describe('classifyBrowserLaunchFailure', () => {
     undefined,
     { message: "Executable doesn't exist at /path" },
   ])('falls back for a non-Error thrown value: %j', (error) => {
-    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+    expect(classifyBrowserLaunchFailure(error, executor)).toEqual({ reason: 'launch-failed', engine });
   });
 
   it('falls back when an Error message is not a string', () => {
     const error = Object.defineProperty(new Error('ignored'), 'message', { value: 42 });
-    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+    expect(classifyBrowserLaunchFailure(error, executor)).toEqual({ reason: 'launch-failed', engine });
   });
 
   it('falls back when an Error message getter throws', () => {
@@ -366,17 +367,17 @@ describe('classifyBrowserLaunchFailure', () => {
         Object.defineProperty(this, 'message', { get() { throw new Error('hostile message getter'); } });
       }
     }
-    expect(classifyBrowserLaunchFailure(new HostileMessageError(), engine)).toEqual({ reason: 'launch-failed', engine });
+    expect(classifyBrowserLaunchFailure(new HostileMessageError(), executor)).toEqual({ reason: 'launch-failed', engine });
   });
 
   it('falls back when the Error instanceof check throws', () => {
     const error = new Proxy({}, { getPrototypeOf() { throw new Error('hostile prototype getter'); } });
-    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+    expect(classifyBrowserLaunchFailure(error, executor)).toEqual({ reason: 'launch-failed', engine });
   });
 
   it('does not inspect a cause chain', () => {
     const error = new Error('generic launch failure', { cause: new Error("Executable doesn't exist at /path") });
-    expect(classifyBrowserLaunchFailure(error, engine)).toEqual({ reason: 'launch-failed', engine });
+    expect(classifyBrowserLaunchFailure(error, executor)).toEqual({ reason: 'launch-failed', engine });
   });
 });
 const CREDENTIAL_LITERALS = [
@@ -406,7 +407,7 @@ interface RecordingStorage {
 
 interface Scenario {
   readonly deps: RunDeps;
-  readonly browserDriver: ReturnType<typeof vi.fn<(engine: BrowserEngine) => BrowserDriver>>;
+  readonly uiExecutor: ReturnType<typeof vi.fn<RunDeps['uiExecutor']>>;
   readonly events: ReturnType<typeof createRecordingEventSink>;
   readonly recordingStorage: RecordingStorage;
   readonly sessionFactory: ReturnType<typeof vi.fn<() => BrowserSession>>;
@@ -453,8 +454,8 @@ function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
   const recordingStorage = createRecordingStorage();
   const events = createRecordingEventSink();
   const sessionFactory = vi.fn<() => BrowserSession>(() => createFakeBrowserSession(new Map()));
-  const driver = createFakeBrowserDriver(sessionFactory);
-  const browserDriver = vi.fn<(engine: BrowserEngine) => BrowserDriver>(() => driver);
+  const driver = createFakeUiExecutor(sessionFactory);
+  const uiExecutor = vi.fn<RunDeps['uiExecutor']>(() => driver);
   const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => {
     throw new Error('The scenario did not permit an AI fallback.');
   });
@@ -463,7 +464,7 @@ function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
     layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
     clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
     runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-    browserDriver,
+    uiExecutor,
     secrets: createFakeSecretsProvider(new Map()),
     resolveAiExecutor,
     events: events.sink,
@@ -484,7 +485,7 @@ function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
     allocateCallId: overrides.allocateCallId ?? createCallIdAllocator(),
   };
 
-  return { deps, browserDriver, events, recordingStorage, sessionFactory, resolveAiExecutor };
+  return { deps, uiExecutor, events, recordingStorage, sessionFactory, resolveAiExecutor };
 }
 
 function elementGrounding(stepIds: readonly string[]): GroundingDocument['entries'] {
@@ -757,7 +758,7 @@ async function runFailureEvidenceScenario(
 ): Promise<Awaited<ReturnType<typeof run>>> {
   const secretRefs = [...secretValues.keys()];
   const { deps, recordingStorage } = createScenario({
-    browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+    uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     secrets: createFakeSecretsProvider(secretValues),
   });
   const testPath = await writePrompt(
@@ -797,14 +798,14 @@ describe('run', () => {
   });
 
   it('reports a missing plan as exit-4 failure before resolving a browser driver', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, uiExecutor, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage);
 
     const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: [] } } }, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(MissingPlanError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'missing-plan', exitCode: 4 });
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -821,7 +822,7 @@ describe('run', () => {
       await storage.writeText(`${TEST_DIR}/login.ambercast.plan.json`, JSON.stringify({ schemaVersion: 2, steps: [{ id: 'missing-kind' }] }));
     }],
   ] as const)('reports %s as an integrity violation before resolving a browser driver', async (_description, arrangePlan) => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, uiExecutor, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await arrangePlan(recordingStorage.storage, testPath);
 
@@ -829,11 +830,11 @@ describe('run', () => {
 
     expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'integrity-violation', exitCode: 4 });
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('reports a canonical plan with an old inputs digest as stale before resolving a browser driver', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, uiExecutor, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     const plan = await createFreshPlan(recordingStorage.storage, testPath, [
       { id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
@@ -847,11 +848,11 @@ describe('run', () => {
 
     expect(outcome.results[0]?.error).toBeInstanceOf(StaleIrError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'stale-ir', exitCode: 4 });
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('rejects legacy secret syntax before target resolution or browser launch', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, uiExecutor, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n@ambercast-${'secret'} {{secrets.FOO}}\n`);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -862,22 +863,22 @@ describe('run', () => {
       details: { hint: 'Delete the offending line(s) and re-run `ambercast generate`.' },
     });
     expect(outcome.results[0]?.error).not.toBeInstanceOf(TargetUnresolvedError);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('rejects legacy secret syntax with no browser or provider calls', async () => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const { deps, uiExecutor, recordingStorage, resolveAiExecutor } = createScenario();
     await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n{{secrets.FOO}}\n`);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(SecretSyntaxRejectedError);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
   it('requires configured consent for committed secret uses before browser launch', async () => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const { deps, uiExecutor, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
@@ -886,12 +887,12 @@ describe('run', () => {
     const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: [] } } }, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
   it('denies committed secret uses when the optional consent dependency is absent', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, uiExecutor, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
@@ -901,12 +902,12 @@ describe('run', () => {
     const outcome = await run({ ...deps, config: configWithoutSecrets }, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(SecretConsentRequiredError);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('accepts every committed secret use when consent allows all names', async () => {
     const scenario = createScenario();
-    const { deps, browserDriver, recordingStorage } = scenario;
+    const { deps, uiExecutor, recordingStorage } = scenario;
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.LOGIN_PASSWORD}}',
@@ -915,11 +916,11 @@ describe('run', () => {
     const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: '*' } } }, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).not.toBeInstanceOf(SecretConsentRequiredError);
-    expect(browserDriver).toHaveBeenCalled();
+    expect(uiExecutor).toHaveBeenCalled();
   });
 
   it('rejects committed secret refs that collide in environment-variable space before browser launch', async () => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const { deps, uiExecutor, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'first', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: '{{secrets.FOO_BAR}}' },
@@ -929,12 +930,12 @@ describe('run', () => {
     const outcome = await run({ ...deps, config: { ...deps.config, secrets: { allow: '*' } } }, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(SecretEnvVarCollisionError);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
   it('rejects a v2 committed secret-span field at the strict plan-read boundary', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, uiExecutor, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     const plan = await createFreshPlan(recordingStorage.storage, testPath, []);
     await recordingStorage.storage.writeText(`${TEST_DIR}/login.ambercast.plan.json`, toCanonicalArtifactText({
@@ -945,15 +946,15 @@ describe('run', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('replays normally when every fill-secret and AI-step secret ref is allowed', async () => {
     const secretRef = '{{secrets.LOGIN_PASSWORD}}';
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
-    const browserDriver = vi.fn(() => createFakeBrowserDriver(() => session));
+    const uiExecutor = vi.fn(() => createFakeUiExecutor(() => session));
     const { deps, events: _events, recordingStorage, resolveAiExecutor: _resolveAiExecutor } = createScenario({
-      browserDriver,
+      uiExecutor,
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'resolved-at-run-time']])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -974,12 +975,12 @@ describe('run', () => {
 
     expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 0 });
     expect(outcome.results[0]?.error).toBeUndefined();
-    expect(browserDriver).toHaveBeenCalledTimes(1);
+    expect(uiExecutor).toHaveBeenCalledTimes(1);
   });
 
   // SPEC-9/10: run has no selected Target; Plan targets define execution.
   it('reports a source prompt read failure as a pre-dispatch filesystem error', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario();
+    const { deps, uiExecutor, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage);
     vi.spyOn(recordingStorage.storage, 'readText').mockRejectedValueOnce(new Error('prompt volume unavailable'));
 
@@ -988,11 +989,11 @@ describe('run', () => {
     expect(outcome.results[0]?.error).toBeInstanceOf(FsIoError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'fs-io-error', exitCode: 3 });
     expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [] });
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('SPEC-10 rejects a plan target missing from config before digest comparison', async () => {
-    const { deps, browserDriver, recordingStorage } = createScenario({
+    const { deps, uiExecutor, recordingStorage } = createScenario({
       config: {
         testDir: TEST_DIR,
         testMatch: ['**/*.test.md'],
@@ -1012,14 +1013,14 @@ describe('run', () => {
 
     expect(outcome.results[0]?.error).toBeInstanceOf(TargetUnresolvedError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'target-unresolved', exitCode: 2, details: { target: 'not-configured' } });
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('reports aiCalls zero for a full grounding-cache hit and emits no AI lifecycle event', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(liveEntries([SUBMIT, EMAIL]), { onClose: closed });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1057,7 +1058,7 @@ describe('run', () => {
     });
     const secretRef = '{{secrets.auth.password}}';
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'not-in-the-plan']])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -1095,7 +1096,7 @@ describe('run', () => {
   it('rejects a cross-origin deterministic navigate before it reaches the browser', async () => {
     const session = createFakeBrowserSession(new Map());
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -1112,7 +1113,7 @@ describe('run', () => {
   it('rejects a same-origin-looking blob: deterministic navigate before it reaches the browser', async () => {
     const session = createFakeBrowserSession(new Map());
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -1131,7 +1132,7 @@ describe('run', () => {
   it('allows same-origin absolute and relative deterministic navigate URLs', async () => {
     const session = createFakeBrowserSession(new Map());
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -1151,7 +1152,7 @@ describe('run', () => {
   it('preserves the repairable class for an unresolvable deterministic navigate URL through redaction', async () => {
     const session = createFakeBrowserSession(new Map());
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -1173,7 +1174,7 @@ describe('run', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -1193,7 +1194,7 @@ describe('run', () => {
       captureValues: new Map([[elementRefKey(EMAIL), { text: capturedHost, value: 'unused' }]]),
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -1224,7 +1225,7 @@ describe('run', () => {
     });
     const captureValue = vi.spyOn(session, 'captureValue');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1248,7 +1249,7 @@ describe('run', () => {
     const session = createFakeBrowserSession(liveEntries([EMAIL]), { onClose: closed });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1279,7 +1280,7 @@ describe('run', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets,
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -1299,7 +1300,7 @@ describe('run', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]), { onFillSecret: fillSecret, onClose: closed });
     const secretRef = '{{secrets.auth.password}}';
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map()),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -1364,7 +1365,7 @@ describe('run', () => {
       const secrets = createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]]));
       const resolve = vi.spyOn(secrets, 'resolve');
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         config: { ...createScenario().deps.config, targets: DENY_EVERYWHERE_TARGETS },
         secrets,
       });
@@ -1393,7 +1394,7 @@ describe('run', () => {
         },
       });
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         config: { ...createScenario().deps.config, targets: DENY_EVERYWHERE_TARGETS },
         resolveAiExecutor: async () => executor,
         secrets,
@@ -1418,7 +1419,7 @@ describe('run', () => {
     ] as const)('%s', async (_description, targets, targetDefinitions, currentUrl, allowed) => {
       const session = createFakeBrowserSession(liveEntries([PASSWORD]), { currentUrl });
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         config: { ...createScenario().deps.config, targets },
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
@@ -1445,7 +1446,7 @@ describe('run', () => {
       const allowedSession = createFakeBrowserSession(liveEntries([PASSWORD]));
       setFakeCurrentUrl(allowedSession, 'https://idp.example.test/login');
       const allowedScenario = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => allowedSession)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => allowedSession)),
         config: { ...createScenario().deps.config, targets: IDP_ONLY_TARGETS },
         discoverTestFiles: vi.fn(async () => ['allowed.test.md']),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
@@ -1469,7 +1470,7 @@ describe('run', () => {
 
       const deniedSession = createFakeBrowserSession(liveEntries([PASSWORD]));
       const deniedScenario = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => deniedSession)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => deniedSession)),
         config: { ...createScenario().deps.config, targets: IDP_ONLY_TARGETS },
         discoverTestFiles: vi.fn(async () => ['denied.test.md']),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
@@ -1497,7 +1498,7 @@ describe('run', () => {
         },
       }));
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         resolveAiExecutor,
         secrets,
       });
@@ -1522,10 +1523,10 @@ describe('run', () => {
       const narrowSecrets = createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]]));
       const narrowResolve = vi.spyOn(narrowSecrets, 'resolve');
       const narrowSessionFactory = vi.fn(() => narrowSession);
-      const narrowDriver = vi.fn<(engine: BrowserEngine) => BrowserDriver>(() => createFakeBrowserDriver(narrowSessionFactory));
+      const narrowDriver = vi.fn<RunDeps['uiExecutor']>(() => createFakeUiExecutor(narrowSessionFactory));
       const narrowCurrentUrl = vi.spyOn(narrowSession, 'currentUrl');
       const narrowScenario = createScenario({
-        browserDriver: narrowDriver,
+        uiExecutor: narrowDriver,
         discoverTestFiles: vi.fn(async () => ['narrow.test.md']),
         secrets: narrowSecrets,
       });
@@ -1578,7 +1579,7 @@ describe('run', () => {
         web: { ...TARGETS.web, secretSinkOrigins: { [SECRET_REF]: ['https://idp.example.test'] } },
       };
       const wideScenario = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => wideSession)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => wideSession)),
         config: { ...createScenario().deps.config, targets: wideTargets },
         discoverTestFiles: vi.fn(async () => ['wide.test.md']),
         resolveAiExecutor: async () => createFakeAiExecutor({
@@ -1615,7 +1616,7 @@ describe('run', () => {
     it('keeps explicit navigate origin enforcement independent from a secret-sink allow-list', async () => {
       const session = createFakeBrowserSession(new Map());
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         config: { ...createScenario().deps.config, targets: IDP_ONLY_TARGETS },
       });
       const testPath = await writePrompt(recordingStorage.storage);
@@ -1642,7 +1643,7 @@ describe('run', () => {
       onClose: closed,
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1672,10 +1673,10 @@ describe('run', () => {
 
   it('aborts a browser-launch failure before any step has execution evidence', async () => {
     const sessionFactory = vi.fn<() => BrowserSession>(() => createFakeBrowserSession(new Map()));
-    const driver = createFakeBrowserDriver(sessionFactory);
+    const driver = createFakeUiExecutor(sessionFactory);
     const launch = vi.spyOn(driver, 'launch').mockRejectedValue(new BrowserLaunchFailedError('Chromium could not launch.'));
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => driver),
+      uiExecutor: vi.fn(() => driver),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'open-home', kind: 'action', action: 'navigate', url: '/' }]);
@@ -1694,9 +1695,9 @@ describe('run', () => {
   });
 
   it('classifies a generic browser-launch rejection and retains the resolved engine', async () => {
-    const driver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    const driver = createFakeUiExecutor(() => createFakeBrowserSession(new Map()));
     vi.spyOn(driver, 'launch').mockRejectedValue(new Error("Executable doesn't exist at /path/to/chromium"));
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => driver) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => driver) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'open-home', kind: 'action', action: 'navigate', url: '/' }]);
 
@@ -1706,14 +1707,14 @@ describe('run', () => {
       kind: 'browser-launch-failed',
       details: { reason: 'executable-missing', engine: 'chromium' },
     });
-    expect(outcome.results[0]?.engine).toBe('chromium');
+    expect(outcome.results[0]?.error?.details?.engine).toBe('chromium');
   });
 
   it('reports a grounding-unresolved error for a cold AI step in cache-only mode and closes the session', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(new Map(), { onClose: closed });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1749,7 +1750,7 @@ describe('run', () => {
   });
 
   it('reports a missing preflight miss for the first leading AI step before browser startup', async () => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const { deps, uiExecutor, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep('first-ai')]);
 
@@ -1759,12 +1760,12 @@ describe('run', () => {
       kind: 'grounding-unresolved',
       details: { stepId: 'first-ai', reason: 'missing' },
     });
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).toHaveBeenCalledOnce();
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
   it('attributes a leading legacy preflight miss to its own step after later resolvable AI steps', async () => {
-    const { deps, browserDriver, recordingStorage, resolveAiExecutor } = createScenario();
+    const { deps, uiExecutor, recordingStorage, resolveAiExecutor } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
       recordingStorage.storage,
@@ -1791,7 +1792,7 @@ describe('run', () => {
         { id: 'third-ai', status: 'skipped' },
       ],
     });
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).toHaveBeenCalledOnce();
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
@@ -1804,7 +1805,7 @@ describe('run', () => {
       assertOutcome: { passed: false, message: 'Cached dashboard is absent.' },
     });
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1845,7 +1846,7 @@ describe('run', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -1867,7 +1868,7 @@ describe('run', () => {
     const session = createFakeBrowserSession(live, { onClose: closed });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1912,7 +1913,7 @@ describe('run', () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]), { onClose: closed });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1940,7 +1941,7 @@ describe('run', () => {
       onClose: closed,
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -1967,7 +1968,7 @@ describe('run', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
@@ -2003,14 +2004,14 @@ describe('run', () => {
   });
 
   it('continues a sibling case after a browser-launch failure', async () => {
-    const firstDriver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    const firstDriver = createFakeUiExecutor(() => createFakeBrowserSession(new Map()));
     vi.spyOn(firstDriver, 'launch').mockRejectedValue(new BrowserLaunchFailedError('first case cannot launch'));
     const secondClosed = vi.fn();
-    const secondDriver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map(), { onClose: secondClosed }));
+    const secondDriver = createFakeUiExecutor(() => createFakeBrowserSession(new Map(), { onClose: secondClosed }));
     const drivers = [firstDriver, secondDriver];
-    const browserDriver = vi.fn<(engine: BrowserEngine) => BrowserDriver>(() => drivers.shift()!);
+    const uiExecutor = vi.fn<RunDeps['uiExecutor']>(() => drivers.shift()!);
     const { deps, recordingStorage } = createScenario({
-      browserDriver,
+      uiExecutor,
       discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
     });
     const firstPath = await writePrompt(recordingStorage.storage, 'first.test.md');
@@ -2027,12 +2028,12 @@ describe('run', () => {
   });
 
   it('continues a sibling case after a generic browser-launch rejection with classified details', async () => {
-    const firstDriver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    const firstDriver = createFakeUiExecutor(() => createFakeBrowserSession(new Map()));
     vi.spyOn(firstDriver, 'launch').mockRejectedValue(new Error('generic launch failure'));
-    const secondDriver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    const secondDriver = createFakeUiExecutor(() => createFakeBrowserSession(new Map()));
     const drivers = [firstDriver, secondDriver];
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn<(engine: BrowserEngine) => BrowserDriver>(() => drivers.shift()!),
+      uiExecutor: vi.fn<RunDeps['uiExecutor']>(() => drivers.shift()!),
       discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
     });
     const firstPath = await writePrompt(recordingStorage.storage, 'first.test.md');
@@ -2044,7 +2045,6 @@ describe('run', () => {
 
     expect(outcome.results.map(({ result }) => result.status)).toEqual(['error', 'passed']);
     expect(outcome.results[0]).toMatchObject({
-      engine: 'chromium',
       error: { kind: 'browser-launch-failed', details: { reason: 'launch-failed', engine: 'chromium' } },
     });
   });
@@ -2054,7 +2054,7 @@ describe('run', () => {
     const firstClosed = vi.fn(() => controller.abort(new Error('stop after first case')));
     const sessionFactory = vi.fn<() => BrowserSession>(() => createFakeBrowserSession(new Map(), { onClose: firstClosed }));
     const { deps, recordingStorage, sessionFactory: defaultFactory } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(sessionFactory)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(sessionFactory)),
       discoverTestFiles: async () => ['first.test.md', 'second.test.md'],
       signal: controller.signal,
     });
@@ -2080,7 +2080,7 @@ describe('run', () => {
     const clock: Clock = { ...fixed, monotonicMs };
     const { deps, recordingStorage } = createScenario({
       clock,
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => createFakeBrowserSession(new Map()))),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => createFakeBrowserSession(new Map()))),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'open-home', kind: 'action', action: 'navigate', url: '/' }]);
@@ -2183,7 +2183,7 @@ describe('run', () => {
 
   it('lists matched paths without resolving AI, launching a browser, emitting events, or reading artifacts', async () => {
     const discoverTestFiles = vi.fn(async () => ['login.test.md']);
-    const { deps, browserDriver, events, recordingStorage, resolveAiExecutor } = createScenario({ discoverTestFiles });
+    const { deps, uiExecutor, events, recordingStorage, resolveAiExecutor } = createScenario({ discoverTestFiles });
 
     const outcome = await run(deps, { ...DEFAULT_OPTIONS, list: true });
 
@@ -2196,7 +2196,7 @@ describe('run', () => {
     });
     expect(discoverTestFiles).toHaveBeenCalledTimes(1);
     expect(resolveAiExecutor).not.toHaveBeenCalled();
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
     expect(events.emitted()).toEqual([]);
     expect(recordingStorage.reads).toEqual([]);
     expect(recordingStorage.exists).toEqual([]);
@@ -2360,7 +2360,7 @@ describe('run interruption contract', () => {
   it('turns a pre-aborted execution batch into ordered pending identities without launching browser work', async () => {
     const controller = new AbortController();
     controller.abort();
-    const { deps, browserDriver, recordingStorage } = createScenario({ signal: controller.signal });
+    const { deps, uiExecutor, recordingStorage } = createScenario({ signal: controller.signal });
 
     const outcome = await run(deps, { ...DEFAULT_OPTIONS, files: [`${TEST_DIR}/first.test.md`, `${TEST_DIR}/second.test.md`] });
 
@@ -2368,7 +2368,7 @@ describe('run interruption contract', () => {
     expect(outcome.skipped).toEqual([
       { file: `${TEST_DIR}/first.test.md` }, { file: `${TEST_DIR}/second.test.md` },
     ]);
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
     expect(recordingStorage.reads).toEqual([]);
   });
 
@@ -2389,11 +2389,11 @@ describe('run interruption contract', () => {
     let releaseLaunch: ((session: BrowserSession) => void) | undefined;
     let started: (() => void) | undefined;
     const firstLaunchStarted = new Promise<void>((resolve) => { started = resolve; });
-    const browserDriver = vi.fn<RunDeps['browserDriver']>(() => ({
-      engine: 'chromium',
+    const uiExecutor = vi.fn<RunDeps['uiExecutor']>(() => ({
+      ...createFakeUiExecutor(() => createFakeBrowserSession(new Map())),
       launch: () => new Promise<BrowserSession>((resolve) => { releaseLaunch = resolve; started?.(); }),
     }));
-    const { deps, recordingStorage } = createScenario({ signal: controller.signal, browserDriver });
+    const { deps, recordingStorage } = createScenario({ signal: controller.signal, uiExecutor });
     const first = await writePrompt(recordingStorage.storage, 'first.test.md');
     const second = await writePrompt(recordingStorage.storage, 'second.test.md');
     // SPEC-14: a Target session launches only when its first step is reached.
@@ -2412,7 +2412,7 @@ describe('run interruption contract', () => {
       results: [expect.objectContaining({ result: expect.objectContaining({ id: first, status: 'error' }) })],
       skipped: [{ file: second }],
     });
-    expect(browserDriver).toHaveBeenCalledOnce();
+    expect(uiExecutor).toHaveBeenCalledOnce();
     expect(recordingStorage.reads).not.toContain(second);
   });
 
@@ -2462,7 +2462,7 @@ describe('run AI lifecycle accounting', () => {
       { snapshot: pathBSnapshot() },
     );
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -2543,7 +2543,7 @@ describe('run AI lifecycle accounting', () => {
       { snapshot: pathBSnapshot() },
     );
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       clock: { ...fixed, monotonicMs },
       resolveAiExecutor: async () => executor,
     });
@@ -2588,7 +2588,7 @@ describe('run agentic fallback pipeline', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => sessions.shift()!)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => sessions.shift()!)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -2648,7 +2648,7 @@ describe('run agentic fallback pipeline', () => {
     });
     const sessions = [firstSession, secondSession];
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => sessions.shift()!)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => sessions.shift()!)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -2706,7 +2706,7 @@ describe('run agentic fallback pipeline', () => {
     const executor = createFakeAiExecutor({ executeAgentic });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -2794,7 +2794,7 @@ describe('run agentic fallback pipeline', () => {
     const executor = createFakeAiExecutor({ executeAgentic });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -2868,7 +2868,7 @@ describe('run agentic fallback pipeline', () => {
     const executor = createFakeAiExecutor({ executeAgentic });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -2976,7 +2976,7 @@ describe('run agentic fallback pipeline', () => {
     const executor = createFakeAiExecutor({ executeAgentic });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -3025,7 +3025,7 @@ describe('run agentic fallback pipeline', () => {
     const executor = createFakeAiExecutor({ executeAgentic });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -3075,7 +3075,7 @@ describe('run agentic fallback pipeline', () => {
     const executor = createFakeAiExecutor({ executeAgentic });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -3119,7 +3119,7 @@ describe('run agentic fallback pipeline', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3148,7 +3148,7 @@ describe('run agentic fallback pipeline', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3204,7 +3204,7 @@ describe('run agentic fallback pipeline', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3232,7 +3232,7 @@ describe('run agentic fallback pipeline', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3277,7 +3277,7 @@ describe('run agentic fallback pipeline', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3312,7 +3312,7 @@ describe('run agentic fallback pipeline', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
       signal: abortController.signal,
     });
@@ -3343,7 +3343,7 @@ describe('run agentic fallback pipeline', () => {
       assertOutcome: { passed: false, message: 'The cached page changed.' },
     });
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -3375,7 +3375,7 @@ describe('run path-B element recovery', () => {
   it('keeps a fingerprint hit deterministic and never resolves an AI executor', async () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -3413,7 +3413,7 @@ describe('run path-B element recovery', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3482,7 +3482,7 @@ describe('run path-B element recovery', () => {
       execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3537,7 +3537,7 @@ describe('run path-B element recovery', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -3618,7 +3618,7 @@ describe('run path-B element recovery', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3649,7 +3649,7 @@ describe('run path-B element recovery', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3678,7 +3678,7 @@ describe('run path-B element recovery', () => {
       execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3730,7 +3730,7 @@ describe('run path-B element recovery', () => {
     });
     const executor = createFakeAiExecutor();
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3769,7 +3769,7 @@ describe('run path-B element recovery', () => {
       execute: () => ({ data: { confirmed: false }, raw: '{"confirmed":false}' }),
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3798,7 +3798,7 @@ describe('run path-B element recovery', () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
     const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
 
@@ -3814,7 +3814,7 @@ describe('run path-B element recovery', () => {
     const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
     const targets = { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 1500 } } as const;
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       config: { ...createScenario().deps.config, targets },
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3837,7 +3837,7 @@ describe('run path-B element recovery', () => {
     const snapshotForResolution = vi.spyOn(session, 'snapshotForResolution');
     const executor = createFakeAiExecutor({ execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3862,7 +3862,7 @@ describe('run path-B element recovery', () => {
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const executor = createFakeAiExecutor({ execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3884,7 +3884,7 @@ describe('run path-B element recovery', () => {
     const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     scheduleFakeAppearance(session, SUBMIT);
-    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
 
@@ -3912,7 +3912,7 @@ describe('run path-B element recovery', () => {
     }]]);
     const session = createFakeBrowserSession(entries, { snapshot: { accessibilityTree, screenshot: new Uint8Array() } });
     if (description.includes('ambiguous')) scheduleFakeAppearance(session, SUBMIT);
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
 
@@ -3926,7 +3926,7 @@ describe('run path-B element recovery', () => {
     const recaptureTree: JsonValueT = { role: 'root', name: 'recapture', children: [] };
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
     vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
 
@@ -3948,7 +3948,7 @@ describe('run path-B element recovery', () => {
     ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
     vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -3980,7 +3980,7 @@ describe('run path-B element recovery', () => {
       scalarValues: [secretValue],
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4006,7 +4006,7 @@ describe('run path-B element recovery', () => {
     ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
     vi.spyOn(session, 'accessibilitySnapshot').mockRejectedValue(new Error('fresh re-capture unavailable'));
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4026,7 +4026,7 @@ describe('run path-B element recovery', () => {
     const recaptureTree: JsonValueT = { role: 'root', name: 'fresh non-classification re-capture', children: [] };
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
     vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }], elementGrounding(['click-submit']));
 
@@ -4060,7 +4060,7 @@ describe('run path-B element recovery', () => {
       execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
     });
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -4106,7 +4106,7 @@ describe('run path-B element recovery', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4149,7 +4149,7 @@ describe('run path-B element recovery', () => {
     const correctedFingerprint = pathBFingerprint();
     const session = createFakeBrowserSession(liveEntries([SUBMIT], correctedFingerprint));
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -4175,7 +4175,7 @@ describe('run path-B element recovery', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4198,7 +4198,7 @@ describe('run path-B element recovery', () => {
   it('suppresses an element-miss fallback in cache-only mode with exactly zero AI calls', async () => {
     const session = createFakeBrowserSession(new Map());
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -4222,7 +4222,7 @@ describe('run element-count grounding boundary', () => {
     const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: true } });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -4247,7 +4247,7 @@ describe('run element-count grounding boundary', () => {
     const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: true } });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -4276,7 +4276,7 @@ describe('run element-count grounding boundary', () => {
       new Error('element-count must not bind a single element.'),
     );
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -4305,7 +4305,7 @@ describe('run grounding recovery-mode dispatch regression', () => {
   ] as const)('does not consult a resolvable grounding entry for none-classified %s', async (_name, rawStep) => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]), { assertOutcome: { passed: true } });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded').mockRejectedValue(new Error('none-classified steps must not resolve grounding'));
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     const step = rawStep as unknown as TestStep;
     await seedFreshArtifacts(recordingStorage.storage, testPath, [step], elementGrounding([step.id]));
@@ -4328,7 +4328,7 @@ describe('run grounding recovery-mode dispatch regression', () => {
     const session = createFakeBrowserSession(liveEntries(refs), { assertOutcome: { passed: true } });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([['{{secrets.password}}', 'not-in-the-plan']])),
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4371,7 +4371,7 @@ describe('run AI call timeout composition', () => {
     });
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: pathBSnapshot() });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       config: configWithAiTimeout(1),
       resolveAiExecutor: async () => executor,
     });
@@ -4435,7 +4435,7 @@ describe('run AI call timeout composition', () => {
     });
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: pathBSnapshot() });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       config: configWithAiTimeout(60_000),
       resolveAiExecutor: async () => executor,
       signal: controller.signal,
@@ -4512,7 +4512,7 @@ describe('run AI call timeout composition', () => {
         [elementRefKey(SUBMIT), { exists: true, currentFingerprint: pathBFingerprint(snapshot.accessibilityTree) }],
       ]), { snapshot });
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         resolveAiExecutor: async () => executor,
       });
       const testPath = await writePrompt(recordingStorage.storage);
@@ -4544,7 +4544,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4620,7 +4620,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4641,7 +4641,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4671,7 +4671,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4703,7 +4703,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4735,7 +4735,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -4762,7 +4762,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
       secrets: createFakeSecretsProvider(new Map()),
     });
@@ -4824,7 +4824,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -4866,7 +4866,7 @@ describe('run path-C pre-scan', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -4914,7 +4914,7 @@ describe('run path-C pre-scan', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -4980,7 +4980,7 @@ describe('run path-C pre-scan', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5012,7 +5012,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5039,7 +5039,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5105,7 +5105,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5139,7 +5139,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5180,7 +5180,7 @@ describe('run agentic wrapper state machine', () => {
         },
       });
       const { deps, recordingStorage } = createScenario({
-        browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
         resolveAiExecutor: async () => executor,
       });
       const testPath = await writePrompt(recordingStorage.storage);
@@ -5238,7 +5238,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5268,7 +5268,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5296,7 +5296,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -5334,7 +5334,7 @@ describe('run agentic wrapper state machine', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
       signal: abortController.signal,
     });
@@ -5359,7 +5359,7 @@ describe('run deterministic redaction boundary', () => {
       assertOutcome: { passed: false, message: `The visible account is ${secretValue}.` },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -5398,7 +5398,7 @@ describe('run deterministic redaction boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -5448,7 +5448,7 @@ describe('run deterministic redaction boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -5476,7 +5476,7 @@ describe('run deterministic redaction boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -5515,7 +5515,7 @@ describe('run deterministic redaction boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -5549,7 +5549,7 @@ describe('run deterministic redaction boundary', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -5590,7 +5590,7 @@ describe('run deterministic redaction boundary', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -5655,7 +5655,7 @@ describe('run deterministic redaction boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: { resolve },
       resolveAiExecutor: async () => executor,
     });
@@ -5687,7 +5687,7 @@ describe('run deterministic redaction boundary', () => {
       ],
     });
     const { deps, recordingStorage, resolveAiExecutor } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -5746,7 +5746,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -5801,7 +5801,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const successful = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => successfulSession)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => successfulSession)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => successfulExecutor,
     });
@@ -5860,7 +5860,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const failing = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => failingSession)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => failingSession)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => failingExecutor,
     });
@@ -5925,7 +5925,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'SECRET-LITERAL-SENTINEL']])),
       resolveAiExecutor: async () => executor,
     });
@@ -5969,7 +5969,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -6024,7 +6024,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -6065,7 +6065,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue ?? 'unused']])),
       resolveAiExecutor: async () => executor,
     });
@@ -6113,7 +6113,7 @@ describe('run agentic materialization boundary', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([
         [tiedSecretRef, tiedValue],
         [longSecretRef, longValue],
@@ -6147,7 +6147,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -6181,7 +6181,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -6229,7 +6229,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -6268,7 +6268,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -6306,7 +6306,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -6389,7 +6389,7 @@ describe('run grounding write-back posture integration', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
       config: {
@@ -6467,7 +6467,7 @@ describe('run failure evidence', () => {
       const outcome = await run({
         storage, layout, clock: createFixedClock(new Date('2026-08-10T00:00:00.000Z'), 0), runId,
         allocateCallId: createCallIdAllocator(),
-        browserDriver: () => createFakeBrowserDriver(() => session), secrets: createFakeSecretsProvider(new Map()),
+        uiExecutor: () => createFakeUiExecutor(() => session), secrets: createFakeSecretsProvider(new Map()),
         resolveAiExecutor: async () => createFakeAiExecutor(), events: createRecordingEventSink().sink,
         discoverTestFiles: async () => [],
         config: { testDir, testMatch: ['**/*.test.md'], testIgnore: ['**/.runs/**'], targets: RESOLVED_TARGETS, defaultTarget: 'web', ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 }, ci: { heal: false, updateGroundingCache: false }, grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' } },
@@ -6503,7 +6503,7 @@ describe('run failure evidence', () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]), {
       assertOutcome: { passed: false, message: 'The browser reported a mismatch.' },
     });
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [step], entries);
 
@@ -6517,7 +6517,7 @@ describe('run failure evidence', () => {
       captureValues: new Map([[elementRefKey(EMAIL), { text: 'Ari', value: '' }]]),
       assertOutcome: { passed: false, message: 'Welcome, Ari was not visible.' },
     });
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'capture-name', kind: 'capture', target: EMAIL, variable: 'name' },
@@ -6543,7 +6543,7 @@ describe('run failure evidence', () => {
     });
     const screenshot = vi.spyOn(session, 'screenshot');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
@@ -6606,7 +6606,7 @@ describe('run failure evidence', () => {
     });
     const screenshot = vi.spyOn(session, 'screenshot');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, 'xy']])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
@@ -6900,7 +6900,7 @@ describe('run failure evidence', () => {
     vi.spyOn(session, 'accessibilitySnapshot').mockRejectedValue(new Error('a11y unavailable'));
     const screenshot = vi.spyOn(session, 'screenshot');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
@@ -6926,7 +6926,7 @@ describe('run failure evidence', () => {
     });
     vi.spyOn(session, 'accessibilitySnapshot').mockRejectedValue(new Error('a11y unavailable'));
     const screenshot = vi.spyOn(session, 'screenshot');
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -6967,7 +6967,7 @@ describe('run failure evidence', () => {
     });
     const screenshot = vi.spyOn(session, 'screenshot');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
@@ -6994,7 +6994,7 @@ describe('run failure evidence', () => {
     });
     const screenshot = vi.spyOn(session, 'screenshot');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
@@ -7023,7 +7023,7 @@ describe('run failure evidence', () => {
     });
     const screenshot = vi.spyOn(session, 'screenshot');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
@@ -7050,7 +7050,7 @@ describe('run failure evidence', () => {
         }
       },
     });
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' }]);
 
@@ -7079,7 +7079,7 @@ describe('run failure evidence', () => {
       order.push('screenshot');
       return new Uint8Array([4]);
     });
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' }]);
 
@@ -7097,7 +7097,7 @@ describe('run failure evidence', () => {
         assertOutcome: { passed: false, message: 'The dashboard is absent.' },
         snapshot: { accessibilityTree: { role: 'document' }, screenshot: new Uint8Array([5]) },
       });
-      const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+      const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
       if (failure === 'capture') {
         vi.spyOn(session, 'screenshot').mockImplementation(() => { throw new Error('synchronous screenshot failure'); });
       } else {
@@ -7123,7 +7123,7 @@ describe('run failure evidence', () => {
     });
     const accessibilitySnapshot = vi.spyOn(session, 'accessibilitySnapshot');
     const screenshot = vi.spyOn(session, 'screenshot');
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary').mockRejectedValue(violation);
     const testPath = await writePrompt(recordingStorage.storage, 'integrity-evidence.test.md');
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -7150,7 +7150,7 @@ describe('run failure evidence', () => {
       snapshot: { accessibilityTree: { role: 'document' }, screenshot: new Uint8Array([62]) },
       onPerform() { throw original; },
     });
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     vi.spyOn(recordingStorage.storage, 'writeBinary').mockRejectedValue(violation);
     const testPath = await writePrompt(recordingStorage.storage, 'integrity-outer-catch.test.md');
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -7179,7 +7179,7 @@ describe('run failure evidence', () => {
     });
     const screenshot = vi.spyOn(session, 'screenshot');
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
@@ -7213,7 +7213,7 @@ describe('run failure evidence', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
@@ -7242,9 +7242,9 @@ describe('run failure evidence', () => {
   });
 
   it('returns a pre-launch error without attempting to attach browser evidence', async () => {
-    const driver = createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    const driver = createFakeUiExecutor(() => createFakeBrowserSession(new Map()));
     vi.spyOn(driver, 'launch').mockRejectedValue(new BrowserLaunchFailedError('launch failed'));
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => driver) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => driver) });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' }]);
 
@@ -7261,7 +7261,7 @@ describe('run failure evidence', () => {
     const passingSession = createFakeBrowserSession(new Map());
     const screenshot = vi.spyOn(passingSession, 'screenshot');
     const accessibilitySnapshot = vi.spyOn(passingSession, 'accessibilitySnapshot');
-    const { deps, recordingStorage } = createScenario({ browserDriver: vi.fn(() => createFakeBrowserDriver(() => passingSession)) });
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => passingSession)) });
     const writeBinary = vi.spyOn(recordingStorage.storage, 'writeBinary');
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' }]);
@@ -7286,7 +7286,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -7308,7 +7308,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -7341,7 +7341,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -7382,7 +7382,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -7422,7 +7422,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -7453,7 +7453,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -7475,7 +7475,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -7521,7 +7521,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -7555,7 +7555,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -7628,7 +7628,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(secretValues),
       resolveAiExecutor,
     });
@@ -7727,7 +7727,7 @@ describe('run credential-literal symmetry', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(secretValues),
       resolveAiExecutor,
     });
@@ -7759,7 +7759,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -7791,7 +7791,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -7810,7 +7810,7 @@ describe('run credential-literal symmetry', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
     const executor = createFakeAiExecutor();
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -7843,7 +7843,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
     });
@@ -7937,7 +7937,7 @@ describe('run credential-literal symmetry', () => {
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -7963,7 +7963,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor,
     });
@@ -8015,7 +8015,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8048,7 +8048,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8085,7 +8085,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8114,7 +8114,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8157,7 +8157,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8189,7 +8189,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8229,7 +8229,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8258,7 +8258,7 @@ describe('run credential-literal symmetry', () => {
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -8304,7 +8304,7 @@ describe('run credential-literal symmetry', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
-      browserDriver: vi.fn(() => createFakeBrowserDriver(() => session)),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);

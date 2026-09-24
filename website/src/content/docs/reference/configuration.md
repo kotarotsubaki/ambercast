@@ -32,7 +32,8 @@ A target configuration supplies a web surface and a browser destination; its `he
 | `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate input; run, check, heal referenced Plan targets |
 | `targets.<name>.surface` | `web` | absent | only `web` in TP1; the optional field resolves to `web` at use, not via a schema default | generate and Plan target definition |
 | `targets.<name>.description` | string | absent | optional generation context | generate |
-| `targets.<name>.browser` | `chromium` | `chromium` on `web-user` | live executor setting; excluded from Plan digest | run and heal browser composition |
+| `targets.<name>.executor.kind` | `playwright` | `playwright` | live UI executor kind; excluded from Plan digest | run and heal executor composition |
+| `targets.<name>.executor.browser` | `chromium` | `chromium` | live executor browser; excluded from Plan digest | run and heal executor composition |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires every Plan-referenced target to be `idempotent` | heal |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |

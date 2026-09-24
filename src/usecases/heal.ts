@@ -13,7 +13,9 @@ import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
-import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, PlanDocument, type GroundingDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
+import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, GroundingDocument, PlanDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
+import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
+import { ExecutorUnsupportedError } from '#core/errors/executor-unsupported-error.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
@@ -696,6 +698,8 @@ async function preflightCase(
   assertNoEnvVarCollision([...new Set(enumerateSecretUses(plan).map(({ ref }) => ref))]);
 
   let inspection;
+  let validResult: ValidatedHealPreflight | undefined;
+  let groundingForPreflight: GroundingDocument | undefined;
   try {
     if (!(await deps.storage.exists(groundingFile))) {
       inspection = { kind: 'missing' } as const;
@@ -703,7 +707,8 @@ async function preflightCase(
       const groundingSnapshot = await deps.storage.readTextSnapshot(groundingFile);
       inspection = inspectGroundingArtifactText(groundingSnapshot.text, plan);
       if (inspection.kind === 'valid') {
-        return {
+        groundingForPreflight = GroundingDocument.parse(JSON.parse(groundingSnapshot.text));
+        validResult = {
           normalized,
           digest,
           plan,
@@ -721,6 +726,34 @@ async function preflightCase(
     }
   } catch (error) {
     throw new FsIoErrorClass('The grounding artifact could not be inspected.', undefined, { cause: error });
+  }
+  if (validResult) {
+    // Executor errors must stay outside the grounding inspection error boundary.
+    const requiredCapabilities = deriveRequiredCapabilities(plan, groundingForPreflight!, { resolve: true });
+    for (const name of targetNames) {
+      const executor = deps.uiExecutor(deps.config.targets[name]!.executor);
+      const targetSurface = definitions[name]!.surface;
+      if (targetSurface !== executor.surface) {
+        throw new ExecutorUnsupportedError('The configured executor does not support this plan.', {
+          target: name,
+          executor: executor.kind,
+          reason: 'surface-mismatch',
+          missing: [],
+          surface: { target: targetSurface, executor: executor.surface },
+        });
+      }
+      const missing = UI_CAPABILITIES.filter((capability) =>
+        requiredCapabilities[name]!.has(capability) && !executor.capabilities.has(capability));
+      if (missing.length > 0) {
+        throw new ExecutorUnsupportedError('The configured executor does not support this plan.', {
+          target: name,
+          executor: executor.kind,
+          reason: 'capability-missing',
+          missing,
+        });
+      }
+    }
+    return validResult;
   }
   throw new FsIoErrorClass('The grounding artifact is not valid and current.');
 }

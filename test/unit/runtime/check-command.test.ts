@@ -50,7 +50,7 @@ const CONFIG: ResolvedConfig = {
   projectRoot: '/workspace',
   testMatch: ['**/*.test.md'],
   testIgnore: ['**/.runs/**'],
-  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+  targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
   defaultTarget: 'web',
   secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 },
@@ -245,7 +245,7 @@ describe('runCheckCommand', () => {
       ...CONFIG,
       testDir: '/workspace/overridden-tests',
       runsDir: '/workspace/overridden-tests/.runs',
-      targets: { admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+      targets: { admin: { baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
       defaultTarget: 'admin',
     } as const satisfies ResolvedConfig;
     const outcome = { noTestsFound: true, results: [], errors: [] } as const;

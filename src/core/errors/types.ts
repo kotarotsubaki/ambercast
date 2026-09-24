@@ -43,6 +43,7 @@ export type ErrorKind =
   | 'browser-launch-failed'
   | 'ai-executor-unavailable'
   | 'ai-response-invalid'
+  | 'executor-unsupported'
   | 'fs-io-error'
   | 'unexpected-crash'
   | 'interrupted'

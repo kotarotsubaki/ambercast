@@ -102,7 +102,7 @@ describe('Plan v4 and grounding v2 contract', () => {
   });
 
   it('rejects missing surface and browser in Plan targets in Zod and public JSON Schema', () => {
-    for (const target of [{ baseUrl: definition.baseUrl }, { ...definition, browser: 'chromium' }]) {
+    for (const target of [{ baseUrl: definition.baseUrl }, { ...definition, executor: { kind: 'playwright', browser: 'chromium' } }]) {
       const value = makePlan([step], { A: target });
       expect(parse(value).success).toBe(false);
       expect(planValidator(value)).toBe(false);
@@ -111,9 +111,9 @@ describe('Plan v4 and grounding v2 contract', () => {
 
   it('projects only referenced Target definitions and excludes browser from the digest', () => {
     const config: Record<'A' | 'B' | 'C', ResolvedTargetConfigEntry> = {
-      A: { baseUrl: 'https://a.example.test', browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 1000, secretSinkOrigins: { '{{secrets.app.password}}': ['https://login.example.test'] } },
-      B: { baseUrl: 'https://b.example.test', browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 2000 },
-      C: { baseUrl: 'https://c.example.test', browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 3000 },
+      A: { baseUrl: 'https://a.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'idempotent', resolveTimeoutMs: 1000, secretSinkOrigins: { '{{secrets.app.password}}': ['https://login.example.test'] } },
+      B: { baseUrl: 'https://b.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'idempotent', resolveTimeoutMs: 2000 },
+      C: { baseUrl: 'https://c.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'idempotent', resolveTimeoutMs: 3000 },
     };
     const inputs = (targets: typeof config) => computeInputsDigest({ normalizedTestMd: '# Test\n' as never, schemaVersion: 4, generatorPromptTemplateFingerprint: 'template', planProducerBundleFingerprint: 'bundle', targetDefinitions: projectPlanTargets(['B', 'A'], targets) });
     expect(projectPlanTargets(['B', 'A'], config)).toEqual({ A: toTargetDefinition(config.A), B: toTargetDefinition(config.B) });
@@ -122,7 +122,7 @@ describe('Plan v4 and grounding v2 contract', () => {
     expect(inputs({ ...config, C: { ...config.C, baseUrl: 'https://changed.example.test' } })).toBe(baseline);
     expect(inputs({ ...config, A: { ...config.A, baseUrl: 'https://changed.example.test' } })).not.toBe(baseline);
     expect(inputs({ ...config, A: { ...config.A, secretSinkOrigins: { '{{secrets.app.password}}': ['https://other.example.test'] } } })).not.toBe(baseline);
-    expect(inputs({ ...config, A: { ...config.A, browser: 'firefox' as never } })).toBe(baseline);
+    expect(inputs({ ...config, A: { ...config.A, executor: { ...config.A.executor, browser: 'firefox' as never } } })).toBe(baseline);
   });
 
   it('publishes v4 and v2 schema identities and the frozen v3 schema accepts a v3 fixture', () => {

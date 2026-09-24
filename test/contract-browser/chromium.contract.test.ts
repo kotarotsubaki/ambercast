@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chromium } from 'playwright-core';
 import {
-  createChromiumBrowserDriver,
+  createPlaywrightUiExecutor,
   type PlaywrightBrowserHandle,
   type PlaywrightContextHandle,
   type PlaywrightLauncher,
@@ -13,7 +13,8 @@ import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import type { ElementRef, Fingerprint, JsonValueT, TargetDefinition } from '#core/ir/schema.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type { BoundElement, BrowserSession } from '#ports/browser.js';
-import { registerBrowserDriverContract } from '../contracts/browser-driver.contract.js';
+import { registerUiExecutorContract } from '../contracts/ui-executor.contract.js';
+const EXECUTOR_CONFIG = { kind: 'playwright', browser: 'chromium' } as const;
 import { resolveChromiumAvailability } from './support/chromium-availability.js';
 import {
   registerBrowserSessionContract,
@@ -473,7 +474,7 @@ async function createFixtureSession(setup: BrowserSessionContractSetup): Promise
     physicalFillCalls: 0,
     physicalDisposeCalls: 0,
   };
-  const session = await createChromiumBrowserDriver({
+  const session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG, {
     launcher: createObservedLauncher(observation),
   }).launch(TARGET);
   operationObservations.set(session, observation);
@@ -780,8 +781,8 @@ async function createSecretRaceFixture(): Promise<SecretRaceFixture> {
 }
 
 describe('Chromium real-browser contract', () => {
-  registerBrowserDriverContract({
-    createDriver: () => createChromiumBrowserDriver(),
+  registerUiExecutorContract({
+    createExecutor: () => createPlaywrightUiExecutor(EXECUTOR_CONFIG),
   });
 
   registerBrowserSessionContract({
@@ -815,7 +816,7 @@ describe('Chromium real-browser contract', () => {
   });
 
   it('evaluates text-visible against repeated visible text without a strict-mode violation', async () => {
-    const session = await createChromiumBrowserDriver().launch(TARGET);
+    const session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG).launch(TARGET);
 
     try {
       await session.perform({ type: 'navigate', url: DUPLICATE_TEXT_PAGE });
@@ -830,7 +831,7 @@ describe('Chromium real-browser contract', () => {
   });
 
   it('reports ambiguous-match for a separate duplicate fixture even when one candidate has the stored hash', async () => {
-    const session = await createChromiumBrowserDriver().launch(TARGET);
+    const session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG).launch(TARGET);
 
     try {
       await session.perform({ type: 'navigate', url: FIRST_AMBIGUOUS_SUBMIT_CANDIDATE_PAGE });
@@ -859,7 +860,7 @@ describe('Chromium real-browser contract', () => {
   });
 
   it('rejects a bound element after navigation to identical role/name and fingerprint evidence', async () => {
-    const session = await createChromiumBrowserDriver().launch(TARGET);
+    const session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG).launch(TARGET);
 
     try {
       await session.perform({ type: 'navigate', url: adjacentTextPage('Alpha') });
@@ -881,7 +882,7 @@ describe('Chromium real-browser contract', () => {
     ['evaluateAssert', async (session: BrowserSession, target: BoundElement) => session.evaluateAssert({ check: 'element-visible', target })],
     ['captureValue', async (session: BrowserSession, target: BoundElement) => session.captureValue(target, 'text')],
   ] as const)('rejects %s after the Mutate control changes the descriptor without navigation', async (_operation, invoke) => {
-    const session = await createChromiumBrowserDriver().launch(TARGET);
+    const session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG).launch(TARGET);
 
     try {
       await session.perform({ type: 'navigate', url: MUTABLE_DESCRIPTOR_PAGE });
@@ -899,7 +900,7 @@ describe('Chromium real-browser contract', () => {
   });
 
   it('changes the fingerprint when a direct adjacent text sibling changes from Alpha to Beta', async () => {
-    const session = await createChromiumBrowserDriver().launch(TARGET);
+    const session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG).launch(TARGET);
 
     try {
       await session.perform({ type: 'navigate', url: adjacentTextPage('Alpha') });
@@ -946,7 +947,7 @@ describe('Chromium secret-fill target pinning', () => {
         allowedOrigins: [new URL(fixture.successUrl).origin],
         source: 'base-url-default',
       };
-      session = await createChromiumBrowserDriver().launch(target);
+      session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG).launch(target);
       await session.perform({ type: 'navigate', url: fixture.successUrl });
       const firstFingerprint = fingerprintFor(
         (await session.snapshotForResolution()).accessibilityTree,
@@ -1058,7 +1059,7 @@ describe('Chromium secret-fill target pinning', () => {
         allowedOrigins: [new URL(fixture.successUrl).origin],
         source: 'base-url-default',
       };
-      session = await createChromiumBrowserDriver({
+      session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG, {
         launcher: createObservedLauncher(observation),
       }).launch(target);
       await session.perform({ type: 'navigate', url: fixture.successUrl });
@@ -1120,7 +1121,7 @@ describe('Chromium secret-fill target pinning', () => {
         allowedOrigins: [new URL(fixture.allowedUrl).origin],
         source: 'base-url-default',
       };
-      session = await createChromiumBrowserDriver().launch(target);
+      session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG).launch(target);
       await session.perform({ type: 'navigate', url: fixture.allowedUrl });
       const fingerprint = fingerprintFor(
         (await session.snapshotForResolution()).accessibilityTree,

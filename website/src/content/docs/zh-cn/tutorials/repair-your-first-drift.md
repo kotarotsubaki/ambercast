@@ -8,12 +8,12 @@ description: 在一次性练习应用中，安全地自愈并验证因定位器�
 ## 步骤 {#steps}
 
 > [!IMPORTANT]
-> **写入范围**：请严格保留现有配置，仅修改所选 target 的 `healReplayIsolation` 键。请保持其 target 名称、`baseUrl`、`browser` 以及任何 `secretSinkOrigins` 原样不变；切勿新增、删除、重命名或编辑其他 target。一旦显式提供 `targets` 记录，它将整体替换内置默认值；target 的名称与定义会参与 `inputsDigest` 计算，而 `healReplayIsolation` 经专门设计独立于该摘要契约之外。
+> **写入范围**：请严格保留现有配置，仅修改所选 target 的 `healReplayIsolation` 键。请保持其 target 名称、`baseUrl`、`executor`（包括 `executor.browser`） 以及任何 `secretSinkOrigins` 原样不变；切勿新增、删除、重命名或编辑其他 target。一旦显式提供 `targets` 记录，它将整体替换内置默认值；target 的名称与定义会参与 `inputsDigest` 计算，而 `healReplayIsolation` 经专门设计独立于该摘要契约之外。
 
 1. 在 `ambercast.config.json` 中，编辑现有的所选 target 条目，仅将其 `healReplayIsolation` 修改为 `"idempotent"`。对于未显式配置的默认 target，等效的保留配置如下：
 
 ```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","browser":"chromium","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
 ```
 
 → **预期现象**：由于 target 名称以及参与摘要计算的定义均未改动，现有的 Plan 依然保持新鲜（fresh）；改变的仅是其实时自愈策略。该文件符合 `RawConfig` 必需的 `$schema` 要求，且使用的 Schema URL 为已发布的官方配置 Schema URL。

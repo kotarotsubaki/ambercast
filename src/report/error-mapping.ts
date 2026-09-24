@@ -4,6 +4,7 @@ import {
   AiResponseInvalidDetails,
   BrowserLaunchFailedDetails,
   CauseName,
+  ExecutorUnsupportedDetails,
   GroundingUnresolvedDetails,
   PromptPathInvalidDetails,
   SecretConsentRequiredDetails,
@@ -87,6 +88,7 @@ export const REPORT_ERROR_DETAILS = {
     code: 'BROWSER_LAUNCH_FAILED',
     hint: 'Install Chromium by running `npx playwright install chromium`, then retry.',
   },
+  'executor-unsupported': { kind: 'usage', code: 'EXECUTOR_UNSUPPORTED' },
   'ai-executor-unavailable': { kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE' },
   'ai-response-invalid': { kind: 'environment', code: 'AI_RESPONSE_INVALID' },
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
@@ -114,7 +116,7 @@ export const REPORT_ERROR_DETAILS = {
  *
  * @remarks
  * For diagnostics without a table-defined hint, a string
- * `error.details.hint` is copied for every report scope and code. The seven
+ * `error.details.hint` is copied for every report scope and code. The eleven
  * existing diagnostic codes construct strict `details` values from normalized
  * producer context; `UNEXPECTED_CRASH` alone reads `error.cause`, never
  * `error.details`. `BROWSER_LAUNCH_FAILED` projects `{ reason, engine }`
@@ -212,6 +214,14 @@ export function reportError(
           })
           : error.kind === 'unexpected-crash'
             ? UnexpectedCrashDetails.safeParse({ cause: { name: projectCauseName(error.cause) } })
+            : error.kind === 'executor-unsupported'
+              ? ExecutorUnsupportedDetails.safeParse({
+                target: readRecordField(sourceDetails, 'target'),
+                executor: readRecordField(sourceDetails, 'executor'),
+                reason: readRecordField(sourceDetails, 'reason'),
+                missing: readRecordField(sourceDetails, 'missing'),
+                ...(readRecordField(sourceDetails, 'surface') === undefined ? {} : { surface: readRecordField(sourceDetails, 'surface') }),
+              })
             : error.kind === 'browser-launch-failed'
               ? browserLaunchDetails
             : undefined;

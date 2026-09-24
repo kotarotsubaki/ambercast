@@ -46,7 +46,7 @@ async function fixtureProject(): Promise<string> {
   await mkdir(join(directory, 'tests'), { recursive: true });
   await writeFile(join(directory, 'ambercast.config.json'), JSON.stringify({
     $schema: 'https://ambercast.dev/schema/config.json', testDir: 'tests', runsDir: 'tests/.runs',
-    targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } }, defaultTarget: 'web', ai: { provider: 'codex' },
+    targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } }, defaultTarget: 'web', ai: { provider: 'codex' },
   }));
   await writeFile(join(directory, 'tests', 'test.test.md'), FIXTURE_PROMPT);
   return directory;
@@ -60,7 +60,7 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
     $schema: 'https://ambercast.dev/schema/config.json',
     testDir: 'tests',
     runsDir: 'tests/.runs',
-    targets: { replacement: { baseUrl: targetDefinitions.replacement.baseUrl, browser: 'chromium' } },
+    targets: { replacement: { baseUrl: targetDefinitions.replacement.baseUrl, executor: { kind: 'playwright', browser: 'chromium' } } },
     ai: { provider: 'codex' },
     ci: { heal: ciHeal },
   }));

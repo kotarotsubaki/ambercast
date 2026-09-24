@@ -3,7 +3,7 @@
  * their grounding companions.
  *
  * Check deliberately observes existing files instead of composing an AI
- * provider, browser driver, event sink, or mutable storage capability. That
+ * provider, UI executor, event sink, or mutable storage capability. That
  * boundary keeps a CI freshness gate reproducible and makes any write or
  * execution dependency an explicit type-level design change.
  */
@@ -98,7 +98,7 @@ export interface CheckOptions {
  *
  * @remarks
  * This surface intentionally omits aiExecutor, resolveAiExecutor,
- * browserDriver, secrets, clock, and events. Their absence is structural: an
+ * uiExecutor, secrets, clock, and events. Their absence is structural: an
  * inspection neither executes work nor measures or emits lifecycle activity,
  * so exposing any of them would weaken the read-only command boundary rather
  * than merely support an unused implementation detail.

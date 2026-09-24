@@ -13,14 +13,14 @@ import type { RunOutcome } from '#usecases/run.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 
 const mocks = vi.hoisted(() => ({
   claudeFactory: vi.fn(),
   codexFactory: vi.fn(),
-  createBrowserDriverResolver: vi.fn(),
+  createUiExecutorResolver: vi.fn(),
   createEnvSecretsProvider: vi.fn(),
   createFsStorage: vi.fn(),
   createCryptoRandom: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock('#adapters/ai/registry.js', () => ({
   AI_EXECUTOR_FACTORIES: { claude: mocks.claudeFactory, codex: mocks.codexFactory },
 }));
 vi.mock('#adapters/browser/registry.js', () => ({
-  createBrowserDriverResolver: mocks.createBrowserDriverResolver,
+  createUiExecutorResolver: mocks.createUiExecutorResolver,
 }));
 vi.mock('#adapters/storage/fs-storage.js', () => ({ createFsStorage: mocks.createFsStorage }));
 vi.mock('#adapters/system/crypto-random.js', () => ({ createCryptoRandom: mocks.createCryptoRandom }));
@@ -73,7 +73,7 @@ const CONFIG: ResolvedConfig = {
   projectRoot: '/workspace',
   testMatch: ['**/*.test.md'],
   testIgnore: ['**/.runs/**'],
-  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+  targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
   defaultTarget: 'web',
   secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 },
@@ -211,7 +211,7 @@ describe('runRunCommand', () => {
     const configSource = { path: '/workspace/ambercast.config.json' };
     mocks.createFsStorage.mockReturnValue(createInMemoryStorage());
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: configSource });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage: createInMemoryStorage(), layout: { runReportPathFor: () => '/workspace/tests/.runs/report.json' }, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
@@ -229,7 +229,7 @@ describe('runRunCommand', () => {
     const emergency = reportOutput(3).envelope;
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
@@ -252,7 +252,7 @@ describe('runRunCommand', () => {
     const built = reportOutput(0);
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
@@ -290,7 +290,7 @@ describe('runRunCommand', () => {
     const emergency = reportOutput(3).envelope;
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
@@ -319,7 +319,7 @@ describe('runRunCommand', () => {
     const output = reportOutput(0);
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({
@@ -352,7 +352,7 @@ describe('runRunCommand', () => {
     vi.stubEnv('CI', ci);
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({
@@ -390,7 +390,7 @@ describe('runRunCommand', () => {
     } as unknown as RunCommandOutput;
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: { ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` }, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout: { runReportPathFor: () => '/workspace/tests/.runs/report.json' }, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
@@ -425,7 +425,7 @@ describe('runRunCommand', () => {
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout: { runReportPathFor: () => `${cwd}/tests/.runs/report.json` }, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
@@ -445,7 +445,7 @@ describe('runRunCommand', () => {
 
   it('persists a report-safe failing outcome under the invocation path without leaking an absolute screenshot path', async () => {
     const storage = createInMemoryStorage();
-    const browserDriver = vi.fn(() => createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    const uiExecutor = vi.fn(() => createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     const secrets = createFakeSecretsProvider(new Map());
     const events = createRecordingEventSink();
     const runId = '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000';
@@ -512,7 +512,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
+    mocks.createUiExecutorResolver.mockReturnValue(uiExecutor);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -595,7 +595,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -669,7 +669,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -700,7 +700,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -734,7 +734,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -803,7 +803,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -864,7 +864,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({
@@ -942,7 +942,7 @@ describe('runRunCommand', () => {
       },
     };
     const replayClock = createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20);
-    const browserDriver = vi.fn(() => createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    const uiExecutor = vi.fn(() => createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     const secrets = createFakeSecretsProvider(new Map([['{{secrets.auth.password}}', 'secret']]));
     const events = createRecordingEventSink();
     const layout = { planPathFor: vi.fn(), groundingPathFor: vi.fn(), runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
@@ -962,7 +962,7 @@ describe('runRunCommand', () => {
     mocks.createSystemClock.mockReturnValue(commandClock);
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
+    mocks.createUiExecutorResolver.mockReturnValue(uiExecutor);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
     mocks.readCommandEnvironment.mockReturnValue(commandEnvironment);
@@ -988,11 +988,11 @@ describe('runRunCommand', () => {
       aiProviderOverride: 'codex',
     }))).resolves.toEqual(persistedOutput);
 
-    expect(mocks.createBrowserDriverResolver).toHaveBeenCalledWith({ headed: true });
+    expect(mocks.createUiExecutorResolver).toHaveBeenCalledWith({ headed: true });
     expect(mocks.createAmbercast).toHaveBeenCalledWith({
       config: CONFIG,
       aiProvider: 'claude',
-      browserDriver,
+      uiExecutor,
       secrets,
       events: events.sink,
     });
@@ -1002,7 +1002,7 @@ describe('runRunCommand', () => {
       clock: replayClock,
       allocateCallId: expect.any(Function),
       runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      browserDriver,
+      uiExecutor,
       secrets,
       events: events.sink,
       discoverTestFiles,
@@ -1039,12 +1039,12 @@ describe('runRunCommand', () => {
     const childEnvironment = JSON.parse(result.stdout) as NodeJS.ProcessEnv;
     expect(childEnvironment.AMBERCAST_RUNTIME_ALLOWED).toBe('allowed');
     expect(childEnvironment).not.toHaveProperty('AMBERCAST_SECRET_RUNTIME_TEST');
-    expect(browserDriver).not.toHaveBeenCalled();
+    expect(uiExecutor).not.toHaveBeenCalled();
   });
 
   it('passes caller cancellation into replay', async () => {
     const storage = createInMemoryStorage();
-    const browserDriver = vi.fn(() => createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    const uiExecutor = vi.fn(() => createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     const secrets = createFakeSecretsProvider(new Map());
     const events = createRecordingEventSink();
     const layout = { planPathFor: vi.fn(), groundingPathFor: vi.fn(), runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
@@ -1059,7 +1059,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
+    mocks.createUiExecutorResolver.mockReturnValue(uiExecutor);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
     mocks.createAmbercast.mockReturnValue({
@@ -1078,7 +1078,7 @@ describe('runRunCommand', () => {
 
   it('normalizes an unexpected replay failure before top-level report construction', async () => {
     const storage = createInMemoryStorage();
-    const browserDriver = vi.fn(() => createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    const uiExecutor = vi.fn(() => createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     const secrets = createFakeSecretsProvider(new Map());
     const events = createRecordingEventSink();
     const layout = { planPathFor: vi.fn(), groundingPathFor: vi.fn(), runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
@@ -1089,7 +1089,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(browserDriver);
+    mocks.createUiExecutorResolver.mockReturnValue(uiExecutor);
     mocks.createEnvSecretsProvider.mockReturnValue(secrets);
     mocks.createNoopEventSink.mockReturnValue(events.sink);
     mocks.createAmbercast.mockReturnValue({
@@ -1179,7 +1179,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -1242,7 +1242,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -1287,7 +1287,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -1323,7 +1323,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -1383,7 +1383,7 @@ describe('runRunCommand', () => {
 
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 20), discoverTestFiles: vi.fn(async () => []) });
@@ -1408,7 +1408,7 @@ describe('runRunCommand', () => {
     const layout = { runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') };
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createNoopEventSink.mockReturnValue(createRecordingEventSink().sink);
     mocks.createAmbercast.mockReturnValue({ storage, layout, clock: createFixedClock(new Date(), 1), discoverTestFiles: vi.fn(async () => []) });
@@ -1434,7 +1434,7 @@ describe('runRunCommand', () => {
     const failure = new Error('composition failed');
     mocks.createFsStorage.mockReturnValue(createInMemoryStorage());
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createAmbercast.mockImplementation(() => { throw failure; });
     mocks.buildRunReport.mockReturnValue(reportOutput(3));
@@ -1457,7 +1457,7 @@ describe('runRunCommand', () => {
       const storage = createInMemoryStorage();
       mocks.createFsStorage.mockReturnValue(storage);
       mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-      mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+      mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
       mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
       mocks.createStderrProgressSink.mockImplementation(createStderrProgressSink);
       mocks.createAmbercast.mockReturnValue({

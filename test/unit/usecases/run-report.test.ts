@@ -149,7 +149,7 @@ describe('buildRunReport', () => {
     const error = new BrowserLaunchFailedError('browser did not launch', {
       reason: 'executable-missing', engine: 'chromium',
     });
-    const outcome = { ...caseOutcome('error', 'login.test.md', error), engine: 'chromium' as const };
+    const outcome = caseOutcome('error', 'login.test.md', error);
     const output = report({ outcome: { noTestsFound: false, results: [outcome], listed: [] } });
 
     expect(output.envelope.errors).toEqual([{

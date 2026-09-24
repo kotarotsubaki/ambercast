@@ -12,7 +12,7 @@ import { run, type RunDeps } from '#usecases/run.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { awaitElementPresenceCalls, createFakeBrowserSession, elementRefKey, type FakeBrowserSession } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
@@ -31,7 +31,7 @@ const definitions = {
   C: { surface: 'web', baseUrl: 'https://c.example.test' },
 } as const;
 const configs = Object.fromEntries(Object.entries(definitions).map(([name, target], index) => [name, {
-  ...target, browser: 'chromium', resolveTimeoutMs: 111 + index * 111, healReplayIsolation: 'stateful',
+  ...target, executor: { kind: 'playwright', browser: 'chromium' }, resolveTimeoutMs: 111 + index * 111, healReplayIsolation: 'stateful',
 }])) as RunDeps['config']['targets'];
 type TestStep = Record<string, unknown> & { id: string; target: 'A' | 'B' | 'C' };
 
@@ -88,13 +88,13 @@ async function scenario(
     if (options.advanceOnLaunchMs !== undefined) void clock.sleep(options.advanceOnLaunchMs);
     return value as BrowserSession;
   }]));
-  const driver = createFakeBrowserDriver(factories, targets);
+  const driver = createFakeUiExecutor(factories, targets);
   const deps: RunDeps = {
     storage,
     layout,
     clock,
     runId: '2026-09-23T000000Z-550e8400-e29b-41d4-a716-446655440000',
-    browserDriver: () => driver,
+    uiExecutor: () => driver,
     secrets: createFakeSecretsProvider(new Map([[SECRET_REF, 'secret-value']])),
     resolveAiExecutor: options.resolveAiExecutor ?? (async () => { throw new Error('AI must not run'); }),
     events: events.sink,
@@ -124,7 +124,7 @@ describe('multi-target run contracts', () => {
     const targetB = { surface: 'web', baseUrl: sharedUrl, description: 'B' } as unknown as TargetDefinition;
     const a = session('A');
     const b = session('B');
-    const driver = createFakeBrowserDriver({ A: () => a, B: () => b }, { A: targetA, B: targetB });
+    const driver = createFakeUiExecutor({ A: () => a, B: () => b }, { A: targetA, B: targetB });
     await expect(driver.launch(targetB)).resolves.toBe(b);
     await expect(driver.launch({ ...targetA })).resolves.toBe(a);
     expect(driver.launches).toEqual([targetB, targetA]);
@@ -154,9 +154,9 @@ describe('multi-target run contracts', () => {
 
     const secondA = session('A', { captureValues: new Map([[elementRefKey(REF), { text: 'created', value: 'created' }]]) });
     const secondB = session('B', { assertOutcomes: [{ passed: false, message: 'not yet' }, { passed: true }] });
-    const replayDriver = createFakeBrowserDriver({ A: () => secondA, B: () => secondB }, definitions);
+    const replayDriver = createFakeUiExecutor({ A: () => secondA, B: () => secondB }, definitions);
     const replayEvents = createRecordingEventSink();
-    const replay = await run({ ...first.deps, browserDriver: () => replayDriver, events: replayEvents.sink }, {
+    const replay = await run({ ...first.deps, uiExecutor: () => replayDriver, events: replayEvents.sink }, {
       files: [FILE], resolve: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail',
     });
     expect(replay.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 0 });

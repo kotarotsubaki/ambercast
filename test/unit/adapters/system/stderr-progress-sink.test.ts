@@ -385,7 +385,7 @@ describe('createStderrProgressSink()', () => {
         testDir: '/workspace/tests',
         testMatch: ['**/*.test.md'],
         testIgnore: ['**/.runs/**'],
-        targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+        targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
         defaultTarget: 'web',
         ai: { provider: 'codex', timeoutMs: 60_001, maxGenerateAttempts: 1 },
       },

@@ -39,10 +39,24 @@ export const checkInputSchema = z.object({
   allowEmpty: z.boolean().optional(),
 }).strict();
 
+/*
+ * Apply calls must carry only the issued token: replay cannot change the
+ * preview's file selection or provider. Preview calls cannot carry a token.
+ */
 export const healInputSchema = z.object({
   files: z.string().array().optional(),
   allowEmpty: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   applyToken: z.string().optional(),
   ai: z.enum(['claude', 'codex']).optional(),
-}).strict();
+}).strict().refine((input) => {
+  if (input.dryRun === false) {
+    return input.applyToken !== undefined
+      && input.files === undefined
+      && input.ai === undefined
+      && input.allowEmpty === undefined;
+  }
+  return input.applyToken === undefined;
+}, {
+  message: 'Invalid heal preview/apply input',
+});

@@ -3,6 +3,7 @@ import { setImmediate } from 'node:timers/promises';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ElicitRequestSchema, type ClientCapabilities, type ElicitRequest, type ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createMcpServer } from '#adapters/mcp/server.js';
@@ -21,11 +22,16 @@ const toolNames = [
 
 function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
   const success = async () => ({ exitCode: 0, envelope: { summary: 'ok' } });
-  const fake = () => new Proxy(vi.fn(success), {
+  const fake = <T extends (...args: any[]) => Promise<any>>(impl: T = success as T): T => new Proxy(vi.fn(impl), {
     apply(target, thisArg, [input]) {
       return Reflect.apply(target, thisArg, [input]);
     },
-  });
+  }) as T;
+  const applySuccess = async (_token: string, confirm: 'authorized' | 'declined' | 'interrupted') => {
+    if (confirm === 'authorized') return { kind: 'report' as const, exitCode: 0, envelope: { summary: 'applied' } };
+    if (confirm === 'declined') return { kind: 'report' as const, exitCode: 0, envelope: { summary: 'declined' } };
+    return { kind: 'report' as const, exitCode: 1, envelope: { summary: 'interrupted' } };
+  };
   return {
     sessionRoot: '/workspace',
     version: '0.6.0',
@@ -34,6 +40,7 @@ function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
     run: fake(),
     check: fake(),
     healPreview: fake(),
+    applyHeal: fake(applySuccess),
     ...overrides,
   };
 }
@@ -41,10 +48,15 @@ function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
 type ConnectedServer = ReturnType<typeof createMcpServer>;
 const connections: Array<{ client: Client; server: ConnectedServer }> = [];
 
-async function connect(deps: McpServerDeps, options?: { readonly signal?: AbortSignal; readonly syncWaitMs?: number; readonly clock?: Clock }): Promise<Client> {
+async function connect(
+  deps: McpServerDeps,
+  options?: { readonly signal?: AbortSignal; readonly syncWaitMs?: number; readonly clock?: Clock },
+  clientOptions?: { capabilities?: ClientCapabilities; onElicit?: (request: ElicitRequest) => ElicitResult | Promise<ElicitResult> },
+): Promise<Client> {
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   const server = createMcpServer(deps, { ...options, clock: options?.clock ?? createSystemClock() });
-  const client = new Client({ name: 'ambercast-server-test', version: '1.0.0' });
+  const client = new Client({ name: 'ambercast-server-test', version: '1.0.0' }, clientOptions?.capabilities === undefined ? {} : { capabilities: clientOptions.capabilities });
+  if (clientOptions?.onElicit !== undefined) client.setRequestHandler(ElicitRequestSchema, clientOptions.onElicit);
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   connections.push({ client, server });
   return client;
@@ -71,6 +83,63 @@ describe('mcp/server', () => {
     }
   });
 
+  it('consumes at FIFO admission before elicitation crosses the pending TTL', async () => {
+    const token = 'a'.repeat(32);
+    const applyArgs = { dryRun: false, applyToken: token };
+    let elapsed = 1_000;
+    const clock: Clock = { now: () => new Date(0), monotonicMs: () => elapsed };
+    const beginHealApply = vi.fn(async () => ({ proceed: true as const }));
+    const settleHealApply = vi.fn(async () => ({ kind: 'report' as const, exitCode: 0, envelope: { applied: true } }));
+    const onElicit = vi.fn(async () => {
+      expect(beginHealApply).toHaveBeenCalledExactlyOnceWith(token, expect.anything());
+      elapsed += 600_001;
+      return { action: 'accept' as const, content: { confirm: true } };
+    });
+    const client = await connect(fakeDeps({ beginHealApply, settleHealApply }), { clock }, { capabilities: { elicitation: { form: {} } }, onElicit });
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(result).toMatchObject({ isError: false, structuredContent: { applied: true } });
+    expect(settleHealApply).toHaveBeenCalledExactlyOnceWith(token, 'authorized', expect.anything());
+  });
+
+  it('consumes and interrupts a queued apply on original-request abort before TTL expiry', async () => {
+    const token = 'a'.repeat(32);
+    const applyArgs = { dryRun: false, applyToken: token };
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    let elapsed = 0;
+    const clock: Clock = { now: () => new Date(0), monotonicMs: () => elapsed };
+    let consumed = false;
+    const beginHealApply = vi.fn(async () => {
+      if (consumed) return { proceed: false as const, outcome: { kind: 'report' as const, exitCode: 1, envelope: { interrupted: true } } };
+      if (elapsed >= 600_000) return { proceed: false as const, outcome: { kind: 'error' as const, code: 'EXPIRED_TOKEN', message: 'expired' } };
+      consumed = true;
+      return { proceed: true as const };
+    });
+    const settleHealApply = vi.fn(async () => ({ kind: 'report' as const, exitCode: 1, envelope: { interrupted: true } }));
+    const client = await connect(fakeDeps({
+      run: vi.fn(async () => { entered(); await blocked; return { exitCode: 0, envelope: {} }; }),
+      beginHealApply, settleHealApply,
+    }), { clock });
+    const first = client.callTool({ name: 'ambercast_run', arguments: {} });
+    await started;
+    const controller = new AbortController();
+    const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { signal: controller.signal });
+    try {
+      await setImmediate();
+      controller.abort();
+      await pending.catch(() => undefined);
+      await vi.waitFor(() => expect(settleHealApply).toHaveBeenCalledExactlyOnceWith(token, 'interrupted', expect.anything()));
+      elapsed = 600_001;
+      release();
+      const replay = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+      expect(replay).toMatchObject({ isError: false, structuredContent: { interrupted: true } });
+      expect(beginHealApply).toHaveBeenCalledTimes(2);
+      expect(settleHealApply).toHaveBeenCalledTimes(1);
+      expect((await first).isError).toBe(false);
+    } finally { release(); await first.catch(() => undefined); }
+  });
   it('accepts the C3 maximum wait of 45000 ms', async () => {
     const client = await connect(fakeDeps());
     const result = await client.callTool({ name: 'ambercast_job_status', arguments: { jobId: 'missing', waitMs: 45_000 } });
@@ -530,4 +599,274 @@ describe('mcp/server', () => {
 
   // TEST-B12: fake deps expose no interactive input capability, so this
   // adapter-level fixture structurally cannot prompt when stdin is not a TTY.
+});
+
+describe('mcp/server heal apply', () => {
+  const token = 'a'.repeat(32);
+  const applyArgs = { dryRun: false, applyToken: token };
+
+  it('marks first delivery at the synchronous terminal response, and repeated reads preserve its time (TEST-D2)', async () => {
+    let elapsed = 100;
+    let wall = new Date('2026-01-01T00:00:00.000Z');
+    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed };
+    const marks: number[] = [];
+    const markHealDelivered = vi.fn(() => {
+      marks.push(elapsed);
+    });
+    const healPreview = vi.fn(async () => {
+      expect(markHealDelivered).not.toHaveBeenCalled();
+      return { exitCode: 0, envelope: { summary: 'preview' }, applyToken: token };
+    });
+    const client = await connect(fakeDeps({ healPreview, markHealDelivered }), { clock });
+
+    const preview = await client.callTool({ name: 'ambercast_heal', arguments: {} });
+    expect(preview.content).toEqual([{ type: 'text', text: expect.stringContaining(`applyToken: ${token}`) }]);
+    expect(markHealDelivered).toHaveBeenCalledWith(token);
+    expect(marks).toEqual([100]);
+    const jobId = (preview._meta?.job as { jobId: string }).jobId;
+
+    elapsed = 8_000;
+    wall = new Date('2025-01-01T00:00:00.000Z');
+    const again = await client.callTool({ name: 'ambercast_job_status', arguments: { jobId } });
+    expect(again.content).toEqual([{ type: 'text', text: expect.stringContaining(`applyToken: ${token}`) }]);
+    expect(marks).toEqual([100]);
+  });
+
+  it('waits for a terminal job_status read after an early handle before marking first delivery (TEST-D2)', async () => {
+    let elapsed = 30;
+    let wall = new Date('2026-01-01T00:00:00.000Z');
+    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed };
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const marks: number[] = [];
+    const markHealDelivered = vi.fn(() => { marks.push(elapsed); });
+    const client = await connect(fakeDeps({
+      healPreview: vi.fn(async () => {
+        await blocked;
+        expect(markHealDelivered).not.toHaveBeenCalled();
+        return { exitCode: 0, envelope: { summary: 'preview' }, applyToken: token };
+      }),
+      markHealDelivered,
+    }), { clock, syncWaitMs: 0 });
+
+    const handle = await client.callTool({ name: 'ambercast_heal', arguments: {} });
+    const jobId = (handle.structuredContent as { jobId: string }).jobId;
+    expect(marks).toEqual([]);
+    try {
+      release();
+      await vi.waitFor(async () => {
+        const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
+        expect((listing.structuredContent as { jobs: Array<{ jobId: string; status: string }> }).jobs)
+          .toContainEqual(expect.objectContaining({ jobId, status: 'completed' }));
+      });
+      expect(markHealDelivered).not.toHaveBeenCalled();
+
+      elapsed = 300;
+      const firstRead = await client.callTool({ name: 'ambercast_job_status', arguments: { jobId } });
+      expect(firstRead.content).toEqual([{ type: 'text', text: expect.stringContaining(`applyToken: ${token}`) }]);
+      expect(markHealDelivered).toHaveBeenCalledWith(token);
+      expect(marks).toEqual([300]);
+
+      elapsed = 900;
+      wall = new Date('2025-01-01T00:00:00.000Z');
+      await client.callTool({ name: 'ambercast_job_status', arguments: { jobId } });
+      expect(marks).toEqual([300]);
+    } finally { release(); }
+  });
+
+  it('cancels an apply waiting in the write FIFO without invoking settlement (TEST-D4)', async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const running = new Promise<void>((resolve) => { started = resolve; });
+    let interrupted = false;
+    const writes: string[] = [];
+    const applyHeal = vi.fn(async (_token: string, confirm: 'authorized' | 'declined' | 'interrupted') => {
+      if (confirm === 'interrupted') {
+        interrupted = true;
+        return { kind: 'report' as const, exitCode: 1, envelope: { summary: 'interrupted' } };
+      }
+      if (interrupted) return { kind: 'error' as const, code: 'TOKEN_CONSUMED', message: 'already interrupted' };
+      if (confirm === 'authorized') writes.push(_token);
+      return { kind: 'report' as const, exitCode: 0, envelope: { summary: 'applied' } };
+    });
+    const client = await connect(fakeDeps({
+      run: vi.fn(async () => { started(); await blocked; return { exitCode: 0, envelope: {} }; }),
+      applyHeal,
+    }));
+    const first = client.callTool({ name: 'ambercast_run', arguments: {} });
+    await running;
+    const controller = new AbortController();
+    const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { signal: controller.signal });
+    try {
+      await setImmediate();
+      controller.abort();
+      await expect(pending).rejects.toThrow();
+      const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
+      const cancelled = (listing.structuredContent as { jobs: Array<{ jobId: string; tool: string; status: string }> }).jobs
+        .find((job) => job.tool === 'heal');
+      expect(cancelled).toMatchObject({ status: 'cancelled' });
+      expect(applyHeal).not.toHaveBeenCalledWith(token, 'authorized');
+    } finally {
+      release();
+      await first.catch(() => undefined);
+    }
+    const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
+    const cancelled = (listing.structuredContent as { jobs: Array<{ jobId: string; tool: string; status: string }> }).jobs
+      .find((job) => job.tool === 'heal');
+    expect(cancelled).toMatchObject({ status: 'cancelled' });
+    expect(applyHeal).toHaveBeenCalledExactlyOnceWith(token, 'interrupted', expect.anything());
+    await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(writes).toEqual([]);
+    expect(applyHeal).not.toHaveBeenCalledWith(token, 'authorized');
+  });
+
+  it('renders a preimage-changed settlement failure as an error outcome (TEST-D4)', async () => {
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'error' as const, code: 'PREIMAGE_CHANGED', message: 'file changed after preview' }));
+    const client = await connect(fakeDeps({ applyHeal }));
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(result.isError).toBe(true);
+    expect(applyHeal).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a settlement throw as a failed apply job (TEST-D4)', async () => {
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted'): Promise<never> => {
+      throw new Error('preimage changed during settlement');
+    });
+    const client = await connect(fakeDeps({ applyHeal }));
+
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(applyHeal).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ isError: true, _meta: { job: { status: 'failed' } } });
+  });
+
+  it.each([
+    ['accept with confirmed content', { action: 'accept' as const, content: { confirm: true } }, 'authorized'],
+    ['accept without confirmation', { action: 'accept' as const, content: { confirm: false } }, 'declined'],
+    ['accept with omitted confirm', { action: 'accept' as const, content: {} }, 'declined'],
+    ['decline', { action: 'decline' as const }, 'declined'],
+    ['cancel', { action: 'cancel' as const }, 'interrupted'],
+  ])('maps %s to settlement (TEST-D5)', async (_name, elicited, decision) => {
+    const onElicit = vi.fn(async (_request: ElicitRequest): Promise<ElicitResult> => elicited);
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'settled' } }));
+    const client = await connect(fakeDeps({ applyHeal }), undefined, { capabilities: { elicitation: { form: {} } }, onElicit });
+
+    await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(onElicit).toHaveBeenCalledTimes(1);
+    expect(onElicit.mock.calls[0]?.[0]).toMatchObject({ method: 'elicitation/create', params: { mode: 'form' } });
+    expect(applyHeal).toHaveBeenCalledTimes(1);
+    expect(applyHeal.mock.calls[0]?.[1]).toBe(decision);
+  });
+
+  it('maps an elicitation request rejection to interrupted (TEST-D5)', async () => {
+    const onElicit = vi.fn(async (): Promise<ElicitResult> => { throw new Error('client rejected elicitation'); });
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'interrupted' } }));
+    const client = await connect(fakeDeps({ applyHeal }), undefined, { capabilities: { elicitation: { form: {} } }, onElicit });
+
+    await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(onElicit).toHaveBeenCalledTimes(1);
+    expect(applyHeal.mock.calls[0]?.[1]).toBe('interrupted');
+  });
+
+  it('maps an explicit reject action to interrupted even though the SDK rejects that result shape (TEST-D5)', async () => {
+    const onElicit = vi.fn(async (): Promise<ElicitResult> => ({ action: 'reject' } as unknown as ElicitResult));
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'interrupted' } }));
+    const client = await connect(fakeDeps({ applyHeal }), undefined, { capabilities: { elicitation: { form: {} } }, onElicit });
+
+    await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(onElicit).toHaveBeenCalledTimes(1);
+    expect(applyHeal.mock.calls[0]?.[1]).toBe('interrupted');
+  });
+
+  it('authorizes directly when the client has no form elicitation capability (TEST-D5)', async () => {
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'applied' } }));
+    const onElicit = vi.fn(async (): Promise<ElicitResult> => ({ action: 'accept', content: { confirm: true } }));
+    const client = await connect(fakeDeps({ applyHeal }), undefined, { capabilities: { elicitation: { url: {} } }, onElicit });
+
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(result.isError).toBe(false);
+    expect(applyHeal).toHaveBeenCalledTimes(1);
+    expect(applyHeal.mock.calls[0]?.[1]).toBe('authorized');
+    expect(onElicit).not.toHaveBeenCalled();
+  });
+
+  it('interrupts confirmation after its 600000 ms response deadline (TEST-D5)', async () => {
+    let release!: () => void;
+    const blocked = new Promise<ElicitResult>((resolve) => { release = () => resolve({ action: 'cancel' }); });
+    const onElicit = vi.fn(async () => blocked);
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'interrupted' } }));
+    const client = await connect(fakeDeps({ applyHeal }), undefined, { capabilities: { elicitation: { form: {} } }, onElicit });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { timeout: 700_000 });
+    try {
+      await vi.waitFor(() => expect(onElicit).toHaveBeenCalledTimes(1));
+      expect(applyHeal).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(600_000);
+      await pending;
+      expect(applyHeal.mock.calls[0]?.[1]).toBe('interrupted');
+    } finally {
+      release();
+      vi.useRealTimers();
+      await pending.catch(() => undefined);
+    }
+  });
+
+  it('interrupts confirmation on original-request abort before settlement starts (TEST-D4, TEST-D5)', async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => { entered = resolve; });
+    const blocked = new Promise<ElicitResult>((resolve) => { release = () => resolve({ action: 'accept', content: { confirm: true } }); });
+    const onElicit = vi.fn(async () => { entered(); return blocked; });
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'interrupted' } }));
+    const client = await connect(fakeDeps({ applyHeal }), undefined, { capabilities: { elicitation: { form: {} } }, onElicit });
+    const controller = new AbortController();
+    const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { signal: controller.signal });
+    try {
+      await vi.waitFor(() => expect(onElicit).toHaveBeenCalledTimes(1));
+      await waiting;
+      controller.abort();
+      await expect(pending).rejects.toThrow();
+      await vi.waitFor(() => expect(applyHeal.mock.calls[0]?.[1]).toBe('interrupted'));
+    } finally {
+      release();
+      await pending.catch(() => undefined);
+    }
+  });
+
+  it('keeps an authorized settlement running after original-request abort and stores its result (TEST-D4)', async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const envelope = { summary: 'authorized write completed' };
+    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => {
+      entered();
+      await blocked;
+      return { kind: 'report' as const, exitCode: 0, envelope };
+    });
+    const client = await connect(fakeDeps({ applyHeal }));
+    const controller = new AbortController();
+    const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { signal: controller.signal });
+    try {
+      await vi.waitFor(() => expect(applyHeal).toHaveBeenCalledTimes(1));
+      await started;
+      expect(applyHeal.mock.calls[0]?.[1]).toBe('authorized');
+      controller.abort();
+      await expect(pending).rejects.toThrow();
+      release();
+      await vi.waitFor(async () => {
+        const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
+        expect((listing.structuredContent as { jobs: Array<{ tool: string; status: string }> }).jobs)
+          .toContainEqual(expect.objectContaining({ tool: 'heal', status: 'completed' }));
+      });
+      const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
+      const jobId = (listing.structuredContent as { jobs: Array<{ jobId: string; tool: string }> }).jobs.find((job) => job.tool === 'heal')!.jobId;
+      const terminal = await client.callTool({ name: 'ambercast_job_status', arguments: { jobId } });
+      expect(terminal.structuredContent).toEqual(envelope);
+      expect(applyHeal).toHaveBeenCalledTimes(1);
+    } finally {
+      release();
+      await pending.catch(() => undefined);
+    }
+  });
 });

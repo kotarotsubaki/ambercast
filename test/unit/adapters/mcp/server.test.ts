@@ -79,7 +79,7 @@ describe('mcp/server', () => {
 
   it('lists jobs newest first with one text line per job and a no jobs line', async () => {
     let wall = new Date('2026-01-01T00:00:00.000Z');
-    const clock: Clock = { now: () => wall, monotonicMs: () => 0 };
+    const clock: Clock = { now: () => wall, monotonicMs: () => 0, sleep: async () => {} };
     const client = await connect(fakeDeps(), { clock });
     expect((await client.callTool({ name: 'ambercast_job_status', arguments: {} })).content).toEqual([{ type: 'text', text: 'no jobs' }]);
     const first = await client.callTool({ name: 'ambercast_run', arguments: {} });
@@ -145,7 +145,7 @@ describe('mcp/server', () => {
   it('expires terminal jobs using monotonic time despite wall-clock changes', async () => {
     let elapsed = 0;
     let wall = new Date('2026-01-01T00:00:00.000Z');
-    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed };
+    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed, sleep: async () => {} };
     const client = await connect(fakeDeps(), { clock });
     const result = await client.callTool({ name: 'ambercast_run', arguments: {} });
     const jobId = (result._meta?.job as { jobId: string }).jobId;

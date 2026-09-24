@@ -259,30 +259,6 @@ export function createMcpServer(deps: McpServerDeps, options: { readonly signal?
     enqueueWrite(async () => {
       if (job.record.status !== 'working') return;
       job.queued = false;
-      if (capability === 'applyHeal') {
-        try {
-          const token = job.applyToken!;
-          const consumed = await beginApply(token, job.controller.signal);
-          if (!consumed.proceed) {
-            renderApply(job, consumed.outcome);
-            settle(job, 'completed');
-            return;
-          }
-          if (options?.signal?.aborted || extra.signal?.aborted || job.controller.signal.aborted) {
-            await finishApply(token, 'interrupted', job.controller.signal);
-            settle(job, 'cancelled', options?.signal?.aborted ? 'server shutting down' : undefined);
-            return;
-          }
-          const confirm = await confirmHeal(job.controller.signal);
-          const outcome = await finishApply(token, job.controller.signal.aborted ? 'interrupted' : confirm, job.controller.signal);
-          renderApply(job, outcome);
-          settle(job, 'completed');
-        } catch (error) {
-          job.error = error;
-          settle(job, 'failed');
-        }
-        return;
-      }
       if (options?.signal?.aborted || (extra.signal?.aborted && !job.handleReturned) || job.record.status !== 'working') {
         settle(job, 'cancelled', options?.signal?.aborted ? 'server shutting down' : undefined);
         return;

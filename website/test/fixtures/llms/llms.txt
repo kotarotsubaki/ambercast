@@ -57,7 +57,7 @@
 ## PLAN SPECIFICATION
 - [Ambercast Plan Specification](https://kotarotsubaki.github.io/ambercast/spec/overview/): This specification describes the artifacts accepted by ambercast 0.3.1.
 - [Plan document](https://kotarotsubaki.github.io/ambercast/spec/plan-document/): `PlanDocument` is a strict object.
-- [Steps](https://kotarotsubaki.github.io/ambercast/spec/steps/): Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId`.
+- [Steps](https://kotarotsubaki.github.io/ambercast/spec/steps/): Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId` and a required `target` naming a key in `Plan.
 - [Value types](https://kotarotsubaki.github.io/ambercast/spec/value-types/): All other chapters MUST use these definitions rather than restating their shapes.
 - [Grounding document](https://kotarotsubaki.github.io/ambercast/spec/grounding-document/): `GroundingDocument` is a strict object bound to exactly one Plan digest.
 - [Element fingerprint](https://kotarotsubaki.github.io/ambercast/spec/fingerprint/): `Fingerprint.

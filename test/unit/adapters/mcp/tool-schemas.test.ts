@@ -36,4 +36,46 @@ describe('mcp/tool-schemas', () => {
   it('generate accepts target', () => {
     expect(generateInputSchema.safeParse({ target: 'web' }).success).toBe(true);
   });
+
+  describe('TEST-D3: heal preview/apply input boundary', () => {
+    const applyToken = '0123456789abcdef0123456789abcdef';
+
+    it('accepts an apply call containing only dryRun: false and an applyToken', () => {
+      expect(healInputSchema.safeParse({ dryRun: false, applyToken }).success).toBe(true);
+    });
+
+    it('rejects an apply call without an applyToken', () => {
+      expect(healInputSchema.safeParse({ dryRun: false }).success).toBe(false);
+    });
+
+    it('rejects an apply call with an empty applyToken', () => {
+      expect(healInputSchema.safeParse({ dryRun: false, applyToken: '' }).success).toBe(false);
+    });
+
+    it.each([
+      ['files', ['other.test.md']],
+      ['ai', 'claude'],
+      ['allowEmpty', false],
+    ] as const)('rejects an apply call that also specifies %s', (field, value) => {
+      expect(healInputSchema.safeParse({
+        dryRun: false,
+        applyToken,
+        [field]: value,
+      }).success).toBe(false);
+    });
+
+    it.each([
+      ['omitted', {}],
+      ['true', { dryRun: true }],
+    ] as const)('rejects a preview call with an applyToken when dryRun is %s', (_case, input) => {
+      expect(healInputSchema.safeParse({ ...input, applyToken }).success).toBe(false);
+    });
+
+    it.each([
+      ['omitted', {}],
+      ['true', { dryRun: true }],
+    ] as const)('accepts a preview call without an applyToken when dryRun is %s', (_case, input) => {
+      expect(healInputSchema.safeParse({ ...input, files: ['case.test.md'], ai: 'codex', allowEmpty: true }).success).toBe(true);
+    });
+  });
 });

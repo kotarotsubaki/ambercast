@@ -51,6 +51,7 @@ describe('mcp/render TEST-B6', () => {
       }]);
       expect(rendered.structuredContent).toEqual(envelope);
       expect(rendered._meta.exitCode).toBe(2);
+      expect(rendered._meta.applyToken).toBe(token);
     }
   });
 });

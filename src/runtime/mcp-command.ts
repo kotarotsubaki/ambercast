@@ -220,8 +220,8 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     beginDrain?.();
   };
   input.stdin.once('end', onDrain);
-  process.once('SIGTERM', onDrain);
-  process.once('SIGINT', onDrain);
+  process.on('SIGTERM', onDrain);
+  process.on('SIGINT', onDrain);
   if (drainRequested) onDrain();
 
   try {

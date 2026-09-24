@@ -125,6 +125,27 @@ describe('runtime/mcp-command', () => {
     }
   });
 
+  it('keeps draining after a repeated SIGTERM until the active call settles (TEST-B9)', async () => {
+    let settleCall: ((value: RunCommandOutput) => void) | undefined;
+    vi.mocked(runRunCommand).mockImplementationOnce(() => new Promise<RunCommandOutput>((resolve) => {
+      settleCall = resolve;
+    }));
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const initialListeners = process.listenerCount('SIGTERM');
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await vi.waitFor(() => expect(serverFake.connected).toHaveBeenCalled());
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`);
+    await vi.waitFor(() => expect(serverFake.called).toHaveBeenCalledTimes(1));
+
+    process.emit('SIGTERM');
+    process.emit('SIGTERM');
+    expect(process.listenerCount('SIGTERM')).toBe(initialListeners + 1);
+    settleCall?.({ exitCode: 0, envelope: { schemaVersion: '3.6', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [], reportPersistence: 'not-attempted' } } as unknown as RunCommandOutput);
+    expect(await running).toBe(0);
+    expect(process.listenerCount('SIGTERM')).toBe(initialListeners);
+  });
+
   it('rejects a new call during drain before it reaches the tool handler and logs its count (TEST-B9)', async () => {
     const io = streams();
     const directory = await fixtureDirectory();

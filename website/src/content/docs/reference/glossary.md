@@ -86,7 +86,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `GitHub Security Advisories` | GitHub Security Advisories is the private vulnerability-reporting channel. | `SECURITY.md`; [Security policy](/ambercast/reference/security-policy/#vulnerability-reporting) | public issues |
 | `GroundingDocument` | `GroundingDocument` is the strict schema owning Grounding `schemaVersion`, `planDigest`, and entries. | `GroundingDocument`; [Grounding document](/ambercast/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` is the structured environment-error code for interrupted execution. | report schema; [Error codes](/ambercast/reference/error-codes/#code-vocabulary) | assertion failure |
-| `JSON-RPC` | `JSON-RPC` is planned-only for the MCP transport and has no 0.3.1 server runtime. | [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | CLI `--json` |
+| `JSON-RPC` | `JSON-RPC` carries the implemented MCP server's stdio messages. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | CLI `--json` |
 | `PlanDocument` | `PlanDocument` is the strict schema owning Plan version, provenance, targets, and steps. | `PlanDocument`; [Plan document](/ambercast/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` is the whole-value anchored regular expression built from `SECRET_REF_SOURCE`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | unanchored fragment |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` is the only accepted element-fingerprint algorithm literal. | `Fingerprint`; [Element fingerprint](/ambercast/spec/fingerprint/) | Plan schema version 2 |
@@ -96,24 +96,26 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
 | `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` is planned-only and rejected by the 0.3.1 parser. | [ambercast mcp](/ambercast/reference/cli/mcp/#status) | MCP tool name |
+| `ambercast mcp` | `ambercast mcp` starts the implemented stdio MCP server. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | MCP tool name |
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
 | `ambercast run` | `ambercast run` is the implemented deterministic replay command. | [ambercast run](/ambercast/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` is the implemented read-only local results viewer. | [ambercast view](/ambercast/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_review` | `ambercast_review` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | planned CLI review |
-| `ambercast_run` | `ambercast_run` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `ambercast_check` | `ambercast_check` is the implemented read-only MCP freshness tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` is the implemented MCP Plan-generation tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` is the implemented MCP repair tool, with preview and token-authorized apply. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` requests cancellation of a job in this server process. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | a CLI command |
+| `ambercast_job_status` | `ambercast_job_status` lists jobs or retrieves one job's status and result. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | a CLI command |
+| `ambercast_review` | `ambercast_review` is a future MCP tool and is absent from the implemented six-tool server. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | planned CLI review |
+| `ambercast_run` | `ambercast_run` is the implemented MCP replay tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
 | `config.schema.json` | `config.schema.json` is the generated config JSON Schema and npm config-schema export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | a config instance |
-| `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-safety-default) | HealResult representation |
+| `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-preview-and-apply) | HealResult representation |
 | `fresh-without-grounding` | `fresh-without-grounding` is a completed check status distinct from `fresh`. | check result; [ambercast check](/ambercast/reference/cli/check/#status-vocabulary) | missing Plan |
 | `grounding.schema.json` | `grounding.schema.json` is the generated Grounding JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Grounding instance |
 | `healReplayIsolation` | `healReplayIsolation` is the target policy whose `idempotent` value is required by heal. | target config / heal | browser mode |
 | `inputsDigest` | `inputsDigest` records the five-input Plan provenance digest. | `computeInputsDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `planDigest` |
-| `isError` | `isError` is planned MCP result classification and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
-| `outputSchema` | `outputSchema` is planned MCP schema metadata and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract) | generated npm JSON Schema |
+| `isError` | `isError` classifies implemented MCP tool results, with exit-code mappings and MCP-specific failures. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
+| `outputSchema` | `outputSchema` is omitted from every implemented MCP tool definition because the report schema is too large for `tools/list`. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | generated npm JSON Schema |
 | `plan.schema.json` | `plan.schema.json` is the generated Plan JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Plan instance |
 | `planDigest` | `planDigest` binds Grounding to replay-relevant Plan content excluding `generatorMeta`. | `computePlanDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `inputsDigest` |
 | `producerBundleFingerprint` | `producerBundleFingerprint` names producer-contract provenance whose change alters `inputsDigest`. | generate provenance / [Compatibility](/ambercast/reference/compatibility/#regeneration-boundary) | element fingerprint |
@@ -121,10 +123,10 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `reportPersistence` | `reportPersistence` is the run-envelope state of its persistence attempt. | run report; [Reports](/ambercast/reference/reports/#persistence) | test status |
 | `review` | `review` is a report-schema command branch, not evidence of an implemented CLI command. | `ReportEnvelope`; [Reports](/ambercast/reference/reports/#result-shapes) | available command |
 | `schemaVersion` | `schemaVersion` discriminates a versioned Plan, Grounding, or report contract. | IR/report schemas | package version |
-| `stderr` | `stderr` carries CLI usage errors, crash diagnostics, and persistence warnings rather than successful report output. | CLI runtime / [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | stdout answer |
-| `stdio` | `stdio` is planned MCP transport and has no 0.3.1 server runtime. | [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | a network port |
+| `stderr` | `stderr` carries CLI usage errors, crash diagnostics, persistence warnings, and MCP startup logs rather than successful report output. | CLI runtime / [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | stdout answer |
+| `stdio` | `stdio` is the implemented MCP server transport. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | a network port |
 | `stdout` | `stdout` carries help/version and completed command reports, while process status is assigned separately. | CLI runtime / [Reports](/ambercast/reference/reports/#envelope) | stderr diagnostics |
-| `structuredContent` | `structuredContent` is planned MCP result payload and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract) | CLI JSON text |
+| `structuredContent` | `structuredContent` carries a report envelope or Job record in implemented MCP responses. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI JSON text |
 | `testIgnore` | `testIgnore` excludes a matching relative path after inclusion. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testMatch` |
 | `testMatch` | `testMatch` requires at least one inclusion match for a relative path. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` exemplifies a whole-value secret reference whose body maps to an environment key. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal credential |

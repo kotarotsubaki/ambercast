@@ -3,11 +3,11 @@ title: 操作契约
 description: 规定 AI Agent 安全调用 ambercast 时的动作边界、核心禁令以及退出状态与错误处理契约。
 ---
 
-ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal` 与 `view`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
+ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
 
 ## 命令契约 {#command-contract}
 
-解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal` 与 `view`。其中，`check` 与 `view` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
+解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。其中，`check` 与 `view` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
 
 | 命令 | 前提条件 | 副作用 | 是否需要批准？ | CI 中是否安全？ |
 | --- | --- | --- | --- | --- |
@@ -17,6 +17,7 @@ ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`
 | check | 所选目标可被发现。 | 仅读取 prompt 与工件。 | 不需要 ambercast 工件写入批准。 | 安全。 |
 | heal | 目标具备幂等性，且在 CI 中时已启用真实尝试。 | 可能在 runs 目录中写入尝试证据；仅在确认后提交测得的计划/grounding 候选变更。 | 需要用户明确批准；--yes 不构成 agent 授权。 | 默认不安全；仅在 ci.heal: true 时安全。 |
 | view | 具备交互式终端，或指定 `--allow-headless`；具有可绑定的空闲端口。 | 无；仅读取已持久化的 run report 的 HTTP 服务器。 | 不需要 ambercast 工件写入批准。 | 默认不安全；未指定 `--allow-headless` 的非交互使用会被拒绝。 |
+| mcp | 会话根目录存在。 | 启动 stdio 服务器；所调用工具遵循各自的写入与批准边界。 | 取决于所调用的工具。 | 取决于所调用的工具。 |
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[ambercast init](/ambercast/zh-cn/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 

@@ -38,13 +38,10 @@ describe('readCapabilityPages', () => {
 });
 
 describe('plannedPageSlugs', () => {
-  it('returns the sorted six-page union, deduplicating the shared baseline/restore page', () => {
+  it('returns the sorted two-page union, deduplicating the shared baseline/restore page', () => {
     expect(plannedPageSlugs(mapping)).toEqual([
-      'agents/mcp-server',
       'reference/cli/baseline-restore',
-      'reference/cli/mcp',
       'reference/cli/review',
-      'reference/mcp-tools',
     ]);
   });
 

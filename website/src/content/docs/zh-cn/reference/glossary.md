@@ -81,7 +81,7 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `GitHub Security Advisories` | GitHub Security Advisories 是私密安全漏洞报告通道。 | `SECURITY.md`；[安全策略](/ambercast/zh-cn/reference/security-policy/#vulnerability-reporting) | 公开 Issue |
 | `GroundingDocument` | `GroundingDocument` 是拥有 Grounding `schemaVersion`、`planDigest` 与条目的严格 Schema。 | `GroundingDocument`；[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` 是针对执行中断的结构化环境错误代码。 | 报告 Schema；[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) | 断言失败 |
-| `JSON-RPC` | `JSON-RPC` 处于规划阶段（在 0.3.1 中未实现），作为 MCP 传输协议，在 0.3.1 中尚无服务端运行时。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#planned-interface) | CLI `--json` |
+| `JSON-RPC` | `JSON-RPC` 承载已实现的 MCP 服务器的 stdio 消息。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | CLI `--json` |
 | `PlanDocument` | `PlanDocument` 是拥有 Plan 版本、来源凭证、目标与步骤的严格 Schema。 | `PlanDocument`；[计划文档](/ambercast/zh-cn/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` 是由 `SECRET_REF_SOURCE` 构建的锚定全值正则表达式。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 未锚定的片段 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` 是唯一被接受的元素指纹算法字面量。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | Plan Schema 版本 2 |
@@ -91,24 +91,26 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `ambercast generate` | `ambercast generate` 是已实现的 Plan 生成命令。 | [ambercast generate](/ambercast/zh-cn/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` 是已实现且受守卫保护的工件修复命令。 | [ambercast heal](/ambercast/zh-cn/reference/cli/heal/) | 运行时回退 |
 | `ambercast init` | `ambercast init` 已实现，会写入四个文件。 | [ambercast init](/ambercast/zh-cn/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#status) | MCP 工具名 |
+| `ambercast mcp` | `ambercast mcp` 启动已实现的 stdio MCP 服务器。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | MCP 工具名 |
 | `ambercast restore` | `ambercast restore` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
 | `ambercast review` | `ambercast review` 处于规划阶段（在 0.3.1 中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
 | `ambercast run` | `ambercast run` 是已实现的确定性重放命令。 | [ambercast run](/ambercast/zh-cn/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` 是已实现的只读本地结果查看器。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_review` | `ambercast_review` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 规划中的 CLI review |
-| `ambercast_run` | `ambercast_run` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `ambercast_check` | `ambercast_check` 是已实现的只读 MCP 新鲜度检查工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` 是已实现的 MCP Plan 生成工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` 是已实现的 MCP 修复工具，支持预览及通过 token 授权的应用。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` 请求取消此服务器进程中的作业。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI 命令 |
+| `ambercast_job_status` | `ambercast_job_status` 列出作业或获取单个作业的状态和结果。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI 命令 |
+| `ambercast_review` | `ambercast_review` 是未来的 MCP 工具，未包含在已实现的六项工具中。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 规划中的 CLI review |
+| `ambercast_run` | `ambercast_run` 是已实现的 MCP 重放工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
 | `config.schema.json` | `config.schema.json` 是生成的配置 JSON Schema 及 npm 配置 Schema 导出目标。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#generated-artifacts) | 配置实例 |
-| `dryRun` | `dryRun` 是 CLI/MCP 自愈预览请求的输入字段；已完成的 `HealResult` 使用 `application: preview-only` 表示预览，而非 `dryRun` 字段。 | 自愈请求 / [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#heal-safety-default) | HealResult 的表示形式 |
+| `dryRun` | `dryRun` 是 CLI/MCP 自愈预览请求的输入字段；已完成的 `HealResult` 使用 `application: preview-only` 表示预览，而非 `dryRun` 字段。 | 自愈请求 / [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#heal-preview-and-apply) | HealResult 的表示形式 |
 | `fresh-without-grounding` | `fresh-without-grounding` 是已完成的 check 状态，与 `fresh` 区分开来。 | check 结果；[ambercast check](/ambercast/zh-cn/reference/cli/check/#status-vocabulary) | 缺失 Plan |
 | `grounding.schema.json` | `grounding.schema.json` 是生成的 Grounding JSON Schema 及 npm 导出目标。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#generated-artifacts) | Grounding 实例 |
 | `healReplayIsolation` | `healReplayIsolation` 是目标策略，自愈要求其值必须为 `idempotent`。 | 目标配置 / heal | 浏览器模式 |
 | `inputsDigest` | `inputsDigest` 记录五项输入的 Plan 来源凭证摘要。 | `computeInputsDigest`；[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/) | `planDigest` |
-| `isError` | `isError` 是规划中的 MCP 结果分类字段，在 0.3.1 中没有 MCP 运行时语义。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 测试失败状态 |
-| `outputSchema` | `outputSchema` 是规划中的 MCP Schema 元数据，在 0.3.1 中没有 MCP 运行时语义。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#planned-tool-contract) | 生成的 npm JSON Schema |
+| `isError` | `isError` 根据退出码映射与 MCP 专有失败对已实现的 MCP 工具结果分类。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 测试失败状态 |
+| `outputSchema` | 报告 Schema 过大，因此所有已实现的 MCP 工具定义均省略 `outputSchema`。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 生成的 npm JSON Schema |
 | `plan.schema.json` | `plan.schema.json` 是生成的 Plan JSON Schema 及 npm 导出目标。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#generated-artifacts) | Plan 实例 |
 | `planDigest` | `planDigest` 将 Grounding 绑定至排除 `generatorMeta` 后的重放相关 Plan 内容。 | `computePlanDigest`；[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/) | `inputsDigest` |
 | `producerBundleFingerprint` | `producerBundleFingerprint` 命名生产器契约来源凭证，其变更会改变 `inputsDigest`。 | 生成来源凭证 / [兼容性](/ambercast/zh-cn/reference/compatibility/#regeneration-boundary) | 元素指纹 |
@@ -116,10 +118,10 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `reportPersistence` | `reportPersistence` 是运行信封对其持久化尝试状态的记录。 | 运行报告；[报告](/ambercast/zh-cn/reference/reports/#persistence) | 测试状态 |
 | `review` | `review` 是报告 Schema 中的命令分支，并非已实现 CLI 命令的证据。 | `ReportEnvelope`；[报告](/ambercast/zh-cn/reference/reports/#result-shapes) | 可用命令 |
 | `schemaVersion` | `schemaVersion` 用于区分带版本的 Plan、Grounding 或报告契约。 | IR/报告 Schema | 软件包版本 |
-| `stderr` | `stderr` 用于传递 CLI 用法错误、崩溃诊断和持久化警告，而非成功的报告输出。 | CLI 运行时 / [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#planned-interface) | stdout 响应 |
-| `stdio` | `stdio` 处于规划阶段（在 0.3.1 中未实现），用于 MCP 传输，在 0.3.1 中没有服务端运行时。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#planned-interface) | 网络端口 |
+| `stderr` | `stderr` 用于传递 CLI 用法错误、崩溃诊断、持久化警告和 MCP 启动日志。 | CLI 运行时 / [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | stdout 响应 |
+| `stdio` | `stdio` 是已实现的 MCP 服务器传输方式。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | 网络端口 |
 | `stdout` | `stdout` 用于传递帮助/版本信息和已完成的命令报告，进程状态则单独指定。 | CLI 运行时 / [报告](/ambercast/zh-cn/reference/reports/#envelope) | stderr 诊断信息 |
-| `structuredContent` | `structuredContent` 处于规划阶段（在 0.3.1 中未实现），属于 MCP 结果载荷，在 0.3.1 中没有 MCP 运行时语义。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#planned-tool-contract) | CLI JSON 文本 |
+| `structuredContent` | `structuredContent` 在已实现的 MCP 响应中承载报告信封或 Job record。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI JSON 文本 |
 | `testIgnore` | `testIgnore` 在相对路径匹配包含规则之后将其排除。 | 发现匹配器；[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection) | `testMatch` |
 | `testMatch` | `testMatch` 要求相对路径至少匹配一项包含规则。 | 发现匹配器；[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` 示范了一个全值密钥引用，其正文映射到环境变量键。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 字面量凭据 |

@@ -39,7 +39,7 @@ That is why ambercast prioritizes assertion quality above everything else, and w
 
 ## Both humans and AI are readers {#humans-and-agents}
 
-An asset's readers are not only human. Coding agents such as Claude Code and Codex read and write tests inside their own loop of implementing, testing, and fixing. ambercast treats agents as first-class users, and ships an official skill alongside the CLI, with an MCP server planned.
+An asset's readers are not only human. Coding agents such as Claude Code and Codex read and write tests inside their own loop of implementing, testing, and fixing. ambercast treats agents as first-class users, and ships an official skill and an MCP server alongside the CLI.
 
 There is no separate specification written for agents. The same documentation is kept readable by both humans and agents.
 

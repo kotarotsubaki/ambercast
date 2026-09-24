@@ -197,17 +197,6 @@
           "lineBreakAfter": false
         },
         {
-          "name": "target",
-          "alias": null,
-          "value": "<name>",
-          "hidden": false,
-          "acceptedValues": null,
-          "shownValue": null,
-          "effect": "select target",
-          "default": "omitted",
-          "lineBreakAfter": false
-        },
-        {
           "name": "headed",
           "alias": null,
           "value": null,
@@ -324,17 +313,6 @@
       },
       "flags": [
         {
-          "name": "target",
-          "alias": null,
-          "value": "<name>",
-          "hidden": false,
-          "acceptedValues": null,
-          "shownValue": null,
-          "effect": "select target",
-          "default": "omitted",
-          "lineBreakAfter": false
-        },
-        {
           "name": "allow-empty",
           "alias": null,
           "value": null,
@@ -420,17 +398,6 @@
           "shownValue": null,
           "effect": "authorizes non-interactive commit",
           "default": "false",
-          "lineBreakAfter": false
-        },
-        {
-          "name": "target",
-          "alias": null,
-          "value": "<name>",
-          "hidden": false,
-          "acceptedValues": null,
-          "shownValue": null,
-          "effect": "select target",
-          "default": "omitted",
           "lineBreakAfter": false
         },
         {
@@ -551,6 +518,35 @@
           "shownValue": null,
           "effect": "disable ANSI",
           "default": "false",
+          "lineBreakAfter": false
+        }
+      ]
+    },
+    {
+      "name": "mcp",
+      "summary": "Serve the MCP stdio server",
+      "positional": null,
+      "flags": [
+        {
+          "name": "dir",
+          "alias": null,
+          "value": "<path>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "session root to serve",
+          "default": "cwd",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "sync-wait-ms",
+          "alias": null,
+          "value": "<n>",
+          "hidden": false,
+          "acceptedValues": null,
+          "shownValue": null,
+          "effect": "synchronous response wait bound in milliseconds",
+          "default": "45000",
           "lineBreakAfter": false
         }
       ]

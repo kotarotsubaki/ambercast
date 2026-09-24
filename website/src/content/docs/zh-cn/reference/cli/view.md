@@ -48,4 +48,6 @@ view requires --allow-headless when no interactive terminal is attached.
 
 `ambercast view` 会读取 `schemaVersion` 为 3.x 的所有报告。由与当前 CLI 不同的次版本写入的报告，会在运行详情标题中显示"Schema `<version>`"；来自其他主版本的报告会在列表中显示为"Unsupported version `<version>`"，且无法打开。
 
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
+view 是 Ambercast 命令中唯一消耗网络端口的命令；MCP 服务器采用无端口的 stdio。
+
+相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)，[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)。

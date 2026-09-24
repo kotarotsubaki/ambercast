@@ -85,7 +85,21 @@ ambercast is pre-1.0 (0.x), and breaking changes can land in a minor release.
 
 - Chromium only (Firefox and WebKit are planned).
 - Local execution only — no hosted runner.
-- No MCP server yet.
+
+Run `ambercast mcp` to serve the six MCP tools over stdio from the current working directory: generate, run, check, heal, job status, and job cancellation. For a different session root, pass `--dir <path>`.
+
+The launch command is `npx --no-install ambercast mcp`. Register it in Claude Code's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ambercast": {
+      "command": "npx",
+      "args": ["--no-install", "ambercast", "mcp"]
+    }
+  }
+}
+```
 
 ## Contributing
 

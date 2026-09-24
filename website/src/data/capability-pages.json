@@ -1,7 +1,6 @@
 {
   "capabilities": {
     "review": ["reference/cli/review"],
-    "mcp": ["reference/cli/mcp", "reference/mcp-tools", "agents/mcp-server"],
     "baseline": ["reference/cli/baseline-restore"],
     "restore": ["reference/cli/baseline-restore"]
   },

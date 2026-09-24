@@ -1,30 +1,25 @@
 ---
 title: MCP サーバー
-description: ambercast で計画されている MCP サーバーの接続仕様と境界について説明します。
-status: planned
-sidebar:
-  badge:
-    text: Planned
-    variant: caution
+description: ambercast MCP サーバーを使用するエージェント向けの接続境界。
 ---
 
-:::caution
-このページで説明している機能は計画段階のものであり、バージョン 0.3.1 には実装されていません。現在の動作ではなく、計画されている設計上の動作について説明しています。
-:::
+`ambercast mcp` サブコマンドは、打鍵 E2E テストの実行と修復に使う、ポートを持たない `stdio` 接続を提供します。1つのサーバープロセスは1つの session root を提供し、`--dir` で選択します。省略時はプロセスの現在の作業ディレクトリを使います。ツールに渡すファイルはこの root を基準に解決します。`--sync-wait-ms` で同期待機上限を設定でき、既定値は 45000 ms です。
 
-本ドキュメントでは、ambercast における MCP サーバーの計画されている接続仕様と設計境界について説明します。本機能は現在計画中であり、バージョン 0.3.1 には実装されていません。
+## 接続境界 {#connection-boundary}
 
-## ステータス {#status}
+接続では `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` を提供します。前の4つはワークフロー、後の2つはサーバー内ジョブの観測と取消です。入力、アノテーション、Job record、`isError`、MCP エラー面は [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) を参照してください。クライアントへのプロセス登録は [ambercast mcp](/ambercast/ja/reference/cli/mcp/#client-registration) に記載しています。
 
-本ページで説明している機能は計画中のものであり、0.3.1 には実装されていません。
+## 計画時の設計からの変更 {#changes-from-the-planned-design}
 
-## 計画されている接続境界 {#planned-connection-boundary}
+| 旧 planned ページ | 実装済みの接続 |
+| --- | --- |
+| 計画された5ツール | ジョブ状態と取消を含む6ツール |
+| report `outputSchema` を公開 | `outputSchema` を省略 |
+| heal preview のみ | `applyToken` による二段階 heal |
+| 同期ワークフローのみ | 長い呼び出しはジョブとなり、ID なしの status は一覧を返す |
+| server flags 未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` に対応 |
+| MCP error 未指定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` は独立したエラー面 |
+| CLI 入力未指定 | 入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外 |
+| report から exit code を推測 | `_meta.exitCode` に明示 |
 
-エージェントインターフェースの設計では、MCP は stdio を使用する `ambercast mcp` サブコマンドとして計画されており、各インスタンスはそのカレントワーキングディレクトリにスコープされます。
-
-MCP の設計は、ツールのスキーマ、アノテーション、`isError`、および既定の `dryRun` の振る舞いの定義元となります。
-
-関連リンク:
-- [MCP ツール](/ambercast/ja/reference/mcp-tools/)
-- [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)
-- [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
+関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)。

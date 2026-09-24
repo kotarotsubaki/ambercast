@@ -86,7 +86,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `GitHub Security Advisories` | GitHub Security Advisoriesは、非公開の脆弱性報告チャネルです。 | `SECURITY.md`; [セキュリティポリシー](/ambercast/ja/reference/security-policy/#vulnerability-reporting) | 公開issue |
 | `GroundingDocument` | `GroundingDocument` は、Groundingの `schemaVersion`、`planDigest`、およびエントリを所有する厳格なスキーマです。 | `GroundingDocument`; [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` は、中断された実行に対する構造化環境エラーコードです。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | アサーション失敗 |
-| `JSON-RPC` | `JSON-RPC` はMCPトランスポート用として計画中（0.3.1では未実装）であり、0.3.1サーバーランタイムはありません。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#planned-interface) | CLI `--json` |
+| `JSON-RPC` | `JSON-RPC` は実装済み MCP サーバーの stdio メッセージを運びます。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | CLI `--json` |
 | `PlanDocument` | `PlanDocument` は、Planのバージョン、出所、ターゲット、およびステップを所有する厳格なスキーマです。 | `PlanDocument`; [計画ドキュメント](/ambercast/ja/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` は、`SECRET_REF_SOURCE` から構築される完全一致用の固定正規表現です。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | アンカーなしの断片 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` は、唯一受け入れられる要素フィンガープリントのアルゴリズムリテラルです。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | Planスキーマバージョン2 |
@@ -96,24 +96,26 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `ambercast generate` | `ambercast generate` は実装済みのPlan生成コマンドです。 | [ambercast generate](/ambercast/ja/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` は実装済みの保護されたアーティファクト修復コマンドです。 | [ambercast heal](/ambercast/ja/reference/cli/heal/) | runフォールバック |
 | `ambercast init` | `ambercast init` は実装済みで、4つのファイルを書き込みます。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#status) | MCPツール名 |
+| `ambercast mcp` | `ambercast mcp` は実装済みの stdio MCP サーバーを起動します。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | MCPツール名 |
 | `ambercast restore` | `ambercast restore` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
 | `ambercast review` | `ambercast review` は計画中（0.3.1では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
 | `ambercast run` | `ambercast run` は実装済みの決定論的リプレイコマンドです。 | [ambercast run](/ambercast/ja/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` は実装済みの読み取り専用ローカル結果ビューアです。 | [ambercast view](/ambercast/ja/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_review` | `ambercast_review` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 計画中のCLI review |
-| `ambercast_run` | `ambercast_run` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `ambercast_check` | `ambercast_check` は実装済みの読み取り専用 MCP 鮮度確認ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` は実装済みの MCP Plan 生成ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` はプレビューと token 認可による適用を持つ実装済み MCP 修復ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` はこのサーバープロセスのジョブの取消を要求します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
+| `ambercast_job_status` | `ambercast_job_status` はジョブ一覧または単一ジョブの状態と結果を取得します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
+| `ambercast_review` | `ambercast_review` は将来の MCP ツールであり、実装済みの 6 ツールには含まれません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 計画中の CLI review |
+| `ambercast_run` | `ambercast_run` は実装済みの MCP リプレイツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
 | `config.schema.json` | `config.schema.json` は生成される設定JSON Schemaであり、npmのconfig-schemaエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | 設定インスタンス |
-| `dryRun` | `dryRun` はCLI/MCPのhealプレビュー要求用の入力フィールドです。完了した `HealResult` は `dryRun` フィールドではなく `application: preview-only` でプレビューを表します。 | heal要求 / [MCP ツール](/ambercast/ja/reference/mcp-tools/#heal-safety-default) | HealResultの表現 |
+| `dryRun` | `dryRun` はCLI/MCPのhealプレビュー要求用の入力フィールドです。完了した `HealResult` は `dryRun` フィールドではなく `application: preview-only` でプレビューを表します。 | heal要求 / [MCP ツール](/ambercast/ja/reference/mcp-tools/#heal-preview-and-apply) | HealResultの表現 |
 | `fresh-without-grounding` | `fresh-without-grounding` は、`fresh` とは区別される完了したcheckステータスです。 | check結果; [ambercast check](/ambercast/ja/reference/cli/check/#status-vocabulary) | 欠落しているPlan |
 | `grounding.schema.json` | `grounding.schema.json` は生成されるGrounding JSON Schemaであり、npmのエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | Groundingインスタンス |
 | `healReplayIsolation` | `healReplayIsolation` はhealにおいて `idempotent` の値が要求されるターゲットポリシーです。 | ターゲット設定 / heal | ブラウザモード |
 | `inputsDigest` | `inputsDigest` は5つの入力からなるPlanの出所ダイジェストを記録します。 | `computeInputsDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `planDigest` |
-| `isError` | `isError` は計画中のMCP結果分類であり、0.3.1 MCPランタイムセマンティクスはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | test-redステータス |
-| `outputSchema` | `outputSchema` は計画中のMCPスキーマメタデータであり、0.3.1 MCPランタイムセマンティクスはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#planned-tool-contract) | 生成されるnpm JSON Schema |
+| `isError` | `isError` は exit code の写像と MCP 固有の失敗によって実装済み MCP ツールの結果を分類します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | test-redステータス |
+| `outputSchema` | report スキーマが大きいため、実装済みの全 MCP ツール定義では `outputSchema` を省略します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 生成されるnpm JSON Schema |
 | `plan.schema.json` | `plan.schema.json` は生成されるPlan JSON Schemaであり、npmのエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | Planインスタンス |
 | `planDigest` | `planDigest` は、`generatorMeta` を除外したリプレイ関連のPlan内容にGroundingを紐付けます。 | `computePlanDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `inputsDigest` |
 | `producerBundleFingerprint` | `producerBundleFingerprint` はプロデューサコントラクトの出所を示し、その変更は `inputsDigest` を変化させます。 | generateの出所 / [互換性と再生成](/ambercast/ja/reference/compatibility/#regeneration-boundary) | 要素フィンガープリント |
@@ -121,10 +123,10 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `reportPersistence` | `reportPersistence` は、永続化の試行に関するrunエンベロープの状態です。 | runレポート; [レポート](/ambercast/ja/reference/reports/#persistence) | テストステータス |
 | `review` | `review` はレポートスキーマのコマンドブランチであり、実装済みCLIコマンドの存在を示すものではありません。 | `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#result-shapes) | 利用可能なコマンド |
 | `schemaVersion` | `schemaVersion` はバージョン管理されたPlan、Grounding、またはレポートコントラクトを識別します。 | IR/レポートスキーマ | パッケージバージョン |
-| `stderr` | `stderr` は成功したレポート出力ではなく、CLIの使用方法エラー、クラッシュ診断、永続化警告を出力します。 | CLIランタイム / [ambercast mcp](/ambercast/ja/reference/cli/mcp/#planned-interface) | stdoutの応答 |
-| `stdio` | `stdio` は計画中のMCPトランスポートであり、0.3.1サーバーランタイムはありません。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#planned-interface) | ネットワークポート |
+| `stderr` | `stderr` は CLI の使用方法エラー、クラッシュ診断、永続化警告、および MCP 起動ログを出力します。 | CLIランタイム / [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | stdoutの応答 |
+| `stdio` | `stdio` は実装済み MCP サーバーのトランスポートです。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | ネットワークポート |
 | `stdout` | `stdout` はヘルプ/バージョン情報および完了したコマンドレポートを出力し、プロセスのステータスは個別に割り当てられます。 | CLIランタイム / [レポート](/ambercast/ja/reference/reports/#envelope) | stderrの診断情報 |
-| `structuredContent` | `structuredContent` は計画中のMCP結果ペイロードであり、0.3.1 MCPランタイムセマンティクスはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#planned-tool-contract) | CLI JSONテキスト |
+| `structuredContent` | `structuredContent` は実装済み MCP 応答で report envelope または Job record を運びます。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI JSONテキスト |
 | `testIgnore` | `testIgnore` は包含された相対パスから一致するパスを除外します。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testMatch` |
 | `testMatch` | `testMatch` は相対パスに対して少なくとも1つの一致を要求します。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` は、環境変数のキーに対応する完全一致のシークレット参照の例です。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | リテラルの認証情報 |

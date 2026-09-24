@@ -3,4 +3,4 @@
  * documentation checks cannot silently disagree. The generated artifact must retain its
  * existing bytes; independent literal expectations in tests remain an oracle for this tuple.
  */
-export const PLANNED_CAPABILITIES = ['review', 'mcp', 'baseline', 'restore'] as const;
+export const PLANNED_CAPABILITIES = ['review', 'baseline', 'restore'] as const;

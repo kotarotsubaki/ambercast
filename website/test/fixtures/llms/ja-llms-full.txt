@@ -83,7 +83,7 @@ AI にテストを任せるとき、最も危険なのは「壊れているの�
 
 ## 人と AI の両方が読者である {#humans-and-agents}
 
-資産の読者は人間だけではない。Claude Code や Codex のようなコーディングエージェントが、実装し、テストし、直すループの中でテストを読み書きする。ambercast はエージェントを第一級のユーザーとして扱い、CLI に加えて公式スキルを用意し、MCP を計画している。
+資産の読者は人間だけではない。Claude Code や Codex のようなコーディングエージェントが、実装し、テストし、直すループの中でテストを読み書きする。ambercast はエージェントを第一級のユーザーとして扱い、CLI に加えて公式スキルと MCP サーバーを提供する。
 
 エージェント向けに別の仕様書を書くことはしない。同じドキュメントを、人間とエージェントの両方が読める形で保つ。
 
@@ -1674,7 +1674,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `GitHub Security Advisories` | GitHub Security Advisoriesは、非公開の脆弱性報告チャネルです。 | `SECURITY.md`; [セキュリティポリシー](/ambercast/ja/reference/security-policy/#vulnerability-reporting) | 公開issue |
 | `GroundingDocument` | `GroundingDocument` は、Groundingの `schemaVersion`、`planDigest`、およびエントリを所有する厳格なスキーマです。 | `GroundingDocument`; [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` は、中断された実行に対する構造化環境エラーコードです。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | アサーション失敗 |
-| `JSON-RPC` | `JSON-RPC` はMCPトランスポート用として計画中（0.3.1では未実装）であり、0.3.1サーバーランタイムはありません。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#planned-interface) | CLI `--json` |
+| `JSON-RPC` | `JSON-RPC` は実装済み MCP サーバーの stdio メッセージを運びます。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | CLI `--json` |
 | `PlanDocument` | `PlanDocument` は、Planのバージョン、出所、ターゲット、およびステップを所有する厳格なスキーマです。 | `PlanDocument`; [計画ドキュメント](/ambercast/ja/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` は、`SECRET_REF_SOURCE` から構築される完全一致用の固定正規表現です。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | アンカーなしの断片 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` は、唯一受け入れられる要素フィンガープリントのアルゴリズムリテラルです。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | Planスキーマバージョン2 |
@@ -1684,24 +1684,26 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `ambercast generate` | `ambercast generate` は実装済みのPlan生成コマンドです。 | [ambercast generate](/ambercast/ja/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` は実装済みの保護されたアーティファクト修復コマンドです。 | [ambercast heal](/ambercast/ja/reference/cli/heal/) | runフォールバック |
 | `ambercast init` | `ambercast init` は実装済みで、4つのファイルを書き込みます。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#status) | MCPツール名 |
+| `ambercast mcp` | `ambercast mcp` は実装済みの stdio MCP サーバーを起動します。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | MCPツール名 |
 | `ambercast restore` | `ambercast restore` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
 | `ambercast review` | `ambercast review` は計画中（0.3.1では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
 | `ambercast run` | `ambercast run` は実装済みの決定論的リプレイコマンドです。 | [ambercast run](/ambercast/ja/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` は実装済みの読み取り専用ローカル結果ビューアです。 | [ambercast view](/ambercast/ja/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_review` | `ambercast_review` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 計画中のCLI review |
-| `ambercast_run` | `ambercast_run` は計画中のMCPツールトークンであり、0.3.1サーバーランタイムはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `ambercast_check` | `ambercast_check` は実装済みの読み取り専用 MCP 鮮度確認ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` は実装済みの MCP Plan 生成ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` はプレビューと token 認可による適用を持つ実装済み MCP 修復ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` はこのサーバープロセスのジョブの取消を要求します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
+| `ambercast_job_status` | `ambercast_job_status` はジョブ一覧または単一ジョブの状態と結果を取得します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
+| `ambercast_review` | `ambercast_review` は将来の MCP ツールであり、実装済みの 6 ツールには含まれません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 計画中の CLI review |
+| `ambercast_run` | `ambercast_run` は実装済みの MCP リプレイツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
 | `config.schema.json` | `config.schema.json` は生成される設定JSON Schemaであり、npmのconfig-schemaエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | 設定インスタンス |
-| `dryRun` | `dryRun` はCLI/MCPのhealプレビュー要求用の入力フィールドです。完了した `HealResult` は `dryRun` フィールドではなく `application: preview-only` でプレビューを表します。 | heal要求 / [MCP ツール](/ambercast/ja/reference/mcp-tools/#heal-safety-default) | HealResultの表現 |
+| `dryRun` | `dryRun` はCLI/MCPのhealプレビュー要求用の入力フィールドです。完了した `HealResult` は `dryRun` フィールドではなく `application: preview-only` でプレビューを表します。 | heal要求 / [MCP ツール](/ambercast/ja/reference/mcp-tools/#heal-preview-and-apply) | HealResultの表現 |
 | `fresh-without-grounding` | `fresh-without-grounding` は、`fresh` とは区別される完了したcheckステータスです。 | check結果; [ambercast check](/ambercast/ja/reference/cli/check/#status-vocabulary) | 欠落しているPlan |
 | `grounding.schema.json` | `grounding.schema.json` は生成されるGrounding JSON Schemaであり、npmのエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | Groundingインスタンス |
 | `healReplayIsolation` | `healReplayIsolation` はhealにおいて `idempotent` の値が要求されるターゲットポリシーです。 | ターゲット設定 / heal | ブラウザモード |
 | `inputsDigest` | `inputsDigest` は5つの入力からなるPlanの出所ダイジェストを記録します。 | `computeInputsDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `planDigest` |
-| `isError` | `isError` は計画中のMCP結果分類であり、0.3.1 MCPランタイムセマンティクスはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | test-redステータス |
-| `outputSchema` | `outputSchema` は計画中のMCPスキーマメタデータであり、0.3.1 MCPランタイムセマンティクスはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#planned-tool-contract) | 生成されるnpm JSON Schema |
+| `isError` | `isError` は exit code の写像と MCP 固有の失敗によって実装済み MCP ツールの結果を分類します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | test-redステータス |
+| `outputSchema` | report スキーマが大きいため、実装済みの全 MCP ツール定義では `outputSchema` を省略します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 生成されるnpm JSON Schema |
 | `plan.schema.json` | `plan.schema.json` は生成されるPlan JSON Schemaであり、npmのエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | Planインスタンス |
 | `planDigest` | `planDigest` は、`generatorMeta` を除外したリプレイ関連のPlan内容にGroundingを紐付けます。 | `computePlanDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `inputsDigest` |
 | `producerBundleFingerprint` | `producerBundleFingerprint` はプロデューサコントラクトの出所を示し、その変更は `inputsDigest` を変化させます。 | generateの出所 / [互換性と再生成](/ambercast/ja/reference/compatibility/#regeneration-boundary) | 要素フィンガープリント |
@@ -1709,10 +1711,10 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `reportPersistence` | `reportPersistence` は、永続化の試行に関するrunエンベロープの状態です。 | runレポート; [レポート](/ambercast/ja/reference/reports/#persistence) | テストステータス |
 | `review` | `review` はレポートスキーマのコマンドブランチであり、実装済みCLIコマンドの存在を示すものではありません。 | `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#result-shapes) | 利用可能なコマンド |
 | `schemaVersion` | `schemaVersion` はバージョン管理されたPlan、Grounding、またはレポートコントラクトを識別します。 | IR/レポートスキーマ | パッケージバージョン |
-| `stderr` | `stderr` は成功したレポート出力ではなく、CLIの使用方法エラー、クラッシュ診断、永続化警告を出力します。 | CLIランタイム / [ambercast mcp](/ambercast/ja/reference/cli/mcp/#planned-interface) | stdoutの応答 |
-| `stdio` | `stdio` は計画中のMCPトランスポートであり、0.3.1サーバーランタイムはありません。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#planned-interface) | ネットワークポート |
+| `stderr` | `stderr` は CLI の使用方法エラー、クラッシュ診断、永続化警告、および MCP 起動ログを出力します。 | CLIランタイム / [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | stdoutの応答 |
+| `stdio` | `stdio` は実装済み MCP サーバーのトランスポートです。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | ネットワークポート |
 | `stdout` | `stdout` はヘルプ/バージョン情報および完了したコマンドレポートを出力し、プロセスのステータスは個別に割り当てられます。 | CLIランタイム / [レポート](/ambercast/ja/reference/reports/#envelope) | stderrの診断情報 |
-| `structuredContent` | `structuredContent` は計画中のMCP結果ペイロードであり、0.3.1 MCPランタイムセマンティクスはありません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#planned-tool-contract) | CLI JSONテキスト |
+| `structuredContent` | `structuredContent` は実装済み MCP 応答で report envelope または Job record を運びます。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI JSONテキスト |
 | `testIgnore` | `testIgnore` は包含された相対パスから一致するパスを除外します。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testMatch` |
 | `testMatch` | `testMatch` は相対パスに対して少なくとも1つの一致を要求します。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` は、環境変数のキーに対応する完全一致のシークレット参照の例です。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | リテラルの認証情報 |
@@ -1721,10 +1723,94 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 
 ---
 
+# MCP ツール
+Source: https://kotarotsubaki.github.io/ambercast/ja/reference/mcp-tools/
+
+MCP サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` の順で6つのツールを公開します。ツール名は ambercast プレフィックスと snake_case を使用し、すべての CLI コマンドを複製するものではありません。
+
+## ツール一覧 {#tool-table}
+
+アノテーションは readOnly / destructive / idempotent / openWorld の順です。4値をすべて明示しますが、認可ではなくヒントです。generate の冪等ヒントは弱い意味であり、最新の Plan はスキップされて効果が収束しても、AI 出力は変動し得ます。
+
+| ツール | 対応 CLI | アノテーション | `isError: true` | `isError: false` の負の結果 |
+| --- | --- | --- | --- | --- |
+| `ambercast_generate` | generate | false / false / true（弱）/ false | exit 2・3 | exit 1（strict 曖昧）、exit 5 |
+| `ambercast_run` | run | false / false / false / true | exit 2・3・4（MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED） | exit 1（assertion red）、exit 5 |
+| `ambercast_check` | check | true / false / true / false | exit 2・3 | exit 4（stale は results[].status の正常成果）、exit 5 |
+| `ambercast_heal` | heal | false / true / false / true | exit 2（CI 拒否含む）・3・4、`HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED` | exit 1（未解決・拒否）、exit 5 |
+| `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`、failed 時の `JOB_FAILED`、結果のある completed/cancelled は元ツールの写像 | 非終端 record・一覧・queued cancel record |
+| `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
+
+`isError` はレポートの集約済み exit code から決め、個別の report error は再分類しません。heal は Claude Code 用の対話ヒントも設定しますが、それ自体は承認の証拠ではありません。
+
+## 入力 {#inputs}
+
+入力は strict object です。不明キー、型不一致、refine 違反は SDK の `Input validation error` と `isError: true` になります。引数がない場合は `{}` を渡します。
+
+| 範囲 | プロパティと既定値 |
+| --- | --- |
+| 共通 | `files?: string[]`（省略と `[]` はともに config discovery、相対パスは session root 基準）、`allowEmpty?: boolean`（false） |
+| `ambercast_generate` | `target?: string`（ジェネレーターが利用できる Target 定義を制限する）、`strict?: boolean`（false）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
+| `ambercast_run` | `grep?: string`（有効な正規表現）、`resolve?: boolean`（false）、`updateCache?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
+| `ambercast_check` | 共通入力のみ |
+| `ambercast_heal` | `dryRun?: boolean`（true）、`applyToken?: string`、`ai?: 'claude' \| 'codex'` |
+| `ambercast_job_status` | `jobId?: string`（省略時は当該サーバープロセスの一覧）、`waitMs?: number`（0、整数 0〜45000、ID 指定時のみ有効） |
+| `ambercast_job_cancel` | `jobId: string` |
+
+MCP 入力から CLI フラグ `headed`（headless 固定）、`list`、`stale`（fail 固定）、`json`、`yes`（`applyToken` に置換）、`configPath` を除外します。
+
+## heal のプレビューと適用 {#heal-preview-and-apply}
+
+`ambercast_heal` は CLI heal の false 既定と異なり、プレビュー（`dryRun: true`）が既定です。コミットがあるプレビューのみ `applyToken` を返します。適用には `dryRun: false` と `applyToken` だけを指定し、`files`、`ai`、`allowEmpty` は省略します。プレビューでは `applyToken` を省略します。違反は SDK 入力エラーです。適用は同期実行で、ジョブを作りません。token は 128-bit 暗号乱数の hex 32 文字です。新しいプレビューは pending token を supersede します。pending token は token を含む応答を初めて組み立ててから 600000 ms で期限切れになり、consumed token は確定から 600000 ms の間、保存済み結果を再送します。
+
+クライアントが form elicitation に対応する場合、600000 ms の制限で確認を求めます。受諾と確認で修復を適用し、拒否なら未適用、取消なら中断となります。form elicitation がないクライアントではサーバーが適用を認可します。token はプレビューを識別するもので、適用の要求は別の操作です。クライアントのヒントだけでは認可になりません。
+
+## 結果とジョブ {#results-and-jobs}
+
+全ツールで `outputSchema` を省略します。report JSON Schema は 136 KB で `tools/list` を圧迫し、ツールは report envelope、単一の Job record、または Job record の一覧のいずれかを返すためです。完了した report の `structuredContent` は CLI JSON 出力と同じ envelope で、exit code を追加しません。スクリーンショットは projectRoot 相対のパスであり、inline base64 にしません。
+
+text 1行目は `exitCode: <n>` です。コミットのある heal preview のみ2行目が `applyToken: <token>` になり、その後に envelope JSON が続きます。応答には `_meta.exitCode` と、該当する場合 `_meta.applyToken` も含まれます。`ambercast_job_status` で取得した完了ジョブは同じ content・error 分類・metadata に、result を含まない `_meta.job` を加えます。
+
+generate、run、heal preview は呼び出しごとに Job を作ります。同期待機上限内に終われば report 応答を返し、終わらなければジョブハンドルを返します。ハンドルと非終端 status は Job record を `structuredContent` に入れ、text は `jobId: <id>`、`status: <status>`、status message の3行です。metadata は `_meta.jobId` を含みます。`ambercast_check` と heal apply は同期実行です。`ambercast_job_status` の ID 省略時は当該サーバープロセスのジョブを新しい順で一覧表示し、`structuredContent` に `jobs` 配列を入れます。空の一覧の text は `no jobs` です。これはサーバー固有の経路であり、MCP Tasks extension ではありません。`ambercast_job_cancel` は running または queued ジョブを取り消して record を返します。record は終端から 1800000 ms 後、またはサーバー終了時に消えます。
+
+| Job record フィールド | 意味 |
+| --- | --- |
+| `jobId` | UUID v4 の識別子 |
+| `tool` | 元ツール |
+| `status` | working / completed / failed / cancelled |
+| `statusMessage` | 空でない進捗または終端状態の文 |
+| `progress` | 通知の有無に関係ない runtime event の累計 |
+| `createdAt` | ISO 8601 UTC の作成日時 |
+| `lastUpdatedAt` | status または progress が最後に変化した ISO 8601 UTC 日時 |
+| `pollIntervalMs` | 2000 |
+| `ttlMs` | 1800000 |
+
+## MCP エラー {#mcp-errors}
+
+MCP 層の意味エラーは `isError: true`、text 1個 `<CODE>: <message>`、`structuredContent` なしです。コードは `HEAL_APPLY_TOKEN_INVALID`（reason `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` です。入力不正は SDK の検証エラーを使用し、ドメイン・環境失敗は report envelope に残します。
+
+## 計画時の設計からの変更 {#changes-from-the-planned-design}
+
+| 旧 planned ページ | 実装済みの契約 |
+| --- | --- |
+| review を含む5ツール | 4ワークフローと status/cancel の6ツール。review は公開しない |
+| report `outputSchema` を公開 | 全ツールで `outputSchema` を省略 |
+| heal は preview のみ | `applyToken` による二段階と同期 apply |
+| 同期ワークフローのみ | 長い generate/run/heal preview はジョブになり、ID なしの status は一覧を返す |
+| server flags 未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` を受け付ける |
+| report exit 分類のみ | MCP error code と SDK 検証エラーを report envelope と区別 |
+| CLI flag 対応未指定 | 入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外 |
+| exit code は report から推測 | `_meta.exitCode` と text 1行目に exit code を載せる |
+| `target` は4ツール共通と規定 | `target` は `ambercast_generate` のみが受け付ける。`ambercast_run`・`ambercast_check`・`ambercast_heal` は Plan 自体に記録された Target を使用する（CLI 側の Plan IR v4 移行と一致） |
+
+関連リンク: [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[レポート](/ambercast/ja/reference/reports/#envelope)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)。
+
+---
+
 # CLIの概要
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/
 
-`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal`、`view` の 6 つのコマンドが実装されています。
+`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の 7 つのコマンドが実装されています。
 
 ## コマンド体系 {#command-surface}
 
@@ -1738,6 +1824,7 @@ Commands:
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
   view                 Browse run results in a browser
+  mcp                  Serve the MCP stdio server
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -1759,6 +1846,9 @@ Heal options:
 View options:
   --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
+Mcp options:
+  --dir <path>  --sync-wait-ms <n>
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -1768,7 +1858,7 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-実装されているコマンドは `init`、`generate`、`run`、`check`、`heal`、`view` です。
+実装されているコマンドは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` です。
 
 トップレベルの `--help` および `--version` は、コマンドのディスパッチ前に処理を終了（ショートサーキット）します。不正な形式の引数が指定された場合は、レポートを出力せずに終了コード 2 で終了します。
 
@@ -1778,26 +1868,27 @@ Heal configuration:
 | --- | --- | --- | --- |
 | init | なし | `dir`（対象ディレクトリ）、`yes`/`-y`（確認の省略）、`force`（既存設定の置換）、`no-color`（カラー無効化） | `--dir` 引数（未指定時は cwd） |
 | generate | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
-| check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| check | リテラルパス（パス未指定時は探索） | `allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 | view | なし | `port`（ポート指定）、`host`（バインドアドレス）、`allow-headless`（非対話許可）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| mcp | なし | `dir`（セッションルート）、`sync-wait-ms`（同期応答の待機上限、ミリ秒） | `--dir` 引数（未指定時は cwd） |
 
-`--` はオプション解析を終了し、後続のすべての引数をリテラルパスとして残します。
+ファイルパスを受け付けるコマンドでは、`--` はオプション解析を終了し、後続の引数をリテラルパスとして残します。
 
-`--json` および `--no-color` は、グローバルフラグの抽象化機構ではなく、各コマンドによって個別に解析されます。
+`--json` および `--no-color` は、グローバルフラグの抽象化機構ではなく、これらを受け付ける各コマンドによって個別に解析されます。
 
-`--list` を除き、各位置引数は `testDir` 内にあり、空でない名前部分を持ち、拡張子が正確に `.test.md` であるリテラルパスでなければなりません。適格でないパスは、黙って無視されたり実行時クラッシュに至ったりする代わりに `PROMPT_PATH_INVALID` を発生させます。
+`generate`、`run`、`check`、`heal` では、`--list` を除き、各位置引数は `testDir` 内にあり、空でない名前部分を持ち、拡張子が正確に `.test.md` であるリテラルパスでなければなりません。適格でないパスは、黙って無視されたり実行時クラッシュに至ったりする代わりに `PROMPT_PATH_INVALID` を発生させます。
 
-ターゲットの優先順位は、明示的に指定されたターゲット、設定された既定値、単一のみ設定されたターゲットの順序で評価され、いずれにも該当しない場合は選択に失敗します。
+`generate --target` はジェネレーターが利用できる Target 定義を制限します。run、check、heal は各 Plan に記録された Target 名を使用します。
 
 ## 探索の既定動作 {#discovery-default}
 
-リテラルファイルが指定されていない場合、`generate`、`run`、`check`、`heal` は対象の選択を設定済みの自動探索に委譲します。`init` は探索の対象になりません。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
+`generate`、`run`、`check`、`heal` にリテラルファイルを指定しない場合、対象の選択を設定済みの自動探索に委譲します。`init`、`view`、`mcp` はプロンプトファイルを位置引数として受け付けません。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
 
 探索処理は POSIX 相対パスを評価し、包含パターンのマッチ（inclusion match）を要求した上で、除外パターンのマッチ（ignore match）によって該当するパスを除外します。
 
-関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast init](/ambercast/ja/reference/cli/init/#flags)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)、[ambercast view](/ambercast/ja/reference/cli/view/#flags)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)
 
 ---
 
@@ -2118,7 +2209,76 @@ view requires --allow-headless when no interactive terminal is attached.
 
 `ambercast view` は `schemaVersion` が 3.x であるレポートをすべて読み取ります。現行 CLI と異なるマイナー版で書かれたレポートは、run 詳細ヘッダに「Schema `<version>`」と表示されます。異なるメジャー版のレポートは「Unsupported version `<version>`」として一覧に表示され、開くことはできません。
 
-関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)。
+`view` は、Ambercast のコマンドの中でネットワークポートを消費する唯一のコマンドです（MCP サーバーはポートを使用しない stdio 通信です）。
+
+関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)。
+
+---
+
+# ambercast mcp
+Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/mcp/
+
+`ambercast mcp` はポートを使用しない MCP サーバーを `stdio` で起動します。各プロセスが1つの session root を提供します。
+
+## 使用法 {#usage}
+
+```sh
+ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
+```
+
+## フラグ {#flags}
+
+| フラグ | 値 | 効果 | 既定値 |
+| --- | --- | --- | --- |
+| `--dir` | path | 提供する session root | cwd |
+| `--sync-wait-ms` | n | 同期応答の待機上限（ミリ秒） | 45000 |
+
+`--dir` は session root を選び、省略時はプロセスの現在の作業ディレクトリを使用します。相対パスもそこを基準に解決します。`--sync-wait-ms` は正の整数で既定値は 45000 です。長いワークフローがジョブハンドルを返すまでの同期待機を制限します。`--help` は他の引数より優先され、usage を stdout に出して exit 0 になります。
+
+解決したパスが存在しないかディレクトリでない場合、stderr に `ambercast mcp: --dir <path> is not a directory.` を出してサーバーを起動せず exit 2 になります。起動失敗は `ambercast mcp: failed to start (<error name>)` を出して exit 3 になります。不正なオプション、位置引数、待機上限は CLI の usage error を stderr に出して exit 2 になります。
+
+## 転送と終了 {#transport-and-shutdown}
+
+stdout には JSON-RPC 行だけを出します。stderr には進捗と起動時の1行 `ambercast mcp: serving <session root>` を出します。stdin end、SIGTERM、SIGINT のいずれかで draining に入ります。実行中の呼び出しを abort し、最大 10000 ms 待ちます。すべて確定すればサーバーを閉じて exit 0、期限内に確定しない場合は exit 3 になります。draining 中は新しいツール呼び出しを受け付けません。
+
+## クライアント登録 {#client-registration}
+
+ambercast がインストールされたプロジェクトで `npx --no-install ambercast mcp` を使用します。Claude Code はプロジェクトの `.mcp.json` を読みます。
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+Codex CLI は `config.toml` を読みます。
+
+```toml
+[mcp_servers.ambercast]
+command = "npx"
+args = ["--no-install", "ambercast", "mcp"]
+```
+
+Claude Desktop の設定にも同じサーバー項目を指定できます。
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+クライアントは常に ambercast がインストールされたプロジェクトから起動してください。`npx --no-install` がパッケージを解決できる必要があるためです。`--dir <path>` はサーバー起動後に別の session root を選ぶだけで、このパッケージ解決には影響しません。サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` を提供します。
+
+## 計画時の設計からの変更 {#changes-from-the-planned-design}
+
+| 旧 planned ページ | 実装済みの契約 |
+| --- | --- |
+| server flags 未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` に対応 |
+| 計画された5ツール | ジョブ状態と取消を含む6ツール |
+| report `outputSchema` を公開 | `outputSchema` を省略 |
+| heal preview のみ | `applyToken` による二段階 heal |
+| 同期呼び出しのみ | 長い呼び出しはジョブとなり、ID なしの status は一覧を返す |
+| MCP error 未指定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` は独立したエラー応答 |
+| CLI 入力フラグ未指定 | ツール入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外 |
+| report から exit code を推測 | `_meta.exitCode` に明示 |
+
+関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)。
 
 ---
 
@@ -3226,7 +3386,7 @@ ambercastの現在の実装境界を明確にし、実装済みの機能と今�
 
 ## 現行リリースで実装済み {#implemented}
 
-CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、および `view` を公開しています。一方で、実装されているパーサーには MCP サブコマンドは公開されていません。
+CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` を公開しています。MCP サブコマンドは stdio で 6 ツールを提供します。
 
 また、0.3.1 ではプロデューサ契約のフィンガープリントが変更されました。これにより、プロデューサバンドルおよび `inputsDigest` がstale（古くなった状態）になるため、0.3.1 では 0.1.0 のプランの再生成が必要です。
 
@@ -3237,7 +3397,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、および 
 
 ## 現行境界以降の計画 {#planned-after-current-boundary}
 
-現行の実装境界以降に向けて、計画されているドキュメントは `review`、`mcp`、baseline/restore、および MCPツールを対象としています。
+`review`、baseline/restore は引き続き計画中です。公式スキルは計画中のままですが、MCP ツールは利用できます。
 
 また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
 
@@ -3291,11 +3451,11 @@ AIエージェント向けのドキュメントでは、読む順序、副作用
 # オペレーション規約
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/
 
-本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `init`、`generate`、`run`、`check`、`heal`、`view` の6つです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
+本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
 
 ## コマンド規約 {#command-contract}
 
-パーサーが実装済みコマンドとして公開しているのは、`init`、`generate`、`run`、`check`、`heal`、`view` の6つのコマンドのみです。`check` と `view` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
+パーサーが実装済みコマンドとして公開しているのは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのコマンドのみです。`check` と `view` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
 
 | コマンド | 前提条件 | 副作用 | 承認の要否 | CIで安全か |
 | --- | --- | --- | --- | --- |
@@ -3305,6 +3465,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/
 | check | 選択対象が検出可能であること。 | プロンプトとアーティファクトの読み取りのみを行います。 | ambercast アーティファクト書き込みの承認は不要です。 | 安全です。 |
 | heal | ターゲットが冪等であり、CI環境では実際の試行がCIで有効化されていること。 | runs ディレクトリ内に試行のエビデンスを書き込む場合があります。確認後にのみ、測定された plan/grounding 候補をコミットします。 | ユーザーによる明示的な承認が必要です。--yes はエージェントへの権限付与ではありません。 | 既定では安全ではありません（ci.heal: true の場合のみ）。 |
 | view | 対話端末、または `--allow-headless`。バインド可能な空きポートがあること。 | なし。永続化された run report を読み取るだけの HTTP サーバーです。 | ambercast アーティファクト書き込みの承認は不要です。 | 既定では安全ではありません。`--allow-headless` なしの非対話利用は拒否されます。 |
+| mcp | セッションルートのディレクトリが存在すること。 | stdio サーバーを起動します。ツール呼び出しの書き込みと承認境界はツールごとに適用されます。 | 呼び出すツールによります。 | 呼び出すツールによります。 |
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/), [ambercast init](/ambercast/ja/reference/cli/init/#confirmation), [ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions), [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
 
@@ -3476,3 +3637,29 @@ ambercast は `skills/ambercast/SKILL.md` に `ambercast` という名前の [Ag
 エージェントインターフェースの設計では、人間向けのプロンプトやビューアのサーフェスと並び、コーディングエージェントをファーストクラスのユーザーとして扱います。
 
 関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/), [MCP サーバー](/ambercast/ja/agents/mcp-server/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
+
+---
+
+# MCP サーバー
+Source: https://kotarotsubaki.github.io/ambercast/ja/agents/mcp-server/
+
+`ambercast mcp` サブコマンドは、打鍵 E2E テストの実行と修復に使う、ポートを持たない `stdio` 接続を提供します。1つのサーバープロセスは1つの session root を提供し、`--dir` で選択します。省略時はプロセスの現在の作業ディレクトリを使います。ツールに渡すファイルはこの root を基準に解決します。`--sync-wait-ms` で同期待機上限を設定でき、既定値は 45000 ms です。
+
+## 接続境界 {#connection-boundary}
+
+接続では `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` を提供します。前の4つはワークフロー、後の2つはサーバー内ジョブの観測と取消です。入力、アノテーション、Job record、`isError`、MCP エラー面は [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) を参照してください。クライアントへのプロセス登録は [ambercast mcp](/ambercast/ja/reference/cli/mcp/#client-registration) に記載しています。
+
+## 計画時の設計からの変更 {#changes-from-the-planned-design}
+
+| 旧 planned ページ | 実装済みの接続 |
+| --- | --- |
+| 計画された5ツール | ジョブ状態と取消を含む6ツール |
+| report `outputSchema` を公開 | `outputSchema` を省略 |
+| heal preview のみ | `applyToken` による二段階 heal |
+| 同期ワークフローのみ | 長い呼び出しはジョブとなり、ID なしの status は一覧を返す |
+| server flags 未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` に対応 |
+| MCP error 未指定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` は独立したエラー面 |
+| CLI 入力未指定 | 入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外 |
+| report から exit code を推測 | `_meta.exitCode` に明示 |
+
+関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)。

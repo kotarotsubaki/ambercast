@@ -83,7 +83,7 @@ That is why ambercast prioritizes assertion quality above everything else, and w
 
 ## Both humans and AI are readers {#humans-and-agents}
 
-An asset's readers are not only human. Coding agents such as Claude Code and Codex read and write tests inside their own loop of implementing, testing, and fixing. ambercast treats agents as first-class users, and ships an official skill alongside the CLI, with an MCP server planned.
+An asset's readers are not only human. Coding agents such as Claude Code and Codex read and write tests inside their own loop of implementing, testing, and fixing. ambercast treats agents as first-class users, and ships an official skill and an MCP server alongside the CLI.
 
 There is no separate specification written for agents. The same documentation is kept readable by both humans and agents.
 
@@ -1647,7 +1647,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `GitHub Security Advisories` | GitHub Security Advisories is the private vulnerability-reporting channel. | `SECURITY.md`; [Security policy](/ambercast/reference/security-policy/#vulnerability-reporting) | public issues |
 | `GroundingDocument` | `GroundingDocument` is the strict schema owning Grounding `schemaVersion`, `planDigest`, and entries. | `GroundingDocument`; [Grounding document](/ambercast/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` is the structured environment-error code for interrupted execution. | report schema; [Error codes](/ambercast/reference/error-codes/#code-vocabulary) | assertion failure |
-| `JSON-RPC` | `JSON-RPC` is planned-only for the MCP transport and has no 0.3.1 server runtime. | [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | CLI `--json` |
+| `JSON-RPC` | `JSON-RPC` carries the implemented MCP server's stdio messages. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | CLI `--json` |
 | `PlanDocument` | `PlanDocument` is the strict schema owning Plan version, provenance, targets, and steps. | `PlanDocument`; [Plan document](/ambercast/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` is the whole-value anchored regular expression built from `SECRET_REF_SOURCE`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | unanchored fragment |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` is the only accepted element-fingerprint algorithm literal. | `Fingerprint`; [Element fingerprint](/ambercast/spec/fingerprint/) | Plan schema version 2 |
@@ -1657,24 +1657,26 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
 | `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` is planned-only and rejected by the 0.3.1 parser. | [ambercast mcp](/ambercast/reference/cli/mcp/#status) | MCP tool name |
+| `ambercast mcp` | `ambercast mcp` starts the implemented stdio MCP server. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | MCP tool name |
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
 | `ambercast run` | `ambercast run` is the implemented deterministic replay command. | [ambercast run](/ambercast/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` is the implemented read-only local results viewer. | [ambercast view](/ambercast/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_review` | `ambercast_review` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | planned CLI review |
-| `ambercast_run` | `ambercast_run` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `ambercast_check` | `ambercast_check` is the implemented read-only MCP freshness tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` is the implemented MCP Plan-generation tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` is the implemented MCP repair tool, with preview and token-authorized apply. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` requests cancellation of a job in this server process. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | a CLI command |
+| `ambercast_job_status` | `ambercast_job_status` lists jobs or retrieves one job's status and result. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | a CLI command |
+| `ambercast_review` | `ambercast_review` is a future MCP tool and is absent from the implemented six-tool server. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | planned CLI review |
+| `ambercast_run` | `ambercast_run` is the implemented MCP replay tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
 | `config.schema.json` | `config.schema.json` is the generated config JSON Schema and npm config-schema export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | a config instance |
-| `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-safety-default) | HealResult representation |
+| `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-preview-and-apply) | HealResult representation |
 | `fresh-without-grounding` | `fresh-without-grounding` is a completed check status distinct from `fresh`. | check result; [ambercast check](/ambercast/reference/cli/check/#status-vocabulary) | missing Plan |
 | `grounding.schema.json` | `grounding.schema.json` is the generated Grounding JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Grounding instance |
 | `healReplayIsolation` | `healReplayIsolation` is the target policy whose `idempotent` value is required by heal. | target config / heal | browser mode |
 | `inputsDigest` | `inputsDigest` records the five-input Plan provenance digest. | `computeInputsDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `planDigest` |
-| `isError` | `isError` is planned MCP result classification and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
-| `outputSchema` | `outputSchema` is planned MCP schema metadata and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract) | generated npm JSON Schema |
+| `isError` | `isError` classifies implemented MCP tool results, with exit-code mappings and MCP-specific failures. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
+| `outputSchema` | `outputSchema` is omitted from every implemented MCP tool definition because the report schema is too large for `tools/list`. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | generated npm JSON Schema |
 | `plan.schema.json` | `plan.schema.json` is the generated Plan JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Plan instance |
 | `planDigest` | `planDigest` binds Grounding to replay-relevant Plan content excluding `generatorMeta`. | `computePlanDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `inputsDigest` |
 | `producerBundleFingerprint` | `producerBundleFingerprint` names producer-contract provenance whose change alters `inputsDigest`. | generate provenance / [Compatibility](/ambercast/reference/compatibility/#regeneration-boundary) | element fingerprint |
@@ -1682,10 +1684,10 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `reportPersistence` | `reportPersistence` is the run-envelope state of its persistence attempt. | run report; [Reports](/ambercast/reference/reports/#persistence) | test status |
 | `review` | `review` is a report-schema command branch, not evidence of an implemented CLI command. | `ReportEnvelope`; [Reports](/ambercast/reference/reports/#result-shapes) | available command |
 | `schemaVersion` | `schemaVersion` discriminates a versioned Plan, Grounding, or report contract. | IR/report schemas | package version |
-| `stderr` | `stderr` carries CLI usage errors, crash diagnostics, and persistence warnings rather than successful report output. | CLI runtime / [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | stdout answer |
-| `stdio` | `stdio` is planned MCP transport and has no 0.3.1 server runtime. | [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | a network port |
+| `stderr` | `stderr` carries CLI usage errors, crash diagnostics, persistence warnings, and MCP startup logs rather than successful report output. | CLI runtime / [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | stdout answer |
+| `stdio` | `stdio` is the implemented MCP server transport. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | a network port |
 | `stdout` | `stdout` carries help/version and completed command reports, while process status is assigned separately. | CLI runtime / [Reports](/ambercast/reference/reports/#envelope) | stderr diagnostics |
-| `structuredContent` | `structuredContent` is planned MCP result payload and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract) | CLI JSON text |
+| `structuredContent` | `structuredContent` carries a report envelope or Job record in implemented MCP responses. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI JSON text |
 | `testIgnore` | `testIgnore` excludes a matching relative path after inclusion. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testMatch` |
 | `testMatch` | `testMatch` requires at least one inclusion match for a relative path. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` exemplifies a whole-value secret reference whose body maps to an environment key. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal credential |
@@ -1694,14 +1696,98 @@ See also: [CLI overview](/ambercast/reference/cli/overview/), [Configuration](/a
 
 ---
 
+# MCP Tools
+Source: https://kotarotsubaki.github.io/ambercast/reference/mcp-tools/
+
+The MCP server exposes six tools in this order: `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. Tool names use the ambercast prefix and snake_case; the server does not mirror every CLI command.
+
+## Tool table {#tool-table}
+
+Annotations list readOnly / destructive / idempotent / openWorld, in that order. All four values are explicit. They are hints, not authorization. Generate's idempotent hint is weak: a fresh Plan is skipped and effects converge, but AI output can vary.
+
+| Tool | CLI equivalent | Annotations | `isError: true` | Negative result with `isError: false` |
+| --- | --- | --- | --- | --- |
+| `ambercast_generate` | generate | false / false / true (weak) / false | Exit 2 or 3 | Exit 1 (strict ambiguity), exit 5 |
+| `ambercast_run` | run | false / false / false / true | Exit 2, 3, or 4 (MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED) | Exit 1 (assertion red), exit 5 |
+| `ambercast_check` | check | true / false / true / false | Exit 2 or 3 | Exit 4 (stale is a normal result in results[].status), exit 5 |
+| `ambercast_heal` | heal | false / true / false / true | Exit 2 (including CI refusal), 3, or 4; `HEAL_APPLY_TOKEN_INVALID`; `HEAL_APPLY_FAILED` | Exit 1 (unresolved or declined), exit 5 |
+| `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`; `JOB_FAILED` for a failed job; completed/cancelled jobs with a result use their source tool's mapping | Nonterminal record, job list, queued-cancel record |
+| `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
+
+The report's aggregated exit code determines `isError`; the server does not reclassify individual report errors. The heal tool also sets the Claude Code interaction hint, but the hint is not proof of approval.
+
+## Inputs {#inputs}
+
+Inputs are strict objects. Unknown keys, type mismatches, and invalid refinements produce the SDK's `Input validation error` text with `isError: true`. Supply `{}` when there are no arguments.
+
+| Scope | Properties and defaults |
+| --- | --- |
+| Common workflow input | `files?: string[]` (omission and `[]` both select config discovery; relative paths use the session root), `allowEmpty?: boolean` (false) |
+| `ambercast_generate` | `target?: string` (restricts which Target definitions the generator may use), `strict?: boolean` (false), `force?: boolean` (false), `dryRun?: boolean` (false), `ai?: 'claude' \| 'codex'` |
+| `ambercast_run` | `grep?: string` (valid regular expression), `resolve?: boolean` (false), `updateCache?: boolean` (false), `ai?: 'claude' \| 'codex'` |
+| `ambercast_check` | Common input only |
+| `ambercast_heal` | `dryRun?: boolean` (true), `applyToken?: string`, `ai?: 'claude' \| 'codex'` |
+| `ambercast_job_status` | `jobId?: string` (omit for this server process's job list), `waitMs?: number` (0; integer 0–45000, effective with a job ID) |
+| `ambercast_job_cancel` | `jobId: string` |
+
+The MCP input intentionally excludes CLI flags `headed` (headless fixed), `list`, `stale` (fail fixed), `json`, `yes` (replaced by `applyToken`), and `configPath`.
+
+## Heal preview and apply {#heal-preview-and-apply}
+
+`ambercast_heal` defaults to preview (`dryRun: true`), unlike CLI heal's false default. A preview with commits returns an `applyToken`; a preview without commits does not. Apply with `dryRun: false` and `applyToken` alone: `files`, `ai`, and `allowEmpty` must be absent. A preview must omit `applyToken`. An invalid combination is an SDK input validation error. Apply is synchronous and does not create a job. A token is a 128-bit random value rendered as 32 hexadecimal characters; a newer preview supersedes pending tokens. Pending tokens expire 600000 ms after their first token-bearing response is assembled. A consumed token replays its saved result for 600000 ms after settlement.
+
+If the client supports form elicitation, it asks for confirmation with a 600000 ms timeout. Accepting and confirming applies the repair; declining leaves it unapplied; cancellation interrupts it. If the client lacks form elicitation, the server authorizes apply. The token identifies a preview; requesting apply is a separate step, and client hints alone are not authorization.
+
+## Results and jobs {#results-and-jobs}
+
+Every tool omits `outputSchema`: the report JSON Schema is 136 KB and would crowd `tools/list`; tools may also return a report envelope, a single Job record, or a Job record list. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
+
+The single text item begins with `exitCode: <n>`. Only a heal preview with commits has a second line `applyToken: <token>`; the following line contains the envelope JSON. The response also has `_meta.exitCode` and, when present, `_meta.applyToken`. A completed job fetched by `ambercast_job_status` returns the same content, error classification, and metadata, plus `_meta.job` without the result.
+
+Every generate, run, and heal preview call creates a Job. If it finishes within the synchronous wait bound, the caller receives the report response; otherwise it receives a job handle. A handle and a nonterminal status response contain a Job record in `structuredContent`; the text has three lines: `jobId: <id>`, `status: <status>`, and the status message. Their metadata contains `_meta.jobId`. `ambercast_check` and heal apply stay synchronous. `ambercast_job_status` with no ID lists jobs for this server process, newest first, as `structuredContent` with a `jobs` array; an empty list has text `no jobs`. This is a server-local job path, not the MCP Tasks extension. `ambercast_job_cancel` cancels a running or queued job and returns a record. Job records disappear 1800000 ms after termination or when the server exits.
+
+| Job record field | Meaning |
+| --- | --- |
+| `jobId` | UUID v4 identifier |
+| `tool` | Source tool |
+| `status` | working, completed, failed, or cancelled |
+| `statusMessage` | Nonempty progress or terminal status message |
+| `progress` | Count of runtime events, even without progress notifications |
+| `createdAt` | ISO 8601 UTC creation time |
+| `lastUpdatedAt` | ISO 8601 UTC time of the latest status or progress change |
+| `pollIntervalMs` | 2000 |
+| `ttlMs` | 1800000 |
+
+## MCP errors {#mcp-errors}
+
+MCP-layer semantic failures have `isError: true`, one text item in the form `<CODE>: <message>`, and no `structuredContent`. The codes are `HEAL_APPLY_TOKEN_INVALID` (reason `missing`, `unknown-token`, `superseded`, or `expired`), `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED`. Invalid inputs instead use the SDK validation error. Domain and environment failures remain in report envelopes.
+
+## Changes from the planned design {#changes-from-the-planned-design}
+
+| Earlier planned page | Implemented contract |
+| --- | --- |
+| Five tools including review | Six tools: four workflows plus status and cancellation; review is not exposed |
+| Report `outputSchema` published | `outputSchema` omitted for every tool |
+| Heal preview only | Two-stage heal with `applyToken` and synchronous apply |
+| Synchronous workflows only | Long generate, run, and heal previews return jobs; status without ID lists them |
+| Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
+| Only report exit classification | MCP error codes and SDK validation errors are distinct from report envelopes |
+| CLI flag mapping unspecified | Inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
+| Exit code only inferred from report | `_meta.exitCode` and the first text line carry the exit code |
+| `target` specified as common to all four tools | `target` is accepted only by `ambercast_generate`; `ambercast_run`, `ambercast_check`, and `ambercast_heal` select Targets from the Plan itself, matching the CLI's own Plan IR v4 migration |
+
+Links: [ambercast mcp](/ambercast/reference/cli/mcp/#usage), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), [Reports](/ambercast/reference/reports/#envelope), [Exit codes](/ambercast/reference/exit-codes/#exit-code-table).
+
+---
+
 # CLI overview
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/overview/
 
-The `ambercast` command-line interface provides six commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, and browsing run results, using per-command option parsing and configured discovery defaults.
+The `ambercast` command-line interface provides seven commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, browsing run results, and serving the MCP stdio server, using per-command option parsing and configured discovery defaults.
 
 ## Command surface {#command-surface}
 
-The implemented commands are `init`, `generate`, `run`, `check`, `heal`, and `view`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
+The implemented commands are `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
 
 Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to operate on plans whose steps name their execution Targets.
 
@@ -1715,6 +1801,7 @@ Commands:
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
   view                 Browse run results in a browser
+  mcp                  Serve the MCP stdio server
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -1736,6 +1823,9 @@ Heal options:
 View options:
   --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
+Mcp options:
+  --dir <path>  --sync-wait-ms <n>
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -1755,8 +1845,9 @@ Heal configuration:
 | check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | view | none | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| mcp | none | dir, sync-wait-ms | --dir argument selects session root (cwd when omitted) |
 
-Except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
+For `generate`, `run`, `check`, and `heal`, except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
 
 - Passing `--` terminates option parsing, leaving all subsequent arguments to be interpreted as literal paths.
 - The `--json` and `--no-color` flags are handled individually by each command rather than through a shared global-flag abstraction.
@@ -1764,13 +1855,13 @@ Except in `--list` mode, each positional argument must be a literal path inside 
 
 ## Discovery default {#discovery-default}
 
-When you pass no literal files, `generate`, `run`, `check`, and `heal` delegate test file selection to configured discovery; `init` does not participate in discovery.
+When you pass no literal files to `generate`, `run`, `check`, or `heal`, that command delegates test file selection to configured discovery. `init`, `view`, and `mcp` take no prompt-file arguments.
 
 - The default inclusion pattern is `**/*.test.md`.
 - Default exclusions include `.runs`, Plan, and Grounding companions.
 - Discovery evaluates POSIX-relative paths by requiring an inclusion match first, after which an ignore match excludes the path.
 
-Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), and [ambercast heal](/ambercast/reference/cli/heal/#flags).
+Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast init](/ambercast/reference/cli/init/#flags), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), [ambercast heal](/ambercast/reference/cli/heal/#flags), [ambercast view](/ambercast/reference/cli/view/#flags), and [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
 
 ---
 
@@ -2085,7 +2176,76 @@ A run directory missing its `report.json` (for example, mid-write, or after a fa
 
 `ambercast view` reads every report whose `schemaVersion` is 3.x. A report written by a different minor version than the current CLI shows "Schema `<version>`" in the run detail header; a report from another major version is listed as "Unsupported version `<version>`" and cannot be opened.
 
-Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table).
+`view` is the only Ambercast command that consumes a network port; the MCP server uses portless stdio.
+
+Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
+
+---
+
+# ambercast mcp
+Source: https://kotarotsubaki.github.io/ambercast/reference/cli/mcp/
+
+`ambercast mcp` starts the portless MCP server over `stdio`. Each process serves one session root.
+
+## Usage {#usage}
+
+```sh
+ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
+```
+
+## Flags {#flags}
+
+| Flag | Value | Effect | Default |
+| --- | --- | --- | --- |
+| `--dir` | path | session root to serve | cwd |
+| `--sync-wait-ms` | n | synchronous response wait bound in milliseconds | 45000 |
+
+`--dir` selects the session root; omission uses the process current working directory. Relative paths resolve against that directory. `--sync-wait-ms` is a positive integer with default 45000, bounding the synchronous wait before a long workflow returns a job handle. `--help` takes precedence over other arguments and prints usage to stdout with exit 0.
+
+If the resolved directory is absent or not a directory, stderr prints `ambercast mcp: --dir <path> is not a directory.` and the process exits 2 without starting. Startup failure prints `ambercast mcp: failed to start (<error name>)` and exits 3. Invalid options, positional arguments, and invalid wait bounds use the CLI usage error on stderr with exit 2.
+
+## Transport and shutdown {#transport-and-shutdown}
+
+Stdout contains JSON-RPC lines only. Stderr receives progress and one startup line, `ambercast mcp: serving <session root>`. The server begins draining on stdin end, SIGTERM, or SIGINT. It aborts in-flight calls, waits at most 10000 ms, closes the server, and exits 0 after settlement; an unsettled call at the deadline causes exit 3. New tool calls are rejected during draining.
+
+## Client registration {#client-registration}
+
+Use `npx --no-install ambercast mcp` in the project where ambercast is installed. Claude Code reads a project `.mcp.json`:
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+Codex CLI reads `config.toml`:
+
+```toml
+[mcp_servers.ambercast]
+command = "npx"
+args = ["--no-install", "ambercast", "mcp"]
+```
+
+Claude Desktop accepts the same server entry in its configuration:
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+Always start the client from a project where ambercast is installed, so `npx --no-install` can resolve the package; `--dir <path>` only selects a different session root once the server is running and has no effect on that package resolution. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
+
+## Changes from the planned design {#changes-from-the-planned-design}
+
+| Earlier planned page | Implemented contract |
+| --- | --- |
+| Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
+| Five planned tools | Six tools, including job status and cancellation |
+| Report `outputSchema` published | `outputSchema` omitted |
+| Heal preview only | Two-stage heal uses `applyToken` |
+| Synchronous calls only | Long calls return jobs; status without ID lists jobs |
+| MCP errors unspecified | `HEAL_APPLY_TOKEN_INVALID`, `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED` have a separate error response |
+| CLI input flags unspecified | Tool inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
+| Exit code inferred from report | `_meta.exitCode` carries it explicitly |
+
+Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), [CLI overview](/ambercast/reference/cli/overview/#command-surface).
 
 ---
 
@@ -3121,11 +3281,11 @@ Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Trust a
 # Status and roadmap
 Source: https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/
 
-ambercast establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes six subcommands—`init`, `generate`, `run`, `check`, `heal`, and `view`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
+ambercast establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes seven subcommands—`init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
 
 ## Implemented in current release {#implemented}
 
-The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, and `view`. The implemented parser exposes no MCP subcommand, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, and browsing the results of test plans.
+The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. The MCP subcommand serves six tools over stdio, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, browsing the results of test plans, and serving an MCP interface.
 
 When working across versions, 0.3.1 requires regeneration of 0.1.0 plans. This requirement exists because the producer-contract fingerprint changed between releases, making the producer bundle and `inputsDigest` from 0.1.0 stale under 0.3.1.
 
@@ -3133,7 +3293,7 @@ Links: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambe
 
 ## Planned after the current boundary {#planned-after-current-boundary}
 
-Several surfaces and tools lie outside the 0.3.1 implementation. Planned documentation covers `review`, `mcp`, baseline/restore, and MCP tools. On the execution side, support for Firefox and WebKit is planned by 1.0.
+Planned documentation still covers `review` and baseline/restore. The official skill remains planned; MCP tools are available. On the execution side, support for Firefox and WebKit is planned by 1.0.
 
 Links: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/ambercast/agents/mcp-server/)
 
@@ -3177,11 +3337,11 @@ Links: [Setup prompt](/ambercast/agents/setup-prompt/), [Operating contract](/am
 # Operating contract
 Source: https://kotarotsubaki.github.io/ambercast/agents/operating-contract/
 
-This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly six implemented commands: `init`, `generate`, `run`, `check`, `heal`, and `view`.
+This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly seven implemented commands: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`.
 
 ## Command contract {#command-contract}
 
-Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, `heal`, and `view` as implemented commands.
+Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp` as implemented commands.
 
 Among these commands, `check` and `view` have no mutable-storage, AI-provider, or browser dependency. Healing buffers only plan and grounding companion changes until confirmation, but its replay attempts may write contained evidence in the case run directory before approval and during dry runs.
 
@@ -3193,6 +3353,7 @@ Among these commands, `check` and `view` have no mutable-storage, AI-provider, o
 | `check` | A selection can be discovered. | Reads prompts and artifacts only. | No ambercast-artifact write approval required. | Yes. |
 | `heal` | Target is idempotent and a real attempt is CI-enabled when in CI. | May write attempt evidence in the runs directory; commits measured plan/grounding candidates only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | No by default; only with `ci.heal: true`. |
 | `view` | An interactive terminal, or `--allow-headless`; a free port to bind. | None; read-only HTTP server over persisted run reports. | No ambercast-artifact write approval required. | No by default; it rejects non-interactive use without `--allow-headless`. |
+| `mcp` | A directory exists for the session root. | Starts a stdio server; called tools follow their own write and approval boundaries. | Depends on the tool invoked. | Depends on the tool invoked. |
 
 Links: [CLI overview](/ambercast/reference/cli/overview/), [ambercast init](/ambercast/reference/cli/init/#confirmation), [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 
@@ -3368,3 +3529,29 @@ For the install methods (Claude Code, Codex CLI, `gh skill`-compatible agents, s
 The agent-interface design treats coding agents as first-class users alongside the human-facing prompt and viewer surfaces.
 
 Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Setup prompt](/ambercast/agents/setup-prompt/), [MCP server](/ambercast/agents/mcp-server/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
+
+---
+
+# MCP server
+Source: https://kotarotsubaki.github.io/ambercast/agents/mcp-server/
+
+The `ambercast mcp` subcommand provides a portless `stdio` connection for agents to run and repair keystroke E2E tests. One server process serves one session root: `--dir` selects it, or the process current working directory is used. Files supplied to tools resolve relative to that root. Use `--sync-wait-ms` to set the synchronous response wait bound; the default is 45000 ms.
+
+## Connection boundary {#connection-boundary}
+
+The connection exposes `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. The first four are the workflow operations; the last two observe and cancel server-local jobs. See [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) for inputs, annotations, job records, `isError`, and the MCP error surface. Register the process in your client as shown in [ambercast mcp](/ambercast/reference/cli/mcp/#client-registration).
+
+## Changes from the planned design {#changes-from-the-planned-design}
+
+| Earlier planned page | Implemented connection |
+| --- | --- |
+| Five planned tools | Six tools, including job status and cancellation |
+| Report `outputSchema` published | `outputSchema` omitted |
+| Heal preview only | Two-stage heal uses `applyToken` |
+| Synchronous workflows only | Long calls become jobs; status without ID lists jobs |
+| Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
+| MCP errors unspecified | `HEAL_APPLY_TOKEN_INVALID`, `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED` use a separate error surface |
+| CLI inputs unspecified | Inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
+| Exit code inferred from report | `_meta.exitCode` carries it explicitly |
+
+Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage), [Reading structured output](/ambercast/agents/reading-structured-output/).

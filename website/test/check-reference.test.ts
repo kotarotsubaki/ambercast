@@ -65,13 +65,12 @@ const defaults = {
 const capabilities = {
   exitCodes: [0, 1],
   errorCodes: ['CONFIG_INVALID', 'FS_IO_ERROR'],
-  planned: ['review', 'mcp', 'baseline', 'restore'],
+  planned: ['review', 'baseline', 'restore'],
 };
 
 const plannedDocs = Object.fromEntries([
-  'reference/cli/review', 'reference/cli/mcp',
-  'reference/cli/baseline-restore', 'reference/mcp-tools',
-  'agents/mcp-server',
+  'reference/cli/review',
+  'reference/cli/baseline-restore',
 ].map((slug) => [`${slug}.md`, '---\ntitle: Planned\nstatus: planned\n---\n# Planned\n']));
 
 const flagTable = (rows: string[], anchored = true, prose = '') => [
@@ -179,7 +178,7 @@ function expectDifference(violations: Violation[], pageEnd: string, values: stri
 }
 
 describe('checkReference', () => {
-  it('accepts the complete six-page planned mapping', async () => {
+  it('accepts the complete two-page planned mapping', async () => {
     expect(await checkFixture(createReferenceFixture())).toEqual([]);
   });
 

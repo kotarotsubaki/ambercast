@@ -42,6 +42,7 @@
 - [变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/changelog/): 记录 ambercast 用户可见的产品行为与公共契约变更，优先展示破坏性变更。
 - [安全策略](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/security-policy/): ambercast 的版本支持范围与安全漏洞私下报告流程。
 - [术语表](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/): ambercast 全站术语的权威规范性定义以及翻译人员必须保留的字面量词元索引。
+- [MCP 工具](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/mcp-tools/): ambercast MCP 工作流的工具、输入、结果与错误契约。
 
 ### CLI
 - [CLI 概览](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/): 介绍 ambercast 命令行界面的全局解析规则、核心命令集、命令与标志支持矩阵以及默认文件发现机制。
@@ -51,6 +52,7 @@
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/): 规定 ambercast heal 命令的授权机制与运行时副作用，并提供选项、修复模型、限制及运行时行为的完整参考。
 - [ambercast init](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/init/): ambercast init 的命令行参考：用于创建配置文件、示例提示词和仓库操作指引。
 - [ambercast view](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/view/): ambercast view 命令参考，定义标志、交互门控、端口选择、主机绑定以及提供的路由。
+- [ambercast mcp](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/mcp/): MCP 服务器的启动、传输、关闭和客户端注册参考。
 
 ## PLAN SPECIFICATION
 - [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.3.1 接受的工件。
@@ -81,3 +83,4 @@
 - [读取结构化输出](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/reading-structured-output/): 指导 Agent 根据报告信封进行逻辑分支，按固定安全顺序处理命令、结果状态、错误代码与报告持久化。
 - [机器可读资源](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-resources/): 明确列出已发布的机器可读资源及其可用性规则。
 - [official skill](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/official-skill/): 说明 ambercast 内置的面向编码智能体的 official skill，及其在智能体接口设计中的角色。
+- [MCP 服务器](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/mcp-server/): 使用 ambercast MCP 服务器的 Agent 连接边界。

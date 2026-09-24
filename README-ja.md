@@ -85,7 +85,21 @@ ambercast は **0.x、pre-1.0** です: マイナーリリースで破壊的変�
 
 - Chromium のみ対応です（Firefox と WebKit は計画中です）。
 - ローカル実行のみ — ホスト型のランナーはありません。
-- MCP サーバーはまだありません。
+
+`ambercast mcp` で、現在の作業ディレクトリを対象とする stdio の MCP サーバーを起動できます。generate、run、check、heal の 4 ワークフローと、ジョブの状態確認・取消の 2 ツールを提供します。別のセッションルートを使う場合は `--dir <path>` を指定します。
+
+起動コマンドは `npx --no-install ambercast mcp` です。Claude Code の `.mcp.json` に次のように登録します:
+
+```json
+{
+  "mcpServers": {
+    "ambercast": {
+      "command": "npx",
+      "args": ["--no-install", "ambercast", "mcp"]
+    }
+  }
+}
+```
 
 ## コントリビューション
 

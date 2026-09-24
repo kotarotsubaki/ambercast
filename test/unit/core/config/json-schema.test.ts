@@ -103,7 +103,7 @@ describe('config JSON Schema document', () => {
   });
 
   it('publishes optional target executor and the supported kind', () => {
-    const schema = getConfigJsonSchema() as any;
+    const schema = getConfigJsonSchema() as unknown as { properties: { targets: { additionalProperties: { required: readonly string[]; properties: { executor: { properties: { kind: { enum: readonly string[] } } } } } } } };
     const target = schema.properties.targets.additionalProperties;
     expect(target.required).toStrictEqual(['baseUrl']);
     expect(target.properties.executor.properties.kind.enum).toStrictEqual(['playwright']);

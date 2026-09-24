@@ -3,7 +3,6 @@
  */
 import type { AiExecutor } from './ai.js';
 import type { UiExecutor } from './browser.js';
-import type { UiExecutorKind } from '#core/config/schema.js';
 import type { ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import type { StorageAdapter } from './storage.js';
 import type {

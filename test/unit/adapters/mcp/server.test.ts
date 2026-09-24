@@ -87,7 +87,7 @@ describe('mcp/server', () => {
     const token = 'a'.repeat(32);
     const applyArgs = { dryRun: false, applyToken: token };
     let elapsed = 1_000;
-    const clock: Clock = { now: () => new Date(0), monotonicMs: () => elapsed };
+    const clock: Clock = { now: () => new Date(0), monotonicMs: () => elapsed, sleep: async () => {} };
     const beginHealApply = vi.fn(async () => ({ proceed: true as const, cases: [{ file: 'one.test.md', healingSummary: 'repair one' }] }));
     const settleHealApply = vi.fn(async () => ({ kind: 'report' as const, exitCode: 0, envelope: { applied: true } }));
     const finalizeHealApply = vi.fn();
@@ -114,7 +114,7 @@ describe('mcp/server', () => {
     const blocked = new Promise<void>((resolve) => { release = resolve; });
     const started = new Promise<void>((resolve) => { entered = resolve; });
     let elapsed = 0;
-    const clock: Clock = { now: () => new Date(0), monotonicMs: () => elapsed };
+    const clock: Clock = { now: () => new Date(0), monotonicMs: () => elapsed, sleep: async () => {} };
     let consumed = false;
     const beginHealApply = vi.fn(async () => {
       if (consumed) return { proceed: false as const, outcome: { kind: 'report' as const, exitCode: 1, envelope: { interrupted: true } } };
@@ -614,7 +614,7 @@ describe('mcp/server heal apply', () => {
   it('marks first delivery at the synchronous terminal response, and repeated reads preserve its time (TEST-D2)', async () => {
     let elapsed = 100;
     let wall = new Date('2026-01-01T00:00:00.000Z');
-    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed };
+    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed, sleep: async () => {} };
     const marks: number[] = [];
     const markHealDelivered = vi.fn(() => {
       marks.push(elapsed);
@@ -642,7 +642,7 @@ describe('mcp/server heal apply', () => {
   it('waits for a terminal job_status read after an early handle before marking first delivery (TEST-D2)', async () => {
     let elapsed = 30;
     let wall = new Date('2026-01-01T00:00:00.000Z');
-    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed };
+    const clock: Clock = { now: () => wall, monotonicMs: () => elapsed, sleep: async () => {} };
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => { release = resolve; });
     const marks: number[] = [];

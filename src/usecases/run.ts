@@ -10,9 +10,7 @@ import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-e
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { ExecutorUnsupportedError } from '#core/errors/executor-unsupported-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
-import {
-  GroundingUnresolvedError,
-} from '#core/errors/grounding-unresolved-error.js';
+import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
@@ -832,7 +830,7 @@ function materializeTrustedRunText(value: string, context: TraceTrustContext): s
  * browser boundary's trust. It rejects a destination that cannot be resolved,
  * uses a non-HTTP(S) scheme, or resolves to a different origin as an
  * `IntegrityViolationError`.
- * Resolving against `baseUrl` is sound because `ChromiumBrowserDriver.launch()`
+ * Resolving against `baseUrl` is sound because `PlaywrightUiExecutor.launch()`
  * configures its Playwright context with the identical `target.baseUrl` via
  * `browser.newContext({ baseURL: target.baseUrl })`, so this guard and
  * `page.goto()` resolve the same relative string against the same fixed base.
@@ -2546,11 +2544,13 @@ async function groundedTarget(
     if (resolved.kind === 'hit') {
       return resolved.element;
     }
-    if (!context.resolve) throw groundingAbort(resolved.reason);
+    if (!context.resolve) {
+      throw new GroundingUnresolvedError(unresolvedMessage(resolved.reason), { stepId: step.id, reason: 'recoverable-miss' });
+    }
   }
 
   if (!context.resolve) {
-    throw new CaseAbort('Element grounding is unavailable because AI resolution is not permitted. Pass --resolve to permit resolution.');
+    throw new GroundingUnresolvedError(unresolvedMessage('missing'), { stepId: step.id, reason: 'missing' });
   }
 
   const snapshot = await session.snapshotForResolution();
@@ -2609,9 +2609,16 @@ async function groundedTarget(
 }
 
 /**
- * Builds the shared grounding-abort message without constructing an error,
- * so the ordinary and classification abort paths keep one mapping from each
- * reason to its user-facing explanation.
+ * Supplies abort diagnostics when resolution is allowed: the local
+ * classification path uses it before AI confirmation, and a failed verify
+ * bind uses it after confirmation. With resolution disabled, element
+ * grounding misses use `unresolvedMessage` to describe stored evidence.
+ * Ambiguous, invalid, and secret-contaminated evidence can share wording
+ * across both policies; fingerprint changes and missing elements need
+ * distinct wording before resolution because no AI candidate was confirmed.
+ * The `fingerprint-mismatch` reason reaches this function only from the
+ * post-confirmation verify miss in `groundingAbort`, never from
+ * `groundingClassificationAbort`.
  */
 function groundingAbortMessage(reason: GroundingMissReason): string {
   switch (reason) {
@@ -2625,6 +2632,29 @@ function groundingAbortMessage(reason: GroundingMissReason): string {
       return 'The current accessibility evidence could not be parsed and cannot be trusted for this locator. Retry the run; if this persists, the page structure may use a form this parser does not recognize.';
     case 'secret-contaminated':
       return 'The supplied locator\'s accessibility evidence contains a resolved secret value and cannot be fingerprinted or cached. Add an aria-label that does not echo the secret value to the affected element.';
+  }
+}
+
+/**
+ * Describes fail-closed element grounding when resolution is disabled.
+ * A stored entry that no longer verifies needs a diagnostic about stale
+ * evidence; an absent entry needs a different diagnostic because no prior
+ * evidence can be retried. Fingerprint changes and missing elements therefore
+ * differ from the resolution-enabled abort wording, while ambiguous, invalid,
+ * and secret-contaminated evidence can reuse those explanations.
+ */
+function unresolvedMessage(reason: 'missing' | GroundingMissReason): string {
+  switch (reason) {
+    case 'missing':
+      return 'No grounding is stored for this locator.';
+    case 'fingerprint-mismatch':
+      return 'The stored grounding for this locator no longer matches the current page.';
+    case 'element-not-found':
+      return 'The stored grounding for this locator has no matching element on the current page.';
+    case 'ambiguous-match':
+    case 'snapshot-invalid':
+    case 'secret-contaminated':
+      return groundingAbortMessage(reason);
   }
 }
 

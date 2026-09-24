@@ -112,13 +112,13 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", または "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 空白以外の文字列, reason: 空白以外の文字列 }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正の整数, column: 正の整数, kind: "grant-line" または "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"executor-unregistered"、または "launch-failed"; engine: 空白以外の文字列 }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" または "launch-failed"; engine: 空白以外の文字列 }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: 空白以外の文字列, executor: 空白以外の文字列, reason: "surface-mismatch" または "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 空白以外の文字列 } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }`。element step では、`missing` は grounding entry が存在しない場合、`recoverable-miss` は既存 entry が現在のページと一致しない場合を表します。 |
 
 `generated` と `would-generate` の結果では、`secrets` が解決済みの候補シークレット使用を示し、dry run の `skipped-fresh` 結果にも含まれます。任意の `warnings` は、高リスクな `secrets.allow: "*"` 設定など、致命的でないポリシー警告を記録します。これらのフィールドにより、シークレット値を公開せずに同意関連の出力を観測できます。
 

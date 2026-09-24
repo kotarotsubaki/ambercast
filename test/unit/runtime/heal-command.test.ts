@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   createTtyInteractivityCheck: vi.fn(), createConfirmationAnswerReader: vi.fn(), loadConfig: vi.fn(), createAmbercast: vi.fn(),
   heal: vi.fn(), buildHealReport: vi.fn(), finalizeReportEnvelope: vi.fn(), isEmergencyFinalizedEnvelope: vi.fn(),
   createRunsDirContainedStorage: vi.fn(),
+  createUiExecutorResolver: vi.fn(),
   createStderrProgressSink: vi.fn(), closeProgressSink: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ vi.mock('#adapters/system/system-clock.js', () => ({ createSystemClock: mocks.cr
 vi.mock('#adapters/system/tty-interactivity.js', () => ({ createTtyInteractivityCheck: mocks.createTtyInteractivityCheck }));
 vi.mock('#adapters/system/confirmation-answer-reader.js', () => ({ createConfirmationAnswerReader: mocks.createConfirmationAnswerReader }));
 vi.mock('#config/load.js', () => ({ loadConfig: mocks.loadConfig }));
+vi.mock('#adapters/browser/registry.js', () => ({ createUiExecutorResolver: mocks.createUiExecutorResolver }));
 vi.mock('#runtime/create-ambercast.js', () => ({ createAmbercast: mocks.createAmbercast }));
 vi.mock('#usecases/heal.js', async (importOriginal) => ({ ...await importOriginal<typeof import('#usecases/heal.js')>(), heal: mocks.heal }));
 vi.mock('#usecases/heal-report.js', async (importOriginal) => ({ ...await importOriginal<typeof import('#usecases/heal-report.js')>(), buildHealReport: mocks.buildHealReport }));
@@ -144,6 +146,7 @@ describe('runHealCommand', () => {
 
     await runHealCommand(input());
 
+    expect(mocks.createUiExecutorResolver).toHaveBeenCalledExactlyOnceWith();
     expect(mocks.heal).toHaveBeenCalledWith(expect.objectContaining({ configSource }), expect.any(Object));
   });
 

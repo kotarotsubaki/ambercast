@@ -10,7 +10,7 @@ import type {
   TargetDefinition,
   TracePress,
 } from '#core/ir/schema.js';
-import type { UiExecutorKind } from '#core/config/schema.js';
+import type { UiExecutorKind } from '#core/executor/kinds.js';
 import type { UiCapability } from '#core/ir/capabilities.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type { GroundingMissReason } from '#core/errors/grounding-miss-reason.js';
@@ -508,7 +508,13 @@ export interface BrowserSession {
  * executor-session consumers.
  */
 export interface UiExecutor {
-  /** Identifies the executor kind this instance is selected to launch. */
+  /**
+   * Identifies the selected executor using core's shared vocabulary.
+   *
+   * @remarks
+   * The port depends on core directly, preserving its existing dependency
+   * direction without coupling executor identity to config loading.
+   */
   readonly kind: UiExecutorKind;
 
   /** The surface this executor operates on. */

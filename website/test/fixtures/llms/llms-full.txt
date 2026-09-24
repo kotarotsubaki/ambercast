@@ -1142,13 +1142,13 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", or "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: non-whitespace string }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" or "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing", "executor-unregistered", or "launch-failed"; engine: non-whitespace string }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" or "launch-failed"; engine: non-whitespace string }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" or "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" or "recoverable-miss" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" or "recoverable-miss" }`; for an element step, `missing` means no grounding entry exists and `recoverable-miss` means an existing entry does not match the current page. |
 
 For generated and would-generate results, `secrets` identifies the resolved candidate secret uses; a dry-run `skipped-fresh` result also includes it. Optional `warnings` records non-fatal policy warnings, including the high-risk `secrets.allow: "*"` configuration. These fields make consent-related output observable without exposing secret values.
 
@@ -1203,7 +1203,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
-| GROUNDING_UNRESOLVED | usage | case | 4 | grounding miss without `--resolve` |
+| GROUNDING_UNRESOLVED | usage | case | 4 | grounding miss in an ai step or element step without `--resolve` |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | legacy | not producible | — | retained in the report schema for backward compatibility with reports from an earlier tool version; not produced by current `generate`, `run`, `heal`, or `check` |
 | SECRET_ENV_VAR_COLLISION | usage | case | 2 | secret environment variable collision |
@@ -1216,7 +1216,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | UNEXPECTED_CRASH | environment | run/case | 3 | uncategorized crash |
 | INTERRUPTED | environment | run only | 3 | batch cancellation |
 
-A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing`, `executor-unregistered`, or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
+A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
 
 ---
 
@@ -2825,6 +2825,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| TP3 unifies the executor kind vocabulary in a total registry and removes TP2's unreachable `executor-unregistered` reason. Element step grounding misses without `--resolve` now consistently report `GROUNDING_UNRESOLVED` (exit 4 instead of exit 3, with a code instead of no code). Plan v4, grounding v2, and the config schema are unchanged; report 3.7 only narrows the browser launch reason enum. | repo:src/core/executor/kinds.ts, repo:src/adapters/browser/registry.ts, repo:src/usecases/run.ts, repo:src/report/schema.ts | Report consumers should remove `executor-unregistered` and accept `GROUNDING_UNRESOLVED` for element steps. No Plan or grounding regeneration is required. |
 | TP2 changes target config from `targets.<name>.browser` to `targets.<name>.executor`, removes `RunCaseOutcome.engine`, adds `sessions[name].executor` to the report contract, adds the `EXECUTOR_UNSUPPORTED` report error code, and renames the `BROWSER_LAUNCH_FAILED` reason by changing its `engine` prefix to `executor` (`executor-unregistered`); the Plan schema is unchanged | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | Remove the old target browser key when explicit executor selection is unnecessary; otherwise migrate it to `executor: { kind: "playwright", browser: "chromium" }` (`executor.browser`). The loader rejects the old key with `ConfigInvalidError`. Report consumers must handle the removed `RunCaseOutcome.engine`, added `sessions[name].executor`, new `EXECUTOR_UNSUPPORTED` code, and renamed reason; Plan regeneration is not required by this schema change. |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |

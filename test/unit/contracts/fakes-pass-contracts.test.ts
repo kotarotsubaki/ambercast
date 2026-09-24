@@ -1,4 +1,6 @@
 import type { ElementRef } from '../../../src/core/ir/schema.js';
+import { computeAccessibilityFingerprint } from '../../../src/core/ir/fingerprint.js';
+import { describe, expect, it } from 'vitest';
 import type { BrowserSession } from '../../../src/ports/browser.js';
 import type {
   AiExecuteRequest,
@@ -7,6 +9,7 @@ import type {
 } from '../../../src/ports/ai.js';
 import { registerAiExecutorContract } from '../../contracts/ai-executor.contract.js';
 import { registerUiExecutorContract } from '../../contracts/ui-executor.contract.js';
+import { registerUiExecutorReplayContract } from '../../contracts/ui-executor-replay.contract.js';
 import {
   fingerprintWithFlippedLeadingHexCharacter,
   registerBrowserSessionContract,
@@ -128,4 +131,65 @@ registerEnvironmentInfoContract({
 
 registerEventSinkContract({
   createSink: createRecordingEventSink,
+});
+
+const replayElement = { strategy: 'accessibility', role: 'button', name: 'Submit' } as const;
+const replayTarget = { surface: 'web', baseUrl: 'https://fake.example.test/' } as const;
+
+function replayFixture(label: 'Alpha' | 'Beta') {
+  const snapshot = {
+    accessibilityTree: {
+      role: 'document', name: '', children: [
+        { role: 'button', name: 'Submit', children: [] },
+        { role: 'text', name: label, children: [] },
+      ],
+    },
+    screenshot: new Uint8Array(),
+  };
+  const computed = computeAccessibilityFingerprint(snapshot.accessibilityTree, replayElement, []);
+  if (computed.kind !== 'ok') throw new Error(`Invalid replay fixture: ${computed.kind}`);
+  const entry: FakeBrowserSessionEntry = { exists: true, currentFingerprint: computed.fingerprint };
+  return { snapshot, entry };
+}
+
+const producer = replayFixture('Alpha');
+const same = replayFixture('Alpha');
+const divergent = replayFixture('Beta');
+
+describe('TEST-9 replay fake fixture invariants', () => {
+  for (const [name, fixture] of Object.entries({ producer, same, divergent })) {
+    it(`${name} uses its snapshot fingerprint as current evidence`, () => {
+      const computed = computeAccessibilityFingerprint(fixture.snapshot.accessibilityTree, replayElement, []);
+      expect(computed.kind).toBe('ok');
+      if (computed.kind === 'ok') expect(fixture.entry.currentFingerprint).toEqual(computed.fingerprint);
+    });
+  }
+  it('changes the adjacent sibling fingerprint', () => {
+    expect(producer.entry.currentFingerprint.hash).toBe(same.entry.currentFingerprint.hash);
+    expect(producer.entry.currentFingerprint.hash).not.toBe(divergent.entry.currentFingerprint.hash);
+  });
+});
+
+let lastDivergentSession: FakeBrowserSession | undefined;
+
+function replayFactory(fixture: ReturnType<typeof replayFixture>, divergentRun = false) {
+  return () => createFakeUiExecutor(() => {
+    const session = createFakeBrowserSession(
+      new Map([[elementRefKey(replayElement), { ...fixture.entry }]]),
+      { snapshot: fixture.snapshot, baseUrl: replayTarget.baseUrl },
+    );
+    if (divergentRun) lastDivergentSession = session;
+    return session;
+  });
+}
+
+registerUiExecutorReplayContract({
+  target: replayTarget,
+  entryUrl: replayTarget.baseUrl,
+  element: replayElement,
+  readyText: 'Ready',
+  producerFactory: replayFactory(producer),
+  sameObservationFactory: replayFactory(same),
+  divergentObservationFactory: replayFactory(divergent, true),
+  inspectDivergentSession: () => lastDivergentSession?.operations() ?? [],
 });

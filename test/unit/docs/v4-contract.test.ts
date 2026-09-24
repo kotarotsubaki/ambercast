@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { RawConfig } from '../../../src/core/config/schema.js';
+// @ts-expect-error The website's .mjs script has no TypeScript declaration.
+import { main as syncSpec } from '../../../website/scripts/sync-spec.mjs';
 
 const expected = JSON.parse(readFileSync(new URL('../../fixtures/docs-v4-expectations.json', import.meta.url), 'utf8')) as {
   versions: { plan: string; grounding: string; report: string };
@@ -11,6 +16,70 @@ const expected = JSON.parse(readFileSync(new URL('../../fixtures/docs-v4-expecta
 const spec = (name: string) => readFileSync(new URL(`../../../docs/spec/${name}.md`, import.meta.url), 'utf8');
 const reference = (name: string) => readFileSync(new URL(`../../../website/src/content/docs/reference/${name}.md`, import.meta.url), 'utf8');
 const localizedDoc = (locale: string, name: string) => readFileSync(new URL(`../../../website/src/content/docs/${locale}${name}.md`, import.meta.url), 'utf8');
+
+function trackedMatches(pattern: string, paths: readonly string[]): string[] {
+  const result = spawnSync('git', ['grep', '-l', pattern, '--', ...paths], {
+    cwd: new URL('../../../', import.meta.url), encoding: 'utf8',
+  });
+  expect(result.error).toBeUndefined();
+  expect([0, 1]).toContain(result.status);
+  return result.stdout.trim() === '' ? [] : result.stdout.trim().split('\n').sort();
+}
+
+describe('TP3 source vocabulary', () => {
+  it('keeps the synced EN changelog page in sync with docs/spec/changelog.md (TEST-12)', async () => {
+    const enChangelogPath = new URL('../../../website/src/content/docs/spec/changelog.md', import.meta.url);
+    let before: string;
+    try {
+      before = await readFile(enChangelogPath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    await syncSpec({ websiteRoot: fileURLToPath(new URL('../../../website/', import.meta.url)) });
+    expect(await readFile(enChangelogPath, 'utf8')).toBe(before);
+  });
+
+  it('records the TP3 contract and matching evidence in each specification changelog', () => {
+    const tp3Row = (document: string) => document.split('\n').find((line) => line.startsWith('| TP3'));
+    const english = tp3Row(spec('changelog'));
+    expect(english).toBeDefined();
+    expect(english).toMatch(/executor kind vocabulary[^|]*total registry/i);
+    expect(english).toMatch(/unreachable[^|]*executor-unregistered/i);
+    expect(english).toMatch(/element step[^|]*GROUNDING_UNRESOLVED/i);
+    expect(english).toMatch(/Plan v4, grounding v2, and the config schema are unchanged; report 3\.7 only narrows the browser launch reason enum/i);
+
+    const evidence = [
+      'repo:src/core/executor/kinds.ts',
+      'repo:src/adapters/browser/registry.ts',
+      'repo:src/usecases/run.ts',
+      'repo:src/report/schema.ts',
+    ];
+    for (const locale of ['ja/', 'zh-cn/']) {
+      const translated = tp3Row(localizedDoc(locale, 'spec/changelog'));
+      expect(translated, locale).toBeDefined();
+      for (const identifier of evidence) {
+        expect(english, identifier).toContain(identifier);
+        expect(translated, `${locale}${identifier}`).toContain(identifier);
+      }
+      for (const term of ['executor-unregistered', 'GROUNDING_UNRESOLVED', 'Plan v4', 'grounding v2', 'config schema', 'report 3.7']) {
+        expect(translated, `${locale}${term}`).toContain(term);
+      }
+    }
+  });
+
+  it('retains executor-unregistered only in the historical specification changelogs', () => {
+    expect(trackedMatches('executor-unregistered', ['src', 'website/src/content/docs', 'docs/spec'])).toEqual([
+      'docs/spec/changelog.md',
+      'website/src/content/docs/ja/spec/changelog.md',
+      'website/src/content/docs/zh-cn/spec/changelog.md',
+    ]);
+  });
+
+  it('removes ChromiumBrowserDriver from source, including comments', () => {
+    expect(trackedMatches('ChromiumBrowserDriver', ['src'])).toEqual([]);
+  });
+});
 
 describe('TEST-21 v4 documentation golden expectations', () => {
   it('documents target names and element references in all eight step examples', () => {
@@ -92,7 +161,6 @@ describe('TEST-21 v4 documentation golden expectations', () => {
       expect(configuration, locale).toContain('`targets.<name>.executor.browser`');
       expect(configuration, locale).not.toContain('`targets.<name>.browser`');
       expect(errorCodes, locale).toMatch(/^\| EXECUTOR_UNSUPPORTED \| usage \| case \| 2 \|/m);
-      expect(errorCodes, locale).toContain('`executor-unregistered`');
       const howTo = localizedDoc(locale, 'how-to/configure-targets');
       const tutorial = localizedDoc(locale, 'tutorials/repair-your-first-drift');
       const inlineExample = howTo.match(/`(\{"\$schema":.+?\})`/)?.[1];

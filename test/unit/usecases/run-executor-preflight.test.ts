@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { loadConfig } from '#config/load.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
@@ -8,7 +9,7 @@ import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import type { JsonValueT, TargetDefinition } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
-import { run, type RunDeps, type RunOptions } from '#usecases/run.js';
+import { run, type RunCaseOutcome, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { buildRunReport } from '#usecases/run-report.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
@@ -218,7 +219,59 @@ describe('run executor preflight', () => {
     expect(result.uiExecutor).toHaveBeenCalledTimes(2);
     expect(result.executors.A.launches).toHaveLength(1);
     expect(result.executors.B.launches).toHaveLength(1);
+    expect(result.uiExecutor.mock.results[0]?.value).toBe(result.executors.A);
+    expect(result.uiExecutor.mock.results[1]?.value).toBe(result.executors.B);
+    expect(result.executors.A.launches[0]).toEqual(expect.objectContaining({ baseUrl: definitions.A.baseUrl }));
+    expect(result.executors.B.launches[0]).toEqual(expect.objectContaining({ baseUrl: definitions.B.baseUrl }));
     // The existing run-multi-target suite checks the broader routing contract.
+  });
+
+  it('TEST-11 omits engine from the case outcome contract', () => {
+    expectTypeOf<RunCaseOutcome>().not.toHaveProperty('engine');
+  });
+
+  it('TEST-11 reports the executor default loaded from raw config', async () => {
+    const storage = createInMemoryStorage();
+    const file = `${ROOT}/loaded-default.test.md`;
+    const layout = createLayoutResolver({ testDir: ROOT, runsDir: `${ROOT}/.runs` });
+    await storage.writeText(`${ROOT}/ambercast.config.json`, JSON.stringify({
+      $schema: 'https://ambercast.dev/schema/config.json',
+      testDir: ROOT, runsDir: `${ROOT}/.runs`,
+      targets: { A: { baseUrl: definitions.A.baseUrl } }, defaultTarget: 'A',
+    }));
+    const { resolved: config } = await loadConfig({ cwd: ROOT, storage });
+    const targets = { A: { ...definitions.A } };
+    const plan = {
+      schemaVersion: 4,
+      source: { inputsDigest: computeInputsDigest({
+        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
+        generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
+        planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
+      }) },
+      targets, steps: [navigate('a-nav', 'A')],
+    };
+    await storage.writeText(file, PROMPT);
+    await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as unknown as JsonValueT));
+    await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText({
+      schemaVersion: 2, planDigest: computePlanDigest(plan as never), entries: {},
+    } as JsonValueT));
+    const executor = createFakeUiExecutor(() => session('A'));
+    const deps: RunDeps = {
+      storage, layout, config, clock: createFixedClock(new Date('2026-09-24T00:00:00Z'), 0),
+      allocateCallId: createCallIdAllocator(),
+      runId: '2026-09-24T000000Z-550e8400-e29b-41d4-a716-446655440000',
+      uiExecutor: vi.fn<RunDeps['uiExecutor']>(() => executor),
+      secrets: createFakeSecretsProvider(new Map()),
+      resolveAiExecutor: async () => { throw new Error('AI must not run'); },
+      events: createRecordingEventSink().sink,
+      discoverTestFiles: async () => [file], isCI: false,
+    };
+    const runOptions = { ...options, files: [file] };
+    const outcome = await run(deps, runOptions);
+    const report = buildRunReport({ outcome, startedAt: '2026-09-24T00:00:00.000Z', durationMs: 0, options: runOptions });
+    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(executor.launches).toHaveLength(1);
+    expect(report.envelope.results[0]).toMatchObject({ sessions: { A: { executor: EXECUTOR } } });
   });
 
   it('TEST-11 keeps secret validation ahead of executor capability checking', async () => {

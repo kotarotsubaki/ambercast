@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { type SecretName, TargetDefinition, SecretName as SecretNameSchema } from '#core/ir/schema.js';
+import { UI_EXECUTOR_KINDS, type UiExecutorKind as CoreUiExecutorKind } from '#core/executor/kinds.js';
 
 /** Shared explanation for the incremental repair dispatch budget. */
 export const HEAL_MAX_STEP_REPAIRS_DESCRIPTION = 'Hard limit on real provider dispatches started during incremental repair. Charged at dispatch time regardless of outcome. Includes element confirmation dispatches. Excludes the cache-only baseline and Stage 3.';
@@ -34,12 +35,11 @@ export const AI_TIMEOUT_MS_DESCRIPTION = 'Deadline in milliseconds for one provi
  * The executor kind vocabulary for UI executors.
  *
  * @remarks
- * The single-member enum keeps the vocabulary closed while giving future
- * executor kinds one explicit place to extend it, rather than letting
- * consumers assume that the current literal is the permanent contract.
+ * Validation derives its closed vocabulary from the core executor tuple so
+ * config, ports, and registry cannot drift as new kinds are added.
  */
-export const UiExecutorKind = z.enum(['playwright']);
-export type UiExecutorKind = z.infer<typeof UiExecutorKind>;
+export const UiExecutorKind = z.enum(UI_EXECUTOR_KINDS);
+export type UiExecutorKind = CoreUiExecutorKind;
 
 /**
  * The executor configuration shape for a target.
@@ -110,9 +110,10 @@ export type ResolvedTargetConfigEntry =
  * This is a plain type because loading has already parsed the untrusted
  * {@link UiExecutorConfig} and supplied its browser default. Runtime consumers
  * can therefore rely on both fields being present without parsing them again.
+ * Its kind follows the shared executor vocabulary rather than a local literal.
  */
 export type ResolvedUiExecutorConfig = {
-  readonly kind: 'playwright';
+  readonly kind: UiExecutorKind;
   readonly browser: 'chromium';
 };
 

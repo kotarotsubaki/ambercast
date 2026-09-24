@@ -7,6 +7,7 @@ description: "工件版本的接受必须（MUST）遵循 Ambercast 计划规范
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| TP3：通过完整的 registry 统一 executor 的 kind 词汇，并删除 TP2 引入但不可达的 `executor-unregistered` 原因。未启用 `--resolve` 时，element step 的 grounding 未命中统一报告 `GROUNDING_UNRESOLVED`：退出码由 3 变为 4，且从无错误代码变为有代码。Plan v4、grounding v2 和 config schema 保持不变；report 3.7 仅缩小 browser launch 的 reason 枚举。 | repo:src/core/executor/kinds.ts, repo:src/adapters/browser/registry.ts, repo:src/usecases/run.ts, repo:src/report/schema.ts | 报告使用方应移除 `executor-unregistered`，并接受 element step 的 `GROUNDING_UNRESOLVED`。无需重新生成 Plan 或 grounding。 |
 | TP2：目标配置由 `targets.<name>.browser` 改为 `targets.<name>.executor`，删除 `RunCaseOutcome.engine`，在报告契约中新增 `sessions[name].executor`；新增 `EXECUTOR_UNSUPPORTED` 错误代码，并将 `BROWSER_LAUNCH_FAILED` 原因的旧 `engine` 前缀改为 `executor`（`executor-unregistered`）；Plan schema 不变 | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | 若无需显式指定 executor，应删除旧 browser 键；否则迁移至 `executor: { kind: "playwright", browser: "chromium" }`（`executor.browser`）。loader 会以 `ConfigInvalidError` 拒绝旧键。报告使用方须处理已删除和新增的字段、新错误代码及更名后的原因；此次 schema 变更无需重新生成 Plan。 |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |

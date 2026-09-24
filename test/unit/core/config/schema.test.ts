@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { RawConfig, type ResolvedConfig } from '#core/config/schema.js';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { RawConfig, UiExecutorKind, type ResolvedConfig, type ResolvedUiExecutorConfig } from '#core/config/schema.js';
+import { UI_EXECUTOR_KINDS, type UiExecutorKind as CoreUiExecutorKind } from '#core/executor/kinds.js';
 
 interface SchemaUnderTest {
   safeParse(value: unknown): { success: boolean };
@@ -17,6 +18,10 @@ function expectRejected(schema: SchemaUnderTest, value: unknown): void {
 }
 
 describe('RawConfig', () => {
+  it('derives the resolved executor kind from the shared vocabulary', () => {
+    expect(UiExecutorKind.options).toEqual(UI_EXECUTOR_KINDS);
+    expectTypeOf<ResolvedUiExecutorConfig['kind']>().toEqualTypeOf<CoreUiExecutorKind>();
+  });
   it('accepts the minimal present config file', () => {
     expectAccepted(RawConfig, { $schema: CONFIG_SCHEMA_URL });
   });

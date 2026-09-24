@@ -112,13 +112,13 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", or "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: non-whitespace string }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" or "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing", "executor-unregistered", or "launch-failed"; engine: non-whitespace string }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" or "launch-failed"; engine: non-whitespace string }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" or "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" or "recoverable-miss" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" or "recoverable-miss" }`; for an element step, `missing` means no grounding entry exists and `recoverable-miss` means an existing entry does not match the current page. |
 
 For generated and would-generate results, `secrets` identifies the resolved candidate secret uses; a dry-run `skipped-fresh` result also includes it. Optional `warnings` records non-fatal policy warnings, including the high-risk `secrets.allow: "*"` configuration. These fields make consent-related output observable without exposing secret values.
 

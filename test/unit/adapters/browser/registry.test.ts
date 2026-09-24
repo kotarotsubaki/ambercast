@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UiExecutor } from '../../../../src/ports/browser.js';
-import type { ResolvedUiExecutorConfig } from '../../../../src/core/config/schema.js';
 import { UI_CAPABILITIES } from '#core/ir/capabilities.js';
-import { BrowserLaunchFailedError } from '../../../../src/core/errors/browser-launch-failed-error.js';
 
 const mocks = vi.hoisted(() => ({
   createPlaywrightUiExecutor: vi.fn(),
@@ -30,7 +28,7 @@ describe('createUiExecutorResolver()', () => {
     mocks.createPlaywrightUiExecutor.mockReturnValue(executor);
 
     expect(createUiExecutorResolver()(config)).toBe(executor);
-    expect(mocks.createPlaywrightUiExecutor).toHaveBeenCalledExactlyOnceWith(config, undefined);
+    expect(mocks.createPlaywrightUiExecutor).toHaveBeenCalledExactlyOnceWith(config, { headed: false });
   });
 
   it('forwards headed policy and declares all thirteen capabilities', () => {
@@ -44,14 +42,21 @@ describe('createUiExecutorResolver()', () => {
     expect(executor.capabilities.size).toBe(13);
   });
 
-  it.each(['stagehand', ''] as const)('throws BrowserLaunchFailedError for unregistered kind %j', (kind) => {
-    const resolver = createUiExecutorResolver();
-    const unknown = { ...config, kind } as unknown as ResolvedUiExecutorConfig;
+  it('uses the override factory for a configured kind', () => {
+    const executor = playwrightExecutor();
+    const overrideSpy = vi.fn().mockReturnValue(executor);
+    mocks.createPlaywrightUiExecutor.mockReturnValue(playwrightExecutor());
 
-    expect(() => resolver(unknown)).toThrow(BrowserLaunchFailedError);
-    expect(() => resolver(unknown)).toThrow(expect.objectContaining({
-      details: { reason: 'executor-unregistered', engine: kind },
-    }));
+    expect(createUiExecutorResolver({ headed: true, factories: { playwright: overrideSpy } })(config)).toBe(executor);
+    expect(overrideSpy).toHaveBeenCalledExactlyOnceWith(config, { headed: true });
     expect(mocks.createPlaywrightUiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('uses the default factory when overrides are omitted', () => {
+    const executor = playwrightExecutor();
+    mocks.createPlaywrightUiExecutor.mockReturnValue(executor);
+
+    expect(createUiExecutorResolver({ headed: true })(config)).toBe(executor);
+    expect(mocks.createPlaywrightUiExecutor).toHaveBeenCalledExactlyOnceWith(config, { headed: true });
   });
 });

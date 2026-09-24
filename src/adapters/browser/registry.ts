@@ -1,67 +1,48 @@
+/**
+ * Composes factories for the validated UI executor vocabulary. A total record
+ * makes an unregistered kind unreachable, so no defensive launch error remains.
+ */
+
 import { createPlaywrightUiExecutor } from './chromium.js';
-import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import type { UiExecutor } from '#ports/browser.js';
-import type { UiExecutorKind } from '#core/config/schema.js';
+import type { UiExecutorKind } from '#core/executor/kinds.js';
 import type { ResolvedUiExecutorConfig } from '#core/config/schema.js';
 
 /**
- * Construction-time choices shared by every executor selected from this
- * registry.
- *
- * These options are intentionally not part of `UiExecutorResolver`: the
- * port resolves only an already-composed executor, while CLI policy such as
- * `--headed` is known before any case selects one.
+ * Constructs a UI executor from resolved config and composition choices.
+ * Required headed mode keeps this contract independent of adapter defaults.
  */
-type ExecutorLaunchOptions = {
-  readonly headed?: boolean;
-};
+export type UiExecutorFactory = (
+  executor: ResolvedUiExecutorConfig,
+  options: { readonly headed: boolean },
+) => UiExecutor;
 
 /**
- * Internal constructors for the executors this composition root can provide.
- *
- * The per-executor options parameter belongs only to adapter construction. It
- * is not exported in place of `UiExecutorResolver`, whose fixed
- * executor-only shape is the contract consumed by the rest of the application.
+ * Covers every validated kind. `satisfies` detects missing registrations at
+ * compile time when the shared vocabulary grows.
  */
-const UI_EXECUTOR_FACTORIES: Partial<Record<
-  UiExecutorKind,
-  (executor: ResolvedUiExecutorConfig, options?: ExecutorLaunchOptions) => UiExecutor
->> = {
+const UI_EXECUTOR_FACTORIES = {
   playwright: createPlaywrightUiExecutor,
-};
+} satisfies Record<UiExecutorKind, UiExecutorFactory>;
 
 /**
  * Creates the fixed-shape resolver used by run composition.
  *
- * @param options - Executor choices captured once for this composed command,
- * including whether Playwright should be headed.
+ * @param options - Headed mode and optional per-kind factory seeds.
  * @returns An executor-only resolver compatible with `UiExecutorResolver`.
- * @throws `BrowserLaunchFailedError` when
- *   `UI_EXECUTOR_FACTORIES[kind]` has no registered entry.
  *
  * @remarks
- * The resolver closes over CLI-supplied options when composition is created,
- * then selects a factory only when a target supplies its executor. This
- * preserves the existing resolver port instead of leaking per-executor
- * construction options into every caller.
- *
- * The unregistered-executor branch ensures that a schema-valid target whose
- * executor has no registered factory fails with a classified error rather than
- * a bare `TypeError`, regardless of the registered executor set.
+ * Factory seeds are for test composition only: they let the shared replay
+ * contract pass config through this registry under different observations.
+ * Runtime composition omits them and uses the total defaults. Construction
+ * options stay outside the executor-only resolver port because they are known
+ * before any target is selected.
  */
 export function createUiExecutorResolver(
-  options?: ExecutorLaunchOptions,
+  options?: { headed?: boolean; factories?: Partial<Record<UiExecutorKind, UiExecutorFactory>> },
 ): (executor: ResolvedUiExecutorConfig) => UiExecutor {
-  return (executor) => {
-    const factory = UI_EXECUTOR_FACTORIES[executor.kind];
-
-    if (factory === undefined) {
-      throw new BrowserLaunchFailedError(`No UI executor is registered for kind: ${executor.kind}`, {
-        reason: 'executor-unregistered',
-        engine: executor.kind,
-      });
-    }
-
-    return factory(executor, options);
-  };
+  return (executor) => (options?.factories?.[executor.kind] ?? UI_EXECUTOR_FACTORIES[executor.kind])(
+    executor,
+    { headed: options?.headed ?? false },
+  );
 }

@@ -1623,6 +1623,17 @@ describe('view command transcript', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it('writes the exact IPv6 loopback startup line', async () => {
+    prepareViewCommand.mockResolvedValue({ ...plan(false), bindHost: '::1' });
+    startLocalReportServer.mockResolvedValue({ url: 'http://[::1]:4600/', closed: Promise.resolve() });
+
+    const result = await run(['view', '--host', '::1', '--allow-headless']);
+
+    expect(result.stderr).toBe('Listening on http://[::1]:4600/\n');
+    expect(result.stdout).toBe('');
+    expect(result.exitCode).toBe(0);
+  });
+
   it('writes the non-loopback warning after the startup line', async () => {
     prepareViewCommand.mockResolvedValue(plan(true));
     startLocalReportServer.mockResolvedValue({ url: 'http://192.0.2.10:4600/', closed: Promise.resolve() });

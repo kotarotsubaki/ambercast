@@ -26,6 +26,8 @@ import {
 /** Exposes the listing classification through runtime so HTTP callers need no direct usecase import. */
 export type { RunListing } from '#usecases/get-run-report.js';
 export { AmbercastError } from '#core/errors/types.js';
+/** Exposes viewer copy to CLI through its allowed runtime dependency boundary. */
+export { VIEW_COPY } from '#core/viewer/copy.js';
 
 /** Parsed view options and invocation context supplied by the CLI. */
 export interface ViewCommandInput {

@@ -1,4 +1,4 @@
-import type { EventSink, RunEvent } from '#ports/system.js';
+import type { EventSink } from '#ports/system.js';
 
 /**
  * Combines ordered event subscribers into one usecase-facing sink.

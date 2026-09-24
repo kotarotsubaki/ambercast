@@ -113,7 +113,7 @@ const H1D_H3C_CORPUS_SOURCE = [
 ].join('\n');
 const H1D_H3C_CORPUS_OPTIONS: ts.CompilerOptions = { noUncheckedIndexedAccess: true };
 
-test('keeps CLI main imports outside the adapter layer (TEST-B11)', async () => {
+test('routes CLI adapter imports through runtime except for the HTTP carve-out (TEST-B11)', async () => {
   const source = ts.createSourceFile(
     CLI_MAIN_MODULE_FILE,
     await readFile(CLI_MAIN_MODULE_FILE, 'utf8'),
@@ -125,7 +125,11 @@ test('keeps CLI main imports outside the adapter layer (TEST-B11)', async () => 
     .map((statement) => statement.moduleSpecifier)
     .filter(ts.isStringLiteral)
     .map((specifier) => specifier.text);
-  expect(imports.filter((specifier) => specifier.startsWith('#adapters/'))).toEqual([]);
+  // The architecture policy permits CLI to start the view server directly; other adapters, including MCP, belong behind runtime.
+  const forbiddenAdapterImports = imports.filter(
+    (specifier) => specifier.startsWith('#adapters/') && !specifier.startsWith('#adapters/http/'),
+  );
+  expect(forbiddenAdapterImports).toEqual([]);
 });
 
 function scanVirtualDigestCorpus(source: string, extraOptions: ts.CompilerOptions = {}): {

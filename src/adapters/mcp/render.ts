@@ -54,3 +54,36 @@ export function renderToolResult(
     _meta: { exitCode },
   };
 }
+
+/**
+ * Renders a job record for handle, status, and cancellation responses.
+ *
+ * @param record - The job record to render (unknown for defensive parsing).
+ * @returns Text and structured content with transport error and metadata fields.
+ * @remarks
+ * Job handles, non-terminal job_status, job_cancel, and queued cancellation
+ * share one record response contract. Terminal job_status responses for
+ * completed or cancelled jobs retaining a result instead use the same
+ * renderToolResult response format as the corresponding synchronous tool,
+ * with the record attached at `_meta.job`. The job_status handler in
+ * the server handler chooses between the two response formats.
+ * Keeping the record contract here prevents its response formats from
+ * drifting apart. A valid record yields isError: false,
+ * structuredContent equal to the record, and _meta.jobId equal to its ID.
+ * Its text always has exactly three lines: `jobId: <id>`,
+ * `status: <status>`, and `<statusMessage>`, in that order. The status message
+ * can express queue position without adding a queued status. Invalid records
+ * yield isError: true with an error message.
+ */
+export function renderJobRecord(record: unknown): { isError: boolean; content: { type: 'text'; text: string }[]; structuredContent: unknown; _meta: Record<string, unknown> } {
+  if (typeof record !== 'object' || record === null || !('jobId' in record) || !('status' in record) || !('statusMessage' in record)
+    || typeof record.jobId !== 'string' || typeof record.status !== 'string' || typeof record.statusMessage !== 'string') {
+    return { isError: true, content: [{ type: 'text', text: 'Invalid job record' }], structuredContent: undefined, _meta: {} };
+  }
+  return {
+    isError: false,
+    content: [{ type: 'text', text: `jobId: ${record.jobId}\nstatus: ${record.status}\n${record.statusMessage}` }],
+    structuredContent: record,
+    _meta: { jobId: record.jobId },
+  };
+}

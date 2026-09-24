@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 import { PassThrough, type Readable, type Writable } from 'node:stream';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMcpServer } from '#adapters/mcp/server.js';
+import { createSystemClock } from '#adapters/system/system-clock.js';
 import { createMcpProgressSink } from '#adapters/mcp/progress-sink.js';
 import type { McpProgressContext, McpServerDeps } from '#adapters/mcp/types.js';
 import { runCheckCommand, type CheckCommandInput } from '#runtime/check-command.js';
@@ -26,6 +27,38 @@ export interface RunMcpCommandInput {
   readonly stderr: NodeJS.WritableStream;
 }
 
+/**
+ * Job record for write operations (generate/run/heal-preview).
+ *
+ * @remarks
+ * A write call creates a record on enqueue. Queued and running jobs both
+ * retain working status: a read derives `queued behind <N>` in statusMessage
+ * for a queued job, so queue position does not require another status value.
+ * statusMessage is always non-empty: while running it is `running` until the
+ * first RunEvent, then the latest fixed progress phrase. At termination it
+ * becomes the terminal status, except for cancellation before invocation
+ * (`cancelled before start`) and shutdown of a queued job
+ * (`server shutting down`). Terminal status remains fixed.
+ * A running cancellation settles when the
+ * runtime returns; cancelling before invocation settles through FIFO removal.
+ * Progress counts every RunEvent emitted by the runtime, regardless of
+ * whether the client supplied a progressToken or received a notification.
+ * The polling recommendation and post-terminal retention period are fixed
+ * protocol contracts, so neither varies by job: pollIntervalMs is 2000 ms
+ * and ttlMs is 1800000 ms.
+ */
+export interface JobRecord {
+  readonly jobId: string;
+  readonly tool: 'generate' | 'run' | 'heal';
+  readonly status: 'working' | 'completed' | 'failed' | 'cancelled';
+  readonly statusMessage: string;
+  readonly progress: number;
+  readonly createdAt: string;
+  readonly lastUpdatedAt: string;
+  readonly pollIntervalMs: number;
+  readonly ttlMs: number;
+}
+
 function normalizeCommonMcpInput(args: Record<string, unknown>): Record<string, unknown> {
   const { ai, ...rest } = args;
   return {
@@ -40,14 +73,22 @@ function progressSink(command: 'generate' | 'run' | 'heal', sessionRoot: string,
   if (progress.progressToken === undefined) return undefined;
   const progressToken = progress.progressToken;
   let sequence = 0;
-  return createMcpProgressSink({
+  let pendingFlush = Promise.resolve();
+  const sink = createMcpProgressSink({
     command,
     sessionRoot,
+    // The job record observes every event immediately. Flushing each projection
+    // also exposes its fixed phrase while the job is still running.
+    onEvent: () => {
+      void progress.sendNotification({ method: 'internal/run-event' });
+      pendingFlush = pendingFlush.then(() => sink.flush());
+    },
     send: (message) => progress.sendNotification({
       method: 'notifications/progress',
       params: { progressToken, progress: ++sequence, message },
     }),
   });
+  return { emit: sink.emit, flush: async () => { await pendingFlush; await sink.flush(); } };
 }
 
 /**
@@ -125,7 +166,8 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     sessionRoot,
     version: __VERSION__,
     stderr: input.stderr,
-    generate: (args, progress) => track(async (signal) => {
+    generate: (args, progress, jobSignal) => track(async (drainSignal) => {
+      const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;
       const sink = progressSink('generate', sessionRoot, progress);
       try {
@@ -141,7 +183,8 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
         await sink?.flush();
       }
     }),
-    run: (args, progress) => track(async (signal) => {
+    run: (args, progress, jobSignal) => track(async (drainSignal) => {
+      const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;
       const { grep, ...normalized } = normalizeCommonMcpInput(inputArgs);
       const sink = progressSink('run', sessionRoot, progress);
@@ -166,7 +209,8 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
         cwd: sessionRoot, stderr: input.stderr, list: false, signal,
       } as unknown as CheckCommandInput);
     }),
-    healPreview: (args, progress) => track(async (signal) => {
+    healPreview: (args, progress, jobSignal) => track(async (drainSignal) => {
+      const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;
       const sink = progressSink('heal', sessionRoot, progress);
       try {
@@ -198,7 +242,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     }
   });
 
-  const server = createMcpServer(deps, { signal: drainController.signal });
+  const server = createMcpServer(deps, { signal: drainController.signal, syncWaitMs: input.syncWaitMs, clock: createSystemClock() });
   const transport = new StdioServerTransport(proxy, input.stdout as Writable);
   const send = transport.send.bind(transport);
   let transportClosed = false;

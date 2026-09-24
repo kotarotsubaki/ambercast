@@ -22,8 +22,11 @@ export interface McpServerDeps {
   readonly sessionRoot: string;
   readonly version: string;
   readonly stderr: NodeJS.WritableStream;
-  readonly generate: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
-  readonly run: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
+  /** The signal interrupts this job's execution, including a job_cancel request. */
+  readonly generate: (input: unknown, progress: McpProgressContext, signal?: AbortSignal) => Promise<{ exitCode: number; envelope: unknown }>;
+  /** The signal interrupts this job's execution, including a job_cancel request. */
+  readonly run: (input: unknown, progress: McpProgressContext, signal?: AbortSignal) => Promise<{ exitCode: number; envelope: unknown }>;
   readonly check: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
-  readonly healPreview: (input: unknown, progress: McpProgressContext) => Promise<{ exitCode: number; envelope: unknown }>;
+  /** The signal interrupts this job's execution, including a job_cancel request. */
+  readonly healPreview: (input: unknown, progress: McpProgressContext, signal?: AbortSignal) => Promise<{ exitCode: number; envelope: unknown }>;
 }

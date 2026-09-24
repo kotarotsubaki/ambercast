@@ -36,8 +36,15 @@ describe('TP3 source vocabulary', () => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
       throw error;
     }
-    await syncSpec({ websiteRoot: fileURLToPath(new URL('../../../website/', import.meta.url)) });
-    expect(await readFile(enChangelogPath, 'utf8')).toBe(before);
+    const originalExitCode = process.exitCode;
+    try {
+      process.exitCode = undefined;
+      await syncSpec({ websiteRoot: fileURLToPath(new URL('../../../website/', import.meta.url)) });
+      expect(process.exitCode).toBeUndefined();
+      expect(await readFile(enChangelogPath, 'utf8')).toBe(before);
+    } finally {
+      process.exitCode = originalExitCode;
+    }
   });
 
   it('records the TP3 contract and matching evidence in each specification changelog', () => {

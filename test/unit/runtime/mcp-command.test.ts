@@ -9,7 +9,7 @@ import type { McpServerDeps } from '#adapters/mcp/types.js';
 import { runMcpCommand } from '#runtime/mcp-command.js';
 import { runRunCommand, type RunCommandOutput } from '#runtime/run-command.js';
 
-const serverFake = vi.hoisted(() => ({ connected: vi.fn(), called: vi.fn() }));
+const serverFake = vi.hoisted(() => ({ connected: vi.fn(), called: vi.fn(), connectFailure: null as unknown }));
 vi.mock('#adapters/mcp/server.js', () => ({
   createMcpServer: (deps: McpServerDeps) => {
     const server = new Server({ name: 'shutdown-test', version: '1.0.0' }, { capabilities: { tools: {} } });
@@ -20,6 +20,7 @@ vi.mock('#adapters/mcp/server.js', () => ({
     });
     return {
       connect: async (transport: Parameters<typeof server.connect>[0]) => {
+        if (serverFake.connectFailure !== null) throw serverFake.connectFailure;
         await server.connect(transport);
         serverFake.connected();
       },
@@ -55,10 +56,33 @@ function streams() {
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  serverFake.connectFailure = null;
   vi.clearAllMocks();
 });
 
 describe('runtime/mcp-command', () => {
+  it.each([
+    [new TypeError('connection refused'), 'TypeError'],
+    ['connection refused', 'Error'],
+  ])('reports a connect rejection as one startup error with exit 3 (%s) (TEST-B2)', async (failure, name) => {
+    serverFake.connectFailure = failure;
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const stdinEndListeners = io.stdin.listenerCount('end');
+    const sigtermListeners = process.listenerCount('SIGTERM');
+    const sigintListeners = process.listenerCount('SIGINT');
+
+    const exitCode = await runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+
+    expect(exitCode).toBe(3);
+    expect(io.errors()).toBe(`ambercast mcp: failed to start (${name})\n`);
+    expect(io.output()).toBe('');
+    expect(io.stdin.listenerCount('end')).toBe(stdinEndListeners);
+    expect(process.listenerCount('SIGTERM')).toBe(sigtermListeners);
+    expect(process.listenerCount('SIGINT')).toBe(sigintListeners);
+    expect(serverFake.connected).not.toHaveBeenCalled();
+  });
+
   it('aborts an active call on SIGTERM and returns its INTERRUPTED envelope with exit 0 (TEST-B9)', async () => {
     vi.mocked(runRunCommand).mockImplementationOnce(({ signal }) => new Promise<RunCommandOutput>((resolve) => {
       signal?.addEventListener('abort', () => resolve({

@@ -39,7 +39,7 @@ import type { ProgressNotification } from '@modelcontextprotocol/sdk/types.js';
 export function createMcpServer(deps: McpServerDeps, options?: { readonly signal?: AbortSignal }): { connect: (transport: unknown) => Promise<void>; close: () => Promise<void> } {
   const mcpServer = new McpServer(
     { name: 'ambercast', version: deps.version },
-    { instructions: 'Ambercast MCP server' }
+    { instructions: 'Use this server to run and repair keystroke E2E tests with ambercast. Use generate to create plans, run to replay them, check to validate them, and heal to preview repairs. For longer work, use job_status to collect results or job_cancel to stop a job.' }
   );
 
   let queue: Promise<unknown> = Promise.resolve();

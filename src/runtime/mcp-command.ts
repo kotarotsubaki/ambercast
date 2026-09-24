@@ -62,6 +62,7 @@ function progressSink(command: 'generate' | 'run' | 'heal', sessionRoot: string,
  * all calls. If they finish in time, server.close() runs before exit code 0;
  * otherwise the command exits with code 3. Results obtained after abort are
  * sent only while the transport remains open; otherwise they are discarded.
+ * A connection failure reports its error name on stderr and exits with code 3.
  * A failed send writes one line to stderr. Nothing is written to stdout after
  * close() is called.
  */
@@ -224,7 +225,12 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
   if (drainRequested) onDrain();
 
   try {
-    await server.connect(transport);
+    try {
+      await server.connect(transport);
+    } catch (error) {
+      input.stderr.write(`ambercast mcp: failed to start (${error instanceof Error ? error.name : 'Error'})\n`);
+      return 3;
+    }
     input.stderr.write(`ambercast mcp: serving ${sessionRoot}\n`);
     if ((input.stdin as Readable).readableEnded) onDrain();
     await drainStarted;

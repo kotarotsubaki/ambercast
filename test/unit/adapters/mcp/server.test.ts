@@ -54,6 +54,19 @@ afterEach(async () => {
 });
 
 describe('mcp/server', () => {
+  it('introduces the required purpose and workflow guidance in the initialization instructions (TEST-B2)', async () => {
+    const client = await connect(fakeDeps());
+    const instructions = client.getInstructions();
+
+    expect(instructions).toBeDefined();
+    expect(instructions).toMatch(/^Use this server to run and repair keystroke E2E tests with ambercast/);
+    expect(instructions!.length).toBeLessThanOrEqual(300);
+    expect(instructions).toMatch(/^[\x20-\x7E]+$/);
+    for (const name of ['generate', 'run', 'check', 'heal', 'job_status', 'job_cancel']) {
+      expect(instructions).toContain(name);
+    }
+  });
+
   it('lists the four synchronous tools in order with explicit safety annotations (TEST-B3)', async () => {
     const client = await connect(fakeDeps());
     const { tools } = await client.listTools();

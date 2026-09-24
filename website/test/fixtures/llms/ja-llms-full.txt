@@ -1147,13 +1147,13 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", または "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 空白以外の文字列, reason: 空白以外の文字列 }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正の整数, column: 正の整数, kind: "grant-line" または "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"executor-unregistered"、または "launch-failed"; engine: 空白以外の文字列 }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" または "launch-failed"; engine: 空白以外の文字列 }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: 空白以外の文字列, executor: 空白以外の文字列, reason: "surface-mismatch" または "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 空白以外の文字列 } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }`。element step では、`missing` は grounding entry が存在しない場合、`recoverable-miss` は既存 entry が現在のページと一致しない場合を表します。 |
 
 `generated` と `would-generate` の結果では、`secrets` が解決済みの候補シークレット使用を示し、dry run の `skipped-fresh` 結果にも含まれます。任意の `warnings` は、高リスクな `secrets.allow: "*"` 設定など、致命的でないポリシー警告を記録します。これらのフィールドにより、シークレット値を公開せずに同意関連の出力を観測できます。
 
@@ -1210,7 +1210,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
-| GROUNDING_UNRESOLVED | usage | case | 4 | `--resolve` なしのグラウンディングミス |
+| GROUNDING_UNRESOLVED | usage | case | 4 | `--resolve` なしの ai step または element step のグラウンディングミス |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | legacy | 生成されない | — | 以前のツールバージョンが生成したレポートとの後方互換性のためにレポートスキーマに保持されている。現在の `generate`、`run`、`heal`、`check` では生成されない |
 | SECRET_ENV_VAR_COLLISION | usage | case | 2 | 2つの secret が同じ環境変数名に投影される |
@@ -1225,7 +1225,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 
 利用エラー（usage）と環境エラー（environment）は独立したレポート語彙を持ちます。`SECRET_GRANT_UNATTRIBUTABLE` はレガシーの例外です。以前のツールバージョンが生成したレポートとの後方互換性のためにレポートコードスキーマに残されていますが、現在の `ErrorKind` やレポートエラー分岐はありません。
 
-caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`executor-unregistered`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
+caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
 
 レポートの構造については [レポート](/ambercast/ja/reference/reports/#errors)、終了コードの一覧については [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、トラブルシューティングの手順については [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/) を参照してください。
 
@@ -2856,6 +2856,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| TP3: executor の kind 語彙を total registry で単一化し、TP2 で導入した到達不能な `executor-unregistered` 理由を削除。`--resolve` なしの element step の grounding miss は `GROUNDING_UNRESOLVED` に統一され、終了コードは 3 から 4 に、エラーコードなしからコードありに変わる。Plan v4、grounding v2、config schema は不変で、report 3.7 は browser launch の reason enum 縮小のみ。 | repo:src/core/executor/kinds.ts, repo:src/adapters/browser/registry.ts, repo:src/usecases/run.ts, repo:src/report/schema.ts | レポート利用側は `executor-unregistered` を除外し、element step の `GROUNDING_UNRESOLVED` を受け入れる。Plan と grounding の再生成は不要。 |
 | TP2: ターゲット設定を `targets.<name>.browser` から `targets.<name>.executor` に変更し、`RunCaseOutcome.engine` を削除、レポート契約に `sessions[name].executor` を追加。`EXECUTOR_UNSUPPORTED` エラーコードを追加し、`BROWSER_LAUNCH_FAILED` の理由は旧 `engine` 接頭辞を `executor` に変更（`executor-unregistered`）。Plan schema は不変 | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | 明示的な executor 指定が不要なら旧 browser キーを削除し、必要なら `executor: { kind: "playwright", browser: "chromium" }`（`executor.browser`）へ移行する。loader は旧キーを `ConfigInvalidError` で拒否する。レポート利用側は削除・追加されたフィールド、新コード、改名された理由に対応する。今回の schema 変更による Plan の再生成は不要。 |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |

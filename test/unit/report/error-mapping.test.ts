@@ -204,7 +204,7 @@ describe('reportError', () => {
     });
   });
 
-  it.each(['executable-missing', 'executor-unregistered', 'launch-failed'] as const)('projects matching browser-launch %s reason and engine unchanged', (reason) => {
+  it.each(['executable-missing', 'launch-failed'] as const)('projects matching browser-launch %s reason and engine unchanged', (reason) => {
     const error = new BrowserLaunchFailedError('browser failed', {
       reason, engine: 'chromium', ignored: 'not reportable',
     });

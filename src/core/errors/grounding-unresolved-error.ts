@@ -6,7 +6,7 @@ import { AmbercastError } from './types.js';
 export type GroundingUnresolvedReason = 'missing' | 'recoverable-miss';
 
 /**
- * Reports an AI-step grounding miss when the caller has not opted into resolution.
+ * Reports an AI or element step grounding miss when resolution is not permitted.
  *
  * The typed details preserve the case-local diagnostic required by reports and
  * prevent call sites from collapsing an absent entry and a recoverable trace

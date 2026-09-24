@@ -110,13 +110,13 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 非空白字符串, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required"、"declined" 或 "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 非空白字符串, reason: 非空白字符串 }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正整数, column: 正整数, kind: "grant-line" 或 "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"executor-unregistered" 或 "launch-failed"; engine: 非空白字符串 }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" 或 "launch-failed"; engine: 非空白字符串 }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: 非空白字符串, executor: 非空白字符串, reason: "surface-mismatch" 或 "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 非空白字符串 } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 非空白字符串, reason: "outside-test-dir"、"not-test-md" 或 "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" 或 "recoverable-miss" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" 或 "recoverable-miss" }`；对于 element step，`missing` 表示没有 grounding 条目，`recoverable-miss` 表示已有条目与当前页面不匹配。 |
 
 对于 `generated` 与 `would-generate` 结果，`secrets` 标识已解析的候选机密使用；dry run 的 `skipped-fresh` 结果也会包含该字段。可选的 `warnings` 会记录非致命策略警告，包括高风险的 `secrets.allow: "*"` 配置。这些字段使同意相关输出可被观测，而不会暴露机密值。
 

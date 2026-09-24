@@ -7,6 +7,7 @@ description: "アーティファクトのバージョン受け入れは、リリ
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| TP3: executor の kind 語彙を total registry で単一化し、TP2 で導入した到達不能な `executor-unregistered` 理由を削除。`--resolve` なしの element step の grounding miss は `GROUNDING_UNRESOLVED` に統一され、終了コードは 3 から 4 に、エラーコードなしからコードありに変わる。Plan v4、grounding v2、config schema は不変で、report 3.7 は browser launch の reason enum 縮小のみ。 | repo:src/core/executor/kinds.ts, repo:src/adapters/browser/registry.ts, repo:src/usecases/run.ts, repo:src/report/schema.ts | レポート利用側は `executor-unregistered` を除外し、element step の `GROUNDING_UNRESOLVED` を受け入れる。Plan と grounding の再生成は不要。 |
 | TP2: ターゲット設定を `targets.<name>.browser` から `targets.<name>.executor` に変更し、`RunCaseOutcome.engine` を削除、レポート契約に `sessions[name].executor` を追加。`EXECUTOR_UNSUPPORTED` エラーコードを追加し、`BROWSER_LAUNCH_FAILED` の理由は旧 `engine` 接頭辞を `executor` に変更（`executor-unregistered`）。Plan schema は不変 | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | 明示的な executor 指定が不要なら旧 browser キーを削除し、必要なら `executor: { kind: "playwright", browser: "chromium" }`（`executor.browser`）へ移行する。loader は旧キーを `ConfigInvalidError` で拒否する。レポート利用側は削除・追加されたフィールド、新コード、改名された理由に対応する。今回の schema 変更による Plan の再生成は不要。 |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |

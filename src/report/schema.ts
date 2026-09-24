@@ -238,7 +238,7 @@ export const SecretSyntaxRejectedDetails = z.strictObject({
 });
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
-/** Identifies the AI step whose fail-closed grounding miss can be resolved explicitly. */
+/** Identifies the AI or element step whose fail-closed grounding miss can be resolved explicitly. */
 export const GroundingUnresolvedDetails = z.strictObject({
   stepId: z.string(),
   reason: z.enum(['missing', 'recoverable-miss']),
@@ -254,9 +254,12 @@ export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ n
  * reports may omit this evidence. The strict object admits only the reason
  * and a non-whitespace informational engine, keeping engine identity
  * independent from the closed reason vocabulary.
+ * The total executor registry makes an unregistered-kind reason unreachable,
+ * so this vocabulary excludes it. REPORT_SCHEMA_VERSION remains unchanged because
+ * narrowing accepted reasons does not require readers to supply a new field.
  */
 export const BrowserLaunchFailedDetails = z.strictObject({
-  reason: z.enum(['executable-missing', 'executor-unregistered', 'launch-failed']),
+  reason: z.enum(['executable-missing', 'launch-failed']),
   engine: NonWhitespaceString,
 });
 

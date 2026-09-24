@@ -46,13 +46,14 @@ import {
 } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
 import type { AiAgenticRequest, InstructionCoveredAiAgenticRequest } from '#ports/ai.js';
-import type { BrowserSession, PerformableAction } from '#ports/browser.js';
+import type { BrowserSession, GroundedResolution, PerformableAction } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
 import { classifyBrowserLaunchFailure, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { buildRunReport } from '#usecases/run-report.js';
+import { reportError } from '#report/error-mapping.js';
 import { OBSERVED_NOTE, RunResult } from '#report/schema.js';
 import { baseUrlSecretPolicy } from '../../doubles/base-url-secret-policy.js';
 import { boundTarget } from '../../doubles/bound-target.js';
@@ -1860,14 +1861,30 @@ describe('run', () => {
   });
 
   it.each([
-    ['an absent grounding entry', {} as GroundingDocument['entries'], new Map<string, FakeBrowserSessionEntry>(), false],
-    ['an element-not-found grounding miss', elementGrounding(['click-submit']), new Map<string, FakeBrowserSessionEntry>(), true],
-    ['a fingerprint-mismatch grounding miss', elementGrounding(['click-submit']), liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), true],
-  ] as const)('keeps element grounding on the existing CaseAbort recovery mode for %s when resolve is false', async (_description, entries, live, resolvesGrounding) => {
+    ['missing', 'No grounding is stored for this locator.'],
+    ['fingerprint-mismatch', 'The stored grounding for this locator no longer matches the current page.'],
+    ['element-not-found', 'The stored grounding for this locator has no matching element on the current page.'],
+    ['ambiguous-match', 'The supplied locator matches more than one element in the current accessibility evidence. Add a distinguishing aria-label (or other accessible-name difference) to one of the matching elements so the locator can identify a single element.'],
+    ['snapshot-invalid', 'The current accessibility evidence could not be parsed and cannot be trusted for this locator. Retry the run; if this persists, the page structure may use a form this parser does not recognize.'],
+    ['secret-contaminated', 'The supplied locator\'s accessibility evidence contains a resolved secret value and cannot be fingerprinted or cached. Add an aria-label that does not echo the secret value to the affected element.'],
+  ] as const)('reports GROUNDING_UNRESOLVED for element grounding %s without resolve', async (missReason, message) => {
+    const hasEntry = missReason !== 'missing';
+    const entries = hasEntry ? elementGrounding(['click-submit']) : {};
     const closed = vi.fn();
+    const live = liveEntries([SUBMIT]);
+    if (hasEntry && missReason !== 'secret-contaminated') {
+      live.set(elementRefKey(SUBMIT), {
+        currentFingerprint: FINGERPRINT,
+        exists: true,
+        scriptedMissReasons: { verify: missReason },
+      });
+    }
     const session = createFakeBrowserSession(live, { onClose: closed });
+    if (missReason === 'secret-contaminated') {
+      vi.spyOn(session, 'resolveGrounded').mockImplementation(async (): Promise<GroundedResolution> => ({ kind: 'miss', reason: missReason }));
+    }
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
-    const { deps, recordingStorage } = createScenario({
+    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
     const testPath = await writePrompt(recordingStorage.storage);
@@ -1877,11 +1894,35 @@ describe('run', () => {
       { id: 'after-grounding', kind: 'action', action: 'navigate', url: '/after' },
     ];
     await seedFreshArtifacts(recordingStorage.storage, testPath, steps, entries);
+    const groundingPath = `${TEST_DIR}/login.ambercast.grounding.json`;
+    const groundingBefore = await recordingStorage.storage.readText(groundingPath);
 
     const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
-    expectStopgapOutcome(outcome, 'click-submit', 'after-grounding', 'before-grounding');
-    if (resolvesGrounding) {
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      exitCode: 4,
+      message,
+      details: { stepId: 'click-submit', reason: hasEntry ? 'recoverable-miss' : 'missing' },
+    });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [
+        { id: 'before-grounding', status: 'passed' },
+        { id: 'click-submit', status: 'error' },
+        { id: 'after-grounding', status: 'skipped' },
+      ],
+      aiCalls: 0,
+    });
+    expect(reportError(outcome.results[0]!.error as GroundingUnresolvedError, { scope: 'case', caseId: 'login' })).toMatchObject({
+      kind: 'usage', code: 'GROUNDING_UNRESOLVED', hint: expect.stringContaining('ambercast run --resolve'),
+    });
+    expect(await recordingStorage.storage.readText(groundingPath)).toBe(groundingBefore);
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+    expect(aiCalls(events)).toEqual([]);
+    expect(session.operations().filter((operation) => operation.type === 'perform' && operation.action.type === 'click')).toEqual([]);
+    if (hasEntry) {
       expect(resolveGrounded).toHaveBeenCalledWith(SUBMIT, { mode: 'verify', fingerprint: FINGERPRINT });
     } else {
       expect(resolveGrounded).not.toHaveBeenCalled();
@@ -1908,7 +1949,7 @@ describe('run', () => {
         } as unknown as JsonValueT),
       );
     }],
-  ] as const)('degrades %s to the cache-only grounding-miss case-abort stopgap', async (_description, arrangeGrounding) => {
+  ] as const)('reports GROUNDING_UNRESOLVED for %s in cache-only mode', async (_description, arrangeGrounding) => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(liveEntries([SUBMIT]), { onClose: closed });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
@@ -1925,7 +1966,21 @@ describe('run', () => {
 
     const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
-    expectStopgapOutcome(outcome, 'click-submit', 'after-grounding', 'before-grounding');
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      exitCode: 4,
+      message: 'No grounding is stored for this locator.',
+      details: { stepId: 'click-submit', reason: 'missing' },
+    });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [
+        { id: 'before-grounding', status: 'passed' },
+        { id: 'click-submit', status: 'error', kind: 'environment' },
+        { id: 'after-grounding', status: 'skipped' },
+      ],
+    });
     expect(resolveGrounded).not.toHaveBeenCalled();
     expect(closed).toHaveBeenCalledTimes(1);
   });
@@ -4209,8 +4264,17 @@ describe('run path-B element recovery', () => {
 
     const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
-    expect(outcome.results[0]?.error).toBeUndefined();
-    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved',
+      exitCode: 4,
+      message: 'No grounding is stored for this locator.',
+      details: { stepId: 'click-submit', reason: 'missing' },
+    });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      steps: [{ id: 'click-submit', status: 'error', kind: 'environment' }],
+    });
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(aiCalls(events)).toEqual([]);
     expect(session.operations()).toEqual([]);

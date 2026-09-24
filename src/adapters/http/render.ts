@@ -30,7 +30,7 @@ const reasonText = (reason: Extract<RunListing, { kind: 'unreadable' }>['reason'
   'not-run-report': VIEW_COPY.list.cases.unreadableReasons.notRunReport,
   'read-error': VIEW_COPY.list.cases.unreadableReasons.readFailed,
 })[reason];
-const rawLink = (runId: string, label: string): string => `<a href="/runs/${runId}/report.json">${label}</a>`;
+const rawLink = (runId: string, label: string): string => `<a href="/runs/${escapeHtml(runId)}/report.json">${label}</a>`;
 const statusText = (status: string): string => status === 'failed' ? VIEW_COPY.list.rowStatus.failed : status === 'error' ? VIEW_COPY.list.rowStatus.error : status === 'passed' ? VIEW_COPY.list.rowStatus.passed : status;
 
 /**
@@ -43,6 +43,7 @@ const statusText = (status: string): string => status === 'failed' ? VIEW_COPY.l
  * output depends only on `listings` and fixed copy, so the same input yields
  * the same output for snapshot tests. Only readable runs link to detail pages;
  * unreadable reports link to raw bytes unless the read itself failed.
+ * A row's `runId` comes from its report directory name, and this exported pure renderer may receive arbitrary strings directly; escaping remains a render-layer invariant even though the HTTP router separately restricts in-scope IDs to `[A-Za-z0-9-]`.
  */
 export function renderRunList(listings: readonly RunListing[]): string {
   const copy = VIEW_COPY.list;
@@ -59,7 +60,7 @@ export function renderRunList(listings: readonly RunListing[]): string {
     const { summary, startedAt, durationMs } = listing.envelope;
     const status = summary.failed > 0 ? copy.rowStatus.failed : summary.errored > 0 ? copy.rowStatus.error : summary.passed > 0 ? copy.rowStatus.passed : copy.rowStatus.empty;
     const counts = [[summary.passed, 'passed'], [summary.failed, 'failed'], [summary.errored, 'error'], [summary.skipped, 'skipped']].filter(([count]) => Number(count) > 0).map(([count, name]) => `${count} ${name}`).join(' · ') || '0 cases';
-    return `<tr><td>${status}</td><td>${escapeHtml(runId)} <a href="/runs/${runId}">${copy.runLinks.openRun}</a></td><td>${escapeHtml(startedAt)}</td><td>${duration(durationMs)}</td><td>${counts}</td></tr>`;
+    return `<tr><td>${status}</td><td>${escapeHtml(runId)} <a href="/runs/${escapeHtml(runId)}">${copy.runLinks.openRun}</a></td><td>${escapeHtml(startedAt)}</td><td>${duration(durationMs)}</td><td>${counts}</td></tr>`;
   }).join('');
   return page(copy.title, `<h1>${copy.title}</h1><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`);
 }
@@ -98,7 +99,7 @@ export function renderRunDetail(listing: RunListing): string {
     const columns = Object.values(copy.stepTable).map((label) => `<th>${label}</th>`).join('');
     const steps = result.steps.map((step, index) => {
       const diagnostics = step.status === 'failed' || step.status === 'error' ? `${step.expected === undefined ? '' : `<p>${copy.failedStep.expected} ${escapeHtml(step.expected)}</p>`}${step.actual === undefined ? '' : `<p>${copy.failedStep.actual} ${escapeHtml(step.actual)}</p>`}` : '';
-      const screenshot = step.screenshotOmitted ? `<p>${copy.failedStep.screenshotOmitted}</p>` : step.screenshot === undefined ? '' : `<img src="/runs/${runId}/screenshots/${escapeHtml(encodeURIComponent(step.screenshot))}" alt="${copy.snapshotAltPrefix}${escapeHtml(step.id)}">`;
+      const screenshot = step.screenshotOmitted ? `<p>${copy.failedStep.screenshotOmitted}</p>` : step.screenshot === undefined ? '' : `<img src="/runs/${escapeHtml(runId)}/screenshots/${escapeHtml(encodeURIComponent(step.screenshot))}" alt="${copy.snapshotAltPrefix}${escapeHtml(step.id)}">`;
       const observed = step.observed ? `<details><summary>${copy.snapshotDetails.summary}</summary><p>${escapeHtml(step.observed.note)}</p><pre>${escapeHtml(step.observed.accessibilitySnapshot)}</pre></details>` : '';
       return `<tr><td>${index + 1}</td><td>${escapeHtml(step.id)}</td><td>${escapeHtml(step.type)}</td><td>${escapeHtml(step.status)}</td></tr>${diagnostics || screenshot || observed ? `<tr><td colspan="4">${diagnostics}${screenshot}${observed}</td></tr>` : step.status === 'failed' || step.status === 'error' ? '<tr><td colspan="4">—</td></tr>' : ''}`;
     }).join('');

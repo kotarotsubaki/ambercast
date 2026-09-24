@@ -5,6 +5,7 @@ import type { RunListing } from '../../runtime/view-command.js';
 import { escapeHtml, renderError, renderRunDetail, renderRunList } from './render.js';
 
 const runId = '2026-09-23T120000-abc123';
+const attackRunId = 'x" onmouseover="alert(1)';
 const envelope = ReportEnvelope.parse({
   schemaVersion: REPORT_SCHEMA_VERSION,
   command: 'run',
@@ -168,6 +169,41 @@ describe('renderRunDetail', () => {
 });
 
 describe('HTML injection boundaries', () => {
+  it('escapes the readable run ID in the Open run link', () => {
+    const listing = readable({ results: [executed({ steps: [{ id: 'step', type: 'capture', status: 'passed', screenshot: 'step.png' }] })] }, attackRunId);
+    const list = renderRunList([listing]);
+    expect(list).toContain('<a href="/runs/x&quot; onmouseover=&quot;alert(1)"');
+    expect(list).not.toContain('" onmouseover="');
+  });
+
+  it('escapes the readable run ID in the Raw JSON link', () => {
+    const listing = readable({ results: [executed({ steps: [{ id: 'step', type: 'capture', status: 'passed', screenshot: 'step.png' }] })] }, attackRunId);
+    const detail = renderRunDetail(listing);
+    expect(detail).toContain('href="/runs/x&quot; onmouseover=&quot;alert(1)/report.json"');
+    expect(detail).not.toContain('" onmouseover="');
+  });
+
+  it('escapes the readable run ID in the screenshot source', () => {
+    const listing = readable({ results: [executed({ steps: [{ id: 'step', type: 'capture', status: 'passed', screenshot: 'step.png' }] })] }, attackRunId);
+    const detail = renderRunDetail(listing);
+    expect(detail).toContain('<img src="/runs/x&quot; onmouseover=&quot;alert(1)/screenshots/step.png"');
+    expect(detail).not.toContain('" onmouseover="');
+  });
+
+  it('escapes the unreadable run ID in the list Raw JSON link', () => {
+    const listing: RunListing = { kind: 'unreadable', runId: attackRunId, reason: 'invalid-json' };
+    const list = renderRunList([listing]);
+    expect(list).toContain('href="/runs/x&quot; onmouseover=&quot;alert(1)/report.json"');
+    expect(list).not.toContain('" onmouseover="');
+  });
+
+  it('escapes the unreadable run ID in the detail Raw JSON link', () => {
+    const listing: RunListing = { kind: 'unreadable', runId: attackRunId, reason: 'invalid-json' };
+    const detail = renderRunDetail(listing);
+    expect(detail).toContain('href="/runs/x&quot; onmouseover=&quot;alert(1)/report.json"');
+    expect(detail).not.toContain('" onmouseover="');
+  });
+
   it('escapes report-controlled text in list and detail, including attributes', () => {
     const attack = '<script>alert(1)</script>" onmouseover="&';
     const listing = readable({ results: [executed({ id: attack, file: attack, planFile: attack, explanation: attack, steps: [{ id: attack, type: 'assert', target: 'default', status: 'failed', expected: attack, actual: attack, screenshot: attack, observed: { note: OBSERVED_NOTE, accessibilitySnapshot: attack } }] })], errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: attack }] });

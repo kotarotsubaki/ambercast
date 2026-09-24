@@ -4,6 +4,7 @@ import {
   classifyConfig,
   classifyGitignore,
   classifySample,
+  decodePreservingBom,
   type ActionClassification,
   type InitRejectionReason,
 } from '#core/init/plan.js';
@@ -89,7 +90,8 @@ export async function planInit(
 
     let current: string | null;
     try {
-      current = (await deps.storage.readTextSnapshotIfExists(entry.path))?.text ?? null;
+      const snapshot = await deps.storage.readTextSnapshotIfExists(entry.path);
+      current = snapshot ? decodePreservingBom(snapshot.bytes) : null;
     } catch (error) {
       return { kind: 'read-failed', path: entry.path, error };
     }

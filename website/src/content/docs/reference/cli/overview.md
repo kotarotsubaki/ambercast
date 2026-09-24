@@ -70,10 +70,10 @@ Except in `--list` mode, each positional argument must be a literal path inside 
 
 ## Discovery default {#discovery-default}
 
-When you pass no literal files, every implemented command delegates test file selection to configured discovery.
+When you pass no literal files, `generate`, `run`, `check`, and `heal` delegate test file selection to configured discovery; `init` does not participate in discovery.
 
 - The default inclusion pattern is `**/*.test.md`.
 - Default exclusions include `.runs`, Plan, and Grounding companions.
 - Discovery evaluates POSIX-relative paths by requiring an inclusion match first, after which an ignore match excludes the path.
 
-Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast init](/ambercast/reference/cli/init/#flags), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), and [ambercast heal](/ambercast/reference/cli/heal/#flags).
+Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), and [ambercast heal](/ambercast/reference/cli/heal/#flags).

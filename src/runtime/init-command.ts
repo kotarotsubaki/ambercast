@@ -246,6 +246,10 @@ export async function runInitCommand(
     input.stderr.write(`  ${entry.classification.action.padEnd(8)}${toRelativePath(entry.path, directory)}\n`);
   }
 
+  if (input.signal?.aborted) {
+    return preApplyInterrupted();
+  }
+
   if (entries.every((entry) => entry.classification.action === 'skipped')) {
     const states: InitSkippedFileStates = [
       { path: toRelativePath(entries[0].path, directory), state: 'skipped' },
@@ -273,6 +277,9 @@ export async function runInitCommand(
         message: `could not read the confirmation answer: ${escapeControlChars(messageFor(error))}`,
         exitCode: 3,
       };
+    }
+    if (input.signal?.aborted) {
+      return preApplyInterrupted();
     }
     if (confirmation === 'declined') {
       return { outcome: 'declined', states: [], message: null, exitCode: 0 };

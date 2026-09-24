@@ -6,6 +6,7 @@ import {
   classifyConfig,
   classifyGitignore,
   classifySample,
+  decodePreservingBom,
 } from '../../../../src/core/init/plan.js';
 import {
   AGENTS_BLOCK,
@@ -17,6 +18,28 @@ import {
 const beginMarker = '<!-- ambercast:begin -->';
 const endMarker = '<!-- ambercast:end -->';
 const crlf = (text: string): string => text.replaceAll('\n', '\r\n');
+
+describe('decodePreservingBom', () => {
+  it('preserves a complete UTF-8 BOM as a leading character', () => {
+    expect(decodePreservingBom(Uint8Array.from([0xef, 0xbb, 0xbf, 0x41]))).toBe('\uFEFFA');
+  });
+
+  it('decodes BOM-free UTF-8 without adding a BOM', () => {
+    expect(decodePreservingBom(Uint8Array.from([0x41, 0xc3, 0xa9]))).toBe('Aé');
+  });
+
+  it('decodes empty bytes to an empty string', () => {
+    expect(decodePreservingBom(new Uint8Array(0))).toBe('');
+  });
+
+  it('replaces an incomplete BOM sequence before subsequent ASCII', () => {
+    expect(decodePreservingBom(Uint8Array.from([0xef, 0xbb, 0x41]))).toBe('�A');
+  });
+
+  it('replaces a lone UTF-8 continuation byte', () => {
+    expect(decodePreservingBom(Uint8Array.from([0xbf]))).toBe('�');
+  });
+});
 
 describe('init plan classification', () => {
   describe('classifyConfig', () => {

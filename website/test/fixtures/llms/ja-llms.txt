@@ -80,3 +80,4 @@
 - [セットアッププロンプト](https://kotarotsubaki.github.io/ambercast/ja/agents/setup-prompt/): 依頼されたテストを扱うエージェントに対し、レビューを最優先とする境界を規定するセットアッププロンプトを提供します。
 - [構造化出力の読み取り](https://kotarotsubaki.github.io/ambercast/ja/agents/reading-structured-output/): エージェントがレポートエンベロープに基づいて安全な順序で分岐処理を行い、実行結果を正しく判定するための手順を解説します。
 - [機械可読リソース](https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-resources/): ambercast で公開されている機械可読リソースと、その提供ルールについて説明します。
+- [official skill](https://kotarotsubaki.github.io/ambercast/ja/agents/official-skill/): ambercast が同梱する AI コーディングエージェント向け official skill と、エージェント向けインターフェースにおけるその役割について説明します。

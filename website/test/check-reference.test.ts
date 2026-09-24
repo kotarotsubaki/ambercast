@@ -63,7 +63,7 @@ const capabilities = {
 const plannedDocs = Object.fromEntries([
   'reference/cli/review', 'reference/cli/mcp',
   'reference/cli/baseline-restore', 'reference/mcp-tools',
-  'agents/mcp-server', 'agents/official-skill',
+  'agents/mcp-server',
 ].map((slug) => [`${slug}.md`, '---\nstatus: planned\n---\n# Planned\n']));
 
 const flagTable = (rows: string[], anchored = true, prose = '') => [
@@ -221,7 +221,13 @@ describe('checkReference', () => {
   });
 
   it('reports one unlisted page whose status became available', async () => {
-    const result = await checkFixture(createReferenceFixture({ docs: { 'agents/official-skill.md': '---\nstatus: available\n---\n# Skill\n' } }));
+    const result = await checkFixture(createReferenceFixture({
+      capabilityPages: { ...capabilityPagesMapping, unlisted: {
+        ...capabilityPagesMapping.unlisted,
+        unmapped: { reason: 'fixture-only', owner: 'test', removeWhen: 'never' },
+      } },
+      docs: { 'unmapped.md': '---\nstatus: available\n---\n# Unmapped\n' },
+    }));
     expect(result.filter((v) => v.rule === 'unlisted-not-planned')).toHaveLength(1);
   });
   it('returns no violations for a complete internally consistent reference fixture', async () => {

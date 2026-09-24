@@ -34,7 +34,7 @@ npx ambercast <command>
 
 ## クイックスタート
 
-`init` コマンドはまだ無く、プロンプトファイルが 1 つあれば始められますが、既定ではアプリが `http://localhost:3000` で動いている前提です（変更方法は[設定](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/)を参照してください）。
+`npx ambercast init` を実行すると、config・サンプルプロンプト・`.gitignore` エントリ・`AGENTS.md` セクションを一度に生成できます — 使わずにプロンプトファイルを 1 つ書くだけでも始められます。既定ではアプリが `http://localhost:3000` で動いている前提です（変更方法は[設定](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/)を参照してください）。
 
 1. `tests/ambercast/sign-in.test.md` にテストプロンプトを書きます:
 
@@ -51,11 +51,11 @@ npx ambercast <command>
    npx ambercast run
    ```
 
-`generate` はプロンプトの隣に `sign-in.ambercast.plan.json` と `sign-in.ambercast.grounding.json` を書き出すため、3 ファイルすべてを git にコミットします。以降の `run` はキャッシュ済みの grounding が揃っている限りプランをリプレイするだけで AI 呼び出しはゼロです。grounding が欠けたステップは AI にフォールバックし、`--cache-only` を付けると代わりに失敗します（詳細は[プロンプトの書き方](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/)を参照してください）。
+`generate` はプロンプトの隣に `sign-in.ambercast.plan.json` と `sign-in.ambercast.grounding.json` を書き出すため、3 ファイルすべてを git にコミットします。以降の `run` はキャッシュ済みの grounding が揃っている限りプランをリプレイするだけで AI 呼び出しはゼロです。grounding が欠けたステップは既定で失敗しクローズし、`--resolve` を付けるとそのステップだけライブ AI 解決を行います（詳細は[プロンプトの書き方](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/)を参照してください）。
 
 ## もっと知る
 
-- [コマンド一覧](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/) — `generate`、`run`、`check`、`heal`、`view` の各コマンドの使い方
+- [コマンド一覧](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/) — `init`、`generate`、`run`、`check`、`heal`、`view` の各コマンドの使い方
 - [終了コード](https://kotarotsubaki.github.io/ambercast/ja/reference/exit-codes/) — 終了コード 0〜5 の定義と、結果が混在するバッチ実行時の優先順位
 - [アーティファクト](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/) — どの生成ファイルをコミットし、どれを gitignore すべきかの指針
 - [シークレット管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/) — 認証情報をプロンプトやプランに含めずテストへ安全に渡す方法
@@ -85,7 +85,6 @@ ambercast は **0.x、pre-1.0** です: マイナーリリースで破壊的変�
 
 - Chromium のみ対応です（Firefox と WebKit は計画中です）。
 - ローカル実行のみ — ホスト型のランナーはありません。
-- `init` コマンドはまだありません — config とプロンプトは手動でセットアップしてください。
 - MCP サーバーはまだありません。
 
 ## コントリビューション

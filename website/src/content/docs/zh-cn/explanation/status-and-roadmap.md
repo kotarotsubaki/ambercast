@@ -3,11 +3,11 @@ title: 状态与路线图
 description: 明确 ambercast 0.3.1 的功能边界与后续设计规划。
 ---
 
-理解 ambercast 的当前边界，有助于区分已实现的工程事实与后续的设计规划。在当前阶段，0.3.1 确立了明确的命令行能力范围，同时定义了计划（plans）在版本演进中的生命周期要求。
+理解 ambercast 的当前边界，有助于区分已实现的工程事实与后续的设计规划。在当前阶段，ambercast 确立了明确的命令行能力范围，同时定义了计划（plans）在版本演进中的生命周期要求。
 
 ## 当前版本已实现 {#implemented}
 
-在 0.3.1 中，CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`、`heal` 和 `view`。当前已实现的解析器并未暴露 MCP 子命令。
+CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`、`heal` 和 `view`。当前已实现的解析器并未暴露 MCP 子命令。
 
 对于在早期版本中生成的产物，0.3.1 要求重新生成 0.1.0 的计划。这是因为 producer-contract 的指纹发生了变更，致使既有的 producer bundle 以及 `inputsDigest` 处于 `stale`（已过期）状态。
 
@@ -15,11 +15,11 @@ description: 明确 ambercast 0.3.1 的功能边界与后续设计规划。
 
 ## 当前边界之后的规划 {#planned-after-current-boundary}
 
-在当前实现的边界之外，项目规划中的文档涵盖了 `review`、`mcp`、baseline/restore、MCP 工具以及官方 skill。
+在当前实现的边界之外，项目规划中的文档涵盖了 `review`、`mcp`、baseline/restore 以及 MCP 工具。
 
 在浏览器平台支持方面，Firefox 和 WebKit 计划在 1.0 达成。
 
-相关链接：[ambercast review](/ambercast/zh-cn/reference/cli/review/)、[official skill](/ambercast/zh-cn/agents/official-skill/)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
+相关链接：[ambercast review](/ambercast/zh-cn/reference/cli/review/)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
 
 ## 版本策略 {#version-policy}
 

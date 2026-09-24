@@ -12,6 +12,20 @@ import {
   SAMPLE_TEMPLATE,
 } from './templates.js';
 
+/**
+ * Keeps init's pre-write classification aligned with exclusive updates when a
+ * file starts with a UTF-8 BOM. `FsStorage.readTextSnapshotIfExists().text`
+ * strips that BOM because `TextDecoder` defaults to `ignoreBOM: false`, while
+ * `updateTextExclusive` obtains its commit-time `current` through
+ * `readFile(path, 'utf8')`, which preserves it as a literal character. A file
+ * differing only by that character could otherwise be skipped during planning
+ * and become a conflict or replacement during apply. Decoding the snapshot's
+ * raw bytes with `ignoreBOM: true` makes both classifications see the same text.
+ */
+export function decodePreservingBom(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
+}
+
 export type InitAction = 'create' | 'replace' | 'append' | 'skipped';
 
 export type InitRejectionReason = 'config-conflict' | 'agents-malformed-markers';

@@ -72,8 +72,8 @@ Target（目标）的解析优先级依次为：显式指定的 target、配置�
 
 ## 默认发现规则 {#discovery-default}
 
-当未传入字面文件路径时，所有已实现的命令均会将文件选择委托给所配置的发现机制；默认包含模式为 `**/*.test.md`，默认排除项包括 `.runs` 目录、Plan 与 Grounding 伴生文件。
+当未传入字面文件路径时，`generate`、`run`、`check`、`heal` 会将文件选择委托给所配置的发现机制；`init` 不参与发现。默认包含模式为 `**/*.test.md`，默认排除项包括 `.runs` 目录、Plan 与 Grounding 伴生文件。
 
 发现机制对 POSIX 相对路径进行求值：首先要求满足包含匹配，若命中忽略匹配则会将该路径排除。
 
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection), [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection), [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags), [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags), [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags), [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)。
+相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection), [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags), [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags), [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags), [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)。

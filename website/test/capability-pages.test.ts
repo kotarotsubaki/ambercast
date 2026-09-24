@@ -6,7 +6,6 @@ describe('plannedPageSlugs', () => {
   it('returns the sorted six-page union, deduplicating the shared baseline/restore page', () => {
     expect(plannedPageSlugs(mapping)).toEqual([
       'agents/mcp-server',
-      'agents/official-skill',
       'reference/cli/baseline-restore',
       'reference/cli/mcp',
       'reference/cli/review',

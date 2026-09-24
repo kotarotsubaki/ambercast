@@ -80,3 +80,4 @@
 - [设置提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/setup-prompt/): 为处理指定测试的 AI Agent 提供轻量、以审查为先的完整可复制运行提示词。
 - [读取结构化输出](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/reading-structured-output/): 指导 Agent 根据报告信封进行逻辑分支，按固定安全顺序处理命令、结果状态、错误代码与报告持久化。
 - [机器可读资源](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-resources/): 明确列出已发布的机器可读资源及其可用性规则。
+- [official skill](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/official-skill/): 说明 ambercast 内置的面向编码智能体的 official skill，及其在智能体接口设计中的角色。

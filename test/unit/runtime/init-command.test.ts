@@ -117,7 +117,116 @@ function allSkippedFiles(): Record<string, string> {
   };
 }
 
+function expectedPlan(actions: readonly ['create' | 'skipped', 'create' | 'skipped', 'create' | 'skipped', 'create' | 'skipped']): string {
+  return `ambercast init will write to ${root}:\n`
+    + `  ${actions[0].padEnd(8)}ambercast.config.json\n`
+    + `  ${actions[1].padEnd(8)}tests/ambercast/find-page.test.md\n`
+    + `  ${actions[2].padEnd(8)}.gitignore\n`
+    + `  ${actions[3].padEnd(8)}AGENTS.md\n`;
+}
+
+function expectNoWrites(fake: ReturnType<typeof createStorage>, before: Map<string, Uint8Array>): void {
+  expect(fake.updates).toEqual([]);
+  expect(new Map([...fake.files].map(([path, content]) => [path, new TextEncoder().encode(content)]))).toEqual(before);
+}
+
+async function runWithoutStdout(commandInput: InitCommandInput, commandDeps: InitCommandDeps) {
+  const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  try {
+    const result = await runInitCommand(commandInput, commandDeps);
+    expect(stdout).not.toHaveBeenCalled();
+    return result;
+  } finally {
+    stdout.mockRestore();
+  }
+}
+
 describe('runInitCommand', () => {
+  it('interrupts after displaying an all-skipped plan before returning nothing-to-do', async () => {
+    const controller = new AbortController();
+    const fake = createStorage(allSkippedFiles());
+    const before = new Map([...fake.files].map(([path, content]) => [path, new TextEncoder().encode(content)]));
+    const writes: string[] = [];
+    const stderr = { write(chunk: unknown) {
+      writes.push(String(chunk));
+      if (writes.length === 5) controller.abort();
+      return true;
+    } } as NodeJS.WritableStream;
+    const readConfirmationAnswer = vi.fn(async () => 'authorized' as const);
+
+    const output = await runWithoutStdout(input(stderr, { signal: controller.signal }), deps(fake.storage, { readConfirmationAnswer }));
+    expect(output).toEqual({
+      outcome: 'interrupted', phase: 'pre-apply', states: [], message: 'init was interrupted before writing anything.', exitCode: 3,
+    });
+    expect(output.message).toBe('init was interrupted before writing anything.');
+    expect(writes.join('')).toBe(expectedPlan(['skipped', 'skipped', 'skipped', 'skipped']));
+    expect(readConfirmationAnswer).not.toHaveBeenCalled();
+    expectNoWrites(fake, before);
+  });
+
+  it('interrupts after displaying a plan with writes before prompting or applying', async () => {
+    const controller = new AbortController();
+    const fake = createStorage({ [paths.sample]: 'existing prompt' });
+    const before = new Map([...fake.files].map(([path, content]) => [path, new TextEncoder().encode(content)]));
+    const writes: string[] = [];
+    const stderr = { write(chunk: unknown) {
+      writes.push(String(chunk));
+      if (writes.length === 5) controller.abort();
+      return true;
+    } } as NodeJS.WritableStream;
+    const readConfirmationAnswer = vi.fn(async () => 'authorized' as const);
+
+    const output = await runWithoutStdout(input(stderr, { signal: controller.signal }), deps(fake.storage, { readConfirmationAnswer }));
+    expect(output).toEqual({
+      outcome: 'interrupted', phase: 'pre-apply', states: [], message: 'init was interrupted before writing anything.', exitCode: 3,
+    });
+    expect(output.message).toBe('init was interrupted before writing anything.');
+    expect(writes.join('')).toBe(expectedPlan(['create', 'skipped', 'create', 'create']));
+    expect(readConfirmationAnswer).not.toHaveBeenCalled();
+    expectNoWrites(fake, before);
+  });
+
+  it('prioritizes an abort observed after a declined confirmation answer', async () => {
+    const controller = new AbortController();
+    const fake = createStorage({ [paths.sample]: 'existing prompt' });
+    const before = new Map([...fake.files].map(([path, content]) => [path, new TextEncoder().encode(content)]));
+    const stderr = createStderr();
+    const readConfirmationAnswer = vi.fn(async () => {
+      stderr.stream.write('Write these files? [y/N] \n');
+      controller.abort();
+      return 'declined' as const;
+    });
+
+    const output = await runWithoutStdout(input(stderr.stream, { signal: controller.signal }), deps(fake.storage, { readConfirmationAnswer }));
+    expect(output).toEqual({
+      outcome: 'interrupted', phase: 'pre-apply', states: [], message: 'init was interrupted before writing anything.', exitCode: 3,
+    });
+    expect(output.message).toBe('init was interrupted before writing anything.');
+    expect(stderr.text()).toBe(`${expectedPlan(['create', 'skipped', 'create', 'create'])}Write these files? [y/N] \n`);
+    expect(readConfirmationAnswer).toHaveBeenCalledWith(controller.signal);
+    expectNoWrites(fake, before);
+  });
+
+  it('prioritizes an abort observed after an authorized confirmation answer', async () => {
+    const controller = new AbortController();
+    const fake = createStorage({ [paths.sample]: 'existing prompt' });
+    const before = new Map([...fake.files].map(([path, content]) => [path, new TextEncoder().encode(content)]));
+    const stderr = createStderr();
+    const readConfirmationAnswer = vi.fn(async () => {
+      stderr.stream.write('Write these files? [y/N] \n');
+      controller.abort();
+      return 'authorized' as const;
+    });
+
+    const output = await runWithoutStdout(input(stderr.stream, { signal: controller.signal }), deps(fake.storage, { readConfirmationAnswer }));
+    expect(output).toEqual({
+      outcome: 'interrupted', phase: 'pre-apply', states: [], message: 'init was interrupted before writing anything.', exitCode: 3,
+    });
+    expect(output.message).toBe('init was interrupted before writing anything.');
+    expect(stderr.text()).toBe(`${expectedPlan(['create', 'skipped', 'create', 'create'])}Write these files? [y/N] \n`);
+    expect(readConfirmationAnswer).toHaveBeenCalledWith(controller.signal);
+    expectNoWrites(fake, before);
+  });
   it('rejects a non-directory and returns a pre-apply failure when its directory check throws', async () => {
     const rejectedStderr = createStderr();
     const rejectedStorage = createStorage();

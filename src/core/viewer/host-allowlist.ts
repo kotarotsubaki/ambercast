@@ -3,6 +3,8 @@
  * This limits DNS rebinding exposure but does not authenticate callers.
  */
 
+const AUTHORITY = /^(?<host>localhost\.?|\d{1,3}(?:\.\d{1,3}){3}|\[[0-9A-Fa-f:.]+\])(?::(?<port>\d{1,5}))?$/i;
+
 /**
  * Checks whether a request Host names an allowed address at the bound port.
  *
@@ -10,12 +12,18 @@
  * @param bound - The literal bind host and the actual port returned by listen.
  * @returns Whether the header may proceed to method and route handling.
  * @remarks
+ * An authority-syntax gate rejects headers other than a bare host or host:port
+ * before URL parsing. Paths, queries, fragments, userinfo, whitespace, and
+ * control characters are rejected so embedded authorities cannot smuggle a
+ * different host through the URL parser.
  * Parsing as a URL keeps IPv6 authority syntax and optional ports together.
  * Missing or malformed headers fail closed; hostname comparison permits the
  * local aliases and the bound literal after case and trailing-dot normalization.
  * IPv6 literal brackets are stripped for comparison (e.g., [::1] becomes ::1).
  * An explicit port must match the actual listen port, including when the
- * server was assigned a port dynamically.
+ * server was assigned a port dynamically. The gate's captured port digits
+ * supply that comparison because URL parsing elides a scheme's default port
+ * even when the header specifies it explicitly.
  */
 export function isAllowedHost(
   headerValue: string | undefined,
@@ -23,6 +31,10 @@ export function isAllowedHost(
 ): boolean {
   try {
     if (!headerValue || headerValue.trim() === '') {
+      return false;
+    }
+    const match = AUTHORITY.exec(headerValue);
+    if (!match) {
       return false;
     }
     const url = new URL('http://' + headerValue);
@@ -49,8 +61,9 @@ export function isAllowedHost(
       return false;
     }
 
-    // If port is explicitly specified, it must match bound.port
-    if (url.port !== '' && Number(url.port) !== bound.port) {
+    // Compare the gate's captured port here, preserving explicit default ports.
+    const port = match.groups?.port;
+    if (port !== undefined && Number(port) !== bound.port) {
       return false;
     }
 

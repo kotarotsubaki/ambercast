@@ -188,6 +188,19 @@ describe('local report server real HTTP contract', () => {
     expect(failed.headers.get('content-type')).toBe('text/html; charset=utf-8');
   });
 
+  it.each(['localhost/evil', '127.0.0.1:80'])('rejects Host %s with security headers', async (host) => {
+    const base = await start();
+    const port = Number(new URL(base).port);
+    expect(port).not.toBe(80);
+    const badHost = await rawRequest(port, host);
+    expect(badHost.status).toBe(403);
+    expect(badHost.headers['x-content-type-options']).toBe('nosniff');
+    expect(badHost.headers['cache-control']).toBe('no-store');
+    expect(badHost.headers['content-security-policy']).toBe(csp);
+    expect(badHost.headers['referrer-policy']).toBe('no-referrer');
+    expect(badHost.headers['content-type']).toBe('text/html; charset=utf-8');
+  });
+
   it('returns the fixed 500 copy for an enumeration failure and keeps serving', async () => {
     let failOnce = true;
     const storage = createFsStorage();

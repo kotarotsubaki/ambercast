@@ -13,7 +13,7 @@ import { runCheckCommand } from '#runtime/check-command.js';
 const serverFake = vi.hoisted(() => ({ connected: vi.fn(), called: vi.fn(), connectFailure: null as unknown, useReal: false }));
 vi.mock('#adapters/mcp/server.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('#adapters/mcp/server.js')>();
-  return { createMcpServer: (deps: McpServerDeps, options?: Parameters<typeof actual.createMcpServer>[1]) => {
+  return { createMcpServer: (deps: McpServerDeps, options: Parameters<typeof actual.createMcpServer>[1]) => {
     if (serverFake.useReal) return actual.createMcpServer(deps, options);
     const server = new Server({ name: 'shutdown-test', version: '1.0.0' }, { capabilities: { tools: {} } });
     server.setRequestHandler(CallToolRequestSchema, async () => {
@@ -498,10 +498,14 @@ describe('runtime/mcp-command', () => {
     const job = assertRecordResponse((await responseSoon(io, 1)).result, { tool: 'run', status: 'working', statusMessage: 'running', progress: 0 });
     emitEvent({ type: 'step-start', stepId: 'step-1' });
     sendRequest(io, 2, 'ambercast_job_status', { jobId: job.jobId });
-    expect(((await response(io, 2)).result as Record<string, unknown>).structuredContent).toMatchObject({ progress: 1 });
+    expect(((await response(io, 2)).result as Record<string, unknown>).structuredContent).toMatchObject({
+      progress: 1, statusMessage: 'run: step step-1 started',
+    });
     emitEvent({ type: 'step-result', stepId: 'step-1', via: 'grounding' });
     sendRequest(io, 3, 'ambercast_job_status', { jobId: job.jobId });
-    expect(((await response(io, 3)).result as Record<string, unknown>).structuredContent).toMatchObject({ progress: 2 });
+    expect(((await response(io, 3)).result as Record<string, unknown>).structuredContent).toMatchObject({
+      progress: 2, statusMessage: 'run: step step-1 started',
+    });
     releaseRun({ exitCode: 0, envelope: { errors: [] } } as unknown as RunCommandOutput);
     sendRequest(io, 5, 'ambercast_job_status', { jobId: job.jobId, waitMs: 1000 });
     await response(io, 5);

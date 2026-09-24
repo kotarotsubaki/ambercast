@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 import { PassThrough, type Readable, type Writable } from 'node:stream';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMcpServer } from '#adapters/mcp/server.js';
+import { createSystemClock } from '#adapters/system/system-clock.js';
 import { createMcpProgressSink } from '#adapters/mcp/progress-sink.js';
 import type { McpProgressContext, McpServerDeps } from '#adapters/mcp/types.js';
 import { runCheckCommand, type CheckCommandInput } from '#runtime/check-command.js';
@@ -34,8 +35,10 @@ export interface RunMcpCommandInput {
  * retain working status: a read derives `queued behind <N>` in statusMessage
  * for a queued job, so queue position does not require another status value.
  * statusMessage is always non-empty: while running it is `running` until the
- * first RunEvent, then a fixed progress phrase; at termination it becomes
- * the same word as the terminal status. Terminal status remains fixed.
+ * first RunEvent, then the latest fixed progress phrase. At termination it
+ * becomes the terminal status, except for cancellation before invocation
+ * (`cancelled before start`) and shutdown of a queued job
+ * (`server shutting down`). Terminal status remains fixed.
  * A running cancellation settles when the
  * runtime returns; cancelling before invocation settles through FIFO removal.
  * Progress counts every RunEvent emitted by the runtime, regardless of
@@ -70,16 +73,22 @@ function progressSink(command: 'generate' | 'run' | 'heal', sessionRoot: string,
   if (progress.progressToken === undefined) return undefined;
   const progressToken = progress.progressToken;
   let sequence = 0;
-  return createMcpProgressSink({
+  let pendingFlush = Promise.resolve();
+  const sink = createMcpProgressSink({
     command,
     sessionRoot,
-    // Counting follows emit, because notification delivery is buffered until flush.
-    onEvent: () => { void progress.sendNotification({ method: 'internal/run-event' }); },
+    // The job record observes every event immediately. Flushing each projection
+    // also exposes its fixed phrase while the job is still running.
+    onEvent: () => {
+      void progress.sendNotification({ method: 'internal/run-event' });
+      pendingFlush = pendingFlush.then(() => sink.flush());
+    },
     send: (message) => progress.sendNotification({
       method: 'notifications/progress',
       params: { progressToken, progress: ++sequence, message },
     }),
   });
+  return { emit: sink.emit, flush: async () => { await pendingFlush; await sink.flush(); } };
 }
 
 /**
@@ -233,7 +242,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     }
   });
 
-  const server = createMcpServer(deps, { signal: drainController.signal, syncWaitMs: input.syncWaitMs });
+  const server = createMcpServer(deps, { signal: drainController.signal, syncWaitMs: input.syncWaitMs, clock: createSystemClock() });
   const transport = new StdioServerTransport(proxy, input.stdout as Writable);
   const send = transport.send.bind(transport);
   let transportClosed = false;

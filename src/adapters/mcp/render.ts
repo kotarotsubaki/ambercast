@@ -66,9 +66,7 @@ export function renderToolResult(
  * completed or cancelled jobs retaining a result instead use the same
  * renderToolResult response format as the corresponding synchronous tool,
  * with the record attached at `_meta.job`. The job_status handler in
- * the server handler chooses between the two response formats. Progress counts
- * runtime events without a client token: an internal token enables the sink,
- * while notification forwarding uses only the client's real token.
+ * the server handler chooses between the two response formats.
  * Keeping the record contract here prevents its response formats from
  * drifting apart. A valid record yields isError: false,
  * structuredContent equal to the record, and _meta.jobId equal to its ID.

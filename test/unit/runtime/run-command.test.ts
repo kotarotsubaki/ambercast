@@ -1502,7 +1502,7 @@ describe('runRunCommand event subscribers (TEST-A1)', () => {
     const output = reportOutput(0);
     mocks.createFsStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
-    mocks.createBrowserDriverResolver.mockReturnValue(createFakeBrowserDriver(() => createFakeBrowserSession(new Map())));
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
     mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
     mocks.createAmbercast.mockReturnValue({
       storage,

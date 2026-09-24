@@ -48,7 +48,7 @@ Claude Desktop accepts the same server entry in its configuration:
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
 ```
 
-Set the client's working directory to the desired session root or append the `--dir` argument. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
+Always start the client from a project where ambercast is installed, so `npx --no-install` can resolve the package; `--dir <path>` only selects a different session root once the server is running and has no effect on that package resolution. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
 
 ## Changes from the planned design {#changes-from-the-planned-design}
 

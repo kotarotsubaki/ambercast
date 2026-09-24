@@ -48,7 +48,7 @@ Claude Desktop の設定にも同じサーバー項目を指定できます。
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
 ```
 
-クライアントの作業ディレクトリを目的の session root にするか、`--dir` 引数を追加します。サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` を提供します。
+クライアントは常に ambercast がインストールされたプロジェクトから起動してください。`npx --no-install` がパッケージを解決できる必要があるためです。`--dir <path>` はサーバー起動後に別の session root を選ぶだけで、このパッケージ解決には影響しません。サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` を提供します。
 
 ## 計画時の設計からの変更 {#changes-from-the-planned-design}
 

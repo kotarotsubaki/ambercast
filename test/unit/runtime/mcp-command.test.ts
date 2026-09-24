@@ -616,6 +616,26 @@ describe('runtime/mcp-command', () => {
     expect(aborted).toBe(true);
     expect(runRunCommand).toHaveBeenCalledTimes(1);
   });
+  it('waits for an in-flight heal apply settlement before shutdown completes (TEST-B9)', async () => {
+    const session = await proposalSession();
+    let release!: (output: HealCommandOutput) => void;
+    const blocked = new Promise<HealCommandOutput>((resolve) => { release = resolve; });
+    const { settle } = queuePreparation(vi.fn(async () => blocked));
+    const token = await issuedToken(session.deps);
+    expect(await session.deps.beginHealApply!(token)).toMatchObject({ proceed: true });
+    const pending = session.deps.settleHealApply!(token, 'authorized');
+    await vi.waitFor(() => expect(settle).toHaveBeenCalledTimes(1));
+    let closed = false;
+    const closing = session.close().then(() => { closed = true; });
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(closed).toBe(false);
+    } finally {
+      release(healOutput());
+      await pending;
+      await closing;
+    }
+  });
   it('aborts an active call on SIGTERM and returns its INTERRUPTED envelope with exit 0 (TEST-B9)', async () => {
     vi.mocked(runRunCommand).mockImplementationOnce(({ signal }) => new Promise<RunCommandOutput>((resolve) => {
       signal?.addEventListener('abort', () => resolve({

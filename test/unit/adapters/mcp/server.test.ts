@@ -22,7 +22,7 @@ const toolNames = [
 
 function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
   const success = async () => ({ exitCode: 0, envelope: { summary: 'ok' } });
-  const fake = <T extends (...args: any[]) => Promise<any>>(impl: T = success as T): T => new Proxy(vi.fn(impl), {
+  const fake = <T extends (...args: never[]) => Promise<unknown>>(impl: T = success as T): T => new Proxy(vi.fn(impl), {
     apply(target, thisArg, [input]) {
       return Reflect.apply(target, thisArg, [input]);
     },

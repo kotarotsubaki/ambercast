@@ -289,6 +289,12 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
   const controllers = new Set<AbortController>();
   const active = new Set<Promise<void>>();
 
+  function trackActive<T>(promise: Promise<T>): Promise<T> {
+    const completion = promise.then(() => undefined, () => undefined);
+    active.add(completion);
+    return promise.finally(() => { active.delete(completion); });
+  }
+
   /* One controller per invocation keeps the abort boundary at runtime composition. */
   async function track<T>(invoke: (signal: AbortSignal) => Promise<T>): Promise<T> {
     const controller = new AbortController();
@@ -378,11 +384,11 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
       }
     }),
     markHealDelivered: (token) => proposals.markDelivered(token),
-    beginHealApply: (token) => proposals.consume(token),
-    settleHealApply: (token, confirm, _signal, progress) => proposals.settle(token, confirm, progress),
-    finalizeHealApply: (token) => proposals.finalize(token),
-    failHealApply: (token, error) => proposals.fail(token, error),
-    applyHeal: (token, confirm, signal) => proposals.apply(token, confirm, signal),
+    beginHealApply: (token) => trackActive(proposals.consume(token)),
+    settleHealApply: (token, confirm, _signal, progress) => trackActive(proposals.settle(token, confirm, progress)),
+    finalizeHealApply: (token) => trackActive(Promise.resolve().then(() => proposals.finalize(token))),
+    failHealApply: (token, error) => trackActive(proposals.fail(token, error)),
+    applyHeal: (token, confirm, signal) => trackActive(proposals.apply(token, confirm, signal)),
   };
 
   const proxy = new PassThrough();

@@ -83,7 +83,7 @@ That is why ambercast prioritizes assertion quality above everything else, and w
 
 ## Both humans and AI are readers {#humans-and-agents}
 
-An asset's readers are not only human. Coding agents such as Claude Code and Codex read and write tests inside their own loop of implementing, testing, and fixing. ambercast treats agents as first-class users, and ships an official skill alongside the CLI, with an MCP server planned.
+An asset's readers are not only human. Coding agents such as Claude Code and Codex read and write tests inside their own loop of implementing, testing, and fixing. ambercast treats agents as first-class users, and ships an official skill and an MCP server alongside the CLI.
 
 There is no separate specification written for agents. The same documentation is kept readable by both humans and agents.
 
@@ -1647,7 +1647,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `GitHub Security Advisories` | GitHub Security Advisories is the private vulnerability-reporting channel. | `SECURITY.md`; [Security policy](/ambercast/reference/security-policy/#vulnerability-reporting) | public issues |
 | `GroundingDocument` | `GroundingDocument` is the strict schema owning Grounding `schemaVersion`, `planDigest`, and entries. | `GroundingDocument`; [Grounding document](/ambercast/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` is the structured environment-error code for interrupted execution. | report schema; [Error codes](/ambercast/reference/error-codes/#code-vocabulary) | assertion failure |
-| `JSON-RPC` | `JSON-RPC` is planned-only for the MCP transport and has no 0.3.1 server runtime. | [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | CLI `--json` |
+| `JSON-RPC` | `JSON-RPC` carries the implemented MCP server's stdio messages. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | CLI `--json` |
 | `PlanDocument` | `PlanDocument` is the strict schema owning Plan version, provenance, targets, and steps. | `PlanDocument`; [Plan document](/ambercast/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` is the whole-value anchored regular expression built from `SECRET_REF_SOURCE`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | unanchored fragment |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` is the only accepted element-fingerprint algorithm literal. | `Fingerprint`; [Element fingerprint](/ambercast/spec/fingerprint/) | Plan schema version 2 |
@@ -1657,24 +1657,26 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
 | `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` is planned-only and rejected by the 0.3.1 parser. | [ambercast mcp](/ambercast/reference/cli/mcp/#status) | MCP tool name |
+| `ambercast mcp` | `ambercast mcp` starts the implemented stdio MCP server. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | MCP tool name |
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
 | `ambercast run` | `ambercast run` is the implemented deterministic replay command. | [ambercast run](/ambercast/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` is the implemented read-only local results viewer. | [ambercast view](/ambercast/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_review` | `ambercast_review` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | planned CLI review |
-| `ambercast_run` | `ambercast_run` is a planned MCP tool token with no 0.3.1 server runtime. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `ambercast_check` | `ambercast_check` is the implemented read-only MCP freshness tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` is the implemented MCP Plan-generation tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` is the implemented MCP repair tool, with preview and token-authorized apply. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` requests cancellation of a job in this server process. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | a CLI command |
+| `ambercast_job_status` | `ambercast_job_status` lists jobs or retrieves one job's status and result. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | a CLI command |
+| `ambercast_review` | `ambercast_review` is a future MCP tool and is absent from the implemented six-tool server. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | planned CLI review |
+| `ambercast_run` | `ambercast_run` is the implemented MCP replay tool. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
 | `config.schema.json` | `config.schema.json` is the generated config JSON Schema and npm config-schema export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | a config instance |
-| `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-safety-default) | HealResult representation |
+| `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-preview-and-apply) | HealResult representation |
 | `fresh-without-grounding` | `fresh-without-grounding` is a completed check status distinct from `fresh`. | check result; [ambercast check](/ambercast/reference/cli/check/#status-vocabulary) | missing Plan |
 | `grounding.schema.json` | `grounding.schema.json` is the generated Grounding JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Grounding instance |
 | `healReplayIsolation` | `healReplayIsolation` is the target policy whose `idempotent` value is required by heal. | target config / heal | browser mode |
 | `inputsDigest` | `inputsDigest` records the five-input Plan provenance digest. | `computeInputsDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `planDigest` |
-| `isError` | `isError` is planned MCP result classification and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
-| `outputSchema` | `outputSchema` is planned MCP schema metadata and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract) | generated npm JSON Schema |
+| `isError` | `isError` classifies implemented MCP tool results, with exit-code mappings and MCP-specific failures. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
+| `outputSchema` | `outputSchema` is omitted from every implemented MCP tool definition because the report schema is too large for `tools/list`. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | generated npm JSON Schema |
 | `plan.schema.json` | `plan.schema.json` is the generated Plan JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Plan instance |
 | `planDigest` | `planDigest` binds Grounding to replay-relevant Plan content excluding `generatorMeta`. | `computePlanDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `inputsDigest` |
 | `producerBundleFingerprint` | `producerBundleFingerprint` names producer-contract provenance whose change alters `inputsDigest`. | generate provenance / [Compatibility](/ambercast/reference/compatibility/#regeneration-boundary) | element fingerprint |
@@ -1682,10 +1684,10 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `reportPersistence` | `reportPersistence` is the run-envelope state of its persistence attempt. | run report; [Reports](/ambercast/reference/reports/#persistence) | test status |
 | `review` | `review` is a report-schema command branch, not evidence of an implemented CLI command. | `ReportEnvelope`; [Reports](/ambercast/reference/reports/#result-shapes) | available command |
 | `schemaVersion` | `schemaVersion` discriminates a versioned Plan, Grounding, or report contract. | IR/report schemas | package version |
-| `stderr` | `stderr` carries CLI usage errors, crash diagnostics, and persistence warnings rather than successful report output. | CLI runtime / [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | stdout answer |
-| `stdio` | `stdio` is planned MCP transport and has no 0.3.1 server runtime. | [ambercast mcp](/ambercast/reference/cli/mcp/#planned-interface) | a network port |
+| `stderr` | `stderr` carries CLI usage errors, crash diagnostics, persistence warnings, and MCP startup logs rather than successful report output. | CLI runtime / [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | stdout answer |
+| `stdio` | `stdio` is the implemented MCP server transport. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | a network port |
 | `stdout` | `stdout` carries help/version and completed command reports, while process status is assigned separately. | CLI runtime / [Reports](/ambercast/reference/reports/#envelope) | stderr diagnostics |
-| `structuredContent` | `structuredContent` is planned MCP result payload and has no 0.3.1 MCP runtime semantics. | [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract) | CLI JSON text |
+| `structuredContent` | `structuredContent` carries a report envelope or Job record in implemented MCP responses. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | CLI JSON text |
 | `testIgnore` | `testIgnore` excludes a matching relative path after inclusion. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testMatch` |
 | `testMatch` | `testMatch` requires at least one inclusion match for a relative path. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` exemplifies a whole-value secret reference whose body maps to an environment key. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal credential |
@@ -1694,14 +1696,98 @@ See also: [CLI overview](/ambercast/reference/cli/overview/), [Configuration](/a
 
 ---
 
+# MCP Tools
+Source: https://kotarotsubaki.github.io/ambercast/reference/mcp-tools/
+
+The MCP server exposes six tools in this order: `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. Tool names use the ambercast prefix and snake_case; the server does not mirror every CLI command.
+
+## Tool table {#tool-table}
+
+Annotations list readOnly / destructive / idempotent / openWorld, in that order. All four values are explicit. They are hints, not authorization. Generate's idempotent hint is weak: a fresh Plan is skipped and effects converge, but AI output can vary.
+
+| Tool | CLI equivalent | Annotations | `isError: true` | Negative result with `isError: false` |
+| --- | --- | --- | --- | --- |
+| `ambercast_generate` | generate | false / false / true (weak) / false | Exit 2 or 3 | Exit 1 (strict ambiguity), exit 5 |
+| `ambercast_run` | run | false / false / false / true | Exit 2, 3, or 4 (MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED) | Exit 1 (assertion red), exit 5 |
+| `ambercast_check` | check | true / false / true / false | Exit 2 or 3 | Exit 4 (stale is a normal result in results[].status), exit 5 |
+| `ambercast_heal` | heal | false / true / false / true | Exit 2 (including CI refusal), 3, or 4; `HEAL_APPLY_TOKEN_INVALID`; `HEAL_APPLY_FAILED` | Exit 1 (unresolved or declined), exit 5 |
+| `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`; `JOB_FAILED` for a failed job; completed/cancelled jobs with a result use their source tool's mapping | Nonterminal record, job list, queued-cancel record |
+| `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
+
+The report's aggregated exit code determines `isError`; the server does not reclassify individual report errors. The heal tool also sets the Claude Code interaction hint, but the hint is not proof of approval.
+
+## Inputs {#inputs}
+
+Inputs are strict objects. Unknown keys, type mismatches, and invalid refinements produce the SDK's `Input validation error` text with `isError: true`. Supply `{}` when there are no arguments.
+
+| Scope | Properties and defaults |
+| --- | --- |
+| Common workflow input | `files?: string[]` (omission and `[]` both select config discovery; relative paths use the session root), `allowEmpty?: boolean` (false) |
+| `ambercast_generate` | `target?: string` (restricts which Target definitions the generator may use), `strict?: boolean` (false), `force?: boolean` (false), `dryRun?: boolean` (false), `ai?: 'claude' \| 'codex'` |
+| `ambercast_run` | `grep?: string` (valid regular expression), `resolve?: boolean` (false), `updateCache?: boolean` (false), `ai?: 'claude' \| 'codex'` |
+| `ambercast_check` | Common input only |
+| `ambercast_heal` | `dryRun?: boolean` (true), `applyToken?: string`, `ai?: 'claude' \| 'codex'` |
+| `ambercast_job_status` | `jobId?: string` (omit for this server process's job list), `waitMs?: number` (0; integer 0–45000, effective with a job ID) |
+| `ambercast_job_cancel` | `jobId: string` |
+
+The MCP input intentionally excludes CLI flags `headed` (headless fixed), `list`, `stale` (fail fixed), `json`, `yes` (replaced by `applyToken`), and `configPath`.
+
+## Heal preview and apply {#heal-preview-and-apply}
+
+`ambercast_heal` defaults to preview (`dryRun: true`), unlike CLI heal's false default. A preview with commits returns an `applyToken`; a preview without commits does not. Apply with `dryRun: false` and `applyToken` alone: `files`, `ai`, and `allowEmpty` must be absent. A preview must omit `applyToken`. An invalid combination is an SDK input validation error. Apply is synchronous and does not create a job. A token is a 128-bit random value rendered as 32 hexadecimal characters; a newer preview supersedes pending tokens. Pending tokens expire 600000 ms after their first token-bearing response is assembled. A consumed token replays its saved result for 600000 ms after settlement.
+
+If the client supports form elicitation, it asks for confirmation with a 600000 ms timeout. Accepting and confirming applies the repair; declining leaves it unapplied; cancellation interrupts it. If the client lacks form elicitation, the server authorizes apply. The token identifies a preview; requesting apply is a separate step, and client hints alone are not authorization.
+
+## Results and jobs {#results-and-jobs}
+
+Every tool omits `outputSchema`: the report JSON Schema is 136 KB and would crowd `tools/list`; tools may also return either a report envelope or a Job record. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
+
+The single text item begins with `exitCode: <n>`. Only a heal preview with commits has a second line `applyToken: <token>`; the following line contains the envelope JSON. The response also has `_meta.exitCode` and, when present, `_meta.applyToken`. A completed job fetched by `ambercast_job_status` returns the same content, error classification, and metadata, plus `_meta.job` without the result.
+
+Every generate, run, and heal preview call creates a Job. If it finishes within the synchronous wait bound, the caller receives the report response; otherwise it receives a job handle. A handle and a nonterminal status response contain a Job record in `structuredContent`; the text has three lines: `jobId: <id>`, `status: <status>`, and the status message. Their metadata contains `_meta.jobId`. `ambercast_check` and heal apply stay synchronous. `ambercast_job_status` with no ID lists jobs for this server process, newest first, as `structuredContent` with a `jobs` array; an empty list has text `no jobs`. This is a server-local job path, not the MCP Tasks extension. `ambercast_job_cancel` cancels a running or queued job and returns a record. Job records disappear 1800000 ms after termination or when the server exits.
+
+| Job record field | Meaning |
+| --- | --- |
+| `jobId` | UUID v4 identifier |
+| `tool` | Source tool |
+| `status` | working, completed, failed, or cancelled |
+| `statusMessage` | Nonempty progress or terminal status message |
+| `progress` | Count of runtime events, even without progress notifications |
+| `createdAt` | ISO 8601 UTC creation time |
+| `lastUpdatedAt` | ISO 8601 UTC time of the latest status or progress change |
+| `pollIntervalMs` | 2000 |
+| `ttlMs` | 1800000 |
+
+## MCP errors {#mcp-errors}
+
+MCP-layer semantic failures have `isError: true`, one text item in the form `"<CODE>: <message>"`, and no `structuredContent`. The codes are `HEAL_APPLY_TOKEN_INVALID` (reason `missing`, `unknown-token`, `superseded`, or `expired`), `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED`. Invalid inputs instead use the SDK validation error. Domain and environment failures remain in report envelopes.
+
+## Changes from the planned design {#changes-from-the-planned-design}
+
+| Earlier planned page | Implemented contract |
+| --- | --- |
+| Five tools including review | Six tools: four workflows plus status and cancellation; review is not exposed |
+| Report `outputSchema` published | `outputSchema` omitted for every tool |
+| Heal preview only | Two-stage heal with `applyToken` and synchronous apply |
+| Synchronous workflows only | Long generate, run, and heal previews return jobs; status without ID lists them |
+| Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
+| Only report exit classification | MCP error codes and SDK validation errors are distinct from report envelopes |
+| CLI flag mapping unspecified | Inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
+| Exit code only inferred from report | `_meta.exitCode` and the first text line carry the exit code |
+| `target` specified as common to all four tools | `target` is accepted only by `ambercast_generate`; `ambercast_run`, `ambercast_check`, and `ambercast_heal` select Targets from the Plan itself, matching the CLI's own Plan IR v4 migration |
+
+Links: [ambercast mcp](/ambercast/reference/cli/mcp/#usage), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), [Reports](/ambercast/reference/reports/#envelope), [Exit codes](/ambercast/reference/exit-codes/#exit-code-table).
+
+---
+
 # CLI overview
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/overview/
 
-The `ambercast` command-line interface provides six commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, and browsing run results, using per-command option parsing and configured discovery defaults.
+The `ambercast` command-line interface provides seven commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, browsing run results, and serving the MCP stdio server, using per-command option parsing and configured discovery defaults.
 
 ## Command surface {#command-surface}
 
-The implemented commands are `init`, `generate`, `run`, `check`, `heal`, and `view`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
+The implemented commands are `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
 
 Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to operate on plans whose steps name their execution Targets.
 
@@ -1715,6 +1801,7 @@ Commands:
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
   view                 Browse run results in a browser
+  mcp                  Serve the MCP stdio server
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -1736,6 +1823,9 @@ Heal options:
 View options:
   --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
+Mcp options:
+  --dir <path>  --sync-wait-ms <n>
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -1755,8 +1845,9 @@ Heal configuration:
 | check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | view | none | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| mcp | none | dir, sync-wait-ms | --dir argument selects session root (cwd when omitted) |
 
-Except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
+For `generate`, `run`, `check`, and `heal`, except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
 
 - Passing `--` terminates option parsing, leaving all subsequent arguments to be interpreted as literal paths.
 - The `--json` and `--no-color` flags are handled individually by each command rather than through a shared global-flag abstraction.
@@ -1764,13 +1855,13 @@ Except in `--list` mode, each positional argument must be a literal path inside 
 
 ## Discovery default {#discovery-default}
 
-When you pass no literal files, `generate`, `run`, `check`, and `heal` delegate test file selection to configured discovery; `init` does not participate in discovery.
+When you pass no literal files to `generate`, `run`, `check`, or `heal`, that command delegates test file selection to configured discovery. `init`, `view`, and `mcp` take no prompt-file arguments.
 
 - The default inclusion pattern is `**/*.test.md`.
 - Default exclusions include `.runs`, Plan, and Grounding companions.
 - Discovery evaluates POSIX-relative paths by requiring an inclusion match first, after which an ignore match excludes the path.
 
-Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), and [ambercast heal](/ambercast/reference/cli/heal/#flags).
+Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast init](/ambercast/reference/cli/init/#flags), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), [ambercast heal](/ambercast/reference/cli/heal/#flags), [ambercast view](/ambercast/reference/cli/view/#flags), and [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
 
 ---
 
@@ -2085,7 +2176,76 @@ A run directory missing its `report.json` (for example, mid-write, or after a fa
 
 `ambercast view` reads every report whose `schemaVersion` is 3.x. A report written by a different minor version than the current CLI shows "Schema `<version>`" in the run detail header; a report from another major version is listed as "Unsupported version `<version>`" and cannot be opened.
 
-Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table).
+`view` is the only Ambercast command that consumes a network port; the MCP server uses portless stdio.
+
+Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
+
+---
+
+# ambercast mcp
+Source: https://kotarotsubaki.github.io/ambercast/reference/cli/mcp/
+
+`ambercast mcp` starts the portless MCP server over `stdio`. Each process serves one session root.
+
+## Usage {#usage}
+
+```sh
+ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
+```
+
+## Flags {#flags}
+
+| Flag | Value | Effect | Default |
+| --- | --- | --- | --- |
+| `--dir` | path | session root to serve | cwd |
+| `--sync-wait-ms` | n | synchronous response wait bound in milliseconds | 45000 |
+
+`--dir` selects the session root; omission uses the process current working directory. Relative paths resolve against that directory. `--sync-wait-ms` is a positive integer with default 45000, bounding the synchronous wait before a long workflow returns a job handle. `--help` takes precedence over other arguments and prints usage to stdout with exit 0.
+
+If the resolved directory is absent or not a directory, stderr prints `ambercast mcp: --dir <path> is not a directory.` and the process exits 2 without starting. Startup failure prints `ambercast mcp: failed to start (<error name>)` and exits 3. Invalid options, positional arguments, and invalid wait bounds use the CLI usage error on stderr with exit 2.
+
+## Transport and shutdown {#transport-and-shutdown}
+
+Stdout contains JSON-RPC lines only. Stderr receives progress and one startup line, `ambercast mcp: serving <session root>`. The server begins draining on stdin end, SIGTERM, or SIGINT. It aborts in-flight calls, waits at most 10000 ms, closes the server, and exits 0 after settlement; an unsettled call at the deadline causes exit 3. New tool calls are rejected during draining.
+
+## Client registration {#client-registration}
+
+Use `npx --no-install ambercast mcp` in the project where ambercast is installed. Claude Code reads a project `.mcp.json`:
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+Codex CLI reads `config.toml`:
+
+```toml
+[mcp_servers.ambercast]
+command = "npx"
+args = ["--no-install", "ambercast", "mcp"]
+```
+
+Claude Desktop accepts the same server entry in its configuration:
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+Set the client's working directory to the desired session root or append the `--dir` argument. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
+
+## Changes from the planned design {#changes-from-the-planned-design}
+
+| Earlier planned page | Implemented contract |
+| --- | --- |
+| Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
+| Five planned tools | Six tools, including job status and cancellation |
+| Report `outputSchema` published | `outputSchema` omitted |
+| Heal preview only | Two-stage heal uses `applyToken` |
+| Synchronous calls only | Long calls return jobs; status without ID lists jobs |
+| MCP errors unspecified | `HEAL_APPLY_TOKEN_INVALID`, `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED` have a separate error response |
+| CLI input flags unspecified | Tool inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
+| Exit code inferred from report | `_meta.exitCode` carries it explicitly |
+
+Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), [CLI overview](/ambercast/reference/cli/overview/#command-surface).
 
 ---
 
@@ -2141,15 +2301,15 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/plan-document/
 
 ## Document shape {#document-shape}
 
-`PlanDocument` is a strict object. A producer MUST emit literal `4` and a consumer MUST reject unknown properties and other versions. [src/core/ir/schema.ts:1205-1224](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1205-L1224)
+`PlanDocument` is a strict object. A producer MUST emit literal version 3 and a consumer MUST reject unknown properties and other versions. [src/core/ir/schema.ts:1205-1224](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1205-L1224)
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `4` | Plan format version. | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1205-L1207) |
+| `schemaVersion` | integer | required | literal `3` | Plan format version. | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1205-L1207) |
 | `source` | strict object | required | exactly `inputsDigest` | Freshness wrapper. | [src/core/ir/schema.ts:1207](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1207) |
 | `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | Digest of generation inputs. | [src/core/ir/schema.ts:34](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L34), [src/core/ir/schema.ts:1207](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1207) |
 | `generatorMeta` | record string → `JsonValue` | optional | JSON only | Metadata excluded from `planDigest`. | [src/core/ir/schema.ts:1205-1210](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1205-L1210); [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L128-L131) |
-| `targets` | record string → `TargetDefinition` | required | strict value; [Value types](/ambercast/spec/value-types/#shared-types) | Referenced Target snapshot; every key must be used by a step. | [src/core/ir/schema.ts:1209](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1209) |
+| `targets` | record string → `TargetDefinition` | required | strict value; [Value types](/ambercast/spec/value-types/#shared-types) | Target snapshot. | [src/core/ir/schema.ts:1209](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1209) |
 | `steps` | `Step[]` | required | ordered strict branches | Plan sequence; [Steps](/ambercast/spec/steps/#step-union). | [src/core/ir/schema.ts:1210](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1210) |
 
 Omission and `{}` for `generatorMeta` remain distinct serialized Plan values, but neither affects `planDigest`: the digest view excludes `generatorMeta` as a whole. [src/core/ir/schema.ts:1205-1210](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1205-L1210) [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/digest.ts#L128-L131)
@@ -2160,10 +2320,10 @@ Digest strings are illustrative placeholders. The Grounding example uses the sam
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 3,
   "source": {"inputsDigest": "0000000000000000000000000000000000000000000000000000000000000000"},
-  "targets": {"app": {"surface": "web", "baseUrl": "https://example.test"}},
-  "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "target": "app", "url": "https://example.test"}]
+  "targets": {"app": {"baseUrl": "https://example.test", "browser": "chromium"}},
+  "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "url": "https://example.test"}]
 }
 ```
 
@@ -2200,7 +2360,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/steps/
 
 ## Step union {#step-union}
 
-Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId` and a required `target` naming a key in `Plan.targets`. [src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:742](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L742)
+Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId`. [src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:742](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L742)
 
 ### `action` / `click` {#action-click}
 
@@ -2208,12 +2368,11 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | Stable step identifier. | [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:438](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L438) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `click` | Action discriminator. | [src/core/ir/schema.ts:439](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L439) |
-| `element` | `ElementRef` | required | accessibility branch currently | Element to click. | [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
+| `target` | `ElementRef` | required | accessibility branch currently | Element to click. | [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
 
 ```json
-{"id":"click-login","kind":"action","action":"click","target":"app","element":{"strategy":"accessibility","role":"button","name":"Log in"}}
+{"id":"click-login","kind":"action","action":"click","target":{"strategy":"accessibility","role":"button","name":"Log in"}}
 ```
 
 ### `action` / `navigate` {#action-navigate}
@@ -2226,7 +2385,7 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 | `url` | `InterpolatableText` | required | no `{{secrets.` marker | Navigation text. | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L455) |
 
 ```json
-{"id":"open-home","kind":"action","action":"navigate","target":"app","url":"https://example.test"}
+{"id":"open-home","kind":"action","action":"navigate","url":"https://example.test"}
 ```
 
 At execution, every Plan navigation, cached trace navigation, and fresh agentic navigation MUST resolve against the live target `baseUrl`, use HTTP(S), and remain on that target's origin. An unresolvable, non-HTTP(S), or cross-origin destination is an integrity failure. [src/usecases/run.ts:701](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L701) [src/usecases/run.ts:746](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L746)
@@ -2237,13 +2396,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:476](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L476) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `press` | Action discriminator. | [src/core/ir/schema.ts:477](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L477) |
-| `element` | `ElementRef` | required | strict locator | Recipient. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
+| `target` | `ElementRef` | required | strict locator | Recipient. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
 | `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | Key. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
 
 ```json
-{"id":"submit","kind":"action","action":"press","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
+{"id":"submit","kind":"action","action":"press","target":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
 ```
 
 ### `action` / `fill` {#action-fill}
@@ -2252,13 +2410,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:495](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L495) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill` | Action discriminator. | [src/core/ir/schema.ts:496](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L496) |
-| `element` | `ElementRef` | required | strict locator | Field. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
+| `target` | `ElementRef` | required | strict locator | Field. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
 | `value` | `InterpolatableText` | required | no secret marker | Non-secret or run-state text. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
 
 ```json
-{"id":"fill-email","kind":"action","action":"fill","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
+{"id":"fill-email","kind":"action","action":"fill","target":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
 ```
 
 ### `action` / `fill-secret` {#action-fill-secret}
@@ -2267,13 +2424,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill-secret` | Action discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `element` | `ElementRef` | required | strict locator | Secret sink field. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `target` | `ElementRef` | required | strict locator | Secret sink field. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
 | `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
 
 ```json
-{"id":"fill-password","kind":"action","action":"fill-secret","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
+{"id":"fill-password","kind":"action","action":"fill-secret","target":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
 ### `assert` / `text-visible` {#assert-text-visible}
@@ -2283,11 +2439,10 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
 | `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:558](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L558) |
 | `check` | string | required | literal `text-visible` | Assertion discriminator. | [src/core/ir/schema.ts:559](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L559) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `text` | `InterpolatableText` | required | no secret marker | Expected visible text. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
 
 ```json
-{"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
+{"id":"welcome-visible","kind":"assert","check":"text-visible","text":"Welcome"}
 ```
 
 ### `assert` / `element-visible` {#assert-element-visible}
@@ -2296,13 +2451,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
 | `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:577](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L577) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-visible` | Assertion discriminator. | [src/core/ir/schema.ts:578](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L578) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Expected visible element. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
+| `target` | `ElementRef` | required | strict locator | Expected visible element. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
 
 ```json
-{"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","element":{"strategy":"accessibility","role":"navigation","name":"Main"}}
+{"id":"menu-visible","kind":"assert","check":"element-visible","target":{"strategy":"accessibility","role":"navigation","name":"Main"}}
 ```
 
 ### `assert` / `text-equals` {#assert-text-equals}
@@ -2311,14 +2464,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
 | `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:596](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L596) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `text-equals` | Assertion discriminator. | [src/core/ir/schema.ts:597](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L597) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Element under test. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
+| `target` | `ElementRef` | required | strict locator | Element under test. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
 | `text` | `InterpolatableText` | required | no secret marker | Exact expected text. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":"app","element":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
 ```
 
 ### `assert` / `url-matches` {#assert-url-matches}
@@ -2328,11 +2479,10 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
 | `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:616](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L616) |
 | `check` | string | required | literal `url-matches` | Assertion discriminator. | [src/core/ir/schema.ts:617](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L617) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `pattern` | `InterpolatableText` | required | no secret marker | Expected URL matching text. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
 
 ```json
-{"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
+{"id":"on-account","kind":"assert","check":"url-matches","pattern":"/account"}
 ```
 
 ### `assert` / `element-count` {#assert-element-count}
@@ -2341,14 +2491,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
 | `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:635](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L635) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-count` | Assertion discriminator. | [src/core/ir/schema.ts:636](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L636) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Matching element. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
+| `target` | `ElementRef` | required | strict locator | Matching element. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
 | `count` | integer | required | nonnegative | Expected count, including zero. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
 
 ```json
-{"id":"one-alert","kind":"assert","check":"element-count","target":"app","element":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
+{"id":"one-alert","kind":"assert","check":"element-count","target":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
 ```
 
 ### `capture` {#capture}
@@ -2357,12 +2505,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
 | `kind` | string | required | literal `capture` | Step discriminator. | [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Source element. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
+| `target` | `ElementRef` | required | strict locator | Source element. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
 | `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | Bare run-state variable name. | [src/core/ir/schema.ts:675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L675) |
 
 ```json
-{"id":"capture-code","kind":"capture","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
+{"id":"capture-code","kind":"capture","target":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
 ```
 
 ### `ai` {#ai}
@@ -2376,7 +2523,7 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
 
 ```json
-{"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
 ### Committed AI secret uses {#committed-ai-secret-grants}
@@ -2388,10 +2535,8 @@ Each member of a committed AI step's optional `secrets` array is a strict `AiSte
 | `ref` | `SecretRef` | required | whole secret-reference grammar | Committed secret reference. | [src/core/ir/schema.ts:674-675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674-L675) |
 
 ```json
-{"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
-
-Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once. Element bindings are refreshed for each `element-visible` and `text-equals` observation. A binding failure or adapter error does not retry.
 
 ## Generated forms {#generated-forms}
 
@@ -2428,8 +2573,8 @@ All other chapters MUST use these definitions rather than restating their shapes
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TargetDefinition` with `surface` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Authored HTTP(S) base URL with no secret marker. | [src/core/ir/schema.ts:37-38](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L37-L38), [src/core/ir/schema.ts:165-166](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L165-L166) |
-|  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts |
+| `TargetDefinition` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Authored HTTP(S) base URL with no secret marker. | [src/core/ir/schema.ts:37-38](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L37-L38), [src/core/ir/schema.ts:165-166](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L165-L166) |
+|  | `browser` | string | required | literal `chromium` | Selected browser. | [src/core/ir/schema.ts:167](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L167) |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L168) |
 | `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L183) |
 |  | `role` | string | required | min 1 | Exact accessibility role. | [src/core/ir/schema.ts:185](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L185) |
@@ -2498,7 +2643,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/grounding-document/
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `2` | Grounding format version. | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1368) |
+| `schemaVersion` | integer | required | literal `1` | Grounding format version. | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1368) |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the associated plan. | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | Cached step grounding keyed by ID. | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1370) |
 
@@ -2520,11 +2665,11 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/grounding-document/
 | `TraceRecord` | `events` | `TraceEntry[]` | required | may be empty | Chronological action/assertion journal. | [src/core/ir/schema.ts:1057](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1057) |
 |  | `verification` | `TraceAssert[]` | required | min 1 | Terminal assertions required for replayable success. | [src/core/ir/schema.ts:1059](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1059) |
 |  | `verificationCoverage` | record `InstructionCriterionId` → integer | optional | integer nonnegative | Additive coverage-to-verification-index mapping. | [src/core/ir/schema.ts:1060](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1060) |
-| `TraceClick` | `type`, `element` | string, `ElementRef` | required | literal `click`; strict element | Recorded click. | [src/core/ir/schema.ts:890](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L890) |
+| `TraceClick` | `type`, `target` | string, `ElementRef` | required | literal `click`; strict target | Recorded click. | [src/core/ir/schema.ts:890](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L890) |
 | `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | required | literal `navigate`; no secret marker | Recorded navigation. | [src/core/ir/schema.ts:906](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L906) |
-| `TracePress` | `type`, `element`, `key` | string, locator, string | required | literal `press`; key enum | Recorded key press. | [src/core/ir/schema.ts:922](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L922) |
-| `TraceFill` | `type`, `element`, `value` | string, locator, text | required | literal `fill`; no secret marker | Recorded ordinary fill. | [src/core/ir/schema.ts:938](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L938) |
-| `TraceFillSecret` | `type`, `element`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | Recorded secret fill without literal value. | [src/core/ir/schema.ts:954](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L954) |
+| `TracePress` | `type`, `target`, `key` | string, locator, string | required | literal `press`; key enum | Recorded key press. | [src/core/ir/schema.ts:922](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L922) |
+| `TraceFill` | `type`, `target`, `value` | string, locator, text | required | literal `fill`; no secret marker | Recorded ordinary fill. | [src/core/ir/schema.ts:938](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L938) |
+| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | Recorded secret fill without literal value. | [src/core/ir/schema.ts:954](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L954) |
 
 `TraceAction` is the `type` union of the five action records. The `key` enum is `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp`; `ElementRef`, `InterpolatableText`, and `SecretRef` retain their constraints from [Value types](/ambercast/spec/value-types/#shared-types). [src/core/ir/schema.ts:407-410](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L407-L410), [src/core/ir/schema.ts:922-925](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L922-L925), [src/core/ir/schema.ts:970-976](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L970-L976)
 
@@ -2535,10 +2680,10 @@ Every `TraceAssert` branch is strict and requires `type: "assert"`; it shares th
 | variant | fields | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `text-visible` | `type`, `check`, `text` | all required | literals `assert`, `text-visible`; non-secret text | Visibility observation. | [src/core/ir/schema.ts:998](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L998) |
-| `element-visible` | `type`, `check`, `element` | all required | literals `assert`, `element-visible`; strict locator | Element visibility observation. | [src/core/ir/schema.ts:1003](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1003) |
-| `text-equals` | `type`, `check`, `element`, `text` | all required | literals `assert`, `text-equals`; non-secret text | Exact text observation. | [src/core/ir/schema.ts:1008](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1008) |
+| `element-visible` | `type`, `check`, `target` | all required | literals `assert`, `element-visible`; strict locator | Element visibility observation. | [src/core/ir/schema.ts:1003](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1003) |
+| `text-equals` | `type`, `check`, `target`, `text` | all required | literals `assert`, `text-equals`; non-secret text | Exact text observation. | [src/core/ir/schema.ts:1008](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1008) |
 | `url-matches` | `type`, `check`, `pattern` | all required | literals `assert`, `url-matches`; non-secret text | URL observation. | [src/core/ir/schema.ts:1013](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1013) |
-| `element-count` | `type`, `check`, `element`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | Count observation. | [src/core/ir/schema.ts:1018](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1018) |
+| `element-count` | `type`, `check`, `target`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | Count observation. | [src/core/ir/schema.ts:1018](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1018) |
 
 `TraceEntry` is the outer `type` union of `TraceAction` and `TraceAssert`. [src/core/ir/schema.ts:1039](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L1039)
 
@@ -2548,7 +2693,7 @@ This illustrative `planDigest` refers to the complete Plan example in [Plan docu
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -2796,10 +2941,10 @@ JSON Schema validation alone is insufficient. A conforming validator MUST additi
 | CON-16 | navigation | Every Plan, cached-trace, and fresh-agentic navigation MUST resolve against the target `baseUrl`, use HTTP(S), and remain target same-origin. | integrity failure | [src/usecases/run.ts:701](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L701) |
 | CON-17 | cached AI trace secret markers | Every string-valued descendant of a cached AI trace, except the dedicated `TraceFillSecret.secretRef` field, MUST NOT contain the contiguous `{{secrets.` marker. Violation is an integrity failure and MUST NOT fall back. | integrity failure | [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L984) |
 | CON-18 | cached AI trace `RunRef` | A `RunRef` MUST be well formed, name only a capture variable declared before the containing AI step, and have a value available in the current case. Malformed, unauthorized, or unavailable references are integrity failures and MUST NOT fall back. | integrity failure | [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L648) [src/usecases/run.ts:3180](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L3180) |
-| CON-19 | cached AI trace materialized secrets | Before replay, resolve each `fill-secret` reference listed by the containing Plan AI step in the trace's events and verification lists; together with current-case resolved values, scan every value except fixed `type`, `check`, `target`, `timeoutMs`, `element.strategy`, `key`, and `secretRef` vocabulary. A nonempty resolved secret is forbidden by exact match, and by substring match when it has at least 3 UTF-16 code units. | integrity failure; MUST NOT fall back | [src/usecases/run.ts:1075-1129](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1075-L1129); [src/usecases/run.ts:1252-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1252-L1313); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2190-L2209) |
+| CON-19 | cached AI trace materialized secrets | Before replay, resolve each `fill-secret` reference listed by the containing Plan AI step in the trace's events and verification lists; together with current-case resolved values, scan every value except fixed `type`, `check`, `target.strategy`, `key`, and `secretRef` vocabulary. A nonempty resolved secret is forbidden by exact match, and by substring match when it has at least 3 UTF-16 code units. | integrity failure; MUST NOT fall back | [src/usecases/run.ts:1075-1129](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1075-L1129); [src/usecases/run.ts:1252-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1252-L1313); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2190-L2209) |
 | CON-20 | stored and fresh AI `fill.value` credential literals | Stored traces and fresh agentic actions MUST reject `sk-`, `ghp_`, and `AKIA` fill values unconditionally. A high-entropy fill value is accepted only when its residual text after removal of captured current-case values has no detector match. Stored-trace failure MUST NOT fall back; fresh failure occurs before browser execution or journal persistence. | integrity failure | [src/usecases/run.ts:984-1040](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L984-L1040); [src/usecases/run.ts:1350-1405](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1350-L1405); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2190-L2209) |
 | CON-21 | captured values across AI boundaries | A legacy stored trace without `verificationCoverage` MUST NOT contain a nonempty captured current-case value, except an unresolved `{{run.name}}` placeholder, in any non-fixed-vocabulary value; the check is substring matching. Fresh agentic navigation URLs, fill values, and assertion text/patterns MUST NOT exactly equal a captured value. These values MUST use authorized `RunRef` interpolation instead; violations fail before the stored trace reaches browser/provider fallback or fresh input reaches browser/persistence. | integrity failure | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2190-L2209) |
-| CON-22 | fresh agentic action/assert materialized secrets | Before materialization, every fresh agentic action and assertion MUST scan non-fixed-vocabulary values against every nonempty resolved secret observed in the case. The only closed-vocabulary exclusions are `type`, `check`, `target`, `timeoutMs`, `element.strategy`, `key`, and `secretRef`. Exact equality is forbidden for every nonempty secret; substring matching is forbidden when the secret is at least 3 UTF-16 code units. A match is an integrity failure before browser execution, journal append, Grounding update, or persistence. | integrity failure | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2051-L2116) |
+| CON-22 | fresh agentic action/assert materialized secrets | Before materialization, every fresh agentic action and assertion MUST scan non-fixed-vocabulary values against every nonempty resolved secret observed in the case. The only closed-vocabulary exclusions are `type`, `check`, `target.strategy`, `key`, and `secretRef`. Exact equality is forbidden for every nonempty secret; substring matching is forbidden when the secret is at least 3 UTF-16 code units. A match is an integrity failure before browser execution, journal append, Grounding update, or persistence. | integrity failure | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2051-L2116) |
 | CON-23 | positional/discovered prompt-path selection | A selected prompt path MUST resolve inside `testDir` with an exact `.test.md` suffix and a non-empty name component, checked once for the whole selection before any per-file work begins; `--list` MUST NOT apply this check. | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/prompt-path-eligibility.ts#L25) |
 
 CON-23 applies during file selection, before every other CON item. CON-01 through CON-06, CON-09, and CON-10 apply before Plan persistence; CON-01, CON-07, and CON-08 apply to committed Plans; CON-11 through CON-22 apply to Grounding/replay validation. Grounding/replay validation checks trace secret-marker, resolved-secret, credential-literal, and captured-value boundaries, plus dynamic `RunRef` authority, before browser operations receive materialized values. [src/usecases/instruction-coverage-policy.ts:379](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/instruction-coverage-policy.ts#L379) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/generate.ts#L1405-L1493) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L984)
@@ -3121,11 +3266,11 @@ Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Trust a
 # Status and roadmap
 Source: https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/
 
-ambercast establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes six subcommands—`init`, `generate`, `run`, `check`, `heal`, and `view`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
+ambercast establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes seven subcommands—`init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
 
 ## Implemented in current release {#implemented}
 
-The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, and `view`. The implemented parser exposes no MCP subcommand, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, and browsing the results of test plans.
+The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. The MCP subcommand serves six tools over stdio, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, browsing the results of test plans, and serving an MCP interface.
 
 When working across versions, 0.3.1 requires regeneration of 0.1.0 plans. This requirement exists because the producer-contract fingerprint changed between releases, making the producer bundle and `inputsDigest` from 0.1.0 stale under 0.3.1.
 
@@ -3133,7 +3278,7 @@ Links: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambe
 
 ## Planned after the current boundary {#planned-after-current-boundary}
 
-Several surfaces and tools lie outside the 0.3.1 implementation. Planned documentation covers `review`, `mcp`, baseline/restore, and MCP tools. On the execution side, support for Firefox and WebKit is planned by 1.0.
+Planned documentation still covers `review` and baseline/restore. The official skill remains planned; MCP tools are available. On the execution side, support for Firefox and WebKit is planned by 1.0.
 
 Links: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/ambercast/agents/mcp-server/)
 
@@ -3177,11 +3322,11 @@ Links: [Setup prompt](/ambercast/agents/setup-prompt/), [Operating contract](/am
 # Operating contract
 Source: https://kotarotsubaki.github.io/ambercast/agents/operating-contract/
 
-This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly six implemented commands: `init`, `generate`, `run`, `check`, `heal`, and `view`.
+This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly seven implemented commands: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`.
 
 ## Command contract {#command-contract}
 
-Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, `heal`, and `view` as implemented commands.
+Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp` as implemented commands.
 
 Among these commands, `check` and `view` have no mutable-storage, AI-provider, or browser dependency. Healing buffers only plan and grounding companion changes until confirmation, but its replay attempts may write contained evidence in the case run directory before approval and during dry runs.
 
@@ -3193,6 +3338,7 @@ Among these commands, `check` and `view` have no mutable-storage, AI-provider, o
 | `check` | A selection can be discovered. | Reads prompts and artifacts only. | No ambercast-artifact write approval required. | Yes. |
 | `heal` | Target is idempotent and a real attempt is CI-enabled when in CI. | May write attempt evidence in the runs directory; commits measured plan/grounding candidates only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | No by default; only with `ci.heal: true`. |
 | `view` | An interactive terminal, or `--allow-headless`; a free port to bind. | None; read-only HTTP server over persisted run reports. | No ambercast-artifact write approval required. | No by default; it rejects non-interactive use without `--allow-headless`. |
+| `mcp` | A directory exists for the session root. | Starts a stdio server; called tools follow their own write and approval boundaries. | Depends on the tool invoked. | Depends on the tool invoked. |
 
 Links: [CLI overview](/ambercast/reference/cli/overview/), [ambercast init](/ambercast/reference/cli/init/#confirmation), [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 
@@ -3368,3 +3514,29 @@ For the install methods (Claude Code, Codex CLI, `gh skill`-compatible agents, s
 The agent-interface design treats coding agents as first-class users alongside the human-facing prompt and viewer surfaces.
 
 Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Setup prompt](/ambercast/agents/setup-prompt/), [MCP server](/ambercast/agents/mcp-server/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
+
+---
+
+# MCP server
+Source: https://kotarotsubaki.github.io/ambercast/agents/mcp-server/
+
+The `ambercast mcp` subcommand provides a portless `stdio` connection for agents to run and repair keystroke E2E tests. One server process serves one session root: `--dir` selects it, or the process current working directory is used. Files supplied to tools resolve relative to that root. Use `--sync-wait-ms` to set the synchronous response wait bound; the default is 45000 ms.
+
+## Connection boundary {#connection-boundary}
+
+The connection exposes `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. The first four are the workflow operations; the last two observe and cancel server-local jobs. See [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) for inputs, annotations, job records, `isError`, and the MCP error surface. Register the process in your client as shown in [ambercast mcp](/ambercast/reference/cli/mcp/#client-registration).
+
+## Changes from the planned design {#changes-from-the-planned-design}
+
+| Earlier planned page | Implemented connection |
+| --- | --- |
+| Five planned tools | Six tools, including job status and cancellation |
+| Report `outputSchema` published | `outputSchema` omitted |
+| Heal preview only | Two-stage heal uses `applyToken` |
+| Synchronous workflows only | Long calls become jobs; status without ID lists jobs |
+| Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
+| MCP errors unspecified | `HEAL_APPLY_TOKEN_INVALID`, `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED` use a separate error surface |
+| CLI inputs unspecified | Inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
+| Exit code inferred from report | `_meta.exitCode` carries it explicitly |
+
+Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage), [Reading structured output](/ambercast/agents/reading-structured-output/).

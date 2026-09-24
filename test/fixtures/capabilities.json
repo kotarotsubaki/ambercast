@@ -5,11 +5,11 @@
     "run",
     "check",
     "heal",
-    "view"
+    "view",
+    "mcp"
   ],
   "planned": [
     "review",
-    "mcp",
     "baseline",
     "restore"
   ],

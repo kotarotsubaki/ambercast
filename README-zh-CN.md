@@ -85,7 +85,21 @@ ambercast 目前处于 **0.x、pre-1.0** 版本：破坏性变更可能会出现
 
 - 目前仅支持 Chromium（对 Firefox 与 WebKit 的支持已在计划中）。
 - 目前仅支持本地执行——暂不提供托管的 runner。
-- 暂未提供 MCP server。
+
+运行 `ambercast mcp` 即可从当前工作目录启动基于 stdio 的 MCP 服务器。它提供 generate、run、check、heal 四项工作流，以及查询和取消作业的两项工具。要使用其他会话根目录，请指定 `--dir <path>`。
+
+启动命令为 `npx --no-install ambercast mcp`。在 Claude Code 的 `.mcp.json` 中注册服务器：
+
+```json
+{
+  "mcpServers": {
+    "ambercast": {
+      "command": "npx",
+      "args": ["--no-install", "ambercast", "mcp"]
+    }
+  }
+}
+```
 
 ## 贡献
 

@@ -96,9 +96,9 @@ describe('llms artifact completeness oracles', () => {
       const orderedPlannedSlugs = orderedPages.filter(({ slug }) => discoveredPlannedSlugs.includes(slug)).map(({ slug }) => slug).sort();
 
       expect(new Set(discoveredPlannedSlugs)).toEqual(new Set(PLANNED_SLUGS()));
-      expect(discoveredAvailableSlugs.filter((slug) => !slug.startsWith('spec/'))).toHaveLength(53);
+      expect(discoveredAvailableSlugs.filter((slug) => !slug.startsWith('spec/'))).toHaveLength(56);
       expect(discoveredAvailableSlugs.filter((slug) => slug.startsWith('spec/'))).toHaveLength(11);
-      expect(discoveredAvailableSlugs).toHaveLength(64);
+      expect(discoveredAvailableSlugs).toHaveLength(67);
       expect(orderedAvailableSlugs).toEqual(discoveredAvailableSlugs);
       expect(orderedPlannedSlugs).toEqual(discoveredPlannedSlugs);
     });
@@ -214,11 +214,11 @@ describe('renderLlmsFullTxt', () => {
 });
 
 describe('renderLlmsPlannedTxt', () => {
-  it('renders exactly the fixed five planned pages in supplied ordered-page order without headings', () => {
+  it('renders exactly the fixed two planned pages in supplied ordered-page order without headings', () => {
     const records = PLANNED_SLUGS().map((slug, index) => page({ slug, title: `Planned ${index + 1}`, status: 'planned', url: buildPageUrl('en', slug) }));
     const rendered = renderLlmsPlannedTxt(records);
 
-    expect(rendered.split('\n').filter(Boolean)).toHaveLength(5);
+    expect(rendered.split('\n').filter(Boolean)).toHaveLength(2);
     expect(rendered).not.toMatch(/^#{1,3}\s/m);
     expect(rendered).toBe(records.map((record) => `- [${record.title}](${record.url}): ${record.description}`).join('\n') + '\n');
   });

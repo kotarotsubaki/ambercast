@@ -42,6 +42,7 @@
 - [Changelog](https://kotarotsubaki.github.io/ambercast/reference/changelog/): User-visible product behavior and public-contract changes across ambercast releases, with breaking changes listed first.
 - [Security policy](https://kotarotsubaki.github.io/ambercast/reference/security-policy/): Supported versions and vulnerability reporting procedures for ambercast.
 - [Glossary](https://kotarotsubaki.github.io/ambercast/reference/glossary/): Normative site-wide terminology and index of literal translation-invariant tokens for Ambercast.
+- [MCP Tools](https://kotarotsubaki.github.io/ambercast/reference/mcp-tools/): Tool contracts, inputs, results, and errors for ambercast MCP workflows.
 
 ### CLI
 - [CLI overview](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/): Reference for parser-wide CLI behavior, command-flag dispatch, and discovery defaults in ambercast.
@@ -51,11 +52,12 @@
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/reference/cli/heal/): Command-line reference for ambercast heal, defining flags, repair execution boundaries, authorization, and side effects.
 - [ambercast init](https://kotarotsubaki.github.io/ambercast/reference/cli/init/): Command-line reference for ambercast init, which scaffolds a configuration file, sample prompt, and repository guidance.
 - [ambercast view](https://kotarotsubaki.github.io/ambercast/reference/cli/view/): Command-line reference for ambercast view, defining flags, the interactive gate, port selection, host binding, and the served routes.
+- [ambercast mcp](https://kotarotsubaki.github.io/ambercast/reference/cli/mcp/): Launch, transport, lifecycle, and client registration for the MCP server.
 
 ## PLAN SPECIFICATION
 - [Ambercast Plan Specification](https://kotarotsubaki.github.io/ambercast/spec/overview/): This specification describes the artifacts accepted by ambercast 0.3.1.
 - [Plan document](https://kotarotsubaki.github.io/ambercast/spec/plan-document/): `PlanDocument` is a strict object.
-- [Steps](https://kotarotsubaki.github.io/ambercast/spec/steps/): Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId` and a required `target` naming a key in `Plan.
+- [Steps](https://kotarotsubaki.github.io/ambercast/spec/steps/): Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId`.
 - [Value types](https://kotarotsubaki.github.io/ambercast/spec/value-types/): All other chapters MUST use these definitions rather than restating their shapes.
 - [Grounding document](https://kotarotsubaki.github.io/ambercast/spec/grounding-document/): `GroundingDocument` is a strict object bound to exactly one Plan digest.
 - [Element fingerprint](https://kotarotsubaki.github.io/ambercast/spec/fingerprint/): `Fingerprint.
@@ -72,7 +74,7 @@
 - [Trust and security](https://kotarotsubaki.github.io/ambercast/explanation/trust-and-security/): Trust boundaries and fail-closed architectural choices across plan validation, page observations, evidence collection, and secret handling.
 - [Determinism in CI](https://kotarotsubaki.github.io/ambercast/explanation/determinism-in-ci/): Explains the trust boundaries and structural isolation governing Ambercast execution in CI environments.
 - [How ambercast compares](https://kotarotsubaki.github.io/ambercast/explanation/comparison/): A comparison of ambercast's design model with code generation, record-and-replay frameworks, and direct-driving agents.
-- [Status and roadmap](https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/): Track the implemented command boundary of ambercast 0.3.1, planned capabilities, and the pre-1.0 version policy.
+- [Status and roadmap](https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/): Track implemented commands, planned capabilities, and the pre-1.0 version policy.
 
 ## FOR AI AGENTS
 - [Using ambercast from an AI agent](https://kotarotsubaki.github.io/ambercast/agents/overview/): Operational reading order and bounded execution loop for AI agents using ambercast.
@@ -81,3 +83,4 @@
 - [Reading structured output](https://kotarotsubaki.github.io/ambercast/agents/reading-structured-output/): Branch on the report envelope, inspect reportPersistence and errors, and evaluate command-specific result statuses in ambercast.
 - [Machine-readable resources](https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/): Published machine-readable documentation artifacts and their availability rules for AI agents.
 - [Official skill](https://kotarotsubaki.github.io/ambercast/agents/official-skill/): The official Agent Skills skill ambercast ships for AI coding agents, and its role within the agent-facing interface.
+- [MCP server](https://kotarotsubaki.github.io/ambercast/agents/mcp-server/): Connection boundary for agents using the ambercast MCP server.

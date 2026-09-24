@@ -3,7 +3,7 @@ title: CLIの概要
 description: ambercast CLI のパーサー全体の仕様、コマンド体系、および自動探索の既定動作を解説します。
 ---
 
-`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal`、`view` の 6 つのコマンドが実装されています。
+`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の 7 つのコマンドが実装されています。
 
 ## コマンド体系 {#command-surface}
 
@@ -17,6 +17,7 @@ Commands:
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
   view                 Browse run results in a browser
+  mcp                  Serve the MCP stdio server
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -38,6 +39,9 @@ Heal options:
 View options:
   --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
+Mcp options:
+  --dir <path>  --sync-wait-ms <n>
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -47,7 +51,7 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-実装されているコマンドは `init`、`generate`、`run`、`check`、`heal`、`view` です。
+実装されているコマンドは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` です。
 
 トップレベルの `--help` および `--version` は、コマンドのディスパッチ前に処理を終了（ショートサーキット）します。不正な形式の引数が指定された場合は、レポートを出力せずに終了コード 2 で終了します。
 
@@ -57,23 +61,24 @@ Heal configuration:
 | --- | --- | --- | --- |
 | init | なし | `dir`（対象ディレクトリ）、`yes`/`-y`（確認の省略）、`force`（既存設定の置換）、`no-color`（カラー無効化） | `--dir` 引数（未指定時は cwd） |
 | generate | リテラルパス（パス未指定時は探索） | `strict`（厳格）、`force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`target`（ターゲット指定）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
-| check | リテラルパス（パス未指定時は探索） | `target`（ターゲット指定）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
+| check | リテラルパス（パス未指定時は探索） | `allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
 | view | なし | `port`（ポート指定）、`host`（バインドアドレス）、`allow-headless`（非対話許可）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| mcp | なし | `dir`（セッションルート）、`sync-wait-ms`（同期応答の待機上限、ミリ秒） | `--dir` 引数（未指定時は cwd） |
 
-`--` はオプション解析を終了し、後続のすべての引数をリテラルパスとして残します。
+ファイルパスを受け付けるコマンドでは、`--` はオプション解析を終了し、後続の引数をリテラルパスとして残します。
 
-`--json` および `--no-color` は、グローバルフラグの抽象化機構ではなく、各コマンドによって個別に解析されます。
+`--json` および `--no-color` は、グローバルフラグの抽象化機構ではなく、これらを受け付ける各コマンドによって個別に解析されます。
 
-`--list` を除き、各位置引数は `testDir` 内にあり、空でない名前部分を持ち、拡張子が正確に `.test.md` であるリテラルパスでなければなりません。適格でないパスは、黙って無視されたり実行時クラッシュに至ったりする代わりに `PROMPT_PATH_INVALID` を発生させます。
+`generate`、`run`、`check`、`heal` では、`--list` を除き、各位置引数は `testDir` 内にあり、空でない名前部分を持ち、拡張子が正確に `.test.md` であるリテラルパスでなければなりません。適格でないパスは、黙って無視されたり実行時クラッシュに至ったりする代わりに `PROMPT_PATH_INVALID` を発生させます。
 
-ターゲットの優先順位は、明示的に指定されたターゲット、設定された既定値、単一のみ設定されたターゲットの順序で評価され、いずれにも該当しない場合は選択に失敗します。
+`generate --target` はジェネレーターが利用できる Target 定義を制限します。run、check、heal は各 Plan に記録された Target 名を使用します。
 
 ## 探索の既定動作 {#discovery-default}
 
-リテラルファイルが指定されていない場合、`generate`、`run`、`check`、`heal` は対象の選択を設定済みの自動探索に委譲します。`init` は探索の対象になりません。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
+`generate`、`run`、`check`、`heal` にリテラルファイルを指定しない場合、対象の選択を設定済みの自動探索に委譲します。`init`、`view`、`mcp` はプロンプトファイルを位置引数として受け付けません。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
 
 探索処理は POSIX 相対パスを評価し、包含パターンのマッチ（inclusion match）を要求した上で、除外パターンのマッチ（ignore match）によって該当するパスを除外します。
 
-関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast init](/ambercast/ja/reference/cli/init/#flags)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)、[ambercast view](/ambercast/ja/reference/cli/view/#flags)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)

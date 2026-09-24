@@ -83,7 +83,7 @@ prompt 几乎不做任何加工，既不整理空白，也不规范措辞，为�
 
 ## 人与 AI 都是读者 {#humans-and-agents}
 
-资产的读者不只是人类。Claude Code、Codex 这类编码代理，也会在实现、测试、修复的循环中读写测试。ambercast 把代理当作第一等用户对待，除 CLI 之外还提供官方 skill，并计划推出 MCP。
+资产的读者不只是人类。Claude Code、Codex 这类编码代理，也会在实现、测试、修复的循环中读写测试。ambercast 把代理当作第一等用户对待，除 CLI 之外还提供官方 skill 和 MCP 服务器。
 
 不会为代理另写一份规范。同一份文档，要让人类和代理都能读懂。
 
@@ -1636,7 +1636,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `GitHub Security Advisories` | GitHub Security Advisories 是私密安全漏洞报告通道。 | `SECURITY.md`；[安全策略](/ambercast/zh-cn/reference/security-policy/#vulnerability-reporting) | 公开 Issue |
 | `GroundingDocument` | `GroundingDocument` 是拥有 Grounding `schemaVersion`、`planDigest` 与条目的严格 Schema。 | `GroundingDocument`；[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` 是针对执行中断的结构化环境错误代码。 | 报告 Schema；[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) | 断言失败 |
-| `JSON-RPC` | `JSON-RPC` 处于规划阶段（在 0.3.1 中未实现），作为 MCP 传输协议，在 0.3.1 中尚无服务端运行时。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#planned-interface) | CLI `--json` |
+| `JSON-RPC` | `JSON-RPC` 承载已实现的 MCP 服务器的 stdio 消息。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | CLI `--json` |
 | `PlanDocument` | `PlanDocument` 是拥有 Plan 版本、来源凭证、目标与步骤的严格 Schema。 | `PlanDocument`；[计划文档](/ambercast/zh-cn/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` 是由 `SECRET_REF_SOURCE` 构建的锚定全值正则表达式。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 未锚定的片段 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` 是唯一被接受的元素指纹算法字面量。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | Plan Schema 版本 2 |
@@ -1646,24 +1646,26 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `ambercast generate` | `ambercast generate` 是已实现的 Plan 生成命令。 | [ambercast generate](/ambercast/zh-cn/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` 是已实现且受守卫保护的工件修复命令。 | [ambercast heal](/ambercast/zh-cn/reference/cli/heal/) | 运行时回退 |
 | `ambercast init` | `ambercast init` 已实现，会写入四个文件。 | [ambercast init](/ambercast/zh-cn/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#status) | MCP 工具名 |
+| `ambercast mcp` | `ambercast mcp` 启动已实现的 stdio MCP 服务器。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | MCP 工具名 |
 | `ambercast restore` | `ambercast restore` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
 | `ambercast review` | `ambercast review` 处于规划阶段（在 0.3.1 中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
 | `ambercast run` | `ambercast run` 是已实现的确定性重放命令。 | [ambercast run](/ambercast/zh-cn/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` 是已实现的只读本地结果查看器。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_review` | `ambercast_review` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 规划中的 CLI review |
-| `ambercast_run` | `ambercast_run` 是规划中的 MCP 工具词元，在 0.3.1 中没有服务端运行时。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `ambercast_check` | `ambercast_check` 是已实现的只读 MCP 新鲜度检查工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` 是已实现的 MCP Plan 生成工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` 是已实现的 MCP 修复工具，支持预览及通过 token 授权的应用。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` 请求取消此服务器进程中的作业。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI 命令 |
+| `ambercast_job_status` | `ambercast_job_status` 列出作业或获取单个作业的状态和结果。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI 命令 |
+| `ambercast_review` | `ambercast_review` 是未来的 MCP 工具，未包含在已实现的六项工具中。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 规划中的 CLI review |
+| `ambercast_run` | `ambercast_run` 是已实现的 MCP 重放工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
 | `config.schema.json` | `config.schema.json` 是生成的配置 JSON Schema 及 npm 配置 Schema 导出目标。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#generated-artifacts) | 配置实例 |
-| `dryRun` | `dryRun` 是 CLI/MCP 自愈预览请求的输入字段；已完成的 `HealResult` 使用 `application: preview-only` 表示预览，而非 `dryRun` 字段。 | 自愈请求 / [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#heal-safety-default) | HealResult 的表示形式 |
+| `dryRun` | `dryRun` 是 CLI/MCP 自愈预览请求的输入字段；已完成的 `HealResult` 使用 `application: preview-only` 表示预览，而非 `dryRun` 字段。 | 自愈请求 / [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#heal-preview-and-apply) | HealResult 的表示形式 |
 | `fresh-without-grounding` | `fresh-without-grounding` 是已完成的 check 状态，与 `fresh` 区分开来。 | check 结果；[ambercast check](/ambercast/zh-cn/reference/cli/check/#status-vocabulary) | 缺失 Plan |
 | `grounding.schema.json` | `grounding.schema.json` 是生成的 Grounding JSON Schema 及 npm 导出目标。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#generated-artifacts) | Grounding 实例 |
 | `healReplayIsolation` | `healReplayIsolation` 是目标策略，自愈要求其值必须为 `idempotent`。 | 目标配置 / heal | 浏览器模式 |
 | `inputsDigest` | `inputsDigest` 记录五项输入的 Plan 来源凭证摘要。 | `computeInputsDigest`；[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/) | `planDigest` |
-| `isError` | `isError` 是规划中的 MCP 结果分类字段，在 0.3.1 中没有 MCP 运行时语义。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 测试失败状态 |
-| `outputSchema` | `outputSchema` 是规划中的 MCP Schema 元数据，在 0.3.1 中没有 MCP 运行时语义。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#planned-tool-contract) | 生成的 npm JSON Schema |
+| `isError` | `isError` 根据退出码映射与 MCP 专有失败对已实现的 MCP 工具结果分类。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 测试失败状态 |
+| `outputSchema` | 报告 Schema 过大，因此所有已实现的 MCP 工具定义均省略 `outputSchema`。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | 生成的 npm JSON Schema |
 | `plan.schema.json` | `plan.schema.json` 是生成的 Plan JSON Schema 及 npm 导出目标。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#generated-artifacts) | Plan 实例 |
 | `planDigest` | `planDigest` 将 Grounding 绑定至排除 `generatorMeta` 后的重放相关 Plan 内容。 | `computePlanDigest`；[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/) | `inputsDigest` |
 | `producerBundleFingerprint` | `producerBundleFingerprint` 命名生产器契约来源凭证，其变更会改变 `inputsDigest`。 | 生成来源凭证 / [兼容性](/ambercast/zh-cn/reference/compatibility/#regeneration-boundary) | 元素指纹 |
@@ -1671,10 +1673,10 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `reportPersistence` | `reportPersistence` 是运行信封对其持久化尝试状态的记录。 | 运行报告；[报告](/ambercast/zh-cn/reference/reports/#persistence) | 测试状态 |
 | `review` | `review` 是报告 Schema 中的命令分支，并非已实现 CLI 命令的证据。 | `ReportEnvelope`；[报告](/ambercast/zh-cn/reference/reports/#result-shapes) | 可用命令 |
 | `schemaVersion` | `schemaVersion` 用于区分带版本的 Plan、Grounding 或报告契约。 | IR/报告 Schema | 软件包版本 |
-| `stderr` | `stderr` 用于传递 CLI 用法错误、崩溃诊断和持久化警告，而非成功的报告输出。 | CLI 运行时 / [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#planned-interface) | stdout 响应 |
-| `stdio` | `stdio` 处于规划阶段（在 0.3.1 中未实现），用于 MCP 传输，在 0.3.1 中没有服务端运行时。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#planned-interface) | 网络端口 |
+| `stderr` | `stderr` 用于传递 CLI 用法错误、崩溃诊断、持久化警告和 MCP 启动日志。 | CLI 运行时 / [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | stdout 响应 |
+| `stdio` | `stdio` 是已实现的 MCP 服务器传输方式。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | 网络端口 |
 | `stdout` | `stdout` 用于传递帮助/版本信息和已完成的命令报告，进程状态则单独指定。 | CLI 运行时 / [报告](/ambercast/zh-cn/reference/reports/#envelope) | stderr 诊断信息 |
-| `structuredContent` | `structuredContent` 处于规划阶段（在 0.3.1 中未实现），属于 MCP 结果载荷，在 0.3.1 中没有 MCP 运行时语义。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#planned-tool-contract) | CLI JSON 文本 |
+| `structuredContent` | `structuredContent` 在已实现的 MCP 响应中承载报告信封或 Job record。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI JSON 文本 |
 | `testIgnore` | `testIgnore` 在相对路径匹配包含规则之后将其排除。 | 发现匹配器；[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection) | `testMatch` |
 | `testMatch` | `testMatch` 要求相对路径至少匹配一项包含规则。 | 发现匹配器；[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` 示范了一个全值密钥引用，其正文映射到环境变量键。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 字面量凭据 |
@@ -1683,10 +1685,94 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 
 ---
 
+# MCP 工具
+Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/mcp-tools/
+
+MCP 服务器依次提供六个工具：`ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel`。名称使用 ambercast 前缀和 snake_case，并非复制所有 CLI 命令。
+
+## 工具列表 {#tool-table}
+
+注解依次为 readOnly / destructive / idempotent / openWorld。四个值均明确给出，它们只是提示而非授权。generate 的幂等提示是弱承诺：最新 Plan 会被跳过，效果趋于收敛，但 AI 输出可能变化。
+
+| 工具 | 对应 CLI | 注解 | `isError: true` | `isError: false` 的否定结果 |
+| --- | --- | --- | --- | --- |
+| `ambercast_generate` | generate | false / false / true（弱）/ false | 退出码 2、3 | 退出码 1（strict 歧义）、5 |
+| `ambercast_run` | run | false / false / false / true | 退出码 2、3、4（MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED） | 退出码 1（断言失败）、5 |
+| `ambercast_check` | check | true / false / true / false | 退出码 2、3 | 退出码 4（stale 是 results[].status 中的正常结果）、5 |
+| `ambercast_heal` | heal | false / true / false / true | 退出码 2（含 CI 拒绝）、3、4；`HEAL_APPLY_TOKEN_INVALID`；`HEAL_APPLY_FAILED` | 退出码 1（未解决或拒绝）、5 |
+| `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`；failed 时的 `JOB_FAILED`；有结果的 completed/cancelled 按原工具映射 | 未终结 record、列表、排队取消的 record |
+| `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
+
+`isError` 由报告的聚合退出码决定，不重新分类单个报告错误。heal 还提供 Claude Code 交互提示，但提示不能作为批准证据。
+
+## 输入 {#inputs}
+
+输入是严格对象。未知键、类型不匹配和 refine 违规由 SDK 返回 `Input validation error` 文本及 `isError: true`。没有参数时传入 `{}`。
+
+| 范围 | 属性与默认值 |
+| --- | --- |
+| 通用工作流输入 | `files?: string[]`（省略和 `[]` 都使用配置发现；相对路径以 session root 为基准）、`allowEmpty?: boolean`（false） |
+| `ambercast_generate` | `target?: string`（限制生成器可用的 Target 定义）、`strict?: boolean`（false）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
+| `ambercast_run` | `grep?: string`（有效正则表达式）、`resolve?: boolean`（false）、`updateCache?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
+| `ambercast_check` | 仅通用输入 |
+| `ambercast_heal` | `dryRun?: boolean`（true）、`applyToken?: string`、`ai?: 'claude' \| 'codex'` |
+| `ambercast_job_status` | `jobId?: string`（省略时列出本服务器进程的作业）、`waitMs?: number`（0；整数 0–45000，仅指定 ID 时生效） |
+| `ambercast_job_cancel` | `jobId: string` |
+
+MCP 输入排除 CLI 标志 `headed`（固定 headless）、`list`、`stale`（固定 fail）、`json`、`yes`（由 `applyToken` 取代）和 `configPath`。
+
+## heal 预览与应用 {#heal-preview-and-apply}
+
+`ambercast_heal` 默认预览（`dryRun: true`），与 CLI heal 的 false 默认值不同。只有产生提交的预览返回 `applyToken`。应用时只传 `dryRun: false` 和 `applyToken`；必须省略 `files`、`ai`、`allowEmpty`。预览必须省略 `applyToken`。违规属于 SDK 输入验证错误。应用同步执行，不创建作业。token 是 128-bit 加密随机值，表示为 32 位十六进制字符。新预览会取代 pending token。pending token 从首次组装携带 token 的响应起 600000 ms 后过期；consumed token 在结算后 600000 ms 内重放保存的结果。
+
+如果客户端支持表单征询，将以 600000 ms 超时请求确认。接受并确认会应用修复，拒绝则不应用，取消则中断。客户端不支持表单征询时，服务器授权应用。token 标识预览，应用请求是单独的操作；客户端提示本身并非授权。
+
+## 结果与作业 {#results-and-jobs}
+
+所有工具均省略 `outputSchema`：报告 JSON Schema 大小为 136 KB，会挤占 `tools/list`，而工具还可能返回报告封装或 Job record。已完成报告的 `structuredContent` 与 CLI JSON 输出采用同一封装，不在封装中增加退出码。截图保持为相对 projectRoot 的路径，不使用内联 base64。
+
+单个 text 项的首行是 `exitCode: <n>`。只有产生提交的 heal 预览在第二行给出 `applyToken: <token>`，后续一行包含封装 JSON。响应同时包含 `_meta.exitCode`，适用时包含 `_meta.applyToken`。通过 `ambercast_job_status` 获取的已完成作业返回相同 content、错误分类及元数据，并加入不含结果的 `_meta.job`。
+
+generate、run、heal 预览每次调用都会创建 Job。若在同步等待界限内完成，调用方获得报告响应；否则获得作业句柄。句柄与未终结状态将 Job record 放入 `structuredContent`，text 固定三行：`jobId: <id>`、`status: <status>`、状态消息。元数据含 `_meta.jobId`。`ambercast_check` 与 heal 应用保持同步。`ambercast_job_status` 不指定 ID 时按创建时间从新到旧列出本服务器进程的作业，`structuredContent` 包含 `jobs` 数组；空列表的 text 为 `no jobs`。这是服务器本地作业通道，不是 MCP Tasks extension。`ambercast_job_cancel` 取消运行或排队的作业并返回 record。record 在终结后 1800000 ms 或服务器退出时消失。
+
+| Job record 字段 | 含义 |
+| --- | --- |
+| `jobId` | UUID v4 标识符 |
+| `tool` | 来源工具 |
+| `status` | working、completed、failed 或 cancelled |
+| `statusMessage` | 非空进度或终结状态消息 |
+| `progress` | 运行时事件累计数，与是否发送进度通知无关 |
+| `createdAt` | ISO 8601 UTC 创建时间 |
+| `lastUpdatedAt` | 状态或进度最后变化时的 ISO 8601 UTC 时间 |
+| `pollIntervalMs` | 2000 |
+| `ttlMs` | 1800000 |
+
+## MCP 错误 {#mcp-errors}
+
+MCP 层的语义错误具有 `isError: true`、一个形如 `"<CODE>: <message>"` 的 text 项，且没有 `structuredContent`。代码为 `HEAL_APPLY_TOKEN_INVALID`（原因 `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED`。非法输入使用 SDK 验证错误；领域和环境失败仍留在报告封装中。
+
+## 与原计划设计的变化 {#changes-from-the-planned-design}
+
+| 原 planned 页面 | 已实现契约 |
+| --- | --- |
+| 包含 review 的五个工具 | 四个工作流加状态与取消，共六个工具；不暴露 review |
+| 发布报告 `outputSchema` | 所有工具省略 `outputSchema` |
+| heal 只有预览 | 通过 `applyToken` 进行两阶段同步应用 |
+| 只有同步工作流 | 较长的 generate/run/heal 预览产生作业；无 ID 的状态请求返回列表 |
+| 未规定服务器标志 | `ambercast mcp` 支持 `--dir` 与 `--sync-wait-ms` |
+| 仅对报告退出码分类 | MCP 错误代码与 SDK 验证错误区别于报告封装 |
+| 未规定 CLI 标志映射 | 输入排除 `headed`、`list`、`stale`、`json`、`yes`、`configPath` |
+| 从报告推断退出码 | `_meta.exitCode` 与 text 首行携带退出码 |
+| 规定 `target` 为四个工具共通 | `target` 仅由 `ambercast_generate` 接受；`ambercast_run`、`ambercast_check`、`ambercast_heal` 从 Plan 自身选择 Target，与 CLI 端的 Plan IR v4 迁移一致 |
+
+相关链接：[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/#connection-boundary)、[报告](/ambercast/zh-cn/reference/reports/#envelope)、[退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
+
+---
+
 # CLI 概览
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/
 
-ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check、heal 与 view。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
+ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check、heal、view 与 mcp。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
 
 ## 命令界面 {#command-surface}
 
@@ -1700,6 +1786,7 @@ Commands:
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
   view                 Browse run results in a browser
+  mcp                  Serve the MCP stdio server
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -1721,6 +1808,9 @@ Heal options:
 View options:
   --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
+Mcp options:
+  --dir <path>  --sync-wait-ms <n>
+
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
   ai.maxGenerateAttempts: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
@@ -1730,7 +1820,7 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-ambercast 当前已实现的命令包括 init、generate、run、check、heal 以及 view。
+ambercast 当前已实现的命令包括 init、generate、run、check、heal、view 以及 mcp。
 
 顶层标志 `--help` 与 `--version` 会在命令分发之前短路处理并退出；若传入格式错误的参数，程序将直接以退出码 2 终止退出，且不输出错误报告。
 
@@ -1740,26 +1830,27 @@ ambercast 当前已实现的命令包括 init、generate、run、check、heal �
 | --- | --- | --- | --- |
 | init | 无 | dir, yes/-y, force, no-color | `--dir` 参数（未指定时为 cwd） |
 | generate | 字面路径；未指定路径则执行发现 | strict, force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| run | 字面路径；未指定路径则执行发现 | grep, target, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| check | 字面路径；未指定路径则执行发现 | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| run | 字面路径；未指定路径则执行发现 | grep, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| check | 字面路径；未指定路径则执行发现 | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | view | 无 | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| mcp | 无 | dir, sync-wait-ms | --dir 参数指定会话根目录（未指定时为 cwd） |
 
-除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
+对于 `generate`、`run`、`check` 和 `heal`，除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
 
-`--` 标志用于结束选项解析，其后出现的所有参数均按字面路径处理。
+对于接受文件路径的命令，`--` 标志结束选项解析，其后出现的参数均按字面路径处理。
 
-`--json` 与 `--no-color` 由各个命令独立解析，而非通过全局标志抽象层统一处理。
+`--json` 与 `--no-color` 由接受这些标志的命令独立解析，而非通过全局标志抽象层统一处理。
 
-Target（目标）的解析优先级依次为：显式指定的 target、配置中的默认 target、配置中仅存在唯一定义的 target；若均不满足，则 target 选择失败。
+`generate --target` 用于限制生成器可用的 Target 定义。run、check、heal 使用各 Plan 中记录的 Target 名称。
 
 ## 默认发现规则 {#discovery-default}
 
-当未传入字面文件路径时，`generate`、`run`、`check`、`heal` 会将文件选择委托给所配置的发现机制；`init` 不参与发现。默认包含模式为 `**/*.test.md`，默认排除项包括 `.runs` 目录、Plan 与 Grounding 伴生文件。
+当 `generate`、`run`、`check` 或 `heal` 未收到字面文件路径时，该命令会将文件选择委托给所配置的发现机制。`init`、`view` 与 `mcp` 不接受提示词文件位置参数。默认包含模式为 `**/*.test.md`，默认排除项包括 `.runs` 目录、Plan 与 Grounding 伴生文件。
 
 发现机制对 POSIX 相对路径进行求值：首先要求满足包含匹配，若命中忽略匹配则会将该路径排除。
 
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection), [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags), [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags), [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags), [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)。
+相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection), [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection), [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags), [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags), [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags), [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags), [ambercast view](/ambercast/zh-cn/reference/cli/view/#flags), [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)。
 
 ---
 
@@ -2071,7 +2162,76 @@ view requires --allow-headless when no interactive terminal is attached.
 
 `ambercast view` 会读取 `schemaVersion` 为 3.x 的所有报告。由与当前 CLI 不同的次版本写入的报告，会在运行详情标题中显示"Schema `<version>`"；来自其他主版本的报告会在列表中显示为"Unsupported version `<version>`"，且无法打开。
 
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
+view 是 Ambercast 命令中唯一消耗网络端口的命令；MCP 服务器采用无端口的 stdio。
+
+相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)，[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)。
+
+---
+
+# ambercast mcp
+Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/mcp/
+
+`ambercast mcp` 通过 `stdio` 启动无端口的 MCP 服务器。每个进程服务于一个 session root。
+
+## 用法 {#usage}
+
+```sh
+ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
+```
+
+## 标志 {#flags}
+
+| 标志 | 取值 | 效果 | 默认值 |
+| --- | --- | --- | --- |
+| `--dir` | path | 服务的 session root | cwd |
+| `--sync-wait-ms` | n | 同步响应等待界限（毫秒） | 45000 |
+
+`--dir` 选择 session root；省略时使用进程当前工作目录。相对路径也以该目录为基准解析。`--sync-wait-ms` 是正整数，默认值 45000，限定较长工作流返回作业句柄之前的同步等待时间。`--help` 优先于其他参数，向 stdout 输出用法并以退出码 0 结束。
+
+如果解析后的路径不存在或不是目录，stderr 输出 `ambercast mcp: --dir <path> is not a directory.`，服务器不会启动，退出码为 2。启动失败输出 `ambercast mcp: failed to start (<error name>)`，退出码为 3。非法选项、位置参数和等待界限通过 stderr 输出 CLI 用法错误，退出码为 2。
+
+## 传输与关闭 {#transport-and-shutdown}
+
+stdout 仅包含 JSON-RPC 行。stderr 接收进度与一行启动日志 `ambercast mcp: serving <session root>`。stdin 结束、SIGTERM 或 SIGINT 均会启动 draining。服务器中止运行中的调用，最多等待 10000 ms；全部结算后关闭服务器并以退出码 0 结束，超时未结算则以退出码 3 结束。draining 期间拒绝新工具调用。
+
+## 客户端注册 {#client-registration}
+
+在已安装 ambercast 的项目中使用 `npx --no-install ambercast mcp`。Claude Code 读取项目的 `.mcp.json`：
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+Codex CLI 读取 `config.toml`：
+
+```toml
+[mcp_servers.ambercast]
+command = "npx"
+args = ["--no-install", "ambercast", "mcp"]
+```
+
+Claude Desktop 配置中可使用相同的服务器条目：
+
+```json
+{"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
+```
+
+将客户端工作目录设为所需 session root，或追加 `--dir` 参数。服务器提供 `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status` 和 `ambercast_job_cancel`。
+
+## 与原计划设计的变化 {#changes-from-the-planned-design}
+
+| 原 planned 页面 | 已实现契约 |
+| --- | --- |
+| 未规定服务器标志 | `ambercast mcp` 支持 `--dir` 和 `--sync-wait-ms` |
+| 原计划五个工具 | 六个工具，包含作业状态与取消 |
+| 发布报告 `outputSchema` | 省略 `outputSchema` |
+| heal 只有预览 | 通过 `applyToken` 两阶段应用 |
+| 只有同步调用 | 较长调用返回作业，无 ID 的状态请求返回列表 |
+| 未规定 MCP 错误 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` 使用独立错误响应 |
+| 未规定 CLI 输入标志 | 工具输入排除 `headed`、`list`、`stale`、`json`、`yes`、`configPath` |
+| 从报告推断退出码 | `_meta.exitCode` 明确携带退出码 |
+
+相关链接：[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/#connection-boundary)、[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)。
 
 ---
 
@@ -3128,7 +3288,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-r
 
 ## 当前版本已实现 {#implemented}
 
-CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`、`heal` 和 `view`。当前已实现的解析器并未暴露 MCP 子命令。
+CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。MCP 子命令通过 stdio 提供六项工具。
 
 对于在早期版本中生成的产物，0.3.1 要求重新生成 0.1.0 的计划。这是因为 producer-contract 的指纹发生了变更，致使既有的 producer bundle 以及 `inputsDigest` 处于 `stale`（已过期）状态。
 
@@ -3136,7 +3296,7 @@ CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`�
 
 ## 当前边界之后的规划 {#planned-after-current-boundary}
 
-在当前实现的边界之外，项目规划中的文档涵盖了 `review`、`mcp`、baseline/restore 以及 MCP 工具。
+`review` 和 baseline/restore 仍在规划中。官方 skill 仍在规划中，但 MCP 工具现已提供。
 
 在浏览器平台支持方面，Firefox 和 WebKit 计划在 1.0 达成。
 
@@ -3182,11 +3342,11 @@ Agent 所需的基础循环为：实现 → 编写或调整所请求的 `.test.m
 # 操作契约
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/operating-contract/
 
-ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal` 与 `view`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
+ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
 
 ## 命令契约 {#command-contract}
 
-解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal` 与 `view`。其中，`check` 与 `view` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
+解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。其中，`check` 与 `view` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
 
 | 命令 | 前提条件 | 副作用 | 是否需要批准？ | CI 中是否安全？ |
 | --- | --- | --- | --- | --- |
@@ -3196,6 +3356,7 @@ ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`
 | check | 所选目标可被发现。 | 仅读取 prompt 与工件。 | 不需要 ambercast 工件写入批准。 | 安全。 |
 | heal | 目标具备幂等性，且在 CI 中时已启用真实尝试。 | 可能在 runs 目录中写入尝试证据；仅在确认后提交测得的计划/grounding 候选变更。 | 需要用户明确批准；--yes 不构成 agent 授权。 | 默认不安全；仅在 ci.heal: true 时安全。 |
 | view | 具备交互式终端，或指定 `--allow-headless`；具有可绑定的空闲端口。 | 无；仅读取已持久化的 run report 的 HTTP 服务器。 | 不需要 ambercast 工件写入批准。 | 默认不安全；未指定 `--allow-headless` 的非交互使用会被拒绝。 |
+| mcp | 会话根目录存在。 | 启动 stdio 服务器；所调用工具遵循各自的写入与批准边界。 | 取决于所调用的工具。 | 取决于所调用的工具。 |
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[ambercast init](/ambercast/zh-cn/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 
@@ -3381,3 +3542,29 @@ ambercast 在 `skills/ambercast/SKILL.md` 中内置了一个名为 `ambercast` �
 - [设置提示词](/ambercast/zh-cn/agents/setup-prompt/)
 - [MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
 - [状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)
+
+---
+
+# MCP 服务器
+Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/mcp-server/
+
+`ambercast mcp` 子命令通过无端口的 `stdio` 连接供 Agent 执行及修复按键级 E2E 测试。一个服务器进程服务于一个 session root，由 `--dir` 指定；省略时使用进程当前工作目录。工具中的文件路径以该 root 为基准解析。`--sync-wait-ms` 设置同步响应等待界限，默认值为 45000 ms。
+
+## 连接边界 {#connection-boundary}
+
+连接提供 `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status` 和 `ambercast_job_cancel`。前四项是工作流，后两项观察及取消服务器本地作业。输入、注解、Job record、`isError` 及 MCP 错误界面详见 [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)。客户端进程注册示例见 [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#client-registration)。
+
+## 与原计划设计的变化 {#changes-from-the-planned-design}
+
+| 原 planned 页面 | 已实现连接 |
+| --- | --- |
+| 原计划五个工具 | 六个工具，包含作业状态与取消 |
+| 发布报告 `outputSchema` | 省略 `outputSchema` |
+| heal 只有预览 | 通过 `applyToken` 两阶段应用 |
+| 只有同步工作流 | 较长调用变成作业，无 ID 的状态请求返回列表 |
+| 未规定服务器标志 | `ambercast mcp` 支持 `--dir` 和 `--sync-wait-ms` |
+| 未规定 MCP 错误 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` 使用独立错误界面 |
+| 未规定 CLI 输入 | 输入排除 `headed`、`list`、`stale`、`json`、`yes`、`configPath` |
+| 从报告推断退出码 | `_meta.exitCode` 明确携带退出码 |
+
+相关链接：[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/)。

@@ -87,7 +87,7 @@ function artifactContent(writes: readonly CapturedWrite[], suffix: string): stri
 
 describe('writeGeneratedArtifacts', () => {
   it('keeps the planned capability contract pinned to its literal vocabulary', () => {
-    expect(PLANNED_CAPABILITIES).toStrictEqual(['review', 'mcp', 'baseline', 'restore']);
+    expect(PLANNED_CAPABILITIES).toStrictEqual(['review', 'baseline', 'restore']);
   });
   it('writes the exact compact JSON from all schema and manifest producers', () => {
     const expectedWrites: CapturedWrite[] = [
@@ -99,8 +99,8 @@ describe('writeGeneratedArtifacts', () => {
       {
         path: join('/dist-output', 'manifest', 'capabilities.json'),
         content: JSON.stringify({
-          commands: ['init', 'generate', 'run', 'check', 'heal', 'view'],
-          planned: ['review', 'mcp', 'baseline', 'restore'],
+          commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
+          planned: ['review', 'baseline', 'restore'],
           schemaVersions: { plan: 4, grounding: 2, report: '3.7' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
@@ -162,8 +162,8 @@ describe('writeGeneratedArtifacts', () => {
     );
 
     expect(capabilities).toStrictEqual({
-      commands: ['init', 'generate', 'run', 'check', 'heal', 'view'],
-      planned: ['review', 'mcp', 'baseline', 'restore'],
+      commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
+      planned: ['review', 'baseline', 'restore'],
       schemaVersions: { plan: 4, grounding: 2, report: '3.7' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
@@ -190,7 +190,7 @@ describe('writeGeneratedArtifacts', () => {
     );
 
     expect(capabilities.commands).toContain('init');
-    expect(capabilities.planned).toStrictEqual(['review', 'mcp', 'baseline', 'restore']);
+    expect(capabilities.planned).toStrictEqual(['review', 'baseline', 'restore']);
   });
 
   it('flattens every current raw-config leaf without inventing absent defaults', () => {

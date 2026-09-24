@@ -16,7 +16,7 @@ sidebar:
 
 ## ステータス {#status}
 
-- `ambercast review` は 0.3.1 では実装されていません。パーサーは `generate`、`run`、`check`、`heal`、`init`、`view` のみを受け付け、それ以外のコマンドはすべて拒絶されます。本コマンドの役割は、v2 に向けたCLI設計で定義されています。
+- `ambercast review` は 0.3.1 では実装されておらず、利用可能な CLI コマンドではありません。本コマンドの役割は、v2 に向けた CLI 設計で定義されています。利用可能なコマンドは CLI の概要を参照してください。
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#result-shapes)
 
@@ -40,4 +40,4 @@ sidebar:
 | 未規定 | レビュープロバイダーおよび詳細な結果コントラクト | 設計では、生成元とは分離されたコンテキストのAIが意図と検証の十分性を判定することのみが述べられています。 |
 | 明示的に未決 | `review` には該当なし | このラベルが付与されているのは `baseline` と `restore` のみです。 |
 
-関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#planned-tool-contract)、[計画ドキュメント](/ambercast/ja/spec/plan-document/)
+関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[計画ドキュメント](/ambercast/ja/spec/plan-document/)

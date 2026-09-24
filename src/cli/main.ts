@@ -647,17 +647,19 @@ function parseMcp(argv: readonly string[], _signal: AbortSignal): ParsedMcpComma
 
   let dir = process.cwd();
   let syncWaitMs = 45_000;
+  const flags = flagLookup(CLI_MANIFEST.commands.find((command) => command.name === 'mcp')!);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
-    if (argument === '--dir' || argument === '--sync-wait-ms') {
+    const flag = flags.get(argument);
+    if (flag !== undefined) {
       const value = argv[index + 1];
       if (value === undefined || value === '' || value.startsWith('--')) {
         return `Missing value for ${argument}.`;
       }
       index += 1;
-      if (argument === '--dir') {
+      if (flag.name === 'dir') {
         dir = value;
-      } else {
+      } else if (flag.name === 'sync-wait-ms') {
         const parsed = Number(value);
         if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed) || parsed <= 0) {
           return `The ${argument} value must be a positive integer.`;

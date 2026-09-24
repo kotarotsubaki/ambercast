@@ -260,11 +260,7 @@ it('scans the real documentation corpus within the unit-test timeout', async () 
   const findings = await checkClaims({ repoRoot });
   expect(findings.filter((entry) => entry.rule === 'command-enumeration')).toHaveLength(0);
 
-  const livePage = readFileSync(`${repoRoot}/website/src/content/docs/reference/mcp-tools.md`, 'utf8');
-  const currentLine = livePage.split('\n').find((line) => line.includes('The CLI parser accepts only `generate`'));
-  expect(currentLine).toBeDefined();
-  const staleLine = currentLine!.slice(currentLine!.indexOf('The CLI parser accepts only')).replace(', and `init`', '');
-  expect(staleLine).not.toBe(currentLine);
+  const staleLine = 'The CLI parser accepts only `generate`, `run`, `check`, and `heal`.';
   const control = fixture(staleLine);
   expect((await checkClaims({ repoRoot: control.root })).filter((entry) => entry.rule === 'command-enumeration')).toHaveLength(1);
 }, 10_000);

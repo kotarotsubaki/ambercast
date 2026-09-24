@@ -7,7 +7,7 @@ ambercastの現在の実装境界を明確にし、実装済みの機能と今�
 
 ## 現行リリースで実装済み {#implemented}
 
-CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、および `view` を公開しています。一方で、実装されているパーサーには MCP サブコマンドは公開されていません。
+CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` を公開しています。MCP サブコマンドは stdio で 6 ツールを提供します。
 
 また、0.3.1 ではプロデューサ契約のフィンガープリントが変更されました。これにより、プロデューサバンドルおよび `inputsDigest` がstale（古くなった状態）になるため、0.3.1 では 0.1.0 のプランの再生成が必要です。
 
@@ -18,7 +18,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、および 
 
 ## 現行境界以降の計画 {#planned-after-current-boundary}
 
-現行の実装境界以降に向けて、計画されているドキュメントは `review`、`mcp`、baseline/restore、および MCPツールを対象としています。
+`review`、baseline/restore は引き続き計画中です。公式スキルは計画中のままですが、MCP ツールは利用できます。
 
 また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
 

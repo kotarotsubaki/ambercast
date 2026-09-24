@@ -9,6 +9,8 @@ compatibility: Requires the ambercast CLI (npx ambercast), Node.js 22.14 or newe
 
 This skill covers ambercast, a CLI that turns a plain-language Markdown prompt into a deterministic browser test. The prompt is the only thing a person writes. The CLI generates an execution plan once with AI, then replays it in Chromium with zero AI calls until the page changes.
 
+The MCP server also exposes the same four generate/run/check/heal workflows plus `ambercast_job_status` and `ambercast_job_cancel` for jobs.
+
 ## When to use this skill
 
 Use this skill when the task is to verify a web app end to end through a real browser: sign-in flows, forms, navigation, anything a user would click through. Do not use it for unit tests or API-only checks.
@@ -110,6 +112,8 @@ npx ambercast heal --dry-run --json tests/ambercast/sign-in.test.md
 ```
 
 A dry run changes nothing and needs no approval. Before running `heal` without `--dry-run`, show the user the dry-run result and get explicit approval for exactly that repair. If the prompt, the config, or the plan changes after the dry run, run the dry run again and ask again. `--yes` only skips the CLI confirmation prompt; it is never a substitute for the user's approval.
+
+For MCP heal, show the preview to the user and get explicit approval for that exact repair before calling `ambercast_heal` with `dryRun: false` and `applyToken`; the token is not approval, even when the client has no confirmation form.
 
 ## Reading results
 

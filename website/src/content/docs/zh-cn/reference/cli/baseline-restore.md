@@ -16,7 +16,7 @@ sidebar:
 
 ## 状态 {#status}
 
-`ambercast baseline` 与 `ambercast restore` 在 0.3.1 版本中尚未实现；解析器目前仅接受 `generate`、`run`、`check`、`heal`、`init` 和 `view`，并会拒绝任何其他命令。两者规划的数据库边界由数据库重置设计所定义。
+`ambercast baseline` 与 `ambercast restore` 在 0.3.1 版本中尚未实现，也不是可用的 CLI 命令。两者规划的数据库边界由数据库重置设计所定义。可用命令参见 CLI 概览。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
 
@@ -59,4 +59,4 @@ sidebar:
 | 明确未决 | 引入 `baseline` 与 `restore` 的具体发布版本；两者均与 fixture 功能绑定。 |
 | 保留项而非未决 | `--all-targets`、`--list --live`、额外的钩子阶段以及并行 worker 的 `db.<target>` 子键均属于 v2 保留项，不属于当前规划的接口范围。 |
 
-相关链接：[报告](/ambercast/zh-cn/reference/reports/#envelope)、[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#planned-tool-contract)、[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/)。
+相关链接：[报告](/ambercast/zh-cn/reference/reports/#envelope)、[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/)。

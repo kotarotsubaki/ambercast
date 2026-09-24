@@ -16,7 +16,7 @@ sidebar:
 
 ## ステータス {#status}
 
-`ambercast baseline` および `ambercast restore` はバージョン 0.3.1 には実装されていません。CLI パーサーは `generate`、`run`、`check`、`heal`、`init`、`view` のみを受け付け、それ以外のコマンドはすべて拒絶します。両コマンドの計画されているデータベース境界は、DB リセット設計によって定義されています。
+`ambercast baseline` および `ambercast restore` はバージョン 0.3.1 には実装されておらず、利用可能な CLI コマンドではありません。両コマンドの計画されているデータベース境界は、DB リセット設計によって定義されています。利用可能なコマンドは CLI の概要を参照してください。
 
 リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface), [設定](/ambercast/ja/reference/configuration/#key-table)
 
@@ -59,4 +59,4 @@ sidebar:
 | 明示的に未決 | `baseline` および `restore` を導入するリリース。両コマンドともフィクスチャ機能に紐付いています。 |
 | 予約（未決ではない） | `--all-targets`、`--list --live`、追加のフックフェーズ、および並行ワーカー用の `db.<target>` サブキーは v2 の予約項目であり、本計画インターフェースの一部ではありません。 |
 
-リンク: [レポート](/ambercast/ja/reference/reports/#envelope), [MCP ツール](/ambercast/ja/reference/mcp-tools/#planned-tool-contract), [鮮度とダイジェスト](/ambercast/ja/spec/freshness/)
+リンク: [レポート](/ambercast/ja/reference/reports/#envelope), [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table), [鮮度とダイジェスト](/ambercast/ja/spec/freshness/)

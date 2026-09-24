@@ -16,7 +16,7 @@ sidebar:
 
 ## Status {#status}
 
-`ambercast review` is not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, `heal`, `init`, and `view`, and rejects any other command. Its planned v2 role is defined by the CLI design.
+`ambercast review` is not implemented in 0.3.1 and is not an available CLI command. Its planned v2 role is defined by the CLI design. See the CLI overview for available commands.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#result-shapes).
 
@@ -40,4 +40,4 @@ Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Repo
 | Unspecified | Review provider and detailed result contract | The design states only that a separate-context AI judges intent and verification sufficiency. |
 | Explicitly undecided | None for `review`; only `baseline` and `restore` carry that label. |
 
-Links: [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract), [Plan document](/ambercast/spec/plan-document/).
+Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [Plan document](/ambercast/spec/plan-document/).

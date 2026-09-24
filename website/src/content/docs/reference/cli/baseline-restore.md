@@ -16,7 +16,7 @@ sidebar:
 
 ## Status {#status}
 
-`ambercast baseline` and `ambercast restore` are not implemented in 0.3.1; the parser accepts only `generate`, `run`, `check`, `heal`, `init`, and `view`, and rejects any other command. Their planned database boundary is defined by the DB reset design.
+`ambercast baseline` and `ambercast restore` are not implemented in 0.3.1 and are not available CLI commands. Their planned database boundary is defined by the DB reset design. See the CLI overview for available commands.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Configuration](/ambercast/reference/configuration/#key-table).
 
@@ -59,4 +59,4 @@ Human and JSON output must state `mode` as `captured` or `restored`.
 | Explicitly undecided | The release that introduces `baseline` and `restore`; both are tied to the fixture feature. |
 | Reserved, not undecided | `--all-targets`, `--list --live`, additional hook phases, and parallel-worker `db.<target>` subkeys are v2 reservations, not part of this planned interface. |
 
-Links: [Reports](/ambercast/reference/reports/#envelope), [MCP Tools](/ambercast/reference/mcp-tools/#planned-tool-contract), [Freshness and digests](/ambercast/spec/freshness/).
+Links: [Reports](/ambercast/reference/reports/#envelope), [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [Freshness and digests](/ambercast/spec/freshness/).

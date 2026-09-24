@@ -48,4 +48,6 @@ view requires --allow-headless when no interactive terminal is attached.
 
 `ambercast view` は `schemaVersion` が 3.x であるレポートをすべて読み取ります。現行 CLI と異なるマイナー版で書かれたレポートは、run 詳細ヘッダに「Schema `<version>`」と表示されます。異なるメジャー版のレポートは「Unsupported version `<version>`」として一覧に表示され、開くことはできません。
 
-関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)。
+`view` は、Ambercast のコマンドの中でネットワークポートを消費する唯一のコマンドです（MCP サーバーはポートを使用しない stdio 通信です）。
+
+関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)。

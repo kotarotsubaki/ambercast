@@ -1,13 +1,13 @@
 ---
 title: Status and roadmap
-description: Track the implemented command boundary of ambercast 0.3.1, planned capabilities, and the pre-1.0 version policy.
+description: Track implemented commands, planned capabilities, and the pre-1.0 version policy.
 ---
 
-ambercast establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes six subcommands—`init`, `generate`, `run`, `check`, `heal`, and `view`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
+ambercast establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes seven subcommands—`init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
 
 ## Implemented in current release {#implemented}
 
-The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, and `view`. The implemented parser exposes no MCP subcommand, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, and browsing the results of test plans.
+The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. The MCP subcommand serves six tools over stdio, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, browsing the results of test plans, and serving an MCP interface.
 
 When working across versions, 0.3.1 requires regeneration of 0.1.0 plans. This requirement exists because the producer-contract fingerprint changed between releases, making the producer bundle and `inputsDigest` from 0.1.0 stale under 0.3.1.
 
@@ -15,7 +15,7 @@ Links: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambe
 
 ## Planned after the current boundary {#planned-after-current-boundary}
 
-Several surfaces and tools lie outside the 0.3.1 implementation. Planned documentation covers `review`, `mcp`, baseline/restore, and MCP tools. On the execution side, support for Firefox and WebKit is planned by 1.0.
+Planned documentation still covers `review` and baseline/restore. The official skill remains planned; MCP tools are available. On the execution side, support for Firefox and WebKit is planned by 1.0.
 
 Links: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/ambercast/agents/mcp-server/)
 

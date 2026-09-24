@@ -137,8 +137,43 @@ describe('renderRunDetail', () => {
   it('uses dark inline style tokens without external references', () => {
     const style = renderRunList([]).match(/<style>([\s\S]*?)<\/style>/)?.[1];
     expect(style).toBeDefined();
+    expect(style).toBe('body{background:#181310;color:#F1EBE2;font-family:system-ui,sans-serif;max-width:70rem;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{padding:.5rem;border-bottom:1px solid #3B332C;text-align:left;overflow-wrap:anywhere}th.num,td.num{text-align:right}p{overflow-wrap:anywhere}a{color:inherit;text-decoration:underline}img{display:block;max-width:100%;height:auto}.shot img{max-height:20rem;width:auto}.pass{color:#7FC8A9}.fail{color:#E8875E}.skip{color:#3D6FA6}.verdigris{color:#7FC8A9}.amber{color:#E8B063}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}');
     for (const token of ['#181310', '#F1EBE2', '#3B332C', '#7FC8A9', '#E8875E', '#3D6FA6', '#E8B063']) expect(style).toContain(token);
-    for (const token of ['#ddd', '#087e72', '#9a6700', 'http://', 'https://', '@import']) expect(style).not.toContain(token);
+    for (const token of ['#ddd', '#087e72', '#9a6700', 'http://', 'https://', '@import', 'url(', 'http']) expect(style).not.toContain(token);
+    for (const token of ['table-layout:fixed', 'overflow-wrap:anywhere', 'img{display:block;max-width:100%;height:auto}', '.shot img{max-height:20rem;width:auto}', 'p{overflow-wrap:anywhere}', 'pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}']) expect(style).toContain(token);
+  });
+
+  it('places the exact colgroups immediately after both table openings', () => {
+    const list = renderRunList([readable()]);
+    const detail = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'one', type: 'assert', target: 'default', status: 'passed' }] })] }));
+    expect(list).toContain('<table><colgroup><col style="width:8rem"><col><col style="width:11rem"><col style="width:6rem"><col style="width:12rem"></colgroup>');
+    expect(detail).toContain('<table><colgroup><col style="width:3rem"><col><col style="width:6rem"><col style="width:8rem"></colgroup>');
+  });
+
+  it('wraps a failed step screenshot in an exact linked thumbnail', () => {
+    const ref = 'screenshots/a b&c.png';
+    const url = `/runs/${runId}/screenshots/${encodeURIComponent(ref)}`;
+    const html = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'assert-1', type: 'assert', target: 'default', status: 'failed', screenshot: ref }] })] }));
+    expect(html).toContain(`<a class="shot" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Screenshot of step assert-1" loading="lazy" decoding="async"></a>`);
+  });
+
+  it('omits thumbnail markup when a screenshot is marked omitted', () => {
+    const html = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'secret', type: 'assert', target: 'default', status: 'error', screenshot: 'secret.png', screenshotOmitted: 'secret-detected' }] })] }));
+    expect(html).not.toContain('<a class="shot"');
+    expect(html).not.toContain('<img');
+  });
+
+  it('omits thumbnail markup for a passed step without a screenshot', () => {
+    const html = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'pass', type: 'assert', target: 'default', status: 'passed' }] })] }));
+    expect(html).not.toContain('<a class="shot"');
+    expect(html).not.toContain('<img');
+  });
+
+  it('retains the linked thumbnail for a passed step with a screenshot', () => {
+    const ref = 'capture.png';
+    const url = `/runs/${runId}/screenshots/${encodeURIComponent(ref)}`;
+    const html = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'capture-1', type: 'capture', status: 'passed', screenshot: ref }] })] }));
+    expect(html).toContain(`<a class="shot" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Screenshot of step capture-1" loading="lazy" decoding="async"></a>`);
   });
 
   it('marks only numeric table columns with the num class', () => {
@@ -274,6 +309,16 @@ describe('renderRunDetail', () => {
 });
 
 describe('HTML injection boundaries', () => {
+  it('escapes quote-bearing run IDs and screenshot references in identical thumbnail URLs', () => {
+    const ref = 'shot" onerror="alert(1).png';
+    const url = `/runs/${escapeHtml(attackRunId)}/screenshots/${escapeHtml(encodeURIComponent(ref))}`;
+    const detail = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'step', type: 'capture', status: 'passed', screenshot: ref }] })] }, attackRunId));
+    expect(url).toContain('&quot;');
+    expect(url).toContain('%22');
+    expect(detail).toContain(`<a class="shot" href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Screenshot of step step" loading="lazy" decoding="async"></a>`);
+    expect(detail).not.toContain('" onmouseover="');
+    expect(detail).not.toContain('" onerror="');
+  });
   it('escapes the readable run ID in the Open run link', () => {
     const listing = readable({ results: [executed({ steps: [{ id: 'step', type: 'capture', status: 'passed', screenshot: 'step.png' }] })] }, attackRunId);
     const list = renderRunList([listing]);

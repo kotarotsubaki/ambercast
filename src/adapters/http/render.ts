@@ -23,7 +23,26 @@ export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-const page = (title: string, body: string): string => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title} · ambercast</title><style>body{background:#181310;color:#F1EBE2;font-family:system-ui,sans-serif;max-width:70rem;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%}th,td{padding:.5rem;border-bottom:1px solid #3B332C;text-align:left}th.num,td.num{text-align:right}a{color:inherit;text-decoration:underline}.pass{color:#7FC8A9}.fail{color:#E8875E}.skip{color:#3D6FA6}.verdigris{color:#7FC8A9}.amber{color:#E8B063}pre{white-space:pre-wrap}</style></head><body><header>${VIEW_COPY.pageHeader.brand}</header>${body}</body></html>`;
+// With table-layout:fixed, unspecified columns divide the width equally. The
+// colgroups are the sole per-column width definitions, placed directly
+// after each table's opening tag so Run and Step remain usable while Status,
+// Started, Type, and # stay narrow regardless of cell content.
+// The structural invariant is that LIST_COLGROUP has exactly five
+// <col> entries matching renderRunList's <th> columns (Status, Run, Started,
+// Duration, Cases), and STEP_COLGROUP has exactly four matching the step table's
+// <th> columns (#, Step, Type, Status), in the same order.
+const LIST_COLGROUP = '<colgroup><col style="width:8rem"><col><col style="width:11rem"><col style="width:6rem"><col style="width:12rem"></colgroup>';
+const STEP_COLGROUP = '<colgroup><col style="width:3rem"><col><col style="width:6rem"><col style="width:8rem"></colgroup>';
+
+// Issue #434 needs containment across the whole table: img max-width:100%
+// alone leaves a 1280px screenshot tall enough to push the pass/fail verdict
+// below the fold; long identifiers and expected/actual text also overflow.
+// Fixed layout with explicit colgroups and overflow-wrap:anywhere on cell text
+// and paragraphs keeps column positions stable. Height-capped linked thumbnails
+// and scrollable <pre> snapshot boxes retain access to the original evidence.
+// A lightbox would require client JavaScript despite CSP default-src 'none'; server-side
+// thumbnails add dependency weight and risk changing the served evidence bytes.
+const page = (title: string, body: string): string => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title} · ambercast</title><style>body{background:#181310;color:#F1EBE2;font-family:system-ui,sans-serif;max-width:70rem;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{padding:.5rem;border-bottom:1px solid #3B332C;text-align:left;overflow-wrap:anywhere}th.num,td.num{text-align:right}p{overflow-wrap:anywhere}a{color:inherit;text-decoration:underline}img{display:block;max-width:100%;height:auto}.shot img{max-height:20rem;width:auto}.pass{color:#7FC8A9}.fail{color:#E8875E}.skip{color:#3D6FA6}.verdigris{color:#7FC8A9}.amber{color:#E8B063}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}</style></head><body><header>${VIEW_COPY.pageHeader.brand}</header>${body}</body></html>`;
 const duration = (ms: number): string => ms < 1000 ? `${ms} ms` : `${(Math.round(ms / 100) / 10).toFixed(1)} s`;
 /** Receives the unreadable branch intact because unsupported versions need their associated version text as well as the reason. */
 const reasonText = (listing: Extract<RunListing, { kind: 'unreadable' }>): string => {
@@ -110,7 +129,7 @@ export function renderRunList(listings: readonly RunListing[]): string {
     const counts = formatCounts(summary);
     return `<tr><td>${status}</td><td>${escapeHtml(runId)} <a href="/runs/${escapeHtml(runId)}">${copy.runLinks.openRun}</a></td><td>${escapeHtml(startedAt)}</td><td class="num">${duration(durationMs)}</td><td>${counts}</td></tr>`;
   }).join('');
-  return page(copy.title, `<h1>${copy.title}</h1><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`);
+  return page(copy.title, `<h1>${copy.title}</h1><table>${LIST_COLGROUP}<thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`);
 }
 
 /**
@@ -150,11 +169,21 @@ export function renderRunDetail(listing: RunListing): string {
     const columns = Object.entries(copy.stepTable).map(([key, label]) => `<th${key === 'columnHeaderNumber' ? ' class="num"' : ''}>${label}</th>`).join('');
     const steps = result.steps.map((step, index) => {
       const diagnostics = step.status === 'failed' || step.status === 'error' ? `${step.expected === undefined ? '' : `<p>${copy.failedStep.expected} ${escapeHtml(step.expected)}</p>`}${step.actual === undefined ? '' : `<p>${copy.failedStep.actual} ${escapeHtml(step.actual)}</p>`}` : '';
-      const screenshot = step.screenshotOmitted ? `<p>${copy.failedStep.screenshotOmitted}</p>` : step.screenshot === undefined ? '' : `<img src="/runs/${escapeHtml(runId)}/screenshots/${escapeHtml(encodeURIComponent(step.screenshot))}" alt="${copy.snapshotAltPrefix}${escapeHtml(step.id)}">`;
+      // Screenshot visibility depends only on omission and reference presence,
+      // never step status: a passed capture step with a reference retains its
+      // image. The thumbnail links to the same URL, preserving access
+      // to the full-size PNG in a new tab with target="_blank" and rel="noopener";
+      // the same-origin image already satisfies the img-src 'self' policy.
+      // Attribute order is a tested contract, so reordering fails a test instead
+      // of silently drifting as incidental formatting.
+      // Lazy loading avoids fetching every image at once in runs with many
+      // screenshots.
+      const screenshotUrl = `/runs/${escapeHtml(runId)}/screenshots/${escapeHtml(encodeURIComponent(step.screenshot ?? ''))}`;
+      const screenshot = step.screenshotOmitted ? `<p>${copy.failedStep.screenshotOmitted}</p>` : step.screenshot === undefined ? '' : `<a class="shot" href="${screenshotUrl}" target="_blank" rel="noopener"><img src="${screenshotUrl}" alt="${copy.snapshotAltPrefix}${escapeHtml(step.id)}" loading="lazy" decoding="async"></a>`;
       const observed = step.observed ? `<details><summary>${copy.snapshotDetails.summary}</summary><p>${escapeHtml(step.observed.note)}</p><pre>${escapeHtml(step.observed.accessibilitySnapshot)}</pre></details>` : '';
       return `<tr><td class="num">${index + 1}</td><td>${escapeHtml(step.id)}</td><td>${escapeHtml(step.type)}</td><td>${statusBadge(step.status)}</td></tr>${diagnostics || screenshot || observed ? `<tr><td colspan="4">${diagnostics}${screenshot}${observed}</td></tr>` : step.status === 'failed' || step.status === 'error' ? '<tr><td colspan="4">—</td></tr>' : ''}`;
     }).join('');
-    return `<section><h2>${statusBadge(result.status)} · ${escapeHtml(result.file)} · <span class="${calls === 0 ? 'verdigris' : 'amber'}">${calls}${copy.case.aiCallsSuffix}</span> · ${duration(result.durationMs)}</h2>${auxiliary}<table><thead><tr>${columns}</tr></thead><tbody>${steps}</tbody></table></section>`;
+    return `<section><h2>${statusBadge(result.status)} · ${escapeHtml(result.file)} · <span class="${calls === 0 ? 'verdigris' : 'amber'}">${calls}${copy.case.aiCallsSuffix}</span> · ${duration(result.durationMs)}</h2>${auxiliary}<table>${STEP_COLGROUP}<thead><tr>${columns}</tr></thead><tbody>${steps}</tbody></table></section>`;
   }).join('') : `<p>${copy.emptyCases}</p>`;
   return page(escapeHtml(runId), header + errors + cases);
 }

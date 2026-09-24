@@ -395,7 +395,7 @@ describe('ESLint architecture and determinism rules', () => {
     ];
     for (const file of files) {
       const source = await readFile(file, 'utf8');
-      expect(source).not.toMatch(/playwright|AiExecutor|BrowserDriver/);
+      expect(source).not.toMatch(/playwright|AiExecutor|BrowserDriver|<script/);
     }
   });
 

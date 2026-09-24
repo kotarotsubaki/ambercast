@@ -502,14 +502,14 @@ export type SkippedResult = z.infer<typeof SkippedResult>;
  * outcome without reconstructing it from unstructured logs. Its separate
  * branch keeps execution-backed cases distinct from discovery-only rows in the
  * public run-result union, so consumers can rely on the presence of execution
- * evidence here. Its status vocabulary is `passed`, `failed`, `error`, and
- * `interrupted`; `skipped` is invalid for this execution-backed shape. Skipped batch
+ * evidence here. Its status vocabulary is `passed`, `failed`, and `error`;
+ * `skipped` is invalid for this execution-backed shape. Skipped batch
  * work uses the shared identity-only {@link SkippedResult} branch and never
  * enters this execution-backed shape.
  */
 export const ExecutedRunResult = z.strictObject({
   ...ResultIdentityFields,
-  status: z.enum(['passed', 'failed', 'error', 'interrupted']),
+  status: z.enum(['passed', 'failed', 'error']),
   ...ExecutedResultFields,
 });
 

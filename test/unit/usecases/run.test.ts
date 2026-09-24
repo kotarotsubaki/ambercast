@@ -709,7 +709,7 @@ function expectCallerAbortOutcome(
   expect(outcome.results[0]?.error).toBeUndefined();
   // SPEC-16: caller cancellation is the interrupted case path.
   expect(outcome.results[0]?.result).toMatchObject({
-    status: 'interrupted',
+    status: 'error',
     steps: [{ id: stepId, status: 'error', kind: 'environment' }],
     explanation: 'The run was interrupted.',
   });
@@ -2409,7 +2409,7 @@ describe('run interruption contract', () => {
 
     await expect(running).resolves.toMatchObject({
       interrupted: true,
-      results: [expect.objectContaining({ result: expect.objectContaining({ id: first, status: 'interrupted' }) })],
+      results: [expect.objectContaining({ result: expect.objectContaining({ id: first, status: 'error' }) })],
       skipped: [{ file: second }],
     });
     expect(browserDriver).toHaveBeenCalledOnce();
@@ -3329,7 +3329,7 @@ describe('run agentic fallback pipeline', () => {
     expect(outcome.results[0]?.error).toBeUndefined();
     // SPEC-16: cancellation has its own case status while preserving the step error.
     expect(outcome.results[0]?.result).toMatchObject({
-      status: 'interrupted',
+      status: 'error',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
     expect(resolveAiExecutor).not.toHaveBeenCalled();
@@ -5345,9 +5345,7 @@ describe('run agentic wrapper state machine', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     // SPEC-16: an explicit cancellation ends the case as interrupted.
-    expect(outcome.results[0]?.result.status).toBe(
-      _description === 'cancellation after partial observations' ? 'interrupted' : 'error',
-    );
+    expect(outcome.results[0]?.result.status).toBe('error');
     expect(recordingStorage.writes).toEqual([]);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(aiGrounding(staleTrace));
   });

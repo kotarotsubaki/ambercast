@@ -34,11 +34,15 @@ export function createSystemClock(): Clock {
     sleep(ms: number, signal?: AbortSignal): Promise<void> {
       return new Promise((resolve, reject) => {
         if (signal?.aborted) return reject(signal.reason);
-        const timer = setTimeout(resolve, ms);
-        signal?.addEventListener('abort', () => {
+        const onAbort = (): void => {
           clearTimeout(timer);
-          reject(signal.reason);
-        }, { once: true });
+          reject(signal!.reason);
+        };
+        const timer = setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve();
+        }, ms);
+        signal?.addEventListener('abort', onAbort, { once: true });
       });
     },
   };

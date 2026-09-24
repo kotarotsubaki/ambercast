@@ -61,7 +61,6 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `--list` | `--list` 由每个已实现的命令解析；各命令页面拥有各自的列表结果语义。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 run 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` 将 view 固定为单一的严格端口，而非自动递增尝试候选端口。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#port-selection) | 配置 `viewer.port` |
-| `--target` | `--target` 为每个已实现的命令指定命名的已配置执行目标。 | CLI 解析器 / 目标解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | 目标定义本身 |
 | `--yes` | `--yes` 授权 heal 在无需交互式确认的情况下直接完成结算。 | `ambercast heal`；[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` 是确切的相邻 Grounding 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Plan 后缀 |
 | `.ambercast.plan.json` | `.ambercast.plan.json` 是确切的相邻 Plan 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Grounding 后缀 |

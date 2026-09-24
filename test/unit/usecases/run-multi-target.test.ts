@@ -114,7 +114,7 @@ async function scenario(
     files: [FILE], resolve: options.resolveAiExecutor !== undefined, updateCache: false, allowEmpty: false, list: false, stale: 'fail',
     ...(options.abort === undefined ? {} : { signal: options.abort }),
   });
-  return { outcome, driver, clock, storage, layout, events, originalGrounding, deps };
+  return { outcome, driver, clock, storage, layout, events, originalGrounding, deps, plan };
 }
 
 describe('multi-target run contracts', () => {
@@ -266,7 +266,7 @@ describe('multi-target run contracts', () => {
     const a = session('A', { onClose: () => closed.push('A') });
     const b = session('B', { onClose: () => closed.push('B'), closeError: new Error('close B') });
     const c = session('C', { onClose: () => closed.push('C') });
-    const { outcome, driver } = await scenario([
+    const { outcome, driver, plan } = await scenario([
       action('b', 'B', 'navigate', { url: '/ok' }),
       action('a', 'A', 'navigate', { url: '/ok' }),
       action('c', 'C', 'navigate', { url: '/ok' }),
@@ -277,6 +277,7 @@ describe('multi-target run contracts', () => {
     expect(outcome.results[0]?.result).toMatchObject({ sessions: {
       A: { state: 'closed' }, B: { state: 'close-failed' }, C: { state: 'closed' },
     } });
+    expect(Object.keys(outcome.results[0]!.result.sessions).sort()).toEqual(Object.keys(plan.targets).sort());
   });
 
   it('TEST-13 keeps unreached and launch-failed targets not-opened', async () => {
@@ -315,7 +316,7 @@ describe('multi-target run contracts', () => {
     expect(outcome.results[0]?.result).toMatchObject({ sessions: {
       A: { state: 'closed' }, B: { state: 'close-failed' }, C: { state: 'not-opened' },
     } });
-    expect(outcome.results[0]?.result.status).toBe(ending === 'abort' ? 'interrupted' : 'error');
+    expect(outcome.results[0]?.result.status).toBe('error');
   });
 
   it('TEST-13 keeps the case status when B close rejects', async () => {
@@ -393,7 +394,7 @@ describe('multi-target run contracts', () => {
       onEvaluateAssert: () => controller.abort(new Error('stopped')),
     });
     const { outcome, clock } = await scenario([assertion('poll', 'B', 'text-visible', 1000, { text: 'wanted' })], { B: b }, { abort: controller.signal });
-    expect(outcome.results[0]?.result.status).toBe('interrupted');
+    expect(outcome.results[0]?.result.status).toBe('error');
     expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(1);
     expect(clock.sleepCalls).toHaveLength(1);
   });

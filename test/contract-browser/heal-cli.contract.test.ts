@@ -92,22 +92,22 @@ describe('heal confirmation gate through the built CLI', () => {
         fixture: { surface: 'web', baseUrl: `http://127.0.0.1:${port}` },
       } as const satisfies Record<string, TargetDefinition>;
       const plan = PlanDocument.parse({
-        schemaVersion: 3,
+        schemaVersion: 4,
         source: {
           inputsDigest: computeInputsDigest({
-            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 3,
+            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
             generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
             planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions,
           }),
         },
         targets: targetDefinitions,
         steps: [
-          { id: 'go-to-fixture', kind: 'action', action: 'navigate', url: '/' },
-          { id: 'click-submit', kind: 'action', action: 'click', target: { strategy: 'accessibility', role: 'button', name: 'Submit' } },
+          { id: 'go-to-fixture', kind: 'action', action: 'navigate', target: 'fixture', url: '/' },
+          { id: 'click-submit', kind: 'action', action: 'click', target: 'fixture', element: { strategy: 'accessibility', role: 'button', name: 'Submit' } },
         ],
       });
       const grounding = GroundingDocument.parse({
-        schemaVersion: 1,
+        schemaVersion: 2,
         planDigest: computePlanDigest(plan),
         entries: {
           'click-submit': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: '0'.repeat(64) } },
@@ -118,7 +118,7 @@ describe('heal confirmation gate through the built CLI', () => {
       await Promise.all([
         writeFile(join(project, 'ambercast.config.json'), JSON.stringify({
           $schema: 'https://ambercast.dev/schema/config.json', testDir: 'tests', runsDir: 'tests/.runs',
-          targets: { fixture: { ...targetDefinitions.fixture, healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 } },
+          targets: { fixture: { ...targetDefinitions.fixture, browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 } },
           defaultTarget: 'fixture', ai: { provider: 'codex' }, ci: { heal: true },
         })),
         writeFile(join(tests, 'heal-confirmation.test.md'), PROMPT),

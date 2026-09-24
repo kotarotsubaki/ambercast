@@ -7,6 +7,9 @@ description: "工件版本的接受必须（MUST）遵循 Ambercast 计划规范
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
+| grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
+| report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |
 | Plan v1 → v2 增加指令覆盖率 | [src/core/ir/schema.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L45), [src/core/ir/schema.ts:1185](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1185) | 生成者与消费者必须（MUST）拒绝 v1 并重新生成或报告其过时；不得（MUST NOT）对其进行就地迁移。[src/core/ir/schema.ts:50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L50) |
 | fingerprint v1 → v2 | [CHANGELOG.md:78](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L78) | v2 是唯一被接受的标签。带有覆盖声明的当前出处文档在随后的严格/规范验证失败时，完整性必须（MUST）判定为失败；未带有该声明的伴随文档在 `run` 中可能发生缓存未命中，而 `check` grounding 检查将模式无效的内容归类为 `invalid`（公开状态依据 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences)）。[src/usecases/run.ts:498](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L498) [src/usecases/check-grounding.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L45) |
 | 生成者 bundle 指纹进入 `inputsDigest` | [CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) | 变更前生成的 Plan 必须（MUST）重新生成，因为它们已过时。[CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) |

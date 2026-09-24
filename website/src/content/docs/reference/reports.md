@@ -44,7 +44,7 @@ In `RunResult`, every branch is strict.
 
 | Status | Required Fields | Optional Fields | Forbidden Branch Fields |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` / `interrupted` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 

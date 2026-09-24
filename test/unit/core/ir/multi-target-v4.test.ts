@@ -31,7 +31,7 @@ describe('Plan v4 and grounding v2 contract', () => {
   it('reports undefined and unused Target names at their respective paths', () => {
     const missing = parse(makePlan([{ ...step, target: 'missing' }]));
     expect(missing.success).toBe(false);
-    if (!missing.success) expect(missing.error.issues).toContainEqual(expect.objectContaining({ message: 'step target is not defined: missing', path: expect.arrayContaining(['steps', 0]) }));
+    if (!missing.success) expect(missing.error.issues).toContainEqual(expect.objectContaining({ message: 'step target is not defined: missing', path: ['steps', 0, 'target'] }));
     const unused = parse(makePlan([step], { A: definition, B: { surface: 'web', baseUrl: 'https://b.example.test' } }));
     expect(unused.success).toBe(false);
     if (!unused.success) expect(unused.error.issues).toContainEqual(expect.objectContaining({ message: 'unused target: B', path: ['targets', 'B'] }));

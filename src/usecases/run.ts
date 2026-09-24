@@ -2973,9 +2973,8 @@ async function captureFailureEvidence(
 
 const DISPATCH_TABLE = {
   action: executeAction,
-  assert: (step: Step, context: DispatchContext) => pollAssert(step, context, context.clock.monotonicMs() + configForStep(context, step).resolveTimeoutMs),
   capture: executeCapture,
-} satisfies Record<Exclude<Step['kind'], 'ai'>, StepExecutor>;
+} satisfies Record<Exclude<Step['kind'], 'ai' | 'assert'>, StepExecutor>;
 
 /**
  * Creates the report representation of one executed or skipped plan step.
@@ -3822,7 +3821,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       }
     }
     if (signal?.aborted && !(classificationError instanceof IntegrityViolationError)) {
-      result = { ...resultForAbort(identity, planSteps, completed, currentStep, 'The run was interrupted.', evidence), status: 'interrupted' };
+      result = resultForAbort(identity, planSteps, completed, currentStep, 'The run was interrupted.', evidence);
     } else if (classificationError instanceof AmbercastError) {
       classifiedError = redactedError(
         classificationError,

@@ -44,7 +44,7 @@ MCP 输入排除 CLI 标志 `headed`（固定 headless）、`list`、`stale`（�
 
 ## 结果与作业 {#results-and-jobs}
 
-所有工具均省略 `outputSchema`：报告 JSON Schema 大小为 136 KB，会挤占 `tools/list`，而工具还可能返回报告封装或 Job record。已完成报告的 `structuredContent` 与 CLI JSON 输出采用同一封装，不在封装中增加退出码。截图保持为相对 projectRoot 的路径，不使用内联 base64。
+所有工具均省略 `outputSchema`：报告 JSON Schema 大小为 136 KB，会挤占 `tools/list`，而工具还可能返回报告封装、单个 Job record，或 Job record 列表。已完成报告的 `structuredContent` 与 CLI JSON 输出采用同一封装，不在封装中增加退出码。截图保持为相对 projectRoot 的路径，不使用内联 base64。
 
 单个 text 项的首行是 `exitCode: <n>`。只有产生提交的 heal 预览在第二行给出 `applyToken: <token>`，后续一行包含封装 JSON。响应同时包含 `_meta.exitCode`，适用时包含 `_meta.applyToken`。通过 `ambercast_job_status` 获取的已完成作业返回相同 content、错误分类及元数据，并加入不含结果的 `_meta.job`。
 
@@ -64,7 +64,7 @@ generate、run、heal 预览每次调用都会创建 Job。若在同步等待界
 
 ## MCP 错误 {#mcp-errors}
 
-MCP 层的语义错误具有 `isError: true`、一个形如 `"<CODE>: <message>"` 的 text 项，且没有 `structuredContent`。代码为 `HEAL_APPLY_TOKEN_INVALID`（原因 `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED`。非法输入使用 SDK 验证错误；领域和环境失败仍留在报告封装中。
+MCP 层的语义错误具有 `isError: true`、一个形如 `<CODE>: <message>` 的 text 项，且没有 `structuredContent`。代码为 `HEAL_APPLY_TOKEN_INVALID`（原因 `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED`。非法输入使用 SDK 验证错误；领域和环境失败仍留在报告封装中。
 
 ## 与原计划设计的变化 {#changes-from-the-planned-design}
 

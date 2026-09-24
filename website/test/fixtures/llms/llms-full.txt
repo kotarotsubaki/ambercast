@@ -1740,7 +1740,7 @@ If the client supports form elicitation, it asks for confirmation with a 600000 
 
 ## Results and jobs {#results-and-jobs}
 
-Every tool omits `outputSchema`: the report JSON Schema is 136 KB and would crowd `tools/list`; tools may also return either a report envelope or a Job record. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
+Every tool omits `outputSchema`: the report JSON Schema is 136 KB and would crowd `tools/list`; tools may also return a report envelope, a single Job record, or a Job record list. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
 
 The single text item begins with `exitCode: <n>`. Only a heal preview with commits has a second line `applyToken: <token>`; the following line contains the envelope JSON. The response also has `_meta.exitCode` and, when present, `_meta.applyToken`. A completed job fetched by `ambercast_job_status` returns the same content, error classification, and metadata, plus `_meta.job` without the result.
 
@@ -1760,7 +1760,7 @@ Every generate, run, and heal preview call creates a Job. If it finishes within 
 
 ## MCP errors {#mcp-errors}
 
-MCP-layer semantic failures have `isError: true`, one text item in the form `"<CODE>: <message>"`, and no `structuredContent`. The codes are `HEAL_APPLY_TOKEN_INVALID` (reason `missing`, `unknown-token`, `superseded`, or `expired`), `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED`. Invalid inputs instead use the SDK validation error. Domain and environment failures remain in report envelopes.
+MCP-layer semantic failures have `isError: true`, one text item in the form `<CODE>: <message>`, and no `structuredContent`. The codes are `HEAL_APPLY_TOKEN_INVALID` (reason `missing`, `unknown-token`, `superseded`, or `expired`), `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED`. Invalid inputs instead use the SDK validation error. Domain and environment failures remain in report envelopes.
 
 ## Changes from the planned design {#changes-from-the-planned-design}
 

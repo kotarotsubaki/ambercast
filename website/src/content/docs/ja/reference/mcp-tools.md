@@ -44,7 +44,7 @@ MCP 入力から CLI フラグ `headed`（headless 固定）、`list`、`stale`�
 
 ## 結果とジョブ {#results-and-jobs}
 
-全ツールで `outputSchema` を省略します。report JSON Schema は 136 KB で `tools/list` を圧迫し、ツールは report envelope または Job record を返すためです。完了した report の `structuredContent` は CLI JSON 出力と同じ envelope で、exit code を追加しません。スクリーンショットは projectRoot 相対のパスであり、inline base64 にしません。
+全ツールで `outputSchema` を省略します。report JSON Schema は 136 KB で `tools/list` を圧迫し、ツールは report envelope、単一の Job record、または Job record の一覧のいずれかを返すためです。完了した report の `structuredContent` は CLI JSON 出力と同じ envelope で、exit code を追加しません。スクリーンショットは projectRoot 相対のパスであり、inline base64 にしません。
 
 text 1行目は `exitCode: <n>` です。コミットのある heal preview のみ2行目が `applyToken: <token>` になり、その後に envelope JSON が続きます。応答には `_meta.exitCode` と、該当する場合 `_meta.applyToken` も含まれます。`ambercast_job_status` で取得した完了ジョブは同じ content・error 分類・metadata に、result を含まない `_meta.job` を加えます。
 
@@ -64,7 +64,7 @@ generate、run、heal preview は呼び出しごとに Job を作ります。同
 
 ## MCP エラー {#mcp-errors}
 
-MCP 層の意味エラーは `isError: true`、text 1個 `"<CODE>: <message>"`、`structuredContent` なしです。コードは `HEAL_APPLY_TOKEN_INVALID`（reason `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` です。入力不正は SDK の検証エラーを使用し、ドメイン・環境失敗は report envelope に残します。
+MCP 層の意味エラーは `isError: true`、text 1個 `<CODE>: <message>`、`structuredContent` なしです。コードは `HEAL_APPLY_TOKEN_INVALID`（reason `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` です。入力不正は SDK の検証エラーを使用し、ドメイン・環境失敗は report envelope に残します。
 
 ## 計画時の設計からの変更 {#changes-from-the-planned-design}
 

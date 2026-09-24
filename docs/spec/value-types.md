@@ -6,8 +6,8 @@ All other chapters MUST use these definitions rather than restating their shapes
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TargetDefinition` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Authored HTTP(S) base URL with no secret marker. | repo:src/core/ir/schema.ts:37-38,165-166 |
-|  | `browser` | string | required | literal `chromium` | Selected browser. | repo:src/core/ir/schema.ts:167 |
+| `TargetDefinition` with `surface` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Authored HTTP(S) base URL with no secret marker. | repo:src/core/ir/schema.ts:37-38,165-166 |
+|  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | repo:src/core/ir/schema.ts:168 |
 | `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | repo:src/core/ir/schema.ts:183 |
 |  | `role` | string | required | min 1 | Exact accessibility role. | repo:src/core/ir/schema.ts:185 |
@@ -63,4 +63,4 @@ Shared objects solve the problem of plan, generation response, and grounding gra
 
 The selected design separates whole-value secret and run references from ordinary text, and separates provider naming intent from committed secret references. Local naming and consent, not an AI-produced reference, are authoritative for durable authorization.
 
-One rejected alternative was independently defining a locator and secret syntax in each document; it was rejected because review could not expose compatible-looking drift. Another was treating citations as durable authority; it was rejected because prompt-relative verification must be deterministic and local.  
+One rejected alternative was independently defining a locator and secret syntax in each document; it was rejected because review could not expose compatible-looking drift. Another was treating citations as durable authority; it was rejected because prompt-relative verification must be deterministic and local.

@@ -2,9 +2,23 @@
   "document": "plan",
   "expected": "invalid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": {},
-    "steps": [{ "id": "missing-kind", "action": "navigate", "url": "https://example.test" }]
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "surface": "web",
+        "baseUrl": "https://example.test"
+      }
+    },
+    "steps": [
+      {
+        "id": "missing-kind",
+        "action": "navigate",
+        "url": "https://example.test",
+        "target": "app"
+      }
+    ]
   }
 }

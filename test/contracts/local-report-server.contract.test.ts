@@ -79,8 +79,8 @@ beforeEach(async () => {
   const envelope = ReportEnvelope.parse({
     schemaVersion: REPORT_SCHEMA_VERSION, command: 'run', startedAt: '2026-09-23T06:40:12Z', durationMs: 42,
     summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], reportPersistence: 'persisted',
-    results: [{ id: 'case', file: 'case.test.md', planFile: 'case.ambercast.plan.json', status: 'passed', durationMs: 42,
-      explanation: 'Replay completed successfully.', steps: [{ id: 'step', type: 'capture', status: 'passed', screenshot: ref }] }],
+    results: [{ id: 'case', file: 'case.test.md', planFile: 'case.ambercast.plan.json', status: 'passed', durationMs: 42, sessions: {},
+      explanation: 'Replay completed successfully.', steps: [{ id: 'step', type: 'capture', target: 'default', status: 'passed', screenshot: ref }] }],
   });
   await writeFile(join(runsDir, readableId, 'report.json'), JSON.stringify(envelope));
   await writeFile(join(projectRoot, ref), png);

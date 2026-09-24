@@ -22,7 +22,7 @@ type ResolveGroundedIsRequired = {} extends Pick<BrowserSession, 'resolveGrounde
 
 describe('browser port shapes', () => {
   it('defines the materialized action, assertion, evidence, and grounding shapes', () => {
-    expectTypeOf<BrowserEngine>().toEqualTypeOf<TargetDefinition['browser']>();
+    expectTypeOf<BrowserEngine>().toEqualTypeOf<'chromium'>();
     expectTypeOf<AccessibilityCapture>().toEqualTypeOf<{
       readonly rawYaml: string;
       readonly tree: JsonValueT;

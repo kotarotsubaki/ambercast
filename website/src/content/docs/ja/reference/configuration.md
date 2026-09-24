@@ -35,6 +35,8 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含マッチ後に除外 | generate、run、check、heal の探索 |
 | `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空配列の場合はすべての secret 名に同意が必要。`"*"` はすべての名前を同意なしで許可（非推奨）。空でない配列の場合はその名前のみを許可 | generate、run、heal |
 | `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
+| `targets.<name>.surface` | `web` | absent | TP1 では `web` のみ | generate と Plan のターゲット定義 |
+| `targets.<name>.description` | string | なし | 任意の生成コンテキスト | generate |
 | `targets.<name>.browser` | `chromium` | `web-user` において `chromium` | ターゲットフィールド | generate、run、heal のブラウザ構成、check（鮮度） |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal には選択された `idempotent` ターゲットが必要 | heal |

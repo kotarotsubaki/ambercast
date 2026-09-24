@@ -2,9 +2,24 @@
   "document": "plan",
   "expected": "invalid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": {},
-    "steps": [{ "id": "scroll-page", "kind": "action", "action": "scroll", "url": "https://example.test" }]
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "surface": "web",
+        "baseUrl": "https://example.test"
+      }
+    },
+    "steps": [
+      {
+        "id": "scroll-page",
+        "kind": "action",
+        "action": "scroll",
+        "url": "https://example.test",
+        "target": "app"
+      }
+    ]
   }
 }

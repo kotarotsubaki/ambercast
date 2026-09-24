@@ -66,7 +66,6 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `--list` | `--list` は `generate`、`run`、`check`、`heal` で解析されます。一覧表示の結果セマンティクスは各コマンドのドキュメントが所有します。`init` と `view` はどちらも受け付けません。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 runパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` は view を候補自動増分ではなく単一の厳格なポートに固定します。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#port-selection) | 設定の `viewer.port` |
-| `--target` | `--target` は、`generate`、`run`、`check`、`heal` に対して設定済みの実行ターゲットを指定します。`init` と `view` はどちらも受け付けません。 | CLIパーサー / ターゲット解決ツール; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | ターゲット定義そのもの |
 | `--yes` | `--yes` は、対話的な確認なしでhealの適用を承認し、initの確認プロンプトを省略します。いずれも利用者自身のレビューの代わりにはなりません。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | generateの `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` は、隣接するGroundingコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Planのサフィックス |
 | `.ambercast.plan.json` | `.ambercast.plan.json` は、隣接するPlanコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Groundingのサフィックス |

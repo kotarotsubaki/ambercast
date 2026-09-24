@@ -25,7 +25,7 @@ function healed(
   return {
     id: 'login.test.md', file: 'login.test.md', planFile: 'login.ambercast.plan.json', repairOutcome,
     application: repairOutcome === 'unresolved' ? 'no-artifact-change' : repairOutcome === 'no-changes-needed' ? 'no-artifact-change' : 'applied', stopReason: 'settled',
-    steps: [], explanation: `The case is ${repairOutcome}.`, durationMs: 4, aiCalls: 3,
+    steps: [], sessions: {}, explanation: `The case is ${repairOutcome}.`, durationMs: 4, aiCalls: 3,
     baselineFirstFailureIndex: 0, finalFirstFailureIndex: repairOutcome === 'healed' ? 1 : 0,
     stage3Error: error, finalReplayError: undefined, repairTrace: [],
   };
@@ -40,8 +40,8 @@ function report(input: { readonly outcome?: SettledHealOutcome; readonly error?:
 }
 
 describe('buildHealReport', () => {
-  it('emits the shared 3.6 schema version', () => {
-    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.6');
+  it('emits the shared 3.7 schema version', () => {
+    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.7');
   });
 
   it('serializes a completed healed candidate without exposing internal progress indices, for a case with no Stage 3 activity', () => {

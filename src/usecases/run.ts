@@ -44,6 +44,7 @@ import {
 } from '#core/secrets/sink-policy.js';
 import {
   GROUNDING_SCHEMA_VERSION,
+  PLAN_SCHEMA_VERSION,
   GroundingDocument,
   PlanDocument,
   TraceAction,
@@ -68,7 +69,7 @@ import {
 import type { LayoutResolver } from '#core/layout/resolve.js';
 import { joinPath, relativeWithin } from '#core/paths.js';
 import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance.js';
-import { resolveTarget } from '#core/target/resolve.js';
+import { projectPlanTargets } from '#core/target/resolve.js';
 import type {
   InstructionCoverageAiActionController,
   InstructionCoveredAiExecutor,
@@ -106,6 +107,7 @@ import {
 } from './instruction-coverage-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
+import { createSessionPool, type SessionPool } from './session-pool.js';
 
 /**
  * Execution evidence while a case is still in progress.
@@ -114,7 +116,9 @@ import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
  * executed-result field except the clock-derived value. It intentionally does
  * not use the public union because a listed file never enters case execution.
  */
-type ResultWithoutDuration = Omit<ExecutedRunResult, 'durationMs'>;
+type ResultWithoutDuration = Omit<ExecutedRunResult, 'durationMs' | 'sessions' | 'status'> & {
+  readonly status: ExecutedRunResult['status'];
+};
 
 /**
  * Optional diagnostic evidence retained only for a failed dispatched step.
@@ -148,8 +152,24 @@ type MaterializedFillSecretAction = {
 
 type MaterializedAction = PerformableAction | MaterializedFillSecretAction;
 
+/** The latest successful capture writer for a Plan-wide run variable. */
+interface CapturedRunValue {
+  readonly value: string;
+  readonly stepId: StepId;
+  readonly target: string;
+}
+
+type RunState = ReadonlyMap<RunVariableName, CapturedRunValue>;
+
+/** Project captured values for legacy readers that do not need writer identity. */
+function runStateValues(runState: RunState): ReadonlyMap<RunVariableName, string> {
+  return new Map([...runState].map(([name, writer]) => [name, writer.value]));
+}
+
 interface DispatchContext {
-  readonly session: BrowserSession;
+  // A case owns all Target sessions; step helpers select by step.target.
+  readonly sessions: SessionPool;
+  readonly targets: Readonly<Record<string, { readonly definition: TargetDefinition; readonly config: ResolvedConfig['targets'][string] }>>;
   /**
    * Identifies the case that owns provider lifecycle events, preserving an
    * absolute path even when progress rendering later makes it relative.
@@ -159,7 +179,7 @@ interface DispatchContext {
    * Supplies one monotonic time source for dispatch-only measurement so local
    * request preparation cannot be counted as provider latency.
    */
-  readonly clock: Pick<Clock, 'monotonicMs'>;
+  readonly clock: Clock;
   /**
    * Shares command-wide call IDs with nested healing paths, making every
    * admitted provider dispatch correlate to exactly one lifecycle pair.
@@ -167,18 +187,8 @@ interface DispatchContext {
   readonly allocateCallId: () => string;
   /** Counts only provider calls admitted after request preparation succeeds. */
   aiCalls: number;
-  /**
-   * The resolved replay target retained while actions are materialized.
-   *
-   * Navigate fields deliberately continue to accept relative URLs, whose
-   * safety depends on the target's base URL only after case values have been
-   * substituted. Keeping the target at this boundary lets the navigation
-   * guard compare the materialized destination with the replay target instead of
-   * imposing a schema restriction that would reject valid relative paths.
-   */
-  readonly target: TargetDefinition;
   readonly grounding: GroundingDocumentType;
-  readonly runState: Map<RunVariableName, string>;
+  readonly runState: Map<RunVariableName, CapturedRunValue>;
   readonly secrets: SecretsProvider;
   /**
    * Every non-empty value resolved for a secret reference during this case.
@@ -199,14 +209,26 @@ interface DispatchContext {
   readonly deleteGroundingEntry: (stepId: Step['id']) => void;
   readonly resolvedVias: Map<Step['id'], ResolutionVia>;
   readonly aiTimeoutMs: number;
-  readonly resolveTimeoutMs: number;
   readonly signal?: AbortSignal;
+}
+
+function targetForStep(context: DispatchContext, step: Step): TargetDefinition {
+  return context.targets[step.target]!.definition;
+}
+
+function configForStep(context: DispatchContext, step: Step): ResolvedConfig['targets'][string] {
+  return context.targets[step.target]!.config;
+}
+
+async function sessionForStep(context: DispatchContext, step: Step): Promise<BrowserSession> {
+  return context.sessions.acquire(step.target);
 }
 
 type TraceTrustContext = Pick<
   DispatchContext,
-  'target' | 'secrets' | 'resolvedSecrets' | 'allowedRunRefs'
+  'secrets' | 'resolvedSecrets' | 'allowedRunRefs'
 > & {
+  readonly target: TargetDefinition;
   readonly runState: ReadonlyMap<RunVariableName, string>;
   readonly deferHighEntropyFillCheck?: boolean;
   readonly skipSecretPriming?: boolean;
@@ -215,8 +237,10 @@ type TraceTrustContext = Pick<
 
 type TraceReplayMaterializationContext = Pick<
   DispatchContext,
-  'session' | 'target' | 'secrets' | 'resolvedSecrets' | 'allowedRunRefs'
+  'secrets' | 'resolvedSecrets' | 'allowedRunRefs'
 > & {
+  readonly session: BrowserSession;
+  readonly target: TargetDefinition;
   readonly runState: ReadonlyMap<RunVariableName, string>;
 
   /**
@@ -542,6 +566,14 @@ function validateTrustedPlanText(
   return parsed.data;
 }
 
+export function isRetiredPlanVersion(value: unknown): boolean {
+  return value === PLAN_SCHEMA_VERSION - 1;
+}
+
+function isRetiredGroundingVersion(value: unknown): boolean {
+  return value === GROUNDING_SCHEMA_VERSION - 1;
+}
+
 /**
  * Result of inspecting raw grounding before any trace becomes recoverable.
  *
@@ -650,15 +682,21 @@ async function readUsableGrounding(
   storage: StorageAdapter,
   groundingPath: string,
   plan: PlanDocumentType,
+  onRetiredVersion?: () => void,
 ): Promise<GroundingDocumentType> {
   const empty = emptyGrounding(plan);
 
   try {
     if (!(await storage.exists(groundingPath))) return empty;
-    const inspection = inspectGroundingCoverageSource(
-      await storage.readText(groundingPath),
-      empty.planDigest,
-    );
+    const sourceText = await storage.readText(groundingPath);
+    try {
+      const raw: unknown = JSON.parse(sourceText);
+      if (typeof raw === 'object' && raw !== null && 'schemaVersion' in raw && isRetiredGroundingVersion(raw.schemaVersion)
+        && 'planDigest' in raw && raw.planDigest === empty.planDigest) onRetiredVersion?.();
+    } catch {
+      // Malformed grounding remains a recoverable cache miss.
+    }
+    const inspection = inspectGroundingCoverageSource(sourceText, empty.planDigest);
     if (inspection.kind === 'integrity-failure') {
       throw new IntegrityViolationError('The grounding cache contains invalid or noncanonical instruction coverage.', {
         reason: inspection.reason,
@@ -673,7 +711,7 @@ async function readUsableGrounding(
   }
 }
 
-function materializeText(value: string, runState: ReadonlyMap<RunVariableName, string>): string {
+function materializeText(value: string, runState: RunState): string {
   return value.replace(RUN_REFERENCE_PATTERN, (_reference, path: string) => {
     const segments = path.split('.');
     if (segments.length !== 1) {
@@ -685,13 +723,13 @@ function materializeText(value: string, runState: ReadonlyMap<RunVariableName, s
       throw new CaseAbort('The plan references a run value that no earlier capture produced.');
     }
 
-    return valueForReference;
+    return valueForReference.value;
   });
 }
 
 function materializeStep(
   step: Step,
-  runState: ReadonlyMap<RunVariableName, string>,
+  runState: RunState,
   baseUrl: string,
 ): Step {
   switch (step.kind) {
@@ -865,9 +903,11 @@ function assertSameOriginNavigation(
  * @throws {IntegrityViolationError} When the current origin is not allowed.
  */
 async function assertAllowedSecretSinkOrigin(
-  context: TraceReplayMaterializationContext,
+  context: Pick<TraceReplayMaterializationContext, 'target' | 'session' | 'secrets' | 'resolvedSecrets'>,
   secretRef: string,
 ): Promise<SecretSinkPolicy> {
+  // In v4 this policy and currentUrl must both come from the step's Target.
+  // A secret declared for another Target grants no cross-Target consent.
   const policy = resolveSecretSinkPolicy(context.target, secretRef);
   const currentUrl = await context.session.currentUrl();
   if (!isAllowedSecretSinkOrigin(policy, currentUrl)) {
@@ -956,7 +996,7 @@ async function materializeTraceAction(
 ): Promise<MaterializedAction> {
   switch (action.type) {
     case 'click':
-      return { type: 'click', target: await bindTraceTarget(action.target, context) };
+      return { type: 'click', target: await bindTraceTarget(action.element, context) };
     case 'navigate': {
       const url = materializeTrustedRunText(action.url, context);
       assertSameOriginNavigation(url, context.target.baseUrl);
@@ -965,13 +1005,13 @@ async function materializeTraceAction(
     case 'press':
       return {
         type: 'press',
-        target: await bindTraceTarget(action.target, context),
+        target: await bindTraceTarget(action.element, context),
         key: action.key,
       };
     case 'fill':
       return {
         type: 'fill',
-        target: await bindTraceTarget(action.target, context),
+        target: await bindTraceTarget(action.element, context),
         value: materializeTrustedRunText(action.value, context),
       };
     case 'fill-secret': {
@@ -991,7 +1031,7 @@ async function materializeTraceAction(
       recordResolvedSecret(context.resolvedSecrets, action.secretRef, value);
       return {
         type: 'fill-secret',
-        target: await bindTraceTarget(action.target, context),
+        target: await bindTraceTarget(action.element, context),
         value,
         policy,
       };
@@ -1018,17 +1058,17 @@ async function materializeTraceAssert(
     case 'text-visible':
       return { check: 'text-visible', text: materializeTrustedRunText(check.text, context) };
     case 'element-visible':
-      return { check: 'element-visible', target: await bindTraceTarget(check.target, context) };
+      return { check: 'element-visible', target: await bindTraceTarget(check.element, context) };
     case 'text-equals':
       return {
         check: 'text-equals',
-        target: await bindTraceTarget(check.target, context),
+        target: await bindTraceTarget(check.element, context),
         text: materializeTrustedRunText(check.text, context),
       };
     case 'url-matches':
       return { check: 'url-matches', pattern: materializeTrustedRunText(check.pattern, context) };
     case 'element-count':
-      return { check: 'element-count', target: check.target, count: check.count };
+      return { check: 'element-count', target: check.element, count: check.count };
   }
 }
 
@@ -1356,7 +1396,7 @@ function containsResolvedSecret(
  * Every trace field is scanned unless it belongs to this closed
  * classification vocabulary. `target.role` is deliberately scanned because
  * it is a free-form ARIA role string that can contain a hand-edited secret.
- * `target.strategy`, `type`, `check`, and `key` are excluded as fixed
+ * `element.strategy`, `type`, `check`, and `key` are excluded as fixed
  * classification vocabulary, while `secretRef` is excluded as an authorized
  * reference identifier rather than a resolved value.
  *
@@ -1368,7 +1408,7 @@ function containsResolvedSecret(
 const TRACE_ENTRY_CLOSED_VOCABULARY_PATHS: ReadonlySet<string> = new Set([
   'type',
   'check',
-  'target.strategy',
+  'element.strategy',
   'key',
   'secretRef',
 ]);
@@ -1517,7 +1557,7 @@ function assertNoMaterializedLiteral(
       break;
     case 'fill':
       runStateCandidate = entry.value;
-      assertNoCredentialShapedFillValue(entry.value, context.runState);
+      assertNoCredentialShapedFillValue(entry.value, runStateValues(context.runState));
       break;
     case 'assert':
       switch (entry.check) {
@@ -1536,7 +1576,7 @@ function assertNoMaterializedLiteral(
       return;
   }
 
-  if ([...context.runState.values()].some((candidate) => candidate === runStateCandidate)) {
+  if ([...context.runState.values()].some((candidate) => candidate.value === runStateCandidate)) {
     throw new IntegrityViolationError('The AI adapter supplied a materialized value instead of an unresolved reference.');
   }
 }
@@ -2127,6 +2167,9 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
     try {
       const materializationContext: TraceReplayMaterializationContext = {
         ...this.context,
+        session: await sessionForStep(this.context, this.step),
+        target: targetForStep(this.context, this.step),
+        runState: runStateValues(this.context.runState),
         onBindMiss: (reason) => { throw new AgenticTargetRejection('ambercast_perform', reason); },
       };
       const materialized = await materializeTraceAction(
@@ -2134,7 +2177,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
         materializationContext,
         this.#secretRefs,
       );
-      await performMaterializedAction(materialized, this.context.session);
+      await performMaterializedAction(materialized, await sessionForStep(this.context, this.step));
     } catch (error) {
       if (error instanceof AgenticTargetRejection) {
         this.#trailingPassedAssertRun = 0;
@@ -2146,7 +2189,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
         this.#rejectionBarrier = true;
         throw new AgenticTargetRejection('ambercast_perform', error.reason);
       }
-      throw scrubBrowserRejection(error, this.context.resolvedSecrets, this.context.runState);
+      throw scrubBrowserRejection(error, this.context.resolvedSecrets, runStateValues(this.context.runState));
     }
     this.#journal.push(parsed.data);
   }
@@ -2181,10 +2224,13 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
     try {
       const materializationContext: TraceReplayMaterializationContext = {
         ...this.context,
+        session: await sessionForStep(this.context, this.step),
+        target: targetForStep(this.context, this.step),
+        runState: runStateValues(this.context.runState),
         onBindMiss: (reason) => { throw new AgenticTargetRejection('ambercast_evaluate_assert', reason); },
       };
       const materialized = await materializeTraceAssert(parsed.data, materializationContext);
-      outcome = await this.context.session.evaluateAssert(materialized);
+      outcome = await (await sessionForStep(this.context, this.step)).evaluateAssert(materialized);
     } catch (error) {
       if (error instanceof AgenticTargetRejection) {
         this.#trailingPassedAssertRun = 0;
@@ -2196,7 +2242,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
         this.#rejectionBarrier = true;
         throw new AgenticTargetRejection('ambercast_evaluate_assert', error.reason);
       }
-      throw scrubBrowserRejection(error, this.context.resolvedSecrets, this.context.runState);
+      throw scrubBrowserRejection(error, this.context.resolvedSecrets, runStateValues(this.context.runState));
     }
     if (outcome.passed) {
       this.#rejectionBarrier = false;
@@ -2209,7 +2255,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
       this.#lastObservation = 'failed-assert';
     }
 
-    return templateAssertOutcome(outcome, this.context.resolvedSecrets, this.context.runState);
+    return templateAssertOutcome(outcome, this.context.resolvedSecrets, runStateValues(this.context.runState));
   }
 
   /**
@@ -2230,12 +2276,12 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
   async snapshotForResolution() {
     this.#trailingPassedAssertRun = 0;
     this.#lastObservation = 'snapshot';
-    const raw = await this.context.session.snapshotForResolution();
+    const raw = await (await sessionForStep(this.context, this.step)).snapshotForResolution();
     return {
       accessibilityTree: redactJsonStrings(
         raw.accessibilityTree,
         this.context.resolvedSecrets,
-        this.context.runState,
+        runStateValues(this.context.runState),
       ) as JsonValueT,
     };
   }
@@ -2298,6 +2344,8 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
         parsed.data,
         {
           ...this.context,
+          target: targetForStep(this.context, this.step),
+          runState: runStateValues(this.context.runState),
           resolvedSecrets: new Map(),
           skipSecretPriming: true,
         },
@@ -2306,7 +2354,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
       const classified = classifyPreScannedTraceCoverage({
         trace: preScanned,
         criteria,
-        runValues: { values: this.context.runState },
+        runValues: { values: runStateValues(this.context.runState) },
       });
       if (!classified.success || classified.data.kind !== 'covered') {
         throw new AgenticCoverageAbort('The AI-directed interaction produced invalid terminal verification proof.');
@@ -2393,13 +2441,13 @@ async function executeAiStep(
 
   const preScanned = preScanTraceForInstructionCoverage(
     entry.trace,
-    { ...context, rejectCapturedRunLiterals: !Object.hasOwn(entry.trace, 'verificationCoverage') },
+    { ...context, target: targetForStep(context, step), runState: runStateValues(context.runState), rejectCapturedRunLiterals: !Object.hasOwn(entry.trace, 'verificationCoverage') },
     secretRefs,
   );
   const classified = classifyPreScannedTraceCoverage({
     trace: preScanned,
     criteria: context.instructionCoverageByStepId.get(step.id) ?? [],
-    runValues: { values: context.runState },
+    runValues: { values: runStateValues(context.runState) },
   });
   if (!classified.success) {
     throw new IntegrityViolationError('The grounding trace contains invalid instruction coverage or verification proof.', {
@@ -2417,9 +2465,9 @@ async function executeAiStep(
   }
   try {
     const replayContext: CoveredTraceReplayContext = {
-      session: context.session,
-      target: context.target,
-      runState: context.runState,
+      session: await sessionForStep(context, step),
+      target: targetForStep(context, step),
+      runState: runStateValues(context.runState),
       secrets: context.secrets,
       resolvedSecrets: context.resolvedSecrets,
       allowedRunRefs: context.allowedRunRefs,
@@ -2485,23 +2533,25 @@ async function groundedTarget(
   if (groundingRecoveryModeForStep(step) !== 'element-reground') {
     throw new Error('groundedTarget called for a step kind classified outside element-reground.');
   }
-  await context.session.awaitElementPresence(target, context.resolveTimeoutMs);
+  const session = await sessionForStep(context, step);
+  await session.awaitElementPresence(target, configForStep(context, step).resolveTimeoutMs);
   const entry = context.grounding.entries[step.id];
   if (entry?.kind === 'element') {
-    const resolved = await context.session.resolveGrounded(target, {
+    const resolved = await session.resolveGrounded(target, {
       mode: 'verify',
       fingerprint: entry.fingerprint,
     });
     if (resolved.kind === 'hit') {
       return resolved.element;
     }
+    if (!context.resolve) throw groundingAbort(resolved.reason);
   }
 
   if (!context.resolve) {
     throw new CaseAbort('Element grounding is unavailable because AI resolution is not permitted. Pass --resolve to permit resolution.');
   }
 
-  const snapshot = await context.session.snapshotForResolution();
+  const snapshot = await session.snapshotForResolution();
   const classification = computeAccessibilityFingerprint(
     snapshot.accessibilityTree,
     target,
@@ -2524,7 +2574,7 @@ async function groundedTarget(
   const redactedAccessibilityTree = redactJsonStrings(
     snapshot.accessibilityTree,
     context.resolvedSecrets,
-    context.runState,
+    runStateValues(context.runState),
   ) as JsonValueT;
   const deadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
   const request = {
@@ -2543,7 +2593,7 @@ async function groundedTarget(
     throw new CaseAbort('The AI could not confirm that the supplied locator identifies the intended element.');
   }
 
-  const resolved = await context.session.resolveGrounded(target, {
+  const resolved = await session.resolveGrounded(target, {
     mode: 'verify',
     fingerprint: classification.fingerprint,
   });
@@ -2616,7 +2666,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
   switch (step.action) {
     case 'click':
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A click action must consume element grounding.');
-      action = { type: 'click', target: await groundedTarget(context, step, step.target) };
+      action = { type: 'click', target: await groundedTarget(context, step, step.element) };
       break;
     case 'navigate':
       action = { type: 'navigate', url: step.url };
@@ -2625,20 +2675,28 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A press action must consume element grounding.');
       action = {
         type: 'press',
-        target: await groundedTarget(context, step, step.target),
+        target: await groundedTarget(context, step, step.element),
         key: step.key,
       };
       break;
     case 'fill':
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A fill action must consume element grounding.');
+      if ([...context.resolvedSecrets.values()].some((values) => values.has(step.value))) {
+        throw new IntegrityViolationError('A plan fill contains a materialized secret value.');
+      }
       action = {
         type: 'fill',
-        target: await groundedTarget(context, step, step.target),
+        target: await groundedTarget(context, step, step.element),
         value: step.value,
       };
       break;
     case 'fill-secret': {
-      const policy = await assertAllowedSecretSinkOrigin(context, step.secretRef);
+      const policy = await assertAllowedSecretSinkOrigin({
+        session: await sessionForStep(context, step),
+        target: targetForStep(context, step),
+        secrets: context.secrets,
+        resolvedSecrets: context.resolvedSecrets,
+      }, step.secretRef);
       const value = context.secrets.resolve(step.secretRef);
       if (value === undefined) {
         throw new SecretUnresolvedError('The referenced secret is unavailable.', { secretRef: step.secretRef });
@@ -2646,13 +2704,13 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
 
       recordResolvedSecret(context.resolvedSecrets, step.secretRef, value);
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A secret fill action must consume element grounding.');
-      const target = await groundedTarget(context, step, step.target);
+      const target = await groundedTarget(context, step, step.element);
       action = { type: 'fill-secret', target, value, policy };
       break;
     }
   }
 
-  await performMaterializedAction(action, context.session);
+  await performMaterializedAction(action, await sessionForStep(context, step));
   return { kind: 'passed' };
 }
 
@@ -2668,11 +2726,20 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
  * This preserves bare-target checks while making a new assertion variant
  * choose its recovery treatment at the typed IR table.
  */
-async function executeAssert(step: Step, context: DispatchContext): Promise<DispatchOutcome> {
+async function pollAssert(step: Step, context: DispatchContext, deadline: number): Promise<DispatchOutcome> {
+  // V4 polling fixes its deadline immediately after step-start, before
+  // acquisition or materialization. The first observation always runs;
+  // only a false result waits up to 100 ms or the remaining budget. A wait
+  // reaching the deadline returns the last mismatch without another bind.
+  // Element-visible and text-equals bind anew for each observation. The other
+  // three checks do not bind; element-count passes its ElementRef directly.
+  // Bind failure, adapter rejection, and abort keep their terminal paths.
   if (step.kind !== 'assert') {
     throw new Error('The assertion dispatcher received a non-assertion step.');
   }
 
+  for (;;) {
+  if (context.signal?.aborted) throw context.signal.reason;
   let check: AssertCheck;
   switch (step.check) {
     case 'text-visible':
@@ -2682,14 +2749,14 @@ async function executeAssert(step: Step, context: DispatchContext): Promise<Disp
       if (ASSERT_GROUNDING_MODE[step.check] !== 'element-reground') throw new Error('An element-visible assertion must consume element grounding.');
       check = {
         check: 'element-visible',
-        target: await groundedTarget(context, step, step.target),
+        target: await groundedTarget(context, step, step.element),
       };
       break;
     case 'text-equals':
       if (ASSERT_GROUNDING_MODE[step.check] !== 'element-reground') throw new Error('A text-equals assertion must consume element grounding.');
       check = {
         check: 'text-equals',
-        target: await groundedTarget(context, step, step.target),
+        target: await groundedTarget(context, step, step.element),
         text: step.text,
       };
       break;
@@ -2699,16 +2766,20 @@ async function executeAssert(step: Step, context: DispatchContext): Promise<Disp
     case 'element-count':
       check = {
         check: 'element-count',
-        target: step.target,
+        target: step.element,
         count: step.count,
       };
       break;
   }
 
-  const outcome = await context.session.evaluateAssert(check);
-  return outcome.passed
-    ? { kind: 'passed' }
-    : { kind: 'assertion-failed', expected: expectedForAssert(check), actual: outcome.message };
+  const outcome = await (await sessionForStep(context, step)).evaluateAssert(check);
+  if (outcome.passed) return { kind: 'passed' };
+  const mismatch: DispatchOutcome = { kind: 'assertion-failed', expected: expectedForAssert(check), actual: outcome.message };
+  const remaining = deadline - context.clock.monotonicMs();
+  if (remaining <= 0) return mismatch;
+  await context.clock.sleep(Math.min(100, remaining), context.signal);
+  if (context.clock.monotonicMs() >= deadline) return mismatch;
+  }
 }
 
 /**
@@ -2745,9 +2816,9 @@ async function executeCapture(step: Step, context: DispatchContext): Promise<Dis
     throw new Error('The capture dispatcher received a non-capture step.');
   }
 
-  const target = await groundedTarget(context, step, step.target);
-  const value = await context.session.captureValue(target, 'text');
-  context.runState.set(step.variable, value);
+  const target = await groundedTarget(context, step, step.element);
+  const value = await (await sessionForStep(context, step)).captureValue(target, 'text');
+  context.runState.set(step.variable, { value, stepId: step.id, target: step.target });
   return { kind: 'passed' };
 }
 
@@ -2902,9 +2973,8 @@ async function captureFailureEvidence(
 
 const DISPATCH_TABLE = {
   action: executeAction,
-  assert: executeAssert,
   capture: executeCapture,
-} satisfies Record<Exclude<Step['kind'], 'ai'>, StepExecutor>;
+} satisfies Record<Exclude<Step['kind'], 'ai' | 'assert'>, StepExecutor>;
 
 /**
  * Creates the report representation of one executed or skipped plan step.
@@ -2926,11 +2996,13 @@ function stepResult(
   ) as FailureDetail;
   return {
     id: step.id,
+    target: step.target,
     type: step.kind,
     status,
+    ...(status === 'passed' && step.kind === 'capture' ? { variable: step.variable } : {}),
     ...(kind === undefined ? {} : { kind }),
     ...presentDetail,
-  };
+  } as StepResult;
 }
 
 function skippedSteps(steps: readonly Step[], after: number): StepResult[] {
@@ -3003,8 +3075,8 @@ export interface RunOptions {
    */
   readonly grep?: RegExp;
 
-  /** Optional explicit target name; an invalid name never falls back. */
-  readonly target?: string;
+  /** Caller cancellation observed during acquisition, dispatch, and polling. */
+  readonly signal?: AbortSignal;
 
   /** Whether AI may resolve grounding and trace misses. */
   readonly resolve: boolean;
@@ -3348,7 +3420,7 @@ export type RunListedFile = { readonly file: string };
  * an error kind that misrepresents those conditions.
  */
 export async function run(deps: RunDeps, options: RunOptions): Promise<RunOutcome> {
-  const tracker = new BatchInterruptionTracker(deps.signal);
+  const tracker = new BatchInterruptionTracker(options.signal ?? deps.signal);
   try {
   const discovered = options.files.length === 0
     ? (await deps.discoverTestFiles({
@@ -3424,6 +3496,7 @@ export function classifyBrowserLaunchFailure(
  * browser for a screenshot or accessibility tree.
  */
 async function runCase(deps: RunDeps, options: RunOptions, file: string): Promise<RunCaseOutcome> {
+  const signal = options.signal ?? deps.signal;
   const startedAt = deps.clock.monotonicMs();
   const planPath = deps.layout.planPathFor(file);
   const identity = { id: file, file, planFile: planPath };
@@ -3431,6 +3504,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   let planSteps: readonly Step[] = [];
   let currentStep: Step | undefined;
   let session: BrowserSession | undefined;
+  let sessions: SessionPool | undefined;
+  let sessionTargets: Record<string, { definition: TargetDefinition; config: ResolvedConfig['targets'][string] }> = {};
   let groundingPath: string | undefined;
   let grounding: GroundingDocumentType | undefined;
   let groundingDirty = false;
@@ -3438,7 +3513,10 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   let classifiedError: AmbercastErrorType | undefined;
   let result: ResultWithoutDuration | undefined;
   let resolvedSecrets: Map<string, Set<string>> | undefined;
-  let runState: Map<RunVariableName, string> | undefined;
+  // V4 capture state retains value, stepId, and Target for the latest writer
+  // of each name. References remain Plan-wide; successful capture results
+  // preserve every writer in execution order so reports can reconstruct it.
+  let runState: Map<RunVariableName, CapturedRunValue> | undefined;
   let context: DispatchContext | undefined;
   let engine: BrowserEngine | undefined;
 
@@ -3459,17 +3537,30 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       });
     }
 
-    const targetSelection = resolveTarget({
-      targets: deps.config.targets,
-      defaultTarget: deps.config.defaultTarget,
-      explicitTarget: options.target,
-    });
-    if (targetSelection instanceof TargetUnresolvedError) {
-      throw targetSelection;
+    const planText = await readTrustedPlanText(deps.storage, planPath);
+    let parsedPlan: ReturnType<typeof PlanDocument.safeParse>;
+    try {
+      const rawPlan: unknown = JSON.parse(planText);
+      if (typeof rawPlan === 'object' && rawPlan !== null && 'schemaVersion' in rawPlan && isRetiredPlanVersion(rawPlan.schemaVersion)) {
+        throw new StaleIrError('The generated plan does not match the required schema.', { planPath });
+      }
+      parsedPlan = PlanDocument.safeParse(rawPlan);
+    } catch (error) {
+      if (error instanceof StaleIrError) throw error;
+      throw new IntegrityViolationError('The generated plan is not valid JSON.', { planPath }, { cause: error });
     }
-    const resolvedTargets = targetSelection.definitions;
-    const target = targetSelection.definition;
-    engine = target.browser;
+    if (!parsedPlan.success) {
+      throw new IntegrityViolationError('The generated plan does not match the required schema.', { planPath, issues: parsedPlan.error.issues });
+    }
+    const targetNames = Object.keys(parsedPlan.data.targets).sort();
+    const resolvedTargets = projectPlanTargets(targetNames, deps.config.targets);
+    const missingTarget = targetNames.find((name) => !Object.hasOwn(resolvedTargets, name));
+    if (missingTarget !== undefined) {
+      throw new TargetUnresolvedError('The plan references a target that is not configured.', { target: missingTarget });
+    }
+    sessionTargets = Object.fromEntries(targetNames.map((name) => [name, { definition: resolvedTargets[name]!, config: deps.config.targets[name]! }]));
+    sessions = createSessionPool(sessionTargets, deps.browserDriver);
+    engine = deps.config.targets[targetNames[0]!]!.browser;
 
     const inputsDigest = deriveCurrentPlanInputProvenance({
       normalizedTestMd,
@@ -3489,8 +3580,19 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     assertNoEnvVarCollision([...new Set(enumerateSecretUses(plan).map(({ ref }) => ref))]);
     planSteps = plan.steps;
     groundingPath = deps.layout.groundingPathFor(file);
-    const loadedGrounding = await readUsableGrounding(deps.storage, groundingPath, plan);
+    let retiredGrounding = false;
+    const loadedGrounding = await readUsableGrounding(deps.storage, groundingPath, plan, () => { retiredGrounding = true; });
     grounding = loadedGrounding;
+    if (retiredGrounding && !options.resolve) {
+      const firstGroundedStep = plan.steps.find((step) => groundingRecoveryModeForStep(step) === 'element-reground');
+      if (firstGroundedStep !== undefined) {
+        currentStep = firstGroundedStep;
+        throw new GroundingUnresolvedError(
+          'The grounding cache uses a retired schema and AI resolution is not permitted. Pass --resolve to permit resolution.',
+          { stepId: firstGroundedStep.id, reason: 'recoverable-miss' },
+        );
+      }
+    }
     resolvedSecrets = new Map<string, Set<string>>();
     const preflightAllowedRunRefs = new Set<RunVariableName>();
     const preflightRunState = new Map<RunVariableName, string>();
@@ -3519,7 +3621,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       }
       const secretRefs = new Set(step.secrets?.map((grant) => grant.ref) ?? []);
       const trustContext: TraceTrustContext = {
-        target,
+        target: sessionTargets[step.target]!.definition,
         runState: preflightRunState,
         secrets: deps.secrets,
         resolvedSecrets,
@@ -3553,31 +3655,17 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     }
     currentStep = undefined;
 
-    try {
-      session = await deps.browserDriver(target.browser).launch(target);
-    } catch (error) {
-      if (error instanceof BrowserLaunchFailedError) {
-        throw error;
-      }
-
-      throw new BrowserLaunchFailedError(
-        'The browser session could not be launched.',
-        classifyBrowserLaunchFailure(error, target.browser),
-        { cause: error },
-      );
-    }
-
     const allowedRunRefs = new Set<RunVariableName>();
     const resolvedVias = new Map<Step['id'], ResolutionVia>();
     resolvedSecrets ??= new Map<string, Set<string>>();
-    runState = new Map<RunVariableName, string>();
+    runState = new Map<RunVariableName, CapturedRunValue>();
     context = {
-      session,
+      sessions,
+      targets: sessionTargets,
       file,
       clock: deps.clock,
       allocateCallId: deps.allocateCallId,
       aiCalls: 0,
-      target,
       grounding: loadedGrounding,
       runState,
       secrets: deps.secrets,
@@ -3585,7 +3673,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       allowedRunRefs,
       instructionCoverageByStepId: trustedPlan.instructionCoverageByStepId,
       resolveAiExecutor: () => {
-        aiExecutorPromise ??= deps.resolveAiExecutor(deps.signal);
+        aiExecutorPromise ??= deps.resolveAiExecutor(signal);
         return aiExecutorPromise;
       },
       resolve: options.resolve,
@@ -3602,9 +3690,9 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       },
       resolvedVias,
       aiTimeoutMs: deps.config.ai.timeoutMs,
-      resolveTimeoutMs: deps.config.targets[targetSelection.name]!.resolveTimeoutMs,
-      ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+      ...(signal === undefined ? {} : { signal }),
     };
+    const activeContext = context;
 
     for (const [index, originalStep] of planSteps.entries()) {
       currentStep = originalStep;
@@ -3615,12 +3703,29 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
        * resolution path because it reports the step's `via` field.
        */
       deps.events.emit({ type: 'step-start', stepId: originalStep.id });
+      signal?.throwIfAborted();
+      const deadline = originalStep.kind === 'assert'
+        ? deps.clock.monotonicMs() + (originalStep.timeoutMs ?? sessionTargets[originalStep.target]!.config.resolveTimeoutMs)
+        : undefined;
+      try {
+        session = await sessions.acquire(originalStep.target);
+      } catch (error) {
+        if (error instanceof BrowserLaunchFailedError) throw error;
+        throw new BrowserLaunchFailedError('The browser session could not be launched.', classifyBrowserLaunchFailure(error, sessionTargets[originalStep.target]!.config.browser), { cause: error });
+      }
+      signal?.throwIfAborted();
+      // A v4 ordinary fill whose materialized value equals any resolved
+      // secret fails integrity validation before perform, just like a trace
+      // fill, so a run interpolation cannot turn it into a secret bypass.
       const step = originalStep.kind === 'ai'
         ? originalStep
-        : materializeStep(originalStep, context.runState, context.target.baseUrl);
+        : materializeStep(originalStep, activeContext.runState, sessionTargets[originalStep.target]!.definition.baseUrl);
       const outcome = step.kind === 'ai'
-        ? await executeAiStep(step, context, options.resolve)
-        : await DISPATCH_TABLE[step.kind](step, context);
+        ? await executeAiStep(step, activeContext, options.resolve)
+        : step.kind === 'assert'
+          ? await pollAssert(step, activeContext, deadline!)
+          : await DISPATCH_TABLE[step.kind](step, activeContext);
+      signal?.throwIfAborted();
       if (outcome.kind === 'assertion-failed') {
         /*
          * Assertion diagnostics cross the case-report boundary only after
@@ -3630,16 +3735,16 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
          * case-state access.
          */
         const evidence = await captureFailureEvidence(
-          context.session,
+          session,
           deps.storage,
           deps.layout.runsDirFor(file, deps.runId),
           originalStep.id,
           resolvedSecrets,
-          runState,
+          runStateValues(runState),
           [outcome.expected, outcome.actual],
         );
-        const expected = templateMaterializedValues(outcome.expected, resolvedSecrets, runState);
-        const actual = templateMaterializedValues(outcome.actual, resolvedSecrets, runState);
+        const expected = templateMaterializedValues(outcome.expected, resolvedSecrets, runStateValues(runState));
+        const actual = templateMaterializedValues(outcome.actual, resolvedSecrets, runStateValues(runState));
         result = {
           ...identity,
           status: 'failed',
@@ -3707,7 +3812,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           deps.layout.runsDirFor(file, deps.runId),
           currentStep.id,
           resolvedSecrets ?? new Map(),
-          runState ?? new Map(),
+          runStateValues(runState ?? new Map()),
           [],
           error instanceof GroundingClassificationAbort ? error.accessibilityTree : undefined,
         );
@@ -3715,11 +3820,13 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         if (evidenceError instanceof IntegrityViolationError) classificationError = evidenceError;
       }
     }
-    if (classificationError instanceof AmbercastError) {
+    if (signal?.aborted && !(classificationError instanceof IntegrityViolationError)) {
+      result = resultForAbort(identity, planSteps, completed, currentStep, 'The run was interrupted.', evidence);
+    } else if (classificationError instanceof AmbercastError) {
       classifiedError = redactedError(
         classificationError,
         resolvedSecrets ?? new Map(),
-        runState ?? new Map(),
+        runStateValues(runState ?? new Map()),
       ) as AmbercastErrorType;
       result = resultForAbort(identity, planSteps, completed, currentStep, classifiedError.message, evidence);
     } else if (classificationError instanceof CaseAbort) {
@@ -3736,20 +3843,13 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         currentStep,
         classificationError,
         resolvedSecrets ?? new Map(),
-        runState ?? new Map(),
+        runStateValues(runState ?? new Map()),
       ));
       const explanation = `The browser session could not complete this case and no deterministic fallback is available (${name}).`;
       result = resultForAbort(identity, planSteps, completed, currentStep, explanation, evidence);
     }
   } finally {
-    if (session !== undefined) {
-      try {
-        await session.close();
-      } catch {
-        // Teardown cannot leak an unclassified rejection after the case already
-        // has a stable outcome; the session port remains responsible for release.
-      }
-    }
+    if (sessions !== undefined) await sessions.closeAll();
 
     /*
      * Write-back requires both a changed, addressable grounding artifact
@@ -3794,7 +3894,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           const integrityError = redactedError(
             error,
             resolvedSecrets ?? new Map(),
-            runState ?? new Map(),
+            runStateValues(runState ?? new Map()),
           ) as IntegrityViolationError;
           classifiedError = integrityError;
           result = { ...result!, status: 'error', explanation: integrityError.message };
@@ -3802,7 +3902,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           const flushError = redactedError(
             fsIoError('The grounding cache could not be written.', error),
             resolvedSecrets ?? new Map(),
-            runState ?? new Map(),
+            runStateValues(runState ?? new Map()),
           ) as FsIoError;
           classifiedError = flushError;
           result = { ...result, status: 'error', explanation: flushError.message };
@@ -3813,7 +3913,16 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
 
   const durationMs = deps.clock.monotonicMs() - startedAt;
   return {
-    result: { ...result!, durationMs, aiCalls: context?.aiCalls ?? 0 },
+    result: {
+      ...result!,
+      durationMs,
+      aiCalls: context?.aiCalls ?? 0,
+      sessions: Object.fromEntries(Object.entries(sessionTargets).map(([name, target]) => [name, {
+        surface: target.definition.surface,
+        executor: { kind: 'playwright', browser: target.config.browser },
+        state: sessions?.states()[name] ?? 'not-opened',
+      }])),
+    } as ExecutedRunResult,
     ...(engine === undefined ? {} : { engine }),
     ...(classifiedError === undefined ? {} : { error: classifiedError }),
   };

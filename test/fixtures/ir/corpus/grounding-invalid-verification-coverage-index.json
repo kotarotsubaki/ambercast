@@ -2,7 +2,7 @@
   "document": "grounding",
   "expected": "invalid",
   "value": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "reach-dashboard": {
@@ -10,9 +10,15 @@
         "trace": {
           "events": [],
           "verification": [
-            { "type": "assert", "check": "text-visible", "text": "Dashboard" }
+            {
+              "type": "assert",
+              "check": "text-visible",
+              "text": "Dashboard"
+            }
           ],
-          "verificationCoverage": { "dashboard-reached": -1 }
+          "verificationCoverage": {
+            "dashboard-reached": -1
+          }
         }
       }
     }

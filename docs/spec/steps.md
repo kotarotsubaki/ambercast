@@ -2,7 +2,7 @@
 
 ## Step union {#step-union}
 
-Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId`. [repo:src/core/ir/schema.ts:404,742]
+Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId` and a required `target` naming a key in `Plan.targets`. [repo:src/core/ir/schema.ts:404,742]
 
 ### `action` / `click` {#action-click}
 
@@ -10,11 +10,12 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | Stable step identifier. | repo:src/core/ir/schema.ts:41,436 |
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:438 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `click` | Action discriminator. | repo:src/core/ir/schema.ts:439 |
-| `target` | `ElementRef` | required | accessibility branch currently | Element to click. | repo:src/core/ir/schema.ts:436 |
+| `element` | `ElementRef` | required | accessibility branch currently | Element to click. | repo:src/core/ir/schema.ts:436 |
 
 ```json
-{"id":"click-login","kind":"action","action":"click","target":{"strategy":"accessibility","role":"button","name":"Log in"}}
+{"id":"click-login","kind":"action","action":"click","target":"app","element":{"strategy":"accessibility","role":"button","name":"Log in"}}
 ```
 
 ### `action` / `navigate` {#action-navigate}
@@ -27,7 +28,7 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 | `url` | `InterpolatableText` | required | no `{{secrets.` marker | Navigation text. | repo:src/core/ir/schema.ts:455 |
 
 ```json
-{"id":"open-home","kind":"action","action":"navigate","url":"https://example.test"}
+{"id":"open-home","kind":"action","action":"navigate","target":"app","url":"https://example.test"}
 ```
 
 At execution, every Plan navigation, cached trace navigation, and fresh agentic navigation MUST resolve against the live target `baseUrl`, use HTTP(S), and remain on that target's origin. An unresolvable, non-HTTP(S), or cross-origin destination is an integrity failure. [repo:src/usecases/run.ts:701] [repo:src/usecases/run.ts:746]
@@ -38,12 +39,13 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:474 |
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:476 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `press` | Action discriminator. | repo:src/core/ir/schema.ts:477 |
-| `target` | `ElementRef` | required | strict locator | Recipient. | repo:src/core/ir/schema.ts:474 |
+| `element` | `ElementRef` | required | strict locator | Recipient. | repo:src/core/ir/schema.ts:474 |
 | `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | Key. | repo:src/core/ir/schema.ts:474 |
 
 ```json
-{"id":"submit","kind":"action","action":"press","target":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
+{"id":"submit","kind":"action","action":"press","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
 ```
 
 ### `action` / `fill` {#action-fill}
@@ -52,12 +54,13 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:493 |
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:495 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill` | Action discriminator. | repo:src/core/ir/schema.ts:496 |
-| `target` | `ElementRef` | required | strict locator | Field. | repo:src/core/ir/schema.ts:493 |
+| `element` | `ElementRef` | required | strict locator | Field. | repo:src/core/ir/schema.ts:493 |
 | `value` | `InterpolatableText` | required | no secret marker | Non-secret or run-state text. | repo:src/core/ir/schema.ts:493 |
 
 ```json
-{"id":"fill-email","kind":"action","action":"fill","target":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
+{"id":"fill-email","kind":"action","action":"fill","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
 ```
 
 ### `action` / `fill-secret` {#action-fill-secret}
@@ -66,12 +69,13 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:499-504 |
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:499-504 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill-secret` | Action discriminator. | repo:src/core/ir/schema.ts:499-504 |
-| `target` | `ElementRef` | required | strict locator | Secret sink field. | repo:src/core/ir/schema.ts:396,499-504 |
+| `element` | `ElementRef` | required | strict locator | Secret sink field. | repo:src/core/ir/schema.ts:396,499-504 |
 | `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | repo:src/core/ir/schema.ts:396,499-504 |
 
 ```json
-{"id":"fill-password","kind":"action","action":"fill-secret","target":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
+{"id":"fill-password","kind":"action","action":"fill-secret","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
 ### `assert` / `text-visible` {#assert-text-visible}
@@ -81,10 +85,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:556 |
 | `kind` | string | required | literal `assert` | Outer discriminator. | repo:src/core/ir/schema.ts:558 |
 | `check` | string | required | literal `text-visible` | Assertion discriminator. | repo:src/core/ir/schema.ts:559 |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `text` | `InterpolatableText` | required | no secret marker | Expected visible text. | repo:src/core/ir/schema.ts:556 |
 
 ```json
-{"id":"welcome-visible","kind":"assert","check":"text-visible","text":"Welcome"}
+{"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
 ```
 
 ### `assert` / `element-visible` {#assert-element-visible}
@@ -93,11 +98,13 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:575 |
 | `kind` | string | required | literal `assert` | Outer discriminator. | repo:src/core/ir/schema.ts:577 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-visible` | Assertion discriminator. | repo:src/core/ir/schema.ts:578 |
-| `target` | `ElementRef` | required | strict locator | Expected visible element. | repo:src/core/ir/schema.ts:575 |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Expected visible element. | repo:src/core/ir/schema.ts:575 |
 
 ```json
-{"id":"menu-visible","kind":"assert","check":"element-visible","target":{"strategy":"accessibility","role":"navigation","name":"Main"}}
+{"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","element":{"strategy":"accessibility","role":"navigation","name":"Main"}}
 ```
 
 ### `assert` / `text-equals` {#assert-text-equals}
@@ -106,12 +113,14 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:594 |
 | `kind` | string | required | literal `assert` | Outer discriminator. | repo:src/core/ir/schema.ts:596 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `text-equals` | Assertion discriminator. | repo:src/core/ir/schema.ts:597 |
-| `target` | `ElementRef` | required | strict locator | Element under test. | repo:src/core/ir/schema.ts:594 |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Element under test. | repo:src/core/ir/schema.ts:594 |
 | `text` | `InterpolatableText` | required | no secret marker | Exact expected text. | repo:src/core/ir/schema.ts:594 |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":"app","element":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
 ```
 
 ### `assert` / `url-matches` {#assert-url-matches}
@@ -121,10 +130,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:614 |
 | `kind` | string | required | literal `assert` | Outer discriminator. | repo:src/core/ir/schema.ts:616 |
 | `check` | string | required | literal `url-matches` | Assertion discriminator. | repo:src/core/ir/schema.ts:617 |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `pattern` | `InterpolatableText` | required | no secret marker | Expected URL matching text. | repo:src/core/ir/schema.ts:614 |
 
 ```json
-{"id":"on-account","kind":"assert","check":"url-matches","pattern":"/account"}
+{"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
 ```
 
 ### `assert` / `element-count` {#assert-element-count}
@@ -133,12 +143,14 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:633 |
 | `kind` | string | required | literal `assert` | Outer discriminator. | repo:src/core/ir/schema.ts:635 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-count` | Assertion discriminator. | repo:src/core/ir/schema.ts:636 |
-| `target` | `ElementRef` | required | strict locator | Matching element. | repo:src/core/ir/schema.ts:633 |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Matching element. | repo:src/core/ir/schema.ts:633 |
 | `count` | integer | required | nonnegative | Expected count, including zero. | repo:src/core/ir/schema.ts:633 |
 
 ```json
-{"id":"one-alert","kind":"assert","check":"element-count","target":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
+{"id":"one-alert","kind":"assert","check":"element-count","target":"app","element":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
 ```
 
 ### `capture` {#capture}
@@ -147,11 +159,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | --- | --- | --- | --- | --- | --- |
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:672 |
 | `kind` | string | required | literal `capture` | Step discriminator. | repo:src/core/ir/schema.ts:674 |
-| `target` | `ElementRef` | required | strict locator | Source element. | repo:src/core/ir/schema.ts:672 |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Source element. | repo:src/core/ir/schema.ts:672 |
 | `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | Bare run-state variable name. | repo:src/core/ir/schema.ts:675 |
 
 ```json
-{"id":"capture-code","kind":"capture","target":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
+{"id":"capture-code","kind":"capture","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
 ```
 
 ### `ai` {#ai}
@@ -165,7 +178,7 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | repo:src/core/ir/schema.ts:688-692 |
 
 ```json
-{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
 ### Committed AI secret uses {#committed-ai-secret-grants}
@@ -177,8 +190,10 @@ Each member of a committed AI step's optional `secrets` array is a strict `AiSte
 | `ref` | `SecretRef` | required | whole secret-reference grammar | Committed secret reference. | repo:src/core/ir/schema.ts:674-675 |
 
 ```json
-{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
+
+Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once. Element bindings are refreshed for each `element-visible` and `text-equals` observation. A binding failure or adapter error does not retry.
 
 ## Generated forms {#generated-forms}
 
@@ -202,4 +217,4 @@ Provider-supplied anchor and column coordinates bind each criterion to one local
 
 Terminal `url-matches` is rejected because it is a tautological success form rather than independent proof of the cited success criterion. Use a supported, non-duplicative terminal `TraceAssert`; if the success condition cannot be represented, generation fails.  [repo:src/usecases/instruction-coverage-policy.ts:403-407] [repo:src/usecases/instruction-coverage-policy.ts:622-625]
 
-One rejected alternative used one action object with optional payload fields; it was rejected because invalid combinations become schema-invisible. Another let generic text carry secrets; it was rejected because consent boundaries and redaction would be ambiguous.  
+One rejected alternative used one action object with optional payload fields; it was rejected because invalid combinations become schema-invisible. Another let generic text carry secrets; it was rejected because consent boundaries and redaction would be ambiguous.

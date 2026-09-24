@@ -365,6 +365,7 @@ function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedCo
   return Object.fromEntries(
     Object.entries(source).map(([name, target]) => [name, {
       ...target,
+      surface: target.surface ?? 'web',
       healReplayIsolation: target.healReplayIsolation ?? 'stateful',
       resolveTimeoutMs: target.resolveTimeoutMs ?? 5000,
     }]),

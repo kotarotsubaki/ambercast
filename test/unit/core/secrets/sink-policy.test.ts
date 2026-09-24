@@ -9,7 +9,7 @@ import type { TargetDefinition } from '#core/ir/schema.js';
 
 const SECRET_REF = '{{secrets.app.password}}';
 const OTHER_SECRET_REF = '{{secrets.app.apiKey}}';
-const TARGET: TargetDefinition = { baseUrl: 'https://app.example.test', browser: 'chromium' };
+const TARGET: TargetDefinition = { surface: 'web', baseUrl: 'https://app.example.test' };
 
 describe('originOf', () => {
   it('normalizes host case and default ports while retaining non-default ports', () => {

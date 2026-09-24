@@ -26,14 +26,14 @@ Generate options:
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
-  --grep <pattern>  --target <name>  --headed  --resolve  --update-cache  --allow-empty  --list
+  --grep <pattern>  --headed  --resolve  --update-cache  --allow-empty  --list
   --stale <fail>  --ai <claude|codex>  --json  --no-color
 
 Check options:
-  --target <name>  --allow-empty  --list  --json  --config <path>  --no-color
+  --allow-empty  --list  --json  --config <path>  --no-color
 
 Heal options:
-  --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
+  --dry-run  --yes, -y  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
 
 View options:
   --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color

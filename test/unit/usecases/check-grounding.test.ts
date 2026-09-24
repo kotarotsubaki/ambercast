@@ -15,17 +15,17 @@ import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js
 const GROUNDING_PATH = '/workspace/tests/login.ambercast.grounding.json';
 
 const plan = PlanDocument.parse({
-  schemaVersion: 3,
+  schemaVersion: 4,
   source: { inputsDigest: '0'.repeat(64) },
-  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } },
-  steps: [],
+  targets: { web: { surface: 'web', baseUrl: 'https://example.test' } },
+  steps: [{ id: 'visit', kind: 'action', action: 'navigate', target: 'web', url: '/' }],
 });
 
 function validGrounding(
   overrides: Partial<GroundingDocumentType> = {},
 ): GroundingDocumentType {
   return GroundingDocument.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     planDigest: computePlanDigest(plan),
     entries: {},
     ...overrides,
@@ -53,7 +53,8 @@ describe('inspectGroundingArtifact', () => {
   });
 
   it('classifies a wrong grounding schema version as invalid', async () => {
-    await expect(inspectStoredText(JSON.stringify({ ...validGrounding(), schemaVersion: 2 }))).resolves.toEqual({ kind: 'invalid' });
+    // SPEC-3: grounding v1 is the retired negative fixture under Plan v4.
+    await expect(inspectStoredText(JSON.stringify({ ...validGrounding(), schemaVersion: 1 }))).resolves.toEqual({ kind: 'invalid' });
   });
 
   it('classifies a grounding document missing a required field as invalid', async () => {

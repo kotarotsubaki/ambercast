@@ -9,7 +9,7 @@ description: "`PlanDocument` 是一个严格对象。"
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `3` | 计划格式版本。 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1207) |
+| `schemaVersion` | integer | required | literal `4` | 计划格式版本。 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1207) |
 | `source` | strict object | required | exactly `inputsDigest` | 新鲜度包装器。 | [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
 | `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | 生成输入的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
 | `generatorMeta` | record string → `JsonValue` | optional | JSON only | 从 `planDigest` 中排除的元数据。 | [src/core/ir/schema.ts:1189-1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189-L1193); [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128-L131) |
@@ -24,10 +24,10 @@ description: "`PlanDocument` 是一个严格对象。"
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "source": {"inputsDigest": "0000000000000000000000000000000000000000000000000000000000000000"},
-  "targets": {"app": {"baseUrl": "https://example.test", "browser": "chromium"}},
-  "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "url": "https://example.test"}]
+  "targets": {"app": {"surface": "web", "baseUrl": "https://example.test"}},
+  "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "target": "app", "url": "https://example.test"}]
 }
 ```
 

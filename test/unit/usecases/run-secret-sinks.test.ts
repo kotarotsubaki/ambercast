@@ -141,18 +141,25 @@ async function createFreshPlan(
   steps: readonly Step[],
 ): Promise<PlanDocument> {
   const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
-  const committedSteps = steps;
+  // SPEC-9/10: Plan v4 steps name the execution Target independently of
+  // their element locator. These historical fixtures used `target` as locator.
+  const committedSteps = steps.map((step) => {
+    const legacy = step as unknown as Record<string, unknown>;
+    const { target: oldTarget, ...rest } = legacy;
+    return { ...rest, target: 'web', ...(typeof oldTarget === 'object' && oldTarget !== null ? { element: oldTarget } : {}) };
+  });
+  const planTargets = { web: { surface: 'web' as const, baseUrl: TARGETS.web.baseUrl } };
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundleFingerprint(),
-    targetDefinitions: TARGETS,
+    targetDefinitions: planTargets,
   });
   const plan = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: { inputsDigest },
-    targets: TARGETS,
+    targets: planTargets,
     steps: committedSteps,
   } as unknown as PlanDocument;
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
@@ -169,7 +176,7 @@ async function seedFreshArtifacts(
   const plan = await createFreshPlan(storage, testPath, steps);
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding: GroundingDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     planDigest: computePlanDigest(plan),
     entries,
   };
@@ -403,7 +410,7 @@ describe('run secret sinks', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
         await evaluateTerminal(request.controller, {
           type: 'assert',
           check: 'text-visible',
@@ -451,7 +458,7 @@ describe('run secret sinks', () => {
     const rotatingSecrets = createRotatingSecretsProvider(SECRET_REF, [preScanValue, materializationValue]);
     const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     const priorTrace = {
-      events: [{ type: 'fill-secret' as const, target: secretTaintedTarget, secretRef: SECRET_REF }],
+      events: [{ type: 'fill-secret' as const, element: secretTaintedTarget, secretRef: SECRET_REF }],
       verification: [{ type: 'assert' as const, check: 'text-visible' as const, text: 'Cached dashboard' }],
     };
     await seedFreshArtifacts(
@@ -488,7 +495,7 @@ describe('run secret sinks', () => {
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: secretTaintedTarget, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'fill-secret', element: secretTaintedTarget, secretRef: SECRET_REF });
         return { outcome: 'success' };
       },
     });
@@ -530,9 +537,9 @@ describe('run secret sinks', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD, unsafeTarget]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
-        await request.controller.perform({ type: 'click', target: unsafeTarget });
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'click', element: unsafeTarget });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
         await evaluateTerminal(request.controller, { type: 'assert', check: 'text-visible', text: 'Dashboard' });
         return { outcome: 'success' };
       },
@@ -575,9 +582,9 @@ describe('run secret sinks', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
-        await request.controller.perform({ type: 'click', target: unsafeTarget });
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'click', element: unsafeTarget });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
         await evaluateTerminal(request.controller, { type: 'assert', check: 'text-visible', text: 'Dashboard' });
         return { outcome: 'success' };
       },
@@ -587,7 +594,8 @@ describe('run secret sinks', () => {
     const testPath = await writePrompt(recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       aiStep(),
-      { id: 'later-ordinary-assertion', kind: 'assert', check: 'element-visible', target: SUBMIT },
+      // SPEC-17: one failing observation is enough for this persistence-path fixture.
+      { id: 'later-ordinary-assertion', kind: 'assert', check: 'element-visible', target: 'web', element: SUBMIT, timeoutMs: 0 },
     ], elementGrounding(['later-ordinary-assertion']));
     recordingStorage.writes.length = 0;
 
@@ -611,7 +619,7 @@ describe('run secret sinks', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]));
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
         await evaluateTerminal(request.controller, { type: 'assert', check: 'text-visible', text: 'Dashboard' });
         return { outcome: 'success' };
       },
@@ -621,6 +629,7 @@ describe('run secret sinks', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [{
       id: authoredStepId,
       kind: 'ai',
+      target: 'web',
       instruction: 'Complete the sign-in flow and verify the dashboard.',
       instructionCoverage: [{ id: SUCCESS_CRITERION_ID, kind: 'success', sourceSpan: SUCCESS_SOURCE_SPAN }],
       secrets: [{ ref: SECRET_REF }],
@@ -640,7 +649,8 @@ describe('run secret sinks', () => {
         id: 'fill-token',
         kind: 'action',
         action: 'fill',
-        target: PASSWORD,
+        target: 'web',
+        element: PASSWORD,
         value: SECRET_VALUE,
       }],
       ambiguities: [],
@@ -668,8 +678,8 @@ describe('run secret sinks', () => {
     const failedScenario = createRunScenario(failedSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
     const failedPath = await writePrompt(failedScenario.recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(failedScenario.recordingStorage.storage, failedPath, [
-      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF },
-      { id: 'secret-assertion', kind: 'assert', check: 'text-equals', target: PASSWORD, text: 'Dashboard' },
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD, secretRef: SECRET_REF },
+      { id: 'secret-assertion', kind: 'assert', check: 'text-equals', target: 'web', element: PASSWORD, text: 'Dashboard' },
     ], elementGrounding(['fill-secret', 'secret-assertion']));
     const failedOutcome = await run(failedScenario.deps, RUN_OPTIONS);
 
@@ -683,8 +693,8 @@ describe('run secret sinks', () => {
     const exceptionScenario = createRunScenario(exceptionSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
     const exceptionPath = await writePrompt(exceptionScenario.recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(exceptionScenario.recordingStorage.storage, exceptionPath, [
-      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF },
-      { id: 'go-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD, secretRef: SECRET_REF },
+      { id: 'go-dashboard', kind: 'action', action: 'navigate', target: 'web', url: '/dashboard' },
     ], elementGrounding(['fill-secret']));
     const exceptionOutcome = await run(exceptionScenario.deps, RUN_OPTIONS);
 
@@ -710,8 +720,8 @@ describe('run secret sinks', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await request.controller.perform({ type: 'fill-secret', target: PASSWORD, secretRef: SECRET_REF });
-        await request.controller.perform({ type: 'fill', target: EMAIL, value: 'ordinary provider value' });
+        await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef: SECRET_REF });
+        await request.controller.perform({ type: 'fill', element: EMAIL, value: 'ordinary provider value' });
         return { outcome: 'success' };
       },
     });
@@ -782,7 +792,7 @@ describe('run secret sinks', () => {
     await seedFreshArtifacts(
       runScenario.recordingStorage.storage,
       testPath,
-      [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT }],
+      [{ id: 'click-submit', kind: 'action', action: 'click', target: 'web', element: SUBMIT }],
       elementGrounding(['click-submit']),
     );
 

@@ -30,7 +30,14 @@ function withLiveVersion(manifestLike: { version: string }, version: string) {
 const fixtureCliManifest = JSON.parse(
   readFileSync(new URL('../../fixtures/cli-manifest.json', import.meta.url), 'utf8'),
 );
-const expectedCliManifest = withLiveVersion(fixtureCliManifest, pkg.version);
+// SPEC-9: the frozen CLI fixture predates removal of --target from run/check/heal.
+const expectedCliManifest = withLiveVersion({
+  ...fixtureCliManifest,
+  commands: fixtureCliManifest.commands.map((command: { name: string; flags: Array<{ name: string }> }) =>
+    ['run', 'check', 'heal'].includes(command.name)
+      ? { ...command, flags: command.flags.filter((flag) => flag.name !== 'target') }
+      : command),
+}, pkg.version);
 
 const EXPECTED_REPORT_ERROR_CODES = [
   'CONFIG_INVALID',
@@ -93,7 +100,7 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['init', 'generate', 'run', 'check', 'heal', 'view'],
           planned: ['review', 'mcp', 'baseline', 'restore'],
-          schemaVersions: { plan: 3, grounding: 1, report: '3.6' },
+          schemaVersions: { plan: 4, grounding: 2, report: '3.7' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
@@ -155,7 +162,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['init', 'generate', 'run', 'check', 'heal', 'view'],
       planned: ['review', 'mcp', 'baseline', 'restore'],
-      schemaVersions: { plan: 3, grounding: 1, report: '3.6' },
+      schemaVersions: { plan: 4, grounding: 2, report: '3.7' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,
@@ -232,7 +239,7 @@ describe('writeGeneratedArtifacts', () => {
     });
   });
 
-  it('emits Plan-v3 required coverage and additive Grounding-v1 coverage fields', () => {
+  it('emits Plan-v4 required coverage and additive Grounding-v2 coverage fields', () => {
     const writes = captureGeneratedArtifactWrites();
     const planText = artifactContent(writes, 'schema/plan.schema.json');
     const groundingText = artifactContent(writes, 'schema/grounding.schema.json');
@@ -241,8 +248,8 @@ describe('writeGeneratedArtifacts', () => {
     expect(planText).toContain('sourceSpan');
     expect(planText).toContain('startColumn');
     expect(planText).toContain('endColumn');
-    expect(planText).toMatch(/"const":3/);
+    expect(planText).toMatch(/"const":4/);
     expect(groundingText).toContain('verificationCoverage');
-    expect(groundingText).toMatch(/"const":1/);
+    expect(groundingText).toMatch(/"const":2/);
   });
 });

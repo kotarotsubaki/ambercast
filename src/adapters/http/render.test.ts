@@ -19,7 +19,7 @@ if (envelope.command !== 'run') throw new Error('Expected run envelope');
 const readable = (overrides: Partial<typeof envelope> = {}, id = runId): RunListing => ({ kind: 'readable', runId: id, envelope: { ...envelope, ...overrides } });
 const executed = (overrides: Record<string, unknown> = {}) => ({
   id: 'case-id', file: 'case.test.md', planFile: 'case.ambercast.plan.json',
-  status: 'failed' as const, durationMs: 850, aiCalls: 0, steps: [], explanation: 'Failure explained', ...overrides,
+  status: 'failed' as const, durationMs: 850, aiCalls: 0, sessions: {}, steps: [], explanation: 'Failure explained', ...overrides,
 });
 
 function fixedCopyValues(value: unknown): Set<string> {
@@ -133,7 +133,7 @@ describe('renderRunDetail', () => {
 
   it('renders present diagnostics, screenshot and observed snapshot', () => {
     const ref = 'screenshots/a b&c.png';
-    const html = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'assert-1', type: 'assert', status: 'failed', expected: 'Expected value', actual: 'Actual value', screenshot: ref, observed: { note: OBSERVED_NOTE, accessibilitySnapshot: 'button Save' } }] })] }));
+    const html = renderRunDetail(readable({ results: [executed({ steps: [{ id: 'assert-1', type: 'assert', target: 'default', status: 'failed', expected: 'Expected value', actual: 'Actual value', screenshot: ref, observed: { note: OBSERVED_NOTE, accessibilitySnapshot: 'button Save' } }] })] }));
     expect(html).toContain(VIEW_COPY.detail.failedStep.expected);
     expect(html).toContain('Expected value');
     expect(html).toContain(VIEW_COPY.detail.failedStep.actual);
@@ -146,8 +146,8 @@ describe('renderRunDetail', () => {
 
   it('omits absent diagnostics and suppresses even a present secret screenshot', () => {
     const html = renderRunDetail(readable({ results: [executed({ steps: [
-      { id: 'failed', type: 'assert', status: 'failed' },
-      { id: 'secret', type: 'assert', status: 'error', screenshot: 'secret.png', screenshotOmitted: 'secret-detected' },
+      { id: 'failed', type: 'assert', target: 'default', status: 'failed' },
+      { id: 'secret', type: 'assert', target: 'default', status: 'error', screenshot: 'secret.png', screenshotOmitted: 'secret-detected' },
     ] })] }));
     expect(html).not.toContain('Expected');
     expect(html).not.toContain('Actual');
@@ -170,7 +170,7 @@ describe('renderRunDetail', () => {
 describe('HTML injection boundaries', () => {
   it('escapes report-controlled text in list and detail, including attributes', () => {
     const attack = '<script>alert(1)</script>" onmouseover="&';
-    const listing = readable({ results: [executed({ id: attack, file: attack, planFile: attack, explanation: attack, steps: [{ id: attack, type: 'assert', status: 'failed', expected: attack, actual: attack, screenshot: attack, observed: { note: OBSERVED_NOTE, accessibilitySnapshot: attack } }] })], errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: attack }] });
+    const listing = readable({ results: [executed({ id: attack, file: attack, planFile: attack, explanation: attack, steps: [{ id: attack, type: 'assert', target: 'default', status: 'failed', expected: attack, actual: attack, screenshot: attack, observed: { note: OBSERVED_NOTE, accessibilitySnapshot: attack } }] })], errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: attack }] });
     for (const html of [renderRunList([listing]), renderRunDetail(listing)]) {
       expect(html).not.toContain('<script');
       expect(html).not.toContain('" onmouseover="');

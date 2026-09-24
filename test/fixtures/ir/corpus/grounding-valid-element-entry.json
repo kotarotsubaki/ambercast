@@ -2,12 +2,15 @@
   "document": "grounding",
   "expected": "valid",
   "value": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "login-flow": {
         "kind": "element",
-        "fingerprint": { "algorithm": "a11y-neighborhood-v2", "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }
+        "fingerprint": {
+          "algorithm": "a11y-neighborhood-v2",
+          "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
       }
     }
   }

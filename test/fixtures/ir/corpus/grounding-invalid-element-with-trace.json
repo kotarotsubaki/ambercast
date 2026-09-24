@@ -2,13 +2,25 @@
   "document": "grounding",
   "expected": "invalid",
   "value": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "step": {
         "kind": "element",
-        "fingerprint": { "algorithm": "a11y-neighborhood-v2", "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
-        "trace": [{ "type": "click", "target": { "strategy": "accessibility", "role": "button", "name": "Submit" } }]
+        "fingerprint": {
+          "algorithm": "a11y-neighborhood-v2",
+          "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "trace": [
+          {
+            "type": "click",
+            "element": {
+              "strategy": "accessibility",
+              "role": "button",
+              "name": "Submit"
+            }
+          }
+        ]
       }
     }
   }

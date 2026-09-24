@@ -20,6 +20,7 @@ function createMutableClock(initialMs = 0): {
     clock: {
       now: () => new Date('2026-09-09T00:00:00.000Z'),
       monotonicMs,
+      sleep: async () => {},
     },
     monotonicMs,
     set(next): void {
@@ -239,6 +240,7 @@ describe('createStderrProgressSink()', () => {
     const clockFailure = new Error('clock unavailable');
     const clock: Clock = {
       now: () => new Date('2026-09-09T00:00:00.000Z'),
+      sleep: async () => {},
       monotonicMs: vi.fn(() => {
         throw clockFailure;
       }),
@@ -335,6 +337,7 @@ describe('createStderrProgressSink()', () => {
     const clock: Clock = {
       now: () => new Date(Date.now()),
       monotonicMs: () => Date.now(),
+      sleep: async () => {},
     };
     const sink = createStderrProgressSink({
       command: 'generate',
@@ -506,6 +509,7 @@ describe('createStderrProgressSink()', () => {
     const clockFailure = new Error('clock failed');
     const clock: Clock = {
       now: () => new Date('2026-09-09T00:00:00.000Z'),
+      sleep: async () => {},
       monotonicMs: vi.fn(() => {
         throw clockFailure;
       }),
@@ -537,7 +541,7 @@ describe('createStderrProgressSink()', () => {
       stderr: stderr.stderr,
       projectRoot: '/workspace',
       isCI: false,
-      clock: { now: () => new Date('2026-09-09T00:00:00.000Z'), monotonicMs },
+      clock: { now: () => new Date('2026-09-09T00:00:00.000Z'), monotonicMs, sleep: async () => {} },
     });
     sink.emit(aiCall());
 

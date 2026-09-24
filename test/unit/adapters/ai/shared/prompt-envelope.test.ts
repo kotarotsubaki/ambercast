@@ -142,7 +142,7 @@ describe('prompt envelope', () => {
       allowedSecretRefs: ['{{secrets.LOGIN_PASSWORD}}'],
       allowedRunRefs: ['sessionId'],
       priorTrace: {
-        events: [{ type: 'click', target: { strategy: 'accessibility', role: 'button', name: 'Continue' } }],
+        events: [{ type: 'click', element: { strategy: 'accessibility', role: 'button', name: 'Continue' } }],
         verification: [{ type: 'assert', check: 'url-matches', pattern: '/dashboard' }],
       },
     });

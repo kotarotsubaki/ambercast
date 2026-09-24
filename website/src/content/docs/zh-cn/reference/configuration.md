@@ -27,6 +27,8 @@ description: 本页定义了配置键及其解析逻辑。
 | `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含匹配后排除 | generate、run、check、heal 发现 |
 | `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空数组要求所有 secret 名称都需同意；`"*"` 允许所有名称且无需同意（不推荐）；非空数组仅允许其中列出的名称 | generate、run、heal |
 | `targets.<name>.baseUrl` | string | `web-user` 上的 `http://localhost:3000` | 替换整个 target 记录 | generate、run、check、heal 目标选择 |
+| `targets.<name>.surface` | `web` | absent | TP1 仅支持 `web` | generate 与 Plan 目标定义 |
+| `targets.<name>.description` | string | 无 | 可选的生成上下文 | generate |
 | `targets.<name>.browser` | `chromium` | `web-user` 上的 `chromium` | target 字段 | generate、run、heal 浏览器编排；check（新鲜度） |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | 缺省 secret 条目时仅允许 `baseUrl`；空数组将在所有位置拒绝该 secret；非空数组替换该默认值 | generate、run、heal 的 secret 接收方策略；check（新鲜度） |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal 要求所选目标必须为 `idempotent` | heal |

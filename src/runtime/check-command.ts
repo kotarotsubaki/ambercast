@@ -35,8 +35,6 @@ export interface CheckCommandInput {
   /** Literal prompt paths, or an empty list for configured discovery. */
   readonly files: readonly string[];
 
-  /** Optional configured target override. */
-  readonly target?: string;
 
   /** Whether a genuinely empty inspection is accepted. */
   readonly allowEmpty: boolean;
@@ -132,7 +130,6 @@ export async function runCheckCommand(input: CheckCommandInput): Promise<CheckCo
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     }, {
       files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-      ...(input.target === undefined ? {} : { target: input.target }),
       allowEmpty: input.allowEmpty,
       list: input.list,
     });

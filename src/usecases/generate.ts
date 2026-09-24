@@ -46,7 +46,7 @@ import {
 } from '#core/ir/schema.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
 import { joinPath } from '#core/paths.js';
-import { resolveTarget } from '#core/target/resolve.js';
+import { projectPlanTargets, resolveTarget } from '#core/target/resolve.js';
 import type { AiExecutor } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink } from '#ports/system.js';
@@ -237,12 +237,21 @@ function fileFailure(error: unknown, message: string): AmbercastErrorType {
  */
 function validFreshPlan(
   text: string,
-  inputsDigest: string,
+  configTargets: GenerateDeps['config']['targets'],
+  allowedTargetNames: readonly string[],
   normalizedTestMd: NormalizedTestMd,
 ): PlanDocumentType | undefined {
   try {
     const parsed = PlanDocument.safeParse(JSON.parse(text));
-    if (!parsed.success || parsed.data.source.inputsDigest !== inputsDigest) {
+    if (!parsed.success) {
+      return undefined;
+    }
+    const referenced = [...new Set(parsed.data.steps.map((step) => step.target))];
+    if (referenced.some((name) => !allowedTargetNames.includes(name) || !Object.hasOwn(configTargets, name))
+      || parsed.data.source.inputsDigest !== deriveCurrentPlanInputProvenance({
+        normalizedTestMd,
+        targetDefinitions: projectPlanTargets(referenced, configTargets),
+      }).inputsDigest) {
       return undefined;
     }
 
@@ -265,14 +274,15 @@ function validFreshPlan(
 async function freshPlan(
   storage: StorageAdapter,
   planPath: string,
-  inputsDigest: string,
+  configTargets: GenerateDeps['config']['targets'],
+  allowedTargetNames: readonly string[],
   normalizedTestMd: NormalizedTestMd,
 ): Promise<PlanDocumentType | undefined> {
   if (!(await storage.exists(planPath))) {
     return undefined;
   }
 
-  return validFreshPlan(await storage.readText(planPath), inputsDigest, normalizedTestMd);
+  return validFreshPlan(await storage.readText(planPath), configTargets, allowedTargetNames, normalizedTestMd);
 }
 
 function emptyGrounding(plan: PlanDocumentType): GroundingDocumentType {
@@ -724,7 +734,7 @@ function secretRowsForPlan(
 function consentRowsForPlan(plan: PlanDocumentType, rows: readonly GenerateSecretOutcome[]): GenerateSecretOutcome[] {
   const targets = new Map<StepId, ElementRef>();
   for (const step of plan.steps) {
-    if (step.kind === 'action' && step.action === 'fill-secret') targets.set(step.id, step.target);
+    if (step.kind === 'action' && step.action === 'fill-secret') targets.set(step.id, step.element);
   }
   return enumerateSecretUses(plan).map(({ ref, stepId, useIndex }) => {
     const row = rows.find((use) => use.stepId === stepId && use.name === secretNameFor(ref));
@@ -741,7 +751,7 @@ function existingPlanWarnings(plan: PlanDocumentType): SecretWarning[] {
   for (const step of plan.steps) {
     if (step.kind !== 'action' || step.action !== 'fill-secret') continue;
     const name = secretNameFor(step.secretRef);
-    groups.set(name, [...(groups.get(name) ?? []), { stepId: step.id, target: JSON.stringify(step.target) }]);
+    groups.set(name, [...(groups.get(name) ?? []), { stepId: step.id, target: JSON.stringify(step.element) }]);
   }
   return [...groups.entries()]
     .filter(([, uses]) => new Set(uses.map(({ target }) => target)).size > 1)
@@ -812,7 +822,7 @@ function targetChangeWarnings(previous: PlanDocumentType | undefined, next: Plan
   const oldTargets = new Map<string, unknown>();
   for (const step of previous.steps) {
     if (step.kind === 'action' && step.action === 'fill-secret') {
-      oldTargets.set(`${secretNameFor(step.secretRef)}\u0000${step.id}`, step.target);
+      oldTargets.set(`${secretNameFor(step.secretRef)}\u0000${step.id}`, step.element);
     }
   }
   const warnings: SecretWarning[] = [];
@@ -820,8 +830,8 @@ function targetChangeWarnings(previous: PlanDocumentType | undefined, next: Plan
     if (step.kind !== 'action' || step.action !== 'fill-secret') continue;
     const key = `${secretNameFor(step.secretRef)}\u0000${step.id}`;
     const previousTarget = oldTargets.get(key);
-    if (previousTarget !== undefined && JSON.stringify(previousTarget) !== JSON.stringify(step.target)) {
-      warnings.push({ kind: 'secret-target-changed', name: secretNameFor(step.secretRef), stepId: step.id, previousTarget: previousTarget as never, target: step.target });
+    if (previousTarget !== undefined && JSON.stringify(previousTarget) !== JSON.stringify(step.element)) {
+      warnings.push({ kind: 'secret-target-changed', name: secretNameFor(step.secretRef), stepId: step.id, previousTarget: previousTarget as never, target: step.element });
     }
   }
   return warnings.sort(compareSecretWarnings);
@@ -913,7 +923,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           continue;
         }
 
-        const targetSelection = resolveTarget({
+        const targetSelection = options.target === undefined ? undefined : resolveTarget({
           targets: deps.config.targets,
           defaultTarget: deps.config.defaultTarget,
           explicitTarget: options.target,
@@ -922,14 +932,20 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           results.push({ file, status: 'failed', error: targetSelection, ...metrics() });
           continue;
         }
-        const resolvedTargets = targetSelection.definitions;
+        const allowedTargetNames = options.target === undefined ? Object.keys(deps.config.targets) : [options.target];
+        const resolvedTargets = projectPlanTargets(allowedTargetNames, deps.config.targets);
+        const contextTargets = Object.fromEntries(allowedTargetNames.map((name) => {
+          const target = deps.config.targets[name]!;
+          return [name, { surface: target.surface ?? 'web', baseUrl: target.baseUrl,
+            ...(target.description === undefined ? {} : { description: target.description }) }];
+        }));
         const secretAllow = deps.config.secrets?.allow ?? [];
 
         const provenance = deriveCurrentPlanInputProvenance({
           normalizedTestMd,
           targetDefinitions: resolvedTargets,
         });
-        const { inputsDigest, producerBundleFingerprint, producerBundleInputs } = provenance;
+        const { producerBundleFingerprint, producerBundleInputs } = provenance;
         const planPath = deps.layout.planPathFor(file);
         const groundingPath = deps.layout.groundingPathFor(file);
 
@@ -952,7 +968,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
 
         let existingPlan: PlanDocumentType | undefined;
         try {
-          existingPlan = await freshPlan(deps.storage, planPath, inputsDigest, normalizedTestMd);
+          existingPlan = await freshPlan(deps.storage, planPath, deps.config.targets, allowedTargetNames, normalizedTestMd);
         } catch (error) {
           results.push({ file, status: 'failed', error: fsIoError('The existing plan could not be read.', error), ...metrics() });
           continue;
@@ -1022,12 +1038,19 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           };
 
           const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
+          // In v4 context targets include every allowed Target's surface,
+          // baseUrl, and optional description; defaultTarget is separate and
+          // omitted when --target restricts the set. The one-Target prompt
+          // requires the provider to assign that name to every step.
+          const targetInstruction = allowedTargetNames.length === 1
+            ? `Assign target: ${allowedTargetNames[0]} to every step. Do not report target ambiguity.`
+            : 'Assign a target name to every step using the prompt and context.targets. If a step does not identify a target, use context.defaultTarget when provided; otherwise list that step in ambiguities.';
           const request = {
-            prompt: buildGeneratorTask(GENERATE_PLAN_TASK_INSTRUCTION),
+            prompt: buildGeneratorTask(`${GENERATE_PLAN_TASK_INSTRUCTION} ${targetInstruction}`),
             responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
             context: (attempt === 1
-              ? { testMd: toAnchoredLines(normalizedTestMd), targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names }
-              : { testMd: toAnchoredLines(normalizedTestMd), targets: resolvedTargets, allowedSecretNames: projectAllowedNames(secretAllow).names, previousAttempts }) as unknown as JsonValueT,
+              ? { testMd: toAnchoredLines(normalizedTestMd), targets: contextTargets, ...(options.target === undefined && deps.config.defaultTarget !== undefined ? { defaultTarget: deps.config.defaultTarget } : {}), allowedSecretNames: projectAllowedNames(secretAllow).names }
+              : { testMd: toAnchoredLines(normalizedTestMd), targets: contextTargets, ...(options.target === undefined && deps.config.defaultTarget !== undefined ? { defaultTarget: deps.config.defaultTarget } : {}), allowedSecretNames: projectAllowedNames(secretAllow).names, previousAttempts }) as unknown as JsonValueT,
             signal: deadline.signal,
           };
           const callId = deps.allocateCallId();
@@ -1056,6 +1079,10 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
 
           // Parsed-value traversal keeps dynamic provider data non-disclosive even
           // where generated-schema structure cannot identify the true container.
+          // V4 validates the required step target and membership in the
+          // offered set before inspecting ambiguities. Missing or foreign
+          // names are AI response errors even for a one-Target request; the
+          // use case never supplies a missing name on the provider's behalf.
           const parsedResponse = GeneratedPlanResponseForPolicy.safeParse(response.data);
           if (!parsedResponse.success) {
             return outcomeForError(new AiResponseInvalidError(
@@ -1067,6 +1094,12 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
                   path: redactDynamicPathSegments(response.data, issue.path),
                 })),
               },
+            ));
+          }
+          if (parsedResponse.data.steps.some((step) => !Object.hasOwn(resolvedTargets, step.target))) {
+            return outcomeForError(new AiResponseInvalidError(
+              'The AI provider response references a target outside the generation context.',
+              { raw: response.raw, issues: [{ code: 'schema-mismatch', path: ['steps'] }] },
             ));
           }
 
@@ -1108,9 +1141,18 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           } catch (error) {
             return outcomeForError(fileFailure(error, 'The generated secret uses could not be normalized.'));
           }
+          // In v4 this candidate projects only Target names actually used by
+          // valid response steps, keeping unrelated config out of freshness.
+          const projectedTargets = projectPlanTargets(normalizedSteps.map((step) => step.target), deps.config.targets);
+          // Reuse the snapshot already captured for this file when generation
+          // references the whole offered set, keeping the digest and bundle
+          // diagnostics paired to one live producer snapshot.
+          const projectedProvenance = Object.keys(projectedTargets).length === Object.keys(resolvedTargets).length
+            ? provenance
+            : deriveCurrentPlanInputProvenance({ normalizedTestMd, targetDefinitions: projectedTargets });
           const candidate = {
             schemaVersion: PLAN_SCHEMA_VERSION,
-            source: { inputsDigest },
+            source: { inputsDigest: projectedProvenance.inputsDigest },
             generatorMeta: {
               ...(response.data.generatorMeta ?? {}),
               planProducerBundle: {
@@ -1118,7 +1160,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
                 components: planProducerBundleComponentDiagnostics(producerBundleInputs),
               },
             },
-            targets: resolvedTargets,
+            targets: projectedTargets,
             steps: normalizedSteps,
           };
           // Candidate-value traversal preserves the same non-disclosure invariant
@@ -1163,6 +1205,11 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             ...(projection.dropped === 0 ? [] : [{ kind: 'allowed-names-truncated' as const, kept: projection.kept, dropped: projection.dropped }]),
           ].sort(compareSecretWarnings);
 
+          if (response.data.ambiguities.length > 0) {
+            return { kind: 'terminal', error: new (class extends AmbercastError {
+              readonly kind = 'assertion-failed' as const;
+            })('The generated plan has unresolved target ambiguities.') };
+          }
           if (options.dryRun) {
             return {
               kind: 'success',

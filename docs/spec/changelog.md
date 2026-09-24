@@ -4,6 +4,9 @@
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
+| grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
+| report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |
 | Plan v1 → v2 adds instruction coverage | repo:src/core/ir/schema.ts:45, repo:src/core/ir/schema.ts:1185 | Producers and consumers MUST reject v1 and regenerate or report it stale; they MUST NOT migrate it in place. [repo:src/core/ir/schema.ts:50] |
 | fingerprint v1 → v2 | repo:CHANGELOG.md:78 | v2 is the only accepted tag. A current-provenance document with a coverage claim MUST fail integrity if strict/canonical validation then fails; a companion without that claim may be a cache miss in `run`, while `check` grounding inspection classifies schema-invalid content as `invalid` (public status per [[spec/freshness#freshness-consequences]]). [repo:src/usecases/run.ts:498] [repo:src/usecases/check-grounding.ts:45] |
 | producer bundle fingerprint enters `inputsDigest` | repo:CHANGELOG.md:8 | Plans generated before the change MUST be regenerated because they are stale. [repo:CHANGELOG.md:8] |

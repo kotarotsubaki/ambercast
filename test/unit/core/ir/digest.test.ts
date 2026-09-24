@@ -13,7 +13,7 @@ const DIGEST_A = 'a'.repeat(64);
 const DIGEST_B = 'b'.repeat(64);
 
 function targetDefinition(baseUrl = 'https://example.test'): TargetDefinition {
-  return { baseUrl, browser: 'chromium' };
+  return { surface: 'web', baseUrl };
 }
 
 function asNormalizedTestMd(value: string): NormalizedTestMd {
@@ -23,7 +23,7 @@ function asNormalizedTestMd(value: string): NormalizedTestMd {
 function createInputs(overrides: Partial<DigestInputs> = {}): DigestInputs {
   return {
     normalizedTestMd: asNormalizedTestMd('# Smoke\n'),
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatorPromptTemplateFingerprint: 'generator-template-v2',
     planProducerBundleFingerprint: 'producer-bundle-v1',
     targetDefinitions: { app: targetDefinition() },
@@ -43,13 +43,14 @@ function createPlan({
   generatorMeta?: Record<string, JsonValueT>;
 } = {}): PlanDocument {
   return PlanDocument.parse({
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: { inputsDigest },
     ...(generatorMeta === undefined ? {} : { generatorMeta }),
     targets: { app: targetDefinition(targetBaseUrl) },
     steps: [
       {
         id: 'navigate-home',
+        target: 'app',
         kind: 'action',
         action: 'navigate',
         url: navigateUrl,
@@ -60,7 +61,7 @@ function createPlan({
 
 function createGrounding(planDigest: string): GroundingDocument {
   return GroundingDocument.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     planDigest,
     entries: {},
   });
@@ -86,10 +87,10 @@ describe('computeInputsDigest', () => {
   });
 
   // The expected SHA-256 was calculated without calling the implementation.
-  // Its exact JCS preimage is {"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":3,"targetDefinitions":{"app":{"baseUrl":"https://example.test","browser":"chromium"}}}.
-  // Command: printf '%s' '{"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":3,"targetDefinitions":{"app":{"baseUrl":"https://example.test","browser":"chromium"}}}' | shasum -a 256
+  // SPEC-1 and SPEC-4 bind the oracle to Plan v4 and the web surface rather than a browser choice.
+  // Its exact JCS preimage is {"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":4,"targetDefinitions":{"app":{"baseUrl":"https://example.test","surface":"web"}}}.
   it('matches the independently derived SHA-256 oracle for the fixed preimage', () => {
-    expect(computeInputsDigest(createInputs())).toBe('e0832090f6b1ec5529df5c702ea594767d1bee3a1842606624373f7cca42b9d2');
+    expect(computeInputsDigest(createInputs())).toBe('8fb2ca4bdceb738e1592987be8c4a11df9e2c6d8baa351b2eb62bb1a047f941a');
   });
 
   // The `-?` modifier prevents a future optional DigestInputs field from silently evading this completeness check.

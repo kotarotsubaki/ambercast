@@ -54,29 +54,29 @@ async function fixtureProject(): Promise<string> {
 
 async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true): Promise<void> {
   const targetDefinitions = {
-    replacement: { baseUrl: 'https://replacement.example.test', browser: 'chromium' as const },
+    replacement: { surface: 'web' as const, baseUrl: 'https://replacement.example.test' },
   };
   await writeFile(join(project, 'ambercast.config.json'), JSON.stringify({
     $schema: 'https://ambercast.dev/schema/config.json',
     testDir: 'tests',
     runsDir: 'tests/.runs',
-    targets: targetDefinitions,
+    targets: { replacement: { baseUrl: targetDefinitions.replacement.baseUrl, browser: 'chromium' } },
     ai: { provider: 'codex' },
     ci: { heal: ciHeal },
   }));
   const plan = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(FIXTURE_PROMPT),
-        schemaVersion: 3,
+        schemaVersion: 4,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions,
       }),
     },
     targets: targetDefinitions,
-    steps: [],
+    steps: [{ id: 'step-1', target: 'replacement', kind: 'action', action: 'navigate', url: 'https://replacement.example.test' }],
   } as unknown as PlanDocument;
   await writeFile(
     join(project, 'tests', 'test.ambercast.plan.json'),
@@ -84,16 +84,16 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
   );
   await writeFile(
     join(project, 'tests', 'test.ambercast.grounding.json'),
-    toCanonicalArtifactText({ schemaVersion: 1, planDigest: computePlanDigest(plan), entries: {} }),
+    toCanonicalArtifactText({ schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} }),
   );
 }
 
 async function writeStalePlan(project: string): Promise<void> {
   await writeFile(join(project, 'tests', 'test.ambercast.plan.json'), toCanonicalArtifactText({
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: { inputsDigest: 'f'.repeat(64) },
-    targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } },
-    steps: [],
+    targets: { web: { surface: 'web', baseUrl: 'https://example.test' } },
+    steps: [{ id: 'step-1', target: 'web', kind: 'action', action: 'navigate', url: 'https://example.test' }],
   } as unknown as JsonValueT));
 }
 
@@ -141,7 +141,7 @@ describe('bin/ambercast.js (e2e)', () => {
     expect(result.exitCode).toBe(0);
     const envelope = JSON.parse(result.stdout);
     expect(ReportEnvelope.safeParse(envelope).success).toBe(true);
-    expect(envelope.schemaVersion).toBe('3.6');
+    expect(envelope.schemaVersion).toBe('3.7');
     expect(envelope.results).toEqual([expect.objectContaining({ file: expect.stringContaining('test.test.md'), status: 'listed' })]);
   });
 
@@ -190,23 +190,29 @@ describe('bin/ambercast.js (e2e)', () => {
     });
   });
 
-  it.each(['generate', 'run', 'check'] as const)(
-    'reports an invalid explicit target through %s as TARGET_UNRESOLVED with exit 2',
-    async (command) => {
+  it('reports an invalid explicit target through generate as TARGET_UNRESOLVED with exit 2', async () => {
       const project = await fixtureProject();
 
-      const result = await runCli([command, '--target', 'missing', '--json'], project);
+      const result = await runCli(['generate', '--target', 'missing', '--json'], project);
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toBe('');
       const envelope = JSON.parse(result.stdout);
       expect(ReportEnvelope.safeParse(envelope).success).toBe(true);
-      expect(envelope.command).toBe(command);
+      expect(envelope.command).toBe('generate');
       expect(envelope.errors).toEqual([
         expect.objectContaining({ code: 'TARGET_UNRESOLVED' }),
       ]);
-    },
-  );
+  });
+
+  it.each(['run', 'check'] as const)('%s rejects --target as a usage error with exit 2', async (command) => {
+    const project = await fixtureProject();
+    const result = await runCli([command, '--target', 'missing', '--json'], project);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/unknown|unrecognized|usage/i);
+    expect(result.stdout).toBe('');
+  });
 
   it('loads one replacement target without inheriting the built-in default and checks a fresh plan', async () => {
     const project = await fixtureProject();

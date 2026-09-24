@@ -2,20 +2,44 @@
   "document": "plan",
   "expected": "invalid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "baseUrl": "https://example.test",
+        "surface": "web"
+      }
+    },
     "steps": [
       {
         "id": "find-settings",
         "kind": "ai",
         "instruction": "Open account settings",
-        "instructionCoverage": [{
-          "id": "settings-open",
-          "kind": "success",
-          "sourceSpan": { "startLine": 1, "startColumn": 1, "endLine": 1, "endColumn": 22 }
-        }],
-        "trace": [{ "type": "click", "target": { "strategy": "accessibility", "role": "link", "name": "Settings" } }]
+        "instructionCoverage": [
+          {
+            "id": "settings-open",
+            "kind": "success",
+            "sourceSpan": {
+              "startLine": 1,
+              "startColumn": 1,
+              "endLine": 1,
+              "endColumn": 22
+            }
+          }
+        ],
+        "trace": [
+          {
+            "type": "click",
+            "target": {
+              "strategy": "accessibility",
+              "role": "link",
+              "name": "Settings"
+            }
+          }
+        ],
+        "target": "app"
       }
     ]
   }

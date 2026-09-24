@@ -55,8 +55,8 @@ async function unauthorizedRequest(url: string, token?: string): Promise<Respons
   });
 }
 
-const action = { type: 'click', target: { strategy: 'accessibility', role: 'button', name: 'Continue' } } as never;
-const check = { type: 'assert', check: 'element-visible', target: { strategy: 'accessibility', role: 'heading', name: 'Done' } } as never;
+const action = { type: 'click', element: { strategy: 'accessibility', role: 'button', name: 'Continue' } } as never;
+const check = { type: 'assert', check: 'element-visible', element: { strategy: 'accessibility', role: 'heading', name: 'Done' } } as never;
 type McpServer = Awaited<ReturnType<typeof startAgenticMcpServer>>;
 type ToolName = 'ambercast_perform' | 'ambercast_evaluate_assert' | 'ambercast_snapshot';
 type SchemaMismatchIssue = { readonly code: string; readonly path: readonly (string | number)[]; readonly expected?: string; readonly values?: readonly unknown[]; readonly keyCount?: number };
@@ -387,7 +387,7 @@ describe('startAgenticMcpServer', () => {
     const server = await startAgenticMcpServer(controller);
     const responseBodies: string[] = [];
     const client = await connectClient(server.url, server.token, responseBodies);
-    const fillSecret = { type: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef } as never;
+    const fillSecret = { type: 'fill-secret', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef } as never;
 
     const first = await client.callTool({ name: 'ambercast_perform', arguments: { action: fillSecret } });
     const latched = server.peekLatchedError();
@@ -410,7 +410,7 @@ describe('startAgenticMcpServer', () => {
     const server = await startAgenticMcpServer(controller);
     const responseBodies: string[] = [];
     const client = await connectClient(server.url, server.token, responseBodies);
-    const fill = { type: 'fill', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, value: secretValue };
+    const fill = { type: 'fill', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, value: secretValue };
 
     const result = await client.callTool({ name: 'ambercast_perform', arguments: { action: fill, extra: true } });
 
@@ -431,7 +431,7 @@ describe('startAgenticMcpServer', () => {
     const server = await startAgenticMcpServer(controller);
     const responseBodies: string[] = [];
     const client = await connectClient(server.url, server.token, responseBodies);
-    const fillSecret = { type: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: malformedSecretRef };
+    const fillSecret = { type: 'fill-secret', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: malformedSecretRef };
 
     const result = await client.callTool({ name: 'ambercast_perform', arguments: { action: fillSecret } });
 
@@ -499,8 +499,8 @@ describe('startAgenticMcpServer', () => {
     await server.close();
   });
 
-  it('keeps the producer-bundle fingerprint at the fixed pre-change baseline', () => {
-    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('dece452ee142237497ede8cdacac570d27f0d49b31fa25b06cbf7eea44346871');
+  it('keeps the producer-bundle fingerprint at the v4 baseline', () => {
+    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('bfc9fda291cbc76cb1c9dfd4f41caeac754b040b41133d8e35377e74a652a7b1');
   });
 
   it('projects a terminal schema latch into the case report without attempts', async () => {

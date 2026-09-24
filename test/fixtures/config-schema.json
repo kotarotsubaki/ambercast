@@ -31,6 +31,13 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
+          "surface": {
+            "type": "string",
+            "const": "web"
+          },
+          "description": {
+            "type": "string"
+          },
           "baseUrl": {
             "type": "string",
             "allOf": [
@@ -41,10 +48,6 @@
                 "pattern": "^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$"
               }
             ]
-          },
-          "browser": {
-            "type": "string",
-            "const": "chromium"
           },
           "secretSinkOrigins": {
             "type": "object",
@@ -66,6 +69,10 @@
                 ]
               }
             }
+          },
+          "browser": {
+            "type": "string",
+            "const": "chromium"
           },
           "healReplayIsolation": {
             "type": "string",

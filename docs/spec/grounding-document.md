@@ -6,7 +6,7 @@
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `1` | Grounding format version. | repo:src/core/ir/schema.ts:64,1368 |
+| `schemaVersion` | integer | required | literal `2` | Grounding format version. | repo:src/core/ir/schema.ts:64,1368 |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the associated plan. | repo:src/core/ir/schema.ts:35,1369 |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | Cached step grounding keyed by ID. | repo:src/core/ir/schema.ts:1370 |
 
@@ -28,11 +28,11 @@
 | `TraceRecord` | `events` | `TraceEntry[]` | required | may be empty | Chronological action/assertion journal. | repo:src/core/ir/schema.ts:1057 |
 |  | `verification` | `TraceAssert[]` | required | min 1 | Terminal assertions required for replayable success. | repo:src/core/ir/schema.ts:1059 |
 |  | `verificationCoverage` | record `InstructionCriterionId` → integer | optional | integer nonnegative | Additive coverage-to-verification-index mapping. | repo:src/core/ir/schema.ts:1060 |
-| `TraceClick` | `type`, `target` | string, `ElementRef` | required | literal `click`; strict target | Recorded click. | repo:src/core/ir/schema.ts:890 |
+| `TraceClick` | `type`, `element` | string, `ElementRef` | required | literal `click`; strict element | Recorded click. | repo:src/core/ir/schema.ts:890 |
 | `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | required | literal `navigate`; no secret marker | Recorded navigation. | repo:src/core/ir/schema.ts:906 |
-| `TracePress` | `type`, `target`, `key` | string, locator, string | required | literal `press`; key enum | Recorded key press. | repo:src/core/ir/schema.ts:922 |
-| `TraceFill` | `type`, `target`, `value` | string, locator, text | required | literal `fill`; no secret marker | Recorded ordinary fill. | repo:src/core/ir/schema.ts:938 |
-| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | Recorded secret fill without literal value. | repo:src/core/ir/schema.ts:954 |
+| `TracePress` | `type`, `element`, `key` | string, locator, string | required | literal `press`; key enum | Recorded key press. | repo:src/core/ir/schema.ts:922 |
+| `TraceFill` | `type`, `element`, `value` | string, locator, text | required | literal `fill`; no secret marker | Recorded ordinary fill. | repo:src/core/ir/schema.ts:938 |
+| `TraceFillSecret` | `type`, `element`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | Recorded secret fill without literal value. | repo:src/core/ir/schema.ts:954 |
 
 `TraceAction` is the `type` union of the five action records. The `key` enum is `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp`; `ElementRef`, `InterpolatableText`, and `SecretRef` retain their constraints from [[spec/value-types#shared-types]]. [repo:src/core/ir/schema.ts:407-410,922-925,970-976]
 
@@ -43,10 +43,10 @@ Every `TraceAssert` branch is strict and requires `type: "assert"`; it shares th
 | variant | fields | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `text-visible` | `type`, `check`, `text` | all required | literals `assert`, `text-visible`; non-secret text | Visibility observation. | repo:src/core/ir/schema.ts:998 |
-| `element-visible` | `type`, `check`, `target` | all required | literals `assert`, `element-visible`; strict locator | Element visibility observation. | repo:src/core/ir/schema.ts:1003 |
-| `text-equals` | `type`, `check`, `target`, `text` | all required | literals `assert`, `text-equals`; non-secret text | Exact text observation. | repo:src/core/ir/schema.ts:1008 |
+| `element-visible` | `type`, `check`, `element` | all required | literals `assert`, `element-visible`; strict locator | Element visibility observation. | repo:src/core/ir/schema.ts:1003 |
+| `text-equals` | `type`, `check`, `element`, `text` | all required | literals `assert`, `text-equals`; non-secret text | Exact text observation. | repo:src/core/ir/schema.ts:1008 |
 | `url-matches` | `type`, `check`, `pattern` | all required | literals `assert`, `url-matches`; non-secret text | URL observation. | repo:src/core/ir/schema.ts:1013 |
-| `element-count` | `type`, `check`, `target`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | Count observation. | repo:src/core/ir/schema.ts:1018 |
+| `element-count` | `type`, `check`, `element`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | Count observation. | repo:src/core/ir/schema.ts:1018 |
 
 `TraceEntry` is the outer `type` union of `TraceAction` and `TraceAssert`. [repo:src/core/ir/schema.ts:1039]
 
@@ -56,7 +56,7 @@ This illustrative `planDigest` refers to the complete Plan example in [[spec/pla
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -78,4 +78,4 @@ The problem is that element resolution and AI execution evidence are volatile wh
 
 The chosen design gives element steps a bounded fingerprint and AI steps a full trace with terminal verification, all keyed by stable step ID and bound by digest. It makes grounding the sole trace authority. 
 
-One rejected alternative embedded traces in plans; it was rejected because normal successful runs would churn a reviewed artifact. Another treated an empty trace as success; it was rejected because replay needs explicit terminal evidence.  
+One rejected alternative embedded traces in plans; it was rejected because normal successful runs would churn a reviewed artifact. Another treated an empty trace as success; it was rejected because replay needs explicit terminal evidence.

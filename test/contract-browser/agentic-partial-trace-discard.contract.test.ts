@@ -59,12 +59,12 @@ async function waitForFile(path: string): Promise<void> {
 async function writeFixture(project: string, baseUrl: string): Promise<string> {
   const tests = join(project, 'tests');
   await mkdir(tests);
-  const targets = { fixture: { baseUrl, browser: 'chromium' } } as const satisfies Record<string, TargetDefinition>;
+  const targets = { fixture: { surface: 'web', baseUrl } } as const satisfies Record<string, TargetDefinition>;
   const plan = PlanDocument.parse({
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: {
       inputsDigest: computeInputsDigest({
-        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 3,
+        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
       }),
@@ -72,21 +72,22 @@ async function writeFixture(project: string, baseUrl: string): Promise<string> {
     targets,
     steps: [
       {
-        id: 'first-complete', kind: 'ai', instruction: 'Verify the fixture.',
+        id: 'first-complete', kind: 'ai', target: 'fixture', instruction: 'Verify the fixture.',
         instructionCoverage: [{ id: 'first-complete', kind: 'success', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: FIRST_REQUIREMENT.length + 1 } }],
       },
       {
-        id: 'second-complete', kind: 'ai', instruction: 'Verify the fixture again.',
+        id: 'second-complete', kind: 'ai', target: 'fixture', instruction: 'Verify the fixture again.',
         instructionCoverage: [{ id: 'second-complete', kind: 'success', sourceSpan: { startLine: 4, startColumn: 1, endLine: 4, endColumn: SECOND_REQUIREMENT.length + 1 } }],
       },
     ],
   });
-  const grounding = GroundingDocument.parse({ schemaVersion: 1, planDigest: computePlanDigest(plan), entries: {} });
+  const grounding = GroundingDocument.parse({ schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} });
   const groundingPath = join(tests, 'agentic-partial.ambercast.grounding.json');
   await Promise.all([
     writeFile(join(project, 'ambercast.config.json'), JSON.stringify({
       $schema: 'https://ambercast.dev/schema/config.json', testDir: 'tests', runsDir: 'tests/.runs',
-      targets, defaultTarget: 'fixture', ai: { provider: 'codex' }, ci: { heal: false },
+      targets: { fixture: { ...targets.fixture, browser: 'chromium' } },
+      defaultTarget: 'fixture', ai: { provider: 'claude' }, ci: { heal: false },
     })),
     writeFile(join(tests, 'agentic-partial.test.md'), PROMPT),
     writeFile(join(tests, 'agentic-partial.ambercast.plan.json'), toCanonicalArtifactText(plan as unknown as JsonValueT)),

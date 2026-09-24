@@ -29,8 +29,8 @@ import { GroundingDocument, PlanDocument } from './schema.js';
 export function getPlanJsonSchema(): z.core.JSONSchema.BaseSchema {
   return {
     ...z.toJSONSchema(PlanDocument),
-    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json',
-    title: 'ambercast plan schema v3',
+    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json',
+    title: 'ambercast plan schema v4',
     description: 'Validates the complete generated plan document that is reviewed and committed beside its source test prompt.',
   };
 }
@@ -46,8 +46,8 @@ export function getPlanJsonSchema(): z.core.JSONSchema.BaseSchema {
 export function getGroundingJsonSchema(): z.core.JSONSchema.BaseSchema {
   return {
     ...z.toJSONSchema(GroundingDocument),
-    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json',
-    title: 'ambercast grounding schema v1',
+    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json',
+    title: 'ambercast grounding schema v2',
     description: 'Validates the committed grounding cache associated with one plan digest.',
   };
 }

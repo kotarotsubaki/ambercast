@@ -1588,8 +1588,11 @@ async function assertIssue298LlmsArtifacts(browser) {
     const artifactPlannedUrls = plannedSlugs.map((slug) => `https://kotarotsubaki.github.io/ambercast/${localePrefix}${slug}/`);
     for (const plannedUrl of artifactPlannedUrls) assert.equal(bodies.get(artifact).includes(plannedUrl), false, `${artifact} must omit planned page ${plannedUrl}.`);
   }
+  // Deriving the expected count instead of hardcoding it means this
+  // assertion tracks capability-pages.json automatically whenever a planned
+  // page is added, removed, or promoted out of "planned".
   const plannedLines = bodies.get('llms-planned.txt').trim().split('\n').filter(Boolean);
-  assert.equal(plannedLines.length, 7, 'llms-planned.txt must contain exactly seven planned entries.');
+  assert.equal(plannedLines.length, plannedSlugs.length, 'llms-planned.txt must contain one entry per planned page.');
   for (const plannedUrl of plannedUrls) assert.ok(bodies.get('llms-planned.txt').includes(plannedUrl), `llms-planned.txt must contain ${plannedUrl}.`);
 }
 

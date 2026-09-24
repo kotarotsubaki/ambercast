@@ -1133,7 +1133,7 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these eleven codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these twelve codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
 
 | Code | Optional `details` shape |
 | --- | --- |
@@ -1142,7 +1142,8 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", or "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: non-whitespace string }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" or "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing", "engine-unregistered", or "launch-failed"; engine: non-whitespace string }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing", "executor-unregistered", or "launch-failed"; engine: non-whitespace string }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" or "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
@@ -2820,7 +2821,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
-| TP2 changes target config from `targets.<name>.browser` to `targets.<name>.executor` and adds the `EXECUTOR_UNSUPPORTED` report error code; the Plan schema is unchanged | repo:src/core/config/schema.ts, repo:src/report/error-mapping.ts | Replace the old target browser key with `executor: { kind: "playwright", browser: "chromium" }` when explicit executor selection is needed. Report consumers must recognize `EXECUTOR_UNSUPPORTED`; Plan regeneration is not required by this schema change. |
+| TP2 changes target config from `targets.<name>.browser` to `targets.<name>.executor`, removes `RunCaseOutcome.engine`, adds `sessions[name].executor` to the report contract, adds the `EXECUTOR_UNSUPPORTED` report error code, and renames the `BROWSER_LAUNCH_FAILED` reason by changing its `engine` prefix to `executor` (`executor-unregistered`); the Plan schema is unchanged | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | Remove the old target browser key when explicit executor selection is unnecessary; otherwise migrate it to `executor: { kind: "playwright", browser: "chromium" }` (`executor.browser`). The loader rejects the old key with `ConfigInvalidError`. Report consumers must handle the removed `RunCaseOutcome.engine`, added `sessions[name].executor`, new `EXECUTOR_UNSUPPORTED` code, and renamed reason; Plan regeneration is not required by this schema change. |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
 | report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |

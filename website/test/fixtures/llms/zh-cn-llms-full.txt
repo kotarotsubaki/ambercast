@@ -1125,7 +1125,7 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十一个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十二个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
@@ -1134,7 +1134,8 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 非空白字符串, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required"、"declined" 或 "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 非空白字符串, reason: 非空白字符串 }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正整数, column: 正整数, kind: "grant-line" 或 "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"engine-unregistered" 或 "launch-failed"; engine: 非空白字符串 }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"executor-unregistered" 或 "launch-failed"; engine: 非空白字符串 }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: 非空白字符串, executor: 非空白字符串, reason: "surface-mismatch" 或 "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 非空白字符串 } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
@@ -2804,7 +2805,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
-| TP2：目标配置由 `targets.<name>.browser` 改为 `targets.<name>.executor`，新增 `EXECUTOR_UNSUPPORTED` 错误代码；Plan schema 不变 | repo:src/core/config/schema.ts, repo:src/report/error-mapping.ts | 需要显式指定 executor 时，将旧 browser 键替换为 `executor: { kind: "playwright", browser: "chromium" }`。报告使用方须识别 `EXECUTOR_UNSUPPORTED`；此次 schema 变更无需重新生成 Plan。 |
+| TP2：目标配置由 `targets.<name>.browser` 改为 `targets.<name>.executor`，删除 `RunCaseOutcome.engine`，在报告契约中新增 `sessions[name].executor`；新增 `EXECUTOR_UNSUPPORTED` 错误代码，并将 `BROWSER_LAUNCH_FAILED` 原因的旧 `engine` 前缀改为 `executor`（`executor-unregistered`）；Plan schema 不变 | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | 若无需显式指定 executor，应删除旧 browser 键；否则迁移至 `executor: { kind: "playwright", browser: "chromium" }`（`executor.browser`）。loader 会以 `ConfigInvalidError` 拒绝旧键。报告使用方须处理已删除和新增的字段、新错误代码及更名后的原因；此次 schema 变更无需重新生成 Plan。 |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
 | report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |

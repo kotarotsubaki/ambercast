@@ -1138,7 +1138,7 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の11コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の12コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
@@ -1147,7 +1147,8 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", または "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 空白以外の文字列, reason: 空白以外の文字列 }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正の整数, column: 正の整数, kind: "grant-line" または "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"engine-unregistered"、または "launch-failed"; engine: 空白以外の文字列 }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"executor-unregistered"、または "launch-failed"; engine: 空白以外の文字列 }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: 空白以外の文字列, executor: 空白以外の文字列, reason: "surface-mismatch" または "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 空白以外の文字列 } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
@@ -2851,7 +2852,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
-| TP2: ターゲット設定を `targets.<name>.browser` から `targets.<name>.executor` に変更し、`EXECUTOR_UNSUPPORTED` エラーコードを追加。Plan schema は不変 | repo:src/core/config/schema.ts, repo:src/report/error-mapping.ts | 明示的な executor 指定が必要な場合は旧 browser キーを `executor: { kind: "playwright", browser: "chromium" }` に置き換える。レポート利用側は `EXECUTOR_UNSUPPORTED` を認識する。今回の schema 変更による Plan の再生成は不要。 |
+| TP2: ターゲット設定を `targets.<name>.browser` から `targets.<name>.executor` に変更し、`RunCaseOutcome.engine` を削除、レポート契約に `sessions[name].executor` を追加。`EXECUTOR_UNSUPPORTED` エラーコードを追加し、`BROWSER_LAUNCH_FAILED` の理由は旧 `engine` 接頭辞を `executor` に変更（`executor-unregistered`）。Plan schema は不変 | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | 明示的な executor 指定が不要なら旧 browser キーを削除し、必要なら `executor: { kind: "playwright", browser: "chromium" }`（`executor.browser`）へ移行する。loader は旧キーを `ConfigInvalidError` で拒否する。レポート利用側は削除・追加されたフィールド、新コード、改名された理由に対応する。今回の schema 変更による Plan の再生成は不要。 |
 | Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
 | grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
 | report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |

@@ -181,6 +181,35 @@ describe('mcp/server', () => {
     await first;
   });
 
+  it('does not cancel a queued job when the original request aborts after its handle was already returned', async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const running = new Promise<void>((resolve) => { started = resolve; });
+    const healPreview = vi.fn(async () => ({ exitCode: 0, envelope: {} }));
+    const client = await connect(fakeDeps({
+      run: vi.fn(async () => { started(); await blocked; return { exitCode: 0, envelope: {} }; }),
+      healPreview,
+    }), { syncWaitMs: 0 });
+    const first = client.callTool({ name: 'ambercast_run', arguments: {} });
+    await running;
+    const controller = new AbortController();
+    try {
+      const handle = await client.callTool({ name: 'ambercast_heal', arguments: {} }, undefined, { signal: controller.signal });
+      const jobId = (handle.structuredContent as { jobId: string }).jobId;
+      expect(jobId).toBeDefined();
+      controller.abort();
+      release();
+      await vi.waitFor(async () => {
+        const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
+        expect((listing.structuredContent as { jobs: Array<{ jobId: string; status: string }> }).jobs)
+          .toContainEqual(expect.objectContaining({ jobId, status: 'completed' }));
+      });
+      expect(healPreview).toHaveBeenCalled();
+    } finally { release(); }
+    await first;
+  });
+
   it('routes a running original-request abort through job cancellation', async () => {
     let started!: () => void;
     const running = new Promise<void>((resolve) => { started = resolve; });

@@ -126,7 +126,7 @@ export function createMcpServer(deps: McpServerDeps, options: { readonly signal?
     jobs.set(jobId, job);
     queue = queue.then(async () => {
       if (job.record.status !== 'working') return;
-      if (options?.signal?.aborted || extra.signal?.aborted) {
+      if (options?.signal?.aborted || (extra.signal?.aborted && !job.handleReturned)) {
         settle(job, 'cancelled', options?.signal?.aborted ? 'server shutting down' : undefined);
         return;
       }

@@ -24,4 +24,16 @@ describe('mcp/tool-schemas', () => {
     expect(schema.safeParse({}).success).toBe(true);
     expect(schema.safeParse({ unknown: 1 }).success).toBe(false);
   });
+
+  it.each([
+    ['run', runInputSchema],
+    ['check', checkInputSchema],
+    ['heal', healInputSchema],
+  ] as const)('%s rejects target', (_tool, schema) => {
+    expect(schema.safeParse({ target: 'web' }).success).toBe(false);
+  });
+
+  it('generate accepts target', () => {
+    expect(generateInputSchema.safeParse({ target: 'web' }).success).toBe(true);
+  });
 });

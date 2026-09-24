@@ -19,7 +19,6 @@ export const generateInputSchema = z.object({
 
 export const runInputSchema = z.object({
   files: z.string().array().optional(),
-  target: z.string().optional(),
   allowEmpty: z.boolean().optional(),
   grep: z.string().optional().refine((v) => {
     if (v === undefined) return true;
@@ -37,13 +36,11 @@ export const runInputSchema = z.object({
 
 export const checkInputSchema = z.object({
   files: z.string().array().optional(),
-  target: z.string().optional(),
   allowEmpty: z.boolean().optional(),
 }).strict();
 
 export const healInputSchema = z.object({
   files: z.string().array().optional(),
-  target: z.string().optional(),
   allowEmpty: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   applyToken: z.string().optional(),

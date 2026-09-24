@@ -22,11 +22,7 @@ const toolNames = [
 
 function fakeDeps(overrides: Partial<McpServerDeps> = {}): McpServerDeps {
   const success = async () => ({ exitCode: 0, envelope: { summary: 'ok' } });
-  const fake = <T extends (...args: never[]) => Promise<unknown>>(impl: T = success as T): T => new Proxy(vi.fn(impl), {
-    apply(target, thisArg, [input]) {
-      return Reflect.apply(target, thisArg, [input]);
-    },
-  }) as T;
+  const fake = <T extends (...args: never[]) => Promise<unknown>>(impl: T = success as T): T => vi.fn(impl) as T;
   const applySuccess = async (_token: string, confirm: 'authorized' | 'declined' | 'interrupted') => {
     if (confirm === 'authorized') return { kind: 'report' as const, exitCode: 0, envelope: { summary: 'applied' } };
     if (confirm === 'declined') return { kind: 'report' as const, exitCode: 0, envelope: { summary: 'declined' } };
@@ -441,7 +437,8 @@ describe('mcp/server', () => {
     const result = await client.callTool({ name, arguments: {} });
 
     expect(result.isError).toBe(false);
-    expect(deps[capability]).toHaveBeenCalledExactlyOnceWith({ allowEmpty: false });
+    expect(deps[capability]).toHaveBeenCalledOnce();
+    expect(vi.mocked(deps[capability]).mock.calls[0]?.[0]).toEqual({ allowEmpty: false });
     for (const other of ['generate', 'run', 'check', 'healPreview'] as const) {
       if (other !== capability) expect(deps[other]).not.toHaveBeenCalled();
     }
@@ -452,7 +449,7 @@ describe('mcp/server', () => {
     const client = await connect(deps);
     await client.callTool({ name: 'ambercast_generate', arguments: {} });
 
-    expect(deps.generate).toHaveBeenCalledWith(expect.objectContaining({ allowEmpty: false }));
+    expect(vi.mocked(deps.generate).mock.calls[0]?.[0]).toEqual(expect.objectContaining({ allowEmpty: false }));
   });
 
   it('delivers a run progress notification through the tool call context (TEST-B7)', async () => {

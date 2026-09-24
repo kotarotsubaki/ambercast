@@ -83,22 +83,27 @@ describe('mcp/server', () => {
     }
   });
 
-  it('consumes at FIFO admission before elicitation crosses the pending TTL', async () => {
+  it('consumes before elicitation and never creates an apply job', async () => {
     const token = 'a'.repeat(32);
     const applyArgs = { dryRun: false, applyToken: token };
     let elapsed = 1_000;
     const clock: Clock = { now: () => new Date(0), monotonicMs: () => elapsed };
-    const beginHealApply = vi.fn(async () => ({ proceed: true as const }));
+    const beginHealApply = vi.fn(async () => ({ proceed: true as const, cases: [{ file: 'one.test.md', healingSummary: 'repair one' }] }));
     const settleHealApply = vi.fn(async () => ({ kind: 'report' as const, exitCode: 0, envelope: { applied: true } }));
+    const finalizeHealApply = vi.fn();
     const onElicit = vi.fn(async () => {
       expect(beginHealApply).toHaveBeenCalledExactlyOnceWith(token, expect.anything());
+      expect((await client.callTool({ name: 'ambercast_job_status', arguments: {} })).structuredContent).toEqual({ jobs: [] });
       elapsed += 600_001;
       return { action: 'accept' as const, content: { confirm: true } };
     });
-    const client = await connect(fakeDeps({ beginHealApply, settleHealApply }), { clock }, { capabilities: { elicitation: { form: {} } }, onElicit });
+    const client = await connect(fakeDeps({ beginHealApply, settleHealApply, finalizeHealApply }), { clock }, { capabilities: { elicitation: { form: {} } }, onElicit });
     const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
     expect(result).toMatchObject({ isError: false, structuredContent: { applied: true } });
-    expect(settleHealApply).toHaveBeenCalledExactlyOnceWith(token, 'authorized', expect.anything());
+    expect(result._meta).not.toHaveProperty('job');
+    expect((await client.callTool({ name: 'ambercast_job_status', arguments: {} })).structuredContent).toEqual({ jobs: [] });
+    expect(settleHealApply).toHaveBeenCalledExactlyOnceWith(token, 'authorized', expect.anything(), expect.anything());
+    expect(finalizeHealApply).toHaveBeenCalledExactlyOnceWith(token);
   });
 
   it('consumes and interrupts a queued apply on original-request abort before TTL expiry', async () => {
@@ -115,7 +120,7 @@ describe('mcp/server', () => {
       if (consumed) return { proceed: false as const, outcome: { kind: 'report' as const, exitCode: 1, envelope: { interrupted: true } } };
       if (elapsed >= 600_000) return { proceed: false as const, outcome: { kind: 'error' as const, code: 'EXPIRED_TOKEN', message: 'expired' } };
       consumed = true;
-      return { proceed: true as const };
+      return { proceed: true as const, cases: [] };
     });
     const settleHealApply = vi.fn(async () => ({ kind: 'report' as const, exitCode: 1, envelope: { interrupted: true } }));
     const client = await connect(fakeDeps({
@@ -130,7 +135,7 @@ describe('mcp/server', () => {
       await setImmediate();
       controller.abort();
       await pending.catch(() => undefined);
-      await vi.waitFor(() => expect(settleHealApply).toHaveBeenCalledExactlyOnceWith(token, 'interrupted', expect.anything()));
+      await vi.waitFor(() => expect(settleHealApply).toHaveBeenCalledExactlyOnceWith(token, 'interrupted', expect.anything(), expect.anything()));
       elapsed = 600_001;
       release();
       const replay = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
@@ -144,6 +149,7 @@ describe('mcp/server', () => {
     const client = await connect(fakeDeps());
     const result = await client.callTool({ name: 'ambercast_job_status', arguments: { jobId: 'missing', waitMs: 45_000 } });
     expect(result.content).toEqual([{ type: 'text', text: 'JOB_NOT_FOUND: missing' }]);
+    expect(result).not.toHaveProperty('_meta');
   });
 
   it('lists jobs newest first with one text line per job and a no jobs line', async () => {
@@ -621,6 +627,7 @@ describe('mcp/server heal apply', () => {
 
     const preview = await client.callTool({ name: 'ambercast_heal', arguments: {} });
     expect(preview.content).toEqual([{ type: 'text', text: expect.stringContaining(`applyToken: ${token}`) }]);
+    expect(preview._meta?.applyToken).toBe(token);
     expect(markHealDelivered).toHaveBeenCalledWith(token);
     expect(marks).toEqual([100]);
     const jobId = (preview._meta?.job as { jobId: string }).jobId;
@@ -664,6 +671,7 @@ describe('mcp/server heal apply', () => {
       elapsed = 300;
       const firstRead = await client.callTool({ name: 'ambercast_job_status', arguments: { jobId } });
       expect(firstRead.content).toEqual([{ type: 'text', text: expect.stringContaining(`applyToken: ${token}`) }]);
+      expect(firstRead._meta?.applyToken).toBe(token);
       expect(markHealDelivered).toHaveBeenCalledWith(token);
       expect(marks).toEqual([300]);
 
@@ -674,7 +682,7 @@ describe('mcp/server heal apply', () => {
     } finally { release(); }
   });
 
-  it('cancels an apply waiting in the write FIFO without invoking settlement (TEST-D4)', async () => {
+  it('removes an aborted apply from the write FIFO and settles it as interrupted (TEST-D4)', async () => {
     let release!: () => void;
     let started!: () => void;
     const blocked = new Promise<void>((resolve) => { release = resolve; });
@@ -703,18 +711,14 @@ describe('mcp/server heal apply', () => {
       controller.abort();
       await expect(pending).rejects.toThrow();
       const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
-      const cancelled = (listing.structuredContent as { jobs: Array<{ jobId: string; tool: string; status: string }> }).jobs
-        .find((job) => job.tool === 'heal');
-      expect(cancelled).toMatchObject({ status: 'cancelled' });
+      expect((listing.structuredContent as { jobs: unknown[] }).jobs).toHaveLength(1);
       expect(applyHeal).not.toHaveBeenCalledWith(token, 'authorized');
     } finally {
       release();
       await first.catch(() => undefined);
     }
     const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
-    const cancelled = (listing.structuredContent as { jobs: Array<{ jobId: string; tool: string; status: string }> }).jobs
-      .find((job) => job.tool === 'heal');
-    expect(cancelled).toMatchObject({ status: 'cancelled' });
+    expect((listing.structuredContent as { jobs: Array<{ tool: string }> }).jobs.map((job) => job.tool)).toEqual(['run']);
     expect(applyHeal).toHaveBeenCalledExactlyOnceWith(token, 'interrupted', expect.anything());
     await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
     expect(writes).toEqual([]);
@@ -729,7 +733,17 @@ describe('mcp/server heal apply', () => {
     expect(applyHeal).toHaveBeenCalledTimes(1);
   });
 
-  it('records a settlement throw as a failed apply job (TEST-D4)', async () => {
+  it('omits metadata from invalid-token errors (TEST-D7)', async () => {
+    const beginHealApply = vi.fn(async () => ({ proceed: false as const, outcome: {
+      kind: 'error' as const, code: 'HEAL_APPLY_TOKEN_INVALID', message: 'unknown-token',
+    } }));
+    const client = await connect(fakeDeps({ beginHealApply }));
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'HEAL_APPLY_TOKEN_INVALID: unknown-token' }] });
+    expect(result).not.toHaveProperty('_meta');
+  });
+
+  it('renders a settlement throw as a D7 error without a job (TEST-D4)', async () => {
     const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted'): Promise<never> => {
       throw new Error('preimage changed during settlement');
     });
@@ -737,13 +751,41 @@ describe('mcp/server heal apply', () => {
 
     const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
     expect(applyHeal).toHaveBeenCalledTimes(1);
-    expect(result).toMatchObject({ isError: true, _meta: { job: { status: 'failed' } } });
+    expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'HEAL_APPLY_FAILED: the apply crashed unexpectedly (Error)' }] });
+    expect(result.structuredContent).toBeUndefined();
+    expect(result).not.toHaveProperty('_meta');
+  });
+
+  it('stores a render failure as a replayable D7 error (TEST-D4, TEST-D6)', async () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    let consumed = false;
+    let saved: { kind: 'error'; code: string; message: string } | undefined;
+    const beginHealApply = vi.fn(async () => {
+      if (consumed) return { proceed: false as const, outcome: saved! };
+      consumed = true;
+      return { proceed: true as const, cases: [] };
+    });
+    const settleHealApply = vi.fn(async () => ({ kind: 'report' as const, exitCode: 0, envelope: circular }));
+    const finalizeHealApply = vi.fn();
+    const failHealApply = vi.fn(async (_token: string, error: unknown) => {
+      saved = { kind: 'error', code: 'HEAL_APPLY_FAILED', message: `the apply crashed unexpectedly (${error instanceof Error ? error.name : 'Error'})` };
+      return saved;
+    });
+    const client = await connect(fakeDeps({ beginHealApply, settleHealApply, failHealApply, finalizeHealApply }));
+    const first = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    const replay = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(first.content).toEqual([{ type: 'text', text: 'HEAL_APPLY_FAILED: the apply crashed unexpectedly (TypeError)' }]);
+    expect(first).not.toHaveProperty('_meta');
+    expect(replay).toEqual(first);
+    expect(settleHealApply).toHaveBeenCalledTimes(1);
+    expect(failHealApply).toHaveBeenCalledTimes(1);
+    expect(finalizeHealApply).not.toHaveBeenCalled();
   });
 
   it.each([
     ['accept with confirmed content', { action: 'accept' as const, content: { confirm: true } }, 'authorized'],
     ['accept without confirmation', { action: 'accept' as const, content: { confirm: false } }, 'declined'],
-    ['accept with omitted confirm', { action: 'accept' as const, content: {} }, 'declined'],
     ['decline', { action: 'decline' as const }, 'declined'],
     ['cancel', { action: 'cancel' as const }, 'interrupted'],
   ])('maps %s to settlement (TEST-D5)', async (_name, elicited, decision) => {
@@ -766,6 +808,63 @@ describe('mcp/server heal apply', () => {
     await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
     expect(onElicit).toHaveBeenCalledTimes(1);
     expect(applyHeal.mock.calls[0]?.[1]).toBe('interrupted');
+  });
+
+  it('sends the exact form schema and every case summary with a 600-second timeout (TEST-D5)', async () => {
+    const onElicit = vi.fn(async (_request: ElicitRequest): Promise<ElicitResult> => ({ action: 'decline' }));
+    const beginHealApply = vi.fn(async () => ({ proceed: true as const, cases: [
+      { file: 'one.test.md', healingSummary: 'repair one' },
+      { file: 'two.test.md', healingSummary: 'repair two' },
+    ] }));
+    const deps = fakeDeps({ beginHealApply });
+    const client = await connect(deps, undefined, { capabilities: { elicitation: { form: {} } }, onElicit });
+    await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(onElicit.mock.calls[0]?.[0]).toMatchObject({
+      method: 'elicitation/create',
+      params: {
+        mode: 'form',
+        message: 'Apply 2 repair(s) to plan/grounding files?\none.test.md: repair one\ntwo.test.md: repair two',
+        requestedSchema: { type: 'object', properties: { confirm: { type: 'boolean', title: 'Apply repairs' } }, required: ['confirm'] },
+      },
+    });
+    expect((deps.stderr as PassThrough).read()?.toString()).toContain('heal apply declined');
+  });
+
+  it('forwards settlement progress through the apply request context (TEST-D4)', async () => {
+    const received: unknown[] = [];
+    const settleHealApply = vi.fn(async (_token: string, _decision: 'authorized' | 'declined' | 'interrupted', _signal?: AbortSignal, progress?: Parameters<NonNullable<McpServerDeps['settleHealApply']>>[3]) => {
+      expect(progress?.progressToken).toEqual(expect.any(Number));
+      await progress!.sendNotification({ method: 'notifications/progress', params: {
+        progressToken: progress!.progressToken, progress: 1, message: 'heal: case repaired',
+      } });
+      return { kind: 'report' as const, exitCode: 0, envelope: { summary: 'applied' } };
+    });
+    const client = await connect(fakeDeps({ beginHealApply: vi.fn(async () => ({ proceed: true as const, cases: [] })), settleHealApply }));
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined,
+      { onprogress: (notification) => { received.push(notification); } });
+    expect(result.structuredContent).toEqual({ summary: 'applied' });
+    expect(received).toEqual([{ progress: 1, message: 'heal: case repaired' }]);
+  });
+
+  it.each(['declined', 'interrupted'] as const)('settles %s without waiting for a busy write FIFO', async (decision) => {
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const running = new Promise<void>((resolve) => { entered = resolve; });
+    const settleHealApply = vi.fn(async (_token: string, choice: string) => ({ kind: 'report' as const, exitCode: 1, envelope: { choice } }));
+    const client = await connect(fakeDeps({
+      run: vi.fn(async () => { entered(); await blocked; return { exitCode: 0, envelope: {} }; }),
+      beginHealApply: vi.fn(async () => ({ proceed: true as const, cases: [] })),
+      settleHealApply,
+    }), undefined, { capabilities: { elicitation: { form: {} } }, onElicit: async () => decision === 'declined' ? { action: 'decline' } : { action: 'cancel' } });
+    const first = client.callTool({ name: 'ambercast_run', arguments: {} });
+    await running;
+    try {
+      const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+      expect(result.structuredContent).toEqual({ choice: decision });
+      expect(settleHealApply).toHaveBeenCalledTimes(1);
+      expect((await client.callTool({ name: 'ambercast_job_status', arguments: {} })).structuredContent).toMatchObject({ jobs: [{ tool: 'run' }] });
+    } finally { release(); await first; }
   });
 
   it('maps an explicit reject action to interrupted even though the SDK rejects that result shape (TEST-D5)', async () => {
@@ -799,11 +898,45 @@ describe('mcp/server heal apply', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { timeout: 700_000 });
     try {
-      await vi.waitFor(() => expect(onElicit).toHaveBeenCalledTimes(1));
+      for (let attempt = 0; attempt < 10 && onElicit.mock.calls.length === 0; attempt++) await setImmediate();
+      expect(onElicit).toHaveBeenCalledTimes(1);
       expect(applyHeal).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(600_000);
       await pending;
       expect(applyHeal.mock.calls[0]?.[1]).toBe('interrupted');
+    } finally {
+      release();
+      vi.useRealTimers();
+      await pending.catch(() => undefined);
+    }
+  });
+
+  it('keeps apply synchronous while confirmation exceeds the default 45-second job wait', async () => {
+    let release!: () => void;
+    const blocked = new Promise<ElicitResult>((resolve) => { release = () => resolve({ action: 'accept', content: { confirm: true } }); });
+    const onElicit = vi.fn(async () => blocked);
+    let applySignal: AbortSignal | undefined;
+    const deps = fakeDeps({
+      beginHealApply: vi.fn(async (_token, signal) => { applySignal = signal; return { proceed: true as const, cases: [] }; }),
+      applyHeal: vi.fn(async () => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'applied' } })),
+    });
+    const client = await connect(deps, undefined, { capabilities: { elicitation: { form: {} } }, onElicit });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let returned = false;
+    const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { timeout: 700_000 }).then((result) => {
+      returned = true;
+      return result;
+    });
+    try {
+      for (let attempt = 0; attempt < 10 && onElicit.mock.calls.length === 0; attempt++) await setImmediate();
+      expect(onElicit).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(46_000);
+      expect(returned).toBe(false);
+      expect(applySignal?.aborted).toBe(false);
+      release();
+      const result = await pending;
+      expect(result.structuredContent).toEqual({ summary: 'applied' });
+      expect(result._meta).not.toHaveProperty('job');
     } finally {
       release();
       vi.useRealTimers();
@@ -833,37 +966,38 @@ describe('mcp/server heal apply', () => {
     }
   });
 
-  it('keeps an authorized settlement running after original-request abort and stores its result (TEST-D4)', async () => {
+  it('keeps authorized settlement running after request abort without creating a job (TEST-D4)', async () => {
     let entered!: () => void;
     let release!: () => void;
     const started = new Promise<void>((resolve) => { entered = resolve; });
     const blocked = new Promise<void>((resolve) => { release = resolve; });
     const envelope = { summary: 'authorized write completed' };
-    const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => {
+    let stored: { kind: 'report'; exitCode: number; envelope: typeof envelope } | undefined;
+    const beginHealApply = vi.fn(async () => stored === undefined
+      ? { proceed: true as const, cases: [] }
+      : { proceed: false as const, outcome: stored });
+    const settleHealApply = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => {
       entered();
       await blocked;
-      return { kind: 'report' as const, exitCode: 0, envelope };
+      stored = { kind: 'report', exitCode: 0, envelope };
+      return stored;
     });
-    const client = await connect(fakeDeps({ applyHeal }));
+    const client = await connect(fakeDeps({ beginHealApply, settleHealApply }));
     const controller = new AbortController();
     const pending = client.callTool({ name: 'ambercast_heal', arguments: applyArgs }, undefined, { signal: controller.signal });
     try {
-      await vi.waitFor(() => expect(applyHeal).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(settleHealApply).toHaveBeenCalledTimes(1));
       await started;
-      expect(applyHeal.mock.calls[0]?.[1]).toBe('authorized');
+      expect(settleHealApply.mock.calls[0]?.[1]).toBe('authorized');
       controller.abort();
       await expect(pending).rejects.toThrow();
       release();
-      await vi.waitFor(async () => {
-        const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
-        expect((listing.structuredContent as { jobs: Array<{ tool: string; status: string }> }).jobs)
-          .toContainEqual(expect.objectContaining({ tool: 'heal', status: 'completed' }));
-      });
       const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
-      const jobId = (listing.structuredContent as { jobs: Array<{ jobId: string; tool: string }> }).jobs.find((job) => job.tool === 'heal')!.jobId;
-      const terminal = await client.callTool({ name: 'ambercast_job_status', arguments: { jobId } });
-      expect(terminal.structuredContent).toEqual(envelope);
-      expect(applyHeal).toHaveBeenCalledTimes(1);
+      expect((listing.structuredContent as { jobs: unknown[] }).jobs).toEqual([]);
+      const replay = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+      expect(replay.structuredContent).toEqual(envelope);
+      expect(replay._meta).not.toHaveProperty('job');
+      expect(settleHealApply).toHaveBeenCalledTimes(1);
     } finally {
       release();
       await pending.catch(() => undefined);

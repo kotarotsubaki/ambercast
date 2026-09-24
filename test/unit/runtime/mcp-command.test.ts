@@ -732,16 +732,22 @@ describe('runtime/mcp-command', () => {
     expect(io.output()).toBe('');
   });
 
-  it('issues a 32-character lowercase hex token only for a successful heal preview (TEST-D1)', async () => {
+  it('issues a 32-character lowercase hex token whenever preparation has commits (TEST-D1)', async () => {
     clockFake.elapsed = 100;
     const session = await proposalSession();
     try {
       queuePreparation();
       const token = await issuedToken(session.deps);
       expect(token).toMatch(/^[0-9a-f]{32}$/);
+      vi.mocked(prepareHeal).mockResolvedValueOnce({
+        hasCommits: false, cases: [], preview: () => healOutput(),
+        settle: vi.fn(async () => healOutput()),
+      });
+      const unchanged = await session.deps.healPreview({}, noProgress);
+      expect(unchanged.applyToken).toBeUndefined();
       queuePreparation(vi.fn(async () => healOutput()), healOutput(2, [{ code: 'PREVIEW_FAILED' }]));
       const failed = await session.deps.healPreview({}, noProgress);
-      expect(failed.applyToken).toBeUndefined();
+      expect(failed.applyToken).toMatch(/^[0-9a-f]{32}$/);
       vi.mocked(prepareHeal).mockResolvedValueOnce({
         hasCommits: true, cases: [],
         preview: () => { throw new Error('preview rendering crashed'); },
@@ -750,7 +756,8 @@ describe('runtime/mcp-command', () => {
       await expect(session.deps.healPreview({}, noProgress)).rejects.toThrow('preview rendering crashed');
       vi.mocked(prepareHeal).mockRejectedValueOnce(new Error('preview crashed'));
       await expect(session.deps.healPreview({}, noProgress)).rejects.toThrow('preview crashed');
-      expect(await session.deps.applyHeal!(token, 'declined')).toMatchObject({ kind: 'report' });
+      expectTokenError(await session.deps.applyHeal!(token, 'declined'), 'superseded');
+      expect(await session.deps.applyHeal!(failed.applyToken!, 'declined')).toMatchObject({ kind: 'report' });
     } finally {
       await session.close();
     }
@@ -778,7 +785,9 @@ describe('runtime/mcp-command', () => {
     clockFake.elapsed = 700_000;
     const session = await proposalSession();
     try {
-      expectTokenError(await session.deps.applyHeal!('f'.repeat(32), 'authorized'), 'unknown');
+      expect(await session.deps.applyHeal!('f'.repeat(32), 'authorized')).toEqual({
+        kind: 'error', code: 'HEAL_APPLY_TOKEN_INVALID', message: 'unknown-token',
+      });
     } finally {
       await session.close();
     }
@@ -791,7 +800,9 @@ describe('runtime/mcp-command', () => {
       const { settle } = queuePreparation();
       const token = await issuedToken(session.deps);
       session.deps.markHealDelivered!(token);
-      expect(await session.deps.beginHealApply!(token)).toEqual({ proceed: true });
+      expect(await session.deps.beginHealApply!(token)).toEqual({
+        proceed: true, cases: [{ file: 'sample.test.md', healingSummary: 'repair' }],
+      });
       clockFake.elapsed = 601_001;
       expect(await session.deps.settleHealApply!(token, 'authorized')).toMatchObject({ kind: 'report', exitCode: 0 });
       expect(settle).toHaveBeenCalledExactlyOnceWith('authorized');
@@ -802,7 +813,8 @@ describe('runtime/mcp-command', () => {
 
   it.each([
     { offset: 599_999, expired: false },
-    { offset: 600_000, expired: true },
+    { offset: 600_000, expired: false },
+    { offset: 600_001, expired: true },
   ])('uses the exact deliveredAt TTL boundary at $offset ms (TEST-D4)', async ({ offset, expired }) => {
     clockFake.elapsed = 2_000;
     const session = await proposalSession();
@@ -833,7 +845,7 @@ describe('runtime/mcp-command', () => {
       session.deps.markHealDelivered!(token);
       clockFake.elapsed = 500_000;
       session.deps.markHealDelivered!(token);
-      clockFake.elapsed = 601_000;
+      clockFake.elapsed = 601_001;
       expectTokenError(await session.deps.applyHeal!(token, 'authorized'), 'expired');
       expect(settle).not.toHaveBeenCalled();
     } finally {
@@ -845,12 +857,15 @@ describe('runtime/mcp-command', () => {
     clockFake.elapsed = 1_000;
     const session = await proposalSession();
     try {
-      const settle = vi.fn(async (): Promise<HealCommandOutput> => { throw new Error('preimage changed'); });
+      const settle = vi.fn(async (): Promise<HealCommandOutput> => { throw new TypeError('secret path: preimage changed'); });
       queuePreparation(settle);
       const token = await issuedToken(session.deps);
       session.deps.markHealDelivered!(token);
       const outcome = await session.deps.applyHeal!(token, 'authorized');
-      expect(outcome).toMatchObject({ kind: 'error', code: expect.any(String), message: expect.any(String) });
+      expect(outcome).toEqual({
+        kind: 'error', code: 'HEAL_APPLY_FAILED', message: 'the apply crashed unexpectedly (TypeError)',
+      });
+      expect(await session.deps.applyHeal!(token, 'authorized')).toEqual(outcome);
       expect(settle).toHaveBeenCalledExactlyOnceWith('authorized');
     } finally {
       await session.close();
@@ -952,9 +967,110 @@ describe('runtime/mcp-command', () => {
     }
   });
 
+  it('keeps consumed-token replay pending throughout confirmation before settlement (TEST-D6)', async () => {
+    const session = await proposalSession();
+    try {
+      const { settle } = queuePreparation();
+      const token = await issuedToken(session.deps);
+      expect((await session.deps.beginHealApply!(token)).proceed).toBe(true);
+      let replayReturned = false;
+      const replay = session.deps.beginHealApply!(token).then((value) => { replayReturned = true; return value; });
+      await Promise.resolve();
+      expect(replayReturned).toBe(false);
+      expect(settle).not.toHaveBeenCalled();
+      const first = await session.deps.settleHealApply!(token, 'declined');
+      expect(replayReturned).toBe(false);
+      session.deps.finalizeHealApply!(token);
+      expect(await replay).toEqual({ proceed: false, outcome: first });
+      expect(settle).toHaveBeenCalledExactlyOnceWith('declined');
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('stores unexpected confirmation failures for consumed-token replay without exposing error text (TEST-D4, TEST-D6)', async () => {
+    const session = await proposalSession();
+    try {
+      const { settle } = queuePreparation();
+      const token = await issuedToken(session.deps);
+      expect((await session.deps.beginHealApply!(token)).proceed).toBe(true);
+      const failure = await session.deps.failHealApply!(token, new RangeError('private provider output'));
+      expect(failure).toEqual({ kind: 'error', code: 'HEAL_APPLY_FAILED', message: 'the apply crashed unexpectedly (RangeError)' });
+      expect(await session.deps.beginHealApply!(token)).toEqual({ proceed: false, outcome: failure });
+      expect(settle).not.toHaveBeenCalled();
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('replaces a settled report if response rendering fails, then replays that error (TEST-D4, TEST-D6)', async () => {
+    const session = await proposalSession();
+    try {
+      queuePreparation();
+      const token = await issuedToken(session.deps);
+      expect((await session.deps.beginHealApply!(token)).proceed).toBe(true);
+      expect(await session.deps.settleHealApply!(token, 'authorized')).toMatchObject({ kind: 'report', exitCode: 0 });
+      const failure = await session.deps.failHealApply!(token, new SyntaxError('private rendering details'));
+      expect(failure).toEqual({
+        kind: 'error', code: 'HEAL_APPLY_FAILED', message: 'the apply crashed unexpectedly (SyntaxError)',
+      });
+      expect(await session.deps.beginHealApply!(token)).toEqual({ proceed: false, outcome: failure });
+      expect(await session.deps.failHealApply!(token, new TypeError('later failure'))).toEqual(failure);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('holds concurrent replay after settlement until the response renders (TEST-D6)', async () => {
+    const session = await proposalSession();
+    try {
+      queuePreparation();
+      const token = await issuedToken(session.deps);
+      expect((await session.deps.beginHealApply!(token)).proceed).toBe(true);
+      const report = await session.deps.settleHealApply!(token, 'authorized');
+      let replayReturned = false;
+      const replay = session.deps.beginHealApply!(token).then((value) => { replayReturned = true; return value; });
+      await Promise.resolve();
+      expect(replayReturned).toBe(false);
+      session.deps.finalizeHealApply!(token);
+      expect(await replay).toEqual({ proceed: false, outcome: report });
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('forwards settlement events to the apply request progress token (TEST-B7, TEST-D4)', async () => {
+    const session = await proposalSession();
+    try {
+      vi.mocked(prepareHeal).mockImplementationOnce(async (input) => ({
+        hasCommits: true,
+        cases: [{ caseId: 'case-1', file: 'sample.test.md', healingSummary: 'repair' }],
+        preview: () => healOutput(),
+        settle: vi.fn(async () => {
+          input.events?.emit({ type: 'ai-result', callId: 'call-1', durationMs: 1, outcome: 'ok' });
+          return healOutput();
+        }),
+      }));
+      const token = await issuedToken(session.deps);
+      expect((await session.deps.beginHealApply!(token)).proceed).toBe(true);
+      const notifications: unknown[] = [];
+      await session.deps.settleHealApply!(token, 'authorized', undefined, {
+        progressToken: 'apply-progress',
+        sendNotification: async (notification) => { notifications.push(notification); },
+      });
+      expect(notifications).toContainEqual({
+        method: 'notifications/progress',
+        params: { progressToken: 'apply-progress', progress: 1, message: 'heal: ai call done (ok)' },
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
   it.each([
     { offset: 599_999, expired: false },
-    { offset: 600_000, expired: true },
+    { offset: 600_000, expired: false },
+    { offset: 600_001, expired: true },
   ])('anchors consumed replay to settledAt at $offset ms, independently of deliveredAt (TEST-D6)', async ({ offset, expired }) => {
     clockFake.elapsed = 1_000;
     const session = await proposalSession();

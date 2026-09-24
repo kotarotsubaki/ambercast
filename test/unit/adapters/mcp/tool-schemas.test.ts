@@ -48,6 +48,10 @@ describe('mcp/tool-schemas', () => {
       expect(healInputSchema.safeParse({ dryRun: false }).success).toBe(false);
     });
 
+    it('rejects an apply call with an empty applyToken', () => {
+      expect(healInputSchema.safeParse({ dryRun: false, applyToken: '' }).success).toBe(false);
+    });
+
     it.each([
       ['files', ['other.test.md']],
       ['ai', 'claude'],

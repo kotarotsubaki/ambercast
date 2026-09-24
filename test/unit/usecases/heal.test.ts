@@ -3052,6 +3052,42 @@ describe('heal state-machine contract', () => {
     expect(scenario.textWrites).not.toHaveBeenCalled();
   });
 
+  it('keeps another case committable when one plan preimage changes after a two-case preview', async () => {
+    const scenario = await createBothArtifactRepairScenario();
+    const first = OPTIONS.files[0]!;
+    const second = '/workspace/tests/second.test.md';
+    const secondPlan = scenario.deps.layout.planPathFor(second);
+    const secondGrounding = scenario.deps.layout.groundingPathFor(second);
+    const originalPlan = await scenario.storage.readText(PLAN);
+    const originalGrounding = await scenario.storage.readText(GROUNDING);
+    await scenario.storage.writeText(second, await scenario.storage.readText(first));
+    await scenario.storage.writeText(secondPlan, originalPlan);
+    await scenario.storage.writeText(secondGrounding, originalGrounding);
+    scenario.textWrites.mockClear();
+
+    const preview = await heal(scenario.deps, { ...OPTIONS, files: [first, second], dryRun: true });
+    expect(preview.outcome.results.map(({ file, repairOutcome }) => ({ file, repairOutcome }))).toEqual([
+      { file: first, repairOutcome: 'healed' },
+      { file: second, repairOutcome: 'healed' },
+    ]);
+    expect([...preview.commits.keys()]).toEqual([first, second]);
+    expect(scenario.textWrites).not.toHaveBeenCalled();
+
+    await scenario.storage.writeText(PLAN, 'externally-mutated-after-preview');
+    scenario.textWrites.mockClear();
+    const failed = await preview.commits.get(first)!.commit();
+    expect(failed).toMatchObject({ outcome: 'failed', error: expect.any(IntegrityViolationError), partiallyWritten: [] });
+    expect(scenario.textWrites).not.toHaveBeenCalled();
+
+    const applied = await preview.commits.get(second)!.commit();
+    expect(applied).toEqual({ outcome: 'committed' });
+    expect(scenario.textWrites.mock.calls.map(([path]) => path)).toEqual([secondPlan, secondGrounding]);
+    expect(await scenario.storage.readText(PLAN)).toBe('externally-mutated-after-preview');
+    expect(await scenario.storage.readText(GROUNDING)).toBe(originalGrounding);
+    expect(await scenario.storage.readText(secondPlan)).not.toBe(originalPlan);
+    expect(await scenario.storage.readText(secondGrounding)).not.toBe(originalGrounding);
+  });
+
   it('returns an integration-level zero-write integrity failure when the plan is deleted between heal preflight and commit', async () => {
     const deletable = createDeletableStorage();
     const scenario = await createScenario({ storage: deletable.storage, sessionEntries: liveEntries(SUBMIT) });

@@ -26,7 +26,7 @@ export interface McpProgressContext {
  * settlement, including declined or interrupted confirmation. `kind: 'error'`
  * contains a typed token or settlement failure. An unknown, superseded,
  * expired, or already consumed token that cannot be replayed returns error
- * without invoking settlement. applyHeal selects report only when a valid
+ * without invoking settlement. The apply path selects report only when a valid
  * proposal produces a settled heal result; otherwise it returns error.
  */
 export type ToolOutcome =
@@ -51,10 +51,14 @@ export interface McpServerDeps {
    * delivery. Repeated calls for the same token leave deliveredAt unchanged.
    */
   readonly markHealDelivered?: (token: string) => void;
-  /** Consumes the token at FIFO admission, before confirmation and regardless of abort. */
-  readonly beginHealApply?: (token: string, signal?: AbortSignal) => Promise<{ proceed: true } | { proceed: false; outcome: ToolOutcome }>;
+  /** Consumes a pending token before confirmation and FIFO admission. */
+  readonly beginHealApply?: (token: string, signal?: AbortSignal) => Promise<{ proceed: true; cases: readonly { readonly file: string; readonly healingSummary: string }[] } | { proceed: false; outcome: ToolOutcome }>;
   /** Settles a consumed token once after confirmation, or as interrupted on abort. */
-  readonly settleHealApply?: (token: string, confirm: 'authorized' | 'declined' | 'interrupted', signal?: AbortSignal) => Promise<ToolOutcome>;
+  readonly settleHealApply?: (token: string, confirm: 'authorized' | 'declined' | 'interrupted', signal?: AbortSignal, progress?: McpProgressContext) => Promise<ToolOutcome>;
+  /** Publishes a consumed token's output after its first response renders. */
+  readonly finalizeHealApply?: (token: string) => Promise<void> | void;
+  /** Stores a sanitized, replayable error after an unexpected apply failure. */
+  readonly failHealApply?: (token: string, error: unknown) => Promise<ToolOutcome>;
   /** Compatibility entry point for callers that combine consumption and settlement. */
   readonly applyHeal?: (token: string, confirm: 'authorized' | 'declined' | 'interrupted', signal?: AbortSignal) => Promise<ToolOutcome>;
 }

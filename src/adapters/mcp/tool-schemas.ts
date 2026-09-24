@@ -47,7 +47,7 @@ export const healInputSchema = z.object({
   files: z.string().array().optional(),
   allowEmpty: z.boolean().optional(),
   dryRun: z.boolean().optional(),
-  applyToken: z.string().optional(),
+  applyToken: z.string().min(1).optional(),
   ai: z.enum(['claude', 'codex']).optional(),
 }).strict().refine((input) => {
   if (input.dryRun === false) {

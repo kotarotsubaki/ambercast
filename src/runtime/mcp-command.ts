@@ -66,8 +66,25 @@ type HealProposal = {
   deliveredAt?: number;
   settledAt?: number;
   output?: import('#adapters/mcp/types.js').ToolOutcome;
+  finalized?: boolean;
+  completion?: Promise<import('#adapters/mcp/types.js').ToolOutcome>;
+  finish?: (outcome: import('#adapters/mcp/types.js').ToolOutcome) => void;
   settling?: Promise<import('#adapters/mcp/types.js').ToolOutcome>;
+  setProgress?: (progress: McpProgressContext) => () => Promise<void>;
 };
+
+type ToolOutcome = import('#adapters/mcp/types.js').ToolOutcome;
+
+function invalidHealToken(reason: 'missing' | 'unknown-token' | 'superseded' | 'expired'): ToolOutcome {
+  return { kind: 'error', code: 'HEAL_APPLY_TOKEN_INVALID', message: reason };
+}
+
+function failedHealApply(error: unknown): ToolOutcome {
+  return {
+    kind: 'error', code: 'HEAL_APPLY_FAILED',
+    message: `the apply crashed unexpectedly (${error instanceof Error ? error.name : 'Error'})`,
+  };
+}
 
 /**
  * Keeps write authority inside one MCP session. Token lookup checks
@@ -75,10 +92,11 @@ type HealProposal = {
  * pending-to-consumed transition occurs before confirmation. Preview creation
  * supersedes older pending proposals eagerly, while pending expiry is checked
  * only at apply. Delivery starts the pending TTL; settlement starts a separate
- * replay window. Both windows use the injected monotonic clock and expire at
- * their exact ten-minute boundary. A replay of an in-flight settlement will
- * coalesce with its original call instead of invoking the one-shot settle
- * capability again. Tokens are process-local, never persisted in the plan.
+ * replay window. Both windows use the injected monotonic clock and remain
+ * valid through the exact ten-minute boundary. A consumed-token replay waits
+ * for its original confirmation, settlement, and response rendering instead
+ * of invoking the one-shot settle capability again. Tokens are process-local
+ * and never persisted in the plan.
  */
 class HealProposalStore {
   private readonly proposals = new Map<string, HealProposal>();
@@ -88,14 +106,14 @@ class HealProposalStore {
   /**
    * Issues a random opaque token after preparation resolves for preview.
    * Issuance eagerly supersedes older pending proposals in this session;
-   * no token is issued when preparation throws.
+   * no token is issued when preparation has no commits or throws.
    */
-  issue(preparation: HealPreparation): string {
+  issue(preparation: HealPreparation, setProgress?: HealProposal['setProgress']): string {
     const token = randomBytes(16).toString('hex');
     for (const proposal of this.proposals.values()) {
       if (proposal.state === 'pending') proposal.state = 'superseded';
     }
-    this.proposals.set(token, { preparation, state: 'pending' });
+    this.proposals.set(token, { preparation, state: 'pending', ...(setProgress === undefined ? {} : { setProgress }) });
     return token;
   }
 
@@ -107,53 +125,80 @@ class HealProposalStore {
   }
 
   /** The pending TTL has one checkpoint, before confirmation can delay settlement. */
-  async consume(token: string): Promise<{ proceed: true } | { proceed: false; outcome: import('#adapters/mcp/types.js').ToolOutcome }> {
+  async consume(token: string): Promise<{ proceed: true; cases: readonly { file: string; healingSummary: string }[] } | { proceed: false; outcome: ToolOutcome }> {
     const proposal = this.proposals.get(token);
-    if (proposal === undefined) return { proceed: false, outcome: { kind: 'error', code: 'UNKNOWN_TOKEN', message: `unknown heal apply token: ${token}` } };
-    if (proposal.state === 'superseded') return { proceed: false, outcome: { kind: 'error', code: 'SUPERSEDED_TOKEN', message: 'a newer heal preview superseded this token' } };
+    if (proposal === undefined) return { proceed: false, outcome: invalidHealToken(token === '' ? 'missing' : 'unknown-token') };
+    if (proposal.state === 'superseded') return { proceed: false, outcome: invalidHealToken('superseded') };
     if (proposal.state === 'consumed') {
-      if (proposal.settledAt !== undefined && this.monotonicMs() - proposal.settledAt >= 600_000) {
-        return { proceed: false, outcome: { kind: 'error', code: 'EXPIRED_TOKEN', message: 'this heal apply token has expired' } };
+      if (proposal.settledAt !== undefined && this.monotonicMs() - proposal.settledAt > 600_000) {
+        return { proceed: false, outcome: invalidHealToken('expired') };
       }
-      if (proposal.output !== undefined) return { proceed: false, outcome: proposal.output };
-      // The compatibility entry point schedules settlement in the next microtask.
-      if (proposal.settling === undefined) await Promise.resolve();
-      if (proposal.settling !== undefined) return { proceed: false, outcome: await proposal.settling };
-      throw new Error('unreachable state: consumed but no output or settling');
+      if (proposal.finalized && proposal.output !== undefined) return { proceed: false, outcome: proposal.output };
+      return { proceed: false, outcome: await proposal.completion! };
     }
     if (proposal.state === 'pending') {
-      if (proposal.deliveredAt !== undefined && this.monotonicMs() - proposal.deliveredAt >= 600_000) {
-        return { proceed: false, outcome: { kind: 'error', code: 'EXPIRED_TOKEN', message: 'this heal apply token has expired' } };
+      if (proposal.deliveredAt !== undefined && this.monotonicMs() - proposal.deliveredAt > 600_000) {
+        return { proceed: false, outcome: invalidHealToken('expired') };
       }
       proposal.state = 'consumed';
-      return { proceed: true };
+      proposal.completion = new Promise<ToolOutcome>((resolve) => { proposal.finish = resolve; });
+      return { proceed: true, cases: proposal.preparation.cases.map(({ file, healingSummary }) => ({ file, healingSummary })) };
     }
     throw new Error('unreachable state');
   }
 
-  /** Settlement remains one-shot even when replay arrives during the write. */
-  async settle(token: string, confirm: 'authorized' | 'declined' | 'interrupted'): Promise<import('#adapters/mcp/types.js').ToolOutcome> {
+  /** Settlement remains one-shot while consumed-token replays await its output. */
+  async settle(token: string, confirm: 'authorized' | 'declined' | 'interrupted', progress?: McpProgressContext): Promise<ToolOutcome> {
     const proposal = this.proposals.get(token);
     if (proposal?.state !== 'consumed') throw new Error('heal proposal must be consumed before settlement');
     if (proposal.settling === undefined) {
-      const settlePromise = Promise.resolve().then(() => proposal.preparation.settle(confirm)).then((output) => {
-        proposal.settledAt = this.monotonicMs();
-        proposal.output = { kind: 'report', exitCode: output.exitCode, envelope: output.envelope };
-        return proposal.output;
-      }).catch((error: unknown) => {
-        proposal.settledAt = this.monotonicMs();
-        const outcome: import('#adapters/mcp/types.js').ToolOutcome = { kind: 'error', code: 'SETTLEMENT_FAILED', message: error instanceof Error ? error.message : String(error) };
-        proposal.output = outcome;
-        return outcome;
+      const flush = progress === undefined ? undefined : proposal.setProgress?.(progress);
+      const settlePromise = Promise.resolve().then(() => proposal.preparation.settle(confirm)).then(async (output) => {
+        await flush?.();
+        return this.save(proposal, { kind: 'report', exitCode: output.exitCode, envelope: output.envelope });
+      }).catch(async (error: unknown) => {
+        try { await flush?.(); } catch { /* Preserve the settlement failure. */ }
+        return this.save(proposal, failedHealApply(error));
       });
       proposal.settling = settlePromise;
     }
     return await proposal.settling;
   }
 
+  /** Stores an unexpected confirmation or queue failure for identical replay. */
+  async fail(token: string, error: unknown): Promise<ToolOutcome> {
+    const proposal = this.proposals.get(token);
+    if (proposal?.state !== 'consumed') return invalidHealToken('unknown-token');
+    if (proposal.settling !== undefined) await proposal.settling;
+    if (proposal.finalized || proposal.output?.kind === 'error') {
+      this.finalize(token);
+      return proposal.output!;
+    }
+    const outcome = this.save(proposal, failedHealApply(error));
+    this.finalize(token);
+    return outcome;
+  }
+
+  /** Publishes a stored outcome only after its MCP response renders successfully. */
+  finalize(token: string): void {
+    const proposal = this.proposals.get(token);
+    if (proposal?.state !== 'consumed' || proposal.output === undefined || proposal.finalized) return;
+    proposal.finalized = true;
+    proposal.finish?.(proposal.output);
+  }
+
+  private save(proposal: HealProposal, outcome: ToolOutcome): ToolOutcome {
+    proposal.settledAt = this.monotonicMs();
+    proposal.output = outcome;
+    return outcome;
+  }
+
   async apply(token: string, confirm: 'authorized' | 'declined' | 'interrupted', signal?: AbortSignal): Promise<import('#adapters/mcp/types.js').ToolOutcome> {
     const consumed = await this.consume(token);
-    return consumed.proceed ? this.settle(token, signal?.aborted ? 'interrupted' : confirm) : consumed.outcome;
+    if (!consumed.proceed) return consumed.outcome;
+    const outcome = await this.settle(token, signal?.aborted ? 'interrupted' : confirm);
+    this.finalize(token);
+    return outcome;
   }
 }
 
@@ -175,8 +220,8 @@ function progressSink(command: 'generate' | 'run' | 'heal', sessionRoot: string,
   const sink = createMcpProgressSink({
     command,
     sessionRoot,
-    // The job record observes every event immediately. Flushing each projection
-    // also exposes its fixed phrase while the job is still running.
+    // Job callers observe each event immediately; apply uses the same
+    // projection without creating a job record.
     onEvent: () => {
       void progress.sendNotification({ method: 'internal/run-event' });
       pendingFlush = pendingFlush.then(() => sink.flush());
@@ -312,24 +357,31 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     healPreview: (args, progress, jobSignal) => track(async (drainSignal) => {
       const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;
-      const sink = progressSink('heal', sessionRoot, progress);
+      let sink = progressSink('heal', sessionRoot, progress);
+      const events: NonNullable<HealCommandInput['events']> = { emit: (event) => sink?.emit(event) };
       try {
         const preparation = await prepareHeal({
           ...normalizeCommonMcpInput(inputArgs), cwd: sessionRoot, stderr: input.stderr,
           dryRun: true, yes: false, list: false, signal,
-          ...(sink === undefined ? {} : { events: sink }),
+          events,
         } as unknown as HealCommandInput);
         const previewResult = await preparation.preview();
-        if (previewResult.exitCode !== 0) return previewResult;
-        const token = proposals.issue(preparation);
+        if (!preparation.hasCommits) return previewResult;
+        const token = proposals.issue(preparation, (applyProgress) => {
+          sink = progressSink('heal', sessionRoot, applyProgress);
+          return async () => { await sink?.flush(); sink = undefined; };
+        });
         return { ...previewResult, applyToken: token };
       } finally {
         await sink?.flush();
+        sink = undefined;
       }
     }),
     markHealDelivered: (token) => proposals.markDelivered(token),
     beginHealApply: (token) => proposals.consume(token),
-    settleHealApply: (token, confirm) => proposals.settle(token, confirm),
+    settleHealApply: (token, confirm, _signal, progress) => proposals.settle(token, confirm, progress),
+    finalizeHealApply: (token) => proposals.finalize(token),
+    failHealApply: (token, error) => proposals.fail(token, error),
     applyHeal: (token, confirm, signal) => proposals.apply(token, confirm, signal),
   };
 

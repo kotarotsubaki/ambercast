@@ -13,14 +13,10 @@
  * client delivery when a synchronous call has returned a handle. This
  * renderer only constructs the response; the server marks first delivery
  * when its shared terminal response boundary returns the cached response.
- * The result exitCode (from HealCommandOutput or an equivalent envelope)
- * determines isError: generate and check treat 2 or 3
- * as errors; run and heal treat 2, 3, or 4 as errors; all other codes are not
- * errors. The result contains exactly one text content item. Its first line is
- * `exitCode: <n>`, followed by `applyToken: <token>` only when supplied, then
- * `JSON.stringify(envelope)` on the following lines. structuredContent is the
- * envelope itself, and _meta.exitCode is its exitCode. The return shape can be
- * used directly by a registerTool callback without exposing SDK types.
+ * Tool-specific exit codes determine transport error status. A preview token
+ * appears in both text and metadata so clients can retrieve it from either
+ * response surface. The return shape can be used directly by a registerTool
+ * callback without exposing SDK types.
  */
 export function renderToolResult(
   tool: 'generate' | 'run' | 'check' | 'heal',
@@ -55,7 +51,7 @@ export function renderToolResult(
     isError,
     content: [{ type: 'text', text: lines.join('\n') }],
     structuredContent: result.envelope,
-    _meta: { exitCode },
+    _meta: { exitCode, ...(applyToken === undefined ? {} : { applyToken }) },
   };
 }
 

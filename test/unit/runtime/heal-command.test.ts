@@ -156,7 +156,7 @@ describe('runHealCommand', () => {
     await expect(runHealCommand(input({ dryRun, files: ['tests/ineligible.md'] }))).resolves.toMatchObject({ exitCode: 2 });
     expect(mocks.heal).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({ targets: expect.objectContaining({ web: expect.objectContaining({ healReplayIsolation: 'stateful' }) }) }),
-    }), expect.objectContaining({ dryRun }));
+    }), expect.objectContaining({ dryRun: true }));
   });
 
   it('permits an idempotent target and leaves --list outside the isolation gate', async () => {

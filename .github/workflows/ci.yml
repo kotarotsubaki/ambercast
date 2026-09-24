@@ -35,9 +35,18 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      # `test.include` in vitest.config.ts covers website/test/**, so `npm
+      # test` below also runs the website suite, which needs website's own
+      # dependencies installed and its generated artifacts (e.g.
+      # website/public/capabilities.json) synced from this build's dist/
+      # output, same as the dedicated `website` job below. This makes the
+      # `pretest` build that `npm test` triggers below a harmless repeat.
+      - run: npm run build
+      - run: npm ci
+        working-directory: website
+      - run: npm run sync
+        working-directory: website
       - run: npm run typecheck
-      # `npm test` builds first via the "pretest" script, so a separate
-      # explicit build step here would just rebuild the same output twice.
       - run: npm test
       - run: node scripts/verify-pack.mjs
 

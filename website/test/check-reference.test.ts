@@ -57,11 +57,11 @@ const defaults = {
 const capabilities = {
   exitCodes: [0, 1],
   errorCodes: ['CONFIG_INVALID', 'FS_IO_ERROR'],
-  planned: ['view', 'review', 'mcp', 'baseline', 'restore'],
+  planned: ['review', 'mcp', 'baseline', 'restore'],
 };
 
 const plannedDocs = Object.fromEntries([
-  'reference/cli/view', 'reference/cli/review', 'reference/cli/mcp',
+  'reference/cli/review', 'reference/cli/mcp',
   'reference/cli/baseline-restore', 'reference/mcp-tools',
   'agents/mcp-server',
 ].map((slug) => [`${slug}.md`, '---\nstatus: planned\n---\n# Planned\n']));
@@ -176,7 +176,7 @@ describe('checkReference', () => {
   });
 
   it.each([
-    ['planned-mapping-missing', { capabilities: { ...capabilityPagesMapping.capabilities, view: undefined } }],
+    ['planned-mapping-missing', { capabilities: { ...capabilityPagesMapping.capabilities, review: undefined } }],
     ['planned-mapping-extra', { capabilities: { ...capabilityPagesMapping.capabilities, invented: ['reference/cli/view'] } }],
   ])('reports exactly one %s violation', async (rule, mapping) => {
     const capabilities = Object.fromEntries(Object.entries(mapping.capabilities).filter(([, pages]) => pages !== undefined));
@@ -185,7 +185,7 @@ describe('checkReference', () => {
   });
 
   it.each([
-    ['planned-page-not-planned', { 'reference/cli/view.md': '---\nstatus: available\n---\n# View\n' }],
+    ['planned-page-not-planned', { 'reference/cli/review.md': '---\nstatus: available\n---\n# Review\n' }],
     ['planned-page-unmapped', { 'unmapped.md': '---\nstatus: planned\n---\n# Unmapped\n' }],
   ])('reports exactly one %s violation', async (rule, docs) => {
     const result = await checkFixture(createReferenceFixture({ docs }));
@@ -193,13 +193,13 @@ describe('checkReference', () => {
   });
 
   it('reports one missing mapped page', async () => {
-    const result = await checkFixture(createReferenceFixture({ omitDocs: ['reference/cli/view.md'] }));
+    const result = await checkFixture(createReferenceFixture({ omitDocs: ['reference/cli/review.md'] }));
     expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toHaveLength(1);
   });
 
   it('reports an unknown mapped page status as the actual value', async () => {
     const result = await checkFixture(createReferenceFixture({ docs: {
-      'reference/cli/view.md': '---\nstatus: draft\n---\n# View\n',
+      'reference/cli/review.md': '---\nstatus: draft\n---\n# Review\n',
     } }));
     expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
       expect.objectContaining({ actual: 'draft' }),
@@ -208,7 +208,7 @@ describe('checkReference', () => {
 
   it('reports malformed frontmatter as a planned-page violation instead of crashing the whole check', async () => {
     const result = await checkFixture(createReferenceFixture({ docs: {
-      'reference/cli/view.md': '---\nstatus: planned\n# View\n',
+      'reference/cli/review.md': '---\nstatus: planned\n# Review\n',
     } }));
     expect(result.filter((v) => v.rule === 'planned-page-not-planned')).toEqual([
       expect.objectContaining({ actual: 'malformed' }),

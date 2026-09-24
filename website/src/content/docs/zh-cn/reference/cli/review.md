@@ -9,14 +9,14 @@ sidebar:
 ---
 
 :::caution
-`ambercast review` 属于规划中的功能，尚未在 0.3.1 中实现。当前命令行解析器仅接受 `generate`、`run`、`check`、`heal` 和 `init`，并会拒绝任何其他命令。本文档描述的是预期设计行为，而非当前版本的实际行为。
+`ambercast review` 属于规划中的功能，尚未在 0.3.1 中实现。当前命令行解析器仅接受 `generate`、`run`、`check`、`heal`、`init` 和 `view`，并会拒绝任何其他命令。本文档描述的是预期设计行为，而非当前版本的实际行为。
 :::
 
 本文档定义了规划中由独立 AI 审查测试计划（Plan）的结果与已知命令行选项。
 
 ## 状态 {#status}
 
-`ambercast review` 在 0.3.1 中尚未实现；命令行解析器仅接受 `generate`、`run`、`check`、`heal` 和 `init`，并会拒绝任何其他命令。其作为 v2 命令的角色由命令行设计所定义。
+`ambercast review` 在 0.3.1 中尚未实现；命令行解析器仅接受 `generate`、`run`、`check`、`heal`、`init` 和 `view`，并会拒绝任何其他命令。其作为 v2 命令的角色由命令行设计所定义。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[报告](/ambercast/zh-cn/reference/reports/#result-shapes)。
 

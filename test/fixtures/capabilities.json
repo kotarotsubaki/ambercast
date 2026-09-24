@@ -4,10 +4,10 @@
     "generate",
     "run",
     "check",
-    "heal"
+    "heal",
+    "view"
   ],
   "planned": [
-    "view",
     "review",
     "mcp",
     "baseline",

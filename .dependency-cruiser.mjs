@@ -91,7 +91,13 @@ function resolvedBuiltinPathPattern(specifiers) {
 }
 
 function allowedTargetPatterns(layer) {
+  // The HTTP role has a fixed path, unlike standard adapter families whose
+  // target depends on a captured source family. Its policy target therefore uses the carve-out path directly, never a backreference.
   return layer.mayImport.map((target) => {
+    if (target.family === 'http') {
+      return httpAdapter.path;
+    }
+
     if (target.sameFamily) {
       return '^src/adapters/$1(?:/|$)';
     }
@@ -209,6 +215,9 @@ const roleBoundaryNames = Object.freeze({
   core: 'core-is-leaf',
 });
 const specializedBoundaryTargetPaths = Object.freeze({
+  // A CLI-to-HTTP allowance belongs to the role policy. Its target must be
+  // excluded from the generic CLI diagnostic to avoid duplicate violations.
+  cli: [httpAdapter.path],
   runtime: [httpAdapter.path],
   usecases: [standardAdapterOrRootFilePath],
 });
@@ -232,7 +241,9 @@ const typesOnlyRules = Object.entries(LAYERS).flatMap(([role, layer]) => layer.m
     layer,
     LAYERS[target.layer],
   )));
-const externalAllowlistRules = Object.entries(LAYERS)
+const externalAllowlistRules = declaredRoles
+  // The eventual source of roles includes the nested HTTP carve-out; otherwise
+  // its closed external list cannot reject imports outside that list.
   .filter(([, layer]) => layer.externalAllow !== undefined)
   .flatMap(([role, layer]) => externalAllowRules(role, layer));
 
@@ -284,10 +295,25 @@ export default {
         reachable: true,
       },
     },
+    {
+      /*
+       * View's guarantee covers every dependency reachable from its entry modules.
+       * The `reachable: true` restriction guards the transitive closure to prevent
+       * an intermediate module from smuggling in an AI or browser dependency.
+       */
+      name: 'view-no-ai-or-browser-dependencies',
+      severity: 'error',
+      from: { path: '^src/(usecases/get-run-report\\.ts|runtime/view-command\\.ts|adapters/http/.*)$' },
+      to: {
+        path: '^src/adapters/(ai|browser)/',
+        reachable: true,
+      },
+    },
     ...typesOnlyRules,
     ...externalAllowlistRules,
   ],
   options: {
+    exclude: '\\.test\\.ts$',
     tsPreCompilationDeps: 'specify',
     tsConfig: { fileName: TSCONFIG_FILE },
     enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'node', 'default'] },

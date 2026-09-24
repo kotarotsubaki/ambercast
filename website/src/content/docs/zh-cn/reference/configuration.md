@@ -35,7 +35,7 @@ description: 本页定义了配置键及其解析逻辑。
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |
 | `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；绝不用于 heal Stage 3 |
 | `ai.timeoutMs` | positive integer | `600000` | 正数 | generate；run 兜底；heal |
-| `viewer.port` | integer | `4600` | 1–65535；viewer 命令处于计划中 | 仅用于计划中的 `view` |
+| `viewer.port` | integer | `4600` | 1–65535；起始候选端口，可被 `--port` 覆盖 | view |
 | `ci.heal` | boolean | `false` | 在 CI 中选择开启非 list 的 heal | heal |
 | `ci.updateGroundingCache` | boolean | `false` | CI 回写选择启用项 | run |
 | `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | 有限取值集合 | check |

@@ -26,7 +26,9 @@ describe('read storage port shape', () => {
     expectTypeOf<ReadStorageAdapter['readTextSnapshotIfExists']>().toEqualTypeOf<(path: string) => Promise<{ readonly text: string; readonly bytes: Uint8Array } | null>>();
     expectTypeOf<ReadStorageAdapter['exists']>().toEqualTypeOf<(path: string) => Promise<boolean>>();
     expectTypeOf<ReadStorageAdapter>().toEqualTypeOf<{
+      listDirectories(path: string): Promise<readonly string[]>;
       readText(path: string): Promise<string>;
+      realPath(path: string): Promise<string | undefined>;
       readTextSnapshotIfExists(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array } | null>;
       exists(path: string): Promise<boolean>;
     }>();

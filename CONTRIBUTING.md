@@ -4,7 +4,7 @@ Thanks for your interest in ambercast!
 
 ## Current state
 
-ambercast is published on npm (pre-1.0; the exact version is in `package.json`). The CLI (`init`, `generate`, `run`, `check`, `heal`) is functional, but breaking changes can still land in a minor release. Contributions to code, tests, docs (README in three locales, the docs site under `website/`), and toolchain are all welcome. Please open an issue before large changes.
+ambercast is published on npm (pre-1.0; the exact version is in `package.json`). The CLI (`init`, `generate`, `run`, `check`, `heal`, `view`) is functional, but breaking changes can still land in a minor release. Contributions to code, tests, docs (README in three locales, the docs site under `website/`), and toolchain are all welcome. Please open an issue before large changes.
 
 ## Development
 

@@ -1,5 +1,4 @@
 - [MCP Tools](https://kotarotsubaki.github.io/ambercast/reference/mcp-tools/): Planned tool contracts, result classifications, and safety defaults for ambercast MCP workflows.
-- [ambercast view](https://kotarotsubaki.github.io/ambercast/reference/cli/view/): Command reference for ambercast view, defining the planned local test results viewer, port selection, and non-interactive refusal.
 - [ambercast review](https://kotarotsubaki.github.io/ambercast/reference/cli/review/): Define the planned independent-AI review outcome and known flags for ambercast review.
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/reference/cli/mcp/): Server launch and transport discipline for the planned ambercast Model Context Protocol interface.
 - [ambercast baseline and restore](https://kotarotsubaki.github.io/ambercast/reference/cli/baseline-restore/): Planned external database baseline capture and restore interface for ambercast.

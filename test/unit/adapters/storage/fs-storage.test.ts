@@ -238,6 +238,27 @@ registerStorageContract({
 });
 
 describe('createFsStorage()', () => {
+  it('excludes symlinked directories from direct directory listings', async () => {
+    await withIsolatedStorage(async (storage) => {
+      await mkdir('runs/regular', { recursive: true });
+      await symlink('regular', 'runs/linked', 'dir');
+
+      await expect(storage.listDirectories('runs')).resolves.toEqual(['regular']);
+    });
+  });
+
+  it('resolves a directory symlink to its canonical target', async () => {
+    await withIsolatedStorage(async (storage) => {
+      await mkdir('runs/regular', { recursive: true });
+      await symlink('regular', 'runs/linked', 'dir');
+
+      const target = await storage.realPath('runs/regular');
+      const link = await storage.realPath('runs/linked');
+      expect(target).toEqual(expect.any(String));
+      expect(link).toBe(target);
+    });
+  });
+
   it.each(atomicWriteCases)('writes $name content to a temporary path before renaming it to the target', async ({ targetPath, write }) => {
     await withIsolatedStorage(async (storage) => {
       const writeFileMock = vi.mocked(fsPromises.writeFile);

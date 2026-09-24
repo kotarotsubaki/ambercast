@@ -3,11 +3,11 @@ title: ステータスとロードマップ
 description: ambercastの現在の実装境界、今後の計画、およびバージョン方針について解説します。
 ---
 
-ambercastの現在の実装境界を明確にし、実装済みの機能と今後の計画を区別して説明します。現行バージョンである 0.3.1 におけるCLIパーサーの公開コマンドとプラン再生成の要件を整理し、現時点でのツールの境界を把握できるようにします。
+ambercastの現在の実装境界を明確にし、実装済みの機能と今後の計画を区別して説明します。現行バージョンのCLIパーサーの公開コマンドとプラン再生成の要件を整理し、現時点でのツールの境界を把握できるようにします。
 
 ## 現行リリースで実装済み {#implemented}
 
-CLIパーサーは、`init`、`generate`、`run`、`check`、および `heal` を公開しています。実装されているパーサーには viewer または MCP サブコマンドは公開されていません。
+CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、および `view` を公開しています。一方で、実装されているパーサーには MCP サブコマンドは公開されていません。
 
 また、0.3.1 ではプロデューサ契約のフィンガープリントが変更されました。これにより、プロデューサバンドルおよび `inputsDigest` がstale（古くなった状態）になるため、0.3.1 では 0.1.0 のプランの再生成が必要です。
 
@@ -18,12 +18,12 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、および `heal` �
 
 ## 現行境界以降の計画 {#planned-after-current-boundary}
 
-現行の実装境界以降に向けて、計画されているドキュメントは `view`、`review`、`mcp`、baseline/restore、および MCPツールを対象としています。
+現行の実装境界以降に向けて、計画されているドキュメントは `review`、`mcp`、baseline/restore、および MCPツールを対象としています。
 
 また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
 
 関連情報:
-- [ambercast view](/ambercast/ja/reference/cli/view/)
+- [ambercast review](/ambercast/ja/reference/cli/review/)
 - [MCP サーバー](/ambercast/ja/agents/mcp-server/)
 
 ## バージョン方針 {#version-policy}

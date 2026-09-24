@@ -3,11 +3,11 @@ title: CLI overview
 description: Reference for parser-wide CLI behavior, command-flag dispatch, and discovery defaults in ambercast.
 ---
 
-The `ambercast` command-line interface provides five commands for scaffolding a project and for generating, running, checking, and repairing deterministic test plans, using per-command option parsing and configured discovery defaults.
+The `ambercast` command-line interface provides six commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, and browsing run results, using per-command option parsing and configured discovery defaults.
 
 ## Command surface {#command-surface}
 
-The implemented commands are `init`, `generate`, `run`, `check`, and `heal`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
+The implemented commands are `init`, `generate`, `run`, `check`, `heal`, and `view`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
 
 ```text
 Usage: ambercast <command> [options]
@@ -18,6 +18,7 @@ Commands:
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+  view                 Browse run results in a browser
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -35,6 +36,9 @@ Check options:
 
 Heal options:
   --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
+
+View options:
+  --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
@@ -54,6 +58,7 @@ Heal configuration:
 | run | literal paths; no paths = discovery | grep, target, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | literal paths; no paths = discovery | target, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, target, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
+| view | none | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 
 Except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
 

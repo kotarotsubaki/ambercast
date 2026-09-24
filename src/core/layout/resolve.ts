@@ -18,7 +18,7 @@ import { basenamePath, dirnamePath, isAbsolutePath, joinPath, relativeWithin } f
 const TEST_SUFFIX = '.test.md';
 export const PLAN_SUFFIX = '.ambercast.plan.json';
 export const GROUNDING_SUFFIX = '.ambercast.grounding.json';
-const RUN_ID_PATTERN = /^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/;
+export const RUN_ID_PATTERN = /^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/;
 
 /**
  * Resolves deterministic companion and run-artifact paths for discovered test

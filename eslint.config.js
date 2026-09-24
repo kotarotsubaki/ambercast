@@ -80,6 +80,13 @@ function roleSelector(layer, options = {}) {
 }
 
 function importPolicy(target) {
+  // The HTTP role has no family capture. Its eventual dedicated target maps
+  // to the carve-out element itself, allowing both CLI-to-HTTP and HTTP sibling
+  // imports without granting access to standard adapter families.
+  if (target.family === 'http') {
+    return { to: elementSelector(HTTP_ADAPTER.element) };
+  }
+
   const targetLayer = LAYERS[target.layer];
   const captured = target.matchingFamily || target.sameFamily
     ? { family: '{{from.family}}' }
@@ -188,6 +195,10 @@ export default [
       'boundaries/files': boundaryFiles,
       'boundaries/files-single-match': true,
     },
+  },
+  {
+    files: BOUNDARY_FILES,
+    ignores: ['src/**/*.test.ts'],
     rules: {
       'boundaries/element-types': ['error', {
         default: 'disallow',

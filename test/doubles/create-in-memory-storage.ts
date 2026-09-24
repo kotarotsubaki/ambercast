@@ -84,7 +84,7 @@ export function createInMemoryStorage(): StorageAdapter {
     async readText(path: string): Promise<string> {
       const content = files.get(path);
       if (content === undefined) {
-        throw new Error(`Cannot read non-file path: ${path}`);
+        throw Object.assign(new Error(`Cannot read non-file path: ${path}`), { code: 'ENOENT' });
       }
 
       return utf8Decoder.decode(content);
@@ -92,7 +92,7 @@ export function createInMemoryStorage(): StorageAdapter {
     async readTextSnapshot(path: string): Promise<{ readonly text: string; readonly bytes: Uint8Array }> {
       const content = files.get(path);
       if (content === undefined) {
-        throw new Error(`Cannot read non-file path: ${path}`);
+        throw Object.assign(new Error(`Cannot read non-file path: ${path}`), { code: 'ENOENT' });
       }
 
       return { text: utf8Decoder.decode(content), bytes: new Uint8Array(content) };
@@ -152,7 +152,7 @@ export function createInMemoryStorage(): StorageAdapter {
     async readBinary(path: string): Promise<Uint8Array> {
       const content = files.get(path);
       if (content === undefined) {
-        throw new Error(`Cannot read non-file path: ${path}`);
+        throw Object.assign(new Error(`Cannot read non-file path: ${path}`), { code: 'ENOENT' });
       }
 
       // Callers must not be able to mutate this fake's stored bytes through a read result.
@@ -175,6 +175,16 @@ export function createInMemoryStorage(): StorageAdapter {
         .filter((path) => parentPath(path) === dir)
         .map(fileName)
         .sort();
+    },
+    async listDirectories(dir: string): Promise<readonly string[]> {
+      return [...directories]
+        .filter((path) => parentPath(path) === dir)
+        .map(fileName)
+        .filter((name) => !name.startsWith('.ambercast-tmp-'))
+        .sort();
+    },
+    async realPath(path: string): Promise<string | undefined> {
+      return files.has(path) || directories.has(path) ? path : undefined;
     },
     async ensureDir(dir: string): Promise<void> {
       ensureDirectory(dir, directories, files);

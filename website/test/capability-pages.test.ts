@@ -9,7 +9,6 @@ describe('plannedPageSlugs', () => {
       'reference/cli/baseline-restore',
       'reference/cli/mcp',
       'reference/cli/review',
-      'reference/cli/view',
       'reference/mcp-tools',
     ]);
   });

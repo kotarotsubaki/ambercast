@@ -46,7 +46,8 @@ export type ErrorKind =
   | 'fs-io-error'
   | 'unexpected-crash'
   | 'interrupted'
-  | 'no-tests-found';
+  | 'no-tests-found'
+  | 'port-unavailable';
 
 /**
  * Base class for failures that participate in Ambercast's classified error

@@ -6,6 +6,7 @@ Commands:
   run [files...]       Replay deterministic plans
   check [files...]     Check plan freshness
   heal [files...]      Repair deterministic plans
+  view                 Browse run results in a browser
 
 Init options:
   --dir <path>  --yes, -y  --force  --no-color
@@ -23,6 +24,9 @@ Check options:
 
 Heal options:
   --dry-run  --yes, -y  --target <name>  --ai <claude|codex>  --allow-empty  --list  --json  --no-color
+
+View options:
+  --port <n>  --host <addr>  --allow-headless  --config <path>  --no-color
 
 AI configuration:
   ai.timeoutMs: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.

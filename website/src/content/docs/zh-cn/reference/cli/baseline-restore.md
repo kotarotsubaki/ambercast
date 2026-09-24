@@ -16,7 +16,7 @@ sidebar:
 
 ## 状态 {#status}
 
-`ambercast baseline` 与 `ambercast restore` 在 0.3.1 版本中尚未实现；解析器目前仅接受 `generate`、`run`、`check`、`heal` 和 `init`，并会拒绝任何其他命令。两者规划的数据库边界由数据库重置设计所定义。
+`ambercast baseline` 与 `ambercast restore` 在 0.3.1 版本中尚未实现；解析器目前仅接受 `generate`、`run`、`check`、`heal`、`init` 和 `view`，并会拒绝任何其他命令。两者规划的数据库边界由数据库重置设计所定义。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
 

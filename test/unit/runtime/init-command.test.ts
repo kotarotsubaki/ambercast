@@ -39,6 +39,8 @@ function createStorage(initial: Readonly<Record<string, string>> = {}, options: 
   const snapshot = (text: string) => ({ text, bytes: new TextEncoder().encode(text) });
 
   const storage: StorageAdapter = {
+    listDirectories: async () => [],
+    realPath: async () => undefined,
     async readText(path) {
       const text = files.get(path);
       if (text === undefined) throw new Error(`missing ${path}`);

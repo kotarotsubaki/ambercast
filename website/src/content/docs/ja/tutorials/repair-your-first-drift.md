@@ -7,12 +7,12 @@ description: UI変更によって失敗したテストに対し、ターゲッ�
 
 ## 手順 {#steps}
 
-作業スコープとして、既存の設定を維持し、選択したターゲットの `healReplayIsolation` キーのみを変更します。ターゲット名、`baseUrl`、`browser`、およびすべての `secretSinkOrigins` は変更しないでください。ターゲットの追加、削除、名前変更、その他の編集も行ってはいけません。指定された `targets` レコードはデフォルト設定を置き換えます。ターゲット名とその定義は `inputsDigest` の計算対象となりますが、`healReplayIsolation` は意図的にそのダイジェスト契約の対象外とされています。
+作業スコープとして、既存の設定を維持し、選択したターゲットの `healReplayIsolation` キーのみを変更します。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、およびすべての `secretSinkOrigins` は変更しないでください。ターゲットの追加、削除、名前変更、その他の編集も行ってはいけません。指定された `targets` レコードはデフォルト設定を置き換えます。ターゲット名とその定義は `inputsDigest` の計算対象となりますが、`healReplayIsolation` は意図的にそのダイジェスト契約の対象外とされています。
 
 1. `ambercast.config.json` において、選択した既存ターゲットのエントリを編集し、`healReplayIsolation` のみを `"idempotent"` に変更します。設定ファイルが存在しないデフォルトターゲットの場合、同等の維持設定は次のとおりです。
 
 ```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","browser":"chromium","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
 ```
 
 ターゲット名およびダイジェストに参加する定義が変更されていないため、既存の Plan の鮮度（freshness）は保たれます。変更されるのはライブ修復ポリシーのみです。このファイルは `RawConfig` で必須とされている `$schema` を満たしており、Schema URL は公開されている設定用 Schema URL です。

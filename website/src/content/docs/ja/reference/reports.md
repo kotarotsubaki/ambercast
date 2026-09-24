@@ -103,7 +103,7 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の11コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の12コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
@@ -112,7 +112,8 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", または "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 空白以外の文字列, reason: 空白以外の文字列 }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正の整数, column: 正の整数, kind: "grant-line" または "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"engine-unregistered"、または "launch-failed"; engine: 空白以外の文字列 }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"executor-unregistered"、または "launch-failed"; engine: 空白以外の文字列 }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: 空白以外の文字列, executor: 空白以外の文字列, reason: "surface-mismatch" または "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 空白以外の文字列 } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |

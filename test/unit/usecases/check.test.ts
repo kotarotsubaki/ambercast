@@ -26,7 +26,7 @@ const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
+const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const OPTIONS: CheckOptions = { files: [], allowEmpty: false, list: false };
 
 type TestConfig = CheckDeps['config'];
@@ -155,9 +155,9 @@ describe('check', () => {
     await writePlan(storage, layout, testPath, plan);
     await writeGrounding(storage, layout, testPath, plan);
     const targets = {
-      A: { ...definitions.A, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-      B: { ...definitions.B, browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
-      C: { surface: 'web' as const, baseUrl: 'https://c.example.test', browser: 'chromium' as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      A: { ...definitions.A, executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      B: { ...definitions.B, executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
+      C: { surface: 'web' as const, baseUrl: 'https://c.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 },
     };
     for (const configuredTargets of [targets, { ...targets, C: { ...targets.C, baseUrl: 'https://changed.example.test' } }]) {
       const outcome = await check({ storage, layout, discoverTestFiles: createDiscovery(), config: createConfig({ targets: configuredTargets, defaultTarget: 'A' }) }, { ...OPTIONS, files: [testPath] });
@@ -665,16 +665,16 @@ describe('check', () => {
     const testPath = `${TEST_DIR}/targets.test.md`;
     const planTargets = {
       web: TARGETS.web,
-      admin: { baseUrl: 'https://admin.example.test', browser: 'chromium' },
+      admin: { baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' } },
     } as const;
     const changedSelectedTargets = {
       ...planTargets,
-      web: { baseUrl: 'https://changed.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+      web: { baseUrl: 'https://changed.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
       admin: { ...planTargets.admin, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
     } as const;
     const changedUnrelatedTargets = {
       web: RESOLVED_TARGETS.web,
-      admin: { baseUrl: 'https://changed-admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+      admin: { baseUrl: 'https://changed-admin.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
     } as const;
     const { storage, layout } = createScenario();
     await storage.writeText(testPath, PROMPT);
@@ -708,7 +708,7 @@ describe('check', () => {
         ...ambiguousConfig,
         targets: {
           web: RESOLVED_TARGETS.web,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+          admin: { baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
         },
       },
     });

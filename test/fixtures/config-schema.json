@@ -70,9 +70,24 @@
               }
             }
           },
-          "browser": {
-            "type": "string",
-            "const": "chromium"
+          "executor": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "playwright"
+                ]
+              },
+              "browser": {
+                "type": "string",
+                "const": "chromium"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
           },
           "healReplayIsolation": {
             "type": "string",
@@ -88,8 +103,7 @@
           }
         },
         "required": [
-          "baseUrl",
-          "browser"
+          "baseUrl"
         ],
         "additionalProperties": false
       }

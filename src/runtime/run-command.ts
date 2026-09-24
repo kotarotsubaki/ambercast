@@ -8,7 +8,7 @@
  */
 import { AI_EXECUTOR_FACTORIES } from '#adapters/ai/registry.js';
 import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js';
-import { createBrowserDriverResolver } from '#adapters/browser/registry.js';
+import { createUiExecutorResolver } from '#adapters/browser/registry.js';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 import { createEnvSecretsProvider } from '#adapters/system/env-secrets-provider.js';
 import { createCryptoRandom } from '#adapters/system/crypto-random.js';
@@ -212,7 +212,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
       configEnv: readConfigEnvironment(),
     });
     projectRoot = config.projectRoot;
-    const browserDriver = createBrowserDriverResolver({ headed: input.headed });
+    const uiExecutor = createUiExecutorResolver({ headed: input.headed });
     const secrets = createEnvSecretsProvider();
     const events = createStderrProgressSink({
       command: 'run',
@@ -226,7 +226,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
       const ambercast = createAmbercast({
         config,
         aiProvider: 'claude',
-        browserDriver,
+        uiExecutor,
         secrets,
         events,
       });
@@ -236,7 +236,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
         clock: ambercast.clock,
         allocateCallId,
         runId,
-        browserDriver,
+        uiExecutor,
         secrets,
         events,
         discoverTestFiles: ambercast.discoverTestFiles,

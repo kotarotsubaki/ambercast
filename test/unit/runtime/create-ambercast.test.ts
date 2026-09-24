@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBrowserDriverResolver } from '#adapters/browser/registry.js';
+import { createUiExecutorResolver } from '#adapters/browser/registry.js';
 import type { CommandRunner } from '#adapters/ai/shared/command-runner.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { createAmbercast } from '#runtime/create-ambercast.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 
@@ -27,7 +27,7 @@ const CONFIG: ResolvedConfig = {
   projectRoot: '/workspace',
   testMatch: ['**/*.test.md'],
   testIgnore: ['**/.runs/**'],
-  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+  targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
   defaultTarget: 'web',
   secrets: { allow: [] },
   ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
@@ -131,20 +131,20 @@ describe('createAmbercast', () => {
   });
 
   it('keeps a headed Chromium resolver intact so replay resolves through the driver registry', () => {
-    const browserDriver = createBrowserDriverResolver({ headed: true });
+    const uiExecutor = createUiExecutorResolver({ headed: true });
     const ambercast = createAmbercast({
       config: CONFIG,
       aiProvider: 'codex',
-      browserDriver,
+      uiExecutor,
       events: createRecordingEventSink().sink,
     });
 
-    expect(ambercast.browserDriver).toBe(browserDriver);
-    expect(ambercast.browserDriver?.('chromium').engine).toBe('chromium');
+    expect(ambercast.uiExecutor).toBe(uiExecutor);
+    expect(ambercast.uiExecutor?.({ kind: 'playwright', browser: 'chromium' }).kind).toBe('playwright');
   });
 
   it('omits browser driver when generation has none', () => {
-    expect(createAmbercast({ config: CONFIG, aiProvider: 'codex', events: createRecordingEventSink().sink }).browserDriver).toBeUndefined();
+    expect(createAmbercast({ config: CONFIG, aiProvider: 'codex', events: createRecordingEventSink().sink }).uiExecutor).toBeUndefined();
   });
 
   it('retains supplied secrets and omits them when generation has none', () => {
@@ -161,21 +161,21 @@ describe('createAmbercast', () => {
   });
 
   it('constructs its AI executor even when every replay-specific port is supplied', () => {
-    const browserDriver = () => createFakeBrowserDriver(() => createFakeBrowserSession(new Map()));
+    const uiExecutor = () => createFakeUiExecutor(() => createFakeBrowserSession(new Map()));
     const secrets = createFakeSecretsProvider(new Map());
     const events = createRecordingEventSink();
 
     const ambercast = createAmbercast({
       config: CONFIG,
       aiProvider: 'claude',
-      browserDriver,
+      uiExecutor,
       secrets,
       events: events.sink,
     });
 
     // This fixture always supplies aiProvider, so the optional field is present.
     expect(ambercast.aiExecutor!.name).toBe('claude-code-cli');
-    expect(ambercast.browserDriver).toBe(browserDriver);
+    expect(ambercast.uiExecutor).toBe(uiExecutor);
     expect(ambercast.secrets).toBe(secrets);
     expect(ambercast.events).toBe(events.sink);
   });

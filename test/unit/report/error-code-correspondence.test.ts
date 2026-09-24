@@ -30,6 +30,7 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'integrity-violation', reportCode: 'INTEGRITY_VIOLATION', exitCode: 4, reportKind: 'usage' },
   { errorKind: 'grounding-unresolved', reportCode: 'GROUNDING_UNRESOLVED', exitCode: 4, reportKind: 'usage' },
   { errorKind: 'browser-launch-failed', reportCode: 'BROWSER_LAUNCH_FAILED', exitCode: 3, reportKind: 'environment' },
+  { errorKind: 'executor-unsupported', reportCode: 'EXECUTOR_UNSUPPORTED', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'ai-executor-unavailable', reportCode: 'AI_EXECUTOR_UNAVAILABLE', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'ai-response-invalid', reportCode: 'AI_RESPONSE_INVALID', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'fs-io-error', reportCode: 'FS_IO_ERROR', exitCode: 3, reportKind: 'environment' },
@@ -38,7 +39,7 @@ const ERROR_CODE_CORRESPONDENCE = [
 ] as const satisfies readonly ErrorCodeCorrespondence[];
 
 const LEGACY_ERROR_CODES_WITHOUT_KIND = ['SECRET_GRANT_UNATTRIBUTABLE'] as const;
-const CASE_SCOPE_ONLY_CODES = ['SECRET_ENV_VAR_COLLISION', 'SECRET_CONSENT_REQUIRED', 'SECRET_SYNTAX_REJECTED', 'GROUNDING_UNRESOLVED'] as const;
+const CASE_SCOPE_ONLY_CODES = ['SECRET_ENV_VAR_COLLISION', 'SECRET_CONSENT_REQUIRED', 'SECRET_SYNTAX_REJECTED', 'GROUNDING_UNRESOLVED', 'EXECUTOR_UNSUPPORTED'] as const;
 
 const REPORTABLE_ERROR_KINDS = [
   'config-invalid',
@@ -54,6 +55,7 @@ const REPORTABLE_ERROR_KINDS = [
   'integrity-violation',
   'grounding-unresolved',
   'browser-launch-failed',
+  'executor-unsupported',
   'ai-executor-unavailable',
   'ai-response-invalid',
   'fs-io-error',

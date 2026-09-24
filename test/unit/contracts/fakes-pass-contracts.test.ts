@@ -6,7 +6,7 @@ import type {
   InstructionCoveredAiAgenticRequest,
 } from '../../../src/ports/ai.js';
 import { registerAiExecutorContract } from '../../contracts/ai-executor.contract.js';
-import { registerBrowserDriverContract } from '../../contracts/browser-driver.contract.js';
+import { registerUiExecutorContract } from '../../contracts/ui-executor.contract.js';
 import {
   fingerprintWithFlippedLeadingHexCharacter,
   registerBrowserSessionContract,
@@ -23,7 +23,7 @@ import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { createFakeAiActionController } from '../../doubles/fake-ai-action-controller.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import {
   createFakeBrowserSession,
   elementRefKey,
@@ -83,8 +83,8 @@ registerBrowserSessionContract({
   operationObservation: (session) => operationObservation(session as FakeBrowserSession),
 });
 
-registerBrowserDriverContract({
-  createDriver: () => createFakeBrowserDriver(createContractSession),
+registerUiExecutorContract({
+  createExecutor: () => createFakeUiExecutor(createContractSession),
 });
 
 registerAiExecutorContract({

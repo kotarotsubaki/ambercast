@@ -9,7 +9,7 @@
 
 import { AI_EXECUTOR_FACTORIES } from '#adapters/ai/registry.js';
 import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js';
-import { createBrowserDriverResolver } from '#adapters/browser/registry.js';
+import { createUiExecutorResolver } from '#adapters/browser/registry.js';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 import { createRunsDirContainedStorage } from '#adapters/storage/runs-dir-contained-storage.js';
 import { createConfirmationAnswerReader, type ConfirmationAnswer, type ConfirmationAnswerReader } from '#adapters/system/confirmation-answer-reader.js';
@@ -469,7 +469,7 @@ export async function runHealCommand(
     });
     projectRoot = config.projectRoot;
     const isCI = createProcessEnvironmentInfo().isCI();
-    const browserDriver = createBrowserDriverResolver();
+    const uiExecutor = createUiExecutorResolver();
     const secrets = createEnvSecretsProvider();
     const events = createStderrProgressSink({
       command: 'heal',
@@ -483,7 +483,7 @@ export async function runHealCommand(
       const ambercast = createAmbercast({
         config,
         aiProvider: 'claude',
-        browserDriver,
+        uiExecutor,
         secrets,
         events,
       });
@@ -494,7 +494,7 @@ export async function runHealCommand(
         clock: ambercast.clock,
         allocateCallId,
         runId,
-        browserDriver,
+        uiExecutor,
         secrets,
         events,
         discoverTestFiles: ambercast.discoverTestFiles,

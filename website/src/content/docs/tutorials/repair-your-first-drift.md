@@ -7,12 +7,12 @@ This tutorial walks you through repairing an existing generated test on a dispos
 
 ## Steps {#steps}
 
-Preserve your existing configuration and change only the selected target's `healReplayIsolation` key. Keep its target name, `baseUrl`, `browser`, and any `secretSinkOrigins` unchanged; do not add, remove, rename, or otherwise edit a target. A supplied `targets` record replaces the defaults, target names and definitions participate in `inputsDigest`, and `healReplayIsolation` is deliberately outside that digest contract.
+Preserve your existing configuration and change only the selected target's `healReplayIsolation` key. Keep its target name, `baseUrl`, `executor` (including `executor.browser`), and any `secretSinkOrigins` unchanged; do not add, remove, rename, or otherwise edit a target. A supplied `targets` record replaces the defaults, target names and definitions participate in `inputsDigest`, and `healReplayIsolation` is deliberately outside that digest contract.
 
 1. In `ambercast.config.json`, edit the existing selected target entry so that only `healReplayIsolation` becomes `"idempotent"`. For the unconfigured default target, the equivalent preservation is:
 
 ```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","browser":"chromium","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
 ```
 
 The existing Plan remains fresh because its target name and digest-participating definition are unchanged; only its live healing policy changes. The file meets `RawConfig`'s required `$schema`, and the Schema URL is the published configuration Schema URL.

@@ -101,7 +101,7 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十一个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十二个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
@@ -110,7 +110,8 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 非空白字符串, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required"、"declined" 或 "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 非空白字符串, reason: 非空白字符串 }> }` |
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正整数, column: 正整数, kind: "grant-line" 或 "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"engine-unregistered" 或 "launch-failed"; engine: 非空白字符串 }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing"、"executor-unregistered" 或 "launch-failed"; engine: 非空白字符串 }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: 非空白字符串, executor: 非空白字符串, reason: "surface-mismatch" 或 "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 非空白字符串 } }` |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |

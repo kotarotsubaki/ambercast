@@ -38,7 +38,7 @@ vi.mock('#usecases/report-finalization.js', () => ({
 const CONFIG: ResolvedConfig = {
   testDir: '/workspace/tests', runsDir: '/workspace/tests/.runs', projectRoot: '/workspace',
   testMatch: ['**/*.test.md'], testIgnore: ['**/.runs/**'],
-  targets: { web: { baseUrl: 'https://example.test', browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 } }, defaultTarget: 'web',
+  targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 } }, defaultTarget: 'web',
   secrets: { allow: [] },
   ai: { provider: 'auto', timeoutMs: 120_000, maxGenerateAttempts: 2 }, viewer: { port: 4600 },
   ci: { heal: true, updateGroundingCache: false }, grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
@@ -184,7 +184,7 @@ describe('runHealCommand', () => {
         ...CONFIG,
         targets: {
           web: CONFIG.targets.web!,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+          admin: { baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
         },
       },
     });
@@ -198,7 +198,7 @@ describe('runHealCommand', () => {
         ...CONFIG,
         targets: {
           web: CONFIG.targets.web!,
-          admin: { baseUrl: 'https://admin.example.test', browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
+          admin: { baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 },
         },
       },
       built: report(2),
@@ -247,7 +247,7 @@ describe('runHealCommand', () => {
   it('forwards an absent replay-isolation setting to the heal use case', async () => {
     const config = {
       ...CONFIG,
-      targets: { web: { baseUrl: 'https://example.test', browser: 'chromium' } },
+      targets: { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } },
     } as unknown as ResolvedConfig;
     configure({ config, built: report(2) });
 

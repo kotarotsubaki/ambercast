@@ -6,8 +6,7 @@ import type {
   AssertCheck,
   AssertOutcome,
   BoundElement,
-  BrowserDriver,
-  BrowserEngine,
+  UiExecutor,
   BrowserSession,
   CaptureMode,
   GroundedResolution,
@@ -22,7 +21,6 @@ type ResolveGroundedIsRequired = {} extends Pick<BrowserSession, 'resolveGrounde
 
 describe('browser port shapes', () => {
   it('defines the materialized action, assertion, evidence, and grounding shapes', () => {
-    expectTypeOf<BrowserEngine>().toEqualTypeOf<'chromium'>();
     expectTypeOf<AccessibilityCapture>().toEqualTypeOf<{
       readonly rawYaml: string;
       readonly tree: JsonValueT;
@@ -84,9 +82,11 @@ describe('browser port shapes', () => {
     expectTypeOf<BrowserSession['close']>().toEqualTypeOf<() => Promise<void>>();
   });
 
-  it('defines a driver with its selected engine and launch operation', () => {
-    expectTypeOf<BrowserDriver['engine']>().toEqualTypeOf<BrowserEngine>();
-    expectTypeOf<BrowserDriver['launch']>().toEqualTypeOf<(target: TargetDefinition) => Promise<BrowserSession>>();
+  it('defines every required executor member', () => {
+    expectTypeOf<UiExecutor['kind']>().toEqualTypeOf<'playwright'>();
+    expectTypeOf<UiExecutor['surface']>().toEqualTypeOf<'web'>();
+    expectTypeOf<UiExecutor['capabilities']>().toEqualTypeOf<ReadonlySet<import('../../../src/core/ir/capabilities.js').UiCapability>>();
+    expectTypeOf<UiExecutor['launch']>().toEqualTypeOf<(target: TargetDefinition) => Promise<BrowserSession>>();
   });
 
   it('keeps resolveGrounded required', () => {

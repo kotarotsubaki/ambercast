@@ -12,7 +12,7 @@ import { run } from '../../../src/usecases/run.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 import { toTargetDefinition } from '../../../src/core/target/resolve.js';
@@ -31,14 +31,14 @@ async function scenario() {
   await storage.writeText(file, '# Visit missing\n');
   await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan));
   const launch = vi.fn(() => createFakeBrowserSession(new Map()));
-  const driver = createFakeBrowserDriver(launch);
+  const driver = createFakeUiExecutor(launch);
   const deps = {
     storage,
     layout,
     clock: createFixedClock(new Date('2026-09-23T00:00:00Z'), 0),
     allocateCallId: createCallIdAllocator(),
     runId: '2026-09-23T000000Z-550e8400-e29b-41d4-a716-446655440000',
-    browserDriver: () => driver,
+    uiExecutor: () => driver,
     secrets: createFakeSecretsProvider(new Map()),
     resolveAiExecutor: async () => { throw new Error('AI must not start'); },
     events: createRecordingEventSink().sink,
@@ -48,7 +48,7 @@ async function scenario() {
       testDir: '/workspace/tests',
       testMatch: ['**/*.test.md'],
       testIgnore: ['**/.runs/**'],
-      targets: { app: { baseUrl: 'https://app.example.test', browser: 'chromium' as const, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 } },
+      targets: { app: { baseUrl: 'https://app.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 } },
       defaultTarget: 'app',
       ai: { provider: 'codex' as const, timeoutMs: 1000, maxGenerateAttempts: 1 },
       ci: { heal: false, updateGroundingCache: false },
@@ -87,7 +87,7 @@ describe('retired Plan v3 preflight', () => {
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText({
       schemaVersion: 3,
       source: { inputsDigest: 'a'.repeat(64) },
-      targets: { app: { baseUrl: 'https://app.example.test', browser: 'chromium' } },
+      targets: { app: { baseUrl: 'https://app.example.test', executor: { kind: 'playwright', browser: 'chromium' } } },
       steps: [{ id: 'visit-app', kind: 'action', action: 'navigate', url: 'https://app.example.test' }],
     }));
     const result = await check({ storage: deps.storage, layout: deps.layout, discoverTestFiles: deps.discoverTestFiles, config: deps.config }, { files: [file], allowEmpty: false, list: false });
@@ -99,7 +99,7 @@ describe('retired Plan v3 preflight', () => {
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText({
       schemaVersion: 3,
       source: { inputsDigest: 'a'.repeat(64) },
-      targets: { app: { baseUrl: 'https://app.example.test', browser: 'chromium' } },
+      targets: { app: { baseUrl: 'https://app.example.test', executor: { kind: 'playwright', browser: 'chromium' } } },
       steps: [{ id: 'visit-app', kind: 'action', action: 'navigate', url: 'https://app.example.test' }],
     }));
     const runResult = await run(deps, { files: [file], resolve: false, updateCache: false, allowEmpty: false, list: false, stale: 'fail' });

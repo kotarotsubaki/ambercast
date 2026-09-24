@@ -18,7 +18,7 @@ import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
-import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
+import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 
@@ -26,7 +26,7 @@ const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TEST_PATH = `${TEST_DIR}/login.test.md`;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
-const TARGETS = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const;
+const TARGETS = { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } } as const;
 const GENERATED_RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [TEST_PATH],
@@ -104,7 +104,7 @@ registerUsecaseEmitsEventsContract([
         clock: createFixedClock(new Date('2026-08-11T00:00:00.000Z'), 0),
         allocateCallId: createCallIdAllocator(),
         runId: '2026-08-11T000000Z-550e8400-e29b-41d4-a716-446655440000',
-        browserDriver: () => createFakeBrowserDriver(() => createFakeBrowserSession(new Map())),
+        uiExecutor: () => createFakeUiExecutor(() => createFakeBrowserSession(new Map())),
         secrets: createFakeSecretsProvider(new Map()),
         resolveAiExecutor: async () => {
           throw new Error('The fully grounded replay must not resolve an AI executor.');

@@ -1133,7 +1133,7 @@ describe('ReportError', () => {
     { scope: 'run', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', message: 'The browser could not launch.' },
     { scope: 'case', kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', message: 'The browser could not launch.', caseId: 'login-succeeds' },
   ] as const)('accepts browser-launch details at $scope scope', (error) => {
-    for (const reason of ['executable-missing', 'engine-unregistered', 'launch-failed'] as const) {
+    for (const reason of ['executable-missing', 'executor-unregistered', 'launch-failed'] as const) {
       expectAccepted(ReportError, {
         ...error,
         details: { reason, engine: 'chromium' },

@@ -3,7 +3,7 @@
  * paths.
  *
  * Generation needs event delivery and the shared filesystem services while it
- * resolves AI only for a real dispatch; replay needs browser driver resolution,
+ * resolves AI only for a real dispatch; replay needs UI executor resolution,
  * secret lookup, and the same event delivery. One composer holds that real
  * dependency set so command paths converge on the same Ports-aligned
  * application boundary instead of duplicating composition policy in a
@@ -18,7 +18,7 @@ import { createSystemClock } from '#adapters/system/system-clock.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { createLayoutResolver, type LayoutResolver } from '#core/layout/resolve.js';
 import type { InstructionCoveredAiExecutor } from '#ports/ai.js';
-import type { BrowserDriverResolver } from '#ports/index.js';
+import type { UiExecutorResolver } from '#ports/index.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink, SecretsProvider } from '#ports/system.js';
 import { createFsTestFileDiscovery, type TestFileDiscovery } from './test-file-discovery.js';
@@ -40,11 +40,11 @@ export interface CreateAmbercastOptions {
   readonly aiProvider?: 'claude' | 'codex';
 
   /**
-   * Driver resolver supplied for replay. Its `browserDriver` name exactly
+   * Executor resolver supplied for replay. Its `uiExecutor` name exactly
    * matches `Ports`, keeping the composed surface aligned as use cases
    * accumulate.
    */
-  readonly browserDriver?: BrowserDriverResolver;
+  readonly uiExecutor?: UiExecutorResolver;
 
   /**
    * Secret lookup supplied for replay. The `secrets` name intentionally
@@ -81,10 +81,10 @@ export interface Ambercast {
   readonly discoverTestFiles: TestFileDiscovery;
 
   /**
-   * Replay driver resolution, named `browserDriver` to precisely mirror
+   * Replay executor resolution, named `uiExecutor` to precisely mirror
    * `Ports` as the application composition shape converges.
    */
-  readonly browserDriver?: BrowserDriverResolver;
+  readonly uiExecutor?: UiExecutorResolver;
 
   /**
    * Replay secret lookup, retaining Ports' `secrets` name rather than a
@@ -121,7 +121,7 @@ export interface Ambercast {
  * That executor is not passed to `run()`—`RunDeps`
  * has no `aiExecutor` field—so a grounded replay still requires no AI CLI.
  *
- * `browserDriver` and `secrets` remain optional in both input and result
+ * `uiExecutor` and `secrets` remain optional in both input and result
  * because generation supplies neither. Replay keeps local, non-optional
  * references to the same values it passes here and gives those references
  * directly to `run()`'s non-optional `RunDeps` fields; it does not read them
@@ -142,7 +142,7 @@ export function createAmbercast(options: CreateAmbercastOptions): Ambercast {
     }),
     clock: createSystemClock(),
     discoverTestFiles: createFsTestFileDiscovery(),
-    ...(options.browserDriver === undefined ? {} : { browserDriver: options.browserDriver }),
+    ...(options.uiExecutor === undefined ? {} : { uiExecutor: options.uiExecutor }),
     ...(options.secrets === undefined ? {} : { secrets: options.secrets }),
     events: options.events,
   };

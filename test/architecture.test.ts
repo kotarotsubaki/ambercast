@@ -16,6 +16,7 @@ import {
 } from '#core/ai/plan-producer-bundle.js';
 
 const SOURCE_ROOT = fileURLToPath(new URL('../src/', import.meta.url));
+const CLI_MAIN_MODULE_FILE = fileURLToPath(new URL('../src/cli/main.ts', import.meta.url));
 const DIGEST_MODULE_FILE = fileURLToPath(new URL('../src/core/ir/digest.ts', import.meta.url));
 const PORTS_MODULE_FILE = fileURLToPath(new URL('../src/ports/browser.ts', import.meta.url));
 const REPORT_SCHEMA_MODULE_FILE = fileURLToPath(new URL('../src/report/schema.ts', import.meta.url));
@@ -111,6 +112,25 @@ const H1D_H3C_CORPUS_SOURCE = [
   'declare const customGenericIteratorBoundarySink: { alias: unknown }; class CustomGenericIteratorBoundary<A, B> implements Iterator<B> { next(): IteratorResult<B> { throw new Error(); } } declare const customGenericIteratorBoundaryItems: { [Symbol.iterator](): CustomGenericIteratorBoundary<string, { x: [typeof digest.computeInputsDigest] }> }; for ({ x: [customGenericIteratorBoundarySink.alias] } of customGenericIteratorBoundaryItems) {}',
 ].join('\n');
 const H1D_H3C_CORPUS_OPTIONS: ts.CompilerOptions = { noUncheckedIndexedAccess: true };
+
+test('routes CLI adapter imports through runtime except for the HTTP carve-out (TEST-B11)', async () => {
+  const source = ts.createSourceFile(
+    CLI_MAIN_MODULE_FILE,
+    await readFile(CLI_MAIN_MODULE_FILE, 'utf8'),
+    ts.ScriptTarget.ES2023,
+    true,
+  );
+  const imports = source.statements
+    .filter(ts.isImportDeclaration)
+    .map((statement) => statement.moduleSpecifier)
+    .filter(ts.isStringLiteral)
+    .map((specifier) => specifier.text);
+  // The architecture policy permits CLI to start the view server directly; other adapters, including MCP, belong behind runtime.
+  const forbiddenAdapterImports = imports.filter(
+    (specifier) => specifier.startsWith('#adapters/') && !specifier.startsWith('#adapters/http/'),
+  );
+  expect(forbiddenAdapterImports).toEqual([]);
+});
 
 function scanVirtualDigestCorpus(source: string, extraOptions: ts.CompilerOptions = {}): {
   readonly program: ts.Program;

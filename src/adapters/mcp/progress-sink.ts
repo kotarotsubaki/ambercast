@@ -1,0 +1,68 @@
+import { relativeWithinOrOriginal } from '#core/paths.js';
+
+type McpProgressEvent =
+  | { readonly type: 'step-start'; readonly stepId: string }
+  | { readonly type: 'ai-call'; readonly file: string; readonly stepId?: string; readonly attempt: number; readonly attemptLimit: number }
+  | { readonly type: 'ai-result'; readonly outcome: string }
+  | { readonly type: 'heal-stage2-rejected'; readonly stepId: string; readonly reason: string }
+  | { readonly type: 'unclassified-rejection' }
+  | { readonly type: 'step-result' };
+
+/**
+ * Projects runtime events into MCP progress notifications.
+ *
+ * @param params - Tool identity, session root, notification sender, and optional event observer.
+ * @returns An event sink whose flush waits for queued notifications to settle.
+ * @remarks
+ * Emission can enqueue asynchronous sends, so callers must await flush before
+ * returning a tool response. The optional observer lets a job owner update
+ * progress counters; synchronous calls do not require that extra consumer.
+ * emit projects each RunEvent into a fixed message and queues it, except that
+ * unclassified-rejection is never sent. flush passes unsent notifications to
+ * send in order and resolves after attempting all of them. A failed send is
+ * discarded without propagating its exception, and later sends are still
+ * attempted; send success does not determine whether flush resolves. onEvent
+ * runs on every emit regardless of notification delivery and can update job
+ * progress counters independently of sending.
+ */
+export function createMcpProgressSink(params: {
+  readonly command: 'generate' | 'run' | 'heal';
+  readonly sessionRoot: string;
+  readonly send: (message: string) => Promise<void>;
+  readonly onEvent?: (event: unknown) => void;
+}): { emit: (event: unknown) => void; flush: () => Promise<void> } {
+  const { command, sessionRoot, send, onEvent } = params;
+  const queue: string[] = [];
+
+  function emit(event: unknown): void {
+    const runEvent = event as McpProgressEvent;
+
+    if (runEvent.type === 'step-start') {
+      queue.push(`${command}: step ${runEvent.stepId} started`);
+    } else if (runEvent.type === 'ai-call') {
+      const relativeFile = relativeWithinOrOriginal(sessionRoot, runEvent.file);
+      const stepIdPart = runEvent.stepId !== undefined ? ` ${runEvent.stepId}` : '';
+      queue.push(`${command} ${relativeFile}${stepIdPart}: ai call ${runEvent.attempt}/${runEvent.attemptLimit}`);
+    } else if (runEvent.type === 'ai-result') {
+      queue.push(`${command}: ai call done (${runEvent.outcome})`);
+    } else if (runEvent.type === 'heal-stage2-rejected') {
+      queue.push(`${command}: step ${runEvent.stepId} repair attempt rejected (${runEvent.reason})`);
+    }
+
+    if (onEvent !== undefined) {
+      onEvent(event);
+    }
+  }
+
+  async function flush(): Promise<void> {
+    while (queue.length > 0) {
+      const message = queue.shift()!;
+      try {
+        await send(message);
+      } catch {
+      }
+    }
+  }
+
+  return { emit, flush };
+}

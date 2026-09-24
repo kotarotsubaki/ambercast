@@ -20,9 +20,10 @@
  * commands or flags, malformed command arguments, and missing option values
  * write plain-text usage to stderr and exit 2 without a report envelope.
  *
- * For each valid command, this layer creates one `AbortController`, aborting
- * it when `SIGINT` or `SIGTERM` arrives, and passes its signal with the parsed
- * input to the matching runtime command. Runtime returns an envelope and
+ * For each valid non-MCP command, this layer creates one `AbortController`,
+ * aborting it when `SIGINT` or `SIGTERM` arrives, and passes its signal with
+ * the parsed input to the matching runtime command. MCP owns those signals
+ * in its runtime shutdown state machine. Runtime returns an envelope and
  * selected exit code; `--json` writes the `JSON.stringify(envelope)` payload
  * to the stream with a trailing newline appended at the write call, while human
  * output renders that same envelope with ANSI styling disabled by
@@ -53,6 +54,7 @@ import { escapeControlChars, escapeStackControlChars } from '#runtime/control-ch
 import { readDebugEnvironment } from '#runtime/debug-environment.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runInitCommand, type InitCommandDeps, type InitCommandInput, type InitCommandOutput } from '#runtime/init-command.js';
+import { runMcpCommand } from '#runtime/mcp-command.js';
 import { runRunCommand } from '#runtime/run-command.js';
 import { AmbercastError, prepareViewCommand, VIEW_COPY } from '#runtime/view-command.js';
 import { startLocalReportServer } from '#adapters/http/local-report-server.js';
@@ -146,6 +148,13 @@ interface ParsedViewCommand {
     readonly signal: AbortSignal;
   };
   readonly color: boolean;
+}
+
+interface ParsedMcpCommand {
+  readonly command: 'mcp';
+  readonly dir: string;
+  readonly syncWaitMs: number;
+  readonly stdin: NodeJS.ReadableStream;
 }
 
 const USAGE = renderUsage(CLI_MANIFEST);
@@ -632,6 +641,37 @@ function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCo
   };
 }
 
+/** MCP owns its process signals after argument validation, so this parser only selects streams and policy. */
+function parseMcp(argv: readonly string[], _signal: AbortSignal): ParsedMcpCommand | string {
+  if (argv.includes('--help')) return 'help';
+
+  let dir = process.cwd();
+  let syncWaitMs = 45_000;
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]!;
+    if (argument === '--dir' || argument === '--sync-wait-ms') {
+      const value = argv[index + 1];
+      if (value === undefined || value === '' || value.startsWith('--')) {
+        return `Missing value for ${argument}.`;
+      }
+      index += 1;
+      if (argument === '--dir') {
+        dir = value;
+      } else {
+        const parsed = Number(value);
+        if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed) || parsed <= 0) {
+          return `The ${argument} value must be a positive integer.`;
+        }
+        syncWaitMs = parsed;
+      }
+      continue;
+    }
+    return argument.startsWith('-') ? `Unknown mcp option: ${argument}.` : `Unexpected mcp argument: ${argument}.`;
+  }
+
+  return { command: 'mcp', dir, syncWaitMs, stdin: process.stdin };
+}
+
 function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealCommand | string {
   const separator = argv.indexOf('--');
   if (argv.slice(0, separator === -1 ? undefined : separator).includes('--help')) {
@@ -894,7 +934,15 @@ export async function main(
     process.exitCode = 0;
     return;
   }
-  if (argv[0] !== 'init' && argv[0] !== 'generate' && argv[0] !== 'run' && argv[0] !== 'check' && argv[0] !== 'heal' && argv[0] !== 'view') {
+  if (
+    argv[0] !== 'init'
+    && argv[0] !== 'generate'
+    && argv[0] !== 'run'
+    && argv[0] !== 'check'
+    && argv[0] !== 'heal'
+    && argv[0] !== 'view'
+    && argv[0] !== 'mcp'
+  ) {
     stderr.write(`Unknown command: ${argv[0]}.\n`);
     writeUsage(stderr);
     process.exitCode = 2;
@@ -912,7 +960,9 @@ export async function main(
           ? parseCheck(argv.slice(1), controller.signal)
           : argv[0] === 'view'
             ? parseView(argv.slice(1), controller.signal)
-            : parseHeal(argv.slice(1), controller.signal);
+            : argv[0] === 'mcp'
+              ? parseMcp(argv.slice(1), controller.signal)
+              : parseHeal(argv.slice(1), controller.signal);
   if (typeof parsed === 'string') {
     if (parsed === 'help') {
       writeUsage(stdout);
@@ -933,8 +983,10 @@ export async function main(
   };
   const onSigint = (): void => abort('SIGINT');
   const onSigterm = (): void => abort('SIGTERM');
-  process.once('SIGINT', onSigint);
-  process.once('SIGTERM', onSigterm);
+  if (parsed.command !== 'mcp') {
+    process.once('SIGINT', onSigint);
+    process.once('SIGTERM', onSigterm);
+  }
 
   try {
     try {
@@ -982,16 +1034,25 @@ export async function main(
           ? await runRunCommand({ ...parsed.input, stderr })
           : parsed.command === 'check'
             ? await runCheckCommand({ ...parsed.input, stderr })
-            : await runHealCommand({ ...parsed.input, stderr });
+            : parsed.command === 'mcp'
+              ? await (async () => {
+                const exitCode = await runMcpCommand({ dir: parsed.dir, syncWaitMs: parsed.syncWaitMs, stdin: parsed.stdin, stdout, stderr });
+                process.exitCode = exitCode;
+                return { exitCode, envelope: null };
+              })()
+              : await runHealCommand({ ...parsed.input, stderr });
       if (
-        parsed.command === 'run'
+        output.envelope !== null
+        && parsed.command === 'run'
         && output.envelope.command === 'run'
         && output.envelope.reportPersistence === 'failed'
       ) {
         stderr.write(`${REPORT_PERSISTENCE_FAILED_WARNING}\n`);
       }
-      stdout.write(parsed.json ? `${JSON.stringify(output.envelope)}\n` : renderHumanReport(output.envelope, parsed.color));
-      process.exitCode = output.exitCode;
+      if (output.envelope !== null) {
+        stdout.write((parsed as { json?: boolean; color?: boolean }).json ? `${JSON.stringify(output.envelope)}\n` : renderHumanReport(output.envelope, (parsed as { color?: boolean }).color ?? true));
+        process.exitCode = output.exitCode;
+      }
     } catch (error) {
       /*
        * Opt-in diagnostics can contain sensitive data, but unavailable or

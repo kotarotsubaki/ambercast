@@ -19,6 +19,7 @@ const runHealCommand = vi.hoisted(() => vi.fn());
 const runInitCommand = vi.hoisted(() => vi.fn());
 const prepareViewCommand = vi.hoisted(() => vi.fn());
 const startLocalReportServer = vi.hoisted(() => vi.fn());
+const runMcpCommand = vi.hoisted(() => vi.fn());
 vi.mock('#runtime/generate-command.js', () => ({ runGenerateCommand }));
 vi.mock('#runtime/run-command.js', () => ({ runRunCommand }));
 vi.mock('#runtime/check-command.js', () => ({ runCheckCommand }));
@@ -29,6 +30,7 @@ vi.mock('#runtime/view-command.js', async (importOriginal) => ({
   prepareViewCommand,
 }));
 vi.mock('#adapters/http/local-report-server.js', () => ({ startLocalReportServer }));
+vi.mock('#runtime/mcp-command.js', () => ({ runMcpCommand }));
 
 import { ERROR_DETAILS_KEY_ORDER, main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
@@ -185,6 +187,15 @@ function createInitStorage(): StorageAdapter {
 }
 
 describe('main()', () => {
+  it('passes injected streams to the mcp command', async () => {
+    const stdout = new MemoryWritable();
+    const stderr = new MemoryWritable();
+    runMcpCommand.mockResolvedValueOnce(0);
+
+    await main(['mcp'], stdout, stderr);
+
+    expect(runMcpCommand).toHaveBeenCalledWith(expect.objectContaining({ stdout, stderr, stdin: process.stdin }));
+  });
   it('renders skipped rows as non-healthy without fabricating execution or inspection evidence', async () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,

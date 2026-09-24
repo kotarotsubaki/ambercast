@@ -46,7 +46,7 @@ function expectUnresolved(
   expect(result.details).toEqual(details);
 }
 
-function inheritedTarget(name: string, definition: Readonly<TargetDefinition> = WEB): Targets {
+function inheritedTarget(name: string, definition: Readonly<TargetDefinition> = WEB_DEFINITION): Targets {
   const prototype = Object.create(null) as Record<string, Readonly<TargetDefinition>>;
   Object.defineProperty(prototype, name, { value: definition, enumerable: true });
   return Object.create(prototype) as Targets;
@@ -57,7 +57,7 @@ describe('resolveTarget', () => {
     const idempotent: ResolvedTargetConfigEntry = { baseUrl: 'https://web.example.test', browser: 'chromium', healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 };
     const stateful: ResolvedTargetConfigEntry = { ...idempotent, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 };
 
-    expect(toTargetDefinition(idempotent)).toEqual({ baseUrl: 'https://web.example.test', browser: 'chromium' });
+    expect(toTargetDefinition(idempotent)).toEqual({ surface: 'web', baseUrl: 'https://web.example.test' });
     expect(toTargetDefinition(stateful)).toEqual(toTargetDefinition(idempotent));
     expect(toTargetDefinition(stateful)).not.toHaveProperty('healReplayIsolation');
   });
@@ -183,7 +183,7 @@ describe('resolveTarget', () => {
 
     expect(Object.hasOwn(targets, name)).toBe(false);
     expect(Object.keys(targets)).toEqual([]);
-    expect(targets[name]).toBe(WEB);
+    expect(targets[name]).toBe(WEB_DEFINITION);
 
     const result = resolveTarget({ targets, defaultTarget: undefined, explicitTarget: name });
 

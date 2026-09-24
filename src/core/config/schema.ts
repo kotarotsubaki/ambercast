@@ -44,8 +44,17 @@ export const AI_TIMEOUT_MS_DESCRIPTION = 'Deadline in milliseconds for one provi
  * default before any runtime consumer receives the target, while
  * `toTargetDefinition` keeps its three-field projection free of this
  * live-only setting so it never becomes a plan or input-digest dependency.
+ * In v4 configuration accepts an optional web surface and description while
+ * retaining browser for runtime driver selection. The Plan projection omits
+ * description and browser; the optional surface resolves to web before the
+ * strict Plan definition is formed.
  */
-export const TargetConfigEntry = TargetDefinition.extend({
+export const TargetConfigEntry = z.strictObject({
+  surface: z.literal('web').optional(),
+  description: z.string().optional(),
+  baseUrl: TargetDefinition.shape.baseUrl,
+  secretSinkOrigins: TargetDefinition.shape.secretSinkOrigins,
+  browser: z.literal('chromium'),
   healReplayIsolation: z.enum(['idempotent', 'stateful']).optional(),
   resolveTimeoutMs: z.int().min(0).max(60000).optional(),
 });

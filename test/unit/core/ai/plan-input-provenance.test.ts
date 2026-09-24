@@ -8,10 +8,10 @@ import type { NormalizedTestMd } from '#core/ir/normalize.js';
 import { PLAN_SCHEMA_VERSION, type TargetDefinition } from '#core/ir/schema.js';
 
 const NORMALIZED = '# Sign in\n' as NormalizedTestMd;
-const SINGLE_TARGET = { web: { baseUrl: 'https://example.test', browser: 'chromium' } } as const satisfies Readonly<Record<string, TargetDefinition>>;
+const SINGLE_TARGET = { web: { baseUrl: 'https://example.test', surface: 'web' } } as const satisfies Readonly<Record<string, TargetDefinition>>;
 const MULTIPLE_TARGETS = {
-  staging: { baseUrl: 'https://staging.example.test', browser: 'chromium' },
-  production: { baseUrl: 'https://production.example.test', browser: 'chromium' },
+  staging: { surface: 'web', baseUrl: 'https://staging.example.test' },
+  production: { surface: 'web', baseUrl: 'https://production.example.test' },
 } as const satisfies Readonly<Record<string, TargetDefinition>>;
 
 function sha256(preimage: string): string {
@@ -36,10 +36,10 @@ describe('deriveCurrentPlanInputProvenance()', () => {
       schemaVersion: PLAN_SCHEMA_VERSION,
       generatorPromptTemplateFingerprint: 'fixed-template-fingerprint',
       planProducerBundleFingerprint: 'fixed-bundle-fingerprint',
-      targetDefinitions: { web: { baseUrl: 'https://fixed.example.test', browser: 'chromium' } },
+      targetDefinitions: { web: { surface: 'web', baseUrl: 'https://fixed.example.test' } },
     };
-    const fixedCanonicalPreimage = '{"generatorPromptTemplateFingerprint":"fixed-template-fingerprint","normalizedTestMd":"# Fixed\\n","planProducerBundleFingerprint":"fixed-bundle-fingerprint","schemaVersion":3,"targetDefinitions":{"web":{"baseUrl":"https://fixed.example.test","browser":"chromium"}}}';
-    const fixedExpectedDigest = '9fb2520c30168f64f3bf5fb286b6a9bb0f4525ec8d1ed05cb653fe99d1ca6e9c';
+    const fixedCanonicalPreimage = '{"generatorPromptTemplateFingerprint":"fixed-template-fingerprint","normalizedTestMd":"# Fixed\\n","planProducerBundleFingerprint":"fixed-bundle-fingerprint","schemaVersion":4,"targetDefinitions":{"web":{"baseUrl":"https://fixed.example.test","surface":"web"}}}';
+    const fixedExpectedDigest = 'bda44b8edacaacc15ec43ea6d619919dcbe6ca251bc206978cf9e42c2f03e92e';
 
     expect(sha256(fixedCanonicalPreimage)).toBe(fixedExpectedDigest);
     expect(computeInputsDigest(fixedInputs)).toBe(fixedExpectedDigest);

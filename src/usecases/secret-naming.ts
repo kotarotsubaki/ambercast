@@ -122,7 +122,7 @@ export function deriveStage2ReplacementSecretNames(
   for (const [stepIndex, step] of input.plan.steps.entries()) {
     if (stepIndex === input.replacementIndex) continue;
     if (step.kind === 'action' && step.action === 'fill-secret') {
-      reservations.push({ stepIndex, stepId: step.id, ref: step.secretRef, name: secretNameFor(step.secretRef), target: step.target, targetKey: canonicalTargetKey(step.target), selectionSource: 'existing-plan' });
+      reservations.push({ stepIndex, stepId: step.id, ref: step.secretRef, name: secretNameFor(step.secretRef), target: step.element, targetKey: canonicalTargetKey(step.element), selectionSource: 'existing-plan' });
     } else if (step.kind === 'ai') {
       for (const [useIndex, { ref }] of (step.secrets ?? []).entries()) {
         reservations.push({ stepIndex, stepId: step.id, useIndex, ref, name: secretNameFor(ref), selectionSource: 'existing-plan' });
@@ -221,7 +221,7 @@ export function deriveSecretNames(
         invalidIssues.push({ code: 'secret-allowed-name-not-projected', path: `steps[${stepIndex}].secret.allowedName`, stepId: step.id });
         continue;
       }
-      const target = current.target as ElementRef;
+      const target = current.element as ElementRef;
       const targetSlug = slug(target.name);
       const name = (choice?.allowedName ?? targetSlug) || choice?.nameHint || `secret_step_${stepIndex + 1}`;
       candidates.push({ step: current, stepIndex, stepId: step.id, target, targetKey: canonicalTargetKey(target), explicit: choice?.allowedName !== undefined, candidate: name as SecretName, selectionSource: choice?.allowedName !== undefined ? 'allowed-name' : targetSlug ? 'target-slug' : choice?.nameHint !== undefined ? 'hint' : 'ordinal' });

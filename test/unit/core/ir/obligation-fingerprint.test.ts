@@ -8,7 +8,7 @@ const BUTTON = { strategy: 'accessibility' as const, role: 'button', name: 'Cont
 
 function ai(overrides: Record<string, unknown> = {}) {
   return Step.parse({
-    id: 'agent-step', kind: 'ai', instruction: 'Open {{run.order.id}} then {{run.order.id}}',
+    id: 'agent-step', kind: 'ai', target: 'app', instruction: 'Open {{run.order.id}} then {{run.order.id}}',
     secrets: [{ ref: '{{secrets.auth.token}}' }],
     instructionCoverage: [{ id: 'criterion-a', kind: 'action', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }],
     ...overrides,
@@ -17,23 +17,23 @@ function ai(overrides: Record<string, unknown> = {}) {
 
 describe('obligation fingerprints', () => {
   it('matches an unchanged obligation even when ordinary executable detail changes', () => {
-    const before = Step.parse({ id: 'navigate', kind: 'action', action: 'navigate', url: 'https://example.test/{{run.order.id}}' });
-    const after = Step.parse({ id: 'navigate', kind: 'action', action: 'navigate', url: 'https://other.example.test/{{run.order.id}}' });
+    const before = Step.parse({ id: 'navigate', kind: 'action', action: 'navigate', target: 'app', url: 'https://example.test/{{run.order.id}}' });
+    const after = Step.parse({ id: 'navigate', kind: 'action', action: 'navigate', target: 'app', url: 'https://other.example.test/{{run.order.id}}' });
 
     expect(obligationFingerprintMatches(before, after)).toBe(true);
   });
 
   it.each([
-    ['an action opcode', Step.parse({ id: 'step', kind: 'action', action: 'click', target: BUTTON }), Step.parse({ id: 'step', kind: 'action', action: 'press', target: BUTTON, key: 'Enter' })],
-    ['an assert opcode', Step.parse({ id: 'assertion', kind: 'assert', check: 'text-visible', text: 'Continue' }), Step.parse({ id: 'assertion', kind: 'assert', check: 'text-equals', target: BUTTON, text: 'Continue' })],
+    ['an action opcode', Step.parse({ id: 'step', kind: 'action', action: 'click', target: 'app', element: BUTTON }), Step.parse({ id: 'step', kind: 'action', action: 'press', target: 'app', element: BUTTON, key: 'Enter' })],
+    ['an assert opcode', Step.parse({ id: 'assertion', kind: 'assert', check: 'text-visible', target: 'app', text: 'Continue' }), Step.parse({ id: 'assertion', kind: 'assert', check: 'text-equals', target: 'app', element: BUTTON, text: 'Continue' })],
     // SPEC-C1 C1-12
     ['an AI secret reference', ai(), ai({ secrets: [{ ref: '{{secrets.auth.other}}' }] })],
-    ['a fill-secret reference', Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.token}}' }), Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: BUTTON, secretRef: '{{secrets.auth.other}}' })],
+    ['a fill-secret reference', Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: 'app', element: BUTTON, secretRef: '{{secrets.auth.token}}' }), Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: 'app', element: BUTTON, secretRef: '{{secrets.auth.other}}' })],
     ['an instruction coverage id', ai(), ai({ instructionCoverage: [{ id: 'criterion-z', kind: 'action', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['an instruction coverage kind', ai(), ai({ instructionCoverage: [{ id: 'criterion-a', kind: 'success', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['an instruction coverage span', ai(), ai({ instructionCoverage: [{ id: 'criterion-a', kind: 'action', sourceSpan: NEXT_COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['instruction coverage ordering', ai(), ai({ instructionCoverage: [{ id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }, { id: 'criterion-a', kind: 'action', sourceSpan: COVERAGE_SPAN }] })],
-    ['a capture variable', Step.parse({ id: 'capture', kind: 'capture', target: BUTTON, variable: 'orderId' }), Step.parse({ id: 'capture', kind: 'capture', target: BUTTON, variable: 'otherId' })],
+    ['a capture variable', Step.parse({ id: 'capture', kind: 'capture', target: 'app', element: BUTTON, variable: 'orderId' }), Step.parse({ id: 'capture', kind: 'capture', target: 'app', element: BUTTON, variable: 'otherId' })],
     ['a removed run reference', ai(), ai({ instruction: 'Open {{run.order.id}}' })],
     ['an added run reference', ai({ instruction: 'Open {{run.order.id}}' }), ai()],
     ['run reference ordering', ai({ instruction: 'Open {{run.order.id}} then {{run.user.id}}' }), ai({ instruction: 'Open {{run.user.id}} then {{run.order.id}}' })],
@@ -43,9 +43,9 @@ describe('obligation fingerprints', () => {
   });
 
   it('rejects replacement identity changes before comparing fingerprints', () => {
-    const step = Step.parse({ id: 'capture', kind: 'capture', target: BUTTON, variable: 'orderId' });
-    const renamed = Step.parse({ id: 'renamed', kind: 'capture', target: BUTTON, variable: 'orderId' });
-    const retyped = Step.parse({ id: 'capture', kind: 'action', action: 'click', target: BUTTON });
+    const step = Step.parse({ id: 'capture', kind: 'capture', target: 'app', element: BUTTON, variable: 'orderId' });
+    const renamed = Step.parse({ id: 'renamed', kind: 'capture', target: 'app', element: BUTTON, variable: 'orderId' });
+    const retyped = Step.parse({ id: 'capture', kind: 'action', action: 'click', target: 'app', element: BUTTON });
 
     expect(obligationFingerprintMatches(step, renamed)).toBe(false);
     expect(obligationFingerprintMatches(step, retyped)).toBe(false);
@@ -57,11 +57,11 @@ describe('obligation fingerprints', () => {
 
   it('treats an omitted AI secrets field and an explicit empty secrets array as the same fixed-shape obligation', () => {
     const omitted = Step.parse({
-      id: 'agent-step', kind: 'ai', instruction: 'Open {{run.order.id}} then {{run.order.id}}',
+      id: 'agent-step', kind: 'ai', target: 'app', instruction: 'Open {{run.order.id}} then {{run.order.id}}',
       instructionCoverage: [{ id: 'criterion-a', kind: 'action', sourceSpan: COVERAGE_SPAN }],
     });
     const explicitEmpty = Step.parse({
-      id: 'agent-step', kind: 'ai', instruction: 'Open {{run.order.id}} then {{run.order.id}}',
+      id: 'agent-step', kind: 'ai', target: 'app', instruction: 'Open {{run.order.id}} then {{run.order.id}}',
       secrets: [], instructionCoverage: [{ id: 'criterion-a', kind: 'action', sourceSpan: COVERAGE_SPAN }],
     });
 

@@ -2,10 +2,10 @@ import type { AmbercastError } from '#core/errors/types.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import type { FsIoError } from '#core/errors/fs-io-error.js';
 import { reportError } from '#report/error-mapping.js';
-import type { RepairTraceEntry, StepResult } from '#report/schema.js';
+import type { ExecutedRunResult, RepairTraceEntry, StepResult } from '#report/schema.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { RunCaseOutcome, RunDeps } from './run.js';
-import { run, validateTrustedInstructionCoveredPlanText } from './run.js';
+import { isRetiredPlanVersion, run, validateTrustedInstructionCoveredPlanText } from './run.js';
 import { generate, prepareInstructionCoveredSteps, projectAllowedNames } from './generate.js';
 import { inspectGroundingArtifactText } from './check-grounding.js';
 import { computePlanDigest } from '#core/ir/digest.js';
@@ -13,11 +13,13 @@ import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
-import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, type GroundingDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
+import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, PlanDocument, type GroundingDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
-import { resolveTarget } from '#core/target/resolve.js';
+import { projectPlanTargets } from '#core/target/resolve.js';
+import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
+import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { scanLegacySecretSyntax } from '#core/ir/secret-syntax-scan.js';
 import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-error.js';
 import { assertNoEnvVarCollision } from '#core/secrets/env-var-name.js';
@@ -34,6 +36,7 @@ import { BatchInterruptionTracker } from './batch-interruption.js';
 import { obligationFingerprintMatches } from '#core/ir/obligation-fingerprint.js';
 import { joinPath } from '#core/paths.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
+import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { isRepairableNavigationFailure } from '#usecases/run.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
@@ -163,6 +166,9 @@ export interface HealCaseOutcome {
 
   /** Evidence returned by the last replay that was actually performed. */
   readonly steps: readonly StepResult[];
+
+  /** Final state of every Target session from the retained replay. */
+  readonly sessions: ExecutedRunResult['sessions'];
 
   /** Human-readable replay explanation paired with the retained evidence. */
   readonly explanation: string;
@@ -575,7 +581,7 @@ async function measureReplay(
   const evidenceDir = attemptScopedLayout(deps.layout, attemptOrdinal).runsDirFor(file, deps.runId);
   const batch = await run({ ...deps, storage: overlay.storage, layout: attemptScopedLayout(deps.layout, attemptOrdinal) }, replayOptions(file, options, resolve));
   const replay = batch.results[0];
-  if (replay?.error instanceof IntegrityViolationError && !isRepairableNavigationFailure(replay.error)) throw replay.error;
+  if (replay?.error instanceof IntegrityViolationError && (!isRepairableNavigationFailure(replay.error) || deps.signal?.aborted)) throw replay.error;
   if (deps.signal?.aborted || batch.interrupted || replay === undefined) return { interrupted: true };
 
   return {
@@ -633,6 +639,10 @@ async function preflightCase(
   planFile: string,
   groundingFile: string,
 ): Promise<ValidatedHealPreflight> {
+  // V4 validates Plan structure before projecting every referenced Target.
+  // The per-case gate then requires idempotent replay isolation for all of
+  // those Targets, while unrelated configured Targets cannot block healing.
+  // Replay uses the same lazy Target session pool and cleanup as run.
   const normalized = normalizeTestMd(await readStorageText(deps.storage, file, 'The test prompt could not be read.'));
   const legacySecretSyntax = scanLegacySecretSyntax(normalized);
   if (legacySecretSyntax.length > 0) {
@@ -641,17 +651,6 @@ async function preflightCase(
       hint: 'Delete the offending line(s) and re-run `ambercast generate`.',
     });
   }
-  const target = resolveTarget({
-    targets: deps.config.targets,
-    defaultTarget: deps.config.defaultTarget,
-    explicitTarget: options.target,
-  });
-  if (target instanceof AmbercastErrorClass) throw target;
-
-  const digest = deriveCurrentPlanInputProvenance({
-    normalizedTestMd: normalized,
-    targetDefinitions: target.definitions,
-  }).inputsDigest;
   let planSnapshot: { readonly text: string; readonly bytes: Uint8Array };
   try {
     if (!(await deps.storage.exists(planFile))) {
@@ -662,7 +661,34 @@ async function preflightCase(
     if (error instanceof MissingPlanError) throw error;
     throw new FsIoErrorClass('The generated plan could not be read.', undefined, { cause: error });
   }
+  let rawPlan: unknown;
+  try {
+    rawPlan = JSON.parse(planSnapshot.text);
+  } catch (error) {
+    throw new IntegrityViolationError('The generated plan is not valid JSON.', { planPath: planFile }, { cause: error });
+  }
+  if (typeof rawPlan === 'object' && rawPlan !== null && 'schemaVersion' in rawPlan && isRetiredPlanVersion(rawPlan.schemaVersion)) {
+    throw new StaleIrError('The generated plan does not match the required schema.', { planPath: planFile });
+  }
+  const parsedPlan = PlanDocument.safeParse(rawPlan);
+  if (!parsedPlan.success) {
+    throw new IntegrityViolationError('The generated plan does not match the required schema.', { planPath: planFile, issues: parsedPlan.error.issues });
+  }
+  const targetNames = Object.keys(parsedPlan.data.targets).sort();
+  const definitions = projectPlanTargets(targetNames, deps.config.targets);
+  const missingTarget = targetNames.find((name) => !Object.hasOwn(definitions, name));
+  if (missingTarget !== undefined) {
+    throw new TargetUnresolvedError('The plan references a target that is not configured.', { target: missingTarget });
+  }
+  const digest = deriveCurrentPlanInputProvenance({
+    normalizedTestMd: normalized,
+    targetDefinitions: definitions,
+  }).inputsDigest;
   const plan = validateTrustedInstructionCoveredPlanText(planSnapshot.text, planFile, digest, normalized).plan;
+  const nonIdempotentTargets = targetNames.filter((name) => deps.config.targets[name]!.healReplayIsolation !== 'idempotent');
+  if (nonIdempotentTargets.length > 0) {
+    throw new ConfigInvalidError('Healing requires every target referenced by the plan to set healReplayIsolation to idempotent.', { targets: nonIdempotentTargets });
+  }
   assertSecretUsesAllowed(plan, deps.config.secrets?.allow ?? [], {
     configPath: deps.configSource?.path ?? null,
     cwd: deps.config.projectRoot ?? '',
@@ -1085,9 +1111,9 @@ async function tryFullPlanRepair(
  *
  * Full regeneration deliberately receives a binary pass rule because its new
  * step sequence has no stable index correspondence with the baseline plan.
- * The `repairTrace` parameter preserves SPEC-10b's emission order: this
- * function neither reorders, filters, nor otherwise transforms the case's
- * accumulated trace, because the report exposes that exact array.
+ * The `repairTrace` parameter preserves the order in which repair stages
+ * record their outcomes. This function passes the accumulated trace through
+ * unchanged because the report exposes that exact array.
  */
 function caseOutcome(
   file: string,
@@ -1116,6 +1142,7 @@ function caseOutcome(
     planFile,
     repairOutcome,
     steps: measurement.replay.result.steps,
+    sessions: measurement.replay.result.sessions,
     explanation: measurement.replay.result.explanation,
     durationMs: measurement.replay.result.durationMs,
     aiCalls,
@@ -1361,6 +1388,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
                 planFile,
                 repairOutcome: 'unresolved' as const,
                 steps: bestMeasurement.replay.result.steps,
+                sessions: bestMeasurement.replay.result.sessions,
                 explanation: bestMeasurement.replay.result.explanation,
                 durationMs: bestMeasurement.replay.result.durationMs,
                 aiCalls: budget.aiCalls,

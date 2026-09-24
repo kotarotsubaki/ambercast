@@ -39,14 +39,14 @@ const GENERATED_RESPONSE: GeneratedPlanResponse = {
       id: 'fill-email',
       kind: 'action',
       action: 'fill',
-      target: { strategy: 'accessibility', role: 'textbox', name: 'Email' },
+      target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Email' },
       value: 'person@example.test',
     },
     {
       id: 'click-submit',
       kind: 'action',
       action: 'click',
-      target: { strategy: 'accessibility', role: 'button', name: 'Submit' },
+      target: 'web', element: { strategy: 'accessibility', role: 'button', name: 'Submit' },
     },
   ],
   ambiguities: [],
@@ -130,6 +130,7 @@ describe('fake vertical slice', () => {
       steps: [{
         id: 'recorded-ai',
         kind: 'ai',
+        target: 'web',
         instruction: 'Reach the dashboard.',
         secrets: [],
         instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, ['cita' + 'tion']: SUCCESS_EVIDENCE }],
@@ -213,6 +214,7 @@ describe('fake vertical slice', () => {
       steps: [{
         id: 'recorded-ai',
         kind: 'ai',
+        target: 'web',
         instruction: 'Reach the dashboard.',
         secrets: [],
         instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, ['cita' + 'tion']: SUCCESS_EVIDENCE }],
@@ -313,6 +315,7 @@ describe('fake vertical slice', () => {
       steps: [{
         id: 'recorded-ai',
         kind: 'ai',
+        target: 'web',
         instruction: 'Reach the dashboard.',
         secrets: [],
         instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, ['cita' + 'tion']: SUCCESS_EVIDENCE }],
@@ -444,13 +447,13 @@ describe('fake vertical slice', () => {
 
     const plan = PlanDocument.parse(JSON.parse(await storage.readText(layout.planPathFor(TEST_PATH))));
     expect(GroundingDocument.parse(JSON.parse(await storage.readText(layout.groundingPathFor(TEST_PATH))))).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       planDigest: computePlanDigest(plan),
       entries: {},
     });
 
     const sharedGroundingFixture = plan.steps.map((step, index) => {
-      if (!('target' in step)) {
+      if (!('element' in step)) {
         throw new Error('The generated smoke-test plan must contain only element-bearing steps.');
       }
 
@@ -458,11 +461,11 @@ describe('fake vertical slice', () => {
         algorithm: 'a11y-neighborhood-v2',
         hash: String(index + 1).padStart(64, '0'),
       };
-      return { stepId: step.id, target: step.target, fingerprint };
+      return { stepId: step.id, target: step.element, fingerprint };
     });
     // Path B covers a cold-start grounding miss; this test exercises only pre-seeded grounding.
     const seededGrounding: GroundingDocument = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       planDigest: computePlanDigest(plan),
       entries: Object.fromEntries(sharedGroundingFixture.map(({ stepId, fingerprint }) => [
         stepId,
@@ -527,6 +530,7 @@ describe('fake vertical slice', () => {
       steps: [{
         id: 'complete-sign-in',
         kind: 'ai',
+        target: 'web',
         instruction: 'Complete sign-in.',
         secrets: [{}],
         instructionCoverage: [{ id: SUCCESS_INTENT.criterionId, kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, ['cita' + 'tion']: SUCCESS_EVIDENCE }],
@@ -568,13 +572,13 @@ describe('fake vertical slice', () => {
     })]);
 
     const grounding = GroundingDocument.parse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       planDigest: computePlanDigest(plan),
       entries: {
         'complete-sign-in': {
           kind: 'ai',
           trace: {
-            events: [{ type: 'fill-secret', target: secretTarget, secretRef }],
+            events: [{ type: 'fill-secret', element: secretTarget, secretRef }],
             verification: [{ type: 'assert', check: 'text-visible', text: 'Dashboard' }],
             verificationCoverage: { [SUCCESS_INTENT.criterionId]: 0 },
           },

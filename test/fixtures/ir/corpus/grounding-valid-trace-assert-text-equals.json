@@ -2,7 +2,7 @@
   "document": "grounding",
   "expected": "valid",
   "value": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "step": {
@@ -10,7 +10,16 @@
         "trace": {
           "events": [],
           "verification": [
-            { "type": "assert", "check": "text-equals", "target": { "strategy": "accessibility", "role": "heading", "name": "Welcome" }, "text": "Welcome" }
+            {
+              "type": "assert",
+              "check": "text-equals",
+              "text": "Welcome",
+              "element": {
+                "strategy": "accessibility",
+                "role": "heading",
+                "name": "Welcome"
+              }
+            }
           ]
         }
       }

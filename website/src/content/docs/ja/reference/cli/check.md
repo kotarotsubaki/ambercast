@@ -10,7 +10,6 @@ description: CLIにおけるアーティファクトの検査ステータスと�
 | フラグ | 値 | 効果 | デフォルト |
 | --- | --- | --- | --- |
 | `files` | path[] | リテラルプロンプトの指定。省略時はディスカバリを実行 | discovery |
-| `--target` | name | ターゲットの選択 | omitted |
 | `--allow-empty` | boolean | 空の選択を許容 | false |
 | `--list` | boolean | 検査を行わずに一覧表示 | false |
 | `--json` | boolean | JSONエンベロープ形式で出力 | false |

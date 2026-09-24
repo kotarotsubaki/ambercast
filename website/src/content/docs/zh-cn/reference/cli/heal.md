@@ -12,7 +12,6 @@ description: 规定 ambercast heal 命令的授权机制与运行时副作用，
 | `files` | path[] | 字面提示词路径；缺省时执行自动发现 | discovery |
 | `--dry-run` | boolean | 仅测量修复而不提交缓冲的 Plan 或 Grounding 变更 | false |
 | `--yes, -y` | boolean | 授权非交互式提交 | false |
-| `--target` | name | 选择目标 | omitted |
 | `--ai` | claude\|codex | 覆盖提供商 | omitted |
 | `--allow-empty` | boolean | 允许空选择集 | false |
 | `--list` | boolean | 仅列出而不执行修复 | false |

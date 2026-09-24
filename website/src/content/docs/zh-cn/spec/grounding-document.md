@@ -9,7 +9,7 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | 必填 | 字面量 `1` | Grounding 格式版本。 | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1368) |
+| `schemaVersion` | integer | 必填 | 字面量 `2` | Grounding 格式版本。 | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1368) |
 | `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联计划的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 grounding。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
 
@@ -59,7 +59,7 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }

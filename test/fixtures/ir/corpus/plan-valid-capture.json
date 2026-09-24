@@ -2,11 +2,28 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "baseUrl": "https://example.test",
+        "surface": "web"
+      }
+    },
     "steps": [
-      { "id": "capture-welcome", "kind": "capture", "target": { "strategy": "accessibility", "role": "heading", "name": "Welcome" }, "variable": "welcomeText" }
+      {
+        "id": "capture-welcome",
+        "kind": "capture",
+        "variable": "welcomeText",
+        "element": {
+          "strategy": "accessibility",
+          "role": "heading",
+          "name": "Welcome"
+        },
+        "target": "app"
+      }
     ]
   }
 }

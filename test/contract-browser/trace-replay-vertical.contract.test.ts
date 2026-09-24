@@ -84,14 +84,14 @@ describe('hand-authored trace replay against real Chromium', () => {
 
       const baseUrl = `http://127.0.0.1:${address.port}`;
       const targets = {
-        fixture: { baseUrl, browser: 'chromium' },
+        fixture: { surface: 'web', baseUrl },
       } as const satisfies Record<string, TargetDefinition>;
       const plan = PlanDocument.parse({
-        schemaVersion: 3,
+        schemaVersion: 4,
         source: {
           inputsDigest: computeInputsDigest({
             normalizedTestMd: normalizeTestMd(PROMPT),
-            schemaVersion: 3,
+            schemaVersion: 4,
             generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
             planProducerBundleFingerprint: planProducerBundleFingerprint(),
             targetDefinitions: targets,
@@ -102,6 +102,7 @@ describe('hand-authored trace replay against real Chromium', () => {
           {
             id: 'verify-hand-authored-trace',
             kind: 'ai',
+            target: 'fixture',
             instruction: 'Verify that the trace replay fixture is ready.',
             instructionCoverage: [{
               id: 'fixture-ready',
@@ -115,7 +116,7 @@ describe('hand-authored trace replay against real Chromium', () => {
       // hand. Relative navigation keeps replay on the local fixture origin,
       // where a real browser verifies the DOM without an AI adapter.
       const grounding = GroundingDocument.parse({
-        schemaVersion: 1,
+        schemaVersion: 2,
         planDigest: computePlanDigest(plan),
         entries: {
           'verify-hand-authored-trace': {
@@ -161,7 +162,7 @@ describe('hand-authored trace replay against real Chromium', () => {
           testDir: TEST_DIR,
           testMatch: ['**/*.test.md'],
           testIgnore: ['**/.runs/**'],
-          targets: { fixture: { ...targets.fixture, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
+          targets: { fixture: { ...targets.fixture, browser: 'chromium', healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 } },
           defaultTarget: 'fixture',
           ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
           ci: { heal: false, updateGroundingCache: false },

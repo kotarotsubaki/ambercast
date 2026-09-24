@@ -34,7 +34,7 @@ import {
 
 const TARGET = {
   baseUrl: 'https://example.test',
-  browser: 'chromium',
+  surface: 'web',
 } as const satisfies TargetDefinition;
 
 const SUBMIT_BUTTON: ElementRef = {

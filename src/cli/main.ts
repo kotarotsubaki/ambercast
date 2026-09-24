@@ -81,7 +81,6 @@ interface ParsedRunCommand {
   readonly input: {
     readonly files: readonly string[];
     readonly grep?: RegExp;
-    readonly target?: string;
     readonly headed: boolean;
     /** Whether the caller explicitly permits AI resolution after a grounding miss. */
     readonly resolve: boolean;
@@ -113,7 +112,6 @@ interface ParsedCheckCommand {
   readonly command: 'check';
   readonly input: {
     readonly files: readonly string[];
-    readonly target?: string;
     readonly allowEmpty: boolean;
     readonly list: boolean;
     readonly configPathOverride?: string;
@@ -471,7 +469,6 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
 
   const files: string[] = [];
   let grep: RegExp | undefined;
-  let target: string | undefined;
   let headed = false;
   let json = false;
   let resolve = false;
@@ -523,8 +520,6 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
           } catch {
             return 'The --grep value must be a valid regular expression.';
           }
-        } else if (flag.name === 'target') {
-          target = value;
         } else if (flag.name === 'stale') {
           stale = value as 'fail' | 'regenerate';
         } else if (flag.name === 'ai') {
@@ -546,7 +541,6 @@ function parseRun(argv: readonly string[], signal: AbortSignal): ParsedRunComman
     input: {
       files,
       ...(grep === undefined ? {} : { grep }),
-      ...(target === undefined ? {} : { target }),
       headed,
       resolve,
       updateCache,
@@ -573,7 +567,6 @@ function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCo
   }
 
   const files: string[] = [];
-  let target: string | undefined;
   let allowEmpty = false;
   let list = false;
   let json = false;
@@ -609,9 +602,7 @@ function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCo
         if (flag.acceptedValues !== null && !flag.acceptedValues.includes(value)) {
           return `The ${argument} value must be ${flag.acceptedValues.join(' or ')}.`;
         }
-        if (flag.name === 'target') {
-          target = value;
-        } else if (flag.name === 'config') {
+        if (flag.name === 'config') {
           configPathOverride = value;
         }
       }
@@ -629,7 +620,6 @@ function parseCheck(argv: readonly string[], signal: AbortSignal): ParsedCheckCo
     command: 'check',
     input: {
       files,
-      ...(target === undefined ? {} : { target }),
       allowEmpty,
       list,
       ...(configPathOverride === undefined ? {} : { configPathOverride }),
@@ -650,7 +640,6 @@ function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealComm
   const files: string[] = [];
   let dryRun = false;
   let yes = false;
-  let target: string | undefined;
   let aiProviderOverride: 'claude' | 'codex' | undefined;
   let allowEmpty = false;
   let list = false;
@@ -690,9 +679,7 @@ function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealComm
         if (flag.acceptedValues !== null && !flag.acceptedValues.includes(value)) {
           return `The ${argument} value must be ${flag.acceptedValues.join(' or ')}.`;
         }
-        if (flag.name === 'target') {
-          target = value;
-        } else if (flag.name === 'ai') {
+        if (flag.name === 'ai') {
           aiProviderOverride = value as 'claude' | 'codex';
         }
       }
@@ -712,7 +699,6 @@ function parseHeal(argv: readonly string[], signal: AbortSignal): ParsedHealComm
       files,
       dryRun,
       yes,
-      ...(target === undefined ? {} : { target }),
       ...(aiProviderOverride === undefined ? {} : { aiProviderOverride }),
       allowEmpty,
       list,

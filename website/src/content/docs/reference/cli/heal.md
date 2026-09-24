@@ -12,7 +12,6 @@ The `ambercast heal` command repairs test plans and Grounding companions, provid
 | `files` | path[] | literal prompts; absent selects discovery | discovery |
 | `--dry-run` | boolean | measures repair without committing buffered Plan or Grounding changes | false |
 | `--yes, -y` | boolean | authorizes non-interactive commit | false |
-| `--target` | name | select target | omitted |
 | `--ai` | claude\|codex | provider override | omitted |
 | `--allow-empty` | boolean | allow empty selection | false |
 | `--list` | boolean | list without healing | false |

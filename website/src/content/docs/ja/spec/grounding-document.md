@@ -9,7 +9,7 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `1` | グラウンディングフォーマットのバージョン。 | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1368) |
+| `schemaVersion` | integer | required | literal `2` | グラウンディングフォーマットのバージョン。 | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1368) |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | 関連する計画のダイジェスト。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | ID をキーとするキャッシュされたステップグラウンディング。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
 
@@ -59,7 +59,7 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }

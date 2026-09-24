@@ -2,15 +2,15 @@
 
 ## Document shape {#document-shape}
 
-`PlanDocument` is a strict object. A producer MUST emit literal version 3 and a consumer MUST reject unknown properties and other versions. [repo:src/core/ir/schema.ts:1205-1224]
+`PlanDocument` is a strict object. A producer MUST emit literal `4` and a consumer MUST reject unknown properties and other versions. [repo:src/core/ir/schema.ts:1205-1224]
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `3` | Plan format version. | repo:src/core/ir/schema.ts:58,1205-1207 |
+| `schemaVersion` | integer | required | literal `4` | Plan format version. | repo:src/core/ir/schema.ts:58,1205-1207 |
 | `source` | strict object | required | exactly `inputsDigest` | Freshness wrapper. | repo:src/core/ir/schema.ts:1207 |
 | `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | Digest of generation inputs. | repo:src/core/ir/schema.ts:34,1207 |
 | `generatorMeta` | record string → `JsonValue` | optional | JSON only | Metadata excluded from `planDigest`. | repo:src/core/ir/schema.ts:1205-1210; repo:src/core/ir/digest.ts:128-131 |
-| `targets` | record string → `TargetDefinition` | required | strict value; [[spec/value-types#shared-types]] | Target snapshot. | repo:src/core/ir/schema.ts:1209 |
+| `targets` | record string → `TargetDefinition` | required | strict value; [[spec/value-types#shared-types]] | Referenced Target snapshot; every key must be used by a step. | repo:src/core/ir/schema.ts:1209 |
 | `steps` | `Step[]` | required | ordered strict branches | Plan sequence; [[spec/steps#step-union]]. | repo:src/core/ir/schema.ts:1210 |
 
 Omission and `{}` for `generatorMeta` remain distinct serialized Plan values, but neither affects `planDigest`: the digest view excludes `generatorMeta` as a whole. [repo:src/core/ir/schema.ts:1205-1210] [repo:src/core/ir/digest.ts:128-131]
@@ -21,10 +21,10 @@ Digest strings are illustrative placeholders. The Grounding example uses the sam
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "source": {"inputsDigest": "0000000000000000000000000000000000000000000000000000000000000000"},
-  "targets": {"app": {"baseUrl": "https://example.test", "browser": "chromium"}},
-  "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "url": "https://example.test"}]
+  "targets": {"app": {"surface": "web", "baseUrl": "https://example.test"}},
+  "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "target": "app", "url": "https://example.test"}]
 }
 ```
 
@@ -52,4 +52,4 @@ The problem is preserving reviewed test intent while allowing generated executio
 
 The selected strict, versioned document captures target snapshots and ordered steps while leaving results outside it. That makes plan digests stable across replay and regeneration explicit when inputs change. 
 
-One rejected alternative merged traces into the plan; it was rejected because successful execution would rewrite reviewed intent. Another migrated old plans in place; it was rejected because a derived artifact with changed semantics is safer to regenerate than silently reinterpret.  
+One rejected alternative merged traces into the plan; it was rejected because successful execution would rewrite reviewed intent. Another migrated old plans in place; it was rejected because a derived artifact with changed semantics is safer to regenerate than silently reinterpret.

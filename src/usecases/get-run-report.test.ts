@@ -17,7 +17,7 @@ function runEnvelope(steps: readonly Record<string, unknown>[] = []) {
     summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
     errors: [],
     reportPersistence: 'persisted',
-    results: [{ id: 'case', file: 'case.test.md', planFile: 'case.ambercast.plan.json', status: 'passed', durationMs: 42, steps, explanation: 'Replay completed successfully.' }],
+    results: [{ id: 'case', file: 'case.test.md', planFile: 'case.ambercast.plan.json', status: 'passed', durationMs: 42, sessions: {}, steps: steps.map((step) => ({ target: 'default', ...step })), explanation: 'Replay completed successfully.' }],
   });
 }
 

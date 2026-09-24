@@ -10,7 +10,7 @@ const REPORT_METADATA = {
 } as const;
 
 const reportEnvelopeFields = {
-  schemaVersion: '3.6',
+  schemaVersion: '3.7',
   startedAt: '2026-09-08T12:34:56Z',
   durationMs: 1,
   summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
@@ -50,6 +50,7 @@ const reportDocuments = [
         durationMs: 1,
         aiCalls: 1,
         steps: [],
+        sessions: {},
         explanation: 'The test passed.',
       }],
       reportPersistence: 'not-attempted',
@@ -87,6 +88,7 @@ const reportDocuments = [
         durationMs: 1,
         aiCalls: 2,
         steps: [],
+        sessions: {},
         explanation: 'The repair was not eligible.',
       }],
     },

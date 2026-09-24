@@ -30,7 +30,7 @@ type PlaywrightPhysicalHandle = Awaited<ReturnType<PlaywrightLocator['elementHan
 
 const TARGET = {
   baseUrl: 'https://example.test',
-  browser: 'chromium',
+  surface: 'web',
 } as const satisfies TargetDefinition;
 
 const FIXTURE_PAGE = `data:text/html,${encodeURIComponent(`<!doctype html>
@@ -939,7 +939,7 @@ describe('Chromium secret-fill target pinning', () => {
       );
       const target: TargetDefinition = {
         baseUrl: fixture.successUrl,
-        browser: 'chromium',
+        surface: 'web',
       };
       const policy: SecretSinkPolicy = {
         secretRef: 'secrets.contractPassword',
@@ -1051,7 +1051,7 @@ describe('Chromium secret-fill target pinning', () => {
     await runWithCleanup(async () => {
       const target: TargetDefinition = {
         baseUrl: fixture.successUrl,
-        browser: 'chromium',
+        surface: 'web',
       };
       const policy: SecretSinkPolicy = {
         secretRef: 'secrets.contractPassword',
@@ -1113,7 +1113,7 @@ describe('Chromium secret-fill target pinning', () => {
 
       const target: TargetDefinition = {
         baseUrl: fixture.allowedUrl,
-        browser: 'chromium',
+        surface: 'web',
       };
       const policy: SecretSinkPolicy = {
         secretRef: 'secrets.contractPassword',

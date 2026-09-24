@@ -12,7 +12,6 @@ description: ambercast heal コマンドのフラグ、修復モデル、制限�
 | `files` | path[] | リテラルプロンプト。未指定時はディスカバリーを選択 | discovery |
 | `--dry-run` | boolean | バッファされた Plan または Grounding の変更をコミットせずに修復を測定 | false |
 | `--yes, -y` | boolean | 非対話形式のコミットを認可 | false |
-| `--target` | name | ターゲットを選択 | 省略 |
 | `--ai` | claude\|codex | プロバイダーのオーバーライド | 省略 |
 | `--allow-empty` | boolean | 空の選択を許可 | false |
 | `--list` | boolean | 修復を実行せずに一覧表示 | false |

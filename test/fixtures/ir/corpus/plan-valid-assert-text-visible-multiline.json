@@ -2,11 +2,24 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": {},
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "surface": "web",
+        "baseUrl": "https://example.test"
+      }
+    },
     "steps": [
-      { "id": "multiline-visible", "kind": "assert", "check": "text-visible", "text": "Line one\nLine two" }
+      {
+        "id": "multiline-visible",
+        "kind": "assert",
+        "check": "text-visible",
+        "text": "Line one\nLine two",
+        "target": "app"
+      }
     ]
   }
 }

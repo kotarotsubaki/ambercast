@@ -190,6 +190,16 @@ async function expectRejectedWithoutBrowserWork(
 
 export function registerBrowserSessionContract(harness: BrowserSessionContractHarness): void {
   describe('BrowserSession contract', () => {
+    it('allows repeated element-count evaluation with an ElementRef and no bound handle', async () => {
+      const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists: true };
+      await withSession(harness, setup, async (session) => {
+        const check = { check: 'element-count' as const, target: setup.ref, count: 1 };
+        const first = await session.evaluateAssert(check);
+        const second = await session.evaluateAssert(check);
+        expect(first).toEqual(expect.objectContaining({ passed: expect.any(Boolean) }));
+        expect(second).toEqual(expect.objectContaining({ passed: expect.any(Boolean) }));
+      });
+    });
     it.each([true, false])('awaitElementPresence never rejects and returns promptly at zero timeout when the element exists is %s', async (exists) => {
       const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists };
 

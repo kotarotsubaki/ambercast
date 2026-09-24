@@ -6,22 +6,22 @@ import {
 } from '#core/ir/grounding-recovery-mode.js';
 import { ActionStep, AiStep, AssertStep, CaptureStep, Step } from '#core/ir/schema.js';
 
-const TARGET = { strategy: 'accessibility' as const, role: 'button', name: 'Submit' };
+const ELEMENT = { strategy: 'accessibility' as const, role: 'button', name: 'Submit' };
 
 function actionFixture(action: keyof typeof ACTION_GROUNDING_MODE) {
-  return action === 'click' ? { id: 'click', kind: 'action', action, target: TARGET }
-    : action === 'navigate' ? { id: 'navigate', kind: 'action', action, url: '/dashboard' }
-      : action === 'press' ? { id: 'press', kind: 'action', action, target: TARGET, key: 'Enter' }
-        : action === 'fill' ? { id: 'fill', kind: 'action', action, target: TARGET, value: 'value' }
-          : { id: 'fill-secret', kind: 'action', action, target: TARGET, secretRef: '{{secrets.PASSWORD}}' };
+  return action === 'click' ? { id: 'click', kind: 'action', action, target: 'web', element: ELEMENT }
+    : action === 'navigate' ? { id: 'navigate', kind: 'action', action, target: 'web', url: '/dashboard' }
+      : action === 'press' ? { id: 'press', kind: 'action', action, target: 'web', element: ELEMENT, key: 'Enter' }
+        : action === 'fill' ? { id: 'fill', kind: 'action', action, target: 'web', element: ELEMENT, value: 'value' }
+          : { id: 'fill-secret', kind: 'action', action, target: 'web', element: ELEMENT, secretRef: '{{secrets.PASSWORD}}' };
 }
 
 function assertFixture(check: keyof typeof ASSERT_GROUNDING_MODE) {
-  return check === 'text-visible' ? { id: 'text-visible', kind: 'assert', check, text: 'Dashboard' }
-    : check === 'element-visible' ? { id: 'element-visible', kind: 'assert', check, target: TARGET }
-      : check === 'text-equals' ? { id: 'text-equals', kind: 'assert', check, target: TARGET, text: 'Dashboard' }
-        : check === 'url-matches' ? { id: 'url-matches', kind: 'assert', check, pattern: '/dashboard' }
-          : { id: 'element-count', kind: 'assert', check, target: TARGET, count: 1 };
+  return check === 'text-visible' ? { id: 'text-visible', kind: 'assert', check, target: 'web', text: 'Dashboard' }
+    : check === 'element-visible' ? { id: 'element-visible', kind: 'assert', check, target: 'web', element: ELEMENT }
+      : check === 'text-equals' ? { id: 'text-equals', kind: 'assert', check, target: 'web', element: ELEMENT, text: 'Dashboard' }
+        : check === 'url-matches' ? { id: 'url-matches', kind: 'assert', check, target: 'web', pattern: '/dashboard' }
+          : { id: 'element-count', kind: 'assert', check, target: 'web', element: ELEMENT, count: 1 };
 }
 
 describe('groundingRecoveryModeForStep', () => {
@@ -49,8 +49,8 @@ describe('groundingRecoveryModeForStep', () => {
         } as const;
         return [Step.parse(assertFixture(check)), expected[check]] as const;
       }),
-      [CaptureStep.parse({ id: 'capture', kind: 'capture', target: TARGET, variable: 'result' }), 'element-reground'] as const,
-      [AiStep.parse({ id: 'ai', kind: 'ai', instruction: 'Verify the dashboard.', instructionCoverage: [{ id: 'dashboard', kind: 'success', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 22 } }] }), 'ai-retrace'] as const,
+      [CaptureStep.parse({ id: 'capture', kind: 'capture', target: 'web', element: ELEMENT, variable: 'result' }), 'element-reground'] as const,
+      [AiStep.parse({ id: 'ai', kind: 'ai', target: 'web', instruction: 'Verify the dashboard.', instructionCoverage: [{ id: 'dashboard', kind: 'success', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 22 } }] }), 'ai-retrace'] as const,
     ];
 
     expect(cases).toHaveLength(12);

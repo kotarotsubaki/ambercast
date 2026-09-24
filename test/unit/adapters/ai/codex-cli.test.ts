@@ -132,6 +132,7 @@ describe('createCodexCliExecutor', () => {
       steps: [{
         id: 'complete-sign-in',
         kind: 'ai',
+        target: 'app',
         instruction: 'Complete the sign-in flow.',
         instructionCoverage: [{
           id: 'submit-credentials',

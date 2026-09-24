@@ -11,26 +11,27 @@ description: "每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严�
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | 稳定的步骤标识符。 | [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L436) |
-| `kind` | string | 必填 | 字面量 `action` | 外部辨识符。 | [src/core/ir/schema.ts:438](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L438) |
-| `action` | string | 必填 | 字面量 `click` | 动作辨识符。 | [src/core/ir/schema.ts:439](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L439) |
-| `target` | `ElementRef` | 必填 | 目前为 accessibility 分支 | 要点击的元素。 | [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L436) |
+| `id` | `StepId` | required | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | Stable step identifier. | [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
+| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:438](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L438) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `action` | string | required | literal `click` | Action discriminator. | [src/core/ir/schema.ts:439](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L439) |
+| `element` | `ElementRef` | required | accessibility branch currently | Element to click. | [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
 
 ```json
-{"id":"click-login","kind":"action","action":"click","target":{"strategy":"accessibility","role":"button","name":"Log in"}}
+{"id":"click-login","kind":"action","action":"click","target":"app","element":{"strategy":"accessibility","role":"button","name":"Log in"}}
 ```
 
 ### `action` / `navigate` {#action-navigate}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L455) |
-| `kind` | string | 必填 | 字面量 `action` | 外部辨识符。 | [src/core/ir/schema.ts:457](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L457) |
-| `action` | string | 必填 | 字面量 `navigate` | 动作辨识符。 | [src/core/ir/schema.ts:458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L458) |
-| `url` | `InterpolatableText` | 必填 | 无 `{{secrets.` 标记 | 导航文本。 | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L455) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L455) |
+| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:457](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L457) |
+| `action` | string | required | literal `navigate` | Action discriminator. | [src/core/ir/schema.ts:458](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L458) |
+| `url` | `InterpolatableText` | required | no `{{secrets.` marker | Navigation text. | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L455) |
 
 ```json
-{"id":"open-home","kind":"action","action":"navigate","url":"https://example.test"}
+{"id":"open-home","kind":"action","action":"navigate","target":"app","url":"https://example.test"}
 ```
 
 在执行时，每个 Plan 导航、缓存的 trace 导航以及全新 agentic 导航都必须（MUST）针对实时目标的 `baseUrl` 进行解析，使用 HTTP(S)，并保持在该目标的原点（origin）上。不可解析、非 HTTP(S) 或跨原点的目标地址属于完整性故障。[src/usecases/run.ts:701](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L701) [src/usecases/run.ts:746](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L746)
@@ -39,136 +40,148 @@ description: "每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严�
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L474) |
-| `kind` | string | 必填 | 字面量 `action` | 外部辨识符。 | [src/core/ir/schema.ts:476](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L476) |
-| `action` | string | 必填 | 字面量 `press` | 动作辨识符。 | [src/core/ir/schema.ts:477](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L477) |
-| `target` | `ElementRef` | 必填 | 严格定位器 | 接收目标。 | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L474) |
-| `key` | string | 必填 | 枚举 `Enter`、`Tab`、`Escape`、`ArrowDown`、`ArrowUp` | 按键。 | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L474) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
+| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:476](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L476) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `action` | string | required | literal `press` | Action discriminator. | [src/core/ir/schema.ts:477](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L477) |
+| `element` | `ElementRef` | required | strict locator | Recipient. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
+| `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | Key. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
 
 ```json
-{"id":"submit","kind":"action","action":"press","target":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
+{"id":"submit","kind":"action","action":"press","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
 ```
 
 ### `action` / `fill` {#action-fill}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L493) |
-| `kind` | string | 必填 | 字面量 `action` | 外部辨识符。 | [src/core/ir/schema.ts:495](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L495) |
-| `action` | string | 必填 | 字面量 `fill` | 动作辨识符。 | [src/core/ir/schema.ts:496](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L496) |
-| `target` | `ElementRef` | 必填 | 严格定位器 | 字段。 | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L493) |
-| `value` | `InterpolatableText` | 必填 | 无机密标记 | 非机密或运行状态文本。 | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L493) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
+| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:495](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L495) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `action` | string | required | literal `fill` | Action discriminator. | [src/core/ir/schema.ts:496](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L496) |
+| `element` | `ElementRef` | required | strict locator | Field. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
+| `value` | `InterpolatableText` | required | no secret marker | Non-secret or run-state text. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
 
 ```json
-{"id":"fill-email","kind":"action","action":"fill","target":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
+{"id":"fill-email","kind":"action","action":"fill","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
 ```
 
 ### `action` / `fill-secret` {#action-fill-secret}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:515](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L515) |
-| `kind` | string | 必填 | 字面量 `action` | 外部辨识符。 | [src/core/ir/schema.ts:517](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L517) |
-| `action` | string | 必填 | 字面量 `fill-secret` | 动作辨识符。 | [src/core/ir/schema.ts:518](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L518) |
-| `target` | `ElementRef` | 必填 | 严格定位器 | 机密接收字段。 | [src/core/ir/schema.ts:515](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L515) |
-| `secretRef` | `SecretRef` | 必填 | 完整 secret-ref 语法 | 机密值引用。 | [src/core/ir/schema.ts:515](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L515) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `action` | string | required | literal `fill-secret` | Action discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `element` | `ElementRef` | required | strict locator | Secret sink field. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
 
 ```json
-{"id":"fill-password","kind":"action","action":"fill-secret","target":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
+{"id":"fill-password","kind":"action","action":"fill-secret","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
 ### `assert` / `text-visible` {#assert-text-visible}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L556) |
-| `kind` | string | 必填 | 字面量 `assert` | 外部辨识符。 | [src/core/ir/schema.ts:558](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L558) |
-| `check` | string | 必填 | 字面量 `text-visible` | 断言辨识符。 | [src/core/ir/schema.ts:559](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L559) |
-| `text` | `InterpolatableText` | 必填 | 无机密标记 | 期望可见的文本。 | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L556) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
+| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:558](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L558) |
+| `check` | string | required | literal `text-visible` | Assertion discriminator. | [src/core/ir/schema.ts:559](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L559) |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `text` | `InterpolatableText` | required | no secret marker | Expected visible text. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
 
 ```json
-{"id":"welcome-visible","kind":"assert","check":"text-visible","text":"Welcome"}
+{"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
 ```
 
 ### `assert` / `element-visible` {#assert-element-visible}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L575) |
-| `kind` | string | 必填 | 字面量 `assert` | 外部辨识符。 | [src/core/ir/schema.ts:577](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L577) |
-| `check` | string | 必填 | 字面量 `element-visible` | 断言辨识符。 | [src/core/ir/schema.ts:578](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L578) |
-| `target` | `ElementRef` | 必填 | 严格定位器 | 期望可见的元素。 | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L575) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
+| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:577](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L577) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `check` | string | required | literal `element-visible` | Assertion discriminator. | [src/core/ir/schema.ts:578](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L578) |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Expected visible element. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
 
 ```json
-{"id":"menu-visible","kind":"assert","check":"element-visible","target":{"strategy":"accessibility","role":"navigation","name":"Main"}}
+{"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","element":{"strategy":"accessibility","role":"navigation","name":"Main"}}
 ```
 
 ### `assert` / `text-equals` {#assert-text-equals}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L594) |
-| `kind` | string | 必填 | 字面量 `assert` | 外部辨识符。 | [src/core/ir/schema.ts:596](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L596) |
-| `check` | string | 必填 | 字面量 `text-equals` | 断言辨识符。 | [src/core/ir/schema.ts:597](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L597) |
-| `target` | `ElementRef` | 必填 | 严格定位器 | 被测元素。 | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L594) |
-| `text` | `InterpolatableText` | 必填 | 无机密标记 | 精确的期望文本。 | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L594) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
+| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:596](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L596) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `check` | string | required | literal `text-equals` | Assertion discriminator. | [src/core/ir/schema.ts:597](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L597) |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Element under test. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
+| `text` | `InterpolatableText` | required | no secret marker | Exact expected text. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":"app","element":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
 ```
 
 ### `assert` / `url-matches` {#assert-url-matches}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L614) |
-| `kind` | string | 必填 | 字面量 `assert` | 外部辨识符。 | [src/core/ir/schema.ts:616](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L616) |
-| `check` | string | 必填 | 字面量 `url-matches` | 断言辨识符。 | [src/core/ir/schema.ts:617](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L617) |
-| `pattern` | `InterpolatableText` | 必填 | 无机密标记 | 期望的 URL 匹配文本。 | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L614) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
+| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:616](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L616) |
+| `check` | string | required | literal `url-matches` | Assertion discriminator. | [src/core/ir/schema.ts:617](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L617) |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `pattern` | `InterpolatableText` | required | no secret marker | Expected URL matching text. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
 
 ```json
-{"id":"on-account","kind":"assert","check":"url-matches","pattern":"/account"}
+{"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
 ```
 
 ### `assert` / `element-count` {#assert-element-count}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L633) |
-| `kind` | string | 必填 | 字面量 `assert` | 外部辨识符。 | [src/core/ir/schema.ts:635](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L635) |
-| `check` | string | 必填 | 字面量 `element-count` | 断言辨识符。 | [src/core/ir/schema.ts:636](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L636) |
-| `target` | `ElementRef` | 必填 | 严格定位器 | 匹配的元素。 | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L633) |
-| `count` | integer | 必填 | 非负 | 期望计数，包含零。 | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L633) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
+| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:635](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L635) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `check` | string | required | literal `element-count` | Assertion discriminator. | [src/core/ir/schema.ts:636](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L636) |
+| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Matching element. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
+| `count` | integer | required | nonnegative | Expected count, including zero. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
 
 ```json
-{"id":"one-alert","kind":"assert","check":"element-count","target":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
+{"id":"one-alert","kind":"assert","check":"element-count","target":"app","element":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
 ```
 
 ### `capture` {#capture}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L672) |
-| `kind` | string | 必填 | 字面量 `capture` | 步骤辨识符。 | [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L674) |
-| `target` | `ElementRef` | 必填 | 严格定位器 | 源元素。 | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L672) |
-| `variable` | `RunVariableName` | 必填 | `/^[a-z][a-zA-Z0-9]*$/` | 裸运行状态变量名。 | [src/core/ir/schema.ts:675](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L675) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
+| `kind` | string | required | literal `capture` | Step discriminator. | [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674) |
+| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
+| `element` | `ElementRef` | required | strict locator | Source element. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
+| `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | Bare run-state variable name. | [src/core/ir/schema.ts:675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L675) |
 
 ```json
-{"id":"capture-code","kind":"capture","target":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
+{"id":"capture-code","kind":"capture","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
 ```
 
 ### `ai` {#ai}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | 必填 | step-ID 正则表达式 | 稳定 ID。 | [src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:416-420](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L416-L420) |
-| `kind` | string | 必填 | 字面量 `ai` | 步骤辨识符。 | [src/core/ir/schema.ts:418](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L418) |
-| `instruction` | `InterpolatableText` | 必填 | 无机密标记 | 代理指令。 | [src/core/ir/schema.ts:419](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L419) |
-| `secrets` | `AiStepSecretUse[]` | 可选 | 严格项 | 已提交的机密使用。 | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L688-L692) |
-| `instructionCoverage` | `InstructionCriterion[]` | 必填 | 至少 1 项 | 本地归属的准则。 | [src/core/ir/schema.ts:714](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L714) |
+| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:416-420](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L416-L420) |
+| `kind` | string | required | literal `ai` | Step discriminator. | [src/core/ir/schema.ts:418](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L418) |
+| `instruction` | `InterpolatableText` | required | no secret marker | Agent instruction. | [src/core/ir/schema.ts:419](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L419) |
+| `secrets` | `AiStepSecretUse[]` | optional | strict entries | Committed secret uses. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
+| `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
 
 ```json
-{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
 ### 已提交的 AI 机密使用 {#committed-ai-secret-grants}
@@ -177,23 +190,23 @@ description: "每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严�
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `ref` | `SecretRef` | 必填 | 完整 secret-reference 语法 | 已提交的机密引用。 | [src/core/ir/schema.ts:674-675](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L674-L675) |
+| `ref` | `SecretRef` | required | whole secret-reference grammar | Committed secret reference. | [src/core/ir/schema.ts:674-675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674-L675) |
 
 ```json
-{"id":"complete-flow","kind":"ai","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
+{"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
 ## 生成形式 {#generated-forms}
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | 除 `secretRef` 外同已提交的 fill-secret | 必填 | `kind: action`, `action: fill-secret` | 等待本地命名的提供商形式。 | [src/core/ir/schema.ts:773-805](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L773-L805) |
-|  | `secret` | `SecretNameChoice` | 可选 | 严格 choice | 已有允许列表名称请求或新名称提示。 | [src/core/ir/schema.ts:104-115,779-785](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
-| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | 数组成员必填 | 严格 choice 或无提供商偏好 | 等待本地解析的提供商命名意图。 | [src/core/ir/schema.ts:813-821](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L813-L821) |
-| `GeneratedAiStep` | `id`, `kind`, `instruction` | 同已提交的 AI | 必填 | `kind: ai` | 共享的 AI 契约。 | [src/core/ir/schema.ts:814](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L814) |
-|  | `secrets` | generated uses[] | 可选 | 严格项 | 待定的机密名称解析。 | [src/core/ir/schema.ts:824-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L824-L833) |
-|  | `instructionCoverage` | generated criteria[] | 必填 | 至少 1 项 | 待定的准则归属。 | [src/core/ir/schema.ts:817](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L817) |
-|  | `verificationIntent` | `VerificationIntent[]` | 必填 | 严格形式下至少 1 项 | 瞬态验证提议。 | [src/core/ir/schema.ts:818](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L818) |
+| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | 等待本地命名的提供商形式。 | [src/core/ir/schema.ts:773-805](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L773-L805) |
+|  | `secret` | `SecretNameChoice` | optional | strict choice | 瞬态验证提议。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L104-L115), [src/core/ir/schema.ts:779-785](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L779-L785) |
+| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | 等待本地解析的提供商命名意图。 | [src/core/ir/schema.ts:813-821](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L813-L821) |
+| `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | 共享的 AI 契约。 | [src/core/ir/schema.ts:814](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L814) |
+|  | `secrets` | generated uses[] | optional | strict entries | 瞬态验证提议。 | [src/core/ir/schema.ts:824-833](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L824-L833) |
+|  | `instructionCoverage` | generated criteria[] | required | min 1 | 瞬态验证提议。 | [src/core/ir/schema.ts:817](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L817) |
+|  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | 瞬态验证提议。 | [src/core/ir/schema.ts:818](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L818) |
 
 ## 设计理由 {#rationale}
 

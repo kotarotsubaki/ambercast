@@ -285,7 +285,7 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
   });
 
   it('accepts exact element-count zero as a supported transient terminal intent', () => {
-    const assertion = { type: 'assert' as const, check: 'element-count' as const, target: TARGET, count: 0 };
+    const assertion = { type: 'assert' as const, check: 'element-count' as const, element: TARGET, count: 0 };
     expect(TraceRecord.safeParse({ events: [], verification: [assertion] }).success).toBe(true);
     expectSuccess(validateGeneratedInstructionCoverage(
       generatedCoverage('No alerts', 'L1', 1, 'L1', 10, 'no-alerts', assertion),
@@ -295,9 +295,9 @@ describe('validateGeneratedInstructionCoverage transient intent', () => {
 
   it.each([
     ['text-visible', { type: 'assert', check: 'text-visible', text: 'Ready' }],
-    ['text-equals', { type: 'assert', check: 'text-equals', target: TARGET, text: 'Ready' }],
-    ['element-visible', { type: 'assert', check: 'element-visible', target: TARGET }],
-    ['element-count', { type: 'assert', check: 'element-count', target: TARGET, count: 0 }],
+    ['text-equals', { type: 'assert', check: 'text-equals', element: TARGET, text: 'Ready' }],
+    ['element-visible', { type: 'assert', check: 'element-visible', element: TARGET }],
+    ['element-count', { type: 'assert', check: 'element-count', element: TARGET, count: 0 }],
   ] as const)('accepts the supported %s terminal intent vocabulary', (_name, assertion) => {
     expectSuccess(validateGeneratedInstructionCoverage(
       generatedCoverage('Ready', 'L1', 1, 'L1', 6, 'ready', assertion),
@@ -403,7 +403,7 @@ describe('materializeAssertionForCoverage', () => {
     const assertion = {
       type: 'assert' as const,
       check: 'text-equals' as const,
-      target: TARGET,
+      element: TARGET,
       text: 'Hello {{run.user}}',
     };
     const values = new Map([['user', 'Ada']]) as never;
@@ -417,8 +417,8 @@ describe('materializeAssertionForCoverage', () => {
   });
 
   it('preserves full structured assertion fields and canonical equality ignores object key order', () => {
-    const first = { type: 'assert' as const, check: 'element-count' as const, target: TARGET, count: 0 };
-    const second = { count: 0, target: { name: 'Ready', role: 'status', strategy: 'accessibility' as const }, check: 'element-count' as const, type: 'assert' as const };
+    const first = { type: 'assert' as const, check: 'element-count' as const, element: TARGET, count: 0 };
+    const second = { count: 0, element: { name: 'Ready', role: 'status', strategy: 'accessibility' as const }, check: 'element-count' as const, type: 'assert' as const };
 
     const firstText = toCanonicalArtifactText(
       materializeAssertionForCoverage(first, { values: new Map() }) as unknown as JsonValueT,
@@ -646,23 +646,23 @@ describe('classifyPreScannedTraceCoverage', () => {
       { type: 'assert', check: 'text-visible', text: 'Hello Ada' },
       { type: 'assert', check: 'text-visible', text: 'Hello Grace' }, false],
     ['text-equals repeated despite key order',
-      { type: 'assert', check: 'text-equals', target: TARGET, text: 'Ready' },
-      { text: 'Ready', target: { name: 'Ready', role: 'status', strategy: 'accessibility' }, check: 'text-equals', type: 'assert' }, true],
+      { type: 'assert', check: 'text-equals', element: TARGET, text: 'Ready' },
+      { text: 'Ready', element: { name: 'Ready', role: 'status', strategy: 'accessibility' }, check: 'text-equals', type: 'assert' }, true],
     ['text-equals neighboring target name',
-      { type: 'assert', check: 'text-equals', target: TARGET, text: 'Ready' },
-      { type: 'assert', check: 'text-equals', target: { ...TARGET, name: 'Other' }, text: 'Ready' }, false],
+      { type: 'assert', check: 'text-equals', element: TARGET, text: 'Ready' },
+      { type: 'assert', check: 'text-equals', element: { ...TARGET, name: 'Other' }, text: 'Ready' }, false],
     ['element-visible repeated despite key order',
-      { type: 'assert', check: 'element-visible', target: TARGET },
-      { target: { name: 'Ready', role: 'status', strategy: 'accessibility' }, check: 'element-visible', type: 'assert' }, true],
+      { type: 'assert', check: 'element-visible', element: TARGET },
+      { element: { name: 'Ready', role: 'status', strategy: 'accessibility' }, check: 'element-visible', type: 'assert' }, true],
     ['element-visible neighboring target role',
-      { type: 'assert', check: 'element-visible', target: TARGET },
-      { type: 'assert', check: 'element-visible', target: { ...TARGET, role: 'alert' } }, false],
+      { type: 'assert', check: 'element-visible', element: TARGET },
+      { type: 'assert', check: 'element-visible', element: { ...TARGET, role: 'alert' } }, false],
     ['element-count repeated at exact zero',
-      { type: 'assert', check: 'element-count', target: TARGET, count: 0 },
-      { count: 0, target: { name: 'Ready', role: 'status', strategy: 'accessibility' }, check: 'element-count', type: 'assert' }, true],
+      { type: 'assert', check: 'element-count', element: TARGET, count: 0 },
+      { count: 0, element: { name: 'Ready', role: 'status', strategy: 'accessibility' }, check: 'element-count', type: 'assert' }, true],
     ['element-count neighboring count',
-      { type: 'assert', check: 'element-count', target: TARGET, count: 0 },
-      { type: 'assert', check: 'element-count', target: TARGET, count: 1 }, false],
+      { type: 'assert', check: 'element-count', element: TARGET, count: 0 },
+      { type: 'assert', check: 'element-count', element: TARGET, count: 1 }, false],
   ] as const)(
     '%s uses the complete materialized canonical descriptor',
     (_name, event, terminal, repeated) => {
@@ -684,7 +684,7 @@ describe('classifyPreScannedTraceCoverage', () => {
   );
 
   it('accepts exact element-count zero as terminal proof unless it repeats an event', () => {
-    const zero = { type: 'assert' as const, check: 'element-count' as const, target: TARGET, count: 0 };
+    const zero = { type: 'assert' as const, check: 'element-count' as const, element: TARGET, count: 0 };
     expectSuccess(classifyPreScannedTraceCoverage({
       trace: preScanned({ events: [], verification: [zero], verificationCoverage: { ready: 0 } }),
       criteria,

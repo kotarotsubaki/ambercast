@@ -10,6 +10,7 @@ import type {
   TargetDefinition,
   TracePress,
 } from '#core/ir/schema.js';
+import type { ResolvedTargetConfigEntry } from '#core/config/schema.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type { GroundingMissReason } from '#core/errors/grounding-miss-reason.js';
 
@@ -20,7 +21,7 @@ import type { GroundingMissReason } from '#core/errors/grounding-miss-reason.js'
  * Deriving this union from the target contract keeps target validation and
  * driver selection aligned as browser support grows.
  */
-export type BrowserEngine = TargetDefinition['browser'];
+export type BrowserEngine = ResolvedTargetConfigEntry['browser'];
 
 /**
  * Paired browser evidence captured at the same point in a session.

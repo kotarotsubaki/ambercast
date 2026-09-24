@@ -2,18 +2,32 @@
   "document": "grounding",
   "expected": "invalid",
   "value": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "step": {
         "kind": "ai",
-        "fingerprint": { "algorithm": "a11y-neighborhood-v2", "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
+        "fingerprint": {
+          "algorithm": "a11y-neighborhood-v2",
+          "hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
         "trace": {
           "events": [
-            { "type": "click", "target": { "strategy": "accessibility", "role": "button", "name": "Submit" } }
+            {
+              "type": "click",
+              "element": {
+                "strategy": "accessibility",
+                "role": "button",
+                "name": "Submit"
+              }
+            }
           ],
           "verification": [
-            { "type": "assert", "check": "text-visible", "text": "Submit form is visible" }
+            {
+              "type": "assert",
+              "check": "text-visible",
+              "text": "Submit form is visible"
+            }
           ]
         }
       }

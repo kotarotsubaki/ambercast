@@ -29,8 +29,8 @@ async function withRun(
       reportPersistence: 'persisted',
       results: [{
         id: 'case', file: 'case.test.md', planFile: 'case.ambercast.plan.json',
-        status: 'passed', durationMs: 42, explanation: 'Replay completed successfully.',
-        steps: [{ id: 'step', type: 'capture', status: 'passed', screenshot: ref }],
+        status: 'passed', durationMs: 42, sessions: {}, explanation: 'Replay completed successfully.',
+        steps: [{ id: 'step', type: 'capture', target: 'default', status: 'passed', screenshot: ref }],
       }],
     });
     await writeFile(join(runDir, 'report.json'), JSON.stringify(envelope));

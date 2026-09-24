@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createFakeBrowserDriver } from '../../doubles/fake-browser-driver.js';
 import { createFakeBrowserSession } from '../../doubles/fake-browser-session.js';
 
-const TARGET = { baseUrl: 'https://example.test', browser: 'chromium' } as const;
+const TARGET = { surface: 'web', baseUrl: 'https://example.test' } as const;
 
 describe('createFakeBrowserDriver', () => {
   it('declares chromium as the only currently supported engine', () => {

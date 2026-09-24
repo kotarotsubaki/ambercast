@@ -1,0 +1,37 @@
+{
+  "document": "plan",
+  "expected": "valid",
+  "value": {
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "A": {
+        "surface": "web",
+        "baseUrl": "https://a.example.test"
+      },
+      "B": {
+        "surface": "web",
+        "baseUrl": "https://b.example.test"
+      }
+    },
+    "steps": [
+      {
+        "id": "open-a",
+        "kind": "action",
+        "action": "navigate",
+        "target": "A",
+        "url": "https://a.example.test"
+      },
+      {
+        "id": "check-b",
+        "kind": "assert",
+        "check": "text-visible",
+        "target": "B",
+        "text": "Ready",
+        "timeoutMs": 0
+      }
+    ]
+  }
+}

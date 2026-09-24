@@ -29,7 +29,6 @@ import { IntegrityViolationError } from '#core/errors/integrity-violation-error.
 import { isAbsolutePath, joinPath } from '#core/paths.js';
 import { AmbercastError, type ExitCode } from '#core/errors/types.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
-import { resolveTarget } from '#core/target/resolve.js';
 import { heal, type HealBatchResult } from '#usecases/heal.js';
 import { buildHealReport, type SettledHealOutcome } from '#usecases/heal-report.js';
 import type { FinalizedReportEnvelope } from '#usecases/report-finalization.js';
@@ -69,8 +68,6 @@ export interface HealCommandFlags {
   /** Whether the CLI renders the returned report as JSON. */
   readonly json: boolean;
 
-  /** Optional explicit target name. */
-  readonly target?: string;
 
   /** Optional provider override used only when healing needs AI work. */
   readonly aiProviderOverride?: 'claude' | 'codex';
@@ -515,7 +512,6 @@ export async function runHealCommand(
       };
       const options = {
         files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-        ...(input.target === undefined ? {} : { target: input.target }),
         dryRun: input.dryRun,
         yes: input.yes,
         allowEmpty: input.allowEmpty,
@@ -524,17 +520,6 @@ export async function runHealCommand(
 
       if (!input.list && isCI && !config.ci.heal) {
         throw new ConfigInvalidError('Healing is disabled in CI; set ci.heal to true to enable it.');
-      }
-      if (!input.list) {
-        const target = resolveTarget({
-          targets: config.targets,
-          defaultTarget: config.defaultTarget,
-          explicitTarget: input.target,
-        });
-        if (target instanceof AmbercastError) throw target;
-        if (config.targets[target.name]!.healReplayIsolation !== 'idempotent') {
-          throw new ConfigInvalidError('Healing requires the selected target to set healReplayIsolation to idempotent.');
-        }
       }
 
       const result: HealBatchResult = await heal(deps, options);

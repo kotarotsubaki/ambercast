@@ -2,8 +2,10 @@
   "document": "plan",
   "expected": "invalid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
     "targets": {},
     "steps": [],
     "unexpected": true

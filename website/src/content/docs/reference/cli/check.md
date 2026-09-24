@@ -12,7 +12,6 @@ You can pass prompt paths directly or rely on automated file discovery via [Conf
 | Flag | Value | Effect | Default |
 | --- | --- | --- | --- |
 | `files` | `path[]` | literal prompts; absent selects discovery | `discovery` |
-| `--target` | `name` | select target | `omitted` |
 | `--allow-empty` | `boolean` | allow empty selection | `false` |
 | `--list` | `boolean` | list without inspection | `false` |
 | `--json` | `boolean` | JSON envelope | `false` |

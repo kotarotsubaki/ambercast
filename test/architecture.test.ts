@@ -21,6 +21,7 @@ const PORTS_MODULE_FILE = fileURLToPath(new URL('../src/ports/browser.ts', impor
 const REPORT_SCHEMA_MODULE_FILE = fileURLToPath(new URL('../src/report/schema.ts', import.meta.url));
 const PROMPT_ENVELOPE_MODULE_FILE = fileURLToPath(new URL('../src/core/ai/prompt-envelope.ts', import.meta.url));
 const RUN_MODULE_FILE = fileURLToPath(new URL('../src/usecases/run.ts', import.meta.url));
+const SESSION_POOL_MODULE_FILE = fileURLToPath(new URL('../src/usecases/session-pool.ts', import.meta.url));
 const GENERATE_MODULE_FILE = fileURLToPath(new URL('../src/usecases/generate.ts', import.meta.url));
 const CHECK_TEST_FILE = fileURLToPath(new URL('./unit/usecases/check.test.ts', import.meta.url));
 const CHECK_MODULE_FILE = fileURLToPath(new URL('../src/usecases/check.ts', import.meta.url));
@@ -270,6 +271,7 @@ function scanGeneratorTaskInstructions(program: ts.Program, sourceFile: ts.Sourc
   const checker = program.getTypeChecker();
   const composerBindings = valueImportBindings(sourceFile, PROMPT_ENVELOPE_SPECIFIER, new Set(['buildGeneratorTask']));
   const instructions: string[] = [];
+  const dynamicSlot = '${…}';
 
   function resolveRequest(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
     if (ts.isObjectLiteralExpression(expression)) return expression;
@@ -284,13 +286,29 @@ function scanGeneratorTaskInstructions(program: ts.Program, sourceFile: ts.Sourc
 
   function resolveInstruction(expression: ts.Expression): string | undefined {
     if (ts.isStringLiteral(expression)) return expression.text;
+    if (ts.isNoSubstitutionTemplateLiteral(expression)) return expression.text;
+    if (ts.isTemplateExpression(expression)) {
+      return expression.head.text + expression.templateSpans
+        .map((span) => dynamicSlot + span.literal.text).join('');
+    }
     if (!ts.isIdentifier(expression)) return undefined;
     const symbol = checker.getSymbolAtLocation(expression);
     const resolved = symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
     const declaration = resolved?.declarations?.find(ts.isVariableDeclaration);
-    return declaration?.initializer !== undefined && ts.isStringLiteral(declaration.initializer)
-      ? declaration.initializer.text
-      : undefined;
+    return declaration?.initializer !== undefined ? resolveInstruction(declaration.initializer) : undefined;
+  }
+
+  function conditionalInstructionBranches(expression: ts.Expression): readonly string[] {
+    if (!ts.isIdentifier(expression)) return [];
+    const symbol = checker.getSymbolAtLocation(expression);
+    const declaration = symbol?.declarations?.find(ts.isVariableDeclaration);
+    const initializer = declaration?.initializer;
+    if (initializer === undefined || !ts.isConditionalExpression(initializer)) return [];
+    return [initializer.whenTrue, initializer.whenFalse].map((branch) => {
+      const resolved = resolveInstruction(branch);
+      if (resolved === undefined) throw new Error('Unresolvable conditional generator task instruction.');
+      return resolved;
+    });
   }
 
   function visit(node: ts.Node): void {
@@ -303,6 +321,15 @@ function scanGeneratorTaskInstructions(program: ts.Program, sourceFile: ts.Sourc
         const instruction = prompt.arguments[0] === undefined ? undefined : resolveInstruction(prompt.arguments[0]);
         if (instruction === undefined) throw new Error(`Unresolvable buildGeneratorTask instruction at line ${sourceFile.getLineAndCharacterOfPosition(prompt.getStart(sourceFile)).line + 1}.`);
         instructions.push(instruction);
+        const argument = prompt.arguments[0];
+        if (argument !== undefined && ts.isTemplateExpression(argument)) {
+          for (const span of argument.templateSpans) {
+            for (const branch of conditionalInstructionBranches(span.expression)) {
+              const slotIndex = instruction.lastIndexOf(dynamicSlot);
+              instructions.push(instruction.slice(0, slotIndex) + branch + instruction.slice(slotIndex + dynamicSlot.length));
+            }
+          }
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -709,6 +736,21 @@ describe('architecture guardrails', () => {
         {
           "className": "IntegrityViolationError",
           "fileName": "usecases/run.ts",
+          "functionName": "executeAction",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "runCase",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "runCase",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
           "functionName": "runCase",
         },
         {
@@ -720,6 +762,16 @@ describe('architecture guardrails', () => {
           "className": "IntegrityViolationError",
           "fileName": "usecases/heal.ts",
           "functionName": "createHealOverlayStorage",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/heal.ts",
+          "functionName": "preflightCase",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/heal.ts",
+          "functionName": "preflightCase",
         },
         {
           "className": "IntegrityViolationError",
@@ -840,7 +892,9 @@ describe('architecture guardrails', () => {
     if (generateModule === undefined) throw new Error('Architecture program must include generate.ts.');
     const instructions = scanGeneratorTaskInstructions(program, generateModule);
     expect(instructions.length).toBeGreaterThan(0);
-    for (const instruction of instructions) expect(Object.values(planProducerBundleManifest(liveProducerBundleInputs()))).toContain(instruction);
+    const manifest = planProducerBundleManifest(liveProducerBundleInputs());
+    const registeredInstructions = JSON.parse(manifest.generatorTaskInstruction as string) as string[];
+    for (const instruction of instructions) expect(registeredInstructions).toContain(instruction);
   });
 
   test('builds the fingerprint template directly through the shared generator task composer', async () => {
@@ -1576,6 +1630,35 @@ describe('architecture guardrails', () => {
       expect.objectContaining({ fileName: forbiddenFileName, line: 3, allowed: false }),
       expect.objectContaining({ fileName: forbiddenFileName, line: 4, allowed: false }),
     ]);
+  });
+
+  test('launches browser sessions only from SessionPool', async () => {
+    const files = await findTypeScriptFiles(SOURCE_ROOT);
+    const program = ts.createProgram({
+      rootNames: files,
+      options: { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, target: ts.ScriptTarget.ES2023, noEmit: true },
+    });
+    const checker = program.getTypeChecker();
+    const sites: string[] = [];
+    for (const file of files) {
+      const source = program.getSourceFile(file);
+      if (source === undefined) throw new Error(`Missing source: ${file}`);
+      const activeSource = source;
+      function visit(node: ts.Node): void {
+        if (
+          ts.isCallExpression(node)
+          && ts.isPropertyAccessExpression(node.expression)
+          && node.expression.name.text === 'launch'
+          && checker.getTypeAtLocation(node.expression.expression).getProperty('engine') !== undefined
+        ) {
+          sites.push(`${file}:${activeSource.getLineAndCharacterOfPosition(node.getStart(activeSource)).line + 1}`);
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+    }
+    expect(sites).toHaveLength(1);
+    expect(sites[0]?.startsWith(`${SESSION_POOL_MODULE_FILE}:`)).toBe(true);
   });
 
   test('restricts detection-only accessibility capture fields to the run detector and excludes them from persisted shapes', async () => {

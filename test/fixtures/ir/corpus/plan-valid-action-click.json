@@ -2,11 +2,28 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": { "app": { "baseUrl": "https://example.test", "browser": "chromium" } },
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "baseUrl": "https://example.test",
+        "surface": "web"
+      }
+    },
     "steps": [
-      { "id": "click-submit", "kind": "action", "action": "click", "target": { "strategy": "accessibility", "role": "button", "name": "Submit" } }
+      {
+        "id": "click-submit",
+        "kind": "action",
+        "action": "click",
+        "element": {
+          "strategy": "accessibility",
+          "role": "button",
+          "name": "Submit"
+        },
+        "target": "app"
+      }
     ]
   }
 }

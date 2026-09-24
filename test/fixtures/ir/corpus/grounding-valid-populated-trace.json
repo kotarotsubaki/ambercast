@@ -2,21 +2,59 @@
   "document": "grounding",
   "expected": "valid",
   "value": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "login-flow": {
         "kind": "ai",
         "trace": {
           "events": [
-            { "type": "click", "target": { "strategy": "accessibility", "role": "button", "name": "Start" } },
-            { "type": "navigate", "url": "https://example.test/login" },
-            { "type": "press", "target": { "strategy": "accessibility", "role": "textbox", "name": "Email" }, "key": "Tab" },
-            { "type": "fill", "target": { "strategy": "accessibility", "role": "textbox", "name": "Email" }, "value": "person@example.test" },
-            { "type": "fill-secret", "target": { "strategy": "accessibility", "role": "textbox", "name": "Password" }, "secretRef": "{{secrets.app.password}}" }
+            {
+              "type": "click",
+              "element": {
+                "strategy": "accessibility",
+                "role": "button",
+                "name": "Start"
+              }
+            },
+            {
+              "type": "navigate",
+              "url": "https://example.test/login"
+            },
+            {
+              "type": "press",
+              "key": "Tab",
+              "element": {
+                "strategy": "accessibility",
+                "role": "textbox",
+                "name": "Email"
+              }
+            },
+            {
+              "type": "fill",
+              "value": "person@example.test",
+              "element": {
+                "strategy": "accessibility",
+                "role": "textbox",
+                "name": "Email"
+              }
+            },
+            {
+              "type": "fill-secret",
+              "secretRef": "{{secrets.app.password}}",
+              "element": {
+                "strategy": "accessibility",
+                "role": "textbox",
+                "name": "Password"
+              }
+            }
           ],
           "verification": [
-            { "type": "assert", "check": "text-visible", "text": "Login form is visible" }
+            {
+              "type": "assert",
+              "check": "text-visible",
+              "text": "Login form is visible"
+            }
           ]
         }
       }

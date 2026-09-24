@@ -38,8 +38,14 @@ const ElementRef = z.discriminatedUnion('strategy', [z.strictObject({
   name: z.string().min(1),
 })]);
 
-/** Version shared by every structured report envelope. */
-export const REPORT_SCHEMA_VERSION = '3.6' as const;
+/**
+ * Version shared by every structured report envelope.
+ *
+ * V4 execution evidence introduces required step Target identity and the
+ * complete session inventory, so the 3.7 report contract advances
+ * here rather than allowing command branches to choose versions separately.
+ */
+export const REPORT_SCHEMA_VERSION = '3.7' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -408,8 +414,13 @@ export type Observed = z.infer<typeof Observed>;
  * cross-field policy they require.
  */
 export const StepResult = z.strictObject({
+  // In 3.7 every step result, including skipped steps, retains its Plan Target.
+  // Capture alone may also identify its variable; repeated successful captures
+  // remain separate results in execution order to expose the last writer.
   id: NonWhitespaceString,
   type: z.enum(['action', 'assert', 'capture', 'ai']),
+  target: NonWhitespaceString,
+  variable: NonWhitespaceString.optional(),
   status: z.enum(['passed', 'failed', 'error', 'skipped']),
   kind: z.enum(['assertion', 'environment']).optional(),
   expected: z.string().optional(),
@@ -417,6 +428,10 @@ export const StepResult = z.strictObject({
   screenshot: z.string().optional(),
   screenshotOmitted: z.literal('secret-detected').optional(),
   observed: Observed.optional(),
+}).superRefine((step, context) => {
+  if (step.type !== 'capture' && step.variable !== undefined) {
+    context.addIssue({ code: 'custom', path: ['variable'], message: 'Only capture steps may have a variable.' });
+  }
 });
 
 /**
@@ -437,12 +452,24 @@ const ResultIdentityFields = {
  * are present, keeping normalization and identity-set accounting well-defined.
  */
 
+// In 3.7 these execution-backed fields also carry sessions for every Plan
+// Target. Executor identity comes from live config even when launch never
+// returned a session. `not-opened` covers that case and steps never reached;
+// a passed case cannot contain it because every Plan Target is referenced.
+// Close failure changes only that Target's state, not the case status.
+const SessionResult = z.strictObject({
+  surface: z.literal('web'),
+  executor: z.strictObject({ kind: z.literal('playwright'), browser: z.literal('chromium') }),
+  state: z.enum(['not-opened', 'closed', 'close-failed']),
+});
+
 const ExecutedResultFields = {
   durationMs: NonNegativeInteger,
   // The dispatch boundary increments this independently of events so
   // consumers can distinguish real provider work from presentation delivery.
   aiCalls: NonNegativeInteger.optional(),
   steps: z.array(StepResult),
+  sessions: z.record(NonWhitespaceString, SessionResult),
   explanation: z.string(),
 };
 
@@ -475,8 +502,8 @@ export type SkippedResult = z.infer<typeof SkippedResult>;
  * outcome without reconstructing it from unstructured logs. Its separate
  * branch keeps execution-backed cases distinct from discovery-only rows in the
  * public run-result union, so consumers can rely on the presence of execution
- * evidence here. Its status vocabulary is exactly `passed`, `failed`, and
- * `error`; `skipped` is invalid for this execution-backed shape. Skipped batch
+ * evidence here. Its status vocabulary is `passed`, `failed`, and `error`;
+ * `skipped` is invalid for this execution-backed shape. Skipped batch
  * work uses the shared identity-only {@link SkippedResult} branch and never
  * enters this execution-backed shape.
  */

@@ -8,6 +8,7 @@ import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js'
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import type { JsonValueT, PlanDocument } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
+import { toTargetDefinition } from '#core/target/resolve.js';
 import { ReportEnvelope } from '#report/schema.js';
 import { runCheckCommand, type CheckCommandInput, type CheckCommandOutput } from '#runtime/check-command.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
@@ -93,7 +94,7 @@ describe('runCheckCommand', () => {
     const cwd = `${projectRoot}/nested-cwd`;
     const output = {
       exitCode: 5 as const,
-      envelope: { schemaVersion: '3.6' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] },
+      envelope: { schemaVersion: '3.7' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] },
     };
     mocks.createFsReadStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: { ...CONFIG, projectRoot, testDir: `${projectRoot}/tests`, runsDir: `${projectRoot}/tests/.runs` }, source: { path: null } });
@@ -116,7 +117,7 @@ describe('runCheckCommand', () => {
     const storage = createInMemoryStorage();
     const cwd = '/workspace/no-config-project';
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
-    const output = { exitCode: 0 as const, envelope: { schemaVersion: '3.6', command: 'check', startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] } };
+    const output = { exitCode: 0 as const, envelope: { schemaVersion: '3.7', command: 'check', startedAt: '2026-08-01T00:00:00Z', durationMs: 1, summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'fresh', reason: 'fresh' }] } };
     mocks.createFsReadStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
@@ -157,23 +158,23 @@ describe('runCheckCommand', () => {
     const testPath = `${CONFIG.testDir}/login.test.md`;
     const prompt = '# Sign in\n\nI reach the dashboard.\n';
     const plan = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       source: {
         inputsDigest: computeInputsDigest({
           normalizedTestMd: normalizeTestMd(prompt),
-          schemaVersion: 3,
+          schemaVersion: 4,
           generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
           planProducerBundleFingerprint: planProducerBundleFingerprint(),
-          targetDefinitions: { web: { baseUrl: CONFIG.targets.web!.baseUrl, browser: CONFIG.targets.web!.browser } },
+          targetDefinitions: { web: toTargetDefinition(CONFIG.targets.web!) },
         }),
       },
-      targets: { web: { baseUrl: CONFIG.targets.web!.baseUrl, browser: CONFIG.targets.web!.browser } },
-      steps: [],
+      targets: { web: toTargetDefinition(CONFIG.targets.web!) },
+      steps: [{ id: 'visit-web', kind: 'action', action: 'navigate', target: 'web', url: '/' }],
     } as unknown as PlanDocument;
     await storage.writeText(testPath, prompt);
     await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
     await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
-      schemaVersion: 1,
+      schemaVersion: 2,
       planDigest: computePlanDigest(plan),
       entries: {},
     }));
@@ -207,25 +208,25 @@ describe('runCheckCommand', () => {
     const testPath = `${config.testDir}/login.test.md`;
     const prompt = '# Sign in\n\nI reach the dashboard.\n';
     const plan = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       source: {
         inputsDigest: computeInputsDigest({
-          normalizedTestMd: normalizeTestMd(prompt), schemaVersion: 3,
+          normalizedTestMd: normalizeTestMd(prompt), schemaVersion: 4,
           generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
           planProducerBundleFingerprint: planProducerBundleFingerprint(),
-          targetDefinitions: { web: { baseUrl: config.targets.web!.baseUrl, browser: config.targets.web!.browser } },
+          targetDefinitions: { web: toTargetDefinition(config.targets.web!) },
         }),
       },
-      targets: { web: { baseUrl: config.targets.web!.baseUrl, browser: config.targets.web!.browser } },
+      targets: { web: toTargetDefinition(config.targets.web!) },
       steps: [{
         id: 'fill-password', kind: 'action', action: 'fill-secret',
-        target: { strategy: 'accessibility', role: 'textbox', name: 'Password' },
+        target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' },
         secretRef: '{{secrets.login_password}}',
       }],
     } as unknown as PlanDocument;
     await storage.writeText(testPath, prompt);
     await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
-    await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({ schemaVersion: 1, planDigest: computePlanDigest(plan), entries: {} }));
+    await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({ schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} }));
     mocks.createFsReadStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);
@@ -236,7 +237,7 @@ describe('runCheckCommand', () => {
     expect(output.envelope.results).toEqual([expect.objectContaining({ status: 'fresh' })]);
   });
 
-  it('forwards check policies, target, cancellation, and configuration override through runtime composition', async () => {
+  it('forwards check policies, cancellation, and configuration override through runtime composition', async () => {
     const storage = createInMemoryStorage();
     const discoverTestFiles = vi.fn(async () => []);
     const signal = new AbortController().signal;
@@ -251,7 +252,7 @@ describe('runCheckCommand', () => {
     const report = {
       exitCode: 0 as const,
       envelope: {
-        schemaVersion: '3.6' as const,
+        schemaVersion: '3.7' as const,
         command: 'check' as const,
         startedAt: '2026-08-17T00:00:00Z',
         durationMs: 0,
@@ -268,7 +269,6 @@ describe('runCheckCommand', () => {
 
     await expect(runCheckCommand(input({
       files: ['ui/login.test.md'],
-      target: 'admin',
       allowEmpty: true,
       list: true,
       configPathOverride: 'configs/admin.json',
@@ -287,7 +287,6 @@ describe('runCheckCommand', () => {
       signal,
     }), {
       files: ['/workspace/project/ui/login.test.md'],
-      target: 'admin',
       allowEmpty: true,
       list: true,
     });
@@ -320,7 +319,7 @@ describe('runCheckCommand', () => {
     } as unknown as NodeJS.WritableStream;
     const completed = {
       exitCode: 0 as const,
-      envelope: { schemaVersion: '3.6' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
+      envelope: { schemaVersion: '3.7' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
     };
     mocks.createFsReadStorage.mockReturnValue(createInMemoryStorage());
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
@@ -336,7 +335,7 @@ describe('runCheckCommand', () => {
   it('finalizes both completed and error reports at the runtime boundary', async () => {
     const completed = {
       exitCode: 0 as const,
-      envelope: { schemaVersion: '3.6' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
+      envelope: { schemaVersion: '3.7' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
     };
     mocks.createFsReadStorage.mockReturnValue(createInMemoryStorage());
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
@@ -360,7 +359,7 @@ describe('runCheckCommand', () => {
   it.each(['completed', 'error'] as const)('forces exit 3 when %s finalization returns the emergency singleton', async (branch) => {
     const built = {
       exitCode: 0 as const,
-      envelope: { schemaVersion: '3.6' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
+      envelope: { schemaVersion: '3.7' as const, command: 'check' as const, startedAt: '2026-08-01T00:00:00Z', durationMs: 0, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] },
     };
     mocks.createFsReadStorage.mockReturnValue(createInMemoryStorage());
     mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });

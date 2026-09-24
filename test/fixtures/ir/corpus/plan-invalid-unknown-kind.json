@@ -2,9 +2,22 @@
   "document": "plan",
   "expected": "invalid",
   "value": {
-  "schemaVersion": 3,
-    "source": { "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-    "targets": {},
-    "steps": [{ "id": "wait", "kind": "wait" }]
+    "schemaVersion": 4,
+    "source": {
+      "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "targets": {
+      "app": {
+        "surface": "web",
+        "baseUrl": "https://example.test"
+      }
+    },
+    "steps": [
+      {
+        "id": "wait",
+        "kind": "wait",
+        "target": "app"
+      }
+    ]
   }
 }

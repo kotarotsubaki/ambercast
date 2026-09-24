@@ -82,6 +82,7 @@ export interface FakeBrowserSessionOptions {
    * hook again; shared teardown can therefore close safely without duplicate signals.
    */
   readonly onClose?: () => void;
+  readonly closeError?: Error;
 }
 
 /** A successful secret-fill operation observed by the fake browser session. */
@@ -113,6 +114,8 @@ export type FakeBrowserSessionOperation =
 export interface FakeBrowserSession extends BrowserSession {
   /** Returns a fresh copy of browser-facing work in the order it occurred. */
   operations(): readonly FakeBrowserSessionOperation[];
+  bindCalls(): number;
+  currentUrlCalls(): number;
 }
 
 /**
@@ -148,6 +151,8 @@ type FakeBrowserSessionState = {
   ariaSnapshotCalls: number;
   roleLocatorCalls: number;
   finalOperationCalls: number;
+  bindCalls: number;
+  currentUrlCalls: number;
 };
 
 const sessionStates = new WeakMap<FakeBrowserSession, FakeBrowserSessionState>();
@@ -494,6 +499,8 @@ export function createFakeBrowserSession(
     ariaSnapshotCalls: 0,
     roleLocatorCalls: 0,
     finalOperationCalls: 0,
+    bindCalls: 0,
+    currentUrlCalls: 0,
   };
 
   const session: FakeBrowserSession = {
@@ -563,6 +570,7 @@ export function createFakeBrowserSession(
       options.onFillSecret?.(action);
     },
     async currentUrl(): Promise<string> {
+      state.currentUrlCalls += 1;
       return state.currentUrl;
     },
     async evaluateAssert(check): Promise<AssertOutcome> {
@@ -601,6 +609,7 @@ export function createFakeBrowserSession(
       return options.captureValues?.get(elementRefKey(record.ref))?.[mode] ?? '';
     },
     async resolveGrounded(ref: ElementRef, query: GroundingQuery): Promise<GroundedResolution> {
+      state.bindCalls += 1;
       state.operations.push({ type: 'resolve-grounded', target: ref, query });
       return resolveBinding(state, ref, query);
     },
@@ -625,10 +634,13 @@ export function createFakeBrowserSession(
 
       state.closed = true;
       options.onClose?.();
+      if (options.closeError !== undefined) throw options.closeError;
     },
     operations(): readonly FakeBrowserSessionOperation[] {
       return state.operations.map((operation) => ({ ...operation }));
     },
+    bindCalls(): number { return state.bindCalls; },
+    currentUrlCalls(): number { return state.currentUrlCalls; },
   };
 
   sessionStates.set(session, state);

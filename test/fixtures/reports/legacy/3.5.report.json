@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "3.5",
+  "command": "run",
+  "startedAt": "2026-09-16T04:23:14Z",
+  "durationMs": 3100,
+  "summary": { "total": 1, "passed": 0, "failed": 0, "errored": 1, "skipped": 0 },
+  "errors": [
+    {
+      "scope": "case",
+      "kind": "environment",
+      "code": "BROWSER_LAUNCH_FAILED",
+      "hint": "Fixture hint text.",
+      "caseId": "tests/ambercast/case-c.test.md",
+      "message": "Fixture message C.",
+      "details": {
+        "reason": "example-reason",
+        "engine": "example-engine"
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "tests/ambercast/case-c.test.md",
+      "file": "tests/ambercast/case-c.test.md",
+      "planFile": "tests/ambercast/case-c.ambercast.plan.json",
+      "status": "error",
+      "steps": [],
+      "explanation": "Fixture explanation C.",
+      "durationMs": 0,
+      "aiCalls": 0
+    }
+  ],
+  "reportPersistence": "persisted"
+}

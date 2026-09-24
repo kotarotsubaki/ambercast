@@ -17,7 +17,11 @@ const envelope = ReportEnvelope.parse({
   results: [],
 });
 if (envelope.command !== 'run') throw new Error('Expected run envelope');
-const readable = (overrides: Partial<typeof envelope> = {}, id = runId): RunListing => ({ kind: 'readable', runId: id, envelope: { ...envelope, ...overrides } });
+const readable = (overrides: Partial<Extract<RunListing, { kind: 'readable' }>['envelope']> = {}, id = runId): Extract<RunListing, { kind: 'readable' }> => {
+  // Keep fixture metadata aligned with the version being rendered; non-current versions cannot be exact strict parses.
+  const schemaVersion = overrides.schemaVersion ?? REPORT_SCHEMA_VERSION;
+  return { kind: 'readable', runId: id, schemaVersion, exact: schemaVersion === REPORT_SCHEMA_VERSION, envelope: { ...envelope, ...overrides } };
+};
 const executed = (overrides: Record<string, unknown> = {}) => ({
   id: 'case-id', file: 'case.test.md', planFile: 'case.ambercast.plan.json',
   status: 'failed' as const, durationMs: 850, aiCalls: 0, sessions: {}, steps: [], explanation: 'Failure explained', ...overrides,
@@ -40,6 +44,21 @@ describe('escapeHtml', () => {
 });
 
 describe('renderRunList', () => {
+  it.each(['3.6', '3.99'])('omits Schema from a readable %s list row', (schemaVersion) => {
+    const html = renderRunList([readable({ schemaVersion })]);
+    expect(html).toContain(runId);
+    expect(html).not.toContain('Schema');
+  });
+
+  it('shows an unsupported version in the Cases column', () => {
+    const html = renderRunList([{ kind: 'unreadable', runId, reason: 'unsupported-version', version: '2.0' }]);
+    const row = html.match(/<tbody><tr>(.*?)<\/tr><\/tbody>/s)?.[1];
+    expect(row).toBeDefined();
+    const cells = row?.match(/<td[^>]*>[\s\S]*?<\/td>/g);
+    expect(cells).toHaveLength(5);
+    expect(cells?.[4]).toContain('Unsupported version 2.0');
+  });
+
   it('renders every status, case count, reason, and link branch', () => {
     const rows: RunListing[] = [
       readable(),
@@ -58,7 +77,7 @@ describe('renderRunList', () => {
     for (const [key, cls] of [['failed', 'fail'], ['error', 'fail'], ['passed', 'pass'], ['empty', 'skip'], ['noReport', 'fail'], ['unreadable', 'fail']] as const) {
       expect(html).toContain(`<span class="${cls}">${VIEW_COPY.list.rowStatus[key]}</span>`);
     }
-    for (const reason of Object.values(VIEW_COPY.list.cases.unreadableReasons)) expect(html).toContain(reason);
+    for (const reason of [VIEW_COPY.list.cases.unreadableReasons.invalidJson, VIEW_COPY.list.cases.unreadableReasons.schemaMismatch, VIEW_COPY.list.cases.unreadableReasons.notRunReport, VIEW_COPY.list.cases.unreadableReasons.readFailed]) expect(html).toContain(reason);
     expect(html).toContain('12 passed · 2 failed · 1 error');
     expect(html).toContain('1 error · 1 skipped');
     expect(html).toContain('0 cases');
@@ -86,6 +105,35 @@ describe('renderRunList', () => {
 });
 
 describe('renderRunDetail', () => {
+  it.each(['persisted', 'failed'] as const)('places the 3.6 schema after Report: %s and before Raw JSON', (reportPersistence) => {
+    const html = renderRunDetail(readable({ schemaVersion: '3.6', reportPersistence }));
+    expect(html).toContain(`Report: ${reportPersistence}`);
+    expect(html).toContain('Started 2026-09-23T12:00:00Z');
+    expect(html).toContain('Duration 850 ms');
+    expect(html).toContain('12 passed · 2 failed · 1 error');
+    expect(html).toMatch(new RegExp(`Report: ${reportPersistence} · Schema 3\\.6 · <a[^>]*>Raw JSON<\\/a>`));
+  });
+
+  it('shows a newer 3.x schema and omits the current exact schema from the detail header', () => {
+    const future = renderRunDetail(readable({ schemaVersion: '3.99' }));
+    expect(future).toMatch(/Report: persisted · Schema 3\.99 · <a[^>]*>Raw JSON<\/a>/);
+    const exact = renderRunDetail(readable());
+    const header = exact.match(/<h1>[^<]*<\/h1><p>([\s\S]*?)<\/p>/)?.[1];
+    expect(header).toBeDefined();
+    expect(header).toContain('Report: persisted');
+    expect(header).not.toContain('Schema');
+  });
+
+  it('shows an unsupported version in unreadable detail and escapes version text in both views', () => {
+    const listing: RunListing = { kind: 'unreadable', runId, reason: 'unsupported-version', version: '2.0' };
+    expect(renderRunDetail(listing)).toContain('Unsupported version 2.0');
+    const attack: RunListing = { kind: 'unreadable', runId, reason: 'unsupported-version', version: '2.0<b>' };
+    for (const html of [renderRunList([attack]), renderRunDetail(attack)]) {
+      expect(html).toContain('Unsupported version 2.0&lt;b&gt;');
+      expect(html).not.toContain('<b>');
+    }
+  });
+
   it('uses dark inline style tokens without external references', () => {
     const style = renderRunList([]).match(/<style>([\s\S]*?)<\/style>/)?.[1];
     expect(style).toBeDefined();
@@ -163,7 +211,7 @@ describe('renderRunDetail', () => {
 
   it('shows empty results and each unreadable reason', () => {
     expect(renderRunDetail(readable())).toContain(VIEW_COPY.detail.emptyCases);
-    for (const [reason, label] of Object.entries({ 'invalid-json': VIEW_COPY.list.cases.unreadableReasons.invalidJson, 'schema-mismatch': VIEW_COPY.list.cases.unreadableReasons.schemaMismatch, 'not-run-report': VIEW_COPY.list.cases.unreadableReasons.notRunReport, 'read-error': VIEW_COPY.list.cases.unreadableReasons.readFailed }) as [Extract<RunListing, { kind: 'unreadable' }>['reason'], string][]) {
+    for (const [reason, label] of Object.entries({ 'invalid-json': VIEW_COPY.list.cases.unreadableReasons.invalidJson, 'schema-mismatch': VIEW_COPY.list.cases.unreadableReasons.schemaMismatch, 'not-run-report': VIEW_COPY.list.cases.unreadableReasons.notRunReport, 'read-error': VIEW_COPY.list.cases.unreadableReasons.readFailed }) as [Extract<RunListing, { kind: 'unreadable'; reason: 'invalid-json' | 'schema-mismatch' | 'not-run-report' | 'read-error' }>['reason'], string][]) {
       const html = renderRunDetail({ kind: 'unreadable', runId, reason });
       expect(html).toContain(VIEW_COPY.detail.unreadable.heading);
       expect(html).toContain(label);

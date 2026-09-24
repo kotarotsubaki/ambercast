@@ -128,6 +128,8 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 - `failed`：写入失败，且未留下可见的部分写入内容。
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
+只有写入方会固定使用当前的 schema 版本；查看器会宽松地读取任意 3.x 版本的报告。
+
 ```json
 {"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```

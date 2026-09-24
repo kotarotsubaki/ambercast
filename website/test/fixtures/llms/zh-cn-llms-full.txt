@@ -1151,6 +1151,8 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 - `failed`：写入失败，且未留下可见的部分写入内容。
 - `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
 
+只有写入方会固定使用当前的 schema 版本；查看器会宽松地读取任意 3.x 版本的报告。
+
 ```json
 {"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
@@ -2063,6 +2065,8 @@ view requires --allow-headless when no interactive terminal is attached.
 每个响应都携带 `X-Content-Type-Options: nosniff` 与 `Cache-Control: no-store`；HTML 与原始数据响应还携带固定的 `Content-Security-Policy` 与 `Referrer-Policy: no-referrer`。页面完全在服务端渲染，不包含任何客户端 JavaScript 或外部请求。
 
 缺少 `report.json` 的运行目录（例如写入过程中或持久化失败）会在列表中显示为仅有证据（evidence only），而不是一个失效链接。`report.json` 解析或校验失败的运行仍会保留在列表中，并提供指向其原始字节内容的链接，而不会从列表中消失。
+
+`ambercast view` 会读取 `schemaVersion` 为 3.x 的所有报告。由与当前 CLI 不同的次版本写入的报告，会在运行详情标题中显示"Schema `<version>`"；来自其他主版本的报告会在列表中显示为"Unsupported version `<version>`"，且无法打开。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
 

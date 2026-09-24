@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { ReportEnvelope, REPORT_SCHEMA_VERSION } from '../report/schema.js';
 import { createInMemoryStorage } from '../../test/doubles/create-in-memory-storage.js';
 import type { StorageAdapter } from '../ports/storage.js';
-import { getRunReport, getRunReportBytes, getRunScreenshot, listRunReports, type GetRunReportDeps } from './get-run-report.js';
+import { getRunReport, getRunReportBytes, getRunScreenshot, listRunReports, type GetRunReportDeps, type RunListing } from './get-run-report.js';
 
 const projectRoot = '/project';
 const runsDir = '/project/.runs';
@@ -67,8 +68,8 @@ describe('listRunReports', () => {
       ids.readableA, ids.readableB, ids.noReport, ids.invalidJson, ids.schemaMismatch, ids.notRun,
     ]);
     expect(listings).toEqual([
-      { kind: 'readable', runId: ids.readableA, envelope },
-      { kind: 'readable', runId: ids.readableB, envelope },
+      { kind: 'readable', runId: ids.readableA, envelope, schemaVersion: REPORT_SCHEMA_VERSION, exact: true },
+      { kind: 'readable', runId: ids.readableB, envelope, schemaVersion: REPORT_SCHEMA_VERSION, exact: true },
       { kind: 'no-report', runId: ids.noReport },
       { kind: 'unreadable', runId: ids.invalidJson, reason: 'invalid-json' },
       { kind: 'unreadable', runId: ids.schemaMismatch, reason: 'schema-mismatch' },
@@ -96,7 +97,7 @@ describe('listRunReports', () => {
       return storage.readText(path);
     } };
     expect(await listRunReports(deps(broken))).toEqual([
-      { kind: 'readable', runId: 'readable', envelope: runEnvelope() },
+      { kind: 'readable', runId: 'readable', envelope: runEnvelope(), schemaVersion: REPORT_SCHEMA_VERSION, exact: true },
       { kind: 'unreadable', runId: 'denied', reason: 'read-error' },
     ]);
   });
@@ -105,6 +106,108 @@ describe('listRunReports', () => {
     const storage = createInMemoryStorage();
     await storage.writeText(`${runsDir}/midwrite/.ambercast-tmp-random`, '{partial');
     expect(await listRunReports(deps(storage))).toEqual([{ kind: 'no-report', runId: 'midwrite' }]);
+  });
+});
+
+describe('classifyReport version handling', () => {
+  const runId = 'version-fixture';
+
+  async function classify(value: unknown) {
+    const storage = createInMemoryStorage();
+    await putReport(storage, runId, JSON.stringify(value));
+    return getRunReport(deps(storage), runId);
+  }
+
+  function legacyReport() {
+    return {
+      schemaVersion: '3.6', command: 'run', startedAt: '2026-09-23T06:40:12Z', durationMs: 42,
+      summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
+      errors: [], reportPersistence: 'persisted',
+      results: [{ id: 'case', file: 'case.test.md', planFile: 'case.ambercast.plan.json',
+        status: 'passed', durationMs: 42, explanation: 'Completed.',
+        steps: [{ id: 'step', type: 'assert', status: 'passed' }] }],
+    };
+  }
+
+  it('classifies strict 3.7 as exact', async () => {
+    const envelope = runEnvelope();
+    expect(await classify(envelope)).toEqual({ kind: 'readable', runId, envelope, schemaVersion: REPORT_SCHEMA_VERSION, exact: true });
+  });
+
+  it('classifies 3.7 with an unknown key as non-exact', async () => {
+    const envelope = { ...runEnvelope(), legacyKey: true };
+    expect(await classify(envelope)).toEqual({ kind: 'readable', runId, envelope, schemaVersion: REPORT_SCHEMA_VERSION, exact: false });
+  });
+
+  it.each(['3.6', '3.07'])('classifies a valid %s shape as non-exact', async (schemaVersion) => {
+    const envelope = { ...legacyReport(), schemaVersion };
+    expect(await classify(envelope)).toEqual({ kind: 'readable', runId, envelope, schemaVersion, exact: false });
+  });
+
+  it('classifies a future 3.99 report with an unknown envelope key as non-exact', async () => {
+    const envelope = { ...legacyReport(), schemaVersion: '3.99', futureField: 'x' };
+    expect(await classify(envelope)).toEqual({ kind: 'readable', runId, envelope, schemaVersion: '3.99', exact: false });
+  });
+
+  it.each(['2.0', '3', '3.7.1', ' 3.6'])('retains unsupported version %j verbatim', async (version) => {
+    expect(await classify({ ...legacyReport(), schemaVersion: version })).toEqual({ kind: 'unreadable', runId, reason: 'unsupported-version', version });
+  });
+
+  it.each([
+    ['empty', ''], ['whitespace', '  '], ['missing', undefined],
+  ])('treats %s schemaVersion as a schema mismatch', async (_name, schemaVersion) => {
+    const { schemaVersion: _old, ...withoutVersion } = legacyReport();
+    const report = schemaVersion === undefined ? withoutVersion : { ...withoutVersion, schemaVersion };
+    expect(await classify(report)).toEqual({ kind: 'unreadable', runId, reason: 'schema-mismatch' });
+  });
+
+  it('treats a numeric schemaVersion as a schema mismatch', async () => {
+    const { schemaVersion: _old, ...withoutVersion } = legacyReport();
+    const report = { ...withoutVersion, ...JSON.parse('{"schemaVersion":3.7}') };
+    expect(await classify(report)).toEqual({ kind: 'unreadable', runId, reason: 'schema-mismatch' });
+  });
+
+  it.each([
+    ['broken summary', (report: ReturnType<typeof legacyReport>) => ({ ...report, summary: { ...report.summary, passed: '1' } })],
+    ['unknown status', (report: ReturnType<typeof legacyReport>) => ({ ...report, results: [{ ...report.results[0], status: 'partial' }] })],
+    ['unknown error scope', (report: ReturnType<typeof legacyReport>) => ({ ...report, errors: [{ scope: 'batch', kind: 'usage', code: 'LEGACY', message: 'Failure' }] })],
+  ])('rejects a 3.6 report with %s', (_name, change) => {
+    return expect(classify(change(legacyReport()))).resolves.toEqual({ kind: 'unreadable', runId, reason: 'schema-mismatch' });
+  });
+
+  it.each(['3.6', '2.0'])('classifies heal before version %s', async (schemaVersion) => {
+    expect(await classify({ ...legacyReport(), schemaVersion, command: 'heal' })).toEqual({ kind: 'unreadable', runId, reason: 'not-run-report' });
+  });
+
+  it.each([
+    ['missing', undefined], ['numeric', 5],
+  ])('rejects %s command before version handling', async (_name, command) => {
+    const { command: _old, ...withoutCommand } = legacyReport();
+    const report = command === undefined ? withoutCommand : { ...withoutCommand, command };
+    expect(await classify(report)).toEqual({ kind: 'unreadable', runId, reason: 'schema-mismatch' });
+  });
+
+  it.each([[], 'x'])('rejects a non-object report %j', async (value) => {
+    expect(await classify(value)).toEqual({ kind: 'unreadable', runId, reason: 'schema-mismatch' });
+  });
+
+  it.each(['3.3', '3.5', '3.6'])('reads the anonymized %s legacy fixture', async (version) => {
+    const envelope = JSON.parse(readFileSync(new URL(`../../test/fixtures/reports/legacy/${version}.report.json`, import.meta.url), 'utf8'));
+    expect(await classify(envelope)).toEqual({ kind: 'readable', runId, envelope, schemaVersion: version, exact: false });
+  });
+});
+
+describe('RunListing type contract', () => {
+  it('requires version only for unsupported-version and metadata for readable', () => {
+    type Unsupported = Extract<RunListing, { kind: 'unreadable'; reason: 'unsupported-version' }>;
+    type InvalidJson = Extract<RunListing, { kind: 'unreadable'; reason: 'invalid-json' }>;
+    type Readable = Extract<RunListing, { kind: 'readable' }>;
+    expectTypeOf<Unsupported['version']>().toEqualTypeOf<string>();
+    expectTypeOf<InvalidJson>().toEqualTypeOf<never>();
+    type OtherListings = Exclude<RunListing, { reason: 'unsupported-version' }>;
+    expectTypeOf<'version' extends keyof OtherListings ? true : false>().toEqualTypeOf<false>();
+    expectTypeOf<Readable['schemaVersion']>().toEqualTypeOf<string>();
+    expectTypeOf<Readable['exact']>().toEqualTypeOf<boolean>();
   });
 });
 

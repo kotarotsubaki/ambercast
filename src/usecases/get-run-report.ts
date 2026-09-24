@@ -7,8 +7,11 @@
  */
 import type { StorageAdapter } from '#ports/storage.js';
 import { ReportEnvelope } from '#report/schema.js';
+import { LenientRunReportEnvelope } from '#report/lenient-run-report.js';
+export { REPORT_SCHEMA_VERSION } from '#report/schema.js';
 import { RUN_ID_PATTERN } from '#core/layout/resolve.js';
 import { joinPath } from '#core/paths.js';
+import { z } from 'zod';
 
 /**
  * Read-only storage and absolute roots used to classify run artifacts.
@@ -24,25 +27,29 @@ export type GetRunReportDeps = {
   readonly projectRoot: string;
 };
 
-type RunReportEnvelope = Extract<ReportEnvelope, { command: 'run' }>;
+type RunReportEnvelope = z.infer<typeof LenientRunReportEnvelope>;
 
 /**
  * A run directory's report state for list and detail consumers.
  *
  * @remarks
- * `readable` contains a validated run envelope. `no-report` means the report
+ * `readable` contains a validated run envelope and its schemaVersion for detail
+ * display. `exact` records whether the first strict 3.7 parse succeeded; it
+ * is not a version comparison. `no-report` means the report
  * read returned ENOENT; evidence from heal, interrupted persistence, and a
  * failed write cannot be distinguished from that absence. `unreadable` retains
  * a row when bytes exist but JSON parsing fails (`invalid-json`), envelope
  * validation fails (`schema-mismatch`), or the valid envelope belongs to a
- * different command (`not-run-report`). A non-ENOENT report read failure is
+ * different command (`not-run-report`), or a string version is unsupported
+ * (`unsupported-version`, with that version retained). A non-ENOENT report read failure is
  * `read-error`, including permission denial. These reasons keep malformed
  * data distinct from an unavailable file without suppressing other runs.
  */
 export type RunListing =
-  | { readonly kind: 'readable'; readonly runId: string; readonly envelope: RunReportEnvelope }
+  | { readonly kind: 'readable'; readonly runId: string; readonly envelope: RunReportEnvelope; readonly schemaVersion: string; readonly exact: boolean }
   | { readonly kind: 'no-report'; readonly runId: string }
-  | { readonly kind: 'unreadable'; readonly runId: string; readonly reason: 'invalid-json' | 'schema-mismatch' | 'not-run-report' | 'read-error' };
+  | { readonly kind: 'unreadable'; readonly runId: string; readonly reason: 'invalid-json' | 'schema-mismatch' | 'not-run-report' | 'read-error' }
+  | { readonly kind: 'unreadable'; readonly runId: string; readonly reason: 'unsupported-version'; readonly version: string };
 
 /**
  * Lists valid run directories and classifies each report independently.
@@ -131,7 +138,7 @@ export async function getRunScreenshot(deps: GetRunReportDeps, runId: string, re
   const report = await getRunReport(deps, runId);
   if (report.kind !== 'readable') return { kind: 'not-found' };
 
-  const matchingSteps = report.envelope.results.flatMap((result) => 'steps' in result ? result.steps : []).filter((step) => step.screenshot === ref);
+  const matchingSteps = report.envelope.results.flatMap((result) => result.status === 'listed' || result.status === 'skipped' ? [] : result.steps).filter((step) => step.screenshot === ref);
   if (matchingSteps.length === 0 || matchingSteps.some((step) => step.screenshotOmitted !== undefined)) return { kind: 'not-found' };
   if (ref.includes('\\') || ref.startsWith('/') || /^[A-Za-z]:/.test(ref) || ref.split('/').includes('..')) return { kind: 'not-found' };
 
@@ -178,6 +185,19 @@ function reportPath(deps: GetRunReportDeps, runId: string): string {
   return joinPath(joinPath(deps.runsDir, runId), 'report.json');
 }
 
+/**
+ * Classifies a run report's bytes without checking directory membership.
+ *
+ * @param deps - Storage and roots used to read the report.
+ * @param runId - Run directory name used to locate the report.
+ * @returns A `RunListing` classified as `no-report`, `unreadable`, or `readable`.
+ * @remarks
+ * Only a successful strict parse establishes `exact`; comparing version strings after
+ * lenient parsing cannot recover that observation. Command identity takes precedence
+ * over version compatibility so reports from other commands cannot enter the legacy
+ * run-report path. Missing, non-string, or whitespace-only versions are schema
+ * mismatches, preserving `unsupported-version` for readable but unsupported versions.
+ */
 async function classifyReport(deps: GetRunReportDeps, runId: string): Promise<RunListing> {
   let raw: string;
   try {
@@ -192,8 +212,25 @@ async function classifyReport(deps: GetRunReportDeps, runId: string): Promise<Ru
   } catch {
     return { kind: 'unreadable', runId, reason: 'invalid-json' };
   }
-  const parsed = ReportEnvelope.safeParse(value);
-  if (!parsed.success) return { kind: 'unreadable', runId, reason: 'schema-mismatch' };
-  if (parsed.data.command !== 'run') return { kind: 'unreadable', runId, reason: 'not-run-report' };
-  return { kind: 'readable', runId, envelope: parsed.data };
+
+  if (!isRecord(value) || typeof value.command !== 'string') return { kind: 'unreadable', runId, reason: 'schema-mismatch' };
+  if (value.command !== 'run') return { kind: 'unreadable', runId, reason: 'not-run-report' };
+
+  const exact = ReportEnvelope.safeParse(value);
+  if (exact.success && exact.data.command === 'run') {
+    return { kind: 'readable', runId, envelope: exact.data, schemaVersion: exact.data.schemaVersion, exact: true };
+  }
+
+  const version = value.schemaVersion;
+  if (typeof version !== 'string' || version.trim() === '') return { kind: 'unreadable', runId, reason: 'schema-mismatch' };
+  if (!/^3\.\d+$/.test(version)) return { kind: 'unreadable', runId, reason: 'unsupported-version', version };
+
+  const lenient = LenientRunReportEnvelope.safeParse(value);
+  if (!lenient.success) return { kind: 'unreadable', runId, reason: 'schema-mismatch' };
+  return { kind: 'readable', runId, envelope: lenient.data, schemaVersion: version, exact: false };
+}
+
+/** Provides the first classification guard so non-object JSON cannot supply command or version evidence. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

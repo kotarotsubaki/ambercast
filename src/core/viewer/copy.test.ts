@@ -19,6 +19,9 @@ describe('VIEW_COPY', () => {
   it('keeps representative list, detail, and error copy from the fixed table', () => {
     expect(VIEW_COPY.list.title).toBe('Runs');
     expect(VIEW_COPY.list.emptyState.line2).toBe('Run a test: ambercast run');
+    expect(VIEW_COPY.list.rowStatus.skipped).toBe('– Skipped');
+    expect(VIEW_COPY.list.rowStatus.listed).toBe('· Listed');
+    expect('listedSkipped' in VIEW_COPY.detail).toBe(false);
     expect(VIEW_COPY.detail.failedStep.screenshotOmitted).toBe('Screenshot omitted: secret detected');
     expect(VIEW_COPY.errorPages.forbidden.message).toBe('Host header not allowed');
   });

@@ -54,7 +54,7 @@ import { readDebugEnvironment } from '#runtime/debug-environment.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runInitCommand, type InitCommandDeps, type InitCommandInput, type InitCommandOutput } from '#runtime/init-command.js';
 import { runRunCommand } from '#runtime/run-command.js';
-import { AmbercastError, prepareViewCommand } from '#runtime/view-command.js';
+import { AmbercastError, prepareViewCommand, VIEW_COPY } from '#runtime/view-command.js';
 import { startLocalReportServer } from '#adapters/http/local-report-server.js';
 
 interface ParsedGenerateCommand {
@@ -957,9 +957,10 @@ export async function main(
             stderr,
           });
           if (url !== '') {
-            stderr.write(`Listening on ${url}\n`);
+            const host = new URL(url).host;
+            stderr.write(`${VIEW_COPY.cli.startupPrefix}${host}${VIEW_COPY.cli.startupSuffix}\n`);
             if (plan.warn) {
-              stderr.write(`Warning: reachable without authentication at ${url}\n`);
+              stderr.write(`${VIEW_COPY.cli.warningPrefix}${host}${VIEW_COPY.cli.warningSuffix}\n`);
             }
           }
           await closed;

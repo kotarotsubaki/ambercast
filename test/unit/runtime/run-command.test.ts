@@ -1495,3 +1495,97 @@ describe('runRunCommand', () => {
     );
   });
 });
+
+describe('runRunCommand event subscribers (TEST-A1)', () => {
+  function arrangeRun() {
+    const storage = createInMemoryStorage();
+    const output = reportOutput(0);
+    mocks.createFsStorage.mockReturnValue(storage);
+    mocks.loadConfig.mockResolvedValue({ resolved: CONFIG, source: { path: null } });
+    mocks.createUiExecutorResolver.mockReturnValue(createFakeUiExecutor(() => createFakeBrowserSession(new Map())));
+    mocks.createEnvSecretsProvider.mockReturnValue(createFakeSecretsProvider(new Map()));
+    mocks.createAmbercast.mockReturnValue({
+      storage,
+      layout: { runReportPathFor: vi.fn(() => '/workspace/tests/.runs/report.json') },
+      clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 1),
+      discoverTestFiles: vi.fn(async () => []),
+    });
+    mocks.run.mockResolvedValue({ results: [], noTestsFound: false, listed: [] });
+    mocks.buildRunReport.mockReturnValue(output);
+    return output;
+  }
+
+  it('keeps stderr bytes unchanged when no event subscriber is supplied', async () => {
+    const { createStderrProgressSink } = await vi.importActual<typeof import('#adapters/system/stderr-progress-sink.js')>(
+      '#adapters/system/stderr-progress-sink.js',
+    );
+    const captured = createRecordingStderr();
+    arrangeRun();
+    mocks.createStderrProgressSink.mockImplementation(createStderrProgressSink);
+    mocks.run.mockImplementation(async (deps: { readonly events: { emit(event: { readonly type: 'ai-call'; readonly callId: string; readonly file: string; readonly attempt: number; readonly attemptLimit: number; readonly stepId: string }): void } }) => {
+      deps.events.emit({
+        type: 'ai-call', callId: 'ai-1', file: '/workspace/tests/login.test.md',
+        attempt: 1, attemptLimit: 1, stepId: 'submit-form',
+      });
+      return { results: [], noTestsFound: false, listed: [] };
+    });
+
+    await runRunCommand(input({ stderr: captured.stderr }));
+
+    expect(captured.output.join('')).toBe('run tests/login.test.md [submit-form]: ai call 1/1\n');
+    expect(mocks.createStderrProgressSink).toHaveBeenCalledOnce();
+  });
+
+  it('delivers every event to stderr first and then to the caller sink without closing it', async () => {
+    arrangeRun();
+    const stderrEmit = vi.fn();
+    const emit = vi.fn();
+    const close = vi.fn();
+    const subscriber = { emit, close };
+    const events = [
+      { type: 'ai-call' as const, callId: 'ai-1', file: '/workspace/tests/login.test.md', attempt: 1, attemptLimit: 2 },
+      { type: 'ai-call' as const, callId: 'ai-2', file: '/workspace/tests/login.test.md', attempt: 2, attemptLimit: 2 },
+    ];
+    mocks.createStderrProgressSink.mockReturnValue({ emit: stderrEmit, close: mocks.closeProgressSink });
+    mocks.run.mockImplementation(async (deps: { readonly events: { emit(event: typeof events[number]): void } }) => {
+      for (const event of events) deps.events.emit(event);
+      return { results: [], noTestsFound: false, listed: [] };
+    });
+
+    await runRunCommand(input({ events: subscriber }));
+
+    expect(stderrEmit.mock.calls.map(([event]) => event)).toEqual(events);
+    expect(emit.mock.calls.map(([event]) => event)).toEqual(events);
+    for (let index = 0; index < events.length; index += 1) {
+      expect(stderrEmit.mock.invocationCallOrder[index]).toBeLessThan(emit.mock.invocationCallOrder[index]!);
+    }
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('preserves the use-case result and envelope when the caller sink throws', async () => {
+    const expected = arrangeRun();
+    const stderrEmit = vi.fn();
+    const close = vi.fn();
+    const events = [
+      { type: 'ai-call' as const, callId: 'ai-1', file: '/workspace/tests/login.test.md', attempt: 1, attemptLimit: 2 },
+      { type: 'ai-call' as const, callId: 'ai-2', file: '/workspace/tests/login.test.md', attempt: 2, attemptLimit: 2 },
+    ];
+    const emit = vi.fn().mockImplementationOnce(() => { throw new Error('subscriber failed'); });
+    const subscriber = { emit, close };
+    mocks.createStderrProgressSink.mockReturnValue({ emit: stderrEmit, close: mocks.closeProgressSink });
+    mocks.run.mockImplementation(async (deps: { readonly events: { emit(value: typeof events[number]): void } }) => {
+      for (const event of events) deps.events.emit(event);
+      return { results: [], noTestsFound: false, listed: [] };
+    });
+
+    const actual = await runRunCommand(input({ events: subscriber }));
+
+    expect(mocks.run).toHaveBeenCalledOnce();
+    expect(actual).toEqual({ exitCode: expected.exitCode, envelope: { ...expected.envelope, reportPersistence: 'persisted' } });
+    expect(stderrEmit.mock.calls.map(([event]) => event)).toEqual(events);
+    expect(emit.mock.calls.map(([event]) => event)).toEqual(events);
+    expect(mocks.closeProgressSink).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+  });
+});

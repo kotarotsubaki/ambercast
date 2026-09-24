@@ -12,6 +12,7 @@ import { readCommandEnvironment } from '#adapters/system/process-command-environ
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
 import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
+import { createFanOutEventSink } from '#adapters/system/fan-out-event-sink.js';
 import { createTtyInteractivityCheck } from '#adapters/system/tty-interactivity.js';
 import { loadConfig } from '#config/load.js';
 import { commitAllowlist } from '#config/write-secrets-allow.js';
@@ -21,6 +22,7 @@ import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
 import { envVarNameFor } from '#core/secrets/env-var-name.js';
 import { generate } from '#usecases/generate.js';
+import type { EventSink } from '#ports/system.js';
 import type { FinalizedReportEnvelope } from '#usecases/report-finalization.js';
 import { finalizeReportEnvelope, isEmergencyFinalizedEnvelope } from '#usecases/report-finalization.js';
 import {
@@ -91,6 +93,19 @@ export interface GenerateCommandInput {
   readonly stderr: NodeJS.WritableStream;
   /** Optional caller cancellation propagated to generation. */
   readonly signal?: AbortSignal;
+
+  /**
+   * Receives generation lifecycle events in addition to stderr progress.
+   * Without a subscriber, stderr output remains byte-for-byte identical to
+   * the current command behavior; a caller need not supply this port.
+   *
+   * @remarks
+   * Runtime fans events out to its own progress sink and this caller-owned
+   * sink, keeping protocol-specific subscribers such as MCP progress outside
+   * the runtime dependency graph. Check is read-only and has no external
+   * progress subscription need, so its input deliberately lacks this port.
+   */
+  readonly events?: EventSink;
 }
 
 /**
@@ -154,13 +169,16 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
       ...(input.configPathOverride === undefined ? {} : { configPathOverride: input.configPathOverride }),
     });
     projectRoot = config.projectRoot;
-    const events = createStderrProgressSink({
+    const stderrSink = createStderrProgressSink({
       command: 'generate',
       stderr: input.stderr,
       projectRoot: config.projectRoot,
       isCI: createProcessEnvironmentInfo().isCI(),
       clock,
     });
+    const events = input.events === undefined
+      ? stderrSink
+      : createFanOutEventSink([stderrSink, input.events]);
     const allocateCallId = createCallIdAllocator();
     try {
       const ambercast = createAmbercast({ config, events });
@@ -221,7 +239,7 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
       const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
       return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
     } finally {
-      events.close();
+      stderrSink.close();
     }
   } catch (error) {
     const classified = error instanceof AmbercastError

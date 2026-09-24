@@ -16,6 +16,7 @@ import { createProcessEnvironmentInfo } from '#adapters/system/process-environme
 import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
+import { createFanOutEventSink } from '#adapters/system/fan-out-event-sink.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { loadConfig } from '#config/load.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
@@ -23,6 +24,7 @@ import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type ExitCode } from '#core/errors/types.js';
 import { isAbsolutePath, joinPath } from '#core/paths.js';
+import type { EventSink } from '#ports/system.js';
 import { buildRunReport } from '#usecases/run-report.js';
 import type { FinalizedReportEnvelope } from '#usecases/report-finalization.js';
 import { finalizeReportEnvelope, isEmergencyFinalizedEnvelope } from '#usecases/report-finalization.js';
@@ -126,6 +128,20 @@ export interface RunCommandInput {
 
   /** Optional caller cancellation propagated to replay. */
   readonly signal?: AbortSignal;
+
+  /**
+   * Receives replay lifecycle events alongside the default stderr progress
+   * output. Omitting this sink leaves the existing stderr bytes unchanged;
+   * providing one adds a subscriber rather than replacing that output.
+   *
+   * @remarks
+   * The caller owns the injected sink and its lifetime. This optional port
+   * lets adapters such as an MCP progress reporter observe replay without
+   * making runtime depend on the adapter's protocol. Check is read-only and
+   * has no corresponding external progress subscription contract, so its
+   * command input does not acquire this port.
+   */
+  readonly events?: EventSink;
 }
 
 /**
@@ -214,13 +230,16 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
     projectRoot = config.projectRoot;
     const uiExecutor = createUiExecutorResolver({ headed: input.headed });
     const secrets = createEnvSecretsProvider();
-    const events = createStderrProgressSink({
+    const stderrSink = createStderrProgressSink({
       command: 'run',
       stderr: input.stderr,
       projectRoot: config.projectRoot,
       isCI,
       clock,
     });
+    const events = input.events === undefined
+      ? stderrSink
+      : createFanOutEventSink([stderrSink, input.events]);
     const allocateCallId = createCallIdAllocator();
     try {
       const ambercast = createAmbercast({
@@ -280,7 +299,7 @@ export async function runRunCommand(input: RunCommandInput): Promise<RunCommandO
         return { exitCode, envelope: finalizedFailed };
       }
     } finally {
-      events.close();
+      stderrSink.close();
     }
   } catch (error) {
     const classified = error instanceof AmbercastError

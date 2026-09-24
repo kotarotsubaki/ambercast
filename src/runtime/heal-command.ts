@@ -16,6 +16,7 @@ import { createConfirmationAnswerReader, type ConfirmationAnswer, type Confirmat
 import { createCryptoRandom } from '#adapters/system/crypto-random.js';
 import { createEnvSecretsProvider } from '#adapters/system/env-secrets-provider.js';
 import { createProcessEnvironmentInfo } from '#adapters/system/process-environment-info.js';
+import { createFanOutEventSink } from '#adapters/system/fan-out-event-sink.js';
 import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
 import { readCommandEnvironment } from '#adapters/system/process-command-environment.js';
 import { readConfigEnvironment } from '#adapters/system/process-config-environment.js';
@@ -42,6 +43,8 @@ import type {
   HealDeps,
   HealOutcome,
 } from '#usecases/heal.js';
+
+import type { EventSink } from '#ports/system.js';
 
 function reportTimestamp(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -84,8 +87,9 @@ export interface HealCommandFlags {
  *
  * File paths remain literal until command composition makes them absolute,
  * following `run-command.ts`'s established `isAbsolutePath`/`joinPath`
- * against `cwd` precedent. Cancellation spans the complete invocation,
- * including confirmation and commit settlement.
+ * against `cwd` precedent. Cancellation spans measurement; a caller that
+ * also drives confirmation and settlement propagates the same signal
+ * through those later phases itself.
  */
 export type HealCommandInput = Omit<HealCommandFlags, 'json'> & {
   /** Literal prompt paths, or an empty list for configured discovery. */
@@ -99,6 +103,18 @@ export type HealCommandInput = Omit<HealCommandFlags, 'json'> & {
 
   /** Optional caller cancellation propagated to healing. */
   readonly signal?: AbortSignal;
+
+  /**
+   * Receives healing lifecycle events alongside the default stderr progress
+   * stream. Omitting it preserves the existing stderr output byte for byte.
+   *
+   * @remarks
+   * The caller owns this sink and its lifetime. Fan-out permits an adapter,
+   * including an MCP progress reporter, to subscribe without teaching this
+   * runtime about its transport. Check is read-only and needs no external
+   * progress subscription, so its command input has no matching field.
+   */
+  readonly events?: EventSink;
 };
 
 /**
@@ -149,9 +165,11 @@ export interface HealCommitSettlement {
 /**
  * Rendering-neutral result returned by the healing runtime.
  *
- * The envelope is produced once after authorization and every authorized
- * commit has settled, so a failed commit keeps its own result row and adds a
- * matching case-scoped error before report construction.
+ * A preview envelope reflects measured candidates before any authorization
+ * decision. A settled envelope is produced after authorization and every
+ * authorized commit has settled, so a failed commit keeps its own result
+ * row and adds a matching case-scoped error before report construction.
+ * Both forms share this same shape.
  */
 export interface HealCommandOutput {
   /**
@@ -163,6 +181,65 @@ export interface HealCommandOutput {
 
   /** Structured report for either JSON serialization or text rendering. */
   readonly envelope: FinalizedReportEnvelope;
+}
+
+/**
+ * Measured healing candidates and the separate authority to settle them.
+ *
+ * @remarks
+ * A caller can inspect whether any write is possible and which cases would
+ * change before requesting consent. This boundary serves callers that need a
+ * preview and later approval, while the CLI can retain its own interactive
+ * confirmation policy over the same measured candidates. Measurement must
+ * not itself authorize persistence. The returned object retains pending
+ * commit capabilities privately; exposing only summaries prevents a caller
+ * from committing a case outside the single settlement boundary.
+ */
+export interface HealPreparation {
+  /**
+   * Builds a report of measured changes without applying them.
+   *
+   * @returns A rendering-neutral preview report for consent or inspection.
+   * @remarks
+   * Preview performs no persistence and remains callable repeatedly, even
+   * after settlement. A caller may need to retrieve the measured result again
+   * while presenting or recording an approval decision; reading it never
+   * consumes the authority to settle. Each call returns the same snapshot
+   * fixed during measurement, regardless of whether settlement later runs or
+   * succeeds. Purity includes both the absence of side effects and this
+   * stable result.
+   */
+  preview(): HealCommandOutput;
+
+  /**
+   * Resolves the measured candidates under one explicit authorization.
+   *
+   * @param authorization - Whether the caller approved, declined, or was
+   * interrupted before applying pending changes.
+   * @returns The final report after the authorized commits have settled, or
+   * after the non-applying decision has been recorded.
+   * @remarks
+   * Settlement is one-shot even when authorization declines or interrupts:
+   * accepting a second decision could apply the same buffered writes twice
+   * or rewrite an already reported outcome. A second call fails with
+   * `UnexpectedCrashError`; preview remains available afterward. The decision
+   * is consumed synchronously as the first step of the call, before any await,
+   * so even near-simultaneous calls observe the consumed state in JavaScript's
+   * single-threaded execution model. Individual commit failures become
+   * case-scoped results in the final envelope rather than rejecting settle;
+   * the no-interruption guarantee after settlement starts concerns aborting
+   * the whole settlement, including by signal, not a failed case commit.
+   */
+  settle(authorization: 'authorized' | 'declined' | 'interrupted'): Promise<HealCommandOutput>;
+
+  /** Whether consent could lead to at least one artifact write. */
+  readonly hasCommits: boolean;
+
+  /**
+   * Case identities, files, and repair summaries available before consent.
+   * These describe prospective changes without exposing commit capabilities.
+   */
+  readonly cases: readonly { readonly caseId: string; readonly file: string; readonly healingSummary: string }[];
 }
 
 /**
@@ -186,7 +263,7 @@ export interface HealCommandOutput {
  * error rather than a fifth confirmation outcome.
  */
 export async function promptForHealConfirmation(
-  commits: ReadonlyMap<string, HealCaseCommit>,
+  commits: ReadonlyMap<string, Pick<HealCaseCommit, 'file' | 'healingSummary'>>,
   input: Pick<HealCommandInput, 'dryRun' | 'yes' | 'signal'>,
   deps: Pick<HealCommandDeps, 'isCI' | 'isInteractive' | 'readConfirmationAnswer'>,
 ): Promise<HealConfirmationOutcome> {
@@ -392,63 +469,42 @@ function settleHealOutcome(
   };
 }
 
+interface HealPreparationInternal extends HealPreparation {
+  readonly toCrashOutput: (error: unknown) => HealCommandOutput;
+}
+
+function finalizeHealOutput(built: ReturnType<typeof buildHealReport>, projectRoot: string): HealCommandOutput {
+  const finalized = finalizeReportEnvelope(built.envelope, projectRoot);
+  return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : built.exitCode, envelope: finalized };
+}
+
 /**
- * Runs the composed healing command and produces its final report result.
+ * Measures healing candidates and returns a preview and settlement capability.
  *
- * @param input - Parsed command arguments, working directory, and cancellation.
- * @returns A structured envelope and its selected process exit code.
+ * @param input - Selected prompts, command policy, project directory, and
+ * optional cancellation and progress subscribers.
+ * @returns Measured cases with a repeatable preview and one settlement choice.
  * @remarks
- * This composition has one deliberately ordered path. `heal()` owns
- * the early `--list` selection result, so this runtime lets it short-circuit
- * before consulting `ci.heal`; the shared list contract promises discovery
- * without a primary effect and an exit-zero result even when CI healing is
- * disabled. Only a real attempt reaches the `deps.config.ci.heal` refusal
- * gate, then `heal()` measures every case against its private overlay and
- * returns both its outcome and pending commit capabilities. Confirmation must
- * follow that measurement because no earlier boundary can truthfully describe
- * the files and repair kinds pending writes, yet it remains before the
- * first capability invocation so no real artifact write precedes consent.
+ * Separating measurement from settlement lets a two-stage caller present the
+ * exact proposed repairs for approval before applying them. The CLI can use
+ * the same preparation while retaining its interactive confirmation flow.
+ * This phase does not treat `dryRun` or `yes` as write authority: neither
+ * flag may commit a candidate during measurement. Pending commit capabilities
+ * stay private until a caller makes the explicit settlement choice. Settlement
+ * depends only on its authorization argument and never consults the original
+ * `dryRun` input: `settle('authorized')` commits normally even for a dry-run
+ * preparation. A dry-run caller must choose preview instead of settlement;
+ * `runHealCommand` makes that choice by returning `preview()` without calling
+ * `settle`.
  *
- * An empty `result.commits` map has no artifact write to authorize, so it
- * skips confirmation in every execution environment.
- *
- * A dry run never prompts and never invokes `commit()`, irrespective of
- * `--yes` or `-y`: it reports pending eligible repairs as preview-only while
- * leaving their buffered artifact changes unapplied. The two flag forms are
- * the same pre-authorization. Without either form, a non-interactive
- * caller receives the exit-2 refusal rather than a hidden prompt or implicit
- * write. Interactivity is supplied by the `isInteractive()`/
- * `createTtyInteractivityCheck` seam, not an inline
- * `process.stderr.isTTY` observation, so runtime tests can provide the host
- * fact deterministically and command policy remains independent of Node's
- * process-global state. The same internal composition constructs the
- * confirmation-answer reader
- * before delegating an interactive exchange to the confirmation policy.
- *
- * Cancellation covers the entire invocation rather than only healing. Before
- * an interactive confirmation has obtained consent, including while its yes/no
- * question is pending, no commit capability is called. If cancellation arrives
- * after case processing but before that prompt, the same zero-write outcome
- * preserves already-computed results and skipped identities. With
- * `--yes`/`-y`, authorization predates case processing, so that timing commits
- * exactly the already-terminal cases represented in `result.commits`; cases
- * marked skipped never acquire a capability. Once authorized commit settlement
- * has begun, every eligible capability settles, and a failed case cannot
- * prevent later independent commits; cancellation cannot rewrite an
- * already-started storage settlement into a different batch result.
- *
- * After authorized capabilities settle, this boundary first reconciles
- * failed commits, builds one candidate, and passes it through the shared
- * finalizer. Building after settlement prevents an initial report from
- * becoming stale and keeps a failed commit case-scoped; finalization then
- * rounds executed heal-case durations, normalizes the public identities, and
- * recomputes summary from the settled facts. The emergency singleton from
- * that shared boundary alone selects exit code 3, so every other semantic
- * exit code remains the report builder's decision.
+ * The command still applies its normal list short-circuit and CI healing
+ * refusal at their established boundaries, and it preserves the existing
+ * replay-isolation check. A measurement failure never escapes as a raw
+ * thrown error: it is classified and routed through the same
+ * crash-conversion path a settlement failure uses, so every caller of
+ * `preview`/`settle` always receives a rendering-neutral report.
  */
-export async function runHealCommand(
-  input: HealCommandInput,
-): Promise<HealCommandOutput> {
+export async function prepareHeal(input: HealCommandInput): Promise<HealPreparation> {
   let projectRoot = input.cwd;
   const clock = createSystemClock();
   const startedAt = reportTimestamp(clock.now());
@@ -471,13 +527,14 @@ export async function runHealCommand(
     const isCI = createProcessEnvironmentInfo().isCI();
     const uiExecutor = createUiExecutorResolver();
     const secrets = createEnvSecretsProvider();
-    const events = createStderrProgressSink({
+    const stderrSink = createStderrProgressSink({
       command: 'heal',
       stderr: input.stderr,
       projectRoot: config.projectRoot,
       isCI,
       clock,
     });
+    const events = input.events === undefined ? stderrSink : createFanOutEventSink([stderrSink, input.events]);
     const allocateCallId = createCallIdAllocator();
     try {
       const ambercast = createAmbercast({
@@ -512,8 +569,8 @@ export async function runHealCommand(
       };
       const options = {
         files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-        dryRun: input.dryRun,
-        yes: input.yes,
+        dryRun: true,
+        yes: false,
         allowEmpty: input.allowEmpty,
         list: input.list,
       };
@@ -523,54 +580,153 @@ export async function runHealCommand(
       }
 
       const result: HealBatchResult = await heal(deps, options);
-      const confirmation = await promptForHealConfirmation(result.commits, input, {
-        isCI,
-        isInteractive: () => createTtyInteractivityCheck()(),
-        readConfirmationAnswer: (commits, signal) => createConfirmationAnswerReader()(commits, signal),
-      });
-      const settlements: HealCommitSettlement[] = [];
-      if (!input.dryRun && confirmation === 'authorized') {
-        for (const [caseId, commit] of result.commits) {
+      const commitCaseIds = new Set(result.commits.keys());
+      const measuredContext = reportContext();
+      const toCrashOutput = (error: unknown): HealCommandOutput => {
+        const classified = error instanceof AmbercastError
+          ? error
+          : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
+        return finalizeHealOutput(buildHealReport({ ...measuredContext, error: classified }), projectRoot);
+      };
+      let cachedPreview: HealCommandOutput | undefined;
+      const preview = (): HealCommandOutput => {
+        if (cachedPreview === undefined) {
           try {
-            settlements.push({ caseId, commit, result: await commit.commit() });
+            cachedPreview = finalizeHealOutput(
+              buildHealReport({
+                ...measuredContext,
+                outcome: settleHealOutcome(result.outcome, 'not-required', true, commitCaseIds, []),
+              }),
+              projectRoot,
+            );
           } catch (error) {
-            const partiallyWritten: ('plan' | 'grounding')[] = [];
-            const persisted = partiallyWritten.length === 0 ? 'no artifacts' : partiallyWritten.join(' and ');
-            settlements.push({
-              caseId,
-              commit,
-              result: {
-                outcome: 'failed',
-                error: new FsIoError(
-                  `Healing artifacts could not be committed after persisting ${persisted}.`,
-                  {
-                    ...(error instanceof FsIoError ? error.details ?? {} : {}),
-                    partiallyWritten: [...partiallyWritten],
-                  },
-                  { cause: error },
-                ),
-                partiallyWritten,
-              },
-            });
+            cachedPreview = toCrashOutput(error);
           }
         }
-      }
-
-      const output = buildHealReport({
-        ...reportContext(),
-        outcome: settleHealOutcome(result.outcome, confirmation, input.dryRun, new Set(result.commits.keys()), settlements),
+        return cachedPreview;
+      };
+      const hasCommits = result.commits.size > 0;
+      const cases: { readonly caseId: string; readonly file: string; readonly healingSummary: string }[] = [];
+      result.commits.forEach(({ file, healingSummary }, caseId) => {
+        cases.push({ caseId, file, healingSummary });
       });
-      const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
-      return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+
+      let settled = false;
+      return {
+        preview,
+        hasCommits,
+        cases,
+        toCrashOutput,
+        async settle(authorization) {
+          if (settled) {
+            throw new UnexpectedCrashError('Healing settlement was already consumed.');
+          }
+          settled = true;
+          if (!hasCommits) {
+            return preview();
+          }
+          try {
+            const settlements: HealCommitSettlement[] = [];
+            if (authorization === 'authorized') {
+              for (const [caseId, commit] of result.commits) {
+                try {
+                  settlements.push({ caseId, commit, result: await commit.commit() });
+                } catch (error) {
+                  const partiallyWritten: ('plan' | 'grounding')[] = [];
+                  const persisted = partiallyWritten.length === 0 ? 'no artifacts' : partiallyWritten.join(' and ');
+                  settlements.push({
+                    caseId,
+                    commit,
+                    result: {
+                      outcome: 'failed',
+                      error: new FsIoError(
+                        `Healing artifacts could not be committed after persisting ${persisted}.`,
+                        {
+                          ...(error instanceof FsIoError ? error.details ?? {} : {}),
+                          partiallyWritten: [...partiallyWritten],
+                        },
+                        { cause: error },
+                      ),
+                      partiallyWritten,
+                    },
+                  });
+                }
+              }
+            }
+            return finalizeHealOutput(
+              buildHealReport({
+                ...reportContext(),
+                outcome: settleHealOutcome(result.outcome, authorization, false, commitCaseIds, settlements),
+              }),
+              projectRoot,
+            );
+          } catch (error) {
+            const classified = error instanceof AmbercastError
+              ? error
+              : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
+            return finalizeHealOutput(buildHealReport({ ...reportContext(), error: classified }), projectRoot);
+          }
+        },
+      } as HealPreparationInternal;
     } finally {
-      events.close();
+      stderrSink.close();
     }
   } catch (error) {
     const classified = error instanceof AmbercastError
       ? error
       : new UnexpectedCrashError('The heal command crashed unexpectedly.', undefined, { cause: error });
-    const output = buildHealReport({ ...reportContext(), error: classified });
-    const finalized = finalizeReportEnvelope(output.envelope, projectRoot);
-    return { exitCode: isEmergencyFinalizedEnvelope(finalized) ? 3 : output.exitCode, envelope: finalized };
+    const crashOutput = finalizeHealOutput(buildHealReport({ ...reportContext(), error: classified }), projectRoot);
+    let settled = false;
+    return {
+      preview: () => crashOutput,
+      hasCommits: false,
+      cases: [],
+      toCrashOutput: () => crashOutput,
+      async settle() {
+        if (settled) {
+          throw new UnexpectedCrashError('Healing settlement was already consumed.');
+        }
+        settled = true;
+        return crashOutput;
+      },
+    } as HealPreparationInternal;
+  }
+}
+
+/**
+ * Runs the composed healing command and produces its final report result.
+ *
+ * @param input - Parsed command arguments, working directory, and cancellation.
+ * @returns A structured envelope and its selected process exit code.
+ * @remarks
+ * This is the CLI-facing composition of {@link prepareHeal}, the existing
+ * interactive confirmation policy, and {@link HealPreparation.settle}. A dry
+ * run and a genuinely empty commit set both skip confirmation and settlement
+ * entirely by returning the preparation's preview, since neither has an
+ * artifact write to authorize. Confirmation reconstructs its candidate map
+ * from the preparation's already-disclosed case summaries rather than from
+ * the private commit capabilities themselves, preserving the boundary that
+ * only `settle` may invoke a commit.
+ */
+export async function runHealCommand(
+  input: HealCommandInput,
+): Promise<HealCommandOutput> {
+  const preparation = await prepareHeal(input);
+  if (input.dryRun) {
+    return preparation.preview();
+  }
+  try {
+    const commits = new Map(preparation.cases.map(({ caseId, file, healingSummary }) => [caseId, { file, healingSummary }]));
+    const confirmation = await promptForHealConfirmation(commits, input, {
+      isCI: createProcessEnvironmentInfo().isCI(),
+      isInteractive: () => createTtyInteractivityCheck()(),
+      readConfirmationAnswer: (candidates, signal) => createConfirmationAnswerReader()(candidates, signal),
+    });
+    if (confirmation === 'not-required') {
+      return preparation.preview();
+    }
+    return await preparation.settle(confirmation);
+  } catch (error) {
+    return (preparation as unknown as { readonly toCrashOutput: (error: unknown) => HealCommandOutput }).toCrashOutput(error);
   }
 }

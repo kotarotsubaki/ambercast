@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, type Readable, type Writable } from 'node:stream';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { isJSONRPCNotification, isJSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
 import { createMcpServer } from '#adapters/mcp/server.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { createMcpProgressSink } from '#adapters/mcp/progress-sink.js';
@@ -74,6 +75,8 @@ type HealProposal = {
 };
 
 type ToolOutcome = import('#adapters/mcp/types.js').ToolOutcome;
+
+function inflightKey(id: string | number): string { return `${typeof id}:${String(id)}`; }
 
 function invalidHealToken(reason: 'missing' | 'unknown-token' | 'superseded' | 'expired'): ToolOutcome {
   return { kind: 'error', code: 'HEAL_APPLY_TOKEN_INVALID', message: reason };
@@ -285,6 +288,16 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
 
   let draining = false;
   const drainController = new AbortController();
+  const inflight = new Map<string, number>();
+  let notifyIdle: (() => void) | undefined;
+  const changeInflight = (id: string | number, delta: 1 | -1): void => {
+    const key = inflightKey(id);
+    const count = inflight.get(key) ?? 0;
+    if (delta < 0 && count === 0) return;
+    if (count + delta === 0) inflight.delete(key);
+    else inflight.set(key, count + delta);
+    notifyIdle?.();
+  };
   let rejectedCalls = 0;
   const controllers = new Set<AbortController>();
   const active = new Set<Promise<void>>();
@@ -292,7 +305,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
   function trackActive<T>(promise: Promise<T>): Promise<T> {
     const completion = promise.then(() => undefined, () => undefined);
     active.add(completion);
-    return promise.finally(() => { active.delete(completion); });
+    return promise.finally(() => { active.delete(completion); notifyIdle?.(); });
   }
 
   /* One controller per invocation keeps the abort boundary at runtime composition. */
@@ -308,6 +321,7 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     } finally {
       controllers.delete(controller);
       active.delete(completion);
+      notifyIdle?.();
     }
   }
 
@@ -409,14 +423,57 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
 
   const server = createMcpServer(deps, { signal: drainController.signal, syncWaitMs: input.syncWaitMs, clock: createSystemClock() });
   const transport = new StdioServerTransport(proxy, input.stdout as Writable);
+  /**
+   * Protocol assigns the transport's message handler during connect, so observing
+   * SDK-accepted requests requires intercepting that assignment beforehand.
+   * The getter must expose undefined until the real handler is assigned: a
+   * premature wrapper would look like an existing handler to Protocol and
+   * could register observation twice. The wrapper counts an
+   * isJSONRPCRequest on receipt and an isJSONRPCNotification cancellation
+   * only when params.requestId is truthy, as SDK 1.30 ignores falsy ids.
+   * The ledger counts each id separately and ignores cancellation or response
+   * for an id with no outstanding requests. Even if a client violates MCP by
+   * reusing an id, the remaining request is removed by its response regardless
+   * of which request the SDK cancelled. Observation continues after draining
+   * begins for lines already forwarded to the SDK.
+   */
   const send = transport.send.bind(transport);
+  let heldHandler: typeof transport.onmessage;
+  Object.defineProperty(transport, 'onmessage', {
+    get: () => heldHandler === undefined ? undefined : (message: Parameters<NonNullable<typeof transport.onmessage>>[0]) => {
+      if (isJSONRPCRequest(message)) changeInflight(message.id, 1);
+      else if (isJSONRPCNotification(message) && message.method === 'notifications/cancelled') {
+        const requestId = message.params?.requestId;
+        if (requestId && (typeof requestId === 'string' || typeof requestId === 'number')) changeInflight(requestId, -1);
+      }
+      return heldHandler?.(message);
+    },
+    set: (handler: typeof transport.onmessage) => { heldHandler = handler; },
+  });
   let transportClosed = false;
+  /**
+   * A response leaves the in-flight ledger immediately after the lower send
+   * is invoked, before awaiting its Promise and even if that call throws.
+   * This ordering preserves shutdown completion even when the lower send
+   * remains pending.
+   */
   transport.send = async (...args: Parameters<typeof transport.send>): Promise<void> => {
     if (transportClosed) return;
+    const message = args[0];
+    const responseId = 'id' in message && ('result' in message || 'error' in message) ? message.id : undefined;
+    let sent: Promise<void>;
     try {
-      await send(...args);
+      sent = send(...args);
     } catch {
-      input.stderr.write('ambercast mcp: failed to send a response\n');
+      if (responseId !== undefined) changeInflight(responseId, -1);
+      try { input.stderr.write('ambercast mcp: failed to send a response\n'); } catch { /* Logging cannot block shutdown. */ }
+      return;
+    }
+    if (responseId !== undefined) changeInflight(responseId, -1);
+    try {
+      await sent;
+    } catch {
+      try { input.stderr.write('ambercast mcp: failed to send a response\n'); } catch { /* Logging cannot block shutdown. */ }
     }
   };
   let beginDrain: (() => void) | undefined;
@@ -445,11 +502,21 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     await drainStarted;
 
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * The drain loop re-evaluates while either the request ledger or
+     * runtime calls remain active. Every ledger change (+1 or -1) and active
+     * call settlement triggers re-evaluation; a simple notification to the
+     * waiter suffices. A send decrements the ledger only for a response with
+     * an id and either result or error, unlike request and notification
+     * classification. Fixed microtask waits cannot cover delayed response
+     * sends. A reader line reaches the proxy and SDK onmessage synchronously,
+     * so no extra tick is needed to discover transferred work.
+     */
     const settled = (async () => {
-      while (active.size > 0) await Promise.race(active);
-      // Let handlers serialize any final result while the transport is open.
-      await Promise.resolve();
-      await Promise.resolve();
+      while (inflight.size > 0 || active.size > 0) {
+        await new Promise<void>((resolveIdle) => { notifyIdle = resolveIdle; });
+        notifyIdle = undefined;
+      }
       return true;
     })();
     const timedOut = new Promise<false>((resolveTimeout) => {

@@ -567,6 +567,45 @@ describe('mcp/server', () => {
     expect(order).toEqual(['first', 'third']);
   });
 
+  it('returns the same record to a queued run caller and job_cancel (TEST-A4)', async () => {
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const blocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const run = vi.fn(async () => {
+      firstStarted();
+      await blocked;
+      return { exitCode: 0, envelope: {} };
+    });
+    const client = await connect(fakeDeps({ run }));
+    const first = client.callTool({ name: 'ambercast_run', arguments: {} });
+    await started;
+    const queued = client.callTool({ name: 'ambercast_run', arguments: {} });
+
+    try {
+      await setImmediate();
+      const listing = await client.callTool({ name: 'ambercast_job_status', arguments: {} });
+      const jobs = (listing.structuredContent as { jobs: Array<{ jobId: string; statusMessage: string }> }).jobs;
+      const queuedJob = jobs.find((job) => job.statusMessage === 'queued behind 1');
+      expect(queuedJob).toBeDefined();
+      expect(run).toHaveBeenCalledTimes(1);
+
+      const cancelled = await client.callTool({ name: 'ambercast_job_cancel', arguments: { jobId: queuedJob!.jobId } });
+      const original = await queued;
+      expect(original).toEqual(cancelled);
+      expect(original).toMatchObject({
+        isError: false,
+        content: [{ type: 'text', text: `jobId: ${queuedJob!.jobId}\nstatus: cancelled\ncancelled before start` }],
+        structuredContent: { jobId: queuedJob!.jobId, status: 'cancelled', statusMessage: 'cancelled before start' },
+        _meta: { jobId: queuedJob!.jobId },
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseFirst();
+      await first;
+    }
+  });
+
   it('skips a queued call when server drain begins before its turn (TEST-B8, TEST-B9)', async () => {
     let releaseFirst!: () => void;
     let firstStarted!: () => void;
@@ -594,8 +633,10 @@ describe('mcp/server', () => {
 
     await expect(first).resolves.toMatchObject({ isError: false });
     await expect(queued).resolves.toMatchObject({
-      isError: true,
-      content: [{ type: 'text', text: 'Aborted' }],
+      isError: false,
+      content: [{ type: 'text', text: expect.stringMatching(/^jobId: .+\nstatus: cancelled\nserver shutting down$/) }],
+      structuredContent: { status: 'cancelled', statusMessage: 'server shutting down' },
+      _meta: { jobId: expect.any(String) },
     });
     expect(healPreview).not.toHaveBeenCalled();
   });

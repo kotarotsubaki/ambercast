@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -157,6 +157,37 @@ function assertRecordResponse(result: unknown, expected: Pick<JobRecord, 'tool' 
 
 function healOutput(exitCode = 0, errors: unknown[] = []): HealCommandOutput {
   return { exitCode, envelope: { errors } } as unknown as HealCommandOutput;
+}
+
+function interruptedRunOutput(): RunCommandOutput {
+  return {
+    exitCode: 3,
+    envelope: {
+      schemaVersion: '3.6', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+      summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 },
+      errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'Run interrupted.' }],
+      results: [], reportPersistence: 'not-attempted',
+    },
+  } as unknown as RunCommandOutput;
+}
+
+function abortAfterOneMacrotask(): void {
+  vi.mocked(runRunCommand).mockImplementation(({ signal }) => new Promise<RunCommandOutput>((resolve) => {
+    const interrupted = () => { setTimeout(() => resolve(interruptedRunOutput()), 50); };
+    if (signal?.aborted) interrupted();
+    else signal?.addEventListener('abort', interrupted, { once: true });
+  }));
+}
+
+function assertInterruptedRun(result: unknown): void {
+  expect(result).toMatchObject({
+    isError: true,
+    structuredContent: interruptedRunOutput().envelope,
+    _meta: { exitCode: 3 },
+  });
+  const text = ((result as Record<string, unknown>).content as { text: string }[])[0]!.text;
+  expect(text.split('\n')[0]).toBe('exitCode: 3');
+  expect(text).toContain('INTERRUPTED');
 }
 
 function queuePreparation(settle = vi.fn(async () => healOutput()), preview = healOutput()) {
@@ -615,6 +646,305 @@ describe('runtime/mcp-command', () => {
     expect(await running).toBe(0);
     expect(aborted).toBe(true);
     expect(runRunCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends an interrupted heal apply response before leaving elicitation drain (TEST-A1)', async () => {
+    serverFake.useReal = true;
+    const interrupted = {
+      exitCode: 4,
+      envelope: { results: [{ id: 'sample.test.md', application: 'interrupted' }], errors: [{ scope: 'heal', code: 'INTERRUPTED' }] },
+    } as unknown as HealCommandOutput;
+    const settle = vi.fn(async (confirm: 'authorized' | 'declined' | 'interrupted') => {
+      expect(confirm).toBe('interrupted');
+      return interrupted;
+    });
+    vi.mocked(prepareHeal).mockResolvedValueOnce({
+      hasCommits: true,
+      cases: [{ caseId: 'case-1', file: 'sample.test.md', healingSummary: 'repair' }],
+      preview: () => healOutput(),
+      settle,
+    });
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1000, method: 'initialize', params: {
+      protocolVersion: '2025-03-26', capabilities: { elicitation: { form: {} } }, clientInfo: { name: 'job-test', version: '1' },
+    } })}\n`);
+    await response(io, 1000);
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+    sendRequest(io, 1, 'ambercast_heal', { dryRun: true });
+    const preview = (await response(io, 1)).result as Record<string, unknown>;
+    const token = (preview._meta as Record<string, unknown>).applyToken;
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+    sendRequest(io, 2, 'ambercast_heal', { dryRun: false, applyToken: token });
+    await vi.waitFor(() => expect(io.output()).toContain('"method":"elicitation/create"'));
+    const started = Date.now();
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    const applyResponses = io.output().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((message) => message.id === 2);
+    expect(applyResponses).toHaveLength(1);
+    expect((applyResponses[0]!.result as Record<string, unknown>).structuredContent).toEqual(interrupted.envelope);
+    expect(settle).toHaveBeenCalledExactlyOnceWith('interrupted');
+  });
+
+  it('sends an interrupted heal apply response before leaving write FIFO drain (TEST-A1)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const interrupted = {
+      exitCode: 4,
+      envelope: { results: [{ id: 'sample.test.md', application: 'interrupted' }], errors: [{ scope: 'heal', code: 'INTERRUPTED' }] },
+    } as unknown as HealCommandOutput;
+    const settle = vi.fn(async (confirm: 'authorized' | 'declined' | 'interrupted') => {
+      expect(confirm).toBe('interrupted');
+      return interrupted;
+    });
+    vi.mocked(prepareHeal).mockResolvedValueOnce({
+      hasCommits: true,
+      cases: [{ caseId: 'case-1', file: 'sample.test.md', healingSummary: 'repair' }],
+      preview: () => healOutput(),
+      settle,
+    });
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_heal', { dryRun: true });
+    const preview = (await response(io, 1)).result as Record<string, unknown>;
+    const token = (preview._meta as Record<string, unknown>).applyToken;
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+    sendRequest(io, 2, 'ambercast_run');
+    await vi.waitFor(() => expect(runRunCommand).toHaveBeenCalledTimes(1));
+    sendRequest(io, 3, 'ambercast_heal', { dryRun: false, applyToken: token });
+    await vi.waitFor(() => expect(io.errors()).toContain('heal apply authorized'));
+    expect(settle).not.toHaveBeenCalled();
+    expect(io.output()).not.toMatch(/"id":3[,}]/);
+    const started = Date.now();
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    const applyResponses = io.output().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((message) => message.id === 3);
+    expect(applyResponses).toHaveLength(1);
+    expect((applyResponses[0]!.result as Record<string, unknown>).structuredContent).toEqual(interrupted.envelope);
+    expect(settle).toHaveBeenCalledExactlyOnceWith('interrupted');
+    assertInterruptedRun(responseNow(io, 2).result);
+  });
+
+  it('waits through a delayed runtime abort and sends its synchronous run response (TEST-A2)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    await vi.waitFor(() => expect(runRunCommand).toHaveBeenCalledTimes(1));
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    assertInterruptedRun(responseNow(io, 1).result);
+  });
+
+  it('sends the active interrupted run and a queued shutdown record (TEST-A3)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    await vi.waitFor(() => expect(runRunCommand).toHaveBeenCalledTimes(1));
+    sendRequest(io, 2, 'ambercast_run');
+    expect(runRunCommand).toHaveBeenCalledTimes(1);
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    assertInterruptedRun(responseNow(io, 1).result);
+    assertRecordResponse(responseNow(io, 2).result, {
+      tool: 'run', status: 'cancelled', statusMessage: 'server shutting down', progress: 0,
+    });
+    expect(runRunCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes a valid client-cancelled request before the runtime abort settles (TEST-A5)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    await vi.waitFor(() => expect(runRunCommand).toHaveBeenCalledTimes(1));
+    vi.useFakeTimers();
+    let returned: number | undefined;
+    void running.then((code) => { returned = code; });
+    try {
+      io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1, reason: 'client cancelled' } })}\n`);
+      await vi.advanceTimersByTimeAsync(0);
+      sendRequest(io, 2, 'ambercast_run');
+      await vi.advanceTimersByTimeAsync(0);
+      process.emit('SIGTERM');
+      await vi.advanceTimersByTimeAsync(51);
+      expect(returned).toBe(0);
+      expect(io.output().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>).filter((message) => message.id === 1)).toEqual([]);
+      assertRecordResponse(responseNow(io, 2).result, {
+        tool: 'run', status: 'cancelled', statusMessage: 'server shutting down', progress: 0,
+      });
+    } finally {
+      await vi.advanceTimersByTimeAsync(10_001);
+      vi.useRealTimers();
+      await running;
+    }
+  });
+
+  it('ignores cancellation with requestId zero and sends that request before exit (TEST-A5)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 0, 'ambercast_run');
+    await vi.waitFor(() => expect(runRunCommand).toHaveBeenCalledTimes(1));
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 0 } })}\n`);
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    assertInterruptedRun(responseNow(io, 0).result);
+  });
+
+  it('retains one response for two requests sharing an id after one cancellation (TEST-A5)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    await vi.waitFor(() => expect(runRunCommand).toHaveBeenCalledTimes(1));
+    sendRequest(io, 1, 'ambercast_run');
+    io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 1 } })}\n`);
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    const replies = io.output().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((message) => message.id === 1);
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toHaveProperty('result');
+  });
+
+  it('keeps a request forwarded in the same synchronous call as SIGTERM in flight (TEST-A6)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    const sendAndDrain = (): void => {
+      sendRequest(io, 1, 'ambercast_run');
+      process.emit('SIGTERM');
+    };
+    sendAndDrain();
+    expect(await running).toBe(0);
+    expect(responseNow(io, 1)).toHaveProperty('result');
+  });
+
+  it('does not retain invalid or non-request lines in the shutdown ledger (TEST-A6)', async () => {
+    serverFake.useReal = true;
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_unknown');
+    sendRequest(io, 2, 'ambercast_run', { bogus: 1 });
+    const unknown = await response(io, 1);
+    const invalidArguments = await response(io, 2);
+    expect(unknown).toMatchObject({ result: { isError: true } });
+    expect(invalidArguments).toMatchObject({ result: { isError: true } });
+    expect(unknown).not.toHaveProperty('error');
+    expect(invalidArguments).not.toHaveProperty('error');
+    const started = Date.now();
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(runRunCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['broken JSON', '{broken json\n', undefined],
+    ['missing jsonrpc', `${JSON.stringify({ id: 3, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`, 3],
+    ['fractional id', `${JSON.stringify({ jsonrpc: '2.0', id: 1.5, method: 'tools/call', params: { name: 'ambercast_run', arguments: {} } })}\n`, 1.5],
+  ])('does not count %s as a request during drain (TEST-A6)', async (_label, line, invalidId) => {
+    serverFake.useReal = true;
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    io.stdin.write(line);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const started = Date.now();
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    const replies = io.output().split('\n').filter(Boolean).map((entry) => JSON.parse(entry) as Record<string, unknown>);
+    expect(replies.filter((message) => message.id === invalidId)).toEqual([]);
+    expect(runRunCommand).not.toHaveBeenCalled();
+  });
+
+  it('leaves the ledger after invoking a lower send whose write never completes (TEST-A6)', async () => {
+    serverFake.useReal = true;
+    const writes: string[] = [];
+    let hold = false;
+    const pending = new Writable({ highWaterMark: 1, write(chunk, _encoding, callback) {
+      writes.push(String(chunk));
+      if (!hold) callback();
+    } });
+    const io = { ...streams(), stdout: pending as unknown as PassThrough, output: () => writes.join('') };
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    hold = true;
+    sendRequest(io, 1, 'ambercast_unknown');
+    await vi.waitFor(() => expect(writes.some((line) => line.includes('"id":1'))).toBe(true));
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    const atClose = writes.length;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(writes).toHaveLength(atClose);
+    expect((responseNow(io, 1).result as Record<string, unknown>).isError).toBe(true);
+  });
+
+  it('sends the interrupted terminal job_status response before drain returns (TEST-A7)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    const job = assertRecordResponse((await responseSoon(io, 1)).result, {
+      tool: 'run', status: 'working', statusMessage: 'running', progress: 0,
+    });
+    sendRequest(io, 2, 'ambercast_job_status', { jobId: job.jobId, waitMs: 45_000 });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(io.output()).not.toMatch(/"id":2[,}]/);
+    process.emit('SIGTERM');
+    expect(await running).toBe(0);
+    const result = responseNow(io, 2).result as Record<string, unknown>;
+    assertInterruptedRun(result);
+    expect(result).toMatchObject({ _meta: { job: { jobId: job.jobId, status: 'cancelled' } } });
+  });
+
+  it('sends an interrupted run response before EOF-triggered drain returns (TEST-A9)', async () => {
+    serverFake.useReal = true;
+    abortAfterOneMacrotask();
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    await vi.waitFor(() => expect(runRunCommand).toHaveBeenCalledTimes(1));
+    io.stdin.end();
+    expect(await running).toBe(0);
+    assertInterruptedRun(responseNow(io, 1).result);
   });
   it('waits for an in-flight heal apply settlement before shutdown completes (TEST-B9)', async () => {
     const session = await proposalSession();

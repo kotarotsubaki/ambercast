@@ -187,6 +187,76 @@ function createInitStorage(): StorageAdapter {
 }
 
 describe('main()', () => {
+  describe('MCP shutdown exit boundary (TEST-A8)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it('exits once only after both empty-write callbacks complete for code 3', async () => {
+      const callbacks: Array<() => void> = [];
+      const stdout = new MemoryWritable();
+      const stderr = new MemoryWritable();
+      const write = (stream: MemoryWritable) => vi.spyOn(stream, 'write').mockImplementation(((_chunk: unknown, callback: () => void) => {
+        callbacks.push(callback);
+        return true;
+      }) as typeof stream.write);
+      write(stdout);
+      write(stderr);
+      const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      runMcpCommand.mockResolvedValueOnce(3);
+
+      const running = main(['mcp'], stdout, stderr);
+      await vi.waitFor(() => expect(callbacks).toHaveLength(2));
+      expect(stdout.write).toHaveBeenCalledWith('', expect.any(Function));
+      expect(stderr.write).toHaveBeenCalledWith('', expect.any(Function));
+      callbacks[0]!();
+      await Promise.resolve();
+      expect(exit).not.toHaveBeenCalled();
+      callbacks[1]!();
+      await running;
+      expect(exit).toHaveBeenCalledExactlyOnceWith(3);
+    });
+
+    it('exits after 1,000 ms when stdout never completes its empty write', async () => {
+      vi.useFakeTimers();
+      const stdout = new MemoryWritable();
+      const stderr = new MemoryWritable();
+      vi.spyOn(stdout, 'write').mockImplementation(((_chunk: unknown, _callback: () => void) => true) as typeof stdout.write);
+      const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      runMcpCommand.mockResolvedValueOnce(3);
+      const running = main(['mcp'], stdout, stderr);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(exit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await running;
+      expect(exit).toHaveBeenCalledExactlyOnceWith(3);
+    });
+
+    it.each(['throw', 'callback-error'] as const)('exits when an empty write reports %s', async (failure) => {
+      const stdout = new MemoryWritable();
+      const stderr = new MemoryWritable();
+      const failed = vi.spyOn(stdout, 'write');
+      if (failure === 'throw') failed.mockImplementation((() => { throw new Error('closed'); }) as typeof stdout.write);
+      else failed.mockImplementation(((_chunk: unknown, callback: (error?: Error) => void) => {
+        callback(new Error('closed'));
+        return false;
+      }) as typeof stdout.write);
+      const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      runMcpCommand.mockResolvedValueOnce(3);
+      await main(['mcp'], stdout, stderr);
+      expect(exit).toHaveBeenCalledExactlyOnceWith(3);
+    });
+
+    it.each([0, 2])('sets exitCode %i without explicit exit', async (code) => {
+      const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      runMcpCommand.mockResolvedValueOnce(code);
+      await main(['mcp'], new MemoryWritable(), new MemoryWritable());
+      expect(exit).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(code);
+    });
+  });
+
   it('passes injected streams to the mcp command', async () => {
     const stdout = new MemoryWritable();
     const stderr = new MemoryWritable();

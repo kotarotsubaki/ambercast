@@ -310,8 +310,14 @@ export function createMcpServer(deps: McpServerDeps, options: { readonly signal?
       return response(renderJobRecord(snapshot(job)));
     }
     if (outcome === 'done') {
+      /**
+       * A queued job that ended before execution still has a record for its
+       * original synchronous caller. The record response preserves
+       * its job identity and cancellation reason; settle() has already stored
+       * that reason in statusMessage, so rendering need not infer it here.
+       */
       if (job.record.status === 'cancelled' && job.result === undefined) {
-        return { isError: true, content: [{ type: 'text', text: 'Aborted' }], structuredContent: undefined, _meta: {} };
+        return response(renderJobRecord(snapshot(job)));
       }
       return terminal(job);
     }

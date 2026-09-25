@@ -18,7 +18,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 ## 現行境界以降の計画 {#planned-after-current-boundary}
 
-`review`、baseline/restore は引き続き計画中です。公式スキルは計画中のままですが、MCP ツールは利用できます。
+`review`、baseline/restore は引き続き計画中です。MCP ツールは利用できます。
 
 また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
 

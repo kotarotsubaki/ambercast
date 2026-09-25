@@ -15,7 +15,7 @@ Links: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambe
 
 ## Planned after the current boundary {#planned-after-current-boundary}
 
-Planned documentation still covers `review` and baseline/restore. The official skill remains planned; MCP tools are available. On the execution side, support for Firefox and WebKit is planned by 1.0.
+Planned documentation still covers `review` and baseline/restore. MCP tools are available. On the execution side, support for Firefox and WebKit is planned by 1.0.
 
 Links: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/ambercast/agents/mcp-server/)
 

@@ -15,7 +15,7 @@ CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`�
 
 ## 当前边界之后的规划 {#planned-after-current-boundary}
 
-`review` 和 baseline/restore 仍在规划中。官方 skill 仍在规划中，但 MCP 工具现已提供。
+`review` 和 baseline/restore 仍在规划中。MCP 工具现已提供。
 
 在浏览器平台支持方面，Firefox 和 WebKit 计划在 1.0 达成。
 

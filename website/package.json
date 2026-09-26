@@ -18,11 +18,11 @@
     "check": "node scripts/check-parity.mjs && node scripts/check-reference.mjs && node scripts/check-claims.mjs"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "7.3.0",
-    "@astrojs/mdx": "8.0.0",
-    "@astrojs/starlight": "0.42.0",
-    "astro": "7.2.10",
+    "@astrojs/markdown-remark": "7.3.1",
+    "@astrojs/mdx": "8.0.2",
+    "@astrojs/starlight": "0.42.3",
+    "astro": "7.3.4",
     "github-slugger": "2.0.0",
-    "js-yaml": "^4.3.2"
+    "js-yaml": "^5.4.2"
   }
 }

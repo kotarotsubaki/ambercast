@@ -213,6 +213,32 @@ describe('mcp/server', () => {
     expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'JOB_FAILED: the job crashed unexpectedly (TypeError)' }], _meta: { job: { status: 'failed' } } });
   });
 
+  it('reports a circular response rendering crash with the failed job identity (TEST-C2)', async () => {
+    const envelope: Record<string, unknown> = {};
+    envelope.self = envelope;
+    const stderr = new PassThrough();
+    const reportJobCrash = vi.fn(({ jobId, tool, name }: { jobId: string; tool: string; name: string }) => {
+      stderr.write(`ambercast mcp: job ${jobId} (${tool}) crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
+    });
+    const client = await connect(fakeDeps({
+      run: vi.fn(async () => ({ exitCode: 0, envelope })),
+      stderr,
+      reportJobCrash,
+    }));
+
+    const result = await client.callTool({ name: 'ambercast_run', arguments: {} });
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: 'JOB_FAILED: the job crashed unexpectedly (TypeError)' }],
+      _meta: { job: { status: 'failed', tool: 'run' } },
+    });
+    const jobId = (result._meta as { job: { jobId: string } }).job.jobId;
+    expect(reportJobCrash).toHaveBeenCalledTimes(1);
+    expect(reportJobCrash).toHaveBeenCalledWith({ jobId, tool: 'run', name: 'TypeError' }, expect.any(TypeError));
+    expect(stderr.read()?.toString()).toBe(`ambercast mcp: job ${jobId} (run) crashed unexpectedly (TypeError). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
+    expect(stderr.read()).toBeNull();
+  });
+
   it('expires terminal jobs using monotonic time despite wall-clock changes', async () => {
     let elapsed = 0;
     let wall = new Date('2026-01-01T00:00:00.000Z');
@@ -819,6 +845,33 @@ describe('mcp/server heal apply', () => {
     expect(settleHealApply).toHaveBeenCalledTimes(1);
     expect(failHealApply).toHaveBeenCalledTimes(1);
     expect(finalizeHealApply).not.toHaveBeenCalled();
+  });
+
+  it('fails a heal apply with the actual circular response rendering error (TEST-C5)', async () => {
+    const envelope: Record<string, unknown> = {};
+    envelope.self = envelope;
+    const healPreview = vi.fn(async () => ({ exitCode: 0, envelope: { summary: 'preview' }, applyToken: token }));
+    const settleHealApply = vi.fn(async () => ({ kind: 'report' as const, exitCode: 0, envelope }));
+    const failHealApply = vi.fn(async (_token: string, error: unknown) => ({
+      kind: 'error' as const,
+      code: 'HEAL_APPLY_FAILED',
+      message: `the apply crashed unexpectedly (${error instanceof Error ? error.name : 'Error'})`,
+    }));
+    const client = await connect(fakeDeps({ healPreview, settleHealApply, failHealApply }));
+
+    const preview = await client.callTool({ name: 'ambercast_heal', arguments: {} });
+    const issuedToken = preview._meta?.applyToken;
+    expect(issuedToken).toBe(token);
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: { dryRun: false, applyToken: issuedToken } });
+
+    expect(settleHealApply).toHaveBeenCalledExactlyOnceWith(token, 'authorized', expect.anything(), expect.anything());
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ type: 'text', text: 'HEAL_APPLY_FAILED: the apply crashed unexpectedly (TypeError)' }],
+    });
+    expect(failHealApply).toHaveBeenCalledExactlyOnceWith(token, expect.any(TypeError));
+    const renderingError = vi.mocked(failHealApply).mock.calls[0]![1];
+    expect((renderingError as TypeError).message).toMatch(/circular/i);
   });
 
   it.each([

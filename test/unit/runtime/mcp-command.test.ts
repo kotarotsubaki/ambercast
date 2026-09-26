@@ -3,10 +3,11 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { McpServerDeps } from '#adapters/mcp/types.js';
-import { runMcpCommand, type JobRecord } from '#runtime/mcp-command.js';
+import { createGuardedSend, runMcpCommand, type JobRecord } from '#runtime/mcp-command.js';
 import { runRunCommand, type RunCommandOutput } from '#runtime/run-command.js';
 import { runCheckCommand } from '#runtime/check-command.js';
 import { prepareHeal, type HealCommandOutput, type HealPreparation } from '#runtime/heal-command.js';
@@ -225,6 +226,148 @@ function expectTokenError(outcome: Awaited<ReturnType<NonNullable<McpServerDeps[
 }
 
 describe('runtime/mcp-command', () => {
+  describe('guarded transport send (TEST-B1)', () => {
+    const responseMessage = { jsonrpc: '2.0' as const, id: 7, result: {} };
+    const notification = { jsonrpc: '2.0' as const, method: 'notifications/progress' };
+    const request = { jsonrpc: '2.0' as const, id: 8, method: 'elicitation/create' };
+
+    it.each([
+      [responseMessage, 'ambercast mcp: failed to send a response\n', 7],
+      [notification, 'ambercast mcp: failed to send a notification (notifications/progress)\n', undefined],
+      [request, 'ambercast mcp: failed to send a request (elicitation/create)\n', undefined],
+      [{ jsonrpc: '2.0' as const, method: 'notice\u001b[31m' }, 'ambercast mcp: failed to send a notification (notice\\u001b[31m)\n', undefined],
+    ])('logs one line and resolves for a rejected lower send %#', async (message, line, responseId) => {
+      const stderr = streams().stderr;
+      let written = '';
+      stderr.on('data', (chunk: Buffer | string) => { written += String(chunk); });
+      const onResponse = vi.fn();
+      const send = vi.fn(async () => { throw new Error('send failed'); });
+      await expect(createGuardedSend(send, { stderr, isClosed: () => false, onResponse })(message)).resolves.toBeUndefined();
+      expect(send).toHaveBeenCalledOnce();
+      expect(written).toBe(line);
+      expect(onResponse.mock.calls).toEqual(responseId === undefined ? [] : [[responseId]]);
+    });
+
+    it('logs once and reports an error response id when the lower send rejects', async () => {
+      const io = streams();
+      const onResponse = vi.fn();
+      const send = vi.fn(async () => { throw new Error('send failed'); });
+      const errorResponse = { jsonrpc: '2.0' as const, id: 9, error: { code: -32603, message: 'Internal error' } };
+
+      await expect(createGuardedSend(send, { stderr: io.stderr, isClosed: () => false, onResponse })(errorResponse)).resolves.toBeUndefined();
+      expect(send).toHaveBeenCalledOnce();
+      expect(io.errors()).toBe('ambercast mcp: failed to send a response\n');
+      expect(onResponse).toHaveBeenCalledExactlyOnceWith(9);
+    });
+
+    it('keeps successful sends silent and reports only response ids', async () => {
+      const io = streams();
+      const onResponse = vi.fn();
+      const send = vi.fn(async () => {});
+      const guarded = createGuardedSend(send, { stderr: io.stderr, isClosed: () => false, onResponse });
+      await guarded(responseMessage);
+      await guarded(notification);
+      await guarded(request);
+      expect(send).toHaveBeenCalledTimes(3);
+      expect(onResponse.mock.calls).toEqual([[7]]);
+      expect(io.errors()).toBe('');
+    });
+
+    it('does not call the lower send or log after close', async () => {
+      const io = streams();
+      const send = vi.fn(async () => {});
+      const onResponse = vi.fn();
+      await createGuardedSend(send, { stderr: io.stderr, isClosed: () => true, onResponse })(responseMessage);
+      expect(send).not.toHaveBeenCalled();
+      expect(onResponse).not.toHaveBeenCalled();
+      expect(io.errors()).toBe('');
+    });
+
+    it('resolves and logs once when the lower send throws synchronously', async () => {
+      const io = streams();
+      const order: string[] = [];
+      const send = vi.fn((): Promise<void> => { order.push('send'); throw new Error('sync failure'); });
+      const onResponse = vi.fn((id: string | number) => { order.push(`response:${id}`); });
+      const guarded = createGuardedSend(send, { stderr: io.stderr, isClosed: () => false, onResponse });
+      const result = guarded(responseMessage);
+      expect(order).toEqual(['send', 'response:7']);
+      await expect(result).resolves.toBeUndefined();
+      expect(io.errors()).toBe('ambercast mcp: failed to send a response\n');
+      expect(onResponse).toHaveBeenCalledExactlyOnceWith(7);
+    });
+
+    it('resolves when stderr.write throws', async () => {
+      const stderr = { write: () => { throw new Error('log failure'); } } as unknown as NodeJS.WritableStream;
+      await expect(createGuardedSend(async () => { throw new Error('send failure'); }, {
+        stderr, isClosed: () => false,
+      })(notification)).resolves.toBeUndefined();
+    });
+
+    it('calls onResponse immediately after invoking a pending lower send', async () => {
+      let rejectSend!: (reason: Error) => void;
+      const order: string[] = [];
+      const send = vi.fn(() => {
+        order.push('send');
+        return new Promise<void>((_resolve, reject) => { rejectSend = reject; });
+      });
+      const io = streams();
+      const guarded = createGuardedSend(send, {
+        stderr: io.stderr, isClosed: () => false, onResponse: (id) => { order.push(`response:${id}`); },
+      });
+      const result = guarded(responseMessage);
+      expect(order).toEqual(['send', 'response:7']);
+      expect(io.errors()).toBe('');
+      rejectSend(new Error('later failure'));
+      await expect(result).resolves.toBeUndefined();
+      expect(io.errors()).toBe('ambercast mcp: failed to send a response\n');
+    });
+  });
+
+  it('continues progress after the second transport send fails (TEST-B2)', async () => {
+    serverFake.useReal = true;
+    const attempts: string[] = [];
+    const originalSend = StdioServerTransport.prototype.send;
+    let progressCount = 0;
+    const sendSpy = vi.spyOn(StdioServerTransport.prototype, 'send').mockImplementation(function (this: StdioServerTransport, message) {
+      if ('method' in message && message.method === 'notifications/progress') {
+        progressCount += 1;
+        attempts.push(`progress:${progressCount}`);
+        if (progressCount === 2) return Promise.reject(new Error('progress send failed'));
+      } else if ('id' in message && message.id === 1 && 'result' in message) attempts.push('response');
+      return originalSend.call(this, message);
+    });
+    let releaseRun!: (value: RunCommandOutput) => void;
+    vi.mocked(runRunCommand).mockImplementationOnce(({ events }) => new Promise<RunCommandOutput>((resolve) => {
+      releaseRun = trackRelease(resolve);
+      events?.emit({ type: 'step-start', stepId: 'one' });
+      events?.emit({ type: 'step-start', stepId: 'two' });
+      events?.emit({ type: 'step-start', stepId: 'three' });
+    }));
+    const io = streams();
+    const directory = await fixtureDirectory();
+    const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+    try {
+      await initialize(io);
+      const stderrBeforeCall = io.errors();
+      io.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+        name: 'ambercast_run', arguments: {}, _meta: { progressToken: 'run-progress' },
+      } })}\n`);
+      await vi.waitFor(() => expect(progressCount).toBe(3));
+      releaseRun({ exitCode: 0, envelope: { errors: [] } } as unknown as RunCommandOutput);
+      await response(io, 1);
+      expect(attempts).toEqual(['progress:1', 'progress:2', 'progress:3', 'response']);
+      const messages = io.output().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+      const progress = messages.filter((message) => message.method === 'notifications/progress');
+      expect(progress.map((message) => (message.params as Record<string, unknown>).progress)).toEqual([1, 3]);
+      expect(messages.findIndex((message) => message.id === 1)).toBeGreaterThan(messages.findIndex((message) =>
+        message.method === 'notifications/progress' && (message.params as Record<string, unknown>).progress === 3));
+      expect(io.errors().slice(stderrBeforeCall.length)).toBe('ambercast mcp: failed to send a notification (notifications/progress)\n');
+    } finally {
+      sendSpy.mockRestore();
+      io.stdin.end();
+      await running;
+    }
+  });
   it.each([
     [new TypeError('connection refused'), 'TypeError'],
     ['connection refused', 'Error'],

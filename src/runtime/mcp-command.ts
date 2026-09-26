@@ -96,7 +96,9 @@ function inflightKey(id: string | number): string { return `${typeof id}:${Strin
  * The lower send call and stderr write each need their own try boundary:
  * a synchronous throw and a rejected send are both delivery failures, while
  * a failing diagnostic must never escape or prevent the returned promise from
- * resolving. `context.onResponse` connects the session's in-flight ledger
+ * resolving. Node terminates the process for an asynchronous stream error
+ * without a listener, so stderr needs an error listener as well.
+ * `context.onResponse` connects the session's in-flight ledger
  * decrement to this wrapper immediately after invoking the lower send, before
  * awaiting its promise and even if the call throws synchronously. Once
  * `context.isClosed()` is true, this wrapper neither invokes the lower send
@@ -109,6 +111,7 @@ export function createGuardedSend(
   send: (message: JSONRPCMessage, options?: TransportSendOptions) => Promise<void>,
   context: { stderr: NodeJS.WritableStream; isClosed: () => boolean; onResponse?: (id: string | number) => void },
 ): typeof send {
+  context.stderr.on?.('error', () => undefined);
   return async (message: JSONRPCMessage, options?: TransportSendOptions): Promise<void> => {
     if (context.isClosed()) return;
 

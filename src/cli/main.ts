@@ -33,6 +33,9 @@
  * parse, dispatch, and render boundary as generate, run, and check; its
  * confirmation and persistence policy belong to runtime composition rather
  * than requiring a second top-level CLI shape.
+ * MCP deadline expiry is the sole exception: after a bounded attempt to flush
+ * both output streams, it exits explicitly so unsettled runtime work cannot
+ * keep the process alive.
  *
  * The `view` subcommand accepts no positional paths or JSON report mode. Its
  * parser rejects positionals as `view takes no arguments.` before classifying
@@ -1039,7 +1042,31 @@ export async function main(
             : parsed.command === 'mcp'
               ? await (async () => {
                 const exitCode = await runMcpCommand({ dir: parsed.dir, syncWaitMs: parsed.syncWaitMs, stdin: parsed.stdin, stdout, stderr });
+                /**
+                 * A timed-out MCP drain can leave live runtime work that would
+                 * keep Node alive, so this is the sole explicit exit boundary.
+                 * Give pending diagnostics a bounded chance to flush without
+                 * letting absent diagnostics or broken streams change the exit
+                 * outcome. Failed writes count as settled to avoid a second
+                 * crash while shutting down.
+                 */
                 process.exitCode = exitCode;
+                if (exitCode === 3) {
+                  const flush = (stream: NodeJS.WritableStream): Promise<void> => new Promise((resolveFlush) => {
+                    try {
+                      stream.write('', () => resolveFlush());
+                    } catch {
+                      resolveFlush();
+                    }
+                  });
+                  let timeout: ReturnType<typeof setTimeout> | undefined;
+                  const deadline = new Promise<void>((resolveDeadline) => {
+                    timeout = setTimeout(resolveDeadline, 1_000);
+                  });
+                  await Promise.race([Promise.all([flush(stdout), flush(stderr)]), deadline]);
+                  if (timeout !== undefined) clearTimeout(timeout);
+                  process.exit(3);
+                }
                 return { exitCode, envelope: null };
               })()
               : await runHealCommand({ ...parsed.input, stderr });

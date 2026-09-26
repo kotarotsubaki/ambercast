@@ -3,6 +3,17 @@ name: release-please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to recover (vX.Y.Z) — re-publishes to npm and redeploys the site at that tag when the push-triggered release run failed partway through.'
+        required: true
+        type: string
+      dry_run:
+        description: 'Verify only; do not publish or deploy.'
+        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -12,6 +23,7 @@ concurrency:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,12 +37,41 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  recover:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.recover.outputs.tag }}
+      sha: ${{ steps.recover.outputs.sha }}
+      version: ${{ steps.recover.outputs.version }}
+      publish_needed: ${{ steps.recover.outputs.publish_needed }}
+      deploy: ${{ steps.recover.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.1
+          registry-url: https://registry.npmjs.org
+      - run: node scripts/lib/release-recover.mjs
+        id: recover
+        env:
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          GITHUB_REF: ${{ github.ref }}
+          GH_TOKEN: ${{ github.token }}
+
   # Publishing runs as a follow-up job here (not on release.published):
   # releases created with GITHUB_TOKEN intentionally do not trigger other
   # workflows, so a separate release-triggered workflow would never fire.
   publish:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    needs: [release-please, recover]
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true' && needs.recover.outputs.publish_needed == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,6 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.recover.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -50,16 +92,26 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/verify-pack.mjs
+      - run: node scripts/lib/release-recover.mjs --recheck
+        id: recheck
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ needs.recover.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
       - run: npm publish
+        if: steps.recheck.outputs.skip != 'true'
 
   build-website:
-    # Only a push that created a release reaches here, and only after npm
-    # publish succeeded, so the published site matches the npm release.
-    needs: [release-please, publish]
-    if: ${{ needs.release-please.outputs.release_created }}
+    # Only a push that created a release, or a successful dispatch recovery,
+    # reaches here, and only after npm publish succeeded or was correctly
+    # skipped, so the published site matches the npm release.
+    needs: [release-please, recover, publish]
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true' && needs.publish.result == 'success') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true' && (needs.publish.result == 'success' || (needs.publish.result == 'skipped' && needs.recover.outputs.publish_needed == 'false')))) }}
     permissions:
       contents: read
     uses: ./.github/workflows/website-build.yml
+    with:
+      ref: ${{ needs.recover.outputs.sha }}
 
   deploy-website:
     needs: build-website

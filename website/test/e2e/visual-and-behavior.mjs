@@ -9,6 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { once } from 'node:events';
 import { chromium } from 'playwright-core';
 import { plannedPageSlugs, readCapabilityPages } from '../../scripts/lib/capability-pages.mjs';
+import { orderSchemaFilenames } from '../../scripts/lib/published-schemas.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEBSITE_DIRECTORY = resolve(HERE, '../..');
@@ -1597,21 +1598,16 @@ async function assertIssue298LlmsArtifacts(browser) {
 }
 
 async function assertIssue298MachineReadableResourceLinks(browser) {
+  // The schema hrefs are derived from the files sync actually published, so a
+  // schema version bump can't leave a hardcoded list stale (#446); the ordering
+  // rule matches the page's table order.
+  const SITE = 'https://kotarotsubaki.github.io/ambercast/';
+  const schemaNames = orderSchemaFilenames(await readdir(new URL('../../public/schemas/', import.meta.url)));
   const hrefs = [
-    'https://kotarotsubaki.github.io/ambercast/llms.txt',
-    'https://kotarotsubaki.github.io/ambercast/llms-full.txt',
-    'https://kotarotsubaki.github.io/ambercast/ja/llms.txt',
-    'https://kotarotsubaki.github.io/ambercast/ja/llms-full.txt',
-    'https://kotarotsubaki.github.io/ambercast/zh-cn/llms.txt',
-    'https://kotarotsubaki.github.io/ambercast/zh-cn/llms-full.txt',
-    'https://kotarotsubaki.github.io/ambercast/llms-planned.txt',
-    'https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json',
-    'https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json',
-    'https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json',
-    'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v1.schema.json',
-    'https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json',
-    'https://kotarotsubaki.github.io/ambercast/capabilities.json',
-    'https://kotarotsubaki.github.io/ambercast/manifest/cli.json',
+    ...['llms.txt', 'llms-full.txt', 'ja/llms.txt', 'ja/llms-full.txt', 'zh-cn/llms.txt', 'zh-cn/llms-full.txt', 'llms-planned.txt'].map((path) => `${SITE}${path}`),
+    ...schemaNames.map((name) => `${SITE}schemas/${name}`),
+    `${SITE}capabilities.json`,
+    `${SITE}manifest/cli.json`,
   ];
   const pages = ['/agents/machine-readable-resources/', '/ja/agents/machine-readable-resources/', '/zh-cn/agents/machine-readable-resources/'];
   const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });

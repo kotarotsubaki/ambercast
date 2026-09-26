@@ -908,7 +908,7 @@ describe('mcp/server heal apply', () => {
     const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
     expect(onElicit).toHaveBeenCalledTimes(1);
     expect(onElicit.mock.calls[0]?.[0]).toMatchObject({ method: 'elicitation/create', params: { mode: 'form' } });
-    expect(vi.mocked(deps.applyHeal).mock.calls[0]?.[1]).toBe(decision);
+    expect(vi.mocked(deps.applyHeal!).mock.calls[0]?.[1]).toBe(decision);
     expect(result.structuredContent).toEqual(outcome);
   });
 

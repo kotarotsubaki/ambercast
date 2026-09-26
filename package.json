@@ -71,10 +71,10 @@
     "eslint-import-resolver-typescript": "^4.4.5",
     "eslint-plugin-boundaries": "^7.1.0",
     "github-slugger": "2.0.0",
-    "tsdown": "^0.21.10",
-    "typescript": "^6.0.3",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.65.0",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

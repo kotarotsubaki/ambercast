@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.7.0](https://github.com/kotarotsubaki/ambercast/compare/v0.6.0...v0.7.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **executor:** unify UI executor kind vocabulary and classify element grounding misses
+
+### Features
+
+* **cli:** add ambercast init to scaffold config, sample prompt, .gitignore, and AGENTS.md ([#398](https://github.com/kotarotsubaki/ambercast/issues/398)) ([7f4b0a8](https://github.com/kotarotsubaki/ambercast/commit/7f4b0a83f5af799ffa9e8453f94dd6611d98312a))
+* **cli:** add ambercast view, a read-only local results viewer for .runs reports ([#403](https://github.com/kotarotsubaki/ambercast/issues/403)) ([#414](https://github.com/kotarotsubaki/ambercast/issues/414)) ([28f62bd](https://github.com/kotarotsubaki/ambercast/commit/28f62bda5ee0ecf57c1ef6f52f86c4aebce3a965))
+* **docs:** add docs-drift checks and fix stale links ([#401](https://github.com/kotarotsubaki/ambercast/issues/401)) ([0b9ec94](https://github.com/kotarotsubaki/ambercast/commit/0b9ec945f54dfafa05a7c4fb8eeaeb170154e924))
+* **executor:** add UI Executor abstraction and capability preflight ([#438](https://github.com/kotarotsubaki/ambercast/issues/438)) ([cb9ebce](https://github.com/kotarotsubaki/ambercast/commit/cb9ebce812a96d97f345e9aacdf1af7e3e093954)), closes [#422](https://github.com/kotarotsubaki/ambercast/issues/422)
+* **ir:** migrate Plan IR to v4 with per-step Target and session-per-Target execution ([#415](https://github.com/kotarotsubaki/ambercast/issues/415)) ([1e5a534](https://github.com/kotarotsubaki/ambercast/commit/1e5a534ad9fc8c9c27357b0ceca1e3984d38d74a))
+* **mcp:** add the job model with job_status and job_cancel ([#425](https://github.com/kotarotsubaki/ambercast/issues/425)) ([781b850](https://github.com/kotarotsubaki/ambercast/commit/781b85072393c72b0c8e98f2c1abf96707cede55))
+* **mcp:** add the MCP stdio server with four synchronous tools ([#424](https://github.com/kotarotsubaki/ambercast/issues/424)) ([ebbb313](https://github.com/kotarotsubaki/ambercast/commit/ebbb31370ee5bcee693abf849668fdc16a90c49b))
+* **mcp:** add two-step heal apply with token issuance and elicitation ([#426](https://github.com/kotarotsubaki/ambercast/issues/426)) ([6839c5e](https://github.com/kotarotsubaki/ambercast/commit/6839c5e679f78a101c624247c0bbe4ca63794e47))
+* **runtime:** add MCP-oriented event fan-out and two-phase heal preparation ([#423](https://github.com/kotarotsubaki/ambercast/issues/423)) ([c2600ef](https://github.com/kotarotsubaki/ambercast/commit/c2600ef6a740b10ce5291af82c9ab5b6f5c06280))
+
+
+### Bug Fixes
+
+* **ci:** install and sync website deps before the build-test job's npm test ([#442](https://github.com/kotarotsubaki/ambercast/issues/442)) ([1c0825d](https://github.com/kotarotsubaki/ambercast/commit/1c0825dcd13a83b47b4860da7f33b1b878e31bb8))
+* **e2e:** derive llms-planned.txt expected count from capability-pages.json ([#445](https://github.com/kotarotsubaki/ambercast/issues/445)) ([b993d4a](https://github.com/kotarotsubaki/ambercast/commit/b993d4a6c7dde90acf1ddfaf7f67d9e73389b41e))
+* **executor:** unify UI executor kind vocabulary and classify element grounding misses ([ea784bb](https://github.com/kotarotsubaki/ambercast/commit/ea784bb12d97626faa817d81b919ce1489dba458))
+* **hooks:** evaluate an explicit `git -C <registered-worktree>` against that worktree ([#391](https://github.com/kotarotsubaki/ambercast/issues/391)) ([225224a](https://github.com/kotarotsubaki/ambercast/commit/225224a7bb955261537dd4d1d1784105794ef808))
+* **init:** add browser to scaffolded config, BOM-safe planning, pre-apply aborts, and stale docs ([#418](https://github.com/kotarotsubaki/ambercast/issues/418)) ([7db0635](https://github.com/kotarotsubaki/ambercast/commit/7db0635a2595c54c046d5d6d60f9dd2f60c3b60d))
+* **mcp:** emit AMBERCAST_DEBUG diagnostics for failed jobs and heal apply crashes ([#461](https://github.com/kotarotsubaki/ambercast/issues/461)) ([ada847e](https://github.com/kotarotsubaki/ambercast/commit/ada847e6436b2044b41d43be8354962310c64f4d))
+* **mcp:** wait for heal apply confirmation and in-flight tool responses during shutdown ([#459](https://github.com/kotarotsubaki/ambercast/issues/459)) ([538f554](https://github.com/kotarotsubaki/ambercast/commit/538f554c5f9b79a0dfa092e6c8be942854cd8bc6))
+* **mcp:** write a stderr line when a progress notification send fails ([#460](https://github.com/kotarotsubaki/ambercast/issues/460)) ([9e6e87b](https://github.com/kotarotsubaki/ambercast/commit/9e6e87b7647ba79255a879c5c1806f15cc29022a))
+* **run:** recover agentic target-resolution failures with diagnostics ([#394](https://github.com/kotarotsubaki/ambercast/issues/394)) ([b1f179c](https://github.com/kotarotsubaki/ambercast/commit/b1f179c46d9bc86570ef496d12552122a2e0bb41))
+* **view:** apply design-system dark tokens, status badges in step table, zero-omitted totals, VIEW_COPY.cli reuse ([#429](https://github.com/kotarotsubaki/ambercast/issues/429)) ([2d4cb43](https://github.com/kotarotsubaki/ambercast/commit/2d4cb43eb7a83394004c319f1d9c1bd0412f2c53))
+* **view:** constrain screenshot and long text so the step table never overflows ([#449](https://github.com/kotarotsubaki/ambercast/issues/449)) ([33344c7](https://github.com/kotarotsubaki/ambercast/commit/33344c7cb81cef86c20781083444adb7b571010c))
+* **view:** read run reports from every 3.x schema version leniently ([#439](https://github.com/kotarotsubaki/ambercast/issues/439)) ([41884dd](https://github.com/kotarotsubaki/ambercast/commit/41884dd828ee02af54059ea54dcf3a55bf0466bd))
+* **view:** reject default-port and non-authority Host headers, escape runId in attributes ([#420](https://github.com/kotarotsubaki/ambercast/issues/420)) ([3bf9c7d](https://github.com/kotarotsubaki/ambercast/commit/3bf9c7d8297c23cac40c19f5a86426d05ce34891))
+* **website:** derive the machine-readable-resources schema hrefs from published files ([#464](https://github.com/kotarotsubaki/ambercast/issues/464)) ([5e77705](https://github.com/kotarotsubaki/ambercast/commit/5e77705e946272c23b7a5896b1069d48a8e22358))
+* **website:** tighten docs-drift checker edge cases (inline-code anchors, unmapped malformed frontmatter, mapping value types) ([#433](https://github.com/kotarotsubaki/ambercast/issues/433)) ([c532ec7](https://github.com/kotarotsubaki/ambercast/commit/c532ec7da52f0cd794d1848b2bc8dafee30e7302))
+
 ## [0.6.0](https://github.com/kotarotsubaki/ambercast/compare/v0.5.0...v0.6.0) (2026-09-18)
 
 

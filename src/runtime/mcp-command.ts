@@ -10,6 +10,7 @@ import { createMcpServer } from '#adapters/mcp/server.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { createMcpProgressSink } from '#adapters/mcp/progress-sink.js';
 import { escapeControlChars } from '#adapters/system/control-chars.js';
+import { writeDebugCause } from '#adapters/system/crash-diagnostics.js';
 import type { McpProgressContext, McpServerDeps } from '#adapters/mcp/types.js';
 import { runCheckCommand, type CheckCommandInput } from '#runtime/check-command.js';
 import { runGenerateCommand, type GenerateCommandInput } from '#runtime/generate-command.js';
@@ -166,10 +167,22 @@ function invalidHealToken(reason: 'missing' | 'unknown-token' | 'superseded' | '
   return { kind: 'error', code: 'HEAL_APPLY_TOKEN_INVALID', message: reason };
 }
 
-function failedHealApply(error: unknown): ToolOutcome {
+/**
+ * A newly caught settlement failure or newly saved fail() outcome writes a
+ * diagnostic once. Replaying a stored error does not write it again.
+ */
+function healCrashName(error: unknown): string {
+  try {
+    return error instanceof Error ? error.name : 'Error';
+  } catch {
+    return 'Error';
+  }
+}
+
+function failedHealApply(name: string): ToolOutcome {
   return {
     kind: 'error', code: 'HEAL_APPLY_FAILED',
-    message: `the apply crashed unexpectedly (${error instanceof Error ? error.name : 'Error'})`,
+    message: `the apply crashed unexpectedly (${name})`,
   };
 }
 
@@ -183,12 +196,27 @@ function failedHealApply(error: unknown): ToolOutcome {
  * valid through the exact ten-minute boundary. A consumed-token replay waits
  * for its original confirmation, settlement, and response rendering instead
  * of invoking the one-shot settle capability again. Tokens are process-local
- * and never persisted in the plan.
+ * and never persisted in the plan. New settle() and fail() failures write a
+ * fixed stderr line, plus cause details when AMBERCAST_DEBUG=1; diagnostic
+ * write failures cannot interrupt settlement. Replayed errors remain silent.
  */
 class HealProposalStore {
   private readonly proposals = new Map<string, HealProposal>();
 
-  constructor(private readonly monotonicMs: () => number) {}
+  constructor(private readonly monotonicMs: () => number, private readonly stderr: NodeJS.WritableStream) {}
+
+  private reportCrash(name: string, error: unknown): void {
+    try {
+      this.stderr.write(`ambercast mcp: heal apply crashed unexpectedly (${escapeControlChars(name)}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
+    } catch {
+      /* Diagnostics must not block settlement. */
+    }
+    try {
+      writeDebugCause(this.stderr, error);
+    } catch {
+      /* Diagnostics must not block settlement. */
+    }
+  }
 
   /**
    * Issues a random opaque token after preparation resolves for preview.
@@ -245,7 +273,10 @@ class HealProposalStore {
         return this.save(proposal, { kind: 'report', exitCode: output.exitCode, envelope: output.envelope });
       }).catch(async (error: unknown) => {
         try { await flush?.(); } catch { /* Preserve the settlement failure. */ }
-        return this.save(proposal, failedHealApply(error));
+        const name = healCrashName(error);
+        const outcome = this.save(proposal, failedHealApply(name));
+        this.reportCrash(name, error);
+        return outcome;
       });
       proposal.settling = settlePromise;
     }
@@ -261,7 +292,9 @@ class HealProposalStore {
       this.finalize(token);
       return proposal.output!;
     }
-    const outcome = this.save(proposal, failedHealApply(error));
+    const name = healCrashName(error);
+    const outcome = this.save(proposal, failedHealApply(name));
+    this.reportCrash(name, error);
     this.finalize(token);
     return outcome;
   }
@@ -409,11 +442,15 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     }
   }
 
-  const proposals = new HealProposalStore(() => createSystemClock().monotonicMs());
+  const proposals = new HealProposalStore(() => createSystemClock().monotonicMs(), input.stderr);
   const deps: McpServerDeps = {
     sessionRoot,
     version: __VERSION__,
     stderr: input.stderr,
+    reportJobCrash: ({ jobId, tool, name }, cause) => {
+      input.stderr.write(`ambercast mcp: job ${jobId} (${tool}) crashed unexpectedly (${escapeControlChars(name)}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
+      writeDebugCause(input.stderr, cause);
+    },
     generate: (args, progress, jobSignal) => track(async (drainSignal) => {
       const signal = AbortSignal.any([drainSignal, jobSignal].filter((candidate): candidate is AbortSignal => candidate !== undefined));
       const inputArgs = args as Record<string, unknown>;

@@ -21,7 +21,7 @@ type RecordData = {
 };
 type Job = {
   record: RecordData; controller: AbortController; queued: boolean;
-  result?: Result; error?: unknown; terminalAt?: number; handleReturned?: boolean;
+  result?: Result; error?: unknown; errorName?: string; terminalAt?: number; handleReturned?: boolean;
   rendered?: ReturnType<typeof renderToolResult>;
   delivered?: boolean;
   done: Promise<void>; finish: () => void;
@@ -37,6 +37,21 @@ type HealConfirm = 'authorized' | 'declined' | 'interrupted';
 
 const statusInput = z.object({ jobId: z.string().min(1).optional(), waitMs: z.number().int().min(0).max(45_000).optional() }).strict();
 const cancelInput = z.object({ jobId: z.string().min(1) }).strict();
+
+/**
+ * Job crashes use the failed() name rule, unlike failedHealApply()'s
+ * Error-instance rule. One computed name feeds diagnostics and failed()
+ * and falls back to Error if reading a hostile name property throws.
+ */
+function crashName(cause: unknown): string {
+  try {
+    if (typeof cause !== 'object' || cause === null || !('name' in cause)) return 'Error';
+    const name = cause.name;
+    return typeof name === 'string' ? name : 'Error';
+  } catch {
+    return 'Error';
+  }
+}
 
 /**
  * Creates the MCP tool host from runtime-supplied capabilities.
@@ -120,8 +135,7 @@ export function createMcpServer(deps: McpServerDeps, options: { readonly signal?
   };
   const missing = (id: string): Response => ({ isError: true, content: [{ type: 'text', text: `JOB_NOT_FOUND: ${id}` }], structuredContent: undefined });
   const failed = (job: Job): Response => {
-    const error = job.error;
-    const name = typeof error === 'object' && error !== null && 'name' in error && typeof error.name === 'string' ? error.name : 'Error';
+    const name = job.errorName!;
     return { isError: true, content: [{ type: 'text', text: `JOB_FAILED: the job crashed unexpectedly (${name})` }], structuredContent: undefined, _meta: { job: snapshot(job) } };
   };
   /**
@@ -293,6 +307,13 @@ export function createMcpServer(deps: McpServerDeps, options: { readonly signal?
         settle(job, interrupted ? 'cancelled' : 'completed');
       } catch (error) {
         job.error = error;
+        const name = crashName(error);
+        job.errorName = name;
+        try {
+          deps.reportJobCrash?.({ jobId: job.record.jobId, tool: job.record.tool, name }, error);
+        } catch {
+          /* Diagnostics must not block job settlement. */
+        }
         settle(job, 'failed');
       }
     });

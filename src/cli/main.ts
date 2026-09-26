@@ -53,8 +53,8 @@
 import { runGenerateCommand } from '#runtime/generate-command.js';
 import { runCheckCommand } from '#runtime/check-command.js';
 import { CLI_MANIFEST, flagLookup, renderUsage } from '#runtime/cli-manifest.js';
-import { escapeControlChars, escapeStackControlChars } from '#runtime/control-chars.js';
-import { readDebugEnvironment } from '#runtime/debug-environment.js';
+import { escapeControlChars } from '#runtime/control-chars.js';
+import { writeDebugCause } from '#runtime/crash-diagnostics.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runInitCommand, type InitCommandDeps, type InitCommandInput, type InitCommandOutput } from '#runtime/init-command.js';
 import { runMcpCommand } from '#runtime/mcp-command.js';
@@ -1086,20 +1086,12 @@ export async function main(
       /*
        * Opt-in diagnostics can contain sensitive data, but unavailable or
        * hostile properties must never replace the original failure with a
-       * second crash in this last-resort reporting path.
+       * second crash in this last-resort reporting path. The shared cause
+       * writer keeps these bytes identical for CLI crashes.
        */
       const name = projectCauseName(error);
       stderr.write(`The ${parsed.command} command crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`);
-      if (readDebugEnvironment()) {
-        try {
-          const message = error !== null && typeof error === 'object' ? (error as { message?: unknown }).message : undefined;
-          if (typeof message === 'string') stderr.write(`cause message: ${escapeControlChars(message)}\n`);
-        } catch {}
-        try {
-          const stack = error !== null && typeof error === 'object' ? (error as { stack?: unknown }).stack : undefined;
-          if (typeof stack === 'string') stderr.write(`cause stack:\n${escapeStackControlChars(stack)}\n`);
-        } catch {}
-      }
+      writeDebugCause(stderr, error);
       process.exitCode = 3;
     }
   } finally {

@@ -209,10 +209,177 @@ async function proposalSession() {
   const running = runMcpCommand({ dir: directory, syncWaitMs: 1, ...io });
   await vi.waitFor(() => expect(serverFake.connected.mock.calls.length).toBeGreaterThan(previousConnections));
   const deps = serverFake.deps!;
-  return { deps, close: async () => { io.stdin.end(); expect(await running).toBe(0); } };
+  return { deps, io, close: async () => { io.stdin.end(); expect(await running).toBe(0); } };
 }
 
 const noProgress = { progressToken: undefined, sendNotification: async () => {} };
+
+async function crashedRun(cause: unknown, debug?: string) {
+  const oldDebug = process.env.AMBERCAST_DEBUG;
+  if (debug === undefined) delete process.env.AMBERCAST_DEBUG;
+  else process.env.AMBERCAST_DEBUG = debug;
+  serverFake.useReal = true;
+  vi.mocked(runRunCommand).mockRejectedValueOnce(cause);
+  const io = streams();
+  const directory = await fixtureDirectory();
+  const running = runMcpCommand({ dir: directory, syncWaitMs: 45_000, ...io });
+  try {
+    await initialize(io);
+    sendRequest(io, 1, 'ambercast_run');
+    const result = (await response(io, 1)).result as Record<string, unknown>;
+    return { result, errors: io.errors().slice(`ambercast mcp: serving ${directory}\n`.length), output: io.output() };
+  } finally {
+    io.stdin.end();
+    expect(await running).toBe(0);
+    if (oldDebug === undefined) delete process.env.AMBERCAST_DEBUG;
+    else process.env.AMBERCAST_DEBUG = oldDebug;
+  }
+}
+
+function crashLine(jobId: string, name: string): string {
+  return `ambercast mcp: job ${jobId} (run) crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`;
+}
+
+describe('MCP crash diagnostics (SPEC-C)', () => {
+  it.each([
+    { cause: { name: 'Boom', message: 'x' }, name: 'Error' },
+    { cause: new TypeError('secret'), name: 'TypeError' },
+  ])('reports a newly saved heal settlement crash once and replays silently (TEST-C5: $name)', async ({ cause, name }) => {
+    const session = await proposalSession();
+    try {
+      queuePreparation(vi.fn(async (): Promise<HealCommandOutput> => { throw cause; }));
+      const token = await issuedToken(session.deps);
+      session.deps.markHealDelivered!(token);
+      const beforeCrash = session.io.errors();
+      const first = await session.deps.applyHeal!(token, 'authorized');
+      expect(first).toEqual({ kind: 'error', code: 'HEAL_APPLY_FAILED', message: `the apply crashed unexpectedly (${name})` });
+      const line = `ambercast mcp: heal apply crashed unexpectedly (${name}). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n`;
+      expect(session.io.errors()).toBe(beforeCrash + line);
+      const beforeReplay = session.io.errors();
+      expect(await session.deps.applyHeal!(token, 'authorized')).toEqual(first);
+      expect(session.io.errors()).toBe(beforeReplay);
+    } finally { await session.close(); }
+  });
+
+  it('does not report a successful interrupted heal settlement as a crash (TEST-C5)', async () => {
+    const session = await proposalSession();
+    try {
+      const settle = vi.fn(async () => healOutput(1));
+      queuePreparation(settle);
+      const token = await issuedToken(session.deps);
+      session.deps.markHealDelivered!(token);
+      const before = session.io.errors();
+      expect(await session.deps.applyHeal!(token, 'interrupted')).toMatchObject({ kind: 'report', exitCode: 1 });
+      expect(settle).toHaveBeenCalledExactlyOnceWith('interrupted');
+      expect(session.io.errors()).toBe(before);
+    } finally { await session.close(); }
+  });
+
+  it('reports a new fail after a circular heal apply response (TEST-C5)', async () => {
+    const session = await proposalSession();
+    try {
+      const envelope: Record<string, unknown> = {};
+      envelope.self = envelope;
+      queuePreparation(vi.fn(async () => ({ exitCode: 0, envelope } as HealCommandOutput)));
+      const token = await issuedToken(session.deps);
+      session.deps.markHealDelivered!(token);
+      expect(await session.deps.beginHealApply!(token)).toMatchObject({ proceed: true });
+      const report = await session.deps.settleHealApply!(token, 'authorized');
+      expect(report.kind).toBe('report');
+      expect(() => JSON.stringify((report as { envelope: unknown }).envelope)).toThrow(TypeError);
+      const beforeCrash = session.io.errors();
+      const saved = await session.deps.failHealApply!(token, new TypeError('circular response'));
+      expect(saved).toEqual({ kind: 'error', code: 'HEAL_APPLY_FAILED', message: 'the apply crashed unexpectedly (TypeError)' });
+      const line = 'ambercast mcp: heal apply crashed unexpectedly (TypeError). Set AMBERCAST_DEBUG=1 to print the message and stack; they may contain sensitive data.\n';
+      expect(session.io.errors()).toBe(beforeCrash + line);
+      const beforeReplay = session.io.errors();
+      expect(await session.deps.failHealApply!(token, new Error('later'))).toEqual(saved);
+      expect(session.io.errors()).toBe(beforeReplay);
+    } finally { await session.close(); }
+  });
+  it('writes one safe line for a crashed real-server run (TEST-C1)', async () => {
+    const { result, errors } = await crashedRun(Object.assign(new TypeError('secret /tmp/x'), {}));
+    const jobId = ((result._meta as { job: JobRecord }).job).jobId;
+    expect(result).toMatchObject({ isError: true, content: [{ type: 'text', text: 'JOB_FAILED: the job crashed unexpectedly (TypeError)' }], _meta: { job: { status: 'failed' } } });
+    expect(errors).toBe(crashLine(jobId, 'TypeError'));
+    expect(errors).not.toMatch(/secret|\/tmp\/x/);
+  });
+
+  it('prints escaped details only for debug 1 without changing the response (TEST-C3)', async () => {
+    const makeCause = () => new TypeError('secret /tmp/x \u001b[31m');
+    const normal = await crashedRun(makeCause());
+    const debug = await crashedRun(makeCause(), '1');
+    const normalResult = normal.result;
+    const debugResult = debug.result;
+    const normalJobId = ((normalResult._meta as { job: JobRecord }).job).jobId;
+    const debugJobId = ((debugResult._meta as { job: JobRecord }).job).jobId;
+    expect(normal.errors).toBe(crashLine(normalJobId, 'TypeError'));
+    expect(debug.errors.startsWith(crashLine(debugJobId, 'TypeError'))).toBe(true);
+    expect(debug.errors).toContain('cause message: secret /tmp/x \\u001b[31m\n');
+    expect(debug.errors).toContain('cause stack:\n');
+    expect(debug.errors).not.toContain('\u001b');
+    const normalized = (result: Record<string, unknown>) => {
+      const copy = structuredClone(result);
+      const job = (copy._meta as { job: JobRecord }).job as unknown as Record<string, unknown>;
+      job.jobId = '<jobId>';
+      job.createdAt = '<createdAt>';
+      job.lastUpdatedAt = '<lastUpdatedAt>';
+      return copy;
+    };
+    expect(normalized(debugResult)).toEqual(normalized(normalResult));
+    const normalizedOutput = (output: string, result: Record<string, unknown>) => {
+      const job = (result._meta as { job: JobRecord }).job;
+      return output.replaceAll(job.jobId, '<jobId>')
+        .replace(/"createdAt":"[^"]+"/g, '"createdAt":"<createdAt>"')
+        .replace(/"lastUpdatedAt":"[^"]+"/g, '"lastUpdatedAt":"<lastUpdatedAt>"');
+    };
+    expect(normalizedOutput(debug.output, debugResult)).toBe(normalizedOutput(normal.output, normalResult));
+  });
+
+  it.each(['0', 'false', ''])('treats AMBERCAST_DEBUG=%j as disabled (TEST-C3)', async (debug) => {
+    const { result, errors } = await crashedRun(new TypeError('secret /tmp/x'), debug);
+    expect(errors).toBe(crashLine(((result._meta as { job: JobRecord }).job).jobId, 'TypeError'));
+  });
+
+  it('uses Error for a string throw and omits debug details (TEST-C4)', async () => {
+    const { result, errors } = await crashedRun('boom', '1');
+    expect(result.content).toEqual([{ type: 'text', text: 'JOB_FAILED: the job crashed unexpectedly (Error)' }]);
+    expect(errors).toBe(crashLine(((result._meta as { job: JobRecord }).job).jobId, 'Error'));
+  });
+
+  it('survives a throwing message getter (TEST-C4)', async () => {
+    const cause = new Error('hidden');
+    Object.defineProperty(cause, 'message', { get: () => { throw new Error('getter crashed'); } });
+    const { result, errors } = await crashedRun(cause, '1');
+    expect(errors).toContain(crashLine(((result._meta as { job: JobRecord }).job).jobId, 'Error'));
+    expect(errors).not.toContain('cause message:');
+  });
+
+  it('uses Error for a throwing name getter without a secondary crash (TEST-C4)', async () => {
+    const cause = Object.defineProperty({}, 'name', { get: () => { throw new Error('getter crashed'); } });
+    const { result, errors } = await crashedRun(cause);
+    expect(result.content).toEqual([{ type: 'text', text: 'JOB_FAILED: the job crashed unexpectedly (Error)' }]);
+    expect(errors).toBe(crashLine(((result._meta as { job: JobRecord }).job).jobId, 'Error'));
+  });
+
+  it('reads a changing name getter once for the response and diagnostic (TEST-C4)', async () => {
+    let reads = 0;
+    const cause = Object.defineProperty({}, 'name', { get: () => ++reads === 1 ? 'First' : undefined });
+    const { result, errors } = await crashedRun(cause);
+    expect(reads).toBe(1);
+    expect(result.content).toEqual([{ type: 'text', text: 'JOB_FAILED: the job crashed unexpectedly (First)' }]);
+    expect(errors).toBe(crashLine(((result._meta as { job: JobRecord }).job).jobId, 'First'));
+  });
+
+  it('escapes control characters in the reported name onto one line (TEST-C4)', async () => {
+    const cause = new Error('hidden');
+    cause.name = 'Odd\u001b\nName';
+    const { result, errors } = await crashedRun(cause);
+    expect(errors).toBe(crashLine(((result._meta as { job: JobRecord }).job).jobId, 'Odd\\u001b\\nName'));
+    expect(result.content).toEqual([{ type: 'text', text: 'JOB_FAILED: the job crashed unexpectedly (Odd\u001b\nName)' }]);
+    expect(errors.split('\n')).toHaveLength(2);
+  });
+});
 
 async function issuedToken(deps: McpServerDeps): Promise<string> {
   const result = await deps.healPreview({}, noProgress);

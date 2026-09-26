@@ -37,6 +37,8 @@ export interface McpServerDeps {
   readonly sessionRoot: string;
   readonly version: string;
   readonly stderr: NodeJS.WritableStream;
+  /** Reports one fixed stderr line for a job crash, with cause details only when AMBERCAST_DEBUG=1. */
+  readonly reportJobCrash?: (job: { jobId: string; tool: 'generate' | 'run' | 'heal'; name: string }, cause: unknown) => void;
   /** The signal interrupts this job's execution, including a job_cancel request. */
   readonly generate: (input: unknown, progress: McpProgressContext, signal?: AbortSignal) => Promise<{ exitCode: number; envelope: unknown }>;
   /** The signal interrupts this job's execution, including a job_cancel request. */

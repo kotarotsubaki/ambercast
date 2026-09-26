@@ -4,10 +4,12 @@ import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, type Readable, type Writable } from 'node:stream';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { isJSONRPCNotification, isJSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
+import { isJSONRPCNotification, isJSONRPCRequest, type JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { TransportSendOptions } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { createMcpServer } from '#adapters/mcp/server.js';
 import { createSystemClock } from '#adapters/system/system-clock.js';
 import { createMcpProgressSink } from '#adapters/mcp/progress-sink.js';
+import { escapeControlChars } from '#adapters/system/control-chars.js';
 import type { McpProgressContext, McpServerDeps } from '#adapters/mcp/types.js';
 import { runCheckCommand, type CheckCommandInput } from '#runtime/check-command.js';
 import { runGenerateCommand, type GenerateCommandInput } from '#runtime/generate-command.js';
@@ -77,6 +79,88 @@ type HealProposal = {
 type ToolOutcome = import('#adapters/mcp/types.js').ToolOutcome;
 
 function inflightKey(id: string | number): string { return `${typeof id}:${String(id)}`; }
+
+/**
+ * Wraps a transport send so failed deliveries can be reported without changing
+ * the caller's completion path.
+ *
+ * @remarks
+ * A response is identified by its id and result or error, while a method with
+ * no id is a notification and a method with an id is a request. Distinct
+ * diagnostics identify which protocol action was lost without making the
+ * caller infer it from an absent reply. The method is escaped with
+ * `escapeControlChars` imported from `#adapters/system/control-chars.js`,
+ * following this runtime module's existing dependency direction toward
+ * system adapters, so diagnostic text cannot contain raw control characters.
+ *
+ * The lower send call and stderr write each need their own try boundary:
+ * a synchronous throw and a rejected send are both delivery failures, while
+ * a failing diagnostic must never escape or prevent the returned promise from
+ * resolving. Node terminates the process for an asynchronous stream error
+ * without a listener, so stderr needs an error listener as well.
+ * `context.onResponse` connects the session's in-flight ledger
+ * decrement to this wrapper immediately after invoking the lower send, before
+ * awaiting its promise and even if the call throws synchronously. Once
+ * `context.isClosed()` is true, this wrapper neither invokes the lower send
+ * nor writes to stderr, preserving the closed transport's silent behavior.
+ * Each failed delivery writes exactly one stderr line. This wrapper is the
+ * sole authoritative owner of send-failure diagnostics; `createMcpProgressSink`
+ * has no stderr output, avoiding duplicate reports for a failed notification.
+ */
+export function createGuardedSend(
+  send: (message: JSONRPCMessage, options?: TransportSendOptions) => Promise<void>,
+  context: { stderr: NodeJS.WritableStream; isClosed: () => boolean; onResponse?: (id: string | number) => void },
+): typeof send {
+  context.stderr.on?.('error', () => undefined);
+  return async (message: JSONRPCMessage, options?: TransportSendOptions): Promise<void> => {
+    if (context.isClosed()) return;
+
+    const hasId = 'id' in message;
+    const isResponse = hasId && ('result' in message || 'error' in message);
+    const isNotification = 'method' in message && !hasId;
+    const method = 'method' in message ? message.method : undefined;
+
+    const writeError = (kind: string, method?: string): void => {
+      try {
+        const methodText = method !== undefined ? ` (${escapeControlChars(method)})` : '';
+        context.stderr.write(`ambercast mcp: failed to send a ${kind}${methodText}\n`);
+      } catch {
+        /* Logging cannot block shutdown. */
+      }
+    };
+
+    let sent: Promise<void> | undefined;
+    try {
+      sent = options !== undefined ? send(message, options) : send(message);
+    } catch {
+      if (isResponse && context.onResponse) {
+        try {
+          const responseId = message.id;
+          if (responseId !== undefined) context.onResponse(responseId as string | number);
+        } catch {
+          /* Ledger accounting is secondary to reporting the failed send. */
+        }
+      }
+      writeError(isResponse ? 'response' : isNotification ? 'notification' : 'request', method);
+      return;
+    }
+
+    if (isResponse && context.onResponse) {
+      try {
+        const responseId = message.id;
+        if (responseId !== undefined) context.onResponse(responseId as string | number);
+      } catch {
+        /* Ledger accounting cannot interrupt send completion or diagnostics. */
+      }
+    }
+
+    try {
+      await sent;
+    } catch {
+      writeError(isResponse ? 'response' : isNotification ? 'notification' : 'request', method);
+    }
+  };
+}
 
 function invalidHealToken(reason: 'missing' | 'unknown-token' | 'superseded' | 'expired'): ToolOutcome {
   return { kind: 'error', code: 'HEAL_APPLY_TOKEN_INVALID', message: reason };
@@ -451,31 +535,12 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
     set: (handler: typeof transport.onmessage) => { heldHandler = handler; },
   });
   let transportClosed = false;
-  /**
-   * A response leaves the in-flight ledger immediately after the lower send
-   * is invoked, before awaiting its Promise and even if that call throws.
-   * This ordering preserves shutdown completion even when the lower send
-   * remains pending.
-   */
-  transport.send = async (...args: Parameters<typeof transport.send>): Promise<void> => {
-    if (transportClosed) return;
-    const message = args[0];
-    const responseId = 'id' in message && ('result' in message || 'error' in message) ? message.id : undefined;
-    let sent: Promise<void>;
-    try {
-      sent = send(...args);
-    } catch {
-      if (responseId !== undefined) changeInflight(responseId, -1);
-      try { input.stderr.write('ambercast mcp: failed to send a response\n'); } catch { /* Logging cannot block shutdown. */ }
-      return;
-    }
-    if (responseId !== undefined) changeInflight(responseId, -1);
-    try {
-      await sent;
-    } catch {
-      try { input.stderr.write('ambercast mcp: failed to send a response\n'); } catch { /* Logging cannot block shutdown. */ }
-    }
-  };
+  const guardedSend = createGuardedSend(send, {
+    stderr: input.stderr,
+    isClosed: () => transportClosed,
+    onResponse: (id) => changeInflight(id, -1),
+  });
+  transport.send = guardedSend;
   let beginDrain: (() => void) | undefined;
   const drainStarted = new Promise<void>((resolveDrain) => { beginDrain = resolveDrain; });
   const onDrain = (): void => {

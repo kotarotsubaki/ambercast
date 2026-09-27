@@ -29,7 +29,6 @@ import {
 } from '#core/ir/grounding-coverage-claim.js';
 import {
   ACTION_GROUNDING_MODE,
-  ASSERT_GROUNDING_MODE,
   groundingRecoveryModeForStep,
 } from '#core/ir/grounding-recovery-mode.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
@@ -2775,6 +2774,73 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
 }
 
 /**
+ * Polls accessibility snapshots every 100 ms until the shared deadline for
+ * an element-visible assertion, without grounding or AI in either resolve mode.
+ * Each observation matches `step.intent.quote.text` and its optional roleHint
+ * with `matchQuotedCandidates`. One or more matches pass. On deadline, return
+ * the existing assertion failure (exit 1): expected uses the quote text and
+ * appends the role when hinted; actual comes from the last observation as
+ * `matched <n>` for zero matches or another count mismatch, or
+ * `snapshot-invalid` for an invalid snapshot. Invalid snapshots are retryable.
+ *
+ * @remarks This design scaffold throws until step 11 implements the loop.
+ */
+async function evaluateElementVisibleAssert(
+  step: Extract<Step, { kind: 'assert'; check: 'element-visible' }>,
+  context: DispatchContext,
+  deadline: number,
+): Promise<DispatchOutcome> {
+  throw new Error('not implemented (step 11)');
+}
+
+/**
+ * Polls accessibility snapshots every 100 ms until the shared deadline for
+ * a text-equals assertion, without grounding or AI in either resolve mode.
+ * Match `step.intent.quote.text` and its optional roleHint using
+ * `matchQuotedCandidates`; exactly one candidate can pass. Compute-bind its
+ * `{role,name}` with `session.resolveGrounded(ref, { mode: 'compute',
+ * resolvedSecrets: context.resolvedSecrets.values() })`, then require
+ * `session.captureValue(bound, 'text')` to equal the run-expanded `step.text`
+ * byte for byte, without normalization. A compute-bind miss or
+ * `BoundElementRejectedError` from capture is `binding-lost` and retryable;
+ * all other exceptions propagate as case errors. Two or more matches are
+ * retryable `ambiguous`; an invalid snapshot is retryable `snapshot-invalid`.
+ * On deadline return the existing assertion failure (exit 1): expected uses
+ * the quote text and appends the role when hinted; actual is the last sample's
+ * `matched 0`, `snapshot-invalid`, `binding-lost`, `ambiguous`, or the
+ * mismatching `innerText` from the single bound candidate.
+ *
+ * @remarks This design scaffold throws until step 11 implements the loop.
+ */
+async function evaluateTextEqualsAssert(
+  step: Extract<Step, { kind: 'assert'; check: 'text-equals' }>,
+  context: DispatchContext,
+  deadline: number,
+): Promise<DispatchOutcome> {
+  throw new Error('not implemented (step 11)');
+}
+
+/**
+ * Polls accessibility snapshots every 100 ms until the shared deadline for
+ * an element-count assertion, without grounding or AI in either resolve mode.
+ * Each observation matches `step.intent.quote.text` and its optional roleHint
+ * with `matchQuotedCandidates`. Pass when the match count equals `step.count`,
+ * including zero. On deadline return the existing assertion failure (exit 1):
+ * expected uses the quote text and appends the role when hinted; actual from
+ * the last sample is `matched <n>` for a count mismatch or
+ * `snapshot-invalid` for an invalid snapshot. Invalid snapshots are retryable.
+ *
+ * @remarks This design scaffold throws until step 11 implements the loop.
+ */
+async function evaluateElementCountAssert(
+  step: Extract<Step, { kind: 'assert'; check: 'element-count' }>,
+  context: DispatchContext,
+  deadline: number,
+): Promise<DispatchOutcome> {
+  throw new Error('not implemented (step 11)');
+}
+
+/**
  * Executes one deterministic assertion and preserves its materialized
  * expectation when the browser reports a mismatch.
  *
@@ -2782,18 +2848,16 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
  * than the authored plan step, so a failure explains the value the browser
  * actually evaluated after run-value materialization.
  *
- * The per-assertion lookup uses the same shared classification as healing.
- * This preserves bare-target checks while making a new assertion variant
- * choose its recovery treatment at the typed IR table.
+ * Element assertions delegate to their own snapshot polling loops. Text
+ * visibility and URL matching retain the browser check and shared loop.
  */
 async function pollAssert(step: Step, context: DispatchContext, deadline: number): Promise<DispatchOutcome> {
   // V4 polling fixes its deadline immediately after step-start, before
   // acquisition or materialization. The first observation always runs;
   // only a false result waits up to 100 ms or the remaining budget. A wait
   // reaching the deadline returns the last mismatch without another bind.
-  // Element-visible and text-equals bind anew for each observation. The other
-  // three checks do not bind; element-count passes its ElementRef directly.
-  // Bind failure, adapter rejection, and abort keep their terminal paths.
+  // Element assertions return to their dedicated snapshot loops. The shared
+  // browser loop handles text-visible and url-matches only.
   if (step.kind !== 'assert') {
     throw new Error('The assertion dispatcher received a non-assertion step.');
   }
@@ -2806,30 +2870,14 @@ async function pollAssert(step: Step, context: DispatchContext, deadline: number
       check = { check: 'text-visible', text: step.text };
       break;
     case 'element-visible':
-      if (ASSERT_GROUNDING_MODE[step.check] !== 'element-reground') throw new Error('An element-visible assertion must consume element grounding.');
-      check = {
-        check: 'element-visible',
-        target: await groundedTarget(context, step, step.element),
-      };
-      break;
+      return evaluateElementVisibleAssert(step, context, deadline);
     case 'text-equals':
-      if (ASSERT_GROUNDING_MODE[step.check] !== 'element-reground') throw new Error('A text-equals assertion must consume element grounding.');
-      check = {
-        check: 'text-equals',
-        target: await groundedTarget(context, step, step.element),
-        text: step.text,
-      };
-      break;
+      return evaluateTextEqualsAssert(step, context, deadline);
     case 'url-matches':
       check = { check: 'url-matches', pattern: step.pattern };
       break;
     case 'element-count':
-      check = {
-        check: 'element-count',
-        target: step.element,
-        count: step.count,
-      };
-      break;
+      return evaluateElementCountAssert(step, context, deadline);
   }
 
   const outcome = await (await sessionForStep(context, step)).evaluateAssert(check);
@@ -3630,7 +3678,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     const loadedGrounding = await readUsableGrounding(deps.storage, groundingPath, plan, () => { retiredGrounding = true; });
     grounding = loadedGrounding;
     if (retiredGrounding && !options.resolve) {
-      const firstGroundedStep = plan.steps.find((step) => groundingRecoveryModeForStep(step) === 'element-reground');
+      const firstGroundedStep = plan.steps.find((step) => step.kind !== 'assert' && groundingRecoveryModeForStep(step) === 'element-reground');
       if (firstGroundedStep !== undefined) {
         currentStep = firstGroundedStep;
         throw new GroundingUnresolvedError(

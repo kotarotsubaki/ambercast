@@ -36,7 +36,7 @@ import {
   PLAN_SCHEMA_VERSION,
   PlanDocument,
   type GroundingDocument as GroundingDocumentType,
-  type ElementRef,
+  type ElementIntent,
   type InstructionAttributedSteps,
   type JsonValueT,
   type PlanDocument as PlanDocumentType,
@@ -60,6 +60,9 @@ import {
 } from './generator-secret-policy.js';
 import {
   compareSecretWarnings,
+  canonicalTargetKey,
+  summarizeSecretTarget,
+  type SecretTargetSummary,
   deriveSecretNames,
   normalizeAiStepSecretUses,
   type SecretUse,
@@ -573,7 +576,7 @@ type GenerateSecretOutcome = {
   readonly name: SecretName;
   readonly stepId: StepId;
   readonly useIndex?: number;
-  readonly target?: ElementRef;
+  readonly target?: SecretTargetSummary;
   readonly envVar: string;
   readonly allowed: boolean;
   readonly selectionSource: 'allowed-name' | 'target-slug' | 'hint' | 'ordinal' | 'existing-plan' | 'interactive-rename';
@@ -783,9 +786,9 @@ function secretRowsForPlan(
 }
 
 function consentRowsForPlan(plan: PlanDocumentType, rows: readonly GenerateSecretOutcome[]): GenerateSecretOutcome[] {
-  const targets = new Map<StepId, ElementRef>();
+  const targets = new Map<StepId, SecretTargetSummary>();
   for (const step of plan.steps) {
-    if (step.kind === 'action' && step.action === 'fill-secret') targets.set(step.id, step.element);
+    if (step.kind === 'action' && step.action === 'fill-secret') targets.set(step.id, summarizeSecretTarget(step.intent));
   }
   return enumerateSecretUses(plan).map(({ ref, stepId, useIndex }) => {
     const row = rows.find((use) => use.stepId === stepId && use.name === secretNameFor(ref));
@@ -810,7 +813,7 @@ function existingPlanWarnings(plan: PlanDocumentType): GenerateWarning[] {
   for (const step of plan.steps) {
     if (step.kind !== 'action' || step.action !== 'fill-secret') continue;
     const name = secretNameFor(step.secretRef);
-    groups.set(name, [...(groups.get(name) ?? []), { stepId: step.id, target: JSON.stringify(step.element) }]);
+    groups.set(name, [...(groups.get(name) ?? []), { stepId: step.id, target: canonicalTargetKey(step.intent) }]);
   }
   const secretWarnings: GenerateWarning[] = [...groups.entries()]
     .filter(([, uses]) => new Set(uses.map(({ target }) => target)).size > 1)
@@ -882,10 +885,10 @@ export function projectAllowedNames(allow: readonly SecretName[] | '*'): { reado
 
 function targetChangeWarnings(previous: PlanDocumentType | undefined, next: PlanDocumentType): SecretWarning[] {
   if (previous === undefined) return [];
-  const oldTargets = new Map<string, unknown>();
+  const oldTargets = new Map<string, ElementIntent>();
   for (const step of previous.steps) {
     if (step.kind === 'action' && step.action === 'fill-secret') {
-      oldTargets.set(`${secretNameFor(step.secretRef)}\u0000${step.id}`, step.element);
+      oldTargets.set(`${secretNameFor(step.secretRef)}\u0000${step.id}`, step.intent);
     }
   }
   const warnings: SecretWarning[] = [];
@@ -893,8 +896,8 @@ function targetChangeWarnings(previous: PlanDocumentType | undefined, next: Plan
     if (step.kind !== 'action' || step.action !== 'fill-secret') continue;
     const key = `${secretNameFor(step.secretRef)}\u0000${step.id}`;
     const previousTarget = oldTargets.get(key);
-    if (previousTarget !== undefined && JSON.stringify(previousTarget) !== JSON.stringify(step.element)) {
-      warnings.push({ kind: 'secret-target-changed', name: secretNameFor(step.secretRef), stepId: step.id, previousTarget: previousTarget as never, target: step.element });
+    if (previousTarget !== undefined && canonicalTargetKey(previousTarget) !== canonicalTargetKey(step.intent)) {
+      warnings.push({ kind: 'secret-target-changed', name: secretNameFor(step.secretRef), stepId: step.id, previousTarget: summarizeSecretTarget(previousTarget), target: summarizeSecretTarget(step.intent) });
     }
   }
   return warnings.sort(compareSecretWarnings);

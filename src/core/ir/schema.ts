@@ -872,7 +872,7 @@ interface AttributedFillSecretAction {
   readonly id: StepId;
   readonly kind: 'action';
   readonly action: 'fill-secret';
-  readonly element: ElementRef;
+  readonly intent: ElementIntent;
   readonly secret?: SecretNameChoice;
 }
 
@@ -900,6 +900,38 @@ export type InstructionAttributedSteps = readonly (
   | AttributedAiStep
 )[];
 
+/** Validates a provider-authored click with an unattributed element intent. */
+export const GeneratedClickAction = z.strictObject({
+  ...StepBase,
+  kind: z.literal('action'),
+  action: z.literal('click'),
+  intent: GeneratedElementIntent,
+});
+/** The provider-facing click proposal. */
+export type GeneratedClickAction = z.infer<typeof GeneratedClickAction>;
+
+/** Validates a provider-authored press with an unattributed element intent. */
+export const GeneratedPressAction = z.strictObject({
+  ...StepBase,
+  kind: z.literal('action'),
+  action: z.literal('press'),
+  intent: GeneratedElementIntent,
+  key: PressFields.key,
+});
+/** The provider-facing press proposal. */
+export type GeneratedPressAction = z.infer<typeof GeneratedPressAction>;
+
+/** Validates a provider-authored fill with an unattributed element intent. */
+export const GeneratedFillAction = z.strictObject({
+  ...StepBase,
+  kind: z.literal('action'),
+  action: z.literal('fill'),
+  intent: GeneratedElementIntent,
+  value: FillFields.value,
+});
+/** The provider-facing fill proposal. */
+export type GeneratedFillAction = z.infer<typeof GeneratedFillAction>;
+
 /**
  * Validates a provider-authored `fill-secret` action before local naming.
  *
@@ -910,8 +942,8 @@ export const GeneratedFillSecretAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('fill-secret'),
-  // Provider output uses the same `element` locator spelling as committed IR.
-  element: ElementRef,
+  // Provider output carries an unattributed intent for local verification.
+  intent: GeneratedElementIntent,
   secret: SecretNameChoice.optional(),
 });
 
@@ -924,15 +956,14 @@ export type GeneratedFillSecretAction = z.infer<typeof GeneratedFillSecretAction
 /**
  * Validates the action portion of a provider-authored step response.
  *
- * Non-secret branches already match their committed representations, while
- * the secret branch carries only an optional naming choice until local policy
- * resolves the final reference.
+ * Element actions carry unattributed intents; the secret branch also carries
+ * an optional naming choice until local policy resolves the final reference.
  */
 export const GeneratedActionStep = z.discriminatedUnion('action', [
-  ClickAction,
+  GeneratedClickAction,
   NavigateAction,
-  PressAction,
-  FillAction,
+  GeneratedPressAction,
+  GeneratedFillAction,
   GeneratedFillSecretAction,
 ]);
 
@@ -940,6 +971,89 @@ export const GeneratedActionStep = z.discriminatedUnion('action', [
  * The provider-facing action union narrowed by its `action` discriminant.
  */
 export type GeneratedActionStep = z.infer<typeof GeneratedActionStep>;
+
+/** Validates a provider text-visibility check with no element intent. */
+export const GeneratedTextVisibleCheck = z.strictObject({
+  ...StepBase,
+  kind: z.literal('assert'),
+  check: z.literal('text-visible'),
+  ...TextVisibleFields,
+  ...AssertTimingFields,
+  ...ConfirmsField,
+});
+/** The provider-facing text-visibility proposal. */
+export type GeneratedTextVisibleCheck = z.infer<typeof GeneratedTextVisibleCheck>;
+
+/** Validates a provider element-visibility check with an unattributed intent. */
+export const GeneratedElementVisibleCheck = z.strictObject({
+  ...StepBase,
+  kind: z.literal('assert'),
+  check: z.literal('element-visible'),
+  intent: GeneratedQuotedElementIntent,
+  ...AssertTimingFields,
+  ...ConfirmsField,
+});
+/** The provider-facing element-visibility proposal. */
+export type GeneratedElementVisibleCheck = z.infer<typeof GeneratedElementVisibleCheck>;
+
+/** Validates a provider text-equality check with an unattributed intent. */
+export const GeneratedTextEqualsCheck = z.strictObject({
+  ...StepBase,
+  kind: z.literal('assert'),
+  check: z.literal('text-equals'),
+  intent: GeneratedQuotedElementIntent,
+  text: TextEqualsFields.text,
+  ...AssertTimingFields,
+  ...ConfirmsField,
+});
+/** The provider-facing text-equality proposal. */
+export type GeneratedTextEqualsCheck = z.infer<typeof GeneratedTextEqualsCheck>;
+
+/** Validates a provider URL check with no element intent. */
+export const GeneratedUrlMatchesCheck = z.strictObject({
+  ...StepBase,
+  kind: z.literal('assert'),
+  check: z.literal('url-matches'),
+  ...UrlMatchesFields,
+  ...AssertTimingFields,
+  ...ConfirmsField,
+});
+/** The provider-facing URL-match proposal. */
+export type GeneratedUrlMatchesCheck = z.infer<typeof GeneratedUrlMatchesCheck>;
+
+/** Validates a provider element-count check with an unattributed intent. */
+export const GeneratedElementCountCheck = z.strictObject({
+  ...StepBase,
+  kind: z.literal('assert'),
+  check: z.literal('element-count'),
+  intent: GeneratedQuotedElementIntent,
+  count: ElementCountFields.count,
+  ...AssertTimingFields,
+  ...ConfirmsField,
+});
+/** The provider-facing element-count proposal. */
+export type GeneratedElementCountCheck = z.infer<typeof GeneratedElementCountCheck>;
+
+/** Validates provider assertion proposals before local intent attribution. */
+export const GeneratedAssertStep = z.discriminatedUnion('check', [
+  GeneratedTextVisibleCheck,
+  GeneratedElementVisibleCheck,
+  GeneratedTextEqualsCheck,
+  GeneratedUrlMatchesCheck,
+  GeneratedElementCountCheck,
+]);
+/** The provider-facing assertion union. */
+export type GeneratedAssertStep = z.infer<typeof GeneratedAssertStep>;
+
+/** Validates a provider capture with an unattributed element intent. */
+export const GeneratedCaptureStep = z.strictObject({
+  ...StepBase,
+  kind: z.literal('capture'),
+  intent: GeneratedElementIntent,
+  variable: RunVariableName,
+});
+/** The provider-facing capture proposal. */
+export type GeneratedCaptureStep = z.infer<typeof GeneratedCaptureStep>;
 
 /**
  * Validates one provider-authored AI-step secret naming choice.
@@ -1013,13 +1127,13 @@ export type GeneratedInstructionCoveredAiStep = GeneratedAiStep & {
  * Validates one complete provider-authored step before locally deterministic
  * fields are assembled into a committed plan.
  *
- * Assertions and captures require no secret-name resolution and therefore
- * reuse their committed shapes without a parallel schema branch.
+ * Element actions, assertions, and captures carry unattributed provider
+ * intents that local policy verifies before commitment.
  */
 export const GeneratedStep = z.discriminatedUnion('kind', [
   GeneratedActionStep,
-  AssertStep,
-  CaptureStep,
+  GeneratedAssertStep,
+  GeneratedCaptureStep,
   GeneratedAiStep,
 ]);
 // In v4 both requested and policy-validated response schemas require each
@@ -1479,8 +1593,8 @@ export const GeneratedPlanResponseForPolicy = GeneratedPlanResponse.extend({
 export const GeneratedPlanResponseRequest = GeneratedPlanResponse.extend({
   steps: z.array(z.discriminatedUnion('kind', [
     GeneratedActionStep,
-    AssertStep,
-    CaptureStep,
+    GeneratedAssertStep,
+    GeneratedCaptureStep,
     GeneratedAiStep.extend({
       verificationIntent: z.array(z.lazy(() => VerificationIntent)),
     }),

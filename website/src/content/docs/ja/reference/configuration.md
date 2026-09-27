@@ -41,6 +41,7 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 | `targets.<name>.executor.browser` | `chromium` | `chromium` | 実行時に使うブラウザ。Plan ダイジェストの対象外 | run、heal の executor 構成 |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal には選択された `idempotent` ターゲットが必要 | heal |
+| `targets.<name>.locale` | string | なし | `Intl.getCanonicalLocales` で正規化される。正規化に失敗した値は `CONFIG_INVALID` | generate と Plan のターゲット定義、run のブラウザコンテキスト |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
 | `defaultTarget` | string | `web-user` | ターゲットへと解決される必要あり | generate、run、check、heal のターゲット選択 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |

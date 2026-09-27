@@ -36,6 +36,7 @@ A target configuration supplies a web surface and a browser destination; its `he
 | `targets.<name>.executor.browser` | `chromium` | `chromium` | live executor browser; excluded from Plan digest | run and heal executor composition |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires every Plan-referenced target to be `idempotent` | heal |
+| `targets.<name>.locale` | string | absent | canonicalized via `Intl.getCanonicalLocales`; a value that fails canonicalization is `CONFIG_INVALID` | generate and Plan target definition; run browser context |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
 | `defaultTarget` | string | `web-user` | must resolve to a target; generator uses it when the prompt does not identify a step Target | generate |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |

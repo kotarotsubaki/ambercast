@@ -212,6 +212,8 @@ class ElementIntentAttributionError extends Error {
  * Applies the fingerprint name equivalence rule to literal assertion text.
  * Two different prompt quotes must support the target and the expected value;
  * the same words cannot serve as evidence for both roles (SPEC-G4).
+ * On rejection, reports one issue with `path: ['text']`, relative to the step
+ * (SPEC-I3), because the fix belongs on its expected text, not the intent quote.
  */
 function rejectTextEqualsSelfQuote(text: string, quoteText: string, stepId: string): void {
   throw new Error('not implemented (step 11)');

@@ -891,6 +891,27 @@ describe('mcp/server heal apply', () => {
     expect(applyHeal.mock.calls[0]?.[1]).toBe(decision);
   });
 
+  // The MCP SDK normalizes a bare elicitation capability to form support before
+  // confirmHeal reads the client's capabilities. Confirmation must therefore
+  // reach the client for this declaration too; treating the empty object as
+  // absent would authorize an apply without asking the user.
+  it.each([
+    ['accept with confirmed content', { action: 'accept' as const, content: { confirm: true } }, 'authorized', { summary: 'applied' }],
+    ['accept without confirmation', { action: 'accept' as const, content: { confirm: false } }, 'declined', { summary: 'declined' }],
+    ['decline', { action: 'decline' as const }, 'declined', { summary: 'declined' }],
+    ['cancel', { action: 'cancel' as const }, 'interrupted', { summary: 'interrupted' }],
+  ])('maps %s to settlement with a bare elicitation capability (TEST-D5)', async (_name, elicited, decision, outcome) => {
+    const onElicit = vi.fn(async (_request: ElicitRequest): Promise<ElicitResult> => elicited);
+    const deps = fakeDeps();
+    const client = await connect(deps, undefined, { capabilities: { elicitation: {} }, onElicit });
+
+    const result = await client.callTool({ name: 'ambercast_heal', arguments: applyArgs });
+    expect(onElicit).toHaveBeenCalledTimes(1);
+    expect(onElicit.mock.calls[0]?.[0]).toMatchObject({ method: 'elicitation/create', params: { mode: 'form' } });
+    expect(vi.mocked(deps.applyHeal!).mock.calls[0]?.[1]).toBe(decision);
+    expect(result.structuredContent).toEqual(outcome);
+  });
+
   it('maps an elicitation request rejection to interrupted (TEST-D5)', async () => {
     const onElicit = vi.fn(async (): Promise<ElicitResult> => { throw new Error('client rejected elicitation'); });
     const applyHeal = vi.fn(async (_token: string, _confirm: 'authorized' | 'declined' | 'interrupted') => ({ kind: 'report' as const, exitCode: 0, envelope: { summary: 'interrupted' } }));

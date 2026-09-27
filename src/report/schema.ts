@@ -27,18 +27,6 @@ const StepId = z.string().regex(STEP_ID_PATTERN);
  */
 const SecretName = z.string().regex(SECRET_NAME_PATTERN);
 /**
- * Report-local equivalent of the core IR element-reference schema.
- *
- * Collision and rename warnings need target evidence, yet reports remain a
- * standalone public schema rather than a runtime dependency on core IR.
- */
-const ElementRef = z.discriminatedUnion('strategy', [z.strictObject({
-  strategy: z.literal('accessibility'),
-  role: z.string().min(1),
-  name: z.string().min(1),
-})]);
-
-/**
  * Report-local equivalent of the core IR UiCapability schema.
  *
  * Reports may type-import from core but must keep runtime validation local.
@@ -62,11 +50,11 @@ const UiCapability = z.enum([
 /**
  * Version shared by every structured report envelope.
  *
- * V4 execution evidence introduces required step Target identity and the
- * complete session inventory, so the 3.7 report contract advances
- * here rather than allowing command branches to choose versions separately.
+ * V5 binding evidence and generation warnings advance the shared report
+ * contract to 3.8 rather than allowing command branches to choose versions
+ * separately.
  */
-export const REPORT_SCHEMA_VERSION = '3.7' as const;
+export const REPORT_SCHEMA_VERSION = '3.8' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -238,10 +226,14 @@ export const SecretSyntaxRejectedDetails = z.strictObject({
 });
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
-/** Identifies the AI or element step whose fail-closed grounding miss can be resolved explicitly. */
+/**
+ * Identifies the step and reason for an unresolved binding. The four new
+ * reasons come from first-binding quote-match polling, one AI proposal, local
+ * verification, and re-observation, beyond fail-closed grounding misses.
+ */
 export const GroundingUnresolvedDetails = z.strictObject({
   stepId: z.string(),
-  reason: z.enum(['missing', 'recoverable-miss']),
+  reason: z.enum(['missing', 'recoverable-miss', 'no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed']),
 });
 /** Projects an unexpected failure to a stable cause name rather than arbitrary error details. */
 export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ name: CauseName }) });
@@ -472,6 +464,19 @@ export const StepResult = z.strictObject({
   screenshot: z.string().optional(),
   screenshotOmitted: z.literal('secret-detected').optional(),
   observed: Observed.optional(),
+  /**
+   * Action-kind binding evidence emitted after local verification, including
+   * confirmed grounding, candidate-changed, and action-failure outcomes. Steps
+   * stopped earlier (such as missing or no-candidate) report their reason in
+   * the case error instead. `confirmed` is its value at case end, even when a
+   * later confirming step flips it; stage timings appear only if each ran.
+   */
+  binding: z.strictObject({
+    provenance: z.enum(['grounding', 'quoted-match', 'ai-proposed']),
+    confirmed: z.boolean(),
+    quoteWaitMs: z.int().nonnegative().optional(),
+    aiProposalMs: z.int().nonnegative().optional(),
+  }).optional(),
 }).superRefine((step, context) => {
   if (step.type !== 'capture' && step.variable !== undefined) {
     context.addIssue({ code: 'custom', path: ['variable'], message: 'Only capture steps may have a variable.' });
@@ -808,17 +813,29 @@ export type SecretUseSelectionSource = z.infer<typeof SecretUseSelectionSource>;
  * Public warning vocabulary for non-fatal secret naming conditions.
  *
  * A discriminated union preserves variant-specific evidence: reuse names all
- * related steps, a target change retains both locators for its one step, and
+ * related steps, a target change retains both intent summaries for its one step, and
  * truncation reports only counts to avoid turning omitted candidates into
- * report data. The complete stable shape keeps all naming-policy warnings in
- * one report schema.
+ * report data. V5 plans have no resolved locator at generation report time,
+ * so target identity uses description, optional role hint, and quote text.
+ * The complete stable shape keeps all naming-policy warnings in one report schema.
  */
+const SecretTargetSummary = z.strictObject({
+  description: z.string(),
+  roleHint: z.string().optional(),
+  quote: z.strictObject({ text: z.string() }).optional(),
+});
+
 export const SecretWarning = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('secret-name-reused-across-targets'), name: SecretName, stepIds: z.array(StepId) }),
-  z.strictObject({ kind: z.literal('secret-target-changed'), name: SecretName, stepId: StepId, previousTarget: ElementRef, target: ElementRef }),
+  z.strictObject({ kind: z.literal('secret-target-changed'), name: SecretName, stepId: StepId, previousTarget: SecretTargetSummary, target: SecretTargetSummary }),
   z.strictObject({ kind: z.literal('allowed-names-truncated'), kept: NonNegativeInteger, dropped: NonNegativeInteger }),
 ]);
 export type SecretWarning = z.infer<typeof SecretWarning>;
+
+/** Non-fatal plan-generation warnings, including unconfirmed action steps. */
+export const ActionUnconfirmedWarning = z.strictObject({ kind: z.literal('action-unconfirmed'), stepId: StepId });
+export const GenerateWarning = z.discriminatedUnion('kind', [...SecretWarning.options, ActionUnconfirmedWarning]);
+export type GenerateWarning = z.infer<typeof GenerateWarning>;
 
 /**
  * One generated or reconstructed secret-use row in a generation result.
@@ -863,7 +880,7 @@ export const GenerateResult = z.discriminatedUnion('status', [
     dryRun: z.literal(false),
     ambiguities: z.array(z.json()),
     secrets: z.array(GenerateSecret),
-    warnings: z.array(SecretWarning).optional(),
+    warnings: z.array(GenerateWarning).optional(),
     durationMs: NonNegativeInteger.optional(),
     aiCalls: NonNegativeInteger.optional(),
   }),
@@ -875,7 +892,7 @@ export const GenerateResult = z.discriminatedUnion('status', [
     dryRun: z.literal(true),
     ambiguities: z.array(z.json()),
     secrets: z.array(GenerateSecret),
-    warnings: z.array(SecretWarning).optional(),
+    warnings: z.array(GenerateWarning).optional(),
     durationMs: NonNegativeInteger.optional(),
     aiCalls: NonNegativeInteger.optional(),
   }),
@@ -887,7 +904,7 @@ export const GenerateResult = z.discriminatedUnion('status', [
       status: z.literal('skipped-fresh'),
       dryRun: z.literal(true),
       secrets: z.array(GenerateSecret),
-      warnings: z.array(SecretWarning).optional(),
+      warnings: z.array(GenerateWarning).optional(),
       durationMs: NonNegativeInteger.optional(),
       aiCalls: NonNegativeInteger.optional(),
     }),

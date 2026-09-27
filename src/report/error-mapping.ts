@@ -81,7 +81,6 @@ export const REPORT_ERROR_DETAILS = {
   'grounding-unresolved': {
     kind: 'usage',
     code: 'GROUNDING_UNRESOLVED',
-    hint: 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.',
   },
   'browser-launch-failed': {
     kind: 'environment',
@@ -99,6 +98,24 @@ export const REPORT_ERROR_DETAILS = {
   readonly code: ReportErrorCode;
   readonly hint?: string;
 }>>;
+
+/**
+ * Selects the CLI hint text for a grounding-unresolved failure reason.
+ *
+ * @remarks `missing` and `recoverable-miss` keep pointing callers at
+ * `--resolve`. The four reasons introduced by the first-binding sequence
+ * (`no-candidate`, `ambiguous`, `proposal-rejected`, `candidate-changed`)
+ * instead point at quoting the UI text in the prompt or running `ambercast
+ * heal`, since re-running with `--resolve` alone cannot fix a binding the
+ * first-binding sequence already attempted and could not complete.
+ *
+ * @param reason - The grounding-unresolved reason this run ended with.
+ * @returns The hint string to attach as `error.details.hint`.
+ */
+export function groundingUnresolvedHint(reason: 'missing' | 'recoverable-miss' | 'no-candidate' |
+  'ambiguous' | 'proposal-rejected' | 'candidate-changed'): string {
+  throw new Error('not implemented (step 11)');
+}
 
 /**
  * Converts a classified error into a serializable run- or case-scoped report

@@ -56,7 +56,7 @@ const RUN_REF_PATTERN = /^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
  *
  * Every Plan schema and digest caller shares this literal.
  */
-export const PLAN_SCHEMA_VERSION = 4 as const;
+export const PLAN_SCHEMA_VERSION = 5 as const;
 
 /**
  * The Grounding IR version after element-locator renaming.
@@ -65,7 +65,7 @@ export const PLAN_SCHEMA_VERSION = 4 as const;
  * updates trace records to use `element` instead of `target` for element
  * locators, matching the Plan v4 changes.
  */
-export const GROUNDING_SCHEMA_VERSION = 2 as const;
+export const GROUNDING_SCHEMA_VERSION = 3 as const;
 
 /**
  * Validates a whole secret reference.

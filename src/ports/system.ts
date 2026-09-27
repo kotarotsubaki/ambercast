@@ -135,13 +135,14 @@ export interface EnvironmentInfo {
  * admitted dispatch. A
  * rejected Stage 2 candidate is emitted only after its overlay snapshot is
  * restored, once per normal rejection; interruption is not a rejection event.
+ * Binding-stage provenance values replace the former single `ai-resolve` value.
  */
 export type RunEvent =
   | { readonly type: 'step-start'; readonly stepId: StepId }
   | {
       readonly type: 'step-result';
       readonly stepId: StepId;
-      readonly via: 'grounding' | 'ai-resolve' | 'trace-replay';
+      readonly via: 'grounding' | 'quoted-match' | 'ai-proposed' | 'trace-replay';
     }
   | {
       readonly type: 'ai-call';

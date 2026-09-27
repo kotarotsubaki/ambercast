@@ -155,7 +155,7 @@ function renderRequest(output: NodeJS.WritableStream, request: ConsentRequest): 
     for (const use of item.uses) {
       const reason = use.target === undefined
         ? `ai step "${displayLine(use.stepId)}" declares secret use`
-        : `fill-secret → ${displayLine(use.target.role)} "${displayLine(use.target.name)}"`;
+        : `fill-secret → ${displayLine(use.target.description)}${use.target.roleHint === undefined ? '' : ` (${displayLine(use.target.roleHint)})`}`;
       write(
         output,
         `  ${displayLine(use.name)}  ${displayLine(use.stepId)}  ${reason}  env ${displayLine(useEnvironmentName(use))}\n`,

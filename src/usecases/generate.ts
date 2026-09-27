@@ -74,6 +74,7 @@ import { assertNoEnvVarCollision, envVarNameFor } from '#core/secrets/env-var-na
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 import { scanLegacySecretSyntax } from '#core/ir/secret-syntax-scan.js';
+import { attributeElementIntent, validateCommittedElementIntent, type ElementIntentIssue } from './element-intent-policy.js';
 
 const GENERATED_PLAN_RESPONSE_SCHEMA = typedJsonSchema(GeneratedPlanResponseRequest);
 
@@ -179,19 +180,51 @@ export interface ConsentCapability {
  */
 type PrepareInstructionCoveredStepsResult =
   | { readonly success: true; readonly data: InstructionAttributedSteps }
-  | { readonly success: false; readonly issues: readonly InstructionCoverageIssue[]; readonly stepId: string };
+  | { readonly success: false; readonly issues: readonly (InstructionCoverageIssue | ElementIntentIssue | TextEqualsSelfQuoteIssue)[]; readonly stepId: string };
+
+/** Retryable refusal when one assertion uses its target quote as its expected value. */
+type TextEqualsSelfQuoteIssue = {
+  readonly code: 'text-equals-self-quote';
+  readonly path: readonly (string | number)[];
+  readonly message: string;
+};
+
+/** Non-fatal report warning for an action with no confirming step. */
+type ActionUnconfirmedWarning = { readonly kind: 'action-unconfirmed'; readonly stepId: StepId };
+type GenerateWarning = SecretWarning | ActionUnconfirmedWarning;
+
+/** Retains the generated step identity when element intent cannot be attributed. */
+class ElementIntentAttributionError extends Error {
+  /** @param issues - Element attribution or self-quote issues for this step. */
+  /** @param stepId - Identifier of the generated element-bearing step. */
+  constructor(
+    readonly issues: readonly (ElementIntentIssue | TextEqualsSelfQuoteIssue)[],
+    readonly stepId: string,
+  ) {
+    super('Generated element intent could not be attributed.');
+  }
+}
 
 /**
- * Attributes and validates provider instruction coverage before Plan assembly.
+ * Applies the fingerprint name equivalence rule to literal assertion text.
+ * Two different prompt quotes must support the target and the expected value;
+ * the same words cannot serve as evidence for both roles (SPEC-G4).
+ */
+function rejectTextEqualsSelfQuote(text: string, quoteText: string, stepId: string): void {
+  throw new Error('not implemented (step 11)');
+}
+
+/**
+ * Attributes element intents and validates AI instruction coverage before Plan assembly.
  *
  * @param response - Strict provider response with citations and full intents.
  * @param normalizedTestMd - Canonical prompt used for local attribution.
- * @returns Committed-shape steps without citation or intent data, or the
+ * @returns Committed-shape steps without transient citation data, or the
  * complete deterministic provider issue list and its generated step identity.
  * @remarks
- * Instruction validation runs
- * for every AI step, requires exact step-local success/intent bijections, and
- * discards transient fields before Plan construction. On failure, generation
+ * Instruction validation runs for every AI step, while element-bearing actions,
+ * assertions, and captures receive locally attributed intent. A text-equals
+ * target and expected value require distinct prompt quotes (SPEC-G4). On failure, generation
  * maps the returned raw provider output and affected step to
  * `AiResponseInvalidError`, then performs no artifact write. The default empty
  */
@@ -201,7 +234,19 @@ export function prepareInstructionCoveredSteps(
 ): PrepareInstructionCoveredStepsResult {
   try {
     const steps = response.steps.map((step) => {
-      if (step.kind !== 'ai') return step;
+      if (step.kind !== 'ai') {
+        if (step.kind === 'capture'
+          || (step.kind === 'action' && step.action !== 'navigate')
+          || (step.kind === 'assert' && (step.check === 'element-visible' || step.check === 'text-equals' || step.check === 'element-count'))) {
+          const attributed = attributeElementIntent(step.intent, normalizedTestMd);
+          if (!attributed.success) throw new ElementIntentAttributionError(attributed.issues, step.id);
+          if (step.kind === 'assert' && step.check === 'text-equals' && attributed.data.quote !== undefined) {
+            rejectTextEqualsSelfQuote(step.text, attributed.data.quote.text, step.id);
+          }
+          return { ...step, intent: attributed.data };
+        }
+        return step;
+      }
       const coverage = validateGeneratedInstructionCoverage(step, normalizedTestMd);
       if (!coverage.success) throw new InstructionCoverageAttributionError(coverage.issues, step.id);
       const { verificationIntent: _verificationIntent, instructionCoverage: _instructionCoverage, ...attributed } = step;
@@ -209,7 +254,7 @@ export function prepareInstructionCoveredSteps(
     }) as unknown as InstructionAttributedSteps;
     return { success: true, data: steps };
   } catch (error) {
-    if (error instanceof InstructionCoverageAttributionError) {
+    if (error instanceof InstructionCoverageAttributionError || error instanceof ElementIntentAttributionError) {
       return { success: false, issues: error.issues, stepId: error.stepId };
     }
     throw error;
@@ -229,11 +274,11 @@ function fileFailure(error: unknown, message: string): AmbercastErrorType {
 }
 
 /**
- * Treats committed provenance failure as not fresh so generation regenerates.
+ * Treats committed AI coverage or element-intent provenance failure as not fresh.
  *
  * A committed plan artifact is reusable only
  * when strict schema, canonical bytes, input digest, and every committed AI
- * criterion agree with the current normalized prompt.
+ * criterion and element intent agree with the current normalized prompt.
  */
 function validFreshPlan(
   text: string,
@@ -262,6 +307,12 @@ function validFreshPlan(
     for (const step of parsed.data.steps) {
       if (step.kind === 'ai'
         && !validateCommittedInstructionCoverage(step.instructionCoverage, normalizedTestMd).success) {
+        return undefined;
+      }
+      if ((step.kind === 'capture'
+        || (step.kind === 'action' && step.action !== 'navigate')
+        || (step.kind === 'assert' && (step.check === 'element-visible' || step.check === 'text-equals' || step.check === 'element-count')))
+        && !validateCommittedElementIntent(step.intent, normalizedTestMd).success) {
         return undefined;
       }
     }
@@ -515,7 +566,7 @@ export interface GenerateFileOutcome {
   readonly secrets?: readonly GenerateSecretOutcome[];
 
   /** Non-fatal secret naming warnings retained with secret-use evidence. */
-  readonly warnings?: readonly SecretWarning[];
+  readonly warnings?: readonly GenerateWarning[];
 }
 
 type GenerateSecretOutcome = {
@@ -553,7 +604,7 @@ type PreparedCandidate = {
   /** Secret naming outcomes used to compute the batch-wide unmet set. */
   readonly uses: readonly GenerateSecretOutcome[];
   /** Non-fatal naming diagnostics retained through reporting. */
-  readonly warnings: readonly SecretWarning[];
+  readonly warnings: readonly GenerateWarning[];
   /** Provider ambiguities retained for later strict-exit evaluation. */
   readonly ambiguities: readonly JsonValueT[];
   /** Whether the final plan required generation or was already fresh. */
@@ -746,17 +797,26 @@ function consentRowsForPlan(plan: PlanDocumentType, rows: readonly GenerateSecre
   });
 }
 
-function existingPlanWarnings(plan: PlanDocumentType): SecretWarning[] {
+/** Emits unconfirmed actions in plan order after collecting all referenced IDs. */
+function actionUnconfirmedWarnings(plan: PlanDocumentType): GenerateWarning[] {
+  const confirmed = new Set(plan.steps.flatMap((step) => 'confirms' in step ? step.confirms ?? [] : []));
+  return plan.steps.flatMap((step) => step.kind === 'action' && step.action !== 'navigate' && !confirmed.has(step.id)
+    ? [{ kind: 'action-unconfirmed' as const, stepId: step.id }]
+    : []);
+}
+
+function existingPlanWarnings(plan: PlanDocumentType): GenerateWarning[] {
   const groups = new Map<SecretName, { readonly stepId: StepId; readonly target: string }[]>();
   for (const step of plan.steps) {
     if (step.kind !== 'action' || step.action !== 'fill-secret') continue;
     const name = secretNameFor(step.secretRef);
     groups.set(name, [...(groups.get(name) ?? []), { stepId: step.id, target: JSON.stringify(step.element) }]);
   }
-  return [...groups.entries()]
+  const secretWarnings: GenerateWarning[] = [...groups.entries()]
     .filter(([, uses]) => new Set(uses.map(({ target }) => target)).size > 1)
     .map(([name, uses]) => ({ kind: 'secret-name-reused-across-targets' as const, name, stepIds: uses.map(({ stepId }) => stepId) }))
     .sort(compareSecretWarnings);
+  return [...secretWarnings, ...actionUnconfirmedWarnings(plan)];
 }
 
 function useOccurrenceKey(file: string, use: Pick<GenerateSecretOutcome, 'name' | 'stepId' | 'useIndex'>): string {
@@ -788,11 +848,14 @@ function finalSecretRows(
   });
 }
 
-function finalWarnings(candidate: PreparedCandidate, plan: PlanDocumentType): SecretWarning[] {
+function finalWarnings(candidate: PreparedCandidate, plan: PlanDocumentType): GenerateWarning[] {
   return [
-    ...existingPlanWarnings(plan),
-    ...candidate.warnings.filter((warning) => warning.kind !== 'secret-name-reused-across-targets'),
-  ].sort(compareSecretWarnings);
+    ...([
+      ...existingPlanWarnings(plan).filter((warning) => warning.kind !== 'action-unconfirmed'),
+      ...candidate.warnings.filter((warning) => warning.kind !== 'secret-name-reused-across-targets' && warning.kind !== 'action-unconfirmed'),
+    ].sort((left, right) => compareSecretWarnings(left as unknown as SecretWarning, right as unknown as SecretWarning))),
+    ...actionUnconfirmedWarnings(plan),
+  ];
 }
 
 /**
@@ -1114,7 +1177,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             // the public report projection excludes it and exposes only safe issue
             // fields.
             return outcomeForError(new AiResponseInvalidError(
-              'The AI provider response contains invalid instruction coverage.',
+              'The AI provider response contains invalid source attribution.',
               {
                 raw: response.raw,
                 issues: prepared.issues.map((issue) => ({
@@ -1199,11 +1262,15 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
 
           const secrets = secretRowsForPlan(parsedPlan.data, secretAllow, named.uses);
           const projection = projectAllowedNames(secretAllow);
-          const warnings = [
+          const secretWarnings = [
             ...named.warnings,
             ...targetChangeWarnings(forcedPreviousPlan, parsedPlan.data),
             ...(projection.dropped === 0 ? [] : [{ kind: 'allowed-names-truncated' as const, kept: projection.kept, dropped: projection.dropped }]),
           ].sort(compareSecretWarnings);
+          const warnings: GenerateWarning[] = [
+            ...secretWarnings,
+            ...actionUnconfirmedWarnings(parsedPlan.data),
+          ];
 
           if (response.data.ambiguities.length > 0) {
             return { kind: 'terminal', error: new (class extends AmbercastError {

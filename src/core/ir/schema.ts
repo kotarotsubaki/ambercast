@@ -18,6 +18,7 @@
  * JSON-Schema-inexpressible refinement for duplicate `PlanDocument` IDs.
  */
 import { z } from 'zod';
+import { validateConfirms } from './confirms-validation.js';
 
 // A dotted-path resolver must use own-property-safe access (Object.hasOwn or Map), never plain-object bracket access.
 /**
@@ -478,8 +479,8 @@ export type TargetName = z.infer<typeof TargetName>;
  */
 const StepBase = { id: StepId, target: TargetName };
 
-// In v4 these shared locator bundles use `element`, including the matching
-// trace actions. This leaves `target` exclusively for the step's Target name.
+// Trace records retain concrete element locators; plan steps carry source-backed
+// intents until grounding binds them to locators.
 const ClickFields = { element: ElementRef };
 const NavigateFields = { url: InterpolatableText };
 const PressFields = {
@@ -488,6 +489,10 @@ const PressFields = {
 };
 const FillFields = { element: ElementRef, value: InterpolatableText };
 const FillSecretFields = { element: ElementRef, secretRef: SecretRef };
+const ClickIntentFields = { intent: ElementIntent };
+const PressIntentFields = { intent: ElementIntent, key: PressFields.key };
+const FillIntentFields = { intent: ElementIntent, value: FillFields.value };
+const FillSecretIntentFields = { intent: ElementIntent, secretRef: FillSecretFields.secretRef };
 // Provider-facing and committed AI steps share their execution contract; only
 // secret naming intent is unresolved on the provider-facing side. One bundle
 // prevents those common fields from drifting across the two representations.
@@ -496,15 +501,19 @@ const AiStepFields = {
   kind: z.literal('ai'),
   instruction: InterpolatableText,
 };
-// Assertion steps and recorded verification use one field contract so an
-// assertion cannot change meaning when it moves from a plan into a trace.
+// Locator-free assertion fields retain the same value contract in plans and
+// traces; locator-bearing plan assertions carry intent instead.
 const TextVisibleFields = { text: InterpolatableText };
-// The locator-bearing assertion bundles use `element` in v4 as well; traces
-// share that spelling, while text-visible and url-matches need no locator.
+// Trace assertions record concrete locators, while text-visible and
+// url-matches need no locator in either representation.
 const ElementVisibleFields = { element: ElementRef };
 const TextEqualsFields = { element: ElementRef, text: InterpolatableText };
 const UrlMatchesFields = { pattern: InterpolatableText };
 const ElementCountFields = { element: ElementRef, count: z.int().nonnegative() };
+const ElementVisibleIntentFields = { intent: QuotedElementIntent };
+const TextEqualsIntentFields = { intent: QuotedElementIntent, text: TextEqualsFields.text };
+const ElementCountIntentFields = { intent: QuotedElementIntent, count: ElementCountFields.count };
+const ConfirmsField = { confirms: z.array(StepId).min(1).optional() };
 // Plan assertions gain an optional timing bundle in v4, shared by all five
 // checks but excluded from TraceAssert: a replay observation records evidence,
 // not the Plan's polling budget. The bound is an integer from 0 to 120000 ms.
@@ -516,12 +525,13 @@ const AssertTimingFields = { timeoutMs: z.int().min(0).max(120000).optional() };
  * Its concrete branch preserves action-specific required fields in the
  * structural nested union, so generated JSON Schema does not need a runtime
  * refinement to express them.
+ * A source-backed intent replaces a guessed locator in the plan.
  */
 export const ClickAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('click'),
-  ...ClickFields,
+  ...ClickIntentFields,
 });
 
 /**
@@ -554,12 +564,13 @@ export type NavigateAction = z.infer<typeof NavigateAction>;
  * Its closed key vocabulary remains small and reviewable, making a new key an
  * explicit schema evolution rather than arbitrary text a replay adapter might
  * not understand.
+ * A source-backed intent replaces a guessed locator in the plan.
  */
 export const PressAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('press'),
-  ...PressFields,
+  ...PressIntentFields,
 });
 
 /**
@@ -573,12 +584,13 @@ export type PressAction = z.infer<typeof PressAction>;
  * This branch cannot designate its value as secret. Ordinary literals and
  * run-state text use this path, while secret-bearing input requires the
  * distinct {@link FillSecretAction} branch.
+ * A source-backed intent replaces a guessed locator in the plan.
  */
 export const FillAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('fill'),
-  ...FillFields,
+  ...FillIntentFields,
 });
 
 /**
@@ -595,12 +607,13 @@ export type FillAction = z.infer<typeof FillAction>;
  * fill action stores exactly one already-resolved reference; naming intent is
  * confined to the separate provider-facing shape so no source provenance or
  * provider choice leaks into reviewed IR.
+ * A source-backed intent replaces a guessed locator in the plan.
  */
 export const FillSecretAction = z.strictObject({
   ...StepBase,
   kind: z.literal('action'),
   action: z.literal('fill-secret'),
-  ...FillSecretFields,
+  ...FillSecretIntentFields,
 });
 
 /**
@@ -611,8 +624,7 @@ export type FillSecretAction = z.infer<typeof FillSecretAction>;
 /**
  * Validates the action half of the plan-step union.
  *
- * Shared field bundles keep plan actions and traces aligned. Concrete nested
- * branches, rather than optional fields or `.superRefine()`, keep zod and the
+ * Concrete nested branches, rather than optional fields or `.superRefine()`, keep zod and the
  * derived JSON Schema aligned on action-specific required fields.
  */
 export const ActionStep = z.discriminatedUnion('action', [
@@ -632,9 +644,10 @@ export type ActionStep = z.infer<typeof ActionStep>;
  * Validates an assertion that a text value is visible anywhere relevant to
  * the current page.
  *
- * It has no target because text visibility is not an element-locator check.
+ * It has no element intent because text visibility is not an element check.
  * The shared field contract also keeps this plan assertion semantically
  * identical to its trace-verification counterpart.
+ * `confirms` names the earlier actions this check establishes.
  */
 export const TextVisibleCheck = z.strictObject({
   ...StepBase,
@@ -642,6 +655,7 @@ export const TextVisibleCheck = z.strictObject({
   check: z.literal('text-visible'),
   ...TextVisibleFields,
   ...AssertTimingFields,
+  ...ConfirmsField,
 });
 
 /**
@@ -652,16 +666,17 @@ export type TextVisibleCheck = z.infer<typeof TextVisibleCheck>;
 /**
  * Validates an assertion that a particular element is visible.
  *
- * The element locator keeps visibility checks scoped to a particular target.
- * Reusing its field contract for recorded verification prevents plan and
- * replay from disagreeing about the evidence a visibility claim requires.
+ * A source-backed intent replaces a guessed locator in the plan; the trace
+ * retains the concrete locator used for recorded verification.
+ * `confirms` names the earlier actions this check establishes.
  */
 export const ElementVisibleCheck = z.strictObject({
   ...StepBase,
   kind: z.literal('assert'),
   check: z.literal('element-visible'),
-  ...ElementVisibleFields,
+  ...ElementVisibleIntentFields,
   ...AssertTimingFields,
+  ...ConfirmsField,
 });
 
 /**
@@ -675,13 +690,16 @@ export type ElementVisibleCheck = z.infer<typeof ElementVisibleCheck>;
  * Its expected text remains non-secret by construction, as with other
  * displayable assertion content. A shared field contract preserves that
  * secret-safety rule when the assertion is retained as replay evidence.
+ * A source-backed intent replaces a guessed locator in the plan.
+ * `confirms` names the earlier actions this check establishes.
  */
 export const TextEqualsCheck = z.strictObject({
   ...StepBase,
   kind: z.literal('assert'),
   check: z.literal('text-equals'),
-  ...TextEqualsFields,
+  ...TextEqualsIntentFields,
   ...AssertTimingFields,
+  ...ConfirmsField,
 });
 
 /**
@@ -696,6 +714,7 @@ export type TextEqualsCheck = z.infer<typeof TextEqualsCheck>;
  * matching expression and retains the common prohibition on embedded secret
  * tokens. Its shared field contract carries that restriction into recorded
  * verification without a separate trace-only interpretation.
+ * `confirms` names the earlier actions this check establishes.
  */
 export const UrlMatchesCheck = z.strictObject({
   ...StepBase,
@@ -703,6 +722,7 @@ export const UrlMatchesCheck = z.strictObject({
   check: z.literal('url-matches'),
   ...UrlMatchesFields,
   ...AssertTimingFields,
+  ...ConfirmsField,
 });
 
 /**
@@ -716,13 +736,16 @@ export type UrlMatchesCheck = z.infer<typeof UrlMatchesCheck>;
  * Zero is a valid and useful expected count; negative and fractional values
  * cannot describe a DOM element count. Sharing the field contract with trace
  * verification ensures a replay cannot weaken that numeric boundary.
+ * A source-backed intent replaces a guessed locator in the plan.
+ * `confirms` names the earlier actions this check establishes.
  */
 export const ElementCountCheck = z.strictObject({
   ...StepBase,
   kind: z.literal('assert'),
   check: z.literal('element-count'),
-  ...ElementCountFields,
+  ...ElementCountIntentFields,
   ...AssertTimingFields,
+  ...ConfirmsField,
 });
 
 /**
@@ -735,8 +758,7 @@ export type ElementCountCheck = z.infer<typeof ElementCountCheck>;
  *
  * Keeping the check discriminator flat avoids an awkward nested property and
  * lets the generated nested `oneOf` describe the valid shapes exactly.
- * Field bundles are shared with trace assertions so executable requirements
- * do not drift from the verification evidence used for replay.
+ * The plan's source-backed intents become concrete trace locators when bound.
  */
 export const AssertStep = z.discriminatedUnion('check', [
   TextVisibleCheck,
@@ -756,11 +778,12 @@ export type AssertStep = z.infer<typeof AssertStep>;
  *
  * Capture produces a bare variable identifier; run-state consumers use the
  * distinct reference syntax.
+ * A source-backed intent replaces a guessed locator in the plan.
  */
 export const CaptureStep = z.strictObject({
   ...StepBase,
   kind: z.literal('capture'),
-  element: ElementRef,
+  intent: ElementIntent,
   variable: RunVariableName,
 });
 
@@ -789,9 +812,11 @@ export type AiStepSecretUse = z.infer<typeof AiStepSecretUse>;
  * remain distinct serialized values for deterministic digesting. Canonical
  * ordering and omission policy therefore belong before this schema is used to
  * persist a generated plan, not in validation.
+ * `confirms` names the earlier actions this step establishes.
  */
 export const AiStep = z.strictObject({
   ...AiStepFields,
+  ...ConfirmsField,
   secrets: z.array(AiStepSecretUse).optional(),
   instructionCoverage: z.array(InstructionCriterion).min(1),
 });
@@ -1367,6 +1392,10 @@ export const PlanDocument = z.strictObject({
         path: ['targets', targetName],
       });
     }
+  }
+
+  for (const issue of validateConfirms(plan.steps)) {
+    ctx.addIssue({ code: 'custom', message: issue.message, path: [...issue.path] });
   }
 });
 

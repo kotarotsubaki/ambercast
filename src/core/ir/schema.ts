@@ -53,6 +53,9 @@ const RUN_REF_PATTERN = /^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
  * `targetDefinitions` digest; `surface: 'web'` is required instead.
  * Grounding version 2 updates its trace records to use `element` instead
  * of `target` for element locators.
+ * Plan version 5 replaces resolved `ElementRef` values in element-bearing
+ * steps with source-backed `ElementIntent | QuotedElementIntent` values and
+ * adds optional `confirms: StepId[]` to assert and AI steps.
  *
  * Every Plan schema and digest caller shares this literal.
  */
@@ -64,6 +67,8 @@ export const PLAN_SCHEMA_VERSION = 5 as const;
  * Grounding construction and validation share this literal. Version 2
  * updates trace records to use `element` instead of `target` for element
  * locators, matching the Plan v4 changes.
+ * Version 3 replaces bare fingerprint-only element entries with intent-bound
+ * accessibility locators carrying `locator`, `intentDigest`, and `provenance`.
  */
 export const GROUNDING_SCHEMA_VERSION = 3 as const;
 
@@ -1348,23 +1353,6 @@ export type VerificationCoverage = z.infer<typeof VerificationCoverage>;
 export type TraceRecordWithCoverageStorage = TraceRecord;
 
 /**
- * Validates grounding recorded for an element-based action, assertion, or
- * capture step.
- *
- * Element grounding retains a stable accessibility-neighborhood fingerprint
- * without implying that the step has an AI execution trace.
- */
-export const ElementGroundingEntry = z.strictObject({
-  kind: z.literal('element'),
-  fingerprint: Fingerprint,
-});
-
-/**
- * The parsed `element` branch of a grounding entry.
- */
-export type ElementGroundingEntry = z.infer<typeof ElementGroundingEntry>;
-
-/**
  * Grounding v3 evidence for an intent-bound accessibility locator.
  *
  * The digest binds the locator to the committed intent preimage; provenance
@@ -1405,11 +1393,11 @@ export type AiGroundingEntry = z.infer<typeof AiGroundingEntry>;
  * Validates the distinct grounding records for element-based and AI-directed
  * steps.
  *
- * The discriminator prevents a fingerprint and an AI trace from sharing one
- * entry, keeping their provenance and replay roles unambiguous.
+ * The discriminator separates intent-bound v3 element evidence (locator,
+ * fingerprint, intent digest, and provenance) from an AI execution trace.
  */
 export const GroundingEntry = z.discriminatedUnion('kind', [
-  ElementGroundingEntry,
+  ElementGroundingEntryV3,
   AiGroundingEntry,
 ]);
 

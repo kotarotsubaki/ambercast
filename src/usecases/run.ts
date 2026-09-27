@@ -50,10 +50,12 @@ import {
   TraceAction,
   TraceAssert,
   TraceRecord,
+  type AccessibilityElementRef,
   type ActionStep,
   type AssertStep,
   type CaptureStep,
   type ElementRef,
+  type Fingerprint,
   type GroundingEntry,
   type GroundingDocument as GroundingDocumentType,
   type GroundingDocumentWithCoverageStorage,
@@ -129,11 +131,37 @@ type ResultWithoutDuration = Omit<ExecutedRunResult, 'durationMs' | 'sessions' |
  */
 type FailureDetail = Pick<StepResult, 'expected' | 'actual' | 'screenshot' | 'screenshotOmitted' | 'observed'>;
 
-type ResolutionVia = 'grounding' | 'ai-resolve' | 'trace-replay';
+// Issue #472 reserves `ai-resolve` for executeAgentic's own live execution, never element binding.
+type ResolutionVia = 'grounding' | 'ai-resolve' | 'quoted-match' | 'ai-proposed' | 'trace-replay';
 
 type DispatchOutcome =
   | { readonly kind: 'passed'; readonly via?: ResolutionVia }
   | { readonly kind: 'assertion-failed'; readonly expected: string; readonly actual: string };
+
+/**
+ * Tracks an action-kind step's transient binding during one runCase call.
+ *
+ * @remarks
+ * SPEC-R5 transitions a locally verified SPEC-R4 stage-3 first binding from
+ * candidate to acted after the operation succeeds, then to confirmed when
+ * every step listing that action in `confirms` passes. A SPEC-R2 hit against
+ * an existing v3 entry enters directly at acted, with no candidate stage and
+ * zero AI calls. `grounding` reports that fast path; `quoted-match` and
+ * `ai-proposed` report fresh SPEC-R4 stage-1 and stage-2 bindings. This
+ * transient and StepResult-facing vocabulary is wider than the persisted
+ * entry's provenance: on fast-path confirmation, write back the entry's own
+ * unchanged provenance, never `grounding` (SPEC-R9).
+ *
+ * `quoteWaitMs` and `aiProposalMs` exist only if their respective first-binding
+ * stage actually ran; the fast path has neither, and neither is backfilled.
+ * SPEC-R6 forbids acting without candidate (except the fast-path acted entry),
+ * persisting an acted-only state, and retrying an operation after its action
+ * failed within the same run.
+ */
+type BindingState =
+  | { readonly stage: 'candidate'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
+  | { readonly stage: 'acted'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
+  | { readonly stage: 'confirmed'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number };
 
 /**
  * Carries a materialized secret fill through the private run dispatcher.
@@ -164,6 +192,25 @@ type RunState = ReadonlyMap<RunVariableName, CapturedRunValue>;
 /** Project captured values for legacy readers that do not need writer identity. */
 function runStateValues(runState: RunState): ReadonlyMap<RunVariableName, string> {
   return new Map([...runState].map(([name, writer]) => [name, writer.value]));
+}
+
+/**
+ * Indexes each action ID by the confirming step IDs in plan order, once per
+ * runCase call, avoiding a whole-plan scan after every step. The validated
+ * plan's SPEC-I5 validateConfirms guarantee supplies existence, earlier
+ * action-kind targets, and uniqueness; this function does not revalidate.
+ */
+function buildConfirmsIndex(steps: readonly Step[]): ReadonlyMap<StepId, readonly StepId[]> {
+  const index = new Map<StepId, StepId[]>();
+  for (const step of steps) {
+    if (!('confirms' in step) || !step.confirms?.length) continue;
+    for (const actionId of step.confirms) {
+      const confirmingSteps = index.get(actionId) ?? [];
+      confirmingSteps.push(step.id);
+      index.set(actionId, confirmingSteps);
+    }
+  }
+  return index;
 }
 
 interface DispatchContext {
@@ -208,6 +255,10 @@ interface DispatchContext {
   readonly updateGroundingEntry: (stepId: Step['id'], entry: GroundingEntry) => void;
   readonly deleteGroundingEntry: (stepId: Step['id']) => void;
   readonly resolvedVias: Map<Step['id'], ResolutionVia>;
+  /** SPEC-R5 binding states local to this runCase call. */
+  readonly bindingStates: Map<StepId, BindingState>;
+  /** Reverse index built once by buildConfirmsIndex. */
+  readonly confirmsIndex: ReadonlyMap<StepId, readonly StepId[]>;
   readonly aiTimeoutMs: number;
   readonly signal?: AbortSignal;
 }
@@ -3734,6 +3785,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         }
       },
       resolvedVias,
+      bindingStates: new Map<StepId, BindingState>(),
+      confirmsIndex: buildConfirmsIndex(plan.steps),
       aiTimeoutMs: deps.config.ai.timeoutMs,
       ...(signal === undefined ? {} : { signal }),
     };

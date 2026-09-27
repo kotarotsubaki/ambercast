@@ -134,8 +134,9 @@ type FailureDetail = Pick<StepResult, 'expected' | 'actual' | 'screenshot' | 'sc
 // Issue #472 reserves `ai-resolve` for executeAgentic's own live execution, never element binding.
 type ResolutionVia = 'grounding' | 'ai-resolve' | 'quoted-match' | 'ai-proposed' | 'trace-replay';
 
+// Only element-visible sets confirmationBasisValid: exactly one match is a valid confirmation basis; other passes leave it undefined and valid.
 type DispatchOutcome =
-  | { readonly kind: 'passed'; readonly via?: ResolutionVia }
+  | { readonly kind: 'passed'; readonly via?: ResolutionVia; readonly confirmationBasisValid?: boolean }
   | { readonly kind: 'assertion-failed'; readonly expected: string; readonly actual: string };
 
 /**
@@ -2782,6 +2783,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
  * appends the role when hinted; actual comes from the last observation as
  * `matched <n>` for zero matches or another count mismatch, or
  * `snapshot-invalid` for an invalid snapshot. Invalid snapshots are retryable.
+ * A passed outcome must set `confirmationBasisValid` true for exactly one match and false for multiple matches.
  *
  * @remarks This design scaffold throws until step 11 implements the loop.
  */
@@ -3085,6 +3087,78 @@ const DISPATCH_TABLE = {
 } satisfies Record<Exclude<Step['kind'], 'ai' | 'assert'>, StepExecutor>;
 
 /**
+ * SPEC-R9 reports bindings only for steps that passed stage 3; a step stopped
+ * before stage 3 has no state and no binding. `confirmed` reflects the current
+ * state here, then the case-end backfill accounts for later confirmation.
+ */
+function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult['binding'] {
+  const state = context.bindingStates.get(stepId);
+  if (state === undefined) return undefined;
+  return {
+    provenance: state.provenance,
+    confirmed: state.stage === 'confirmed',
+    ...(state.quoteWaitMs === undefined ? {} : { quoteWaitMs: state.quoteWaitMs }),
+    ...(state.aiProposalMs === undefined ? {} : { aiProposalMs: state.aiProposalMs }),
+  };
+}
+
+/**
+ * Promote bindings after a passing step, with no effect unless it has a
+ * non-empty `confirms` list (available only on assertions and AI steps).
+ * Each listed action ID is a possible confirmation trigger. For an
+ * element-visible assertion, only `outcome.confirmationBasisValid === true`
+ * makes this pass a valid basis: a pass on multiple matches remains an
+ * assertion pass but cannot confirm. Ordinary passes from the other four
+ * assertion kinds and AI steps are valid bases. An invalid basis leaves the
+ * case running and may be followed by another confirmer for the same action.
+ *
+ * Confirm an action only when every ID in `context.confirmsIndex.get(actionId)`
+ * has a passing result in this case with a valid basis. Missing, skipped,
+ * unreached, and not-yet-executed results do not satisfy that requirement.
+ * Since this runs once per newly passed step, consult accumulated results
+ * (the `completed` array or equivalent), not merely `passedStep`.
+ *
+ * On first confirmation, the action must already have a BindingState at
+ * stage `acted`; an absent state or `candidate` is an invariant violation.
+ * Change its stage to `confirmed`, retaining locator, fingerprint,
+ * provenance, and timings. Update the in-memory grounding entry with
+ * `{ kind: 'element', locator, fingerprint, intentDigest:
+ * computeIntentDigest(actionStep), provenance }`. For a SPEC-R2 fast-path
+ * binding, report provenance is `grounding`, but persisted provenance must
+ * remain the pre-existing entry's `quoted-match` or `ai-proposed` value;
+ * never persist the literal `grounding` as that entry's provenance.
+ *
+ * Never demote or re-promote an already confirmed binding. This function
+ * updates only the in-memory binding map and, through updateGroundingEntry,
+ * the in-memory grounding document. The existing case-end finally block
+ * alone handles one disk write, subject to groundingWriteBackAllowed and its
+ * immediate pre-write secret scan.
+ */
+function promoteConfirmedBindings(
+  context: DispatchContext,
+  passedStep: Step,
+  outcome: DispatchOutcome,
+): void {
+  throw new Error('not implemented (step 11)');
+}
+
+/**
+ * SPEC-R5 requires `confirmed` to reflect case-end state, including a later
+ * confirming step that changes a binding projected earlier as false.
+ */
+function backfillConfirmedBindings(
+  context: DispatchContext | undefined,
+  steps: readonly StepResult[],
+): StepResult[] {
+  if (context === undefined) return [...steps];
+  return steps.map((entry) => {
+    if (entry.binding === undefined) return entry;
+    const confirmed = context.bindingStates.get(entry.id as StepId)?.stage === 'confirmed';
+    return confirmed === entry.binding.confirmed ? entry : { ...entry, binding: { ...entry.binding, confirmed } };
+  });
+}
+
+/**
  * Creates the report representation of one executed or skipped plan step.
  *
  * Failure evidence is an object rather than additional positional arguments
@@ -3098,7 +3172,9 @@ function stepResult(
   status: StepResult['status'],
   kind?: StepResult['kind'],
   detail?: FailureDetail,
+  context?: DispatchContext,
 ): StepResult {
+  const binding = context === undefined ? undefined : reportBindingFor(context, step.id);
   const presentDetail = Object.fromEntries(
     Object.entries(detail ?? {}).filter(([, value]) => value !== undefined),
   ) as FailureDetail;
@@ -3110,6 +3186,7 @@ function stepResult(
     ...(status === 'passed' && step.kind === 'capture' ? { variable: step.variable } : {}),
     ...(kind === undefined ? {} : { kind }),
     ...presentDetail,
+    ...(binding === undefined ? {} : { binding }),
   } as StepResult;
 }
 
@@ -3135,6 +3212,7 @@ function resultForAbort(
   steps: readonly Step[],
   completed: readonly StepResult[],
   currentStep: Step | undefined,
+  context: DispatchContext | undefined,
   explanation: string,
   detail?: FailureDetail,
 ): ResultWithoutDuration {
@@ -3144,7 +3222,7 @@ function resultForAbort(
     status: 'error',
     steps: currentStep === undefined
       ? [...completed]
-      : [...completed, stepResult(currentStep, 'error', 'environment', detail), ...skippedSteps(steps, currentIndex)],
+      : [...completed, stepResult(currentStep, 'error', 'environment', detail, context), ...skippedSteps(steps, currentIndex)],
     explanation,
   };
 }
@@ -3873,7 +3951,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           status: 'failed',
           steps: [
             ...completed,
-            stepResult(originalStep, 'failed', 'assertion', { ...evidence, expected, actual }),
+            stepResult(originalStep, 'failed', 'assertion', { ...evidence, expected, actual }, activeContext),
             ...skippedSteps(planSteps, index),
           ],
           explanation: actual,
@@ -3881,10 +3959,11 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         break;
       }
 
-      completed.push(stepResult(originalStep, 'passed'));
+      completed.push(stepResult(originalStep, 'passed', undefined, undefined, activeContext));
       if (originalStep.kind === 'capture') {
         allowedRunRefs.add(originalStep.variable);
       }
+      promoteConfirmedBindings(activeContext, originalStep, outcome);
       deps.events.emit({
         type: 'step-result',
         stepId: originalStep.id,
@@ -3944,21 +4023,21 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       }
     }
     if (signal?.aborted && !(classificationError instanceof IntegrityViolationError)) {
-      result = resultForAbort(identity, planSteps, completed, currentStep, 'The run was interrupted.', evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, 'The run was interrupted.', evidence);
     } else if (classificationError instanceof AmbercastError) {
       classifiedError = redactedError(
         classificationError,
         resolvedSecrets ?? new Map(),
         runStateValues(runState ?? new Map()),
       ) as AmbercastErrorType;
-      result = resultForAbort(identity, planSteps, completed, currentStep, classifiedError.message, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, classifiedError.message, evidence);
     } else if (classificationError instanceof CaseAbort) {
-      result = resultForAbort(identity, planSteps, completed, currentStep, classificationError.message, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, classificationError.message, evidence);
     } else if (classificationError instanceof AgenticTargetRejection) {
       const explanation = classificationError.exhausted
         ? `The AI-directed interaction exhausted its browser target budget: ${classificationError.tool} was rejected (${classificationError.reason}) after ${AGENTIC_TARGET_REJECTION_LIMIT} recoverable rejections.`
         : `The AI-directed interaction was rejected by a browser target it could not resolve (${classificationError.tool}: ${classificationError.reason}).`;
-      result = resultForAbort(identity, planSteps, completed, currentStep, explanation, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, explanation, evidence);
     } else {
       const name = projectCauseName(classificationError);
       deps.events.emit(buildUnclassifiedRejectionEvent(
@@ -3969,7 +4048,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         runStateValues(runState ?? new Map()),
       ));
       const explanation = `The browser session could not complete this case and no deterministic fallback is available (${name}).`;
-      result = resultForAbort(identity, planSteps, completed, currentStep, explanation, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, explanation, evidence);
     }
   } finally {
     if (sessions !== undefined) await sessions.closeAll();
@@ -4038,6 +4117,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   return {
     result: {
       ...result!,
+      steps: backfillConfirmedBindings(context, result!.steps),
       durationMs,
       aiCalls: context?.aiCalls ?? 0,
       sessions: Object.fromEntries(Object.entries(sessionTargets).map(([name, target]) => [name, {

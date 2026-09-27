@@ -348,6 +348,71 @@ export const GeneratedInstructionCriterion = z.strictObject({
 /** Runtime provider schema authority for {@link GeneratedInstructionCriterion}. */
 export type GeneratedInstructionCriterion = z.infer<typeof GeneratedInstructionCriterion>;
 
+/** A literal excerpt and its independently validated source span. */
+export const Quote = z.strictObject({
+  text: z.string().min(1).max(4096).regex(NO_SECRETS_LITERAL_PATTERN),
+  sourceSpan: InstructionSourceSpan,
+});
+/** The parsed quote shape. */
+export type Quote = z.infer<typeof Quote>;
+
+/** A source-backed element description committed to the plan. */
+export const ElementIntent = z.strictObject({
+  description: z.string().min(1).max(4096).regex(NO_SECRETS_LITERAL_PATTERN),
+  sourceSpan: InstructionSourceSpan,
+  roleHint: z.string().regex(/^[a-z]+$/).optional(),
+  quote: Quote.optional(),
+});
+/** The parsed source-backed element description. */
+export type ElementIntent = z.infer<typeof ElementIntent>;
+
+/** An element intent whose quote is required by the consuming operation. */
+export const QuotedElementIntent = ElementIntent.safeExtend({ quote: Quote });
+/** The parsed quoted element intent. */
+export type QuotedElementIntent = z.infer<typeof QuotedElementIntent>;
+
+/**
+ * Provider-authored element attribution awaiting local verification.
+ *
+ * Anchors and columns use the same L<n>, one-based UTF-16, exclusive-end
+ * vocabulary as {@link GeneratedInstructionCriterion}; citation checks text
+ * only and cannot establish its own provenance.
+ */
+export const GeneratedElementIntent = z.strictObject({
+  description: z.string().min(1).max(4096).regex(NO_SECRETS_LITERAL_PATTERN),
+  roleHint: z.string().regex(/^[a-z]+$/).optional(),
+  startAnchor: GeneratedInstructionCriterion.shape.startAnchor,
+  startColumn: GeneratedInstructionCriterion.shape.startColumn,
+  endAnchor: GeneratedInstructionCriterion.shape.endAnchor,
+  endColumn: GeneratedInstructionCriterion.shape.endColumn,
+  citation: z.string().min(1).max(CITATION_MAX_LENGTH),
+  quote: z.strictObject({
+    startAnchor: GeneratedInstructionCriterion.shape.startAnchor,
+    startColumn: GeneratedInstructionCriterion.shape.startColumn,
+    endAnchor: GeneratedInstructionCriterion.shape.endAnchor,
+    endColumn: GeneratedInstructionCriterion.shape.endColumn,
+    text: z.string().min(1).max(4096),
+  }).optional(),
+});
+/** The parsed provider element-intent proposal. */
+export type GeneratedElementIntent = z.infer<typeof GeneratedElementIntent>;
+
+/** A provider element-intent proposal that must contain a quote. */
+export const GeneratedQuotedElementIntent = GeneratedElementIntent.safeExtend({
+  quote: GeneratedElementIntent.shape.quote.unwrap(),
+});
+/** The parsed provider proposal with a required quote. */
+export type GeneratedQuotedElementIntent = z.infer<typeof GeneratedQuotedElementIntent>;
+
+/** A strict first-binding answer, including explicit no-match and ambiguity. */
+export const ElementBindingProposal = z.discriminatedUnion('outcome', [
+  z.strictObject({ outcome: z.literal('found'), role: z.string().min(1), name: z.string().min(1) }),
+  z.strictObject({ outcome: z.literal('none') }),
+  z.strictObject({ outcome: z.literal('ambiguous') }),
+]);
+/** The parsed first-binding proposal. */
+export type ElementBindingProposal = z.infer<typeof ElementBindingProposal>;
+
 /**
  * A committed instruction criterion with locally derived source provenance.
  *
@@ -1159,6 +1224,22 @@ export const ElementGroundingEntry = z.strictObject({
  * The parsed `element` branch of a grounding entry.
  */
 export type ElementGroundingEntry = z.infer<typeof ElementGroundingEntry>;
+
+/**
+ * Grounding v3 evidence for an intent-bound accessibility locator.
+ *
+ * The digest binds the locator to the committed intent preimage; provenance
+ * distinguishes a literal quote match from an AI-proposed first binding.
+ */
+export const ElementGroundingEntryV3 = z.strictObject({
+  kind: z.literal('element'),
+  locator: AccessibilityElementRef,
+  fingerprint: Fingerprint,
+  intentDigest: HexSha256,
+  provenance: z.enum(['quoted-match', 'ai-proposed']),
+});
+/** The parsed grounding v3 element entry. */
+export type ElementGroundingEntryV3 = z.infer<typeof ElementGroundingEntryV3>;
 
 /**
  * Validates grounding recorded for an AI-directed step.

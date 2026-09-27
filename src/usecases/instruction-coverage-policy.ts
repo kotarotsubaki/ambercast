@@ -290,7 +290,7 @@ function isSurrogateBoundary(source: string, offset: number): boolean {
  * exact same bound and surrogate rules to decide *why* a boundary failed,
  * instead of re-deriving a second, potentially divergent notion of validity.
  */
-function resolveBoundaryOffset(source: string, lines: readonly string[], line: number, column: number): number | undefined {
+export function resolveBoundaryOffset(source: string, lines: readonly string[], line: number, column: number): number | undefined {
   if (!Number.isInteger(line) || !Number.isInteger(column) || line < 1 || column < 1 || line > lines.length) {
     return undefined;
   }
@@ -302,7 +302,7 @@ function resolveBoundaryOffset(source: string, lines: readonly string[], line: n
   return isSurrogateBoundary(source, offset) ? offset : undefined;
 }
 
-function extractSpan(
+export function extractSpan(
   source: string,
   span: InstructionCriterion['sourceSpan'],
 ): string | undefined {

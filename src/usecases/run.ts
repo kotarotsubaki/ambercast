@@ -54,6 +54,7 @@ import {
   type ActionStep,
   type AssertStep,
   type CaptureStep,
+  type ElementIntent,
   type ElementRef,
   type Fingerprint,
   type GroundingEntry,
@@ -2546,117 +2547,93 @@ async function executeAiStep(
 }
 
 /**
- * Re-resolves an element grounding miss through a structured AI confirmation
- * request when the caller has allowed fallback.
+ * Binds a source-backed element intent for an action or capture step.
  *
- * Local classification before an AI call fails fast when the page offers no
- * safe candidate and supplies evidence for a focused confirmation request.
- * The AI sees only redacted evidence, so its confirmation cannot expose a
- * resolved secret.
+ * An existing entry is confirmed only when `grounding.entries[step.id]` is a
+ * v3 element entry whose `intentDigest` equals `computeIntentDigest(step)`.
+ * Absence, another kind, or a digest mismatch means no entry for this step;
+ * none invalidates the whole grounding document. For a confirmed entry,
+ * await its locator's presence with the remaining step budget and verify-bind
+ * against its fingerprint. A hit returns the operation-ready element without
+ * AI and reports `grounding` provenance. A missing entry with `--resolve` off
+ * throws `GroundingUnresolvedError` with reason `missing`; a verify miss with
+ * `--resolve` off uses reason `recoverable-miss`. Both exit 4 and perform no
+ * operation for this step.
  *
- * A post-confirmation bind uses verify mode, not compute mode, to retain
- * continuity with the AI-confirmed candidate. A compute bind could accept a
- * different unique element that appeared during the AI round trip; verify
- * mode detects that change against a fresh observation before producing the
- * operation-ready handle.
+ * The sole waiting deadline is step start plus `resolveTimeoutMs`. Presence
+ * waiting for the old locator and first-binding stage 1 share it. After a
+ * verify miss, stage 1 receives only the remaining time. Judge the deadline
+ * when a snapshot capture starts: evaluate a capture started by the deadline
+ * even if it completes later, and never start another after the deadline.
+ * Stage 1 always takes its first snapshot, including at zero remaining time.
  *
- * Grounding changes only after a successful binding. Any miss, denial, or
- * unavailable candidate leaves the existing grounding untouched, preventing
- * failed recovery from replacing known evidence with unconfirmed data.
+ * With `--resolve` on and no usable entry, first binding has four stages:
  *
- * This waits once for element presence after the recovery-mode guard and
- * before reading grounding state, regardless of resolution policy or a
- * grounding-cache hit. That narrows the race where an element appears just
- * after this step starts while leaving AI-call and resolution accounting
- * unchanged. It does not wait before the later post-confirmation re-bind,
- * whose explicit exclusion keeps that fresh verify path independent.
+ * 1. If the intent has a quote, poll `accessibilitySnapshot()` every 100 ms
+ *    until the shared deadline and select the snapshot when
+ *    `matchQuotedCandidates` returns exactly one candidate; provenance is
+ *    `quoted-match`. Without a quote, poll every 100 ms until consecutive
+ *    snapshots have equal `rawYaml`, then use that snapshot for stage 2; at
+ *    the deadline use the last snapshot. If the deadline arrives before a
+ *    second capture, judge the first and proceed without waiting past it.
+ *    Exclude `snapshot-invalid` captures from candidate selection and keep
+ *    polling. If the last snapshot at the deadline is invalid, abort with
+ *    the existing `snapshot-invalid` CaseAbort classification (exit 3),
+ *    without calling AI.
+ * 2. If stage 1 found no candidate, send at most one AI proposal request per
+ *    step per run. Its context is `{ description, quote?, roleHint?, excerpt,
+ *    accessibilityTree }`, where `excerpt` is re-extracted source-span text.
+ *    Redact it with `redactJsonStrings`, then check immediately before send
+ *    with `jsonContainsResolvedSecret`; a match aborts as the existing
+ *    `secret-contaminated` CaseAbort (exit 3). The `ElementBindingProposal`
+ *    response is discriminated by `outcome`: `none` throws
+ *    `GroundingUnresolvedError` reason `no-candidate`, and `ambiguous` uses
+ *    reason `ambiguous`. Never ask again. Provider failures and `aiTimeoutMs`
+ *    timeouts retain the current AI error classification via `callAiExecutor`.
+ *    This proposal replaces the old `{ confirmed: boolean }` call and uses
+ *    the same AI dispatch path, `ai-call` / `ai-result` events, and heal AI
+ *    dispatch accounting.
+ * 3. Verify locally against the selected stage-1 snapshot, or the original
+ *    unredacted source snapshot for stage 2. Accept an AI proposal only when
+ *    `matchQuotedCandidates(tree, { text: name, roleHint: role })` returns
+ *    exactly one node. Build the locator from that node's observed `{ role,
+ *    name }`, never the proposal strings; stage 1 also uses observed values.
+ *    Continue only if `computeAccessibilityFingerprint` returns `ok` and its
+ *    role matches `roleHint` when supplied. Zero or multiple proposal matches,
+ *    `no-match`, `ambiguous-match`, and a role mismatch become
+ *    `proposal-rejected`; `snapshot-invalid` and `secret-contaminated` retain
+ *    their existing classifications.
+ * 4. Immediately before the operation, verify-bind again using the stage-3
+ *    fingerprint. A miss is `candidate-changed`; a hit permits the operation.
  *
- * The dispatcher calls this boundary only for variants the shared recovery
- * table classifies as element-reground. A local invariant rejects any other
- * caller, keeping accidental grounding of bare-target steps visible even when
- * a switch branch is otherwise type-correct.
+ * Stage 3 yields a `candidate` BindingState; only a successful operation may
+ * advance it to `acted`. A separate part of this migration promotes `acted`
+ * to `confirmed` after every step listing this action in `confirms` passes,
+ * updates the in-memory entry with kind, locator, fingerprint, intentDigest,
+ * and provenance, and performs case-end write-back once under the existing
+ * write-back and secret checks. That write-back replaces only confirmed step
+ * entries, preserving all other loaded entries, including stale digests,
+ * unknown IDs, and entries for non-action steps. Never operate without a
+ * candidate (except a verified confirmed-entry hit), persist an `acted`-only
+ * binding, or retry an operation after its failure in the same run; discard
+ * that binding and fail the step. A later failure never deletes a confirmed
+ * entry that hit. An unconfirmed replacement after verify miss leaves the
+ * old entry untouched.
+ *
+ * For `fill-secret`, `executeAction` checks sink origin and resolves the
+ * secret before calling this function for all binding stages, then fills.
+ * A denied sink or unresolved secret takes no snapshot and makes no AI call.
+ *
+ * @remarks
+ * This scaffold throws until step 11 implements the algorithm. This JSDoc
+ * is the design specification for that implementation.
  */
 async function groundedTarget(
   context: DispatchContext,
-  step: ActionStep | AssertStep | CaptureStep,
-  target: ElementRef,
+  step: ActionStep | CaptureStep,
+  intent: ElementIntent,
 ): Promise<BoundElement> {
-  if (groundingRecoveryModeForStep(step) !== 'element-reground') {
-    throw new Error('groundedTarget called for a step kind classified outside element-reground.');
-  }
-  const session = await sessionForStep(context, step);
-  await session.awaitElementPresence(target, configForStep(context, step).resolveTimeoutMs);
-  const entry = context.grounding.entries[step.id];
-  if (entry?.kind === 'element') {
-    const resolved = await session.resolveGrounded(target, {
-      mode: 'verify',
-      fingerprint: entry.fingerprint,
-    });
-    if (resolved.kind === 'hit') {
-      return resolved.element;
-    }
-    if (!context.resolve) {
-      throw new GroundingUnresolvedError(unresolvedMessage(resolved.reason), { stepId: step.id, reason: 'recoverable-miss' });
-    }
-  }
-
-  if (!context.resolve) {
-    throw new GroundingUnresolvedError(unresolvedMessage('missing'), { stepId: step.id, reason: 'missing' });
-  }
-
-  const snapshot = await session.snapshotForResolution();
-  const classification = computeAccessibilityFingerprint(
-    snapshot.accessibilityTree,
-    target,
-    context.resolvedSecrets.values(),
-  );
-  switch (classification.kind) {
-    case 'no-match':
-      throw groundingClassificationAbort('element-not-found', snapshot.accessibilityTree);
-    case 'ambiguous-match':
-      throw groundingClassificationAbort('ambiguous-match', snapshot.accessibilityTree);
-    case 'snapshot-invalid':
-      throw groundingClassificationAbort('snapshot-invalid', snapshot.accessibilityTree);
-    case 'secret-contaminated':
-      throw groundingClassificationAbort('secret-contaminated', snapshot.accessibilityTree);
-    case 'ok':
-      break;
-  }
-
-  const executor = await context.resolveAiExecutor();
-  const redactedAccessibilityTree = redactJsonStrings(
-    snapshot.accessibilityTree,
-    context.resolvedSecrets,
-    runStateValues(context.runState),
-  ) as JsonValueT;
-  const deadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
-  const request = {
-    prompt: 'Confirm whether the supplied locator still identifies the intended element.',
-    responseSchema: CONFIRMATION_RESPONSE_SCHEMA,
-    context: {
-      target,
-      snapshot: {
-        accessibilityTree: redactedAccessibilityTree,
-      },
-    },
-    signal: deadline.signal,
-  };
-  const response = await callAiExecutor(context, step.id, deadline, () => executor.execute(request));
-  if (!response.data.confirmed) {
-    throw new CaseAbort('The AI could not confirm that the supplied locator identifies the intended element.');
-  }
-
-  const resolved = await session.resolveGrounded(target, {
-    mode: 'verify',
-    fingerprint: classification.fingerprint,
-  });
-  if (resolved.kind === 'miss') {
-    throw groundingAbort(resolved.reason);
-  }
-
-  context.updateGroundingEntry(step.id, { kind: 'element', fingerprint: resolved.element.fingerprint });
-  context.resolvedVias.set(step.id, 'ai-resolve');
-  return resolved.element;
+  throw new Error('not implemented (step 11)');
 }
 
 /**
@@ -2749,7 +2726,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
   switch (step.action) {
     case 'click':
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A click action must consume element grounding.');
-      action = { type: 'click', target: await groundedTarget(context, step, step.element) };
+      action = { type: 'click', target: await groundedTarget(context, step, step.intent) };
       break;
     case 'navigate':
       action = { type: 'navigate', url: step.url };
@@ -2758,7 +2735,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A press action must consume element grounding.');
       action = {
         type: 'press',
-        target: await groundedTarget(context, step, step.element),
+        target: await groundedTarget(context, step, step.intent),
         key: step.key,
       };
       break;
@@ -2769,7 +2746,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
       }
       action = {
         type: 'fill',
-        target: await groundedTarget(context, step, step.element),
+        target: await groundedTarget(context, step, step.intent),
         value: step.value,
       };
       break;
@@ -2787,7 +2764,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
 
       recordResolvedSecret(context.resolvedSecrets, step.secretRef, value);
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A secret fill action must consume element grounding.');
-      const target = await groundedTarget(context, step, step.element);
+      const target = await groundedTarget(context, step, step.intent);
       action = { type: 'fill-secret', target, value, policy };
       break;
     }
@@ -2899,7 +2876,7 @@ async function executeCapture(step: Step, context: DispatchContext): Promise<Dis
     throw new Error('The capture dispatcher received a non-capture step.');
   }
 
-  const target = await groundedTarget(context, step, step.element);
+  const target = await groundedTarget(context, step, step.intent);
   const value = await (await sessionForStep(context, step)).captureValue(target, 'text');
   context.runState.set(step.variable, { value, stepId: step.id, target: step.target });
   return { kind: 'passed' };

@@ -11,12 +11,18 @@ import { fileURLToPath } from 'node:url';
  */
 
 /**
- * Publishes the current build interfaces alongside the committed Plan v2 snapshot. Build output
- * supplies schemas that evolve with the repository, while the snapshot preserves the exact
+ * Publishes the current build interfaces alongside committed historical snapshots. Build output
+ * supplies schemas that evolve with the repository, while the Plan v2 snapshot preserves the exact
  * historical bytes emitted immediately before Plan v3 (commit
  * c391a59604a81da0e294f265ce5f47fba7344a02, SHA-256
  * 123a3e3b22570ddbe6fa1886a9d91a7ddfc97e31a5b05b124a829e20f27b9325) so consumers of the
- * retired contract keep a stable URL even though the current build no longer creates it.
+ * retired contract keep a stable URL even though the current build no longer creates it. The
+ * plan.v4.schema.json snapshot preserves bytes from immediately before Plan v5 (commit
+ * 92046ca4e0eb680760ff3d07b1ef40b33a309993, SHA-256
+ * b315f1df6d62f76d4f2ed7697a6a38ca00d4f7ce85eec197e77f535619a147af), and the first grounding
+ * freeze, grounding.v2.schema.json, preserves bytes from immediately before Grounding v3 (same
+ * commit, SHA-256 da60f9f31c913674022fd5c20a772ca2a3fcbd87a6462dbf09b6d9204d2adfc6), so
+ * consumers of both retired contracts keep stable URLs.
  * `SYNC_OPTIONAL=1` permits only
  * an entirely absent root build so local development can deliberately serve 404s instead of
  * obsolete generated artifacts.
@@ -84,6 +90,12 @@ async function hasBuildDirectory(distRoot) {
  * at commit c391a59604a81da0e294f265ce5f47fba7344a02 with SHA-256
  * 123a3e3b22570ddbe6fa1886a9d91a7ddfc97e31a5b05b124a829e20f27b9325; treating it as part of
  * the same preflight prevents a v3-only publication when that contract artifact is unavailable.
+ * The frozen plan.v4.schema.json snapshot, captured immediately before Plan v5 at commit
+ * 92046ca4e0eb680760ff3d07b1ef40b33a309993 with SHA-256
+ * b315f1df6d62f76d4f2ed7697a6a38ca00d4f7ce85eec197e77f535619a147af, and the first frozen
+ * grounding.v2.schema.json snapshot, captured immediately before Grounding v3 at the same commit
+ * with SHA-256 da60f9f31c913674022fd5c20a772ca2a3fcbd87a6462dbf09b6d9204d2adfc6, join that
+ * preflight so consumers of both retired contracts retain stable URLs.
  *
  * @param {string} distRoot Absolute path to the already-validated root `dist` directory.
  * @param {string} publicRoot Absolute `website/public` directory for the copied artifacts.
@@ -93,8 +105,8 @@ async function hasBuildDirectory(distRoot) {
 async function preflightPublications(distRoot, publicRoot, frozenSchemaRoot) {
   const publications = [
     ['schema/config.schema.json', 'schemas/config.schema.json'],
-    ['schema/plan.schema.json', 'schemas/plan.v4.schema.json'],
-    ['schema/grounding.schema.json', 'schemas/grounding.v2.schema.json'],
+    ['schema/plan.schema.json', 'schemas/plan.v5.schema.json'],
+    ['schema/grounding.schema.json', 'schemas/grounding.v3.schema.json'],
     ['schema/report.schema.json', 'schemas/report.v3.schema.json'],
     ['manifest/capabilities.json', 'capabilities.json'],
     ['manifest/cli.json', 'manifest/cli.json'],
@@ -106,6 +118,14 @@ async function preflightPublications(distRoot, publicRoot, frozenSchemaRoot) {
   publications.push({
     source: join(frozenSchemaRoot, 'plan.v2.schema.json'),
     destination: join(publicRoot, 'schemas/plan.v2.schema.json'),
+  });
+  publications.push({
+    source: join(frozenSchemaRoot, 'plan.v4.schema.json'),
+    destination: join(publicRoot, 'schemas/plan.v4.schema.json'),
+  });
+  publications.push({
+    source: join(frozenSchemaRoot, 'grounding.v2.schema.json'),
+    destination: join(publicRoot, 'schemas/grounding.v2.schema.json'),
   });
 
   await Promise.all(publications.map(async ({ source }) => {

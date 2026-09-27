@@ -407,6 +407,10 @@ function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedCo
   );
 }
 
+function canonicalizeLocale(value: string | undefined, targetName: string): string | undefined {
+  throw new Error('not implemented (step 11)');
+}
+
 function resolveSecretAllowlist(
   allow: NonNullable<RawConfigShape['secrets']>['allow'] | ResolvedConfig['secrets']['allow'],
 ): ResolvedConfig['secrets']['allow'] {

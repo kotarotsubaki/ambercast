@@ -201,6 +201,7 @@ export const TargetDefinition = z.strictObject({
   surface: z.literal('web'),
   baseUrl: z.string().regex(HTTP_URL_PATTERN).regex(NO_SECRETS_LITERAL_PATTERN),
   secretSinkOrigins: z.record(SecretRef, z.array(SecretSinkOrigin)).optional(),
+  locale: z.string().min(1).optional(),
 });
 
 /**

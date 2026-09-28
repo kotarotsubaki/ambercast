@@ -82,7 +82,7 @@ export function toAnchoredLines(
  * without extending agentic prompts, whose trusted metadata and traces govern
  * live secret handling independently.
  */
-export const GENERATOR_SECRET_POLICY_TEMPLATE = `Secret inputs (passwords, one-time codes, API keys) must never be written as values. Represent each secret input as a "fill-secret" step. If context.allowedSecretNames contains a name whose meaning clearly matches the field, set "secret" to { "allowedName": "<that name>" }. For a new secret, propose { "nameHint": "<short_ascii_name>" }. When unsure, omit "secret" entirely. Example: { "id": "fill-password", "kind": "action", "action": "fill-secret", "intent": { "description": "Password field", "roleHint": "textbox", "startAnchor": "L3", "startColumn": 1, "endAnchor": "L3", "endColumn": 15, "citation": "password field" }, "secret": { "nameHint": "password" } }`;
+export const GENERATOR_SECRET_POLICY_TEMPLATE = `Secret inputs (passwords, one-time codes, API keys) must never be written as values. Represent each secret input as a "fill-secret" step. If context.allowedSecretNames contains a name whose meaning clearly matches the field, set "secret" to { "allowedName": "<that name>" }. For a new secret, propose { "nameHint": "<short_ascii_name>" }. When unsure, omit "secret" entirely. Example: { "id": "fill-password", "target": "web", "kind": "action", "action": "fill-secret", "intent": { "description": "Password field", "roleHint": "textbox", "startAnchor": "L3", "startColumn": 1, "endAnchor": "L3", "endColumn": 15, "citation": "password field" }, "secret": { "nameHint": "password" } }`;
 
 /**
  * Supplies the literal task instruction for ordinary plan generation.

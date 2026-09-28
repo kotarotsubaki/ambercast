@@ -7,6 +7,7 @@ import {
   planProducerBundleComponentDiagnostics,
   planProducerBundleFingerprint,
   planProducerBundleManifest,
+  PLAN_PRODUCER_SEMANTIC_REVISIONS,
   type PlanProducerBundleInputs,
 } from '#core/ai/plan-producer-bundle.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
@@ -31,6 +32,8 @@ describe('plan producer bundle', () => {
   // TEST-G5 / SPEC-G6
   it('includes the element intent policy and its four provider rules in the live bundle', () => {
     const components = planProducerBundleComponentDiagnostics(liveProducerBundleInputs());
+    expect(PLAN_PRODUCER_SEMANTIC_REVISIONS.elementIntentPolicy).toBe(1);
+    expect(PLAN_PRODUCER_BUNDLE_COMPONENT_NAMES).toContain('elementIntentPolicyRevision');
     expect(components.elementIntentPolicyRevision).toBe(1);
     expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('Never guess or infer an element\'s accessible role or name');
     expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('exact literal text appearing inside quotation marks');
@@ -38,6 +41,7 @@ describe('plan producer bundle', () => {
     expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('list only the actions that produced the exact state');
     expect(GENERATOR_SECRET_POLICY_TEMPLATE).toContain('"intent":');
     expect(GENERATOR_SECRET_POLICY_TEMPLATE).toContain('"startAnchor":');
+    // V4 producer bundle fingerprint, before the v5 element-intent contract.
     expect(planProducerBundleFingerprint()).not.toBe('2f5046995ee6207a945716030a97de787fb9baefb72fcea8bf51c4c857bdc5be');
   });
   it('returns deterministic lowercase SHA-256 hex for deep-equal inputs', () => {

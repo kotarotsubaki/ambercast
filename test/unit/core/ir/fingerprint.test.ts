@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import {
   computeAccessibilityFingerprint,
+  matchQuotedCandidates,
   resolveAccessibilityFingerprint,
 } from '#core/ir/fingerprint.js';
 import { parseAriaSnapshot, SNAPSHOT_INVALID } from '#core/ir/aria-snapshot.js';
@@ -702,6 +703,77 @@ describe('computeAccessibilityFingerprint', () => {
   ] as const)('normalizes %s after parser name promotion', (_description, snapshot, ref, normalizedTree) => {
     expect(computeAccessibilityFingerprint(parseAriaSnapshot(snapshot), ref, NO_RESOLVED_SECRETS))
       .toEqual(computeAccessibilityFingerprint(normalizedTree, ref, NO_RESOLVED_SECRETS));
+  });
+});
+
+describe('matchQuotedCandidates (TEST-I5 and TEST-I6)', () => {
+  const tree = {
+    role: 'root', name: '', children: [{
+      role: 'main', name: 'Page', children: [
+        { role: 'button', name: 'Submit', children: [] },
+        { role: 'link', name: 'Submit', children: [] },
+        { role: 'group', name: 'Controls', children: [
+          { role: 'button', name: 'Submit', children: [] },
+          { role: 'button', name: 'Sign\u3000in\u00a0now', children: [] },
+          { role: 'button', name: 'Cafe\u0301', children: [] },
+          { role: 'button', name: '{{run.x}}', children: [] },
+        ] },
+      ],
+    }],
+  };
+
+  it('returns same-named nested candidates in tree order for text-only queries', () => {
+    expect(matchQuotedCandidates(tree, { text: 'Submit' })).toEqual([
+      { role: 'button', name: 'Submit' },
+      { role: 'link', name: 'Submit' },
+      { role: 'button', name: 'Submit' },
+    ]);
+  });
+
+  it('filters same-named candidates by exact roleHint', () => {
+    expect(matchQuotedCandidates(tree, { text: 'Submit', roleHint: 'button' })).toEqual([
+      { role: 'button', name: 'Submit' },
+      { role: 'button', name: 'Submit' },
+    ]);
+  });
+
+  it('normalizes full-width space and NBSP but returns the observed name', () => {
+    expect(matchQuotedCandidates(tree, { text: 'Sign in now', roleHint: 'button' }))
+      .toEqual([{ role: 'button', name: 'Sign\u3000in\u00a0now' }]);
+  });
+
+  it('normalizes NFD to NFC but returns the observed name', () => {
+    expect(matchQuotedCandidates(tree, { text: 'Café' }))
+      .toEqual([{ role: 'button', name: 'Cafe\u0301' }]);
+  });
+
+  it('matches a run-reference-shaped quote literally', () => {
+    expect(matchQuotedCandidates(tree, { text: '{{run.x}}' }))
+      .toEqual([{ role: 'button', name: '{{run.x}}' }]);
+  });
+
+  it('classifies the invalid snapshot marker', () => {
+    expect(matchQuotedCandidates(SNAPSHOT_INVALID as never, { text: 'Submit' }))
+      .toEqual({ kind: 'snapshot-invalid' });
+  });
+
+  it('matches 5,000 nodes with a median of 200 runs under 10 ms', () => {
+    const largeTree = {
+      role: 'root', name: '',
+      children: Array.from({ length: 5_000 }, (_, index) => ({
+        role: 'button', name: index === 4_999 ? 'Target' : `Other ${index}`, children: [],
+      })),
+    };
+    const durations: number[] = [];
+    for (let index = 0; index < 200; index += 1) {
+      const started = performance.now();
+      expect(matchQuotedCandidates(largeTree, { text: 'Target' }))
+        .toEqual([{ role: 'button', name: 'Target' }]);
+      durations.push(performance.now() - started);
+    }
+    durations.sort((left, right) => left - right);
+    const median = (durations[99]! + durations[100]!) / 2;
+    expect(median).toBeLessThan(10);
   });
 });
 

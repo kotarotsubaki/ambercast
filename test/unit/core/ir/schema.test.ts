@@ -11,6 +11,9 @@ import {
   CaptureStep,
   ClickAction,
   ElementCountCheck,
+  ElementBindingProposal,
+  ElementGroundingEntryV3,
+  ElementIntent,
   ElementRef,
   ElementVisibleCheck,
   FillAction,
@@ -29,6 +32,7 @@ import {
   NavigateAction,
   PlanDocument,
   PressAction,
+  QuotedElementIntent,
   RunRef,
   RunVariableName,
   SecretName,
@@ -213,6 +217,74 @@ describe('IR primitive schemas', () => {
   it('accepts a naming choice or an empty object for generated AI secret uses', () => {
     expectAccepted(GeneratedAiStepSecretUse, { allowedName: 'x' });
     expectAccepted(GeneratedAiStepSecretUse, {});
+  });
+});
+
+describe('TEST-I1 element intent schemas', () => {
+  const sourceSpan = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 };
+  const intent = { description: 'x', sourceSpan };
+  const quote = { text: 'x', sourceSpan };
+
+  it.each([
+    [0, false], [1, true], [4096, true], [4097, false],
+  ])('accepts description length %i: %s', (length, accepted) => {
+    expect(ElementIntent.safeParse({ ...intent, description: 'x'.repeat(length) }).success).toBe(accepted);
+  });
+
+  it.each([
+    ['button', true], ['Button', false], ['menu-item', false],
+  ])('accepts roleHint %s: %s', (roleHint, accepted) => {
+    expect(ElementIntent.safeParse({ ...intent, roleHint }).success).toBe(accepted);
+  });
+
+  it('rejects secret literals and invalid quote text', () => {
+    expectRejected(ElementIntent, { ...intent, description: 'click {{secrets.x}}' });
+    expectRejected(ElementIntent, { ...intent, quote: { ...quote, text: '' } });
+    expectRejected(ElementIntent, { ...intent, quote: { ...quote, text: '{{secrets.x}}' } });
+    expectAccepted(ElementIntent, { ...intent, quote });
+    expectAccepted(QuotedElementIntent, { ...intent, quote });
+    expectRejected(QuotedElementIntent, intent);
+  });
+});
+
+describe('TEST-I8 initial binding schemas', () => {
+  const entry = {
+    kind: 'element',
+    locator: { strategy: 'accessibility', role: 'button', name: 'Submit' },
+    fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A },
+    intentDigest: DIGEST_B,
+    provenance: 'quoted-match',
+  };
+
+  it('requires every grounding field and rejects unknown keys and provenance', () => {
+    expectAccepted(ElementGroundingEntryV3, entry);
+    expectAccepted(ElementGroundingEntryV3, { ...entry, provenance: 'ai-proposed' });
+    for (const field of Object.keys(entry)) {
+      const incomplete = { ...entry } as Record<string, unknown>;
+      delete incomplete[field];
+      expectRejected(ElementGroundingEntryV3, incomplete);
+    }
+    expectRejected(ElementGroundingEntryV3, { ...entry, extra: true });
+    expectRejected(ElementGroundingEntryV3, { ...entry, provenance: 'manual' });
+  });
+
+  it.each([
+    { outcome: 'found', role: 'button', name: 'Submit' },
+    { outcome: 'none' },
+    { outcome: 'ambiguous' },
+  ])('accepts the complete proposal branch $outcome', (proposal) => {
+    expectAccepted(ElementBindingProposal, proposal);
+    expectRejected(ElementBindingProposal, { ...proposal, extra: true });
+  });
+
+  it('requires found role and name and rejects empty values and unknown outcomes', () => {
+    const found = { outcome: 'found', role: 'button', name: 'Submit' };
+    expectRejected(ElementBindingProposal, { outcome: 'found', name: 'Submit' });
+    expectRejected(ElementBindingProposal, { outcome: 'found', role: 'button' });
+    expectRejected(ElementBindingProposal, { ...found, role: '' });
+    expectRejected(ElementBindingProposal, { ...found, name: '' });
+    expectRejected(ElementBindingProposal, { outcome: 'unknown' });
+    expectRejected(ElementBindingProposal, {});
   });
 });
 

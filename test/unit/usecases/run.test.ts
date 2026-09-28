@@ -2176,6 +2176,151 @@ describe('run', () => {
     });
   });
 
+  describe('TEST-R7 and TEST-R8 confirmation and write-back', () => {
+    const click = { id: 'click-submit', kind: 'action', action: 'click', intent: SUBMIT_QUOTED_INTENT } as const;
+    const confirm = { id: 'confirm-submit', kind: 'assert', check: 'element-visible', intent: SUBMIT_QUOTED_INTENT, confirms: ['click-submit'] } satisfies TestStep;
+    const laterFailure = { id: 'fail-later', kind: 'assert', check: 'text-visible', text: 'Never shown' } as const;
+    const digest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent: SUBMIT_QUOTED_INTENT });
+    const hitEntry = { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest: digest, provenance: 'quoted-match' } as const;
+    const capture = (names: readonly string[]) => ({
+      tree: { role: 'root', name: '', children: names.map((name) => ({ role: 'button', name, children: [] })) },
+      rawYaml: names.join(','), scalarValues: [],
+    });
+    async function fixture(options: {
+      steps?: readonly TestStep[];
+      entries?: GroundingDocument['entries'];
+      names?: readonly string[];
+      session?: ReturnType<typeof createFakeBrowserSession>;
+      localWriteBack?: 'auto' | 'explicit';
+      secrets?: RunDeps['secrets'];
+    } = {}) {
+      const names = options.names ?? ['Submit'];
+      const session = options.session ?? createFakeBrowserSession(liveEntries([SUBMIT]));
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(names));
+      const base = createScenario();
+      const deps: RunDeps = {
+        ...base.deps,
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+        config: { ...base.deps.config, grounding: { repositoryPolicy: 'committed', localWriteBack: options.localWriteBack ?? 'auto' } },
+        ...(options.secrets === undefined ? {} : { secrets: options.secrets }),
+      };
+      const testPath = await writePrompt(base.recordingStorage.storage);
+      await seedFreshArtifacts(base.recordingStorage.storage, testPath, options.steps ?? [click, confirm], options.entries ?? {});
+      const groundingPath = deps.layout.groundingPathFor(testPath);
+      const before = await base.recordingStorage.storage.readText(groundingPath);
+      return { ...base, deps, session, testPath, groundingPath, before };
+    }
+
+    it('TEST-R7 writes provenance, intentDigest, and locator after one passing element-visible confirmation', async () => {
+      const f = await fixture();
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toMatchObject({
+        kind: 'element', provenance: 'quoted-match', intentDigest: digest, locator: SUBMIT,
+      });
+    });
+
+    it('TEST-R7 leaves no click entry when its confirming assert fails', async () => {
+      const f = await fixture({ names: ['Submit'] });
+      vi.spyOn(f.session, 'accessibilitySnapshot').mockResolvedValueOnce(capture(['Submit'])).mockResolvedValue(capture([]));
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('failed');
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeUndefined();
+    });
+
+    it('TEST-R7 does not confirm from a passing element-visible assert matching two elements', async () => {
+      const f = await fixture({ names: ['Submit', 'Submit'] });
+      vi.spyOn(f.session, 'accessibilitySnapshot').mockResolvedValueOnce(capture(['Submit'])).mockResolvedValue(capture(['Submit', 'Submit']));
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.steps[1]).toMatchObject({ status: 'passed' });
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeUndefined();
+    });
+
+    it('TEST-R7 requires both confirming steps when the second is skipped', async () => {
+      const second = { ...confirm, id: 'confirm-again' };
+      const f = await fixture({ steps: [click, confirm, laterFailure, second] });
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.steps).toMatchObject([{ status: 'passed' }, { status: 'passed' }, { status: 'failed' }, { status: 'skipped' }]);
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeUndefined();
+    });
+
+    it('TEST-R7 writes an already confirmed click when a later unrelated step fails', async () => {
+      const f = await fixture({ steps: [click, confirm, laterFailure] });
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('failed');
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toMatchObject({ intentDigest: digest, locator: SUBMIT });
+    });
+
+    it('TEST-R7 suppresses a confirmed entry when effective local write-back is disabled', async () => {
+      const f = await fixture({ localWriteBack: 'explicit' });
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+    });
+
+    it('TEST-R7 aborts with IntegrityViolationError if a resolved secret is in the write-back payload', async () => {
+      const secretRef = '{{secrets.write_back}}';
+      const secretValue = HIGH_ENTROPY_TOKEN_LITERAL;
+      const fill = { id: 'fill-password', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef } as const;
+      const fillDigest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'fill-secret', intent: PASSWORD_INTENT });
+      const session = createFakeBrowserSession(liveEntries([PASSWORD, SUBMIT]));
+      const f = await fixture({
+        session,
+        steps: [fill, click, confirm],
+        secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+        entries: {
+          'fill-password': { kind: 'element', locator: PASSWORD, fingerprint: FINGERPRINT, intentDigest: fillDigest, provenance: 'quoted-match' },
+          'unrelated-entry': { ...hitEntry, locator: { strategy: 'accessibility', role: 'button', name: secretValue } },
+        },
+      });
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.steps.slice(0, 3)).toMatchObject([
+        { id: 'fill-password', status: 'passed' },
+        { id: 'click-submit', status: 'passed' },
+        { id: 'confirm-submit', status: 'passed' },
+      ]);
+      expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+    });
+
+    it.each([
+      ['digest mismatch', 'click-other', { ...hitEntry, intentDigest: 'b'.repeat(64) }],
+      ['unknown step ID', 'unknown-action', hitEntry],
+    ] as const)('TEST-R7 preserves a %s entry byte-identically during write-back', async (_case, id, entry) => {
+      const f = await fixture({ entries: { [id]: entry } });
+      const beforeEntry = JSON.stringify(JSON.parse(f.before).entries[id]);
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect(JSON.stringify(JSON.parse(await f.recordingStorage.storage.readText(f.groundingPath)).entries[id])).toBe(beforeEntry);
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeDefined();
+    });
+
+    it('TEST-R8 calls a throwing click operation once and writes no entry', async () => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT]), { onPerform: () => { throw new Error('operation failed'); } });
+      const perform = vi.spyOn(session, 'perform');
+      const f = await fixture({ session });
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('error');
+      expect(perform).toHaveBeenCalledTimes(1);
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeUndefined();
+    });
+
+    it('TEST-R8 retains a verified hit when a later unrelated step fails', async () => {
+      const f = await fixture({ steps: [click, laterFailure], entries: { 'click-submit': hitEntry } });
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+      expect(outcome.results[0]?.result.status).toBe('failed');
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+    });
+
+    it('TEST-R8 preserves the old entry byte-identically after verify miss and unconfirmed first binding', async () => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
+      const f = await fixture({ session, steps: [click], entries: { 'click-submit': hitEntry } });
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed' });
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+    });
+  });
+
   it.each([
     ['missing', 'No grounding is stored for this locator.'],
     ['fingerprint-mismatch', 'The stored grounding for this locator no longer matches the current page.'],

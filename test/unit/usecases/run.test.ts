@@ -24,7 +24,7 @@ import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.j
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { ERROR_EXIT_CODES } from '#core/errors/exit-codes.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computePlanDigest, sha256HexOfCanonicalJson } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import {
@@ -1063,7 +1063,7 @@ describe('run', () => {
     });
     const testPath = await writePrompt(recordingStorage.storage);
     const steps: TestStep[] = [
-      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+      { id: 'click-submit', kind: 'action', action: 'click', intent: SUBMIT_INTENT },
       { id: 'fill-email', kind: 'action', action: 'fill', target: EMAIL, intent: EMAIL_INTENT, value: 'person@example.test' },
     ];
     await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['click-submit', 'fill-email']));
@@ -1896,6 +1896,75 @@ describe('run', () => {
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(resolveAiExecutor).toHaveBeenCalledOnce();
     expect(executor.agenticRequests).toHaveLength(1);
+  });
+
+  it('TEST-R1 acts from a confirmed entry without AI and reports grounding provenance', async () => {
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    const intentDigest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT });
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+    ], {
+      'click-submit': { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest, provenance: 'quoted-match' },
+    });
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'passed', aiCalls: 0,
+      steps: [{ id: 'click-submit', status: 'passed', binding: { provenance: 'grounding' } }],
+    });
+    expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+    expect(aiCalls(events)).toEqual([]);
+  });
+
+  it('TEST-R1 treats an intentDigest mismatch as a missing entry without resolve', async () => {
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+    const { deps, recordingStorage, resolveAiExecutor } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'click-submit', kind: 'action', action: 'click', intent: SUBMIT_INTENT },
+    ], elementGrounding(['click-submit']));
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved', exitCode: 4, details: { stepId: 'click-submit', reason: 'missing' },
+    });
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['no entry', false, 'missing'],
+    ['verify miss', true, 'recoverable-miss'],
+  ] as const)('TEST-R2 reports %s without resolve and performs no browser operation', async (_case, hasEntry, reason) => {
+    const session = createFakeBrowserSession(hasEntry ? liveEntries([SUBMIT], DIFFERENT_FINGERPRINT) : liveEntries([SUBMIT]));
+    const { deps, recordingStorage, resolveAiExecutor } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    const intentDigest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT });
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'click-submit', kind: 'action', action: 'click', intent: SUBMIT_INTENT },
+    ], hasEntry ? {
+      'click-submit': { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest, provenance: 'quoted-match' },
+    } : {});
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved', exitCode: 4, details: { stepId: 'click-submit', reason },
+    });
+    expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
   it.each([

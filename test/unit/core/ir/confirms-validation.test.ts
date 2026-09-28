@@ -11,8 +11,7 @@ function action(id: string, action: 'click' | 'navigate' = 'click', target = 'ap
 }
 
 function assertion(id: string, confirms: string[], target = 'app'): Step {
-  // Layer 2 deliberately leaves confirms outside the Step schema until Plan v5 is wired.
-  return { id, target, kind: 'assert', check: 'text-visible', text: 'Done', confirms } as unknown as Step;
+  return { id, target, kind: 'assert', check: 'text-visible', text: 'Done', confirms };
 }
 
 function issue(code: string, stepIndex: number, entryIndex: number) {

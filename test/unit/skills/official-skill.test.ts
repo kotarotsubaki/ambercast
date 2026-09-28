@@ -41,7 +41,7 @@ const URLS = [
 const REQUIRED_SECTION_TEXT = [
   ['Node.js', '22.14', 'npx playwright-core install chromium', 'claude', 'codex', 'http://localhost:3000', 'ambercast.config.json'],
   ['ambercast.config.json', 'testDir', 'tests/ambercast', 'runsDir', 'baseUrl', 'defaultTarget', '--target', 'npx ambercast generate --list --json', 'AMBERCAST_SECRET_'],
-  ['.test.md', '{{secrets.', 'secrets.allow', 'SECRET_CONSENT_REQUIRED', 'AMBERCAST_SECRET_', '### Good example', '### Bad example'],
+  ['.test.md', '{{secrets.', 'secrets.allow', 'SECRET_CONSENT_REQUIRED', 'AMBERCAST_SECRET_', 'action-unconfirmed', 'straight double quotes', '### Good example', '### Bad example'],
   ['npx ambercast generate', 'npx ambercast run --json', 'npx ambercast check', 'npx ambercast heal --dry-run', '--resolve', '--update-cache', 'grounding.localWriteBack', '--yes'],
   ['2 > 3 > 4 > 1 > 5 > 0', 'summary', 'results[]', 'errors[].code', '--strict', 'testIgnore', 'stderr'],
   ['.ambercast.plan.json', '.ambercast.grounding.json', 'grounding.repositoryPolicy', 'runsDir', 'tests/ambercast/.runs'],

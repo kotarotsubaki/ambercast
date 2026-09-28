@@ -214,6 +214,9 @@ class ElementIntentAttributionError extends Error {
  * the same words cannot serve as evidence for both roles (SPEC-G4).
  * On rejection, reports one issue with `path: ['text']`, relative to the step
  * (SPEC-I3), because the fix belongs on its expected text, not the intent quote.
+ * @throws {ElementIntentAttributionError} On rejection, constructed with a
+ * single-element issues array containing the `text-equals-self-quote` issue
+ * and this call's `stepId`. The check returns normally without a value when it passes.
  */
 function rejectTextEqualsSelfQuote(text: string, quoteText: string, stepId: string): void {
   throw new Error('not implemented (step 11)');

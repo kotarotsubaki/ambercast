@@ -107,6 +107,7 @@ import {
   classifyPreScannedTraceCoverage,
   validateCommittedInstructionCoverage,
 } from './instruction-coverage-policy.js';
+import { validateCommittedElementIntent } from './element-intent-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 import { createSessionPool, type SessionPool } from './session-pool.js';
@@ -490,10 +491,12 @@ export interface TrustedInstructionCoveredPlan {
  * Validates an already-observed Plan artifact.
  *
  * @remarks
- * Parsing, canonical serialization, freshness, and instruction-coverage
- * checks stay pure over supplied text. Preflight validates a one-read snapshot
- * without rereading storage, while established public readers delegate here
- * with unchanged consumer-facing signatures and error behavior.
+ * Parsing, canonical serialization, and digest freshness precede committed
+ * instruction-coverage and element-intent revalidation over supplied text.
+ * Element intents use the same span policy as check's
+ * inspectCommittedElementIntents and generate's self-check, but run and heal
+ * check the digest first so retired plans report StaleIrError (SPEC-R8).
+ * Preflight validates a one-read snapshot without rereading storage.
  */
 export function validateTrustedInstructionCoveredPlanText(
   text: string,
@@ -514,6 +517,16 @@ export function validateTrustedInstructionCoveredPlanText(
     }
     instructionCoverageByStepId.set(step.id, result.data);
   }
+  for (const step of plan.steps) {
+    if (!('intent' in step)) continue;
+    const result = validateCommittedElementIntent(step.intent, normalizedTestMd);
+    if (!result.success) {
+      throw new IntegrityViolationError('The generated plan contains invalid element intents or source spans.', {
+        planPath,
+        issues: result.issues,
+      });
+    }
+  }
   return { plan, instructionCoverageByStepId };
 }
 
@@ -526,10 +539,13 @@ export function validateTrustedInstructionCoveredPlanText(
  * @param normalizedTestMd - Canonical prompt used to re-extract every span.
  * @returns The trusted Plan plus step-keyed local criterion projections.
  * @remarks
- * Strict schema, canonical bytes, digest equality, and committed instruction
- * coverage all complete before grounding inspection, browser launch, or AI
- * resolution. Invalid source coordinates or whitespace-only re-extraction are
- * integrity failures rather than authority-bearing metadata.
+ * Strict schema, canonical bytes, and digest equality complete before
+ * committed instruction coverage and element-intent revalidation, then
+ * grounding inspection, browser launch, or AI resolution. Intent spans follow
+ * check's inspectCommittedElementIntents and generate's self-check policy,
+ * with digest before intent here (the reverse of check, per SPEC-R8).
+ * Invalid source coordinates or whitespace-only re-extraction are integrity
+ * failures rather than authority-bearing metadata.
  */
 export async function readTrustedInstructionCoveredPlan(
   storage: StorageAdapter,

@@ -12,9 +12,17 @@ description: "他のすべての章は、それらの形状を再記述するの
 | `TargetDefinition` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | シークレットマーカーを含まない、作成されたHTTP(S)ベースURL。 | [src/core/ir/schema.ts:37-38](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37-L38), [src/core/ir/schema.ts:165-166](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165-L166) |
 |  | `browser` | string | required | literal `chromium` | 選択されたブラウザ。 | [src/core/ir/schema.ts:167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L167) |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | シークレットごとの許可されたオリジン。 | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L168) |
+|  | `locale` | string | optional | min length 1 | config loader が正規化した後の BCP-47 形式の locale タグ。 | repo:src/core/ir/schema.ts:210 |
 | `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L183) |
 |  | `role` | string | required | min 1 | 正確なアクセシビリティロール。 | [src/core/ir/schema.ts:185](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L185) |
 |  | `name` | string | required | min 1 | アクセシブル名。 | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L186) |
+| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 引用された抜粋のリテラルテキスト。 | repo:src/core/ir/schema.ts:359 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用された抜粋の位置。 | repo:src/core/ir/schema.ts:360 |
+| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | プロンプトの根拠に結び付いた自然言語の要素記述。 | repo:src/core/ir/schema.ts:367 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 記述の抜粋位置。 | repo:src/core/ir/schema.ts:368 |
+|  | `roleHint` | string | optional | `/^[a-z]+$/` | 任意の小文字アクセシビリティロールのヒント。 | repo:src/core/ir/schema.ts:369 |
+|  | `quote` | `Quote` | optional | strict nested object | プロンプト内の位置を独立して特定した任意の UI テキスト引用。 | repo:src/core/ir/schema.ts:370 |
+| `QuotedElementIntent` (`ElementIntent` を拡張) | `quote` | `Quote` | required | strict nested object | 必須の UI テキスト引用。 | repo:src/core/ir/schema.ts:376 |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | ロケータエビデンスの形式。 | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小文字のSHA-256。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:223](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L223) |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | 1始まりのUTF-16開始行。 | [src/core/ir/schema.ts:332](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L332) |

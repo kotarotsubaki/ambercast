@@ -19,6 +19,7 @@ import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
 import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
+import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import {
   type ElementRef,
@@ -33,6 +34,7 @@ import {
 } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
 import { reportError } from '#report/error-mapping.js';
+import { RepairTraceEntry } from '#report/schema.js';
 import type { AssertOutcome, BrowserSession } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { EventSink, RunEvent, StageTwoRejectionReason } from '#ports/system.js';
@@ -4543,6 +4545,144 @@ describe('heal interruption contract', () => {
     } finally {
       dispose.mockRestore();
     }
+  });
+});
+
+describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
+  it.each([
+    ['click', 'element-reground'],
+    ['press', 'element-reground'],
+    ['fill', 'element-reground'],
+    ['fill-secret', 'element-reground'],
+    ['navigate', 'none'],
+  ] as const)('TEST-H1 classifies action %s as %s', (action, expected) => {
+    const step = Step.parse({
+      id: 'action-step', kind: 'action', target: 'web', action,
+      ...(action === 'navigate' ? { url: '/next' } : { intent: committedIntent(SUBMIT) }),
+      ...(action === 'fill' ? { value: 'text' } : {}),
+      ...(action === 'fill-secret' ? { secretRef: '{{secrets.PASSWORD}}' } : {}),
+      ...(action === 'press' ? { key: 'Enter' } : {}),
+    });
+    expect(groundingRecoveryModeForStep(step)).toBe(expected);
+  });
+
+  it.each([
+    ['element-visible', 'confirms-reground'],
+    ['text-equals', 'confirms-reground'],
+    ['text-visible', 'confirms-reground'],
+    ['url-matches', 'confirms-reground'],
+    ['element-count', 'confirms-reground'],
+  ] as const)('TEST-H1 classifies assert %s as %s', (check, expected) => {
+    const step = Step.parse({
+      id: 'assert-step', kind: 'assert', target: 'web', check,
+      ...(check === 'element-visible' || check === 'text-equals' || check === 'element-count' ? { intent: { ...committedIntent(SUBMIT), quote: { text: 'submit', sourceSpan: FIXTURE_SPAN } } } : {}),
+      ...(check === 'text-equals' || check === 'text-visible' ? { text: 'Dashboard' } : {}),
+      ...(check === 'url-matches' ? { pattern: '/dashboard' } : {}),
+      ...(check === 'element-count' ? { count: 1 } : {}),
+    });
+    expect(groundingRecoveryModeForStep(step)).toBe(expected);
+  });
+
+  it('TEST-H1 classifies capture and ai', () => {
+    expect(groundingRecoveryModeForStep(Step.parse({ id: 'capture-step', kind: 'capture', target: 'web', variable: 'dashboard', intent: committedIntent(SUBMIT) }))).toBe('element-reground');
+    expect(groundingRecoveryModeForStep(AI_STEP)).toBe('ai-retrace');
+  });
+
+  it('TEST-H2 sends an unconfirmed click to Stage 2 with no-confirming-step', async () => {
+    const scenario = await createScenario({ grounding: {}, aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [], ambiguities: [] }, raw: '{}' }) }) });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage1', stepId: 'click-submit', outcome: 'not-eligible', reason: 'no-confirming-step' },
+      expect.objectContaining({ stage: 'stage2', stepId: 'click-submit' }),
+    ]));
+  });
+
+  it('TEST-H2 rebinds a confirmed click and records its new provenance without changing the plan', async () => {
+    const steps = [
+      Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+      Step.parse({ id: 'confirm-submit', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] }),
+    ];
+    const scenario = await createScenario({ steps, grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) }, sessionEntries: liveEntries(SUBMIT) });
+    const beforePlan = await scenario.storage.readText(PLAN);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'click-submit', outcome: 'accepted' }]));
+    expect(await scenario.storage.readText(PLAN)).toBe(beforePlan);
+    const grounding = GroundingDocument.parse(JSON.parse(await scenario.storage.readText(GROUNDING)));
+    expect(grounding.entries['click-submit']).toEqual(expect.objectContaining({ kind: 'element', provenance: expect.any(String) }));
+  });
+
+  it('TEST-H3 skips confirms-reground when the failed assert lists no confirms', async () => {
+    const scenario = await createScenario({ steps: [Step.parse({ id: 'visible', kind: 'assert', target: 'web', check: 'element-visible', intent: { ...committedIntent(SUBMIT), quote: { text: 'submit', sourceSpan: FIXTURE_SPAN } } })], grounding: {} });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'visible', outcome: 'not-eligible', reason: 'no-confirms' }]));
+  });
+
+  it('TEST-H3 clears the confirmed click entry before replaying a failed url-matches assert', async () => {
+    const scenario = await createScenario({
+      steps: [
+        Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+        Step.parse({ id: 'url-check', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] }),
+      ],
+      grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) },
+      sessionEntries: liveEntries(SUBMIT),
+    });
+    replayRunObserver.beforeRun = async (_deps, storage, options) => {
+      if (options.resolve) {
+        const grounding = GroundingDocument.parse(JSON.parse(await storage.readText(GROUNDING)));
+        expect(grounding.entries['click-submit']).toBeUndefined();
+      }
+    };
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'url-check', outcome: 'accepted' }]));
+  });
+
+  it('TEST-H5 rejects a Stage 2 replacement that changes confirms', async () => {
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] })],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard' }], ambiguities: [] }, raw: '{}' }) }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason: 'obligation-mismatch' }]));
+  });
+
+  it('TEST-H5 rejects invalid replacement intent with intent-invalid', async () => {
+    const scenario = await createScenario({
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: { ...generatedIntent(REPAIRED_SUBMIT), citation: 'not in prompt' } }], ambiguities: [] }, raw: '{}' }) }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'click-submit', outcome: 'rejected', reason: 'intent-invalid' }]));
+  });
+
+  it.each(['frontier-out-of-range', 'mode-none', 'trace-current', 'no-confirming-step', 'no-confirms'] as const)('TEST-H4 requires not-eligible reason %s in the report schema', (reason) => {
+    const entry = { stage: 'stage1', stepId: 'repair-me', outcome: 'not-eligible', reason };
+    expect(RepairTraceEntry.parse(entry)).toEqual(entry);
+    expect(RepairTraceEntry.safeParse({ stage: 'stage1', stepId: 'repair-me', outcome: 'not-eligible' }).success).toBe(false);
+  });
+
+  it.each(['accepted', 'no-advance'] as const)('TEST-H4 forbids reason on %s', (outcome) => {
+    expect(RepairTraceEntry.parse({ stage: 'stage1', stepId: 'repair-me', outcome })).toEqual({ stage: 'stage1', stepId: 'repair-me', outcome });
+    expect(RepairTraceEntry.safeParse({ stage: 'stage1', stepId: 'repair-me', outcome, reason: 'mode-none' }).success).toBe(false);
+  });
+
+  it('TEST-H6 rejects a v4 plan as stale before replay', async () => {
+    const scenario = await createScenario();
+    const oldPlan = { ...scenario.plan, schemaVersion: 4 };
+    await scenario.storage.writeText(PLAN, toCanonicalArtifactText(oldPlan as JsonValueT));
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.errors[0]?.error).toBeInstanceOf(StaleIrError);
+    expect(scenario.sessionFactory).not.toHaveBeenCalled();
+  });
+
+  it('TEST-H6 asks Stage 3 generation to write a v5 plan', async () => {
+    const scenario = await createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })], grounding: {} });
+    generateRunObserver.afterGenerate = async () => {
+      const plan = PlanDocument.parse(JSON.parse(await scenario.storage.readText(PLAN)));
+      expect(plan.schemaVersion).toBe(PLAN_SCHEMA_VERSION);
+    };
+    await heal(scenario.deps, OPTIONS);
+    expect(generateRunObserver.options).toBeDefined();
   });
 });
 

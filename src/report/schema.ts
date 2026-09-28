@@ -639,6 +639,7 @@ export const HealStageTwoRejectionReason = z.enum([
   'secret-name-invalid',
   'coverage-invalid',
   'obligation-mismatch',
+  'intent-invalid',
   'literal-secret',
   'no-advance',
 ]);

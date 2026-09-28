@@ -36,6 +36,7 @@ import { AmbercastError as AmbercastErrorClass } from '#core/errors/types.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { obligationFingerprintMatches } from '#core/ir/obligation-fingerprint.js';
+import { validateCommittedElementIntent } from './element-intent-policy.js';
 import { joinPath } from '#core/paths.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
@@ -1019,6 +1020,9 @@ async function trySingleStepRepair(
     return propagate(error);
   }
   if (!obligationFingerprintMatches(step, replacement)) return reject('obligation-mismatch');
+  if ('intent' in replacement && !validateCommittedElementIntent(replacement.intent, normalized).success) {
+    throw new Error('not implemented (step 11)');
+  }
   try {
     assertSecretUsesAllowed(candidate, deps.config.secrets?.allow ?? [], {
       configPath: deps.configSource?.path ?? null,

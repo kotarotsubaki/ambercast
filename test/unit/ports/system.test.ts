@@ -50,7 +50,7 @@ describe('system port shapes', () => {
       | {
         readonly type: 'heal-stage2-rejected';
         readonly stepId: StepId;
-        readonly reason: 'provider-error' | 'response-shape' | 'id-mismatch' | 'secret-name-invalid' | 'coverage-invalid' | 'obligation-mismatch' | 'literal-secret' | 'no-advance';
+        readonly reason: 'provider-error' | 'response-shape' | 'id-mismatch' | 'secret-name-invalid' | 'coverage-invalid' | 'obligation-mismatch' | 'intent-invalid' | 'literal-secret' | 'no-advance';
       }
     >();
     expectTypeOf<EventSink['emit']>().toEqualTypeOf<(event: RunEvent) => void>();
@@ -64,6 +64,7 @@ describe('Stage 2 rejection reason report mirror', () => {
     expect([...HealStageTwoRejectionReason.options].sort()).toEqual([
       'coverage-invalid',
       'id-mismatch',
+      'intent-invalid',
       'literal-secret',
       'no-advance',
       'obligation-mismatch',

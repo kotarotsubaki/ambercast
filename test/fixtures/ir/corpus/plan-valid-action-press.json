@@ -2,7 +2,7 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-    "schemaVersion": 4,
+    "schemaVersion": 5,
     "source": {
       "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
@@ -18,12 +18,17 @@
         "kind": "action",
         "action": "press",
         "key": "Enter",
-        "element": {
-          "strategy": "accessibility",
-          "role": "textbox",
-          "name": "Search"
-        },
-        "target": "app"
+        "target": "app",
+        "intent": {
+          "description": "Search",
+          "sourceSpan": {
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 2
+          },
+          "roleHint": "textbox"
+        }
       }
     ]
   }

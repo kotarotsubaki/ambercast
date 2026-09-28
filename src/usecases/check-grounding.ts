@@ -3,7 +3,7 @@ import {
   isGroundingCanonicalForClaim,
   rawGroundingHasCoverageClaim,
 } from '#core/ir/grounding-coverage-claim.js';
-import { GroundingDocument, type PlanDocument } from '#core/ir/schema.js';
+import { GroundingDocument, RETIRED_GROUNDING_SCHEMA_VERSION, type PlanDocument } from '#core/ir/schema.js';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 
 /*
@@ -53,7 +53,7 @@ export function inspectGroundingArtifactText(text: string, plan: PlanDocument): 
     return { kind: 'invalid' };
   }
 
-  if (typeof parsed === 'object' && parsed !== null && 'schemaVersion' in parsed && parsed.schemaVersion === 2) {
+  if (typeof parsed === 'object' && parsed !== null && 'schemaVersion' in parsed && parsed.schemaVersion === RETIRED_GROUNDING_SCHEMA_VERSION) {
     return { kind: 'stale' };
   }
 

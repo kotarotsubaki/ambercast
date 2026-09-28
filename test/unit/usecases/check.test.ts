@@ -45,11 +45,11 @@ function createConfig(overrides: Partial<TestConfig> = {}): TestConfig {
 
 function freshPlan(prompt = PROMPT, targetDefinitions: Readonly<Record<string, TargetDefinition>> = TARGETS): PlanDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(prompt),
-        schemaVersion: 4,
+        schemaVersion: 5,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions,
@@ -87,7 +87,7 @@ async function writeGrounding(
   entries: GroundingDocument['entries'] = {},
   planDigest = computePlanDigest(plan),
 ): Promise<void> {
-  const grounding: GroundingDocument = { schemaVersion: 2, planDigest, entries };
+  const grounding: GroundingDocument = { schemaVersion: 3, planDigest, entries };
   await storage.writeText(
     layout.groundingPathFor(testPath),
     toCanonicalArtifactText(grounding as unknown as JsonValueT),
@@ -129,6 +129,64 @@ function createScenario(overrides: Partial<CheckDeps> = {}) {
 }
 
 describe('check', () => {
+  it('TEST-C1 reports retired v4 plans and invalid committed element intents as stale with exit 4', async () => {
+    const { storage, layout, deps } = createScenario();
+    const retiredPath = `${TEST_DIR}/retired-v4.test.md`;
+    await storage.writeText(retiredPath, PROMPT);
+    await storage.writeText(layout.planPathFor(retiredPath), JSON.stringify({ ...freshPlan(), schemaVersion: 4 }));
+    const retired = await check(deps, { ...OPTIONS, files: [retiredPath] });
+    expect(retired.results).toEqual([expect.objectContaining({
+      id: retiredPath, status: 'stale',
+      reason: 'The plan uses retired schema version 4; regenerate it with `ambercast generate`.',
+    })]);
+    expect(buildCheckReport({ startedAt: '2026-08-24T00:00:00Z', durationMs: 1, options: OPTIONS, outcome: retired }).exitCode).toBe(4);
+
+    const invalidPath = `${TEST_DIR}/invalid-intent-span.test.md`;
+    await storage.writeText(invalidPath, PROMPT);
+    const plan = {
+      ...freshPlan(),
+      steps: [{
+        id: 'click-submit', kind: 'action', action: 'click', target: 'web',
+        intent: { description: 'Submit valid credentials', sourceSpan: { startLine: 99, startColumn: 1, endLine: 99, endColumn: 2 } },
+      }],
+    } as unknown as PlanDocument;
+    await writePlan(storage, layout, invalidPath, plan);
+    const invalid = await check(deps, { ...OPTIONS, files: [invalidPath] });
+    expect(invalid.results).toEqual([expect.objectContaining({
+      id: invalidPath, status: 'stale', reason: 'The plan has invalid element intents or source spans.',
+    })]);
+    expect(buildCheckReport({ startedAt: '2026-08-24T00:00:00Z', durationMs: 1, options: OPTIONS, outcome: invalid }).exitCode).toBe(4);
+  });
+
+  it('TEST-C2 treats v2 grounding as stale but ignores nonmatching v3 entries', async () => {
+    const { storage, layout, deps } = createScenario();
+    const testPath = `${TEST_DIR}/grounding-version-and-entries.test.md`;
+    await storage.writeText(testPath, PROMPT);
+    const plan = await writePlan(storage, layout, testPath);
+    const entries: GroundingDocument['entries'] = {
+      'visit-web': {
+        kind: 'element', locator: { strategy: 'accessibility', role: 'button', name: 'Submit' },
+        fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) },
+        intentDigest: 'b'.repeat(64), provenance: 'ai-proposed',
+      },
+      'unknown-step': {
+        kind: 'element', locator: { strategy: 'accessibility', role: 'button', name: 'Submit' },
+        fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'c'.repeat(64) },
+        intentDigest: 'd'.repeat(64), provenance: 'ai-proposed',
+      },
+    };
+    await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
+      schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {},
+    }));
+    const oldVersion = await check(deps, { ...OPTIONS, files: [testPath] });
+    expect(oldVersion.results).toEqual([expect.objectContaining({
+      id: testPath, status: 'stale-grounding', reason: expect.stringContaining('does not match the current plan'),
+    })]);
+    await writeGrounding(storage, layout, testPath, plan, entries);
+    const extraEntries = await check(deps, { ...OPTIONS, files: [testPath] });
+    expect(extraEntries.results).toEqual([expect.objectContaining({ id: testPath, status: 'fresh' })]);
+  });
+
   it('TEST-L5 reports a locale-changed plan as stale', async () => {
     const testPath = `${TEST_DIR}/locale.test.md`;
     const { storage, layout } = createScenario();
@@ -150,10 +208,10 @@ describe('check', () => {
       B: { surface: 'web', baseUrl: 'https://b.example.test' },
     } as const;
     const plan = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       source: { inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 4,
+        schemaVersion: 5,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions: definitions as unknown as Parameters<typeof computeInputsDigest>[0]['targetDefinitions'],
@@ -358,7 +416,10 @@ describe('check', () => {
     await writeGrounding(storage, layout, testPath, plan, {
       'click-submit': {
         kind: 'element',
+        locator: { strategy: 'accessibility', role: 'button', name: 'Submit' },
         fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) },
+        intentDigest: 'b'.repeat(64),
+        provenance: 'ai-proposed',
       },
     });
 
@@ -1182,7 +1243,7 @@ describe('check', () => {
         throw new Error('Updated-grounding fixtures need a plan.');
       }
       await writeGrounding(backing, layout, testPath, plan, {
-        step: { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) } },
+        step: { kind: 'element', locator: { strategy: 'accessibility', role: 'button', name: 'Submit' }, fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) }, intentDigest: 'b'.repeat(64), provenance: 'ai-proposed' },
       });
     } else if (scenario === 'stale') {
       await backing.writeText(layout.planPathFor(testPath), JSON.stringify(freshPlan(), null, 4));
@@ -1281,7 +1342,7 @@ describe('check grounding lifecycle integration', () => {
   it.each([
     ['empty entries', {}],
     ['non-empty entries', {
-      'click-submit': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) } },
+      'click-submit': { kind: 'element', locator: { strategy: 'accessibility', role: 'button', name: 'Submit' }, fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) }, intentDigest: 'b'.repeat(64), provenance: 'ai-proposed' },
     }],
   ] as const)('keeps committed matching grounding with %s fresh', async (_name, entries) => {
     const { storage, layout, deps } = createScenario();
@@ -1328,7 +1389,7 @@ describe('check grounding lifecycle integration', () => {
     await storage.writeText(testPath, PROMPT);
     const plan = await writePlan(storage, layout, testPath);
     await writeGrounding(storage, layout, testPath, plan, kind === 'empty entries' ? {} : {
-      'click-submit': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) } },
+      'click-submit': { kind: 'element', locator: { strategy: 'accessibility', role: 'button', name: 'Submit' }, fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) }, intentDigest: 'b'.repeat(64), provenance: 'ai-proposed' },
     } as GroundingDocument['entries']);
 
     await expect(check(deps, { ...OPTIONS, files: [testPath] })).resolves.toMatchObject({

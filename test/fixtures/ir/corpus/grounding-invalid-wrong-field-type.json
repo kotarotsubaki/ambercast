@@ -2,7 +2,7 @@
   "document": "grounding",
   "expected": "invalid",
   "value": {
-    "schemaVersion": 2,
+    "schemaVersion": 3,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "step": {
@@ -10,7 +10,14 @@
         "fingerprint": {
           "algorithm": "a11y-neighborhood-v2",
           "hash": 42
-        }
+        },
+        "locator": {
+          "strategy": "accessibility",
+          "role": "button",
+          "name": "Submit"
+        },
+        "intentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "provenance": "quoted-match"
       }
     }
   }

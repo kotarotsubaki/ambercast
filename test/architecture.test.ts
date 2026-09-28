@@ -611,6 +611,11 @@ describe('architecture guardrails', () => {
         {
           "className": "IntegrityViolationError",
           "fileName": "usecases/run.ts",
+          "functionName": "validateTrustedInstructionCoveredPlanText",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
           "functionName": "validateTrustedPlanText",
         },
         {

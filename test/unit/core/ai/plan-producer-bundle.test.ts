@@ -12,6 +12,7 @@ import {
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
+import { GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE, GENERATOR_SECRET_POLICY_TEMPLATE } from '#core/ai/prompt-envelope.js';
 
 function createInputs(overrides: Partial<PlanProducerBundleInputs> = {}): PlanProducerBundleInputs {
   return {
@@ -21,19 +22,32 @@ function createInputs(overrides: Partial<PlanProducerBundleInputs> = {}): PlanPr
     generatedPlanResponseLocalContract: { type: 'object', additionalProperties: false },
     instructionCoveragePolicyRevision: 1,
     generatorSecretPolicyRevision: 1,
+    elementIntentPolicyRevision: 1,
     ...overrides,
   };
 }
 
 describe('plan producer bundle', () => {
+  // TEST-G5 / SPEC-G6
+  it('includes the element intent policy and its four provider rules in the live bundle', () => {
+    const components = planProducerBundleComponentDiagnostics(liveProducerBundleInputs());
+    expect(components.elementIntentPolicyRevision).toBe(1);
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('Never guess or infer an element\'s accessible role or name');
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('exact literal text appearing inside quotation marks');
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('as an ai step instead');
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('list only the actions that produced the exact state');
+    expect(GENERATOR_SECRET_POLICY_TEMPLATE).toContain('"intent":');
+    expect(GENERATOR_SECRET_POLICY_TEMPLATE).toContain('"startAnchor":');
+    expect(planProducerBundleFingerprint()).not.toBe('2f5046995ee6207a945716030a97de787fb9baefb72fcea8bf51c4c857bdc5be');
+  });
   it('returns deterministic lowercase SHA-256 hex for deep-equal inputs', () => {
     expect(computePlanProducerBundleFingerprint(createInputs())).toMatch(/^[0-9a-f]{64}$/);
     expect(computePlanProducerBundleFingerprint(createInputs())).toBe(computePlanProducerBundleFingerprint(createInputs()));
   });
 
-  it('matches the independently derived SHA-256 oracle for a six-field preimage', () => {
-    // Recorded with: printf '%s' '<canonical six-field JSON preimage>' | shasum -a 256
-    expect(computePlanProducerBundleFingerprint(createInputs())).toBe('2f5046995ee6207a945716030a97de787fb9baefb72fcea8bf51c4c857bdc5be');
+  it('matches the independently derived SHA-256 oracle for a seven-field preimage', () => {
+    // Recorded from the canonical seven-field JSON preimage.
+    expect(computePlanProducerBundleFingerprint(createInputs())).toBe('a2f055c67e50d5ef7204708059a9f03647f64c42d0e7a125806cc25c83f643b0');
   });
 
   it.each(Object.entries({
@@ -43,6 +57,7 @@ describe('plan producer bundle', () => {
     generatedPlanResponseLocalContract: (inputs: PlanProducerBundleInputs) => ({ ...inputs, generatedPlanResponseLocalContract: { type: 'array' } }),
     instructionCoveragePolicyRevision: (inputs: PlanProducerBundleInputs) => ({ ...inputs, instructionCoveragePolicyRevision: 2 }),
     generatorSecretPolicyRevision: (inputs: PlanProducerBundleInputs) => ({ ...inputs, generatorSecretPolicyRevision: 2 }),
+    elementIntentPolicyRevision: (inputs: PlanProducerBundleInputs) => ({ ...inputs, elementIntentPolicyRevision: 2 }),
   } satisfies { [K in keyof PlanProducerBundleInputs]-?: (inputs: PlanProducerBundleInputs) => PlanProducerBundleInputs }))(
     'changes when only %s changes',
     (_field, mutate) => expect(computePlanProducerBundleFingerprint(mutate(createInputs())))

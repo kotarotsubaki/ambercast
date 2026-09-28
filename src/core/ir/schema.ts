@@ -72,6 +72,9 @@ export const PLAN_SCHEMA_VERSION = 5 as const;
  */
 export const GROUNDING_SCHEMA_VERSION = 3 as const;
 
+/** The retired grounding version classified as stale during inspection. */
+export const RETIRED_GROUNDING_SCHEMA_VERSION = 2 as const;
+
 /**
  * Validates a whole secret reference.
  *

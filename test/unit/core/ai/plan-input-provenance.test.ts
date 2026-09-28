@@ -38,8 +38,8 @@ describe('deriveCurrentPlanInputProvenance()', () => {
       planProducerBundleFingerprint: 'fixed-bundle-fingerprint',
       targetDefinitions: { web: { surface: 'web', baseUrl: 'https://fixed.example.test' } },
     };
-    const fixedCanonicalPreimage = '{"generatorPromptTemplateFingerprint":"fixed-template-fingerprint","normalizedTestMd":"# Fixed\\n","planProducerBundleFingerprint":"fixed-bundle-fingerprint","schemaVersion":4,"targetDefinitions":{"web":{"baseUrl":"https://fixed.example.test","surface":"web"}}}';
-    const fixedExpectedDigest = 'bda44b8edacaacc15ec43ea6d619919dcbe6ca251bc206978cf9e42c2f03e92e';
+    const fixedCanonicalPreimage = '{"generatorPromptTemplateFingerprint":"fixed-template-fingerprint","normalizedTestMd":"# Fixed\\n","planProducerBundleFingerprint":"fixed-bundle-fingerprint","schemaVersion":5,"targetDefinitions":{"web":{"baseUrl":"https://fixed.example.test","surface":"web"}}}';
+    const fixedExpectedDigest = 'a0a64018c8e74473f2c589dc33be2d218115af5c4bc45a35a255eb5a7a999aa8';
 
     expect(sha256(fixedCanonicalPreimage)).toBe(fixedExpectedDigest);
     expect(computeInputsDigest(fixedInputs)).toBe(fixedExpectedDigest);
@@ -78,6 +78,7 @@ describe('deriveCurrentPlanInputProvenance()', () => {
       generatedPlanResponseLocalContract: { type: 'object' },
       instructionCoveragePolicyRevision: 7,
       generatorSecretPolicyRevision: 11,
+      elementIntentPolicyRevision: 1,
     };
     const liveInputs = vi.spyOn(planProducerBundle, 'liveProducerBundleInputs').mockReturnValue(producerBundleInputs);
 

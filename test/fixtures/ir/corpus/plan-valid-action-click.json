@@ -2,7 +2,7 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-    "schemaVersion": 4,
+    "schemaVersion": 5,
     "source": {
       "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
@@ -17,12 +17,17 @@
         "id": "click-submit",
         "kind": "action",
         "action": "click",
-        "element": {
-          "strategy": "accessibility",
-          "role": "button",
-          "name": "Submit"
-        },
-        "target": "app"
+        "target": "app",
+        "intent": {
+          "description": "Submit",
+          "sourceSpan": {
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 2
+          },
+          "roleHint": "button"
+        }
       }
     ]
   }

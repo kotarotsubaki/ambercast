@@ -88,7 +88,16 @@ const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright'
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
-const PASSWORD_TARGET = { strategy: 'accessibility', role: 'textbox', name: 'Password' } as const;
+const PASSWORD_TARGET = { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 }, quote: { text: 'Password', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } } } as const;
+const PASSWORD_INTENT = { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 }, quote: { text: 'Password', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } } } as const;
+const GENERATED_PASSWORD_INTENT = { description: 'Password', roleHint: 'textbox', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 8, citation: 'Password', quote: { text: 'Password', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 8 } } as const;
+const generatedNamedIntent = (name: string) => ({
+  ...GENERATED_PASSWORD_INTENT,
+  description: name,
+  quote: { ...GENERATED_PASSWORD_INTENT.quote, text: name },
+});
+const QUOTED_PROMPT = '# Sign in\n\nClick "Password" button.\n';
+const QUOTED_INTENT = { description: '"Password" button', roleHint: 'button', startAnchor: 'L3', startColumn: 7, endAnchor: 'L3', endColumn: 24, citation: '"Password" button', quote: { text: 'Password', startAnchor: 'L3', startColumn: 8, endAnchor: 'L3', endColumn: 16 } } as const;
 const INSTRUCTION_PROOF_FIELD = ['cita', 'tion'].join('');
 const coveredResponse = {
   steps: [{
@@ -323,13 +332,13 @@ async function createFreshPlan(
   ) as PlanDocument['targets'];
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 4,
+    schemaVersion: 5,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundle.planProducerBundleFingerprint(),
     targetDefinitions: planTargets,
   });
   const plan = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: { inputsDigest },
     targets: planTargets,
     steps: [...steps],
@@ -347,7 +356,7 @@ async function seedFreshArtifacts(
 ): Promise<void> {
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const plan = await createFreshPlan(storage, testPath, steps, targetDefinitions);
-  const grounding: GroundingDocument = { schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} };
+  const grounding: GroundingDocument = { schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} };
 
   await storage.writeText(
     layout.groundingPathFor(testPath),
@@ -422,7 +431,7 @@ describe('generate', () => {
     ], ['verificationIntent', 1, 'criterionId'], 'intent-id-duplicate'],
     ['unsupported assertion shape', [{
       criterionId: 'dashboard-reached',
-      assertion: { type: 'assert', check: 'element-count', element: PASSWORD_TARGET, min: 0 },
+      assertion: { type: 'assert', check: 'element-count', intent: PASSWORD_TARGET, min: 0 },
     }], ['verificationIntent', 0, 'assertion'], 'intent-assertion-unsupported'],
     ['terminal url intent', [{ criterionId: 'dashboard-reached', assertion: { type: 'assert', check: 'url-matches', pattern: '/dashboard$' } }], ['verificationIntent', 0, 'assertion'], 'terminal-url-matches-forbidden'],
   ] as const)(
@@ -712,9 +721,9 @@ describe('generate', () => {
 
   it.each([
     ['text-visible', { type: 'assert', check: 'text-visible', text: 'Dashboard' }],
-    ['text-equals', { type: 'assert', check: 'text-equals', element: PASSWORD_TARGET, text: 'Dashboard' }],
-    ['element-visible', { type: 'assert', check: 'element-visible', element: PASSWORD_TARGET }],
-    ['element-count exact zero', { type: 'assert', check: 'element-count', element: PASSWORD_TARGET, count: 0 }],
+    ['text-equals', { type: 'assert', check: 'text-equals', intent: PASSWORD_TARGET, text: 'Dashboard' }],
+    ['element-visible', { type: 'assert', check: 'element-visible', intent: PASSWORD_TARGET }],
+    ['element-count exact zero', { type: 'assert', check: 'element-count', intent: PASSWORD_TARGET, count: 0 }],
   ] as const)('accepts provider terminal intent vocabulary %s', async (_name, assertion) => {
     const response = {
       ...coveredResponse,
@@ -1028,7 +1037,7 @@ describe('generate', () => {
     });
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(JSON.parse(await recordingStorage.storage.readText(`${TEST_DIR}/first.ambercast.grounding.json`))).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: computePlanDigest(firstPlan),
       entries: {},
     });
@@ -1348,7 +1357,7 @@ describe('generate', () => {
       kind: 'action',
       action: 'fill-secret',
       target: 'web',
-      element: PASSWORD_TARGET,
+      intent: PASSWORD_INTENT,
       secretRef,
     }]);
     scenario.recordingStorage.reset();
@@ -1388,10 +1397,10 @@ describe('generate', () => {
     const { deps, recordingStorage, execute } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
-      { id: 'z-first', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Z first' }, secretRef: '{{secrets.Z}}' },
-      { id: 'z-second', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Z second' }, secretRef: '{{secrets.Z}}' },
-      { id: 'a-first', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'A first' }, secretRef: '{{secrets.a}}' },
-      { id: 'a-second', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'A second' }, secretRef: '{{secrets.a}}' },
+      { id: 'z-first', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...PASSWORD_TARGET, description: 'Z first' }, secretRef: '{{secrets.Z}}' },
+      { id: 'z-second', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...PASSWORD_TARGET, description: 'Z second' }, secretRef: '{{secrets.Z}}' },
+      { id: 'a-first', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...PASSWORD_TARGET, description: 'A first' }, secretRef: '{{secrets.a}}' },
+      { id: 'a-second', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...PASSWORD_TARGET, description: 'A second' }, secretRef: '{{secrets.a}}' },
     ] as unknown as Step[]);
     recordingStorage.reset();
 
@@ -1439,7 +1448,7 @@ describe('generate', () => {
       readonly entries: unknown;
     };
     expect(rewrittenGrounding).toMatchObject({
-      schemaVersion: 2, // SPEC-3: a v1 cache is replaced by the current v2 cache.
+      schemaVersion: 3, // SPEC-3: a v1 cache is replaced by the current v3 cache.
       planDigest: computePlanDigest(plan),
     });
     expect(rewrittenGrounding.entries).toStrictEqual({});
@@ -2084,7 +2093,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 2, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 3, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -2109,7 +2118,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 2, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 3, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -2242,7 +2251,7 @@ describe('generate', () => {
         kind: 'action',
         action: 'fill-secret',
         target: 'web',
-        element: PASSWORD_TARGET,
+        intent: GENERATED_PASSWORD_INTENT,
         secret: { nameHint: 'login_password' },
       }],
       ambiguities: [],
@@ -2302,6 +2311,7 @@ describe('generate', () => {
       generatedPlanResponseLocalContract: { type: 'object', title: 'first local contract' },
       instructionCoveragePolicyRevision: 101,
       generatorSecretPolicyRevision: 102,
+      elementIntentPolicyRevision: 1,
     };
     const secondSnapshot = {
       generatorPromptTemplate: 'second template',
@@ -2310,6 +2320,7 @@ describe('generate', () => {
       generatedPlanResponseLocalContract: { type: 'object', title: 'second local contract' },
       instructionCoveragePolicyRevision: 201,
       generatorSecretPolicyRevision: 202,
+      elementIntentPolicyRevision: 1,
     };
     const liveInputs = vi.spyOn(planProducerBundle, 'liveProducerBundleInputs')
       .mockReturnValueOnce(firstSnapshot)
@@ -2357,6 +2368,7 @@ describe('generate', () => {
       generatedPlanResponseLocalContract: { type: 'object' },
       instructionCoveragePolicyRevision: 1,
       generatorSecretPolicyRevision: 1,
+      elementIntentPolicyRevision: 1,
     };
     const components = {
       generatorPromptTemplate: '1'.repeat(64),
@@ -2365,6 +2377,7 @@ describe('generate', () => {
       generatedPlanResponseLocalContract: '4'.repeat(64),
       instructionCoveragePolicyRevision: 1,
       generatorSecretPolicyRevision: 1,
+      elementIntentPolicyRevision: 1,
     };
     const inputsSpy = vi.spyOn(planProducerBundle, 'liveProducerBundleInputs').mockReturnValue(inputs);
     const diagnosticsSpy = vi.spyOn(planProducerBundle, 'planProducerBundleComponentDiagnostics').mockReturnValue(components);
@@ -3216,9 +3229,141 @@ describe('generate', () => {
   });
 });
 
+describe('generate v5 element intent and confirmation contracts', () => {
+  const quotedPrompt = '# Sign in\n\nClick "Password" button.\n';
+  const click = (intent: unknown, id = 'click-password') => ({
+    id, kind: 'action', action: 'click', target: 'web', intent,
+  });
+
+  it.each([
+    ['intent attribution', { ...QUOTED_INTENT, citation: 'not in the prompt' }, 'intent-citation-mismatch'],
+    ['quote attribution', { ...QUOTED_INTENT, quote: { ...QUOTED_INTENT.quote, text: 'Not Password' } }, 'quote-text-mismatch'],
+    ['quote-less element assert', undefined, 'schema-mismatch'],
+    ['invalid confirms reference', QUOTED_INTENT, 'schema-mismatch'],
+  ] as const)('TEST-G2 retries %s and writes the corrected plan', async (kind, intent, code) => {
+    const badStep = kind === 'quote-less element assert'
+      ? { id: 'assert-password', kind: 'assert', check: 'element-visible', target: 'web', intent: { ...QUOTED_INTENT, quote: undefined } }
+      : kind === 'invalid confirms reference'
+        ? { id: 'assert-password', kind: 'assert', check: 'element-visible', target: 'web', intent, confirms: ['missing-action'] }
+        : click(intent);
+    const invalid = { steps: [badStep], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const corrected = { steps: [click(QUOTED_INTENT)], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    let attempt = 0;
+    const execute = vi.fn(async () => {
+      const data = attempt++ === 0 ? invalid : corrected;
+      return { data, raw: JSON.stringify(data) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const file = await writePrompt(scenario.recordingStorage.storage, 'login.test.md', quotedPrompt);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results).toMatchObject([{ file, status: 'generated' }]);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect((execute.mock.calls as unknown as Array<[{ readonly context: unknown }]>)[1]?.[0].context).toMatchObject({
+      previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [
+        expect.objectContaining({ code, path: expect.any(Array), ...(code === 'schema-mismatch' ? {} : { stepId: 'click-password' }) }),
+      ] }],
+    });
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).toBe(true);
+  });
+
+  it('TEST-G3 reports one self-quote issue, collects another step defect in order, and retries', async () => {
+    const selfQuote = { id: 'assert-password', kind: 'assert', check: 'text-equals', target: 'web', intent: QUOTED_INTENT, text: ' password ' };
+    const invalid = { steps: [
+      selfQuote,
+      click({ ...QUOTED_INTENT, citation: 'wrong citation' }, 'bad-click'),
+    ], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const corrected = { steps: [{ ...selfQuote, text: 'Ready' }], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    let attempt = 0;
+    const execute = vi.fn(async () => {
+      const data = attempt++ === 0 ? invalid : corrected;
+      return { data, raw: JSON.stringify(data) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', quotedPrompt);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect((execute.mock.calls as unknown as Array<[{ readonly context: unknown }]>)[1]?.[0].context).toMatchObject({
+      previousAttempts: [{ issues: [
+        { code: 'text-equals-self-quote', path: ['text'], stepId: 'assert-password' },
+        expect.objectContaining({ code: 'intent-citation-mismatch', stepId: 'bad-click' }),
+      ] }],
+    });
+  });
+
+  it('TEST-G3 omits self-quote judgment when the quote is unpaired', async () => {
+    const intent = { ...QUOTED_INTENT, quote: { ...QUOTED_INTENT.quote, text: 'Password', startColumn: 1, endColumn: 9 } };
+    const data = { steps: [{ id: 'assert-password', kind: 'assert', check: 'text-equals', target: 'web', intent, text: 'Password' }], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data, raw: JSON.stringify(data) }) }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', quotedPrompt);
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+    expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+    expect(outcome.results[0]?.error?.details).toMatchObject({
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'quote-unpaired', stepId: 'assert-password' })]),
+    });
+    expect(JSON.stringify(outcome.results[0]?.error?.details)).not.toContain('text-equals-self-quote');
+  });
+
+  it.each([false, true])('TEST-G4 warns for two unconfirmed actions in plan order with dryRun=%s', async (dryRun) => {
+    const scenario = createScenario();
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    const steps = [
+      { id: 'first', kind: 'action', action: 'press', target: 'web', intent: PASSWORD_TARGET, key: 'Enter' },
+      { id: 'second', kind: 'action', action: 'press', target: 'web', intent: PASSWORD_TARGET, key: 'Tab' },
+      { id: 'third', kind: 'action', action: 'press', target: 'web', intent: PASSWORD_TARGET, key: 'Escape' },
+      { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Dashboard', confirms: ['second'] },
+    ] as unknown as Step[];
+    await seedFreshArtifacts(scenario.recordingStorage.storage, file, steps);
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, dryRun });
+    expect(outcome.results).toMatchObject([{ status: 'skipped-fresh', warnings: [
+      { kind: 'action-unconfirmed', stepId: 'first' },
+      { kind: 'action-unconfirmed', stepId: 'third' },
+    ] }]);
+  });
+
+  it('TEST-G4 orders secret warnings before unconfirmed action warnings', async () => {
+    const scenario = createScenario();
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    await seedFreshArtifacts(scenario.recordingStorage.storage, file, [
+      { id: 'first', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_TARGET, secretRef: '{{secrets.password}}' },
+      { id: 'second', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...PASSWORD_TARGET, description: 'Other password' }, secretRef: '{{secrets.password}}' },
+      { id: 'third', kind: 'action', action: 'press', target: 'web', intent: PASSWORD_TARGET, key: 'Enter' },
+      { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Dashboard', confirms: ['third'] },
+    ] as unknown as Step[]);
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'skipped-fresh', warnings: [
+      { kind: 'secret-name-reused-across-targets', name: 'password', stepIds: ['first', 'second'] },
+      { kind: 'action-unconfirmed', stepId: 'first' },
+      { kind: 'action-unconfirmed', stepId: 'second' },
+    ] }]);
+  });
+
+  it('TEST-G6 regenerates a v4 plan with v2 grounding and suppresses old-target warning on force', async () => {
+    const scenario = createScenario();
+    const file = await writePrompt(scenario.recordingStorage.storage);
+    const planPath = scenario.deps.layout.planPathFor(file);
+    const groundingPath = scenario.deps.layout.groundingPathFor(file);
+    const oldPlan = { schemaVersion: 4, source: { inputsDigest: '0'.repeat(64) }, targets: TARGETS, steps: [
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Old password' }, secretRef: '{{secrets.password}}' },
+    ] };
+    await scenario.deps.storage.writeText(planPath, toCanonicalArtifactText(oldPlan as unknown as JsonValueT));
+    await scenario.deps.storage.writeText(groundingPath, toCanonicalArtifactText({ schemaVersion: 2, planDigest: '0'.repeat(64), entries: {} }));
+    const first = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(first.results).toMatchObject([{ status: 'generated' }]);
+    expect(JSON.parse(await scenario.deps.storage.readText(planPath))).toMatchObject({ schemaVersion: 5 });
+    expect(JSON.parse(await scenario.deps.storage.readText(groundingPath))).toEqual(expect.objectContaining({ schemaVersion: 3, entries: {} }));
+    await scenario.deps.storage.writeText(planPath, toCanonicalArtifactText(oldPlan as unknown as JsonValueT));
+    const forced = await generate(scenario.deps, { ...DEFAULT_OPTIONS, force: true });
+    expect(forced.results).toMatchObject([{ status: 'generated' }]);
+    expect(forced.results[0]?.warnings ?? []).not.toContainEqual(expect.objectContaining({ kind: 'secret-target-changed' }));
+  });
+});
+
 describe('generate secret naming and consent boundaries', () => {
   const namedResponse = (secret: unknown): GeneratedPlanResponse => ({
-    steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD_TARGET, ...(secret === undefined ? {} : { secret }) }],
+    steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, ...(secret === undefined ? {} : { secret }) }],
     ambiguities: [],
   } as unknown as GeneratedPlanResponse);
 
@@ -3277,13 +3422,13 @@ describe('generate secret naming and consent boundaries', () => {
   it('retries provider naming violation secret-conflicting-target-names as AI_RESPONSE_INVALID', async () => {
     const conflictingResponse = {
       steps: [
-        { id: 'first-name', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Account' } },
-        { id: 'other-target', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Password' } },
+        { id: 'first-name', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Account') },
+        { id: 'other-target', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT },
         {
           id: 'conflicting-later',
           kind: 'action',
           action: 'fill-secret',
-          target: 'web', element: { ...PASSWORD_TARGET, name: 'Account' },
+          target: 'web', intent: generatedNamedIntent('Account'),
           secret: { allowedName: 'password' },
         },
       ],
@@ -3359,8 +3504,8 @@ describe('generate secret naming and consent boundaries', () => {
 
   it('treats environment-name collisions as terminal and omits them from retry feedback', async () => {
     const response = { steps: [
-      { id: 'fill-one', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Token one' }, secret: { nameHint: 'token_one' } },
-      { id: 'fill-two', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Token two' }, secret: { nameHint: 'token_two' } },
+      { id: 'fill-one', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Token one'), secret: { nameHint: 'token_one' } },
+      { id: 'fill-two', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Token two'), secret: { nameHint: 'token_two' } },
     ], ambiguities: [] } as unknown as GeneratedPlanResponse;
     const execute = vi.fn(async () => ({ data: response, raw: 'collision' }));
     const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
@@ -3387,8 +3532,8 @@ describe('generate secret naming and consent boundaries', () => {
     const scenario = createScenario();
     const file = await writePrompt(scenario.recordingStorage.storage);
     await seedFreshArtifacts(scenario.recordingStorage.storage, file, [
-      { id: 'fill-dot', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Dot' }, secretRef: '{{secrets.foo.bar}}' },
-      { id: 'fill-underscore', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Underscore' }, secretRef: '{{secrets.foo_bar}}' },
+      { id: 'fill-dot', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...PASSWORD_TARGET, description: 'Dot' }, secretRef: '{{secrets.foo.bar}}' },
+      { id: 'fill-underscore', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...PASSWORD_TARGET, description: 'Underscore' }, secretRef: '{{secrets.foo_bar}}' },
     ] as unknown as Step[]);
     const request = vi.fn(async () => ({ kind: 'allowed' as const, renames: [] }));
     const commitAllowlist = vi.fn(async () => undefined);
@@ -3452,7 +3597,7 @@ describe('generate secret naming and consent boundaries', () => {
           kind: 'action',
           action: 'fill-secret',
           target: 'web',
-          element: PASSWORD_TARGET,
+          intent: GENERATED_PASSWORD_INTENT,
           secret: { nameHint: 'password' },
         },
       ],
@@ -3575,7 +3720,7 @@ describe('generate secret naming and consent boundaries', () => {
     const execute = vi.fn(async () => ({ data: namedResponse({ nameHint: 'login_password' }), raw: 'named' }));
     const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
       expect(input.items[0]?.uses[0]).toEqual(expect.objectContaining({
-        target: PASSWORD_TARGET,
+        target: { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } },
         stepId: 'fill-password',
       }));
       const renames = [{ file: `${TEST_DIR}/login.test.md`, name: 'password', newName: 'account_password' }] as const;
@@ -3596,8 +3741,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('rejects a simultaneous cross-occurrence rename set whose destinations collide as environment variables', async () => {
     const response = {
       steps: [
-        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
-        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
+        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Alpha'), secret: { nameHint: 'alpha' } },
+        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Beta'), secret: { nameHint: 'beta' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -3651,8 +3796,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('keeps an unedited use at a merged destination marked with its original selection source', async () => {
     const response = {
       steps: [
-        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Alpha' }, secret: { nameHint: 'alpha' } },
-        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Beta' }, secret: { nameHint: 'beta' } },
+        { id: 'fill-alpha', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Alpha'), secret: { nameHint: 'alpha' } },
+        { id: 'fill-beta', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Beta'), secret: { nameHint: 'beta' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -3813,7 +3958,7 @@ describe('generate secret naming and consent boundaries', () => {
       kind: 'action',
       action: 'fill-secret',
       target: 'web',
-      element: PASSWORD_TARGET,
+      intent: PASSWORD_TARGET,
       secretRef: '{{secrets.password}}',
     }] as unknown as Step[]);
     const planPath = scenario.deps.layout.planPathFor(file);
@@ -3936,13 +4081,13 @@ describe('generate secret naming and consent boundaries', () => {
       resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: response, raw: 'named' }) }),
     });
     const file = await writePrompt(scenario.recordingStorage.storage);
-    const previousTarget = { ...PASSWORD_TARGET, role: 'searchbox' };
+    const previousTarget = { ...PASSWORD_TARGET, roleHint: 'searchbox' };
     await createFreshPlan(scenario.recordingStorage.storage, file, [{
       id: 'fill-password',
       kind: 'action',
       action: 'fill-secret',
       target: 'web',
-      element: previousTarget,
+      intent: previousTarget,
       secretRef: '{{secrets.password}}',
     }] as unknown as Step[]);
 
@@ -3952,8 +4097,8 @@ describe('generate secret naming and consent boundaries', () => {
       kind: 'secret-target-changed',
       name: 'password',
       stepId: 'fill-password',
-      previousTarget,
-      target: PASSWORD_TARGET,
+      previousTarget: { description: 'Password', roleHint: 'searchbox', quote: { text: 'Password' } },
+      target: { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } },
     }]);
   });
 
@@ -3967,7 +4112,8 @@ describe('generate secret naming and consent boundaries', () => {
       id: 'fill-password',
       kind: 'action',
       action: 'fill-secret',
-      target: PASSWORD_TARGET,
+      target: 'web',
+      intent: PASSWORD_TARGET,
       secretRef: '{{secrets.password}}',
     }] as unknown as Step[]);
 
@@ -3988,7 +4134,8 @@ describe('generate secret naming and consent boundaries', () => {
         id: 'fill-password',
         kind: 'action',
         action: 'fill-secret',
-        target: PASSWORD_TARGET,
+        target: 'web',
+        intent: PASSWORD_TARGET,
         secretRef: '{{secrets.password}}',
       } as unknown as Step,
       response: generatedAiSecretResponse('password'),
@@ -4363,8 +4510,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('reports the exact not-interactive consent remedy and ordered multi-use details', async () => {
     const response = {
       steps: [
-        { id: 'fill-first', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'First' }, secret: { nameHint: 'first_name' } },
-        { id: 'fill-second', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Second' }, secret: { nameHint: 'second_name' } },
+        { id: 'fill-first', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('First'), secret: { nameHint: 'first_name' } },
+        { id: 'fill-second', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Second'), secret: { nameHint: 'second_name' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -4393,8 +4540,8 @@ describe('generate secret naming and consent boundaries', () => {
   it('commits every final candidate name when a concurrently held config removes an initially allowed name', async () => {
     const response = {
       steps: [
-        { id: 'fill-retained', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Retained' }, secret: { nameHint: 'retained' } },
-        { id: 'fill-added', kind: 'action', action: 'fill-secret', target: 'web', element: { ...PASSWORD_TARGET, name: 'Added' }, secret: { nameHint: 'added' } },
+        { id: 'fill-retained', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Retained'), secret: { nameHint: 'retained' } },
+        { id: 'fill-added', kind: 'action', action: 'fill-secret', target: 'web', intent: generatedNamedIntent('Added'), secret: { nameHint: 'added' } },
       ],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
@@ -4435,7 +4582,7 @@ describe('generate interruption contract', () => {
   it('keeps every started duplicate as an individual skipped row when interruption lands at the in-flight consent gate', async () => {
     const controller = new AbortController();
     const response = {
-      steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD_TARGET }],
+      steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT }],
       ambiguities: [],
     } as unknown as GeneratedPlanResponse;
     const execute = vi.fn(async () => ({ data: response, raw: 'named' }));

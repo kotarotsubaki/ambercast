@@ -1,18 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { PlanDocument } from '#core/ir/schema.js';
 import { compareSecretWarnings, deriveSecretNames, deriveStage2ReplacementSecretNames, normalizeAiStepSecretUses, slug, type SecretWarning } from '#usecases/secret-naming.js';
 
-const STAGE2_PLAN = PlanDocument.parse({
-  schemaVersion: 4,
+vi.mock('#core/ir/confirms-validation.js', () => ({ validateConfirms: () => [] }));
+
+const STAGE2_PLAN = {
+  schemaVersion: 5,
   source: { inputsDigest: 'a'.repeat(64) },
   targets: { web: { baseUrl: 'https://example.test', surface: 'web' } },
   steps: [
-    { id: 'retained-fill', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secretRef: '{{secrets.retained.fill}}' },
+    { id: 'retained-fill', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 }, quote: { text: 'Password', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } } }, secretRef: '{{secrets.retained.fill}}' },
     { id: 'replace-me', kind: 'assert', check: 'text-visible', target: 'web', text: 'old assertion' },
     { id: 'retained-ai', kind: 'ai', target: 'web', instruction: 'keep this', instructionCoverage: [{ id: 'kept', kind: 'success', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 1 } }], secrets: [{ ref: '{{secrets.retained.ai}}' }] },
   ],
-});
+} as unknown as PlanDocument;
+const SOURCE_SPAN = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 };
 
 describe('slug', () => {
   it.each([
@@ -24,15 +27,36 @@ describe('slug', () => {
 });
 
 describe('deriveSecretNames', () => {
+  // TEST-G7 / SPEC-G8
+  it.each([
+    ['non-ASCII quote falls through to hint', { text: 'パスワード' }, { nameHint: 'credential' }, 'credential', 'hint'],
+    ['ASCII quote supplies the first naming rung', { text: 'Password' }, { nameHint: 'credential' }, 'password', 'target-slug'],
+    ['absent quote falls through to hint', undefined, { nameHint: 'credential' }, 'credential', 'hint'],
+    ['absent quote falls through to ordinal', undefined, undefined, 'secret_step_1', 'ordinal'],
+  ] as const)('%s', (_label, quote, secret, name, selectionSource) => {
+    const intent = { description: 'Password field', roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 }, ...(quote === undefined ? {} : { quote: { ...quote, sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } } }) };
+    const result = deriveSecretNames([{ id: 'fill', kind: 'action', action: 'fill-secret', target: 'web', intent, ...(secret === undefined ? {} : { secret }) }] as never, { projected: [], allowlist: [] } as never);
+    expect(result.steps[0]).toMatchObject({ secretRef: `{{secrets.${name}}}` });
+    expect(result.uses[0]).toMatchObject({ name, selectionSource });
+  });
+
+  it('warns when one allowed secret name is reused for distinct intent keys', () => {
+    const base = { roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } };
+    const result = deriveSecretNames([
+      { id: 'first', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...base, description: 'Account password' }, secret: { allowedName: 'shared.password' } },
+      { id: 'second', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...base, description: 'Payment password' }, secret: { allowedName: 'shared.password' } },
+    ] as never, { projected: ['shared.password'], allowlist: [] } as never);
+    expect(result.warnings).toContainEqual({ kind: 'secret-name-reused-across-targets', name: 'shared.password', stepIds: ['first', 'second'] });
+  });
   // SPEC-C1 C1-3
   it.each([
     ['projected allowed name', { secret: { allowedName: 'account.password' } }, { projected: ['account.password'], allowlist: [] }, '{{secrets.account.password}}', 'account.password', 'allowed-name'],
     ['target slug', {}, { projected: [], allowlist: [] }, '{{secrets.password}}', 'password', 'target-slug'],
-    ['name hint after an empty target slug', { secret: { nameHint: 'password' }, element: { strategy: 'accessibility', role: 'textbox', name: '!!!' } }, { projected: [], allowlist: [] }, '{{secrets.password}}', 'password', 'hint'],
-    ['ordinal fallback', { element: { strategy: 'accessibility', role: 'textbox', name: '!!!' } }, { projected: [], allowlist: [] }, '{{secrets.secret_step_1}}', 'secret_step_1', 'ordinal'],
+    ['name hint after an empty target slug', { secret: { nameHint: 'password' }, intent: { description: '!!!', roleHint: 'textbox' } }, { projected: [], allowlist: [] }, '{{secrets.password}}', 'password', 'hint'],
+    ['ordinal fallback', { intent: { description: '!!!', roleHint: 'textbox' } }, { projected: [], allowlist: [] }, '{{secrets.secret_step_1}}', 'secret_step_1', 'ordinal'],
   ] as const)('covers each fill-secret naming rung: %s', (_label, patch, sets, ref, name, selectionSource) => {
     const result = deriveSecretNames([
-      { id: 'fill', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, ...patch },
+      { id: 'fill', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } }, ...patch },
     ] as never, sets as never);
 
     expect(result.steps[0]).toMatchObject({ secretRef: ref });
@@ -58,13 +82,13 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-3
   it('distinguishes exact projected membership from allowlist promotion and star authorization', () => {
     const projected = deriveSecretNames([
-      { id: 'projected-name', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secret: { allowedName: 'account.password' } },
+      { id: 'projected-name', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } }, secret: { allowedName: 'account.password' } },
     ] as never, { projected: ['account.password'], allowlist: [] } as never);
     expect(projected.steps[0]).toMatchObject({ secretRef: '{{secrets.account.password}}' });
     expect(projected.uses[0]).toMatchObject({ name: 'account.password', selectionSource: 'allowed-name' });
 
     const allowlistOnly = () => deriveSecretNames([
-      { id: 'allowlist-only', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, secret: { allowedName: 'account.password' } },
+      { id: 'allowlist-only', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } }, secret: { allowedName: 'account.password' } },
     ] as never, { projected: [], allowlist: ['account.password'] } as never);
     expect(allowlistOnly).toThrow(AiResponseInvalidError);
     try {
@@ -77,8 +101,8 @@ describe('deriveSecretNames', () => {
     }
 
     const star = deriveSecretNames([
-      { id: 'star-first', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card #1' } },
-      { id: 'star-second', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card! 1' } },
+      { id: 'star-first', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card #1', roleHint: 'textbox', quote: { text: 'Card #1' } } },
+      { id: 'star-second', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card! 1', roleHint: 'textbox', quote: { text: 'Card! 1' } } },
     ] as never, { projected: [], allowlist: '*' } as never);
     expect(star.steps).toMatchObject([
       { secretRef: '{{secrets.card_1}}' },
@@ -93,10 +117,10 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-3
   it('aggregates all unprojected explicit-name issues before target collision issues in step/use order', () => {
     const derive = () => deriveSecretNames([
-      { id: 'unprojected-fill', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Email' }, secret: { allowedName: 'unprojected.fill' } },
+      { id: 'unprojected-fill', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Email', roleHint: 'textbox', quote: { text: 'Email' } }, secret: { allowedName: 'unprojected.fill' } },
       { id: 'unprojected-ai', kind: 'ai', instruction: 'x', secrets: [{ allowedName: 'unprojected.ai' }] },
-      { id: 'first-target-claim', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Shared' }, secret: { allowedName: 'first' } },
-      { id: 'second-target-claim', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Shared' }, secret: { allowedName: 'second' } },
+      { id: 'first-target-claim', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Shared', roleHint: 'textbox', quote: { text: 'Shared' } }, secret: { allowedName: 'first' } },
+      { id: 'second-target-claim', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Shared', roleHint: 'textbox', quote: { text: 'Shared' } }, secret: { allowedName: 'second' } },
     ] as never, { projected: ['first', 'second'], allowlist: [] } as never);
 
     expect(derive).toThrow(AiResponseInvalidError);
@@ -116,8 +140,8 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('shares a projected allowed name across different targets and reports one reuse warning', () => {
     const result = deriveSecretNames([
-      { id: 'first-account', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Account password' }, secret: { allowedName: 'shared.password' } },
-      { id: 'second-account', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Payment password' }, secret: { allowedName: 'shared.password' } },
+      { id: 'first-account', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Account password', roleHint: 'textbox', quote: { text: 'Account password' } }, secret: { allowedName: 'shared.password' } },
+      { id: 'second-account', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Payment password', roleHint: 'textbox', quote: { text: 'Payment password' } }, secret: { allowedName: 'shared.password' } },
     ] as never, { projected: ['shared.password'], allowlist: [] } as never);
 
     expect(result.steps).toMatchObject([
@@ -131,10 +155,10 @@ describe('deriveSecretNames', () => {
 
   // SPEC-C1 C1-4
   it('shares a target-slug name for equal canonical targets without a warning', () => {
-    const target = { strategy: 'accessibility', role: 'textbox', name: 'Password' };
+    const target = { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } };
     const result = deriveSecretNames([
-      { id: 'first-password', kind: 'action', action: 'fill-secret', target: 'web', element: target },
-      { id: 'second-password', kind: 'action', action: 'fill-secret', target: 'web', element: target },
+      { id: 'first-password', kind: 'action', action: 'fill-secret', target: 'web', intent: target },
+      { id: 'second-password', kind: 'action', action: 'fill-secret', target: 'web', intent: target },
     ] as never, { projected: [], allowlist: [] } as never);
 
     expect(result.steps).toMatchObject([
@@ -147,8 +171,8 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('suffixes a colliding target slug for a different canonical target without a warning', () => {
     const result = deriveSecretNames([
-      { id: 'first-card', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card #1' } },
-      { id: 'second-card', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card! 1' } },
+      { id: 'first-card', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card #1', roleHint: 'textbox', quote: { text: 'Card #1' } } },
+      { id: 'second-card', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card! 1', roleHint: 'textbox', quote: { text: 'Card! 1' } } },
     ] as never, { projected: [], allowlist: [] } as never);
 
     expect(result.steps).toMatchObject([
@@ -161,10 +185,10 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('allocates distinct consecutive suffixes for three simultaneous collisions', () => {
     const result = deriveSecretNames([
-      { id: 'base', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card #1' } },
-      { id: 'second', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card! 1' } },
-      { id: 'third', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card? 1' } },
-      { id: 'fourth', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Card@ 1' } },
+      { id: 'base', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card #1', roleHint: 'textbox', quote: { text: 'Card #1' } } },
+      { id: 'second', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card! 1', roleHint: 'textbox', quote: { text: 'Card! 1' } } },
+      { id: 'third', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card? 1', roleHint: 'textbox', quote: { text: 'Card? 1' } } },
+      { id: 'fourth', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Card@ 1', roleHint: 'textbox', quote: { text: 'Card@ 1' } } },
     ] as never, { projected: [], allowlist: [] } as never);
 
     expect(result.uses.map(({ name }) => name)).toEqual(['card_1', 'card_1_2', 'card_1_3', 'card_1_4']);
@@ -174,8 +198,8 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('reserves a later explicit name before an earlier derived collision', () => {
     const result = deriveSecretNames([
-      { id: 'derived-first', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' } },
-      { id: 'explicit-later', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Account password' }, secret: { allowedName: 'password' } },
+      { id: 'derived-first', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } } },
+      { id: 'explicit-later', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Account password', roleHint: 'textbox', quote: { text: 'Account password' } }, secret: { allowedName: 'password' } },
     ] as never, { projected: ['password'], allowlist: [] } as never);
 
     expect(result.steps).toMatchObject([
@@ -191,9 +215,9 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('lets a non-reserved derived use share a later explicit reservation for its canonical target', () => {
     const result = deriveSecretNames([
-      { id: 'first-name', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Account' } },
-      { id: 'other-target', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' } },
-      { id: 'conflicting-later', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Account' }, secret: { allowedName: 'password' } },
+      { id: 'first-name', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Account', roleHint: 'textbox' } },
+      { id: 'other-target', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Password', roleHint: 'textbox', quote: { text: 'Password' } } },
+      { id: 'conflicting-later', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Account', roleHint: 'textbox' }, secret: { allowedName: 'password' } },
     ] as never, { projected: ['password'], allowlist: [] } as never);
 
     expect(result.steps).toMatchObject([
@@ -211,8 +235,8 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('rejects an explicit and allowlist-promoted derived name for one canonical target', () => {
     const derive = () => deriveSecretNames([
-      { id: 'explicit', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Account' }, secret: { allowedName: 'account.secret' } },
-      { id: 'promoted', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Account' } },
+      { id: 'explicit', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Account', roleHint: 'textbox', quote: { text: 'Account' } }, secret: { allowedName: 'account.secret' } },
+      { id: 'promoted', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Account', roleHint: 'textbox', quote: { text: 'Account' } } },
     ] as never, { projected: ['account.secret'], allowlist: ['account'] } as never);
 
     expect(derive).toThrow(AiResponseInvalidError);
@@ -229,10 +253,10 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('sorts independently constructed reuse warnings by the documented UTF-16 key', () => {
     const result = deriveSecretNames([
-      { id: 'z-first', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Z first' }, secret: { allowedName: 'z-name' } },
-      { id: 'z-second', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Z second' }, secret: { allowedName: 'z-name' } },
-      { id: 'a-first', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'A first' }, secret: { allowedName: 'a-name' } },
-      { id: 'a-second', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'A second' }, secret: { allowedName: 'a-name' } },
+      { id: 'z-first', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Z first', roleHint: 'textbox', quote: { text: 'Z first' } }, secret: { allowedName: 'z-name' } },
+      { id: 'z-second', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Z second', roleHint: 'textbox', quote: { text: 'Z second' } }, secret: { allowedName: 'z-name' } },
+      { id: 'a-first', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'A first', roleHint: 'textbox', quote: { text: 'A first' } }, secret: { allowedName: 'a-name' } },
+      { id: 'a-second', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'A second', roleHint: 'textbox', quote: { text: 'A second' } }, secret: { allowedName: 'a-name' } },
     ] as never, { projected: ['z-name', 'a-name'], allowlist: [] } as never);
 
     expect(result.warnings).toEqual([
@@ -244,10 +268,10 @@ describe('deriveSecretNames', () => {
   // SPEC-C1 C1-4
   it('sorts every hand-built warning variant by its documented UTF-16 key', () => {
     const warnings: SecretWarning[] = [
-      { kind: 'secret-target-changed', name: 'z-name', stepId: 'a-step', previousTarget: { strategy: 'accessibility', role: 'textbox', name: 'Before' }, target: { strategy: 'accessibility', role: 'textbox', name: 'After' } },
+      { kind: 'secret-target-changed', name: 'z-name', stepId: 'a-step', previousTarget: { description: 'Before', roleHint: 'textbox' }, target: { description: 'After', roleHint: 'textbox' } },
       { kind: 'secret-name-reused-across-targets', name: 'same-name', stepIds: ['z-step'] },
       { kind: 'allowed-names-truncated', kept: 1, dropped: 2 },
-      { kind: 'secret-target-changed', name: 'a-name', stepId: 'z-step', previousTarget: { strategy: 'accessibility', role: 'textbox', name: 'Before' }, target: { strategy: 'accessibility', role: 'textbox', name: 'After' } },
+      { kind: 'secret-target-changed', name: 'a-name', stepId: 'z-step', previousTarget: { description: 'Before', roleHint: 'textbox' }, target: { description: 'After', roleHint: 'textbox' } },
       { kind: 'secret-name-reused-across-targets', name: 'same-name', stepIds: ['a-step'] },
     ];
 
@@ -262,7 +286,7 @@ describe('deriveStage2ReplacementSecretNames', () => {
     const output = deriveStage2ReplacementSecretNames({
       plan: STAGE2_PLAN,
       replacementIndex: 1,
-      attributedReplacement: { id: 'replace-me', kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Retained fill' } } as never,
+      attributedReplacement: { id: 'replace-me', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Retained fill', roleHint: 'textbox', sourceSpan: SOURCE_SPAN, quote: { text: 'Retained fill', sourceSpan: SOURCE_SPAN } } } as never,
       projected: [],
       allowlist: '*',
     });
@@ -282,7 +306,7 @@ describe('deriveStage2ReplacementSecretNames', () => {
   ] as const)('suffixes a replacement when a retained owner is %s its index on a different target', (position, replacementIndex) => {
     const retained = {
       id: `retained-${position}`, kind: 'action', action: 'fill-secret',
-      target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Existing credential' },
+      target: 'web', intent: { description: 'Existing credential', roleHint: 'textbox', sourceSpan: SOURCE_SPAN, quote: { text: 'Existing credential', sourceSpan: SOURCE_SPAN } },
       secretRef: '{{secrets.password}}',
     };
     const replacement = { id: 'replace-me', kind: 'assert', check: 'text-visible', target: 'web', text: 'replace' };
@@ -291,7 +315,7 @@ describe('deriveStage2ReplacementSecretNames', () => {
     const output = deriveStage2ReplacementSecretNames({
       plan,
       replacementIndex,
-      attributedReplacement: { id: plan.steps[replacementIndex]!.id, kind: 'action', action: 'fill-secret', target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' } } as never,
+      attributedReplacement: { id: plan.steps[replacementIndex]!.id, kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Password', roleHint: 'textbox', sourceSpan: SOURCE_SPAN, quote: { text: 'Password', sourceSpan: SOURCE_SPAN } } } as never,
       projected: [],
       allowlist: '*',
     });
@@ -305,7 +329,7 @@ describe('deriveStage2ReplacementSecretNames', () => {
     expect(() => deriveStage2ReplacementSecretNames({
       plan: STAGE2_PLAN,
       replacementIndex: 1,
-      attributedReplacement: { id: 'replace-me', kind: 'action', action: 'fill-secret', target: { strategy: 'accessibility', role: 'textbox', name: 'Other' }, secret: { allowedName: 'not-projected' } } as never,
+      attributedReplacement: { id: 'replace-me', kind: 'action', action: 'fill-secret', target: 'web', intent: { description: 'Other', roleHint: 'textbox' }, secret: { allowedName: 'not-projected' } } as never,
       projected: [],
       allowlist: '*',
     })).toThrow(AiResponseInvalidError);

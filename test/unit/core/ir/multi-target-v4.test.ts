@@ -9,10 +9,12 @@ import type { ResolvedTargetConfigEntry } from '../../../../src/core/config/sche
 import { REPORT_SCHEMA_VERSION } from '../../../../src/report/schema.js';
 
 const element = { strategy: 'accessibility', role: 'button', name: 'Continue' };
+const intent = { description: 'Continue', roleHint: 'button', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 } };
+const quotedIntent = { ...intent, quote: { text: 'Continue', sourceSpan: intent.sourceSpan } };
 const definition = { surface: 'web', baseUrl: 'https://a.example.test' };
 const source = { inputsDigest: 'a'.repeat(64) };
 const step = { id: 'open-a', kind: 'action', action: 'navigate', target: 'A', url: 'https://a.example.test' };
-const makePlan = (steps: unknown[] = [step], targets: Record<string, unknown> = { A: definition }) => ({ schemaVersion: 4, source, targets, steps });
+const makePlan = (steps: unknown[] = [step], targets: Record<string, unknown> = { A: definition }) => ({ schemaVersion: 5, source, targets, steps });
 const parse = (value: unknown) => PlanDocument.safeParse(value);
 const planValidator = new Ajv2020({ strict: true }).compile(getPlanJsonSchema());
 const groundingValidator = new Ajv2020({ strict: true }).compile(getGroundingJsonSchema());
@@ -21,7 +23,7 @@ describe('Plan v4 and grounding v2 contract', () => {
   it('rejects retired document versions and accepts the current versions', () => {
     expect(parse(makePlan()).success).toBe(true);
     expect(parse({ ...makePlan(), schemaVersion: 3 }).success).toBe(false);
-    const current = { schemaVersion: 2, planDigest: 'b'.repeat(64), entries: {} };
+    const current = { schemaVersion: 3, planDigest: 'b'.repeat(64), entries: {} };
     expect(GroundingDocument.safeParse(current).success).toBe(true);
     expect(GroundingDocument.safeParse({ ...current, schemaVersion: 1 }).success).toBe(false);
     expect(planValidator(makePlan())).toBe(true);
@@ -40,20 +42,20 @@ describe('Plan v4 and grounding v2 contract', () => {
   });
 
   it.each([
-    ['click', { kind: 'action', action: 'click', element }],
-    ['press', { kind: 'action', action: 'press', element, key: 'Enter' }],
-    ['fill', { kind: 'action', action: 'fill', element, value: 'hello' }],
-    ['fill-secret', { kind: 'action', action: 'fill-secret', element, secretRef: '{{secrets.app.password}}' }],
-    ['element-visible', { kind: 'assert', check: 'element-visible', element }],
-    ['text-equals', { kind: 'assert', check: 'text-equals', element, text: 'hello' }],
-    ['element-count', { kind: 'assert', check: 'element-count', element, count: 1 }],
-    ['capture', { kind: 'capture', element, variable: 'captured' }],
+    ['click', { kind: 'action', action: 'click', intent }],
+    ['press', { kind: 'action', action: 'press', intent, key: 'Enter' }],
+    ['fill', { kind: 'action', action: 'fill', intent, value: 'hello' }],
+    ['fill-secret', { kind: 'action', action: 'fill-secret', intent, secretRef: '{{secrets.app.password}}' }],
+    ['element-visible', { kind: 'assert', check: 'element-visible', intent: quotedIntent }],
+    ['text-equals', { kind: 'assert', check: 'text-equals', intent: quotedIntent, text: 'hello' }],
+    ['element-count', { kind: 'assert', check: 'element-count', intent: quotedIntent, count: 1 }],
+    ['capture', { kind: 'capture', intent, variable: 'captured' }],
   ] as const)('uses element rather than the old ElementRef target in %s', (_kind, fields) => {
     const current = { id: 'inspect-a', target: 'A', ...fields };
     expect(parse(makePlan([current])).success).toBe(true);
-    const { element: _element, ...withoutElement } = current;
-    expect(parse(makePlan([{ ...withoutElement, target: element }]))).toMatchObject({ success: false });
-    expect(parse(makePlan([{ ...current, element: undefined }]))).toMatchObject({ success: false });
+    const { intent: _intent, ...withoutIntent } = current;
+    expect(parse(makePlan([{ ...withoutIntent, target: intent }]))).toMatchObject({ success: false });
+    expect(parse(makePlan([{ ...current, intent: undefined }]))).toMatchObject({ success: false });
   });
 
   it.each([
@@ -90,10 +92,10 @@ describe('Plan v4 and grounding v2 contract', () => {
   it('applies timeoutMs to all five Plan checks and rejects it in TraceAssert', () => {
     const checks = [
       { check: 'text-visible', text: 'Ready' },
-      { check: 'element-visible', element },
-      { check: 'text-equals', element, text: 'Ready' },
+      { check: 'element-visible', intent: quotedIntent },
+      { check: 'text-equals', intent: quotedIntent, text: 'Ready' },
       { check: 'url-matches', pattern: '/ready' },
-      { check: 'element-count', element, count: 1 },
+      { check: 'element-count', intent: quotedIntent, count: 1 },
     ];
     for (const check of checks) {
       expect(parse(makePlan([{ id: 'check-a', kind: 'assert', target: 'A', timeoutMs: 120000, ...check }])).success).toBe(true);
@@ -115,7 +117,7 @@ describe('Plan v4 and grounding v2 contract', () => {
       B: { baseUrl: 'https://b.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'idempotent', resolveTimeoutMs: 2000 },
       C: { baseUrl: 'https://c.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'idempotent', resolveTimeoutMs: 3000 },
     };
-    const inputs = (targets: typeof config) => computeInputsDigest({ normalizedTestMd: '# Test\n' as never, schemaVersion: 4, generatorPromptTemplateFingerprint: 'template', planProducerBundleFingerprint: 'bundle', targetDefinitions: projectPlanTargets(['B', 'A'], targets) });
+    const inputs = (targets: typeof config) => computeInputsDigest({ normalizedTestMd: '# Test\n' as never, schemaVersion: 5, generatorPromptTemplateFingerprint: 'template', planProducerBundleFingerprint: 'bundle', targetDefinitions: projectPlanTargets(['B', 'A'], targets) });
     expect(projectPlanTargets(['B', 'A'], config)).toEqual({ A: toTargetDefinition(config.A), B: toTargetDefinition(config.B) });
     expect(toTargetDefinition(config.A)).not.toHaveProperty('browser');
     const baseline = inputs(config);
@@ -126,19 +128,19 @@ describe('Plan v4 and grounding v2 contract', () => {
   });
 
   it('publishes v4 and v2 schema identities and the frozen v3 schema accepts a v3 fixture', () => {
-    expect(getPlanJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json');
-    expect(getGroundingJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json');
+    expect(getPlanJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json');
+    expect(getGroundingJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json');
     const frozen = JSON.parse(readFileSync(new URL('../../../../website/src/schemas-frozen/plan.v3.schema.json', import.meta.url), 'utf8'));
     const legacy = JSON.parse(readFileSync(new URL('../../../fixtures/ir/golden/plan.golden.artifact.json', import.meta.url), 'utf8'));
     expect(frozen.$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json');
     expect(new Ajv2020({ strict: true }).compile(frozen)(legacy)).toBe(true);
-    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
   });
 
   it('emits the current build schemas with Plan v4, grounding v2, and report 3.7', () => {
     const readBuilt = (name: string) => JSON.parse(readFileSync(new URL(`../../../../dist/schema/${name}.schema.json`, import.meta.url), 'utf8'));
-    expect(readBuilt('plan').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json');
-    expect(readBuilt('grounding').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json');
-    expect(readBuilt('report').oneOf.every((variant: { properties: { schemaVersion: { const: string } } }) => variant.properties.schemaVersion.const === '3.7')).toBe(true);
+    expect(readBuilt('plan').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json');
+    expect(readBuilt('grounding').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json');
+    expect(readBuilt('report').oneOf.every((variant: { properties: { schemaVersion: { const: string } } }) => variant.properties.schemaVersion.const === '3.8')).toBe(true);
   });
 });

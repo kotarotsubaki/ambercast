@@ -2,7 +2,7 @@
   "document": "grounding",
   "expected": "valid",
   "value": {
-    "schemaVersion": 2,
+    "schemaVersion": 3,
     "planDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "entries": {
       "step": {

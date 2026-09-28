@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { validateConfirms } from '#core/ir/confirms-validation.js';
 import type { Step } from '#core/ir/schema.js';
 
-const element = { strategy: 'accessibility', role: 'button', name: 'Submit' } as const;
+const intent = { description: 'Submit', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 } } as const;
 
 function action(id: string, action: 'click' | 'navigate' = 'click', target = 'app'): Step {
   return action === 'click'
-    ? { id, target, kind: 'action', action, element }
+    ? { id, target, kind: 'action', action, intent }
     : { id, target, kind: 'action', action, url: 'https://example.com' };
 }
 
@@ -69,7 +69,7 @@ describe('validateConfirms (TEST-I4)', () => {
   });
 
   it('accepts an earlier capture step', () => {
-    const capture: Step = { id: 'capture', target: 'app', kind: 'capture', element, variable: 'saved' };
+    const capture: Step = { id: 'capture', target: 'app', kind: 'capture', intent, variable: 'saved' };
     expect(validateConfirms([capture, assertion('check', ['capture'])])).toEqual([]);
   });
 });

@@ -68,6 +68,13 @@ function createGrounding(planDigest: string): GroundingDocument {
 }
 
 describe('computeInputsDigest', () => {
+  it('TEST-L2 changes for adding, changing, and deleting a projected locale', () => {
+    const variants = [undefined, 'ja-JP', 'en-US'] as const;
+    const digests = variants.map((locale) => computeInputsDigest(createInputs({
+      targetDefinitions: { app: { ...targetDefinition(), ...(locale === undefined ? {} : { locale }) } },
+    })));
+    expect(new Set(digests).size).toBe(3);
+  });
   it('returns lowercase SHA-256 hex for equivalent inputs constructed in different orders', () => {
     const first = createInputs({
       targetDefinitions: {

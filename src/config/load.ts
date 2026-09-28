@@ -299,7 +299,7 @@ function resolveExplicitPath(path: string, cwd: string): string {
  * @param text - UTF-8 configuration text supplied by the selected storage path.
  * @param path - Selected path retained in diagnostics for malformed or invalid input.
  * @returns The validated partial configuration before defaults and path resolution.
- * @throws {ConfigInvalidError} When JSON is malformed, unsafe raw keys are present, or the document violates RawConfig.
+ * @throws {ConfigInvalidError} When JSON is malformed, unsafe raw keys are present, or the document violates RawConfig; schema violations list issue paths in the message.
  */
 export function parseAndValidateRawConfig(text: string, path: string): RawConfigShape {
   let document: unknown;
@@ -317,8 +317,11 @@ export function parseAndValidateRawConfig(text: string, path: string): RawConfig
   rejectLegacyBrowserKey(document, path);
   const result = RawConfig.safeParse(document);
   if (!result.success) {
+    const issuePaths = result.error.issues
+      .map((issue) => issue.path.length > 0 ? issue.path.join('.') : '<config root>')
+      .join(', ');
     throw new ConfigInvalidError(
-      'Configuration file does not match the expected schema.',
+      `Configuration file does not match the expected schema: ${issuePaths}.`,
       { configPath: path, issues: result.error.issues },
     );
   }

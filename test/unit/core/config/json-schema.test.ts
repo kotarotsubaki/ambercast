@@ -7,6 +7,12 @@ const CONFIG_SCHEMA_URL = 'https://ambercast.dev/schema/config.json';
 const TARGET = { baseUrl: 'https://example.test' } as const;
 
 describe('config JSON Schema document', () => {
+  it('TEST-L6 publishes optional string targets.*.locale', () => {
+    const schema = getConfigJsonSchema() as unknown as { properties: { targets: { additionalProperties: { required?: string[]; properties: { locale: { type: string } } } } } };
+    const target = schema.properties.targets.additionalProperties;
+    expect(target.properties.locale.type).toBe('string');
+    expect(target.required ?? []).not.toContain('locale');
+  });
   it('returns a strict-compilable JSON Schema 2020-12 document', () => {
     const schema = getConfigJsonSchema();
 

@@ -129,6 +129,19 @@ function createScenario(overrides: Partial<CheckDeps> = {}) {
 }
 
 describe('check', () => {
+  it('TEST-L5 reports a locale-changed plan as stale', async () => {
+    const testPath = `${TEST_DIR}/locale.test.md`;
+    const { storage, layout } = createScenario();
+    await storage.writeText(testPath, PROMPT);
+    const plan = freshPlan(PROMPT, { web: { ...TARGETS.web, locale: 'ja-JP' } });
+    await writePlan(storage, layout, testPath, plan);
+    const originalConfig = createConfig({ targets: { web: { ...RESOLVED_TARGETS.web, locale: 'ja-JP' } } });
+    const original = await check({ storage, layout, discoverTestFiles: createDiscovery(), config: originalConfig }, { ...OPTIONS, files: [testPath] });
+    expect(original.results).toEqual([expect.objectContaining({ status: 'fresh' })]);
+    const config = createConfig({ targets: { web: { ...RESOLVED_TARGETS.web, locale: 'en-US' } } });
+    const outcome = await check({ storage, layout, discoverTestFiles: createDiscovery(), config }, { ...OPTIONS, files: [testPath] });
+    expect(outcome.results).toEqual([expect.objectContaining({ status: 'stale' })]);
+  });
   it('TEST-19 recalculates freshness from both referenced targets and ignores an unreferenced target', async () => {
     const testPath = `${TEST_DIR}/multi-target.test.md`;
     const definitions = {

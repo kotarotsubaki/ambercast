@@ -2,18 +2,18 @@
 
 ## Document shape {#document-shape}
 
-`PlanDocument` is a strict object. A producer MUST emit literal `4` and a consumer MUST reject unknown properties and other versions. [repo:src/core/ir/schema.ts:1205-1224]
+`PlanDocument` is a strict object. A producer MUST emit literal `5` and a consumer MUST reject unknown properties and other versions. [repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:1460-1466]
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `4` | Plan format version. | repo:src/core/ir/schema.ts:58,1205-1207 |
-| `source` | strict object | required | exactly `inputsDigest` | Freshness wrapper. | repo:src/core/ir/schema.ts:1207 |
-| `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | Digest of generation inputs. | repo:src/core/ir/schema.ts:34,1207 |
-| `generatorMeta` | record string → `JsonValue` | optional | JSON only | Metadata excluded from `planDigest`. | repo:src/core/ir/schema.ts:1205-1210; repo:src/core/ir/digest.ts:128-131 |
-| `targets` | record string → `TargetDefinition` | required | strict value; [[spec/value-types#shared-types]] | Referenced Target snapshot; every key must be used by a step. | repo:src/core/ir/schema.ts:1209 |
-| `steps` | `Step[]` | required | ordered strict branches | Plan sequence; [[spec/steps#step-union]]. | repo:src/core/ir/schema.ts:1210 |
+| `schemaVersion` | integer | required | literal `5` | Plan format version. | repo:src/core/ir/schema.ts:62,1460-1461 |
+| `source` | strict object | required | exactly `inputsDigest` | Freshness wrapper. | repo:src/core/ir/schema.ts:1462 |
+| `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | Digest of generation inputs. | repo:src/core/ir/schema.ts:34,1462 |
+| `generatorMeta` | record string → `JsonValue` | optional | JSON only | Metadata excluded from `planDigest`. | repo:src/core/ir/schema.ts:1460-1465; repo:src/core/ir/digest.ts:128-131 |
+| `targets` | record string → `TargetDefinition` | required | strict value; [[spec/value-types#shared-types]] | Referenced Target snapshot; every key must be used by a step. | repo:src/core/ir/schema.ts:1464,1488-1495 |
+| `steps` | `Step[]` | required | ordered strict branches | Plan sequence; [[spec/steps#step-union]]. | repo:src/core/ir/schema.ts:1465 |
 
-Omission and `{}` for `generatorMeta` remain distinct serialized Plan values, but neither affects `planDigest`: the digest view excludes `generatorMeta` as a whole. [repo:src/core/ir/schema.ts:1205-1210] [repo:src/core/ir/digest.ts:128-131]
+Omission and `{}` for `generatorMeta` remain distinct serialized Plan values, but neither affects `planDigest`: the digest view excludes `generatorMeta` as a whole. [repo:src/core/ir/schema.ts:1460-1465] [repo:src/core/ir/digest.ts:128-131]
 
 ## Complete minimal document {#complete-minimal-document}
 
@@ -21,7 +21,7 @@ Digest strings are illustrative placeholders. The Grounding example uses the sam
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "source": {"inputsDigest": "0000000000000000000000000000000000000000000000000000000000000000"},
   "targets": {"app": {"surface": "web", "baseUrl": "https://example.test"}},
   "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "target": "app", "url": "https://example.test"}]
@@ -30,11 +30,13 @@ Digest strings are illustrative placeholders. The Grounding example uses the sam
 
 ## Semantic constraints {#semantic-constraints}
 
-Step IDs MUST be unique; a duplicate reports `duplicate step id: <id>` at the later `steps[index].id`. [repo:src/core/ir/schema.ts:1211-1224] Instruction coverage requires prompt-bound local attribution and set checks in [[spec/conformance#semantic-validation]]. [repo:src/usecases/instruction-coverage-policy.ts:379-538]
+Step IDs MUST be unique; a duplicate reports `duplicate step id: <id>` at the later `steps[index].id`. [repo:src/core/ir/schema.ts:1466-1477] Instruction coverage requires prompt-bound local attribution and set checks in [[spec/conformance#semantic-validation]]. [repo:src/usecases/instruction-coverage-policy.ts:379-538]
 
 ## Provider-only generation response {#provider-generation-response}
 
 The provider does not author `schemaVersion`, `source`, or `targets`; local generation adds them before committed-plan validation. Provider secret naming intent is resolved locally before a committed `SecretRef` is formed. [repo:src/core/ir/schema.ts:729-833] [repo:src/core/ir/schema.ts:1242-1254]
+
+Provider element-bearing step proposals use transient `GeneratedElementIntent` and `GeneratedQuotedElementIntent` with anchor coordinates matching `GeneratedInstructionCriterion`, rather than committed `ElementIntent` and `QuotedElementIntent`. [repo:src/core/ir/schema.ts:380-411]
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |

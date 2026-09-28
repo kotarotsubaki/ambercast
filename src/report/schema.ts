@@ -644,6 +644,27 @@ export const HealStageTwoRejectionReason = z.enum([
 ]);
 export type HealStageTwoRejectionReason = z.infer<typeof HealStageTwoRejectionReason>;
 
+/** Report-local vocabulary for an ineligible Stage 1 grounding repair. */
+export const HealStageOneNotEligibleReason = z.enum([
+  'frontier-out-of-range',
+  'mode-none',
+  'trace-current',
+  'no-confirming-step',
+  'no-confirms',
+]);
+export type HealStageOneNotEligibleReason = z.infer<typeof HealStageOneNotEligibleReason>;
+
+const Stage1Trace = z.discriminatedUnion('outcome', [
+  z.strictObject({ stage: z.literal('stage1'), stepId: StepId, outcome: z.literal('accepted') }),
+  z.strictObject({ stage: z.literal('stage1'), stepId: StepId, outcome: z.literal('no-advance') }),
+  z.strictObject({
+    stage: z.literal('stage1'),
+    stepId: StepId,
+    outcome: z.literal('not-eligible'),
+    reason: HealStageOneNotEligibleReason,
+  }),
+]);
+
 const Stage2Trace = z.discriminatedUnion('outcome', [
   z.strictObject({ stage: z.literal('stage2'), stepId: StepId, outcome: z.literal('accepted') }),
   z.strictObject({
@@ -666,18 +687,15 @@ const Stage3Trace = z.discriminatedUnion('outcome', [
  * completed heal case's repair trace.
  *
  * @remarks
- * A two-level discriminated union (outer `stage`, inner `outcome` for stage2/
- * stage3) is required because a flat union cannot express "accepted never
- * carries reason/code/firstFailureIndex" at the schema level; each leaf is a
+ * A two-level discriminated union (outer `stage`, inner `outcome` for every
+ * stage) is required because a flat strict object cannot express that Stage 1
+ * `reason` belongs only to `not-eligible`, or constrain Stage 2/3 fields by
+ * outcome. Each leaf is a
  * `z.strictObject` so an unexpected field is rejected rather than silently
  * accepted.
  */
 export const RepairTraceEntry = z.discriminatedUnion('stage', [
-  z.strictObject({
-    stage: z.literal('stage1'),
-    stepId: StepId,
-    outcome: z.enum(['accepted', 'no-advance', 'not-eligible']),
-  }),
+  Stage1Trace,
   Stage2Trace,
   Stage3Trace,
 ]);

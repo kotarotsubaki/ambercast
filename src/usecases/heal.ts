@@ -2,10 +2,10 @@ import type { AmbercastError } from '#core/errors/types.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import type { FsIoError } from '#core/errors/fs-io-error.js';
 import { reportError } from '#report/error-mapping.js';
-import type { ExecutedRunResult, RepairTraceEntry, StepResult } from '#report/schema.js';
+import type { ExecutedRunResult, HealStageOneNotEligibleReason, RepairTraceEntry, StepResult } from '#report/schema.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { RunCaseOutcome, RunDeps } from './run.js';
-import { isRetiredPlanVersion, run, validateTrustedInstructionCoveredPlanText } from './run.js';
+import { buildConfirmsIndex, isRetiredPlanVersion, run, validateTrustedInstructionCoveredPlanText } from './run.js';
 import { generate, prepareInstructionCoveredSteps, projectAllowedNames } from './generate.js';
 import { inspectGroundingArtifactText } from './check-grounding.js';
 import { computePlanDigest } from '#core/ir/digest.js';
@@ -13,7 +13,7 @@ import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
-import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, GroundingDocument, PlanDocument, type JsonValueT, type SecretName } from '#core/ir/schema.js';
+import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, GroundingDocument, PlanDocument, type JsonValueT, type SecretName, type StepId } from '#core/ir/schema.js';
 import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import { ExecutorUnsupportedError } from '#core/errors/executor-unsupported-error.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
@@ -534,7 +534,7 @@ function attemptScopedLayout(layout: LayoutResolver, attemptOrdinal: number): La
   return { ...layout, runsDirFor: (file, runId) => joinPath(layout.runsDirFor(file, runId), `attempt-${attemptOrdinal}`) };
 }
 
-type RepairKind = 'grounding-element' | 'grounding-ai-retrace' | 'tail' | 'full-plan';
+type RepairKind = 'grounding-element' | 'grounding-confirms' | 'grounding-ai-retrace' | 'tail' | 'full-plan';
 
 type CaseProcessingResult =
   | { readonly interrupted: true }
@@ -758,8 +758,41 @@ async function preflightCase(
   throw new FsIoErrorClass('The grounding artifact is not valid and current.');
 }
 
-/** The narrow outcome vocabulary a completed (non-interrupted) Stage 1 attempt reaches, per the return site that produced it. */
-type GroundingRepairOutcome = 'accepted' | 'no-advance' | 'not-eligible';
+/** The completed Stage 1 outcome carries an eligibility reason only when ineligible. */
+type GroundingRepairOutcome =
+  | { readonly kind: 'accepted' }
+  | { readonly kind: 'no-advance' }
+  | { readonly kind: 'not-eligible'; readonly reason: HealStageOneNotEligibleReason };
+
+/**
+ * Verifies the additional SPEC-H2/H3 adoption conditions after a Stage 1 replay.
+ *
+ * The caller has already rejected interrupted and non-advancing replays. For
+ * SPEC-H2, `requiredPassingStepIds` contains the failing action and every
+ * confirming step from the reverse confirms index; `requiredConfirmedEntryIds`
+ * contains that action. For SPEC-H3, the passing IDs contain the failed assert
+ * and its forward `confirms` list, while the entry IDs contain that list.
+ * Every required step must have a passing result in the NEW measurement's
+ * replay, never the baseline replay. Re-read `groundingFile` through
+ * `overlay.storage` after `measureReplay` returns and require every named entry
+ * to be present. SPEC-R5 writes entries only for bindings that reached
+ * `confirmed` at case end (`acted` bindings are discarded), and the caller
+ * deleted these entries before replay, so presence proves new confirmation.
+ */
+async function verifyGroundingRepairAdoption(
+  overlay: HealOverlayStorage,
+  groundingFile: string,
+  measurement: ReplayMeasurement & { readonly interrupted: false },
+  requiredPassingStepIds: readonly StepId[],
+  requiredConfirmedEntryIds: readonly StepId[],
+): Promise<boolean> {
+  void overlay;
+  void groundingFile;
+  void measurement;
+  void requiredPassingStepIds;
+  void requiredConfirmedEntryIds;
+  throw new Error('not implemented (step 11)');
+}
 
 /**
  * `tryGroundingRepair`'s return shape uses a two-member discriminated union so
@@ -784,9 +817,9 @@ type GroundingRepairResult =
  * tail-repair decision.
  *
  * `GroundingRepairResult` derives its completed outcome from this function's
- * return site: a baseline return for an out-of-range frontier, no recovery
- * mode, or an ineligible AI retrace is `not-eligible`; a non-advancing
- * replay is `no-advance`; and a new measurement is `accepted`. An
+ * return site: a baseline return for an ineligible recovery is `not-eligible`;
+ * a non-advancing replay or a failed SPEC-H2/H3 adoption check is `no-advance`;
+ * and a verified new measurement is `accepted`. An
  * interrupted measurement remains paired with no outcome, matching the
  * union's interrupted member.
  */
@@ -800,10 +833,10 @@ async function tryGroundingRepair(
   baseline: ReplayMeasurement & { readonly interrupted: false },
   nextAttemptOrdinal: () => number,
 ): Promise<GroundingRepairResult> {
-  if (baseline.firstFailureIndex < 0 || baseline.firstFailureIndex >= plan.steps.length) return { measurement: baseline, outcome: 'not-eligible' };
+  if (baseline.firstFailureIndex < 0 || baseline.firstFailureIndex >= plan.steps.length) return { measurement: baseline, outcome: { kind: 'not-eligible', reason: 'frontier-out-of-range' } };
   const failingStep = plan.steps[baseline.firstFailureIndex]!;
   const mode = groundingRecoveryModeForStep(failingStep);
-  if (mode === 'none') return { measurement: baseline, outcome: 'not-eligible' };
+  if (mode === 'none') return { measurement: baseline, outcome: { kind: 'not-eligible', reason: 'mode-none' } };
 
   const grounding = JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')) as GroundingDocument;
   const entry = grounding.entries[failingStep.id];
@@ -812,7 +845,17 @@ async function tryGroundingRepair(
     // The shape check only limits Stage 1 work; executeAiStep repeats the full
     // safety scan before it can replay or send a trace to a provider.
     const eligible = entry === undefined || entry.kind !== 'ai' || isLegacyShapedTrace(entry.trace);
-    if (!eligible) return { measurement: baseline, outcome: 'not-eligible' };
+    if (!eligible) return { measurement: baseline, outcome: { kind: 'not-eligible', reason: 'trace-current' } };
+  }
+
+  const confirmsIndex = buildConfirmsIndex(plan.steps);
+  const confirmingStepIds = confirmsIndex.get(failingStep.id);
+  if (mode === 'element-reground' && !confirmingStepIds?.length) {
+    return { measurement: baseline, outcome: { kind: 'not-eligible', reason: 'no-confirming-step' } };
+  }
+  const listedStepIds = 'confirms' in failingStep ? failingStep.confirms : undefined;
+  if (mode === 'confirms-reground' && !listedStepIds?.length) {
+    return { measurement: baseline, outcome: { kind: 'not-eligible', reason: 'no-confirms' } };
   }
 
   const snapshot = overlay.snapshot();
@@ -820,14 +863,31 @@ async function tryGroundingRepair(
     // AI retracing retains its prior trace as a focused replay hint; only an
     // element retry clears the stale fingerprint that prevents rebinding.
     delete grounding.entries[failingStep.id];
+  } else if (mode === 'confirms-reground') {
+    for (const id of listedStepIds!) delete grounding.entries[id];
+  }
+  if (mode === 'element-reground' || mode === 'confirms-reground') {
     await writeStorageText(overlay.storage, groundingFile, toCanonicalArtifactText(grounding as JsonValueT), 'The grounding artifact could not be written.');
   }
   const measurement = await measureReplay(deps, options, file, overlay, plan, true, nextAttemptOrdinal());
   if (measurement.interrupted || measurement.firstFailureIndex <= baseline.firstFailureIndex) {
     overlay.restore(snapshot);
-    return measurement.interrupted ? { measurement, outcome: undefined } : { measurement: baseline, outcome: 'no-advance' };
+    return measurement.interrupted ? { measurement, outcome: undefined } : { measurement: baseline, outcome: { kind: 'no-advance' } };
   }
-  return { measurement, outcome: 'accepted' };
+  if (mode === 'element-reground' || mode === 'confirms-reground') {
+    const adopted = await verifyGroundingRepairAdoption(
+      overlay,
+      groundingFile,
+      measurement,
+      mode === 'element-reground' ? [failingStep.id, ...confirmingStepIds!] : [failingStep.id, ...listedStepIds!],
+      mode === 'element-reground' ? [failingStep.id] : listedStepIds!,
+    );
+    if (!adopted) {
+      overlay.restore(snapshot);
+      return { measurement: baseline, outcome: { kind: 'no-advance' } };
+    }
+  }
+  return { measurement, outcome: { kind: 'accepted' } };
 }
 
 /**
@@ -1319,7 +1379,11 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
         const stage1Result = stage1.result.value;
         if (stage1Result.outcome === undefined) return stage1Result.measurement;
         measurement = stage1Result.measurement;
-        repairTrace.push({ stage: 'stage1', stepId: plan.steps[frontier]!.id, outcome: stage1Result.outcome });
+        if (stage1Result.outcome.kind === 'not-eligible') {
+          repairTrace.push({ stage: 'stage1', stepId: plan.steps[frontier]!.id, outcome: 'not-eligible', reason: stage1Result.outcome.reason });
+        } else {
+          repairTrace.push({ stage: 'stage1', stepId: plan.steps[frontier]!.id, outcome: stage1Result.outcome.kind });
+        }
         break;
       }
       default: {
@@ -1327,7 +1391,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
       }
     }
     if (measurement.firstFailureIndex > frontier) {
-      repairKind = mode === 'element-reground' ? 'grounding-element' : 'grounding-ai-retrace';
+      repairKind = mode === 'element-reground' ? 'grounding-element' : mode === 'confirms-reground' ? 'grounding-confirms' : 'grounding-ai-retrace';
       continue;
     }
     const stage2Snapshot = overlay.snapshot();
@@ -1595,6 +1659,8 @@ function commitFor(file: string, planFile: string, overlay: HealOverlayStorage, 
     ? 're-resolved a changed page element'
     : repairKind === 'grounding-ai-retrace'
       ? 'retraced an outdated AI execution trace'
+      : repairKind === 'grounding-confirms'
+        ? 're-verified a confirming assertion and repaired its confirmed elements'
       : repairKind === 'tail'
         ? 'regenerated the remaining steps after the first failure'
         : 'regenerated the test from scratch';

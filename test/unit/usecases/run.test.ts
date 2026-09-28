@@ -1666,6 +1666,28 @@ describe('run', () => {
       expect(session.operations()).toEqual([]);
     });
 
+    it('rejects a denied fill-secret sink before binding takes an accessibility snapshot', async () => {
+      const session = createFakeBrowserSession(liveEntries([PASSWORD]));
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot');
+      const secrets = createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]]));
+      const { deps, recordingStorage } = createScenario({
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+        config: { ...createScenario().deps.config, targets: DENY_EVERYWHERE_TARGETS },
+        secrets,
+      });
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), DENY_EVERYWHERE_TARGET_DEFINITIONS);
+
+      const outcome = await run(deps, DEFAULT_OPTIONS);
+
+      expectSecretSinkOriginViolation(outcome.results[0]?.error, {
+        secretRef: SECRET_REF,
+        allowedOrigins: [],
+        source: 'configured',
+      });
+      expect(snapshots).toHaveBeenCalledTimes(0);
+    });
+
     it('never resolves an agentic secret when its sink origin is denied', async () => {
       const session = createFakeBrowserSession(liveEntries([PASSWORD]));
       const secrets = createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]]));

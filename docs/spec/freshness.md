@@ -19,17 +19,19 @@ This section is the canonical owner of `check` status derivation. Reference page
 | id | `check` status | derivation | result classification |
 | --- | --- | --- | --- |
 | CHK-01 | `fresh` | Plan parses, is canonical, has valid committed coverage, its `inputsDigest` matches, and its companion is valid. | pass |
-| CHK-02 | `stale` | Plan is invalid JSON/schema/canonical form or committed coverage, or its `inputsDigest` differs. | fail |
+| CHK-02 | `stale` | Plan is invalid JSON/schema/canonical form or committed coverage, uses retired `schemaVersion: 4`, has invalid committed `ElementIntent`/`QuotedElementIntent` source spans, or its `inputsDigest` differs. | fail |
 | CHK-03 | `fresh-without-grounding` | Plan is fresh; companion is not valid; repository policy is `uncommitted`. | pass |
 | CHK-04 | `missing-grounding` | Plan is fresh; companion inspection is `missing`; policy requires committed grounding. | fail |
 | CHK-05 | `invalid-grounding` | Plan is fresh; companion inspection is `invalid` (JSON/schema/canonical coverage failure). | fail |
-| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest`). | fail |
+| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest` or retired grounding `schemaVersion: 2`, checked before companion schema-shape validation). | fail |
 | CHK-07 | `missing-plan` | A selected test has no plan artifact. | fail |
 | CHK-08 | `orphaned-plan` | An in-scope plan inverse-maps to a test path that does not exist. | fail |
 | CHK-09 | `orphaned-grounding` | An in-scope grounding artifact inverse-maps to a path for which no corresponding test prompt exists. | fail |
 | CHK-10 | `invalid-artifact-name` | An artifact path cannot be inverse-derived to a test identity. | fail |
 | CHK-11 | `listed` | Discovery-only listing does not inspect the selected path. | skipped |
 | CHK-12 | `skipped` | Interruption leaves an identity-only pending row. | skipped |
+
+An otherwise valid, current grounding document keeps its document-level classification when an entry has a mismatched `intentDigest`, an ID absent from the Plan, or an entry for a non-action-kind step; `run` treats that entry as absent at its own per-step boundary.
 
 Rows `fresh` and `fresh-without-grounding` are pass; all rows classified fail above contribute failure; `listed` and `skipped` are skipped. [repo:src/usecases/check-report.ts:71]
 

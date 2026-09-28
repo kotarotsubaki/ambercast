@@ -4,6 +4,10 @@
 
 Every committed step is a strict branch of `Step`, discriminated by `kind`; every branch has `id: StepId` and a required `target` naming a key in `Plan.targets`. [repo:src/core/ir/schema.ts:404,742]
 
+### Confirmation references {#confirmation-references}
+
+An assertion or `ai` step may have a non-empty `confirms` array naming earlier `click`, `press`, `fill`, `fill-secret`, or `capture` steps whose grounding it confirms when it passes. Validation reports `confirms-unknown-step` for an unknown ID, `confirms-not-earlier` for the same or a later step, `confirms-not-action` for an ineligible step, `confirms-duplicate` for a repeated ID, and `confirms-unsorted` when IDs are not in ascending Plan order; see [[spec/conformance#semantic-validation]]. Target identity is not checked. [repo:src/core/ir/confirms-validation.ts:35]
+
 ### `action` / `click` {#action-click}
 
 | field | type | required/optional | constraint | description | evidence |
@@ -12,10 +16,10 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:438 |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `click` | Action discriminator. | repo:src/core/ir/schema.ts:439 |
-| `element` | `ElementRef` | required | accessibility branch currently | Element to click. | repo:src/core/ir/schema.ts:436 |
+| `intent` | `ElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed element description used for first binding. | repo:src/core/ir/schema.ts:540 |
 
 ```json
-{"id":"click-login","kind":"action","action":"click","target":"app","element":{"strategy":"accessibility","role":"button","name":"Log in"}}
+{"id":"click-login","kind":"action","action":"click","target":"app","intent":{"description":"Click Log in","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}}}
 ```
 
 ### `action` / `navigate` {#action-navigate}
@@ -41,11 +45,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:476 |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `press` | Action discriminator. | repo:src/core/ir/schema.ts:477 |
-| `element` | `ElementRef` | required | strict locator | Recipient. | repo:src/core/ir/schema.ts:474 |
+| `intent` | `ElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed recipient description used for first binding. | repo:src/core/ir/schema.ts:574-579 |
 | `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | Key. | repo:src/core/ir/schema.ts:474 |
 
 ```json
-{"id":"submit","kind":"action","action":"press","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
+{"id":"submit","kind":"action","action":"press","target":"app","intent":{"description":"Press Enter in Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21}},"key":"Enter"}
 ```
 
 ### `action` / `fill` {#action-fill}
@@ -56,11 +60,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:495 |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill` | Action discriminator. | repo:src/core/ir/schema.ts:496 |
-| `element` | `ElementRef` | required | strict locator | Field. | repo:src/core/ir/schema.ts:493 |
+| `intent` | `ElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed field description used for first binding. | repo:src/core/ir/schema.ts:594-599 |
 | `value` | `InterpolatableText` | required | no secret marker | Non-secret or run-state text. | repo:src/core/ir/schema.ts:493 |
 
 ```json
-{"id":"fill-email","kind":"action","action":"fill","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
+{"id":"fill-email","kind":"action","action":"fill","target":"app","intent":{"description":"Fill Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":11}},"value":"a@example.test"}
 ```
 
 ### `action` / `fill-secret` {#action-fill-secret}
@@ -71,11 +75,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `kind` | string | required | literal `action` | Outer discriminator. | repo:src/core/ir/schema.ts:499-504 |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill-secret` | Action discriminator. | repo:src/core/ir/schema.ts:499-504 |
-| `element` | `ElementRef` | required | strict locator | Secret sink field. | repo:src/core/ir/schema.ts:396,499-504 |
+| `intent` | `ElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed secret sink description used for first binding. | repo:src/core/ir/schema.ts:617-622 |
 | `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | repo:src/core/ir/schema.ts:396,499-504 |
 
 ```json
-{"id":"fill-password","kind":"action","action":"fill-secret","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
+{"id":"fill-password","kind":"action","action":"fill-secret","target":"app","intent":{"description":"Fill Password","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":14}},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
 ### `assert` / `text-visible` {#assert-text-visible}
@@ -87,6 +91,7 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `check` | string | required | literal `text-visible` | Assertion discriminator. | repo:src/core/ir/schema.ts:559 |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `text` | `InterpolatableText` | required | no secret marker | Expected visible text. | repo:src/core/ir/schema.ts:556 |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | Steps whose grounding this assertion confirms when it passes. | repo:src/core/ir/schema.ts:521,663 |
 
 ```json
 {"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
@@ -101,10 +106,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-visible` | Assertion discriminator. | repo:src/core/ir/schema.ts:578 |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Expected visible element. | repo:src/core/ir/schema.ts:575 |
+| `intent` | `QuotedElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed quoted element description. | repo:src/core/ir/schema.ts:680 |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | Steps whose grounding this assertion confirms when it passes. | repo:src/core/ir/schema.ts:521,684 |
 
 ```json
-{"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","element":{"strategy":"accessibility","role":"navigation","name":"Main"}}
+{"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","intent":{"description":"Main navigation 「Main」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":23},"quote":{"text":"Main","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":22}}}}
 ```
 
 ### `assert` / `text-equals` {#assert-text-equals}
@@ -116,11 +122,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `text-equals` | Assertion discriminator. | repo:src/core/ir/schema.ts:597 |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Element under test. | repo:src/core/ir/schema.ts:594 |
+| `intent` | `QuotedElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed quoted element under test. | repo:src/core/ir/schema.ts:703 |
 | `text` | `InterpolatableText` | required | no secret marker | Exact expected text. | repo:src/core/ir/schema.ts:594 |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | Steps whose grounding this assertion confirms when it passes. | repo:src/core/ir/schema.ts:521,707 |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":"app","element":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account"}
 ```
 
 ### `assert` / `url-matches` {#assert-url-matches}
@@ -132,6 +139,7 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `check` | string | required | literal `url-matches` | Assertion discriminator. | repo:src/core/ir/schema.ts:617 |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `pattern` | `InterpolatableText` | required | no secret marker | Expected URL matching text. | repo:src/core/ir/schema.ts:614 |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | Steps whose grounding this assertion confirms when it passes. | repo:src/core/ir/schema.ts:521,730 |
 
 ```json
 {"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
@@ -146,11 +154,12 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-count` | Assertion discriminator. | repo:src/core/ir/schema.ts:636 |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Matching element. | repo:src/core/ir/schema.ts:633 |
+| `intent` | `QuotedElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed quoted matching element. | repo:src/core/ir/schema.ts:749 |
 | `count` | integer | required | nonnegative | Expected count, including zero. | repo:src/core/ir/schema.ts:633 |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | Steps whose grounding this assertion confirms when it passes. | repo:src/core/ir/schema.ts:521,753 |
 
 ```json
-{"id":"one-alert","kind":"assert","check":"element-count","target":"app","element":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
+{"id":"one-alert","kind":"assert","check":"element-count","target":"app","intent":{"description":"Error alerts 「Error」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21},"quote":{"text":"Error","sourceSpan":{"startLine":1,"startColumn":15,"endLine":1,"endColumn":20}}},"count":1}
 ```
 
 ### `capture` {#capture}
@@ -160,11 +169,11 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `id` | `StepId` | required | step-ID regex | Stable ID. | repo:src/core/ir/schema.ts:672 |
 | `kind` | string | required | literal `capture` | Step discriminator. | repo:src/core/ir/schema.ts:674 |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Source element. | repo:src/core/ir/schema.ts:672 |
+| `intent` | `ElementIntent` | required | [[spec/value-types#shared-types]] | Source-backed capture element description used for first binding. | repo:src/core/ir/schema.ts:788 |
 | `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | Bare run-state variable name. | repo:src/core/ir/schema.ts:675 |
 
 ```json
-{"id":"capture-code","kind":"capture","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
+{"id":"capture-code","kind":"capture","target":"app","intent":{"description":"Capture Code","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}},"variable":"code"}
 ```
 
 ### `ai` {#ai}
@@ -176,6 +185,7 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `instruction` | `InterpolatableText` | required | no secret marker | Agent instruction. | repo:src/core/ir/schema.ts:419 |
 | `secrets` | `AiStepSecretUse[]` | optional | strict entries | Committed secret uses. | repo:src/core/ir/schema.ts:688-692 |
 | `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | repo:src/core/ir/schema.ts:688-692 |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | Steps whose grounding this agentic execution confirms when it passes. | repo:src/core/ir/schema.ts:521,824 |
 
 ```json
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
@@ -193,9 +203,13 @@ Each member of a committed AI step's optional `secrets` array is a strict `AiSte
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once. Element bindings are refreshed for each `element-visible` and `text-equals` observation. A binding failure or adapter error does not retry.
+Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once.
+
+`element-visible`, `text-equals`, and `element-count` never consult or update grounding or call AI: with or without `--resolve`, they poll `accessibilitySnapshot()` and `matchQuotedCandidates` until their deadline. [repo:src/usecases/run.ts:2780-2855]
 
 ## Generated forms {#generated-forms}
+
+Generated click, press, fill, fill-secret, and capture forms carry `GeneratedElementIntent`; generated `element-visible`, `text-equals`, and `element-count` forms carry `GeneratedQuotedElementIntent`. Both are attributed locally to the shared committed shapes in [[spec/value-types#shared-types]]. [repo:src/core/ir/schema.ts:913-1057]
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |

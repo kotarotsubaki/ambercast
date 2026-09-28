@@ -6,7 +6,7 @@
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `2` | Grounding format version. | repo:src/core/ir/schema.ts:64,1368 |
+| `schemaVersion` | integer | required | literal `3` | Grounding format version. | repo:src/core/ir/schema.ts:73,1663 |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the associated plan. | repo:src/core/ir/schema.ts:35,1369 |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | Cached step grounding keyed by ID. | repo:src/core/ir/schema.ts:1370 |
 
@@ -14,8 +14,11 @@
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntry` | `kind` | string | required | literal `element` | Element-entry discriminator. | repo:src/core/ir/schema.ts:1093 |
-|  | `fingerprint` | `Fingerprint` | required | strict v2 fingerprint | Accessibility-neighborhood evidence. | repo:src/core/ir/schema.ts:1095 |
+| `ElementGroundingEntryV3` | `kind` | string | required | literal `element` | Element-entry discriminator. | repo:src/core/ir/schema.ts:1362 |
+|  | `locator` | `AccessibilityElementRef` | required | [[spec/value-types#shared-types]] | Observed locator bound to the intent. | repo:src/core/ir/schema.ts:1363 |
+|  | `fingerprint` | `Fingerprint` | required | [[spec/fingerprint#algorithm]] | Accessibility-neighborhood evidence. | repo:src/core/ir/schema.ts:1364 |
+|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | repo:src/core/ir/schema.ts:1365 |
+|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | repo:src/core/ir/schema.ts:1366 |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI-entry discriminator. | repo:src/core/ir/schema.ts:1114 |
 |  | `trace` | `TraceRecord` | required | strict trace | Replayable successful trace. | repo:src/core/ir/schema.ts:1116 |
 
@@ -56,7 +59,7 @@ This illustrative `planDigest` refers to the complete Plan example in [[spec/pla
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -69,6 +72,8 @@ A consumer MUST recompute the Plan digest and accept Grounding only when it equa
 ## Plan digest binding {#plan-digest}
 
 After successful replay of an existing trace, an implementation MUST leave that entry unchanged. It MUST write or overwrite an AI entry only after successful agentic execution with exact terminal success-criterion coverage. For a successful agentic execution ending in a snapshot or failed assertion, a cold path MUST write no entry and a fallback path MUST delete the stale entry that caused fallback. It MUST leave an existing entry untouched after agentic failure or abort. [repo:src/usecases/run.ts:1895-1912] [repo:src/usecases/run.ts:2051-2127]
+
+An element entry MUST be written or overwritten only when its binding reaches `confirmed`: every step naming that element step in its own committed `confirms` list must pass in the same case. An `acted`-only binding is discarded at write-back and never persisted. [repo:src/usecases/run.ts:147-160] [repo:src/usecases/run.ts:2627-2633]
 
 For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [repo:src/usecases/run.ts:896] [repo:src/usecases/run.ts:1075]
 

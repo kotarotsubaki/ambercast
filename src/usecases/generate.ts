@@ -173,17 +173,17 @@ export interface ConsentCapability {
 }
 
 /**
- * Keeps generation-only step provenance beside instruction-coverage failures.
+ * Keeps generation-only step provenance beside each attribution issue.
  *
  * The shared instruction-policy result deliberately remains reusable by
  * callers that have no generated step identity to report. Generation instead
- * retains the failing step here, so its response-error projection can give a
+ * retains each failing step here, so its response-error projection can give a
  * retry and a final report the same actionable scope without widening the
  * policy module's general contract.
  */
 type PrepareInstructionCoveredStepsResult =
   | { readonly success: true; readonly data: InstructionAttributedSteps }
-  | { readonly success: false; readonly issues: readonly (InstructionCoverageIssue | ElementIntentIssue | TextEqualsSelfQuoteIssue)[]; readonly stepId: string };
+  | { readonly success: false; readonly issues: readonly ((InstructionCoverageIssue | ElementIntentIssue | TextEqualsSelfQuoteIssue) & { readonly stepId: string })[] };
 
 /** Retryable refusal when one assertion uses its target quote as its expected value. */
 type TextEqualsSelfQuoteIssue = {
@@ -225,18 +225,22 @@ function rejectTextEqualsSelfQuote(text: string, quoteText: string, stepId: stri
  * @param response - Strict provider response with citations and full intents.
  * @param normalizedTestMd - Canonical prompt used for local attribution.
  * @returns Committed-shape steps without transient citation data, or the
- * complete deterministic provider issue list and its generated step identity.
+ * complete deterministic provider issue list with each issue's step identity.
  * @remarks
  * Instruction validation runs for every AI step, while element-bearing actions,
  * assertions, and captures receive locally attributed intent. A text-equals
- * target and expected value require distinct prompt quotes (SPEC-G4). On failure, generation
- * maps the returned raw provider output and affected step to
- * `AiResponseInvalidError`, then performs no artifact write. The default empty
+ * target and expected value require distinct prompt quotes (SPEC-G4).
+ * Element intent and self-quote issues are collected across all non-AI steps:
+ * SPEC-G4 requires that other defects continue to be collected, and SPEC-I3
+ * orders them by step index and then path. AI coverage failures retain their
+ * immediate failure path. Generation maps the returned issues to
+ * `AiResponseInvalidError`, then performs no artifact write.
  */
 export function prepareInstructionCoveredSteps(
   response: GeneratedPlanResponseForPolicyType,
   normalizedTestMd: NormalizedTestMd,
 ): PrepareInstructionCoveredStepsResult {
+  const issues: Array<(InstructionCoverageIssue | ElementIntentIssue | TextEqualsSelfQuoteIssue) & { readonly stepId: string }> = [];
   try {
     const steps = response.steps.map((step) => {
       if (step.kind !== 'ai') {
@@ -244,9 +248,17 @@ export function prepareInstructionCoveredSteps(
           || (step.kind === 'action' && step.action !== 'navigate')
           || (step.kind === 'assert' && (step.check === 'element-visible' || step.check === 'text-equals' || step.check === 'element-count'))) {
           const attributed = attributeElementIntent(step.intent, normalizedTestMd);
-          if (!attributed.success) throw new ElementIntentAttributionError(attributed.issues, step.id);
+          if (!attributed.success) {
+            issues.push(...attributed.issues.map((issue) => ({ ...issue, stepId: step.id })));
+            return step;
+          }
           if (step.kind === 'assert' && step.check === 'text-equals' && attributed.data.quote !== undefined) {
-            rejectTextEqualsSelfQuote(step.text, attributed.data.quote.text, step.id);
+            try {
+              rejectTextEqualsSelfQuote(step.text, attributed.data.quote.text, step.id);
+            } catch (error) {
+              if (!(error instanceof ElementIntentAttributionError)) throw error;
+              issues.push(...error.issues.map((issue) => ({ ...issue, stepId: step.id })));
+            }
           }
           return { ...step, intent: attributed.data };
         }
@@ -257,10 +269,11 @@ export function prepareInstructionCoveredSteps(
       const { verificationIntent: _verificationIntent, instructionCoverage: _instructionCoverage, ...attributed } = step;
       return { ...attributed, instructionCoverage: coverage.data };
     }) as unknown as InstructionAttributedSteps;
+    if (issues.length > 0) return { success: false, issues };
     return { success: true, data: steps };
   } catch (error) {
-    if (error instanceof InstructionCoverageAttributionError || error instanceof ElementIntentAttributionError) {
-      return { success: false, issues: error.issues, stepId: error.stepId };
+    if (error instanceof InstructionCoverageAttributionError) {
+      return { success: false, issues: error.issues.map((issue) => ({ ...issue, stepId: error.stepId })) };
     }
     throw error;
   }
@@ -1190,7 +1203,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
                   path: issue.code === 'intent-id-missing'
                     ? [...issue.path.slice(0, -1), REDACTED_ISSUE_PATH_SEGMENT]
                     : issue.path,
-                  ...(prepared.stepId === undefined ? {} : { stepId: prepared.stepId }),
+                  stepId: issue.stepId,
                 })),
               },
             ));

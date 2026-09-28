@@ -115,8 +115,8 @@ function normalizeName(name: string): string {
  * {@link normalizeName} to query text and node names, compares an optional
  * role hint exactly, and never interpolates `{{run.x}}`-shaped strings.
  * Invalid snapshots return `snapshot-invalid` through
- * {@link isSnapshotInvalid}. The linear walk is the performance contract for
- * the later 5,000-node/10ms test; no index or memo is built.
+ * {@link isSnapshotInvalid}. The linear walk avoids an index or memo and
+ * bounds matching work by the size of the snapshot.
  *
  * @param tree - The synthetic-root ARIA snapshot tree.
  * @param criteria - Literal quote text and optional role filter.

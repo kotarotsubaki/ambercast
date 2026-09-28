@@ -201,8 +201,9 @@ function runStateValues(runState: RunState): ReadonlyMap<RunVariableName, string
  * runCase call, avoiding a whole-plan scan after every step. The validated
  * plan's SPEC-I5 validateConfirms guarantee supplies existence, earlier
  * action-kind targets, and uniqueness; this function does not revalidate.
+ * Stage 1 SPEC-H2 eligibility in heal.ts also consumes this reverse index.
  */
-function buildConfirmsIndex(steps: readonly Step[]): ReadonlyMap<StepId, readonly StepId[]> {
+export function buildConfirmsIndex(steps: readonly Step[]): ReadonlyMap<StepId, readonly StepId[]> {
   const index = new Map<StepId, StepId[]>();
   for (const step of steps) {
     if (!('confirms' in step) || !step.confirms?.length) continue;
@@ -2640,9 +2641,6 @@ async function executeAiStep(
  * secret before calling this function for all binding stages, then fills.
  * A denied sink or unresolved secret takes no snapshot and makes no AI call.
  *
- * @remarks
- * This scaffold throws until step 11 implements the algorithm. This JSDoc
- * is the design specification for that implementation.
  */
 async function groundedTarget(
   context: DispatchContext,
@@ -2801,7 +2799,6 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
  * `snapshot-invalid` for an invalid snapshot. Invalid snapshots are retryable.
  * A passed outcome must set `confirmationBasisValid` true for exactly one match and false for multiple matches.
  *
- * @remarks This design scaffold throws until step 11 implements the loop.
  */
 async function evaluateElementVisibleAssert(
   step: Extract<Step, { kind: 'assert'; check: 'element-visible' }>,
@@ -2828,7 +2825,6 @@ async function evaluateElementVisibleAssert(
  * `matched 0`, `snapshot-invalid`, `binding-lost`, `ambiguous`, or the
  * mismatching `innerText` from the single bound candidate.
  *
- * @remarks This design scaffold throws until step 11 implements the loop.
  */
 async function evaluateTextEqualsAssert(
   step: Extract<Step, { kind: 'assert'; check: 'text-equals' }>,
@@ -2848,7 +2844,6 @@ async function evaluateTextEqualsAssert(
  * the last sample is `matched <n>` for a count mismatch or
  * `snapshot-invalid` for an invalid snapshot. Invalid snapshots are retryable.
  *
- * @remarks This design scaffold throws until step 11 implements the loop.
  */
 async function evaluateElementCountAssert(
   step: Extract<Step, { kind: 'assert'; check: 'element-count' }>,
@@ -3131,8 +3126,8 @@ function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult[
  * Confirm an action only when every ID in `context.confirmsIndex.get(actionId)`
  * has a passing result in this case with a valid basis. Missing, skipped,
  * unreached, and not-yet-executed results do not satisfy that requirement.
- * Since this runs once per newly passed step, consult accumulated results
- * (the `completed` array or equivalent), not merely `passedStep`.
+ * Since this runs once per newly passed step, consult `completed`, not merely
+ * `passedStep`.
  *
  * On first confirmation, the action must already have a BindingState at
  * stage `acted`; an absent state or `candidate` is an invariant violation.
@@ -3149,11 +3144,17 @@ function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult[
  * the in-memory grounding document. The existing case-end finally block
  * alone handles one disk write, subject to groundingWriteBackAllowed and its
  * immediate pre-write secret scan.
+ *
+ * @param context - Case-local dispatch and binding state.
+ * @param passedStep - The newly passed confirming step.
+ * @param outcome - Dispatch result supplying the confirmation basis.
+ * @param completed - Accumulated case results, including `passedStep`.
  */
 function promoteConfirmedBindings(
   context: DispatchContext,
   passedStep: Step,
   outcome: DispatchOutcome,
+  completed: readonly StepResult[],
 ): void {
   throw new Error('not implemented (step 11)');
 }
@@ -3979,7 +3980,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       if (originalStep.kind === 'capture') {
         allowedRunRefs.add(originalStep.variable);
       }
-      promoteConfirmedBindings(activeContext, originalStep, outcome);
+      promoteConfirmedBindings(activeContext, originalStep, outcome, completed);
       deps.events.emit({
         type: 'step-result',
         stepId: originalStep.id,

@@ -4606,9 +4606,10 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
     const beforePlan = await scenario.storage.readText(PLAN);
     const result = await heal(scenario.deps, OPTIONS);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'click-submit', outcome: 'accepted' }]));
+    expect(result.outcome.results[0]?.steps).toContainEqual(expect.objectContaining({ id: 'confirm-submit', status: 'passed' }));
     expect(await scenario.storage.readText(PLAN)).toBe(beforePlan);
     const grounding = GroundingDocument.parse(JSON.parse(await scenario.storage.readText(GROUNDING)));
-    expect(grounding.entries['click-submit']).toEqual(expect.objectContaining({ kind: 'element', provenance: expect.any(String) }));
+    expect(grounding.entries['click-submit']).toEqual(expect.objectContaining({ kind: 'element', provenance: 'ai-proposed' }));
   });
 
   it('TEST-H3 skips confirms-reground when the failed assert lists no confirms', async () => {
@@ -4634,6 +4635,7 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
     };
     const result = await heal(scenario.deps, OPTIONS);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'url-check', outcome: 'accepted' }]));
+    expect(result.outcome.results[0]?.steps).toContainEqual(expect.objectContaining({ id: 'url-check', status: 'passed' }));
   });
 
   it('TEST-H5 rejects a Stage 2 replacement that changes confirms', async () => {

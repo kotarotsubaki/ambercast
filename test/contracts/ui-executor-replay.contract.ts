@@ -51,20 +51,24 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
       const config = 'resolved' in loaded ? loaded.resolved : loaded;
       const targets = { app: harness.target };
       const plan: PlanDocument = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         source: { inputsDigest: computeInputsDigest({
-          normalizedTestMd: normalizeTestMd(prompt), schemaVersion: 4,
+          normalizedTestMd: normalizeTestMd(prompt), schemaVersion: 5,
           generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
           planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
         }) },
         targets,
         steps: [
           { id: 'open-entry', target: 'app', kind: 'action', action: 'navigate', url: harness.entryUrl },
-          { id: 'click-submit', target: 'app', kind: 'action', action: 'click', element: harness.element },
+          { id: 'click-submit', target: 'app', kind: 'action', action: 'click', intent: {
+            description: `${harness.element.name} ${harness.element.role}`,
+            roleHint: harness.element.role,
+            sourceSpan: { startLine: 3, startColumn: 7, endLine: 3, endColumn: 13 },
+          } },
           { id: 'see-ready', target: 'app', kind: 'assert', check: 'text-visible', text: harness.readyText, timeoutMs: 5000 },
         ],
       };
-      const grounding: GroundingDocument = { schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} };
+      const grounding: GroundingDocument = { schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} };
       await storage.writeText(file, prompt);
       await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as JsonValueT));
       await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText(grounding as JsonValueT));

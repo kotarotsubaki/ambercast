@@ -39,14 +39,14 @@ const GENERATED_RESPONSE: GeneratedPlanResponse = {
       id: 'fill-email',
       kind: 'action',
       action: 'fill',
-      target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Email' },
+      target: 'web', intent: { description: 'Email textbox', roleHint: 'textbox', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 62, citation: 'When I submit valid credentials, I reach the dashboard.' },
       value: 'person@example.test',
     },
     {
       id: 'click-submit',
       kind: 'action',
       action: 'click',
-      target: 'web', element: { strategy: 'accessibility', role: 'button', name: 'Submit' },
+      target: 'web', intent: { description: 'Submit button', roleHint: 'button', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 62, citation: 'When I submit valid credentials, I reach the dashboard.' },
     },
   ],
   ambiguities: [],
@@ -447,13 +447,13 @@ describe('fake vertical slice', () => {
 
     const plan = PlanDocument.parse(JSON.parse(await storage.readText(layout.planPathFor(TEST_PATH))));
     expect(GroundingDocument.parse(JSON.parse(await storage.readText(layout.groundingPathFor(TEST_PATH))))).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: computePlanDigest(plan),
       entries: {},
     });
 
     const sharedGroundingFixture = plan.steps.map((step, index) => {
-      if (!('element' in step)) {
+      if (!('intent' in step)) {
         throw new Error('The generated smoke-test plan must contain only element-bearing steps.');
       }
 
@@ -461,15 +461,16 @@ describe('fake vertical slice', () => {
         algorithm: 'a11y-neighborhood-v2',
         hash: String(index + 1).padStart(64, '0'),
       };
-      return { stepId: step.id, target: step.element, fingerprint };
+      const target: ElementRef = { strategy: 'accessibility', role: step.intent.roleHint ?? 'button', name: step.id === 'fill-email' ? 'Email' : 'Submit' };
+      return { stepId: step.id, target, intent: step.intent, fingerprint };
     });
     // Path B covers a cold-start grounding miss; this test exercises only pre-seeded grounding.
     const seededGrounding: GroundingDocument = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: computePlanDigest(plan),
-      entries: Object.fromEntries(sharedGroundingFixture.map(({ stepId, fingerprint }) => [
+      entries: Object.fromEntries(sharedGroundingFixture.map(({ stepId, target, fingerprint }) => [
         stepId,
-        { kind: 'element' as const, fingerprint },
+        { kind: 'element' as const, locator: target, fingerprint, intentDigest: 'a'.repeat(64), provenance: 'ai-proposed' as const },
       ])),
     };
     await storage.writeText(
@@ -572,7 +573,7 @@ describe('fake vertical slice', () => {
     })]);
 
     const grounding = GroundingDocument.parse({
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: computePlanDigest(plan),
       entries: {
         'complete-sign-in': {

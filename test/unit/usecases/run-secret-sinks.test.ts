@@ -66,6 +66,9 @@ const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.
 const EMAIL: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Email' };
 const PASSWORD: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Password' };
 const SUBMIT: ElementRef = { strategy: 'accessibility', role: 'button', name: 'Submit' };
+const PASSWORD_INTENT = { description: 'Password textbox', roleHint: 'textbox', sourceSpan: SUCCESS_SOURCE_SPAN };
+const SUBMIT_INTENT = { description: 'Submit button', roleHint: 'button', sourceSpan: SUCCESS_SOURCE_SPAN, quote: { text: 'submit', sourceSpan: SUCCESS_SOURCE_SPAN } };
+const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, quote: { text: 'credentials', sourceSpan: SUCCESS_SOURCE_SPAN } };
 const RUN_OPTIONS: RunOptions = { files: [], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [],
@@ -151,13 +154,13 @@ async function createFreshPlan(
   const planTargets = { web: { surface: 'web' as const, baseUrl: TARGETS.web.baseUrl } };
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
-    schemaVersion: 4,
+    schemaVersion: 5,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundleFingerprint(),
     targetDefinitions: planTargets,
   });
   const plan = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: { inputsDigest },
     targets: planTargets,
     steps: committedSteps,
@@ -176,7 +179,7 @@ async function seedFreshArtifacts(
   const plan = await createFreshPlan(storage, testPath, steps);
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding: GroundingDocument = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     planDigest: computePlanDigest(plan),
     entries,
   };
@@ -595,7 +598,7 @@ describe('run secret sinks', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       aiStep(),
       // SPEC-17: one failing observation is enough for this persistence-path fixture.
-      { id: 'later-ordinary-assertion', kind: 'assert', check: 'element-visible', target: 'web', element: SUBMIT, timeoutMs: 0 },
+      { id: 'later-ordinary-assertion', kind: 'assert', check: 'element-visible', target: 'web', intent: SUBMIT_INTENT, timeoutMs: 0 },
     ], elementGrounding(['later-ordinary-assertion']));
     recordingStorage.writes.length = 0;
 
@@ -678,8 +681,8 @@ describe('run secret sinks', () => {
     const failedScenario = createRunScenario(failedSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
     const failedPath = await writePrompt(failedScenario.recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(failedScenario.recordingStorage.storage, failedPath, [
-      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD, secretRef: SECRET_REF },
-      { id: 'secret-assertion', kind: 'assert', check: 'text-equals', target: 'web', element: PASSWORD, text: 'Dashboard' },
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_INTENT, secretRef: SECRET_REF },
+      { id: 'secret-assertion', kind: 'assert', check: 'text-equals', target: 'web', intent: PASSWORD_QUOTED_INTENT, text: 'Dashboard' },
     ], elementGrounding(['fill-secret', 'secret-assertion']));
     const failedOutcome = await run(failedScenario.deps, RUN_OPTIONS);
 
@@ -693,7 +696,7 @@ describe('run secret sinks', () => {
     const exceptionScenario = createRunScenario(exceptionSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
     const exceptionPath = await writePrompt(exceptionScenario.recordingStorage.storage, PROMPT);
     await seedFreshArtifacts(exceptionScenario.recordingStorage.storage, exceptionPath, [
-      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', element: PASSWORD, secretRef: SECRET_REF },
+      { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_INTENT, secretRef: SECRET_REF },
       { id: 'go-dashboard', kind: 'action', action: 'navigate', target: 'web', url: '/dashboard' },
     ], elementGrounding(['fill-secret']));
     const exceptionOutcome = await run(exceptionScenario.deps, RUN_OPTIONS);
@@ -792,7 +795,7 @@ describe('run secret sinks', () => {
     await seedFreshArtifacts(
       runScenario.recordingStorage.storage,
       testPath,
-      [{ id: 'click-submit', kind: 'action', action: 'click', target: 'web', element: SUBMIT }],
+      [{ id: 'click-submit', kind: 'action', action: 'click', target: 'web', intent: SUBMIT_INTENT }],
       elementGrounding(['click-submit']),
     );
 

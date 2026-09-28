@@ -4,37 +4,40 @@ import { GroundingDocument, PlanDocument, type Step } from '../../../../src/core
 
 const target = { surface: 'web', baseUrl: 'https://example.test/' } as const;
 const element = { strategy: 'accessibility', role: 'button', name: 'Continue' } as const;
+const sourceSpan = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 9 } as const;
+const intent = { description: 'Continue button', roleHint: 'button', sourceSpan };
+const quotedIntent = { ...intent, quote: { text: 'Continue', sourceSpan } };
 const criterion = { id: 'done', kind: 'success', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 10 } } as const;
 const ai = (id: string, targetName = 'A'): Step => ({ id, target: targetName, kind: 'ai', instruction: 'Finish the task', instructionCoverage: [criterion] });
 const action = (id: string, actionName: 'click' | 'navigate' | 'press' | 'fill' | 'fill-secret', targetName = 'A'): Step => {
   const base = { id, target: targetName, kind: 'action' } as const;
   switch (actionName) {
-    case 'click': return { ...base, action: actionName, element };
+    case 'click': return { ...base, action: actionName, intent };
     case 'navigate': return { ...base, action: actionName, url: 'https://example.test/next' };
-    case 'press': return { ...base, action: actionName, element, key: 'Enter' };
-    case 'fill': return { ...base, action: actionName, element, value: 'hello' };
-    case 'fill-secret': return { ...base, action: actionName, element, secretRef: '{{secrets.password}}' };
+    case 'press': return { ...base, action: actionName, intent, key: 'Enter' };
+    case 'fill': return { ...base, action: actionName, intent, value: 'hello' };
+    case 'fill-secret': return { ...base, action: actionName, intent, secretRef: '{{secrets.password}}' };
   }
 };
 const assertion = (id: string, check: 'text-visible' | 'element-visible' | 'text-equals' | 'url-matches' | 'element-count', targetName = 'A'): Step => {
   const base = { id, target: targetName, kind: 'assert' } as const;
   switch (check) {
     case 'text-visible': return { ...base, check, text: 'Ready' };
-    case 'element-visible': return { ...base, check, element };
-    case 'text-equals': return { ...base, check, element, text: 'Ready' };
+    case 'element-visible': return { ...base, check, intent: quotedIntent };
+    case 'text-equals': return { ...base, check, intent: quotedIntent, text: 'Ready' };
     case 'url-matches': return { ...base, check, pattern: '/next' };
-    case 'element-count': return { ...base, check, element, count: 0 };
+    case 'element-count': return { ...base, check, intent: quotedIntent, count: 0 };
   }
 };
-const capture = (id: string, targetName = 'A'): Step => ({ id, target: targetName, kind: 'capture', element, variable: 'saved' });
+const capture = (id: string, targetName = 'A'): Step => ({ id, target: targetName, kind: 'capture', intent, variable: 'saved' });
 const plan = (steps: Step[], names = ['A']) => PlanDocument.parse({
-  schemaVersion: 4,
+  schemaVersion: 5,
   source: { inputsDigest: 'a'.repeat(64) },
   targets: Object.fromEntries(names.map((name) => [name, target])),
   steps,
 });
 const grounding = (entries: GroundingDocument['entries']) => GroundingDocument.parse({
-  schemaVersion: 2,
+  schemaVersion: 3,
   planDigest: 'b'.repeat(64),
   entries,
 });
@@ -105,7 +108,7 @@ describe('deriveRequiredCapabilities', () => {
   });
 
   it('returns an empty set for every target of an empty plan', () => {
-    const emptyPlan: PlanDocument = { schemaVersion: 4, source: { inputsDigest: 'a'.repeat(64) }, targets: { A: target, B: target }, steps: [] };
+    const emptyPlan: PlanDocument = { schemaVersion: 5, source: { inputsDigest: 'a'.repeat(64) }, targets: { A: target, B: target }, steps: [] };
     const result = deriveRequiredCapabilities(emptyPlan, undefined, { resolve: true });
     expect(Object.keys(result).sort()).toEqual(['A', 'B']);
     expect(capabilities(result, 'A')).toEqual([]);

@@ -1967,6 +1967,167 @@ describe('run', () => {
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
+  describe('SPEC-R4 first binding', () => {
+    const step = (intent: typeof SUBMIT_INTENT | typeof SUBMIT_QUOTED_INTENT): TestStep =>
+      ({ id: 'click-submit', kind: 'action', action: 'click', intent });
+    const capture = (names: readonly string[], rawYaml = names.join(',')) => ({
+      tree: { role: 'root', name: '', children: names.map((name) => ({ role: 'button', name, children: [] })) },
+      rawYaml,
+      scalarValues: [],
+    });
+    const fingerprintFor = (name: string) => {
+      const ref: ElementRef = { strategy: 'accessibility', role: 'button', name };
+      const result = computeAccessibilityFingerprint(capture([name]).tree, ref, []);
+      if (result.kind !== 'ok') throw new Error('The first-binding fixture must have one fingerprintable button.');
+      return result.fingerprint;
+    };
+    const scriptedAi = (proposal: { outcome: 'found'; role: string; name: string } | { outcome: 'none' }) =>
+      createFakeAiExecutor({ execute: async () => ({ data: proposal, raw: JSON.stringify(proposal) }) });
+    async function scenario(
+      session: ReturnType<typeof createFakeBrowserSession>,
+      intent: typeof SUBMIT_INTENT | typeof SUBMIT_QUOTED_INTENT,
+      executor = scriptedAi({ outcome: 'none' }),
+      options: { clock?: Clock; entries?: GroundingDocument['entries']; timeoutMs?: number; confirms?: boolean } = {},
+    ) {
+      const { deps, recordingStorage, resolveAiExecutor } = createScenario({
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+        resolveAiExecutor: async () => executor,
+        ...(options.clock === undefined ? {} : { clock: options.clock }),
+      });
+      const testPath = await writePrompt(recordingStorage.storage);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [
+        step(intent),
+        ...(options.confirms ? [{ id: 'confirm-submit', kind: 'assert' as const, check: 'text-visible' as const, text: 'Done', confirms: ['click-submit'] }] : []),
+      ], options.entries ?? {});
+      const timedDeps: RunDeps = options.timeoutMs === undefined ? deps : {
+        ...deps,
+        config: { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: options.timeoutMs } } },
+      };
+      const outcome = await run(timedDeps, DEFAULT_OPTIONS);
+      return { outcome, session, executor, resolveAiExecutor, recordingStorage, testPath };
+    }
+
+    it('TEST-R3 accepts a quoted candidate rendered before the deadline without AI and records its wait', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      vi.spyOn(session, 'accessibilitySnapshot')
+        .mockResolvedValueOnce(capture([]))
+        .mockResolvedValueOnce(capture([]))
+        .mockResolvedValue(capture(['Submit']));
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock });
+
+      expect(result.outcome.results[0]?.result).toMatchObject({
+        status: 'passed', aiCalls: 0,
+        steps: [{ id: 'click-submit', status: 'passed', binding: { provenance: 'quoted-match', quoteWaitMs: 200 } }],
+      });
+      expect(result.executor.structuredRequests).toHaveLength(0);
+      expect(result.resolveAiExecutor).not.toHaveBeenCalled();
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
+    });
+
+    it('TEST-R3 asks AI exactly once when two quoted candidates remain at the deadline', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(new Map());
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit', 'Submit']));
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, timeoutMs: 200 });
+
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect(result.outcome.results[0]?.error).toMatchObject({ details: { reason: 'no-candidate' } });
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+    });
+
+    it('TEST-R3 shares the old locator wait and fresh quote polling deadline', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
+      vi.spyOn(session, 'awaitElementPresence').mockImplementation(async () => { await clock.sleep(175); });
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot').mockImplementation(async () => {
+        await clock.sleep(20);
+        return capture(['Submit', 'Submit']);
+      });
+      const intentDigest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent: SUBMIT_QUOTED_INTENT });
+      const entries = { 'click-submit': { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest, provenance: 'quoted-match' } } as GroundingDocument['entries'];
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, entries, timeoutMs: 200 });
+
+      expect(snapshots).toHaveBeenCalledTimes(1);
+      expect(clock.monotonicMs()).toBeLessThanOrEqual(220);
+      expect(result.executor.structuredRequests).toHaveLength(1);
+    });
+
+    it('TEST-R3 accepts a unique capture begun before and completed after the deadline', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      const starts: number[] = [];
+      vi.spyOn(session, 'accessibilitySnapshot').mockImplementation(async () => {
+        starts.push(clock.monotonicMs());
+        if (starts.length === 1) return capture([]);
+        await clock.sleep(30);
+        return capture(['Submit']);
+      });
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, timeoutMs: 100 });
+
+      expect(starts).toEqual([0, 100]);
+      expect(clock.monotonicMs()).toBe(130);
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'quoted-match' } });
+      expect(result.executor.structuredRequests).toHaveLength(0);
+    });
+
+    it.each([
+      ['absent name', ['Submit'], { outcome: 'found', role: 'button', name: 'Missing' }],
+      ['two matching nodes', ['Submit', 'Submit'], { outcome: 'found', role: 'button', name: 'Submit' }],
+      ['roleHint mismatch', ['Submit'], { outcome: 'found', role: 'link', name: 'Submit' }],
+    ] as const)('TEST-R5 rejects %s without an operation', async (_label, names, proposal) => {
+      const session = createFakeBrowserSession(new Map());
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(names));
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi(proposal), { timeoutMs: 0 });
+
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect(result.outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'proposal-rejected' } });
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+    });
+
+    it('TEST-R5 rejects a candidate that changes before pre-action verification', async () => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
+      vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason: 'fingerprint-mismatch' });
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: 'found', role: 'button', name: 'Submit' }), { timeoutMs: 0 });
+
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect(result.outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'candidate-changed' } });
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+    });
+
+    it.each([
+      ['NFD', 'Cafe\u0301', 'Café'],
+      ['repeated whitespace', 'Submit   order', 'Submit order'],
+    ] as const)('TEST-R5 persists the observed raw %s name instead of the proposal name', async (_label, observed, proposed) => {
+      const locator = { strategy: 'accessibility', role: 'button', name: observed } as const;
+      const session = createFakeBrowserSession(liveEntries([locator], fingerprintFor(observed)));
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture([observed]));
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: 'found', role: 'button', name: proposed }), { timeoutMs: 0, confirms: true });
+
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+      const grounding = await readGrounding(result.recordingStorage.storage, result.testPath);
+      expect(grounding.entries['click-submit']).toMatchObject({ kind: 'element', locator });
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
+    });
+
+    it('TEST-R6 sends the settled quote-less snapshot to AI after 300ms of changing rendering', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(new Map());
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot').mockImplementation(async () => {
+        const elapsed = clock.monotonicMs();
+        return elapsed < 300 ? capture([`Transitional ${elapsed}`], `transition-${elapsed}`) : capture(['Submit'], 'settled');
+      });
+      const result = await scenario(session, SUBMIT_INTENT, undefined, { clock, timeoutMs: 500 });
+
+      expect(snapshots).toHaveBeenCalledTimes(5);
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      const received = JSON.stringify(result.executor.structuredRequests[0]?.context);
+      expect(received).toContain('Submit');
+      expect(received).not.toContain('Transitional');
+    });
+  });
+
   it.each([
     ['missing', 'No grounding is stored for this locator.'],
     ['fingerprint-mismatch', 'The stored grounding for this locator no longer matches the current page.'],

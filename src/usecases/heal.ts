@@ -770,8 +770,8 @@ type GroundingRepairOutcome =
  * The caller has already rejected interrupted and non-advancing replays. For
  * SPEC-H2, `requiredPassingStepIds` contains the failing action and every
  * confirming step from the reverse confirms index; `requiredConfirmedEntryIds`
- * contains that action. For SPEC-H3, the passing IDs contain the failed assert
- * and its forward `confirms` list, while the entry IDs contain that list.
+ * contains that action. For SPEC-H3, the passing IDs contain only the failed
+ * assert, while the entry IDs contain its forward `confirms` list.
  * Every required step must have a passing result in the NEW measurement's
  * replay, never the baseline replay. Re-read `groundingFile` through
  * `overlay.storage` after `measureReplay` returns and require every named entry
@@ -879,7 +879,7 @@ async function tryGroundingRepair(
       overlay,
       groundingFile,
       measurement,
-      mode === 'element-reground' ? [failingStep.id, ...confirmingStepIds!] : [failingStep.id, ...listedStepIds!],
+      mode === 'element-reground' ? [failingStep.id, ...confirmingStepIds!] : [failingStep.id],
       mode === 'element-reground' ? [failingStep.id] : listedStepIds!,
     );
     if (!adopted) {

@@ -49,7 +49,7 @@ import type { AiAgenticRequest, InstructionCoveredAiAgenticRequest } from '#port
 import type { BrowserSession, GroundedResolution, PerformableAction } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { classifyBrowserLaunchFailure, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
+import { buildRedactedAiProposalContext, classifyBrowserLaunchFailure, jsonContainsResolvedSecret, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { buildRunReport } from '#usecases/run-report.js';
@@ -1981,7 +1981,7 @@ describe('run', () => {
       if (result.kind !== 'ok') throw new Error('The first-binding fixture must have one fingerprintable button.');
       return result.fingerprint;
     };
-    const scriptedAi = (proposal: { outcome: 'found'; role: string; name: string } | { outcome: 'none' }) =>
+    const scriptedAi = (proposal: { outcome: 'found'; role: string; name: string } | { outcome: 'none' } | { outcome: 'ambiguous' }) =>
       createFakeAiExecutor({ execute: async () => ({ data: proposal, raw: JSON.stringify(proposal) }) });
     async function scenario(
       session: ReturnType<typeof createFakeBrowserSession>,
@@ -2006,6 +2006,54 @@ describe('run', () => {
       const outcome = await run(timedDeps, DEFAULT_OPTIONS);
       return { outcome, session, executor, resolveAiExecutor, recordingStorage, testPath };
     }
+
+    it.each([
+      ['none', 'no-candidate'],
+      ['ambiguous', 'ambiguous'],
+    ] as const)('TEST-R4 maps the single %s proposal to exit 4 and %s', async (proposal, reason) => {
+      const session = createFakeBrowserSession(new Map());
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit', 'Submit']));
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: proposal }), { timeoutMs: 0 });
+
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect(result.outcome.results[0]?.error).toMatchObject({
+        kind: 'grounding-unresolved', exitCode: 4, details: { stepId: 'click-submit', reason },
+      });
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+    });
+
+    it('TEST-R4 retains the existing AI error classification for a proposal timeout', async () => {
+      const executor = createFakeAiExecutor({ execute: () => new Promise<never>(() => undefined) });
+      const session = createFakeBrowserSession(new Map());
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit', 'Submit']));
+      const { deps, recordingStorage } = createScenario({
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+        config: configWithAiTimeout(1),
+        resolveAiExecutor: async () => executor,
+      });
+      const testPath = await writePrompt(recordingStorage.storage);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [step(SUBMIT_INTENT)]);
+
+      const outcome = await runWithinAiTimeoutTestWindow(deps);
+
+      expect(executor.structuredRequests).toHaveLength(1);
+      expectAiTimeoutOutcome(outcome, 'click-submit');
+    });
+
+    it('TEST-R4 aborts before provider dispatch when a broken redactor leaves a resolved secret', () => {
+      const secret = HIGH_ENTROPY_TOKEN_LITERAL;
+      const resolvedSecrets = new Map([['secrets.password', new Set([secret])]]);
+      const proposalContext = {
+        description: 'Submit button', excerpt: secret, accessibilityTree: capture(['Submit']).tree,
+      };
+      const executor = scriptedAi({ outcome: 'none' });
+
+      expect(jsonContainsResolvedSecret(proposalContext, resolvedSecrets)).toBe(true);
+      expect(() => buildRedactedAiProposalContext(
+        proposalContext, resolvedSecrets, new Map(), (value) => value,
+      )).toThrowError(/secret-contaminated/);
+      expect(executor.structuredRequests).toHaveLength(0);
+    });
 
     it('TEST-R3 accepts a quoted candidate rendered before the deadline without AI and records its wait', async () => {
       const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);

@@ -1835,7 +1835,7 @@ function redactJsonStrings(
  * @returns `true` when a supported string value or, unless disabled, object
  * key contains a resolved secret or the scan budget is exceeded.
  */
-function jsonContainsResolvedSecret(
+export function jsonContainsResolvedSecret(
   value: unknown,
   resolvedSecrets: ReadonlyMap<string, ReadonlySet<string>>,
   options: { readonly scanObjectKeys?: boolean; readonly excludePaths?: ReadonlySet<string> } = {},
@@ -2642,6 +2642,16 @@ async function executeAiStep(
  * A denied sink or unresolved secret takes no snapshot and makes no AI call.
  *
  */
+/** Builds the redacted stage-2 proposal context before the pre-send secret check. */
+export function buildRedactedAiProposalContext(
+  value: { description: string; quote?: string; roleHint?: string; excerpt: string; accessibilityTree: unknown },
+  resolvedSecrets: ReadonlyMap<string, ReadonlySet<string>>,
+  runState: ReadonlyMap<RunVariableName, string>,
+  redactor: typeof redactJsonStrings = redactJsonStrings,
+): unknown {
+  throw new Error('not implemented (step 11)');
+}
+
 async function groundedTarget(
   context: DispatchContext,
   step: ActionStep | CaptureStep,

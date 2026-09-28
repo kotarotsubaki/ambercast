@@ -2207,6 +2207,27 @@ describe('run', () => {
     expect(resolveAiExecutor).not.toHaveBeenCalled();
   });
 
+  it('TEST-R1 treats a grounding kind mismatch as a missing entry without resolve', async () => {
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+    const { deps, recordingStorage, resolveAiExecutor } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'click-submit', kind: 'action', action: 'click', intent: SUBMIT_INTENT },
+    ], {
+      'click-submit': { kind: 'ai', trace: coveredTrace([], [passingText('Submitted')]) },
+    });
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'grounding-unresolved', exitCode: 4, details: { stepId: 'click-submit', reason: 'missing' },
+    });
+    expect(resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['no entry', false, 'missing'],
     ['verify miss', true, 'recoverable-miss'],

@@ -23,6 +23,7 @@ describe('Plan v4 and grounding v2 contract', () => {
   it('rejects retired document versions and accepts the current versions', () => {
     expect(parse(makePlan()).success).toBe(true);
     expect(parse({ ...makePlan(), schemaVersion: 3 }).success).toBe(false);
+    expect(parse({ ...makePlan(), schemaVersion: 4 }).success).toBe(false);
     const current = { schemaVersion: 3, planDigest: 'b'.repeat(64), entries: {} };
     expect(GroundingDocument.safeParse(current).success).toBe(true);
     expect(GroundingDocument.safeParse({ ...current, schemaVersion: 1 }).success).toBe(false);

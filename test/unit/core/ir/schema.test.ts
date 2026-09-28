@@ -1043,6 +1043,7 @@ describe('PlanDocument', () => {
   it('accepts Plan v4 and Grounding v2 and rejects retired versions (SPEC-1, SPEC-3)', () => {
     expectAccepted(PlanDocument, plan([]));
     expectRejected(PlanDocument, { ...plan([]), schemaVersion: 3 });
+    expectRejected(PlanDocument, { ...plan([]), schemaVersion: 4 });
     expectAccepted(GroundingDocument, { schemaVersion: 3, planDigest: DIGEST_B, entries: {} });
     expectRejected(GroundingDocument, { schemaVersion: 1, planDigest: DIGEST_B, entries: {} });
   });

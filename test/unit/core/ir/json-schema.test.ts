@@ -83,7 +83,7 @@ const INVALID_PLAN_REASONS = {
   'plan-invalid-missing-action.json': { code: 'invalid_union', path: ['steps', 0, 'action'] },
   'plan-invalid-missing-check.json': { code: 'invalid_union', path: ['steps', 0, 'check'] },
   'plan-invalid-missing-kind.json': { code: 'invalid_union', path: ['steps', 0, 'kind'] },
-  'plan-invalid-missing-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'element', 'strategy'] },
+  'plan-invalid-missing-description.json': { code: 'invalid_type', path: ['steps', 0, 'intent', 'description'] },
   'plan-invalid-secret-ref-embedded.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
   'plan-invalid-secret-ref-invalid-character.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },
   'plan-invalid-secret-ref-missing-braces.json': { code: 'invalid_format', path: ['steps', 0, 'secretRef'] },

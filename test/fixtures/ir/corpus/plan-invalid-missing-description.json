@@ -19,7 +19,6 @@
         "action": "click",
         "target": "app",
         "intent": {
-          "description": "Submit",
           "sourceSpan": {
             "startLine": 1,
             "startColumn": 1,

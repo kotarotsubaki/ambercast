@@ -9,7 +9,7 @@ Expect to land on the dashboard and see a "Welcome" heading.`;
 
 /** The schema-validated plan rendered by the landing-page demonstration. */
 export const demoPlan = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   source: {
     inputsDigest: '0000000000000000000000000000000000000000000000000000000000000000',
   },
@@ -23,10 +23,10 @@ export const demoPlan = {
     },
     {
       action: 'fill',
-      element: {
-        name: 'Email',
-        role: 'textbox',
-        strategy: 'accessibility',
+      intent: {
+        description: 'Email field on the login form',
+        roleHint: 'textbox',
+        sourceSpan: { startLine: 3, startColumn: 13, endLine: 3, endColumn: 18 },
       },
       id: 'fill-email',
       kind: 'action',
@@ -38,10 +38,10 @@ export const demoPlan = {
       id: 'fill-password',
       kind: 'action',
       secretRef: '{{secrets.password}}',
-      element: {
-        name: 'Password',
-        role: 'textbox',
-        strategy: 'accessibility',
+      intent: {
+        description: 'Password field on the login form',
+        roleHint: 'textbox',
+        sourceSpan: { startLine: 3, startColumn: 46, endLine: 3, endColumn: 54 },
       },
       target: 'app',
     },
@@ -49,10 +49,10 @@ export const demoPlan = {
       action: 'click',
       id: 'click-sign-in',
       kind: 'action',
-      element: {
-        name: 'Sign in',
-        role: 'button',
-        strategy: 'accessibility',
+      intent: {
+        description: 'Sign in button on the login form',
+        roleHint: 'button',
+        sourceSpan: { startLine: 4, startColumn: 8, endLine: 4, endColumn: 17 },
       },
       target: 'app',
     },

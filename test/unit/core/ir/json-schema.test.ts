@@ -94,7 +94,7 @@ const INVALID_PLAN_REASONS = {
   'plan-invalid-unknown-check.json': { code: 'invalid_union', path: ['steps', 0, 'check'] },
   'plan-invalid-unknown-kind.json': { code: 'invalid_union', path: ['steps', 0, 'kind'] },
   'plan-invalid-unknown-plan-property.json': { code: 'unrecognized_keys', path: [], key: 'unexpected' },
-  'plan-invalid-unknown-strategy.json': { code: 'invalid_union', path: ['steps', 0, 'element', 'strategy'] },
+  'plan-invalid-unknown-strategy.json': { code: 'invalid_format', path: ['steps', 0, 'intent', 'roleHint'] },
   'plan-invalid-unknown-target-property.json': { code: 'unrecognized_keys', path: ['targets', 'app'], key: 'unexpected' },
   'plan-invalid-wrong-field-type.json': { code: 'invalid_type', path: ['steps', 0, 'url'] },
 } as const satisfies Record<string, InvalidPlanReason>;
@@ -181,8 +181,8 @@ describe('IR JSON Schema documents', () => {
       getPlanJsonSchema,
       {
         // SPEC-C1 C1-2
-        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json',
-        title: 'ambercast plan schema v4',
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json',
+        title: 'ambercast plan schema v5',
         description: 'Validates the complete generated plan document that is reviewed and committed beside its source test prompt.',
       },
     ],
@@ -190,8 +190,8 @@ describe('IR JSON Schema documents', () => {
       'grounding',
       getGroundingJsonSchema,
       {
-        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json',
-        title: 'ambercast grounding schema v2',
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json',
+        title: 'ambercast grounding schema v3',
         description: 'Validates the committed grounding cache associated with one plan digest.',
       },
     ],

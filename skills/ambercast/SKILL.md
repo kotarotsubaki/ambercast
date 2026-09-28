@@ -55,7 +55,7 @@ Structure:
 - One H1 naming the test case.
 - Plain sentences describing what the user does and what must be observable afterwards. No DSL, no selectors, no code.
 - One verification per sentence, and every action sentence ends in an observable result: a page, a message, a visible value.
-- Quote the literal UI text naming each element you act on or check (for example, "Sign in" or 「Welcome back」). This gives `generate` a concrete text anchor when it first finds the element.
+- Quote the literal UI text naming each element you act on or check, using straight double quotes or your prompt's local quotation marks. This gives `generate` a concrete text anchor when it first finds the element.
 - Put an exact display requirement in its own assert sentence, with the expected text quoted. Text quoted in an action sentence helps find the element to act on; it does not assert what the next screen displays.
 - If `generate` warns `action-unconfirmed`, no assertion or agentic step confirms that action. Its element binding cannot be cached, so every later `run` of that step needs `--resolve`. When the UI offers something meaningful to check, add a verification sentence after the action.
 - Write data preparation as user actions inside the prompt (create the record through the UI before checking it).

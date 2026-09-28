@@ -55,6 +55,7 @@ import { validateCommittedInstructionCoverage } from '#usecases/instruction-cove
 import { buildRunReport } from '#usecases/run-report.js';
 import { reportError } from '#report/error-mapping.js';
 import { OBSERVED_NOTE, RunResult } from '#report/schema.js';
+import { GroundingUnresolvedDetails, REPORT_SCHEMA_VERSION, StepResult } from '#report/schema.js';
 import { baseUrlSecretPolicy } from '../../doubles/base-url-secret-policy.js';
 import { boundTarget } from '../../doubles/bound-target.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
@@ -92,6 +93,249 @@ vi.mock('#core/ai/ai-deadline.js', async (importOriginal) => {
       });
     },
   };
+});
+
+describe('TEST-R10 staleness precedence', () => {
+  const quotedPrompt = '# Sign in\n\nClick "Submit" to continue.\n';
+  const strippedPrompt = '# Sign in\n\nClick Submit to continue.\n';
+  const quotedIntent = {
+    description: 'Submit button',
+    sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 28 },
+    roleHint: 'button' as const,
+    quote: { text: 'Submit', sourceSpan: { startLine: 3, startColumn: 8, endLine: 3, endColumn: 14 } },
+  };
+
+  it('rejects a retired v4 plan as StaleIrError with exit 4', async () => {
+    const { deps, recordingStorage, uiExecutor } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    const plan = await createFreshPlan(recordingStorage.storage, testPath);
+    await recordingStorage.storage.writeText(deps.layout.planPathFor(testPath), toCanonicalArtifactText({
+      ...plan, schemaVersion: 4,
+    } as unknown as JsonValueT));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toBeInstanceOf(StaleIrError);
+    expect(outcome.results[0]?.error).toMatchObject({ exitCode: 4 });
+    expect(uiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('rejects a quote whose prompt marks were stripped despite a matching inputsDigest', async () => {
+    const { deps, recordingStorage, uiExecutor } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', quotedPrompt);
+    const plan = await createFreshPlan(recordingStorage.storage, testPath, [
+      { id: 'click-submit', kind: 'action', action: 'click', intent: quotedIntent },
+    ]);
+    await writePrompt(recordingStorage.storage, 'login.test.md', strippedPrompt);
+    const inputsDigest = computeInputsDigest({
+      normalizedTestMd: normalizeTestMd(strippedPrompt), schemaVersion: 5,
+      generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
+      planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: plan.targets,
+    });
+    await recordingStorage.storage.writeText(deps.layout.planPathFor(testPath), toCanonicalArtifactText({
+      ...plan, source: { inputsDigest },
+    } as unknown as JsonValueT));
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+    expect(outcome.results[0]?.error).toMatchObject({
+      exitCode: 4, message: 'The generated plan contains invalid element intents or source spans.',
+    });
+    expect(uiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('checks inputsDigest before the simultaneously invalid prompt and quote', async () => {
+    const { deps, recordingStorage, uiExecutor } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', quotedPrompt);
+    const plan = await createFreshPlan(recordingStorage.storage, testPath, [
+      { id: 'click-submit', kind: 'action', action: 'click', intent: quotedIntent },
+    ]);
+    await writePrompt(recordingStorage.storage, 'login.test.md', strippedPrompt);
+    await recordingStorage.storage.writeText(deps.layout.planPathFor(testPath), toCanonicalArtifactText({
+      ...plan, source: { inputsDigest: 'f'.repeat(64) },
+    } as unknown as JsonValueT));
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toBeInstanceOf(StaleIrError);
+    expect(outcome.results[0]?.error).toMatchObject({ exitCode: 4 });
+    expect(uiExecutor).not.toHaveBeenCalled();
+  });
+});
+
+describe('TEST-R11 report and event vocabulary', () => {
+  const prompt = '# Sign in\n\nClick "Submit" to continue.\n';
+  const intent = {
+    description: 'Submit button', roleHint: 'button' as const,
+    sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 28 },
+    quote: { text: 'Submit', sourceSpan: { startLine: 3, startColumn: 8, endLine: 3, endColumn: 14 } },
+  };
+  const unquotedIntent = { description: intent.description, roleHint: intent.roleHint, sourceSpan: intent.sourceSpan };
+  const click = { id: 'click-submit', kind: 'action', action: 'click', intent } as const;
+  const confirm = { id: 'confirm-submit', kind: 'assert', check: 'element-visible', intent, confirms: ['click-submit'] } as const;
+  const capture = (names: readonly string[]) => ({
+    tree: { role: 'root', name: '', children: names.map((name) => ({ role: 'button', name, children: [] })) },
+    rawYaml: names.join(','), scalarValues: [],
+  });
+  const fingerprint = (() => {
+    const result = computeAccessibilityFingerprint(capture(['Submit']).tree, SUBMIT, []);
+    if (result.kind !== 'ok') throw new Error('TEST-R11 requires a fingerprintable Submit button.');
+    return result.fingerprint;
+  })();
+  const entry = {
+    kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT,
+    intentDigest: sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent }),
+    provenance: 'quoted-match',
+  } as const;
+  async function fixture(options: {
+    steps?: readonly TestStep[];
+    entries?: GroundingDocument['entries'];
+    samples?: readonly ReturnType<typeof capture>[];
+    onPerform?: FakeBrowserSessionOptions['onPerform'];
+    executor?: ReturnType<typeof createFakeAiExecutor>;
+    clock?: Clock;
+    resolveTimeoutMs?: number;
+  } = {}) {
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprint),
+      options.onPerform === undefined ? {} : { onPerform: options.onPerform });
+    const samples = options.samples ?? [capture(['Submit'])];
+    const snapshots = vi.spyOn(session, 'accessibilitySnapshot');
+    for (const sample of samples.slice(0, -1)) snapshots.mockResolvedValueOnce(sample);
+    snapshots.mockResolvedValue(samples.at(-1)!);
+    const base = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      ...(options.executor === undefined ? {} : { resolveAiExecutor: async () => options.executor! }),
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
+    const deps = options.resolveTimeoutMs === undefined ? base.deps : {
+      ...base.deps,
+      config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: options.resolveTimeoutMs } } },
+    };
+    const testPath = await writePrompt(base.recordingStorage.storage, 'login.test.md', prompt);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, options.steps ?? [click], options.entries ?? {});
+    return { ...base, deps, session, testPath, snapshots };
+  }
+  const stepEvents = (events: ReturnType<typeof createRecordingEventSink>) =>
+    events.emitted().filter((event): event is Extract<RunEvent, { type: 'step-result' }> => event.type === 'step-result');
+
+  it('accepts report 3.8 bindings and all four new unresolved reasons', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
+    expect(StepResult.parse({
+      id: 'click-submit', type: 'action', target: 'web', status: 'passed',
+      binding: { provenance: 'grounding', confirmed: true },
+    }).binding).toEqual({ provenance: 'grounding', confirmed: true });
+    for (const reason of ['no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed']) {
+      expect(GroundingUnresolvedDetails.parse({ stepId: 'click-submit', reason }).reason).toBe(reason);
+    }
+  });
+
+  it.each(['no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed'] as const)(
+    'recommends quoting UI text or heal for %s without a --resolve retry', (reason) => {
+      const error = new GroundingUnresolvedError('No trusted candidate.', {
+        stepId: 'click-submit', reason: reason as ConstructorParameters<typeof GroundingUnresolvedError>[1]['reason'],
+      });
+      const hint = reportError(error, { scope: 'case', caseId: 'login' }).hint;
+      expect(hint).toMatch(/quot|引用/i);
+      expect(hint).toContain('ambercast heal');
+      expect(hint).not.toContain('--resolve');
+    },
+  );
+
+  it('reports a confirmed-entry hit with confirmed true and grounding via', async () => {
+    const f = await fixture({ entries: { 'click-submit': { ...entry, fingerprint } } });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ binding: { provenance: 'grounding', confirmed: true } });
+    expect(outcome.results[0]?.result.steps[0]?.binding).not.toHaveProperty('quoteWaitMs');
+    expect(outcome.results[0]?.result.steps[0]?.binding).not.toHaveProperty('aiProposalMs');
+    expect(stepEvents(f.events)).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'grounding' });
+  });
+
+  it('reports binding after stage 3 when re-observation returns candidate-changed', async () => {
+    const f = await fixture();
+    vi.spyOn(f.session, 'resolveGrounded').mockResolvedValueOnce({ kind: 'miss', reason: 'fingerprint-mismatch' });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toMatchObject({ details: { reason: 'candidate-changed' } });
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ binding: { provenance: 'quoted-match', confirmed: false } });
+  });
+
+  it('retains binding when the operation throws after stage 3', async () => {
+    const f = await fixture({ onPerform: () => { throw new Error('operation failed'); } });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'error', binding: { provenance: 'quoted-match', confirmed: false } });
+  });
+
+  it('omits binding when stage 2 returns no candidate before stage 3', async () => {
+    const executor = createFakeAiExecutor({ execute: async () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }) });
+    const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }], samples: [capture([])], executor, resolveTimeoutMs: 0 });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toMatchObject({ details: { reason: 'no-candidate' } });
+    expect(outcome.results[0]?.result.steps[0]).not.toHaveProperty('binding');
+  });
+
+  it.each([
+    ['passed', [click, confirm], [capture(['Submit']), capture(['Submit'])], true],
+    ['failed', [click, confirm], [capture(['Submit']), capture([])], false],
+    ['skipped', [click, confirm, { id: 'fail-later', kind: 'assert', check: 'text-visible', text: 'Never shown' }, { ...confirm, id: 'confirm-again' }], [capture(['Submit']), capture(['Submit'])], false],
+  ] as const)('reports case-end confirmed false or true when a later confirmer is %s', async (_label, steps, samples, confirmed) => {
+    const f = await fixture({ steps: steps as readonly TestStep[], samples });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.result.steps[0]?.binding?.confirmed).toBe(confirmed);
+  });
+
+  it('measures stage-1 quote wait with an integer fake-clock duration and no AI timing', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const f = await fixture({ clock, samples: [capture([]), capture(['Submit'])] });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'quoted-match', quoteWaitMs: 100 });
+    expect(outcome.results[0]?.result.steps[0]?.binding).not.toHaveProperty('aiProposalMs');
+    expect(Number.isInteger(outcome.results[0]?.result.steps[0]?.binding?.quoteWaitMs)).toBe(true);
+  });
+
+  it('measures stage-2 AI time separately from quote wait with a fake clock', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const executor = createFakeAiExecutor({ execute: async () => {
+      await clock.sleep(17);
+      return { data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' };
+    } });
+    const f = await fixture({ clock, executor, steps: [{ ...click, intent: unquotedIntent }], resolveTimeoutMs: 0 });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'ai-proposed', quoteWaitMs: 0, aiProposalMs: 17 });
+    expect(Number.isInteger(outcome.results[0]?.result.steps[0]?.binding?.aiProposalMs)).toBe(true);
+  });
+
+  it('emits quoted-match for a stage-1 element candidate', async () => {
+    const f = await fixture();
+    await run(f.deps, DEFAULT_OPTIONS);
+    expect(stepEvents(f.events)).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'quoted-match' });
+  });
+
+  it('emits ai-proposed for a stage-2 element candidate', async () => {
+    const executor = createFakeAiExecutor({ execute: async () => ({
+      data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}',
+    }) });
+    const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }], executor, resolveTimeoutMs: 0 });
+    await run(f.deps, DEFAULT_OPTIONS);
+    expect(stepEvents(f.events)).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'ai-proposed' });
+  });
+
+  it('emits ai-resolve only for a live ai sibling and trace-replay on its next run', async () => {
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await evaluateTerminalAssert(request, passingText('Dashboard'));
+      return { outcome: 'success' };
+    } });
+    const ai = { ...aiStep(), instructionCoverage: [{
+      id: 'dashboard-reached', kind: 'success' as const, sourceSpan: intent.sourceSpan,
+    }] };
+    const f = await fixture({ steps: [click, ai], executor });
+    const first = await run(f.deps, DEFAULT_OPTIONS);
+    expect(first.results[0]?.result.status).toBe('passed');
+    expect(stepEvents(f.events)).toEqual(expect.arrayContaining([
+      { type: 'step-result', stepId: 'click-submit', via: 'quoted-match' },
+      { type: 'step-result', stepId: 'recorded-ai', via: 'ai-resolve' },
+    ]));
+    expect(stepEvents(f.events).filter((event) => event.stepId === 'click-submit').some((event) => event.via === 'ai-resolve')).toBe(false);
+    const before = stepEvents(f.events).length;
+    const second = await run(f.deps, DEFAULT_OPTIONS);
+    expect(second.results[0]?.result.status).toBe('passed');
+    expect(stepEvents(f.events).slice(before)).toContainEqual({ type: 'step-result', stepId: 'recorded-ai', via: 'trace-replay' });
+  });
 });
 
 vi.mock('#core/ir/grounding-recovery-mode.js', async (importOriginal) => {

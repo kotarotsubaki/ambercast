@@ -388,7 +388,7 @@ function rejectLegacyBrowserKey(document: unknown, configPath: string): void {
  * `resolveTimeoutMs` likewise defaults to 5000 here, so runtime eligibility
  * and behavior checks never receive an undefaulted value. Its default remains
  * outside the separate digest-projection boundary for the same live-only
- * reason.
+ * reason. An optional locale is canonicalized for each target during this copy.
  */
 function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedConfig['targets']): ResolvedConfig['targets'] {
   return Object.fromEntries(
@@ -402,11 +402,24 @@ function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedCo
         },
         healReplayIsolation: target.healReplayIsolation ?? 'stateful',
         resolveTimeoutMs: target.resolveTimeoutMs ?? 5000,
+        locale: canonicalizeLocale(target.locale, name),
       }];
     }),
   );
 }
 
+/**
+ * Canonicalizes an optional target locale at the authoritative config-loading boundary.
+ *
+ * @param value - The configured locale; `undefined` passes through unchanged.
+ * @param targetName - The target name used in the issue path.
+ * @returns The sole result of `Intl.getCanonicalLocales(value)`, or `undefined`.
+ * @throws {ConfigInvalidError} For a non-string value, an empty string, a
+ * `RangeError`, or any result other than exactly one locale. Report
+ * `CONFIG_INVALID` (exit 2) with a message such as
+ * `targets.<name>.locale is not a valid locale.`, embedding the actual target
+ * name, and a `{ target: targetName }` context object.
+ */
 function canonicalizeLocale(value: string | undefined, targetName: string): string | undefined {
   throw new Error('not implemented (step 11)');
 }

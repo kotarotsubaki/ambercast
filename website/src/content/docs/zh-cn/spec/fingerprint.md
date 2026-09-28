@@ -19,6 +19,12 @@ description: "`Fingerprint."
 
 `hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 和 `snapshot-invalid` 是截然不同的解析结果。缺失或畸形的树为 `element-not-found`；存在多个归一化 role/name 匹配项为 `ambiguous-match`；哈希过旧或不同为 `fingerprint-mismatch`。[src/core/ir/fingerprint.ts:347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L347), [src/core/ir/fingerprint.ts:388](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L388) 未配对的代理项在生成时不产生指纹，在解析时产生 `element-not-found`。[src/core/ir/fingerprint.ts:181](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L181)
 
+## 引用匹配 {#quote-matching}
+
+`matchQuotedCandidates(tree, {text, roleHint?})` 按指纹匹配顺序，从合成根节点的子节点开始，对无障碍树进行一次线性遍历。它对字面查询文本和节点名称应用相同的 `normalizeName` 规则（NFC 规范化、连续空白折叠、去除首尾空白），精确比较可选的 role 提示，且绝不插值形如 `{{run.x}}` 的字符串。它返回有序的 `{role, name}` 对；无效的树则返回 `{kind: 'snapshot-invalid'}`。
+
+这一操作用于首次绑定时基于引用的阶段，也用于元素断言在不依赖 grounding 时的求值。
+
 ## 设计理由 {#rationale}
 
 要解决的问题是在不允许陈旧定位器在视觉相似元素上重放的前提下检测局部 UI 漂移。有界邻域使该证据得以显式化。

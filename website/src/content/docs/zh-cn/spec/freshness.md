@@ -22,17 +22,19 @@ description: "`inputsDigest` 必须（MUST）是对新构建对象的规范 JSON
 | id | `check` 状态 | 推导 | 结果分类 |
 | --- | --- | --- | --- |
 | CHK-01 | `fresh` | Plan 解析成功、符合规范格式、具有有效的已提交覆盖范围，其 `inputsDigest` 匹配且其伴生项有效。 | pass |
-| CHK-02 | `stale` | Plan 为无效 JSON/模式/规范格式或已提交覆盖范围无效，或其 `inputsDigest` 不一致。 | fail |
+| CHK-02 | `stale` | Plan 为无效 JSON/模式/规范格式或已提交覆盖范围无效，或使用已废弃的 `schemaVersion: 4`，或已提交的 `ElementIntent`／`QuotedElementIntent` 来源跨度无效，或其 `inputsDigest` 不一致。 | fail |
 | CHK-03 | `fresh-without-grounding` | Plan 为 fresh；伴生项无效；仓库策略为 `uncommitted`。 | pass |
 | CHK-04 | `missing-grounding` | Plan 为 fresh；伴生项检查结果为 `missing`；策略要求已提交的 grounding。 | fail |
 | CHK-05 | `invalid-grounding` | Plan 为 fresh；伴生项检查结果为 `invalid`（JSON/模式/规范覆盖范围失败）。 | fail |
-| CHK-06 | `stale-grounding` | Plan 为 fresh；伴生项检查结果为 `stale`（存在另一个 `planDigest`）。 | fail |
+| CHK-06 | `stale-grounding` | Plan 为 fresh；伴生项检查结果为 `stale`（存在另一个 `planDigest`，或使用已废弃的 grounding `schemaVersion: 2`；后者先于伴生项自身的 schema 形状验证进行检查）。 | fail |
 | CHK-07 | `missing-plan` | 选定的测试没有 plan 制品。 | fail |
 | CHK-08 | `orphaned-plan` | 范围内的 plan 反向映射到不存在的测试路径。 | fail |
 | CHK-09 | `orphaned-grounding` | 范围内的 grounding 制品反向映射到不存在对应测试提示词的路径。 | fail |
 | CHK-10 | `invalid-artifact-name` | 制品路径无法反向推导出测试标识。 | fail |
 | CHK-11 | `listed` | 仅发现式的列出操作不检查选定的路径。 | skipped |
 | CHK-12 | `skipped` | 中断留下了仅包含标识的待处理行。 | skipped |
+
+对于其他方面有效且处于当前版本的 grounding 文档，条目中的 `intentDigest` 不匹配、ID 不存在于 Plan 中，或条目属于非操作类步骤，均不会改变本表的文档级分类；`run` 在相应步骤边界将该条目视为缺失。
 
 `fresh` 与 `fresh-without-grounding` 行判定为 pass；上方分类为 fail 的所有行均计入 failure；`listed` 与 `skipped` 为 skipped。[src/usecases/check-report.ts:71](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-report.ts#L71)
 

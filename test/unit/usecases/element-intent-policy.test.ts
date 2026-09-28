@@ -74,6 +74,7 @@ describe('TEST-I2: provider element-intent attribution (SPEC-I2, SPEC-I3)', () =
     ['zero-width span', proposal({ endColumn: 1, quote: undefined }), SOURCE, 'intent-span-invalid'],
     ['whitespace-only intent', proposal({ endColumn: 4, citation: '   ', quote: undefined }), '   ', 'intent-span-whitespace-only'],
     ['citation differs from source', proposal({ citation: '別の本文' }), SOURCE, 'intent-citation-mismatch'],
+    ['zero-width quote span', proposal({ quote: { ...proposal().quote!, endColumn: 2 } }), SOURCE, 'quote-span-invalid'],
     ['quote text differs by one character', proposal({ quote: { ...proposal().quote!, text: 'ログイソ' } }), SOURCE, 'quote-text-mismatch'],
     ['opening and closing marks are unpaired', proposal({ citation: '「ログイン”', endColumn: 7 }), '「ログイン”', 'quote-unpaired'],
     ['quote lies outside intent span', proposal({ startColumn: 7, citation: 'ボタンを押す' }), SOURCE, 'quote-outside-intent'],
@@ -148,14 +149,14 @@ describe('TEST-I2: provider element-intent attribution (SPEC-I2, SPEC-I3)', () =
 
 describe('TEST-I3: committed element-intent revalidation (SPEC-I4)', () => {
   it.each([
-    ['quote body changes', '「ログア」ボタンを押す', committed()],
-    ['surrounding quote marks disappear', ' ログイン ボタンを押す', committed()],
-    ['quote coordinates move outside intent', SOURCE, { ...committed(), sourceSpan: { ...FULL_SPAN, startColumn: 7 } }],
-  ] as const)('rejects when %s', (_name, source, intent) => {
+    ['quote body changes', '「ログア」ボタンを押す', committed(), 'quote-text-mismatch'],
+    ['surrounding quote marks disappear', ' ログイン ボタンを押す', committed(), 'quote-unpaired'],
+    ['quote coordinates move outside intent', SOURCE, { ...committed(), sourceSpan: { ...FULL_SPAN, startColumn: 7 } }, 'quote-outside-intent'],
+  ] as const)('rejects when %s', (_name, source, intent, code) => {
     const result = validateCommittedElementIntent(intent, normalizeTestMd(source));
     expect(result.success).toBe(false);
     if (result.success) throw new Error('Expected committed-intent issues');
-    expect(result.issues.length).toBeGreaterThan(0);
+    expect(result.issues.some((issue) => issue.code === code)).toBe(true);
   });
 
   it('returns the current extracted intent and quote text for the original source', () => {

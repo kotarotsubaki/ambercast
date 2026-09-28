@@ -26,6 +26,10 @@ describe('TEST-I7 computeIntentDigest', () => {
     },
   };
 
+  it('pins the digest of a fixed input', () => {
+    expect(computeIntentDigest(baseline)).toBe('e765672a1bc3a07695aa183977e60030539d03a323c01effa9c4491d29719687');
+  });
+
   it('returns the same digest for the same input twice', () => {
     expect(computeIntentDigest(baseline)).toMatch(/^[0-9a-f]{64}$/);
     expect(computeIntentDigest(baseline)).toBe(computeIntentDigest(baseline));

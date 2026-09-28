@@ -14,10 +14,11 @@ ambercast が生成する Plan や Grounding などのアーティファクト�
 | `0.1.0` | `2` | `1`（未確認） | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
 
 バージョン 0.2.0 では、Plan のスキーマバージョンを変更することなくプロバイダのリクエスト規約が変更されました。この変更により `producerBundleFingerprint` およびすべてのプロンプトの `inputsDigest` が変化するため、0.1.0 で生成された Plan は stale（陳腐化）として扱われます。
 
-スキーマバージョン 1 または 2 の Plan は、インプレースで移行（マイグレーション）されることはありません。`generate` はいずれも fresh ではないものとして扱い、現行の Plan を再生成します。`check` は読み取り専用で `stale` として報告し、`run` と `heal` は `INTEGRITY_VIOLATION`（終了コード 4）として拒否します。Plan v3 は、v2 のシークレットグラントの provenance モデルを、同意と `secrets.allow` に置き換えます。手順を追ったアップグレード方法については、[バージョン間のアップグレード](/ambercast/ja/how-to/upgrade/) を参照してください。
+スキーマバージョン 1 または 2 の Plan は、インプレースで移行（マイグレーション）されることはありません。`generate` はいずれも fresh ではないものとして扱い、現行の Plan を再生成します。`check` は読み取り専用で `stale` として報告し、`run` と `heal` は `INTEGRITY_VIOLATION`（終了コード 4）として拒否します。Plan v3 は、v2 のシークレットグラントの provenance モデルを、同意と `secrets.allow` に置き換えます。Plan v4 もインプレース移行されず、同じく fresh ではない Plan、`stale`、`INTEGRITY_VIOLATION` として扱われます。Plan v5 は v4 の要素参照をソースに裏付けられた intent に置き換えて `confirms` を追加し、Grounding v3 は v2 のフィンガープリントのみのエントリを locator、fingerprint、intentDigest、provenance に置き換えます。手順を追ったアップグレード方法については、[バージョン間のアップグレード](/ambercast/ja/how-to/upgrade/) を参照してください。
 
 ## 再生成境界 {#regeneration-boundary}
 

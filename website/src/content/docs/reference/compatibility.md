@@ -12,10 +12,11 @@ Ambercast defines artifact-format compatibility and regeneration boundaries acro
 | `0.1.0` | `2` | `1` (not yet confirmed) | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
 
 In version 0.2.0, the provider request contract changed without incrementing the Plan schema version. That change updated `producerBundleFingerprint` and altered every prompt's `inputsDigest`, making 0.1.0 plans stale (see [Changelog](/ambercast/reference/changelog/#release-020)).
 
-Plans with schema versions 1 and 2 are never migrated in place. `generate` treats either as non-fresh and regenerates a current Plan; `check` read-only reports it as `stale`; `run` and `heal` reject it with `INTEGRITY_VIOLATION` (exit code 4). Plan v3 replaces the v2 secret-grant provenance model with consent and `secrets.allow`; for step-by-step upgrade procedures, refer to [Upgrade between versions](/ambercast/how-to/upgrade/).
+Plans with schema versions 1 and 2 are never migrated in place. `generate` treats either as non-fresh and regenerates a current Plan; `check` read-only reports it as `stale`; `run` and `heal` reject it with `INTEGRITY_VIOLATION` (exit code 4). Plan v3 replaces the v2 secret-grant provenance model with consent and `secrets.allow`. Plan v4 is likewise never migrated in place and receives the same non-fresh, `stale`, and `INTEGRITY_VIOLATION` treatment. Plan v5 replaces v4 element references with source-backed intent and adds `confirms`; Grounding v3 replaces v2 bare-fingerprint entries with locator, fingerprint, intentDigest, and provenance; for step-by-step upgrade procedures, refer to [Upgrade between versions](/ambercast/how-to/upgrade/).
 
 ## Regeneration boundary {#regeneration-boundary}
 

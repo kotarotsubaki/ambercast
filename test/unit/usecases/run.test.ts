@@ -2321,6 +2321,126 @@ describe('run', () => {
     });
   });
 
+  describe('TEST-R9 grounding-free element asserts', () => {
+    const capture = (names: readonly string[]) => ({
+      tree: { role: 'root', name: '', children: names.map((name) => ({ role: 'button', name, children: [] })) },
+      rawYaml: names.join(','), scalarValues: [],
+    });
+    const invalid = { ...capture([]), tree: SNAPSHOT_INVALID };
+    const visible = { id: 'assert-submit', kind: 'assert', check: 'element-visible', intent: SUBMIT_QUOTED_INTENT } as const;
+    const count = { id: 'assert-submit', kind: 'assert', check: 'element-count', intent: SUBMIT_QUOTED_INTENT, count: 0 } as const;
+    const equals = { id: 'assert-submit', kind: 'assert', check: 'text-equals', intent: SUBMIT_QUOTED_INTENT, text: 'Continue' } as const;
+
+    async function fixture(step: TestStep, samples: readonly (ReturnType<typeof capture> | typeof invalid)[], text = 'Continue') {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT]), {
+        captureValues: new Map([[elementRefKey(SUBMIT), { text, value: '' }]]),
+      });
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot');
+      for (const sample of samples.slice(0, -1)) snapshots.mockResolvedValueOnce(sample);
+      snapshots.mockResolvedValue(samples[samples.length - 1]!);
+      const base = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+      const testPath = await writePrompt(base.recordingStorage.storage);
+      await seedFreshArtifacts(base.recordingStorage.storage, testPath, [step]);
+      const groundingPath = base.deps.layout.groundingPathFor(testPath);
+      const before = await base.recordingStorage.storage.readText(groundingPath);
+      base.recordingStorage.writes.length = 0;
+      return { ...base, session, snapshots, groundingPath, before };
+    }
+
+    async function checkNoGroundingOrAi(f: Awaited<ReturnType<typeof fixture>>) {
+      expect(f.recordingStorage.writes.some(({ path }) => path === f.groundingPath)).toBe(false);
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+      expect(f.resolveAiExecutor).not.toHaveBeenCalled();
+      expect(aiCalls(f.events)).toEqual([]);
+    }
+
+    it.each([false, true])('polls element-visible from zero to one match with resolve=%s', async (resolve) => {
+      const f = await fixture({ ...visible, timeoutMs: 200 }, [capture([]), capture(['Submit'])]);
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve });
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect(f.snapshots).toHaveBeenCalledTimes(2);
+      await checkNoGroundingOrAi(f);
+    });
+
+    it.each([false, true])('passes element-count zero matches with resolve=%s', async (resolve) => {
+      const f = await fixture({ ...count, timeoutMs: 0 }, [capture([])]);
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve });
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect(f.snapshots).toHaveBeenCalledTimes(1);
+      await checkNoGroundingOrAi(f);
+    });
+
+    it.each([false, true])('passes text-equals exact text with resolve=%s', async (resolve) => {
+      const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit'])]);
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve });
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      await checkNoGroundingOrAi(f);
+    });
+
+    it.each([false, true])('fails text-equals mismatching text with resolve=%s', async (resolve) => {
+      const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit'])], 'Wrong');
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve });
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'failed', expected: 'Element button "Submit" has text "Continue".', actual: 'Wrong' });
+      await checkNoGroundingOrAi(f);
+    });
+
+    it.each([false, true])('fails ambiguous text-equals with resolve=%s', async (resolve) => {
+      const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit', 'Submit'])]);
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve });
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'failed', expected: 'Element button "Submit" has text "Continue".', actual: 'ambiguous' });
+      await checkNoGroundingOrAi(f);
+    });
+
+    it('retries one invalid snapshot and passes on the next valid sample', async () => {
+      const f = await fixture({ ...visible, timeoutMs: 200 }, [invalid, capture(['Submit'])]);
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect(f.snapshots).toHaveBeenCalledTimes(2);
+      await checkNoGroundingOrAi(f);
+    });
+
+    it('retries one rejected innerText read and passes on the next poll', async () => {
+      const f = await fixture({ ...equals, timeoutMs: 200 }, [capture(['Submit'])]);
+      const captureValue = vi.spyOn(f.session, 'captureValue');
+      captureValue.mockRejectedValueOnce(new BoundElementRejectedError('element-detached', 'detached'));
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      expect(f.snapshots).toHaveBeenCalledTimes(2);
+      expect(captureValue).toHaveBeenCalledTimes(2);
+      await checkNoGroundingOrAi(f);
+    });
+
+    it('treats another innerText exception as a case error', async () => {
+      const f = await fixture({ ...equals, timeoutMs: 200 }, [capture(['Submit'])]);
+      vi.spyOn(f.session, 'captureValue').mockRejectedValueOnce(new TypeError('read failed'));
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.status).toBe('error');
+      expect(f.snapshots).toHaveBeenCalledTimes(1);
+      await checkNoGroundingOrAi(f);
+    });
+
+    it.each([
+      ['zero matches', { ...visible, timeoutMs: 0 }, capture([]), 'Element button "Submit" is visible.', 'matched 0'],
+      ['count mismatch', { ...count, timeoutMs: 0 }, capture(['Submit']), 'Element button "Submit" has count 0.', 'matched 1'],
+      ['snapshot-invalid', { ...visible, timeoutMs: 0 }, invalid, 'Element button "Submit" is visible.', 'snapshot-invalid'],
+      ['ambiguous', { ...equals, timeoutMs: 0 }, capture(['Submit', 'Submit']), 'Element button "Submit" has text "Continue".', 'ambiguous'],
+      ['text mismatch', { ...equals, timeoutMs: 0 }, capture(['Submit']), 'Element button "Submit" has text "Continue".', 'Wrong'],
+    ] as const)('uses final %s sample for assertion evidence', async (_label, step, sample, expected, actual) => {
+      const f = await fixture(step as TestStep, [sample], 'Wrong');
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'failed', expected, actual });
+      await checkNoGroundingOrAi(f);
+    });
+
+    it('uses binding-lost evidence when the final innerText read is rejected', async () => {
+      const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit'])]);
+      vi.spyOn(f.session, 'captureValue').mockRejectedValue(new BoundElementRejectedError('element-detached', 'detached'));
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'failed', expected: 'Element button "Submit" has text "Continue".', actual: 'binding-lost' });
+      await checkNoGroundingOrAi(f);
+    });
+  });
+
   it.each([
     ['missing', 'No grounding is stored for this locator.'],
     ['fingerprint-mismatch', 'The stored grounding for this locator no longer matches the current page.'],

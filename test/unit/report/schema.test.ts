@@ -123,7 +123,7 @@ const CASE_FS_IO_ERROR = {
   caseId: 'login-succeeds',
 };
 
-describe('TEST-20 report schema 3.7', () => {
+describe('TEST-20 report schema 3.8', () => {
   const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
   const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
   const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
@@ -147,9 +147,9 @@ describe('TEST-20 report schema 3.7', () => {
     expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
   });
 
-  it('pins the shared report version to 3.7', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
-    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.7' }));
+  it('pins the shared report version to 3.8', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.8' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
   });
 });
@@ -170,7 +170,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.7',
+    schemaVersion: '3.8',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -401,11 +401,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.7', () => {
+  it('requires schema version 3.8', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.7' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.8' });
   });
 });
 
@@ -413,8 +413,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.7', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
+  it('exports schema version 3.8', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -918,7 +918,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
   });
 
   it.each(generateBranches)(

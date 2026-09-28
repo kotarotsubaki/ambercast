@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateConfirms } from '#core/ir/confirms-validation.js';
-import type { Step } from '#core/ir/schema.js';
+import { Step } from '#core/ir/schema.js';
 
 const intent = { description: 'Submit', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 } } as const;
 
@@ -19,6 +19,12 @@ function issue(code: string, stepIndex: number, entryIndex: number) {
 }
 
 describe('validateConfirms (TEST-I4)', () => {
+  it('requires a nonempty confirms array at the Step schema boundary', () => {
+    const valid = assertion('check', ['a']);
+    expect(Step.safeParse(valid).success).toBe(true);
+    expect(Step.safeParse({ ...valid, confirms: [] }).success).toBe(false);
+  });
+
   it('reports an unknown step ID at its entry', () => {
     expect(validateConfirms([action('a'), assertion('check', ['missing'])]))
       .toEqual([issue('confirms-unknown-step', 1, 0)]);

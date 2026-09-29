@@ -26,6 +26,7 @@ import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computePlanDigest } from '#core/ir/digest.js';
+import { normalizeName } from '#core/ir/fingerprint.js';
 import { secretNameFor } from '#core/ir/secret-ref.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import {
@@ -219,7 +220,6 @@ class ElementIntentAttributionError extends Error {
  * and this call's `stepId`. The check returns normally without a value when it passes.
  */
 function rejectTextEqualsSelfQuote(text: string, quoteText: string, stepId: string): void {
-  const normalizeName = (name: string): string => name.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
   if (normalizeName(text) === normalizeName(quoteText)) {
     throw new ElementIntentAttributionError([{
       code: 'text-equals-self-quote',
@@ -1232,6 +1232,11 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           } catch (error) {
             return outcomeForError(fileFailure(error, 'The generated secret uses could not be normalized.'));
           }
+          const stepIndex = new Map<StepId, number>(normalizedSteps.map((step, index) => [step.id, index]));
+          const orderedSteps = normalizedSteps.map((step) => 'confirms' in step
+            ? { ...step, confirms: [...step.confirms].sort((left, right) =>
+              (stepIndex.get(left) ?? Infinity) - (stepIndex.get(right) ?? Infinity)) }
+            : step);
           // In v4 this candidate projects only Target names actually used by
           // valid response steps, keeping unrelated config out of freshness.
           const projectedTargets = projectPlanTargets(normalizedSteps.map((step) => step.target), deps.config.targets);
@@ -1252,7 +1257,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
               },
             },
             targets: projectedTargets,
-            steps: normalizedSteps,
+            steps: orderedSteps,
           };
           // Candidate-value traversal preserves the same non-disclosure invariant
           // for dynamic target namespaces after assembly.

@@ -4539,7 +4539,7 @@ describe('run path-B element recovery', () => {
     };
     expect(responseSchema.oneOf).toContainEqual(expect.objectContaining({
       additionalProperties: false,
-      properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string' }, name: { type: 'string' } },
+      properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string', minLength: 1 }, name: { type: 'string', minLength: 1 } },
       required: ['outcome', 'role', 'name'],
     }));
     expect(JSON.stringify(executor.structuredRequests[0]?.responseSchema)).not.toContain('fingerprint');

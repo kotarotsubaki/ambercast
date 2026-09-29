@@ -3268,7 +3268,7 @@ describe('generate v5 element intent and confirmation contracts', () => {
   });
 
   it('TEST-G3 reports one self-quote issue, collects another step defect in order, and retries', async () => {
-    const selfQuote = { id: 'assert-password', kind: 'assert', check: 'text-equals', target: 'web', intent: QUOTED_INTENT, text: ' password ' };
+    const selfQuote = { id: 'assert-password', kind: 'assert', check: 'text-equals', target: 'web', intent: QUOTED_INTENT, text: ' Password ' };
     const invalid = { steps: [
       selfQuote,
       click({ ...QUOTED_INTENT, citation: 'wrong citation' }, 'bad-click'),

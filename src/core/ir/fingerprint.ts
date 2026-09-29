@@ -103,7 +103,7 @@ function isAccessibilityNode(value: JsonValueT): value is AccessibilityNode {
  * descriptor treats as equivalent. Roles remain exact strings: only accessible
  * names have this text-equivalence contract.
  */
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
   return name.normalize('NFC').replace(/\s+/g, ' ').trim();
 }
 

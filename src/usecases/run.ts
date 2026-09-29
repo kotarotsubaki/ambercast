@@ -47,6 +47,7 @@ import {
 import {
   GROUNDING_SCHEMA_VERSION,
   PLAN_SCHEMA_VERSION,
+  ElementBindingProposal,
   GroundingDocument,
   PlanDocument,
   TraceAction,
@@ -2663,12 +2664,6 @@ export function buildRedactedAiProposalContext(
   return redacted;
 }
 
-const ELEMENT_BINDING_PROPOSAL = z.discriminatedUnion('outcome', [
-  z.strictObject({ outcome: z.literal('none') }),
-  z.strictObject({ outcome: z.literal('ambiguous') }),
-  z.strictObject({ outcome: z.literal('found'), role: z.string(), name: z.string() }),
-]);
-
 async function groundedTarget(
   context: DispatchContext,
   step: ElementBindingStep,
@@ -2727,7 +2722,7 @@ async function groundedTarget(
     if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
     const executor = await context.resolveAiExecutor();
     const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
-    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ELEMENT_BINDING_PROPOSAL), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
+    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ElementBindingProposal), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
     const aiStartedMs = context.clock.monotonicMs();
     const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request));
     aiProposalMs = Math.max(0, Math.round(context.clock.monotonicMs() - aiStartedMs));

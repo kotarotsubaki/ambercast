@@ -126,7 +126,32 @@ export function matchQuotedCandidates(
   tree: AccessibilityNode,
   criteria: { readonly text: string; readonly roleHint?: string },
 ): { role: string; name: string }[] | { kind: 'snapshot-invalid' } {
-  throw new Error('not implemented (step 11)');
+  if (isSnapshotInvalid(tree)) {
+    return { kind: 'snapshot-invalid' };
+  }
+
+  const matches: { role: string; name: string }[] = [];
+  const normalizedText = normalizeName(criteria.text);
+
+  function visit(parent: AccessibilityNode): void {
+    for (let index = 0; index < parent.children.length; index += 1) {
+      const node = parent.children[index];
+
+      if (node === undefined) {
+        continue;
+      }
+
+      if (normalizeName(node.name) === normalizedText
+        && (criteria.roleHint === undefined || node.role === criteria.roleHint)) {
+        matches.push({ role: node.role, name: node.name });
+      }
+
+      visit(node);
+    }
+  }
+
+  visit(tree);
+  return matches;
 }
 
 /**

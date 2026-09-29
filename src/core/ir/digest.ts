@@ -51,7 +51,12 @@ export function computeIntentDigest(step: {
   readonly operation: 'click' | 'press' | 'fill' | 'fill-secret' | 'capture';
   readonly intent: ElementIntent;
 }): HexSha256 {
-  throw new Error('not implemented (step 11)');
+  const preimage = {
+    stepKind: step.stepKind,
+    operation: step.operation,
+    intent: step.intent,
+  };
+  return sha256HexOfCanonicalJson(preimage as JsonValueT);
 }
 
 /**

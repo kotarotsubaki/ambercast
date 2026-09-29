@@ -1,4 +1,5 @@
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
+import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
 import { composeAiDeadline, isAiDeadlineTimeout, type AiDeadline } from '#core/ai/ai-deadline.js';
 import type { ResolvedConfig, ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
@@ -21,7 +22,9 @@ import { projectCauseName } from '#report/error-mapping.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import { computePlanDigest } from '#core/ir/digest.js';
-import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
+import { computeAccessibilityFingerprint, matchQuotedCandidates } from '#core/ir/fingerprint.js';
+import type { AccessibilityNode } from '#core/ir/aria-snapshot.js';
+import { computeIntentDigest } from '#core/ir/digest.js';
 import { matchRunReferenceTokens } from '#core/ir/run-ref.js';
 import {
   isGroundingCanonicalForClaim,
@@ -105,6 +108,7 @@ import type {
 } from './instruction-coverage-policy.js';
 import {
   classifyPreScannedTraceCoverage,
+  extractSpan,
   validateCommittedInstructionCoverage,
 } from './instruction-coverage-policy.js';
 import { validateCommittedElementIntent } from './element-intent-policy.js';
@@ -225,6 +229,8 @@ interface DispatchContext {
    * absolute path even when progress rendering later makes it relative.
    */
   readonly file: string;
+  readonly normalizedTestMd: NormalizedTestMd;
+  stepStartedMs: number;
   /**
    * Supplies one monotonic time source for dispatch-only measurement so local
    * request preparation cannot be counted as provider latency.
@@ -262,6 +268,8 @@ interface DispatchContext {
   readonly bindingStates: Map<StepId, BindingState>;
   /** Reverse index built once by buildConfirmsIndex. */
   readonly confirmsIndex: ReadonlyMap<StepId, readonly StepId[]>;
+  readonly actionSteps: ReadonlyMap<StepId, ActionStep>;
+  readonly validConfirmationSteps: Set<StepId>;
   readonly aiTimeoutMs: number;
   readonly signal?: AbortSignal;
 }
@@ -2649,15 +2657,94 @@ export function buildRedactedAiProposalContext(
   runState: ReadonlyMap<RunVariableName, string>,
   redactor: typeof redactJsonStrings = redactJsonStrings,
 ): unknown {
-  throw new Error('not implemented (step 11)');
+  const redacted = redactor(value, resolvedSecrets, runState);
+  if (jsonContainsResolvedSecret(redacted, resolvedSecrets)) throw groundingAbort('secret-contaminated');
+  return redacted;
 }
+
+const ELEMENT_BINDING_PROPOSAL = z.discriminatedUnion('outcome', [
+  z.strictObject({ outcome: z.literal('none') }),
+  z.strictObject({ outcome: z.literal('ambiguous') }),
+  z.strictObject({ outcome: z.literal('found'), role: z.string(), name: z.string() }),
+]);
 
 async function groundedTarget(
   context: DispatchContext,
   step: ActionStep | CaptureStep,
   intent: ElementIntent,
 ): Promise<BoundElement> {
-  throw new Error('not implemented (step 11)');
+  const session = await sessionForStep(context, step);
+  const deadlineMs = context.stepStartedMs + configForStep(context, step).resolveTimeoutMs;
+  const entry = context.grounding.entries[step.id];
+  const operation = step.kind === 'capture' ? 'capture' : step.action;
+  if (operation === 'navigate') throw new IntegrityViolationError('Navigation cannot bind an element intent.');
+  const intentDigest = computeIntentDigest({ stepKind: step.kind, operation, intent });
+  const stored = entry?.kind === 'element' && entry.intentDigest === intentDigest ? entry : undefined;
+  if (stored !== undefined) {
+    await session.awaitElementPresence(stored.locator, Math.max(0, deadlineMs - context.clock.monotonicMs()));
+    const verified = await session.resolveGrounded(stored.locator, { mode: 'verify', fingerprint: stored.fingerprint });
+    if (verified.kind === 'hit') {
+      context.bindingStates.set(step.id, { stage: 'acted', locator: stored.locator, fingerprint: stored.fingerprint, provenance: 'grounding' });
+      context.resolvedVias.set(step.id, 'grounding');
+      return verified.element;
+    }
+    if (!context.resolve) throw new GroundingUnresolvedError(unresolvedMessage(verified.reason), { stepId: step.id, reason: 'recoverable-miss' });
+  } else if (!context.resolve) {
+    throw new GroundingUnresolvedError(unresolvedMessage('missing'), { stepId: step.id, reason: 'missing' });
+  }
+
+  const quoteStartedMs = context.clock.monotonicMs();
+  let selected: AccessibilityCapture | undefined;
+  let quotedCandidate: { role: string; name: string } | undefined;
+  let previousRawYaml: string | undefined;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    selected = capture;
+    if (!isSnapshotInvalid(capture.tree)) {
+      if (intent.quote !== undefined) {
+        const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: intent.quote.text, ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }) });
+        if (Array.isArray(matches) && matches.length === 1) { quotedCandidate = matches[0]; break; }
+      } else if (previousRawYaml === capture.rawYaml) break;
+      previousRawYaml = capture.rawYaml;
+    }
+    const remaining = deadlineMs - context.clock.monotonicMs();
+    if (remaining <= 0) break;
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    // The capture started at the deadline is still eligible for judgment.
+    if (context.clock.monotonicMs() > deadlineMs) break;
+  }
+  if (selected === undefined || isSnapshotInvalid(selected.tree)) throw groundingClassificationAbort('snapshot-invalid', selected?.tree ?? null);
+  const quoteWaitMs = Math.max(0, Math.round(context.clock.monotonicMs() - quoteStartedMs));
+  let candidate = quotedCandidate;
+  let provenance: 'quoted-match' | 'ai-proposed' = 'quoted-match';
+  let aiProposalMs: number | undefined;
+  if (candidate === undefined) {
+    const excerpt = extractSpan(context.normalizedTestMd, intent.sourceSpan);
+    if (excerpt === undefined) throw new IntegrityViolationError('The validated element intent source span could not be re-extracted.');
+    const proposalContext = buildRedactedAiProposalContext({ description: intent.description, ...(intent.quote === undefined ? {} : { quote: intent.quote.text }), ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }), excerpt, accessibilityTree: selected.tree }, context.resolvedSecrets, runStateValues(context.runState));
+    if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
+    const executor = await context.resolveAiExecutor();
+    const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
+    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ELEMENT_BINDING_PROPOSAL), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
+    const aiStartedMs = context.clock.monotonicMs();
+    const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request));
+    aiProposalMs = Math.max(0, Math.round(context.clock.monotonicMs() - aiStartedMs));
+    if (result.data.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
+    const matches = matchQuotedCandidates(selected.tree as AccessibilityNode, { text: result.data.name, roleHint: result.data.role });
+    if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected' });
+    candidate = matches[0];
+    provenance = 'ai-proposed';
+  }
+  const locator: AccessibilityElementRef = { strategy: 'accessibility', role: candidate!.role, name: candidate!.name };
+  const fingerprint = computeAccessibilityFingerprint(selected.tree, locator, context.resolvedSecrets.values());
+  if (fingerprint.kind === 'snapshot-invalid' || fingerprint.kind === 'secret-contaminated') throw groundingClassificationAbort(fingerprint.kind, selected.tree);
+  if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected' });
+  context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
+  const verified = await session.resolveGrounded(locator, { mode: 'verify', fingerprint: fingerprint.fingerprint });
+  if (verified.kind === 'miss') throw new GroundingUnresolvedError('The selected element changed before the operation.', { stepId: step.id, reason: 'candidate-changed' });
+  context.resolvedVias.set(step.id, provenance);
+  return verified.element;
 }
 
 /**
@@ -2795,6 +2882,8 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
   }
 
   await performMaterializedAction(action, await sessionForStep(context, step));
+  const binding = context.bindingStates.get(step.id);
+  if (binding !== undefined) context.bindingStates.set(step.id, { ...binding, stage: binding.provenance === 'grounding' ? 'confirmed' : 'acted' });
   return { kind: 'passed' };
 }
 
@@ -2815,7 +2904,20 @@ async function evaluateElementVisibleAssert(
   context: DispatchContext,
   deadline: number,
 ): Promise<DispatchOutcome> {
-  throw new Error('not implemented (step 11)');
+  const session = await sessionForStep(context, step);
+  const quote = step.intent.quote;
+  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" is visible.`;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
+    if (Array.isArray(matches) && matches.length > 0) return { kind: 'passed', confirmationBasisValid: matches.length === 1 };
+    const actual = Array.isArray(matches) ? `matched ${matches.length}` : 'snapshot-invalid';
+    const remaining = deadline - context.clock.monotonicMs();
+    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
+  }
 }
 
 /**
@@ -2841,7 +2943,35 @@ async function evaluateTextEqualsAssert(
   context: DispatchContext,
   deadline: number,
 ): Promise<DispatchOutcome> {
-  throw new Error('not implemented (step 11)');
+  const session = await sessionForStep(context, step);
+  const quote = step.intent.quote;
+  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" has text "${step.text}".`;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
+    let actual: string;
+    if (!Array.isArray(matches)) actual = 'snapshot-invalid';
+    else if (matches.length > 1) actual = 'ambiguous';
+    else if (matches.length === 0) actual = 'matched 0';
+    else {
+      const bound = await session.resolveGrounded({ strategy: 'accessibility', role: matches[0]!.role, name: matches[0]!.name }, { mode: 'compute', resolvedSecrets: context.resolvedSecrets.values() });
+      if (bound.kind === 'miss') actual = 'binding-lost';
+      else {
+        try {
+          actual = await session.captureValue(bound.element, 'text');
+          if (actual === step.text) return { kind: 'passed' };
+        } catch (error) {
+          if (!(error instanceof BoundElementRejectedError)) throw error;
+          actual = 'binding-lost';
+        }
+      }
+    }
+    const remaining = deadline - context.clock.monotonicMs();
+    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
+  }
 }
 
 /**
@@ -2860,7 +2990,20 @@ async function evaluateElementCountAssert(
   context: DispatchContext,
   deadline: number,
 ): Promise<DispatchOutcome> {
-  throw new Error('not implemented (step 11)');
+  const session = await sessionForStep(context, step);
+  const quote = step.intent.quote;
+  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" has count ${step.count}.`;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
+    if (Array.isArray(matches) && matches.length === step.count) return { kind: 'passed' };
+    const actual = Array.isArray(matches) ? `matched ${matches.length}` : 'snapshot-invalid';
+    const remaining = deadline - context.clock.monotonicMs();
+    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
+  }
 }
 
 /**
@@ -3166,7 +3309,23 @@ function promoteConfirmedBindings(
   outcome: DispatchOutcome,
   completed: readonly StepResult[],
 ): void {
-  throw new Error('not implemented (step 11)');
+  if (outcome.kind !== 'passed' || !('confirms' in passedStep) || !passedStep.confirms?.length) return;
+  if (passedStep.kind === 'assert' && passedStep.check === 'element-visible' && outcome.confirmationBasisValid !== true) return;
+  for (const actionId of passedStep.confirms) {
+    const confirmingIds = context.confirmsIndex.get(actionId) ?? [];
+    if (!confirmingIds.every((id) => context.validConfirmationSteps.has(id) && completed.some((entry) => entry.id === id && entry.status === 'passed'))) continue;
+    const state = context.bindingStates.get(actionId);
+    if (state?.stage === 'confirmed') continue;
+    if (state?.stage !== 'acted') throw new IntegrityViolationError('A confirming step has no acted binding.');
+    const actionStep = context.actionSteps.get(actionId);
+    if (actionStep === undefined || actionStep.action === 'navigate') throw new IntegrityViolationError('A confirming step references no element action.');
+    context.bindingStates.set(actionId, { ...state, stage: 'confirmed' });
+    const provenance = state.provenance === 'grounding'
+      ? context.grounding.entries[actionId]?.kind === 'element' ? context.grounding.entries[actionId].provenance : undefined
+      : state.provenance;
+    if (provenance === undefined) throw new IntegrityViolationError('A cached binding has no persisted provenance.');
+    context.updateGroundingEntry(actionId, { kind: 'element', locator: state.locator, fingerprint: state.fingerprint, intentDigest: computeIntentDigest({ stepKind: 'action', operation: actionStep.action, intent: actionStep.intent }), provenance });
+  }
 }
 
 /**
@@ -3889,6 +4048,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       sessions,
       targets: sessionTargets,
       file,
+      normalizedTestMd,
+      stepStartedMs: 0,
       clock: deps.clock,
       allocateCallId: deps.allocateCallId,
       aiCalls: 0,
@@ -3917,6 +4078,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       resolvedVias,
       bindingStates: new Map<StepId, BindingState>(),
       confirmsIndex: buildConfirmsIndex(plan.steps),
+      actionSteps: new Map(plan.steps.filter((candidate): candidate is ActionStep => candidate.kind === 'action').map((candidate) => [candidate.id, candidate])),
+      validConfirmationSteps: new Set<StepId>(),
       aiTimeoutMs: deps.config.ai.timeoutMs,
       ...(signal === undefined ? {} : { signal }),
     };
@@ -3931,6 +4094,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
        * resolution path because it reports the step's `via` field.
        */
       deps.events.emit({ type: 'step-start', stepId: originalStep.id });
+      activeContext.stepStartedMs = deps.clock.monotonicMs();
       signal?.throwIfAborted();
       const deadline = originalStep.kind === 'assert'
         ? deps.clock.monotonicMs() + (originalStep.timeoutMs ?? sessionTargets[originalStep.target]!.config.resolveTimeoutMs)
@@ -3987,6 +4151,9 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       }
 
       completed.push(stepResult(originalStep, 'passed', undefined, undefined, activeContext));
+      if (originalStep.kind !== 'assert' || originalStep.check !== 'element-visible' || outcome.confirmationBasisValid === true) {
+        activeContext.validConfirmationSteps.add(originalStep.id);
+      }
       if (originalStep.kind === 'capture') {
         allowedRunRefs.add(originalStep.variable);
       }

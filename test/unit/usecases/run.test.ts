@@ -24,7 +24,7 @@ import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.j
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { ERROR_EXIT_CODES } from '#core/errors/exit-codes.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computeInputsDigest, computePlanDigest, sha256HexOfCanonicalJson } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest, sha256HexOfCanonicalJson } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import {
@@ -275,6 +275,7 @@ describe('TEST-R11 report and event vocabulary', () => {
     ['skipped', [click, confirm, { id: 'fail-later', kind: 'assert', check: 'text-visible', text: 'Never shown' }, { ...confirm, id: 'confirm-again' }], [capture(['Submit']), capture(['Submit'])], false],
   ] as const)('reports case-end confirmed false or true when a later confirmer is %s', async (_label, steps, samples, confirmed) => {
     const f = await fixture({ steps: steps as readonly TestStep[], samples });
+    if (_label === 'skipped') vi.spyOn(f.session, 'evaluateAssert').mockResolvedValue({ passed: false, message: 'Never shown' });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
     expect(outcome.results[0]?.result.steps[0]?.binding?.confirmed).toBe(confirmed);
   });
@@ -362,6 +363,7 @@ const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
+const QUOTED_PROMPT = '# Sign in\n\nWhen I "Submit" with "Password", I reach the dashboard.\n';
 const DEFAULT_INSTRUCTION_COVERAGE = [{
   id: 'dashboard-reached',
   kind: 'success' as const,
@@ -376,8 +378,11 @@ const INTENT_SPAN = { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 };
 const EMAIL_INTENT = { description: 'Email textbox', sourceSpan: INTENT_SPAN, roleHint: 'textbox' };
 const PASSWORD_INTENT = { description: 'Password textbox', sourceSpan: INTENT_SPAN, roleHint: 'textbox' };
 const SUBMIT_INTENT = { description: 'Submit button', sourceSpan: INTENT_SPAN, roleHint: 'button' };
-const SUBMIT_QUOTED_INTENT = { ...SUBMIT_INTENT, quote: { text: 'Submit', sourceSpan: INTENT_SPAN } };
-const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, quote: { text: 'Password', sourceSpan: INTENT_SPAN } };
+const SUBMIT_QUOTED_INTENT = { ...SUBMIT_INTENT, quote: { text: 'Submit', sourceSpan: { startLine: 3, startColumn: 9, endLine: 3, endColumn: 15 } } };
+const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, quote: { text: 'Password', sourceSpan: { startLine: 3, startColumn: 23, endLine: 3, endColumn: 31 } } };
+const EMAIL_CAPTURE_DIGEST = computeIntentDigest({ stepKind: 'capture', operation: 'capture', intent: EMAIL_INTENT });
+const SUBMIT_CAPTURE_DIGEST = computeIntentDigest({ stepKind: 'capture', operation: 'capture', intent: SUBMIT_INTENT });
+const PASSWORD_FILL_SECRET_DIGEST = computeIntentDigest({ stepKind: 'action', operation: 'fill-secret', intent: PASSWORD_INTENT });
 const DEFAULT_OPTIONS: RunOptions = {
   files: [],
   resolve: true,
@@ -739,14 +744,21 @@ function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
   return { deps, uiExecutor, events, recordingStorage, sessionFactory, resolveAiExecutor };
 }
 
-function elementGrounding(stepIds: readonly string[], locators: Readonly<Record<string, ElementRef>> = {}, fingerprint: Fingerprint = FINGERPRINT): GroundingDocument['entries'] {
+function elementGrounding(stepIds: readonly string[], locators: Readonly<Record<string, ElementRef>> = {}, fingerprint: Fingerprint = FINGERPRINT, intentDigests: Readonly<Record<string, string>> = {}): GroundingDocument['entries'] {
   return Object.fromEntries(stepIds.map((id) => [id, {
     kind: 'element',
     locator: locators[id] ?? (/capture-second/.test(id) ? SUBMIT : /assert-path-a-account|assert-after-pipelines|assert-after-trace-replay|password|secret/.test(id) ? PASSWORD : /email|capture|name|prefix|reference|first|host|token/.test(id) ? EMAIL : SUBMIT),
     fingerprint,
-    intentDigest: 'a'.repeat(64),
+    intentDigest: intentDigests[id] ?? 'a'.repeat(64),
     provenance: 'quoted-match',
   }])) as GroundingDocument['entries'];
+}
+
+function intentDigestsFor(steps: readonly TestStep[]): Readonly<Record<string, string>> {
+  return Object.fromEntries(steps.flatMap((step) => {
+    if ((step.kind !== 'action' && step.kind !== 'capture') || !('intent' in step)) return [];
+    return [[step.id, computeIntentDigest({ stepKind: step.kind, operation: step.kind === 'capture' ? 'capture' : step.action, intent: step.intent })]];
+  }));
 }
 
 function liveEntries(
@@ -1037,7 +1049,7 @@ async function runFailureEvidenceScenario(
       ...fillSteps,
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
     ],
-    elementGrounding(fillSteps.map(({ id }) => id)),
+    elementGrounding(fillSteps.map(({ id }) => id), {}, FINGERPRINT, intentDigestsFor(fillSteps)),
   );
 
   return run(deps, DEFAULT_OPTIONS);
@@ -1249,7 +1261,9 @@ describe('run', () => {
         aiStep('recorded-ai', [secretRef]),
       ],
       {
-        ...elementGrounding(['fill-password']),
+        ...elementGrounding(['fill-password'], {}, FINGERPRINT, intentDigestsFor([
+          { id: 'fill-password', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef },
+        ])),
         ...aiGrounding(coveredTrace([], [passingText('Dashboard')])),
       },
     );
@@ -1310,7 +1324,10 @@ describe('run', () => {
       { id: 'click-submit', kind: 'action', action: 'click', intent: SUBMIT_INTENT },
       { id: 'fill-email', kind: 'action', action: 'fill', target: EMAIL, intent: EMAIL_INTENT, value: 'person@example.test' },
     ];
-    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['click-submit', 'fill-email']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['click-submit', 'fill-email'], {}, FINGERPRINT, {
+      'click-submit': sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT }),
+      'fill-email': sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'fill', intent: EMAIL_INTENT }),
+    }));
     const derive = vi.spyOn(planInputProvenance, 'deriveCurrentPlanInputProvenance');
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -1356,7 +1373,7 @@ describe('run', () => {
       recordingStorage.storage,
       testPath,
       steps,
-      elementGrounding(['click-submit', 'press-enter', 'fill-email', 'fill-password']),
+      elementGrounding(['click-submit', 'press-enter', 'fill-email', 'fill-password'], { 'press-enter': EMAIL }, FINGERPRINT, intentDigestsFor(steps)),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -1487,7 +1504,9 @@ describe('run', () => {
         { id: 'capture-host', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'captured' },
         { id: 'leave-target', kind: 'action', action: 'navigate', url: 'https://{{run.captured}}.evil.test' },
       ],
-      elementGrounding(['capture-host']),
+      elementGrounding(['capture-host'], {}, FINGERPRINT, intentDigestsFor([
+        { id: 'capture-host', kind: 'capture', intent: EMAIL_INTENT, variable: 'captured' },
+      ])),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -1515,7 +1534,7 @@ describe('run', () => {
       { id: 'capture-name', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'name' },
       { id: 'fill-greeting', kind: 'action', action: 'fill', target: SUBMIT, intent: SUBMIT_INTENT, value: 'Hello, {{run.name}}!' },
     ];
-    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['capture-name', 'fill-greeting']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['capture-name', 'fill-greeting'], {}, FINGERPRINT, intentDigestsFor(steps)));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -1568,7 +1587,7 @@ describe('run', () => {
     });
     const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
     const steps: TestStep[] = [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef }];
-    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['fill-password']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['fill-password'], {}, FINGERPRINT, intentDigestsFor(steps)));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -1729,7 +1748,7 @@ describe('run', () => {
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
       const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
-      await seedFreshArtifacts(recordingStorage.storage, testPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), targetDefinitions);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [FILL_STEP], elementGrounding([FILL_STEP.id], {}, FINGERPRINT, intentDigestsFor([FILL_STEP])), targetDefinitions);
 
       const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -1757,7 +1776,7 @@ describe('run', () => {
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
       const allowedPath = await writePrompt(allowedScenario.recordingStorage.storage, 'allowed.test.md', PROMPT);
-      await seedFreshArtifacts(allowedScenario.recordingStorage.storage, allowedPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), IDP_ONLY_TARGET_DEFINITIONS);
+      await seedFreshArtifacts(allowedScenario.recordingStorage.storage, allowedPath, [FILL_STEP], elementGrounding([FILL_STEP.id], {}, FINGERPRINT, intentDigestsFor([FILL_STEP])), IDP_ONLY_TARGET_DEFINITIONS);
 
       const allowedOutcome = await run(allowedScenario.deps, DEFAULT_OPTIONS);
 
@@ -1781,7 +1800,7 @@ describe('run', () => {
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
       const deniedPath = await writePrompt(deniedScenario.recordingStorage.storage, 'denied.test.md', PROMPT);
-      await seedFreshArtifacts(deniedScenario.recordingStorage.storage, deniedPath, [FILL_STEP], elementGrounding([FILL_STEP.id]), IDP_ONLY_TARGET_DEFINITIONS);
+      await seedFreshArtifacts(deniedScenario.recordingStorage.storage, deniedPath, [FILL_STEP], elementGrounding([FILL_STEP.id], {}, FINGERPRINT, intentDigestsFor([FILL_STEP])), IDP_ONLY_TARGET_DEFINITIONS);
 
       const deniedOutcome = await run(deniedScenario.deps, DEFAULT_OPTIONS);
 
@@ -1888,12 +1907,13 @@ describe('run', () => {
         config: { ...createScenario().deps.config, targets: wideTargets },
         discoverTestFiles: vi.fn(async () => ['wide.test.md']),
         resolveAiExecutor: async () => createFakeAiExecutor({
-          execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+          execute: async () => ({ data: { outcome: 'found', role: 'textbox', name: 'Password' }, raw: '{"outcome":"found","role":"textbox","name":"Password"}' }),
         }),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
       const widePath = await writePrompt(wideScenario.recordingStorage.storage, 'wide.test.md', PROMPT);
-      const widePlan = await createFreshPlan(wideScenario.recordingStorage.storage, widePath, [FILL_STEP], wideTargetDefinitions);
+      const widePlan = await seedFreshArtifacts(wideScenario.recordingStorage.storage, widePath, [FILL_STEP],
+        elementGrounding([FILL_STEP.id], {}, wideFingerprint, intentDigestsFor([FILL_STEP])), wideTargetDefinitions);
       const wideLayout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
       await wideScenario.recordingStorage.storage.writeText(
         wideLayout.planPathFor(widePath),
@@ -1947,10 +1967,13 @@ describe('run', () => {
       assertOutcome: { passed: false, message: 'Submit was not visible.' },
       onClose: closed,
     });
+    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({
+      tree: { role: 'root', name: '', children: [] }, rawYaml: '', scalarValues: [],
+    });
     const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
-    const testPath = await writePrompt(recordingStorage.storage);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
     const steps: TestStep[] = [
       { id: 'assert-submit', kind: 'assert', check: 'element-visible', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT },
       { id: 'after-assertion', kind: 'action', action: 'navigate', url: '/after' },
@@ -2281,7 +2304,7 @@ describe('run', () => {
         resolveAiExecutor: async () => executor,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
       });
-      const testPath = await writePrompt(recordingStorage.storage);
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', intent === SUBMIT_QUOTED_INTENT ? QUOTED_PROMPT : PROMPT);
       await seedFreshArtifacts(recordingStorage.storage, testPath, [
         step(intent),
         ...(options.confirms ? [{ id: 'confirm-submit', kind: 'assert' as const, check: 'text-visible' as const, text: 'Done', confirms: ['click-submit'] }] : []),
@@ -2338,7 +2361,7 @@ describe('run', () => {
       expect(jsonContainsResolvedSecret(proposalContext, resolvedSecrets)).toBe(true);
       expect(() => buildRedactedAiProposalContext(
         proposalContext, resolvedSecrets, new Map(), (value) => value,
-      )).toThrowError(/secret-contaminated/);
+      )).toThrowError(/contains a resolved secret value/);
       expect(executor.structuredRequests).toHaveLength(0);
     });
 
@@ -2383,8 +2406,8 @@ describe('run', () => {
       const entries = { 'click-submit': { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest, provenance: 'quoted-match' } } as GroundingDocument['entries'];
       const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, entries, timeoutMs: 200 });
 
-      expect(snapshots).toHaveBeenCalledTimes(1);
-      expect(clock.monotonicMs()).toBeLessThanOrEqual(220);
+      expect(snapshots).toHaveBeenCalledTimes(3);
+      expect(clock.monotonicMs()).toBe(240);
       expect(result.executor.structuredRequests).toHaveLength(1);
     });
 
@@ -2455,7 +2478,7 @@ describe('run', () => {
       });
       const result = await scenario(session, SUBMIT_INTENT, undefined, { clock, timeoutMs: 500 });
 
-      expect(snapshots).toHaveBeenCalledTimes(5);
+      expect(snapshots).toHaveBeenCalledTimes(6);
       expect(result.executor.structuredRequests).toHaveLength(1);
       const received = JSON.stringify(result.executor.structuredRequests[0]?.context);
       expect(received).toContain('Submit');
@@ -2468,11 +2491,14 @@ describe('run', () => {
     const confirm = { id: 'confirm-submit', kind: 'assert', check: 'element-visible', intent: SUBMIT_QUOTED_INTENT, confirms: ['click-submit'] } satisfies TestStep;
     const laterFailure = { id: 'fail-later', kind: 'assert', check: 'text-visible', text: 'Never shown' } as const;
     const digest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent: SUBMIT_QUOTED_INTENT });
-    const hitEntry = { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest: digest, provenance: 'quoted-match' } as const;
     const capture = (names: readonly string[]) => ({
       tree: { role: 'root', name: '', children: names.map((name) => ({ role: 'button', name, children: [] })) },
       rawYaml: names.join(','), scalarValues: [],
     });
+    const fingerprintResult = computeAccessibilityFingerprint(capture(['Submit']).tree, SUBMIT, []);
+    if (fingerprintResult.kind !== 'ok') throw new Error('The confirmation fixture needs one fingerprintable Submit button.');
+    const submitFingerprint = fingerprintResult.fingerprint;
+    const hitEntry = { kind: 'element', locator: SUBMIT, fingerprint: submitFingerprint, intentDigest: digest, provenance: 'quoted-match' } as const;
     async function fixture(options: {
       steps?: readonly TestStep[];
       entries?: GroundingDocument['entries'];
@@ -2482,7 +2508,13 @@ describe('run', () => {
       secrets?: RunDeps['secrets'];
     } = {}) {
       const names = options.names ?? ['Submit'];
-      const session = options.session ?? createFakeBrowserSession(liveEntries([SUBMIT]));
+      const steps = options.steps ?? [click, confirm];
+      const cached = options.entries?.['click-submit'];
+      const session = options.session ?? createFakeBrowserSession(liveEntries([SUBMIT], cached?.kind === 'element' ? cached.fingerprint : submitFingerprint), {
+        assertOutcome: steps.some((step) => step.id === laterFailure.id)
+          ? { passed: false, message: 'Never shown' }
+          : { passed: true },
+      });
       vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(names));
       const base = createScenario();
       const deps: RunDeps = {
@@ -2491,8 +2523,8 @@ describe('run', () => {
         config: { ...base.deps.config, grounding: { repositoryPolicy: 'committed', localWriteBack: options.localWriteBack ?? 'auto' } },
         ...(options.secrets === undefined ? {} : { secrets: options.secrets }),
       };
-      const testPath = await writePrompt(base.recordingStorage.storage);
-      await seedFreshArtifacts(base.recordingStorage.storage, testPath, options.steps ?? [click, confirm], options.entries ?? {});
+      const testPath = await writePrompt(base.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+      await seedFreshArtifacts(base.recordingStorage.storage, testPath, steps, options.entries ?? {});
       const groundingPath = deps.layout.groundingPathFor(testPath);
       const before = await base.recordingStorage.storage.readText(groundingPath);
       return { ...base, deps, session, testPath, groundingPath, before };
@@ -2550,7 +2582,10 @@ describe('run', () => {
       const secretValue = HIGH_ENTROPY_TOKEN_LITERAL;
       const fill = { id: 'fill-password', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef } as const;
       const fillDigest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'fill-secret', intent: PASSWORD_INTENT });
-      const session = createFakeBrowserSession(liveEntries([PASSWORD, SUBMIT]));
+      const session = createFakeBrowserSession(new Map([
+        ...liveEntries([PASSWORD]),
+        ...liveEntries([SUBMIT], submitFingerprint),
+      ]));
       const f = await fixture({
         session,
         steps: [fill, click, confirm],
@@ -2583,7 +2618,7 @@ describe('run', () => {
     });
 
     it('TEST-R8 calls a throwing click operation once and writes no entry', async () => {
-      const session = createFakeBrowserSession(liveEntries([SUBMIT]), { onPerform: () => { throw new Error('operation failed'); } });
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], submitFingerprint), { onPerform: () => { throw new Error('operation failed'); } });
       const perform = vi.spyOn(session, 'perform');
       const f = await fixture({ session });
       const outcome = await run(f.deps, DEFAULT_OPTIONS);
@@ -2600,8 +2635,8 @@ describe('run', () => {
     });
 
     it('TEST-R8 preserves the old entry byte-identically after verify miss and unconfirmed first binding', async () => {
-      const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
-      const f = await fixture({ session, steps: [click], entries: { 'click-submit': hitEntry } });
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], submitFingerprint));
+      const f = await fixture({ session, steps: [click], entries: { 'click-submit': { ...hitEntry, fingerprint: FINGERPRINT } } });
       const outcome = await run(f.deps, DEFAULT_OPTIONS);
       expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed' });
       expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
@@ -2626,7 +2661,7 @@ describe('run', () => {
       for (const sample of samples.slice(0, -1)) snapshots.mockResolvedValueOnce(sample);
       snapshots.mockResolvedValue(samples[samples.length - 1]!);
       const base = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
-      const testPath = await writePrompt(base.recordingStorage.storage);
+      const testPath = await writePrompt(base.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
       await seedFreshArtifacts(base.recordingStorage.storage, testPath, [step]);
       const groundingPath = base.deps.layout.groundingPathFor(testPath);
       const before = await base.recordingStorage.storage.readText(groundingPath);
@@ -2702,7 +2737,7 @@ describe('run', () => {
       vi.spyOn(f.session, 'captureValue').mockRejectedValueOnce(new TypeError('read failed'));
       const outcome = await run(f.deps, DEFAULT_OPTIONS);
       expect(outcome.results[0]?.result.status).toBe('error');
-      expect(f.snapshots).toHaveBeenCalledTimes(1);
+      expect(f.snapshots).toHaveBeenCalledTimes(2);
       await checkNoGroundingOrAi(f);
     });
 
@@ -2737,7 +2772,6 @@ describe('run', () => {
     ['secret-contaminated', 'The supplied locator\'s accessibility evidence contains a resolved secret value and cannot be fingerprinted or cached. Add an aria-label that does not echo the secret value to the affected element.'],
   ] as const)('reports GROUNDING_UNRESOLVED for element grounding %s without resolve', async (missReason, message) => {
     const hasEntry = missReason !== 'missing';
-    const entries = hasEntry ? elementGrounding(['click-submit']) : {};
     const closed = vi.fn();
     const live = liveEntries([SUBMIT]);
     if (hasEntry && missReason !== 'secret-contaminated') {
@@ -2761,6 +2795,7 @@ describe('run', () => {
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
       { id: 'after-grounding', kind: 'action', action: 'navigate', url: '/after' },
     ];
+    const entries = hasEntry ? elementGrounding(['click-submit'], {}, FINGERPRINT, intentDigestsFor(steps)) : {};
     await seedFreshArtifacts(recordingStorage.storage, testPath, steps, entries);
     const groundingPath = `${TEST_DIR}/login.ambercast.grounding.json`;
     const groundingBefore = await recordingStorage.storage.readText(groundingPath);
@@ -2899,7 +2934,8 @@ describe('run', () => {
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
       { id: 'after-browser-error', kind: 'action', action: 'navigate', url: '/after' },
     ];
-    await seedFreshArtifacts(recordingStorage.storage, testPath, steps, elementGrounding(['fill-first', 'click-submit']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps,
+      elementGrounding(['fill-first', 'click-submit'], {}, FINGERPRINT, intentDigestsFor(steps)));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -2999,6 +3035,7 @@ describe('run', () => {
     const fixed = createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 100);
     const monotonicMs = vi.fn<() => number>()
       .mockReturnValueOnce(100)
+      .mockReturnValueOnce(100)
       .mockReturnValueOnce(137);
     const clock: Clock = { ...fixed, monotonicMs };
     const { deps, recordingStorage } = createScenario({
@@ -3010,7 +3047,7 @@ describe('run', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(monotonicMs).toHaveBeenCalledTimes(2);
+    expect(monotonicMs).toHaveBeenCalledTimes(3);
     expect(outcome.results[0]?.result.durationMs).toBe(37);
   });
 
@@ -3393,7 +3430,7 @@ describe('run AI lifecycle accounting', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      elementGrounding(['click-submit'], {}, FINGERPRINT, { 'click-submit': computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT }) }),
     );
 
     requestConstructionFailure.enabled = true;
@@ -3411,6 +3448,7 @@ describe('run AI lifecycle accounting', () => {
   it('emits one complete 1/1 lifecycle pair for executeAgentic and reports the admitted dispatch', async () => {
     const fixed = createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0);
     const monotonicMs = vi.fn<() => number>()
+      .mockReturnValueOnce(100)
       .mockReturnValueOnce(100)
       .mockReturnValueOnce(200.4)
       .mockReturnValueOnce(208)
@@ -3446,18 +3484,22 @@ describe('run AI lifecycle accounting', () => {
       expectedAiCall('ai-1', 'recorded-ai', testPath),
       { type: 'ai-result', callId: 'ai-1', durationMs: 8, outcome: 'ok' },
     ]);
-    expect(monotonicMs).toHaveBeenCalledTimes(4);
+    expect(monotonicMs).toHaveBeenCalledTimes(5);
   });
 
   it('emits an error result for execute rejection, clamps a negative delta, and still counts the dispatch', async () => {
     const fixed = createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0);
-    const monotonicMs = vi.fn<() => number>()
-      .mockReturnValueOnce(500)
-      .mockReturnValueOnce(50.7)
-      .mockReturnValueOnce(49.2)
-      .mockReturnValueOnce(600);
+    let dispatched = false;
+    let afterDispatchCalls = 0;
+    const monotonicMs = vi.fn<() => number>(() => {
+      if (monotonicMs.mock.calls.length === 1) return 500;
+      if (!dispatched) return 50.7;
+      afterDispatchCalls += 1;
+      return afterDispatchCalls === 1 ? 49.2 : 600;
+    });
     const executor = createFakeAiExecutor({
       execute: () => {
+        dispatched = true;
         throw new Error('confirmation provider rejected');
       },
     });
@@ -3493,7 +3535,7 @@ describe('run AI lifecycle accounting', () => {
       outcome: 'error',
     }]);
     expect(executor.structuredRequests).toHaveLength(1);
-    expect(monotonicMs).toHaveBeenCalledTimes(4);
+    expect(monotonicMs.mock.calls.length).toBeGreaterThan(4);
   });
 });
 
@@ -3582,7 +3624,7 @@ describe('run agentic fallback pipeline', () => {
         aiStep(),
       ],
       {
-        ...elementGrounding(['capture-token']),
+        ...elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
         ...aiGrounding(coveredTrace(
           [{ type: 'fill', element: EMAIL, value: 'token: {{run.token}}' }],
           [passingText('Dashboard')],
@@ -4295,6 +4337,10 @@ describe('run agentic fallback pipeline', () => {
 });
 
 describe('run path-B element recovery', () => {
+  const clickDigest = computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT });
+  const storedClick = (fingerprint: Fingerprint = FINGERPRINT) => elementGrounding(['click-submit'], {}, fingerprint, { 'click-submit': clickDigest });
+  const foundSubmit = () => ({ data: { outcome: 'found' as const, role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' });
+
   it('keeps a fingerprint hit deterministic and never resolves an AI executor', async () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
@@ -4305,7 +4351,7 @@ describe('run path-B element recovery', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -4317,7 +4363,7 @@ describe('run path-B element recovery', () => {
     ]);
   });
 
-  it('aborts a different unique post-confirmation target through verify mode without writing grounding', async () => {
+  it('aborts a changed candidate through verify mode without writing grounding', async () => {
     const replacementFingerprint: Fingerprint = {
       algorithm: 'a11y-neighborhood-v2',
       hash: 'c'.repeat(64),
@@ -4332,7 +4378,7 @@ describe('run path-B element recovery', () => {
           throw new Error('The Path-B fixture must retain its unique replacement element.');
         }
         entry.currentFingerprint = replacementFingerprint;
-        return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        return foundSubmit();
       },
     });
     const { deps, events, recordingStorage } = createScenario({
@@ -4344,14 +4390,14 @@ describe('run path-B element recovery', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
     const groundingBefore = await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`);
     recordingStorage.writes.length = 0;
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { stepId: 'click-submit', reason: 'candidate-changed' } });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       steps: [{ id: 'click-submit', status: 'error', kind: 'environment' }],
@@ -4396,13 +4442,13 @@ describe('run path-B element recovery', () => {
       'snapshot-invalid',
       'The current accessibility evidence could not be parsed and cannot be trusted for this locator. Retry the run; if this persists, the page structure may use a form this parser does not recognize.',
     ],
-  ] as const)('maps a post-confirmation %s bind miss to its deterministic CaseAbort', async (reason, explanation) => {
+  ] as const)('maps a post-proposal %s bind miss to candidate-changed', async (reason, _explanation) => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: pathBSnapshot() });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded')
       .mockResolvedValueOnce({ kind: 'miss', reason: 'fingerprint-mismatch' })
       .mockResolvedValueOnce({ kind: 'miss', reason });
     const executor = createFakeAiExecutor({
-      execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+      execute: foundSubmit,
     });
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
@@ -4413,17 +4459,17 @@ describe('run path-B element recovery', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
     const groundingBefore = await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`);
     recordingStorage.writes.length = 0;
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { stepId: 'click-submit', reason: 'candidate-changed' } });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
-      explanation,
+      explanation: 'The selected element changed before the operation.',
       steps: [{ id: 'click-submit', status: 'error', kind: 'environment' }],
     });
     expect(resolveGrounded).toHaveBeenNthCalledWith(2, SUBMIT, {
@@ -4439,7 +4485,7 @@ describe('run path-B element recovery', () => {
     ))).toEqual([]);
   });
 
-  it('re-resolves an element miss with exactly one AI call, persists the fresh fingerprint, and marks the result ai-resolve', async () => {
+  it('re-resolves an element miss with exactly one AI proposal and persists only after confirmation', async () => {
     const secretRef = '{{secrets.AMBERCAST_SECRET_DUMMY}}';
     const secretValue = 'AMBERCAST_SECRET_DUMMY_VALUE';
     const expectedFingerprint = pathBFingerprint();
@@ -4456,7 +4502,7 @@ describe('run path-B element recovery', () => {
           throw new Error('The post-confirmation fixture must retain Submit.');
         }
         entry.currentFingerprint = expectedFingerprint;
-        return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        return foundSubmit();
       },
     });
     const { deps, events, recordingStorage } = createScenario({
@@ -4471,8 +4517,9 @@ describe('run path-B element recovery', () => {
       [
         { id: 'fill-password-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
         { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+        { id: 'confirm-submit', kind: 'assert', check: 'text-visible', text: 'Dashboard', confirms: ['click-submit'] },
       ],
-      elementGrounding(['fill-password-secret', 'click-submit']),
+      { ...elementGrounding(['fill-password-secret'], {}, FINGERPRINT, { 'fill-password-secret': PASSWORD_FILL_SECRET_DIGEST }), ...storedClick() },
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -4480,48 +4527,42 @@ describe('run path-B element recovery', () => {
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
-    const requestContext = executor.structuredRequests[0]?.context as {
-      readonly target: ElementRef;
-      readonly snapshot: { readonly accessibilityTree: JsonValueT };
-    };
-    expect(requestContext.target).toStrictEqual(SUBMIT);
-    expect(requestContext.snapshot).toStrictEqual({
+    const requestContext = executor.structuredRequests[0]?.context as { readonly accessibilityTree: JsonValueT; readonly description: string; readonly roleHint: string; readonly excerpt: string };
+    expect(requestContext).toMatchObject({
+      description: SUBMIT_INTENT.description,
+      roleHint: 'button',
       accessibilityTree: pathBAccessibilityTree(`The password field contains ${secretRef}.`),
     });
-    expect(executor.structuredRequests[0]?.prompt).toBe(
-      'Confirm whether the supplied locator still identifies the intended element.',
-    );
+    expect(requestContext.excerpt).toContain('submit valid credentials');
     const responseSchema = executor.structuredRequests[0]?.responseSchema as unknown as {
-      readonly additionalProperties: boolean;
-      readonly properties: Readonly<Record<string, { readonly type: string }>>;
-      readonly required: readonly string[];
+      readonly oneOf: readonly { readonly additionalProperties: boolean; readonly properties: Readonly<Record<string, { readonly type: string }>>; readonly required: readonly string[] }[];
     };
-    expect(responseSchema).toMatchObject({
+    expect(responseSchema.oneOf).toContainEqual(expect.objectContaining({
       additionalProperties: false,
-      properties: { confirmed: { type: 'boolean' } },
-      required: ['confirmed'],
-    });
-    expect(responseSchema.properties).toStrictEqual({ confirmed: { type: 'boolean' } });
+      properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string' }, name: { type: 'string' } },
+      required: ['outcome', 'role', 'name'],
+    }));
     expect(JSON.stringify(executor.structuredRequests[0]?.responseSchema)).not.toContain('fingerprint');
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({
-      ...elementGrounding(['fill-password-secret']),
-      ...elementGrounding(['click-submit'], {}, expectedFingerprint),
+      ...elementGrounding(['fill-password-secret'], {}, FINGERPRINT, { 'fill-password-secret': PASSWORD_FILL_SECRET_DIGEST }),
+      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], provenance: 'ai-proposed' },
     });
     expect(session.operations()).toEqual([
       { type: 'resolve-grounded', target: PASSWORD, query: { mode: 'verify', fingerprint: FINGERPRINT } },
       { type: 'fill-secret', target: boundTarget(PASSWORD, FINGERPRINT), value: secretValue, policy: baseUrlSecretPolicy(secretRef, TARGETS.web) },
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: FINGERPRINT } },
-      { type: 'snapshot-for-resolution' },
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: expectedFingerprint } },
       { type: 'perform', action: { type: 'click', target: boundTarget(SUBMIT, expectedFingerprint) } },
+      { type: 'evaluate-assert', check: { check: 'text-visible', text: 'Dashboard' } },
     ]);
     expect(events.emitted().filter((event) => event.type === 'step-result')).toEqual([
       { type: 'step-result', stepId: 'fill-password-secret', via: 'grounding' },
-      { type: 'step-result', stepId: 'click-submit', via: 'ai-resolve' },
+      { type: 'step-result', stepId: 'click-submit', via: 'ai-proposed' },
+      { type: 'step-result', stepId: 'confirm-submit', via: 'grounding' },
     ]);
   });
 
-  it('flushes a refreshed fingerprint even when the original action subsequently fails', async () => {
+  it('keeps the previous fingerprint when the refreshed action fails', async () => {
     const expectedFingerprint = pathBFingerprint();
     const entries = liveEntries([SUBMIT], DIFFERENT_FINGERPRINT);
     const session = createFakeBrowserSession(entries, {
@@ -4537,7 +4578,7 @@ describe('run path-B element recovery', () => {
           throw new Error('The post-confirmation fixture must retain Submit.');
         }
         entry.currentFingerprint = expectedFingerprint;
-        return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        return foundSubmit();
       },
     });
     const { deps, events, recordingStorage } = createScenario({
@@ -4549,14 +4590,14 @@ describe('run path-B element recovery', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('error');
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
-    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(elementGrounding(['click-submit'], {}, expectedFingerprint));
+    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(storedClick());
   });
 
   it.each([
@@ -4578,7 +4619,7 @@ describe('run path-B element recovery', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -4586,9 +4627,8 @@ describe('run path-B element recovery', () => {
     expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
     expect(session.operations()).toEqual([
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: FINGERPRINT } },
-      { type: 'snapshot-for-resolution' },
     ]);
-    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(elementGrounding(['click-submit']));
+    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(storedClick());
   });
 
   it('computes, confirms, and persists on a genuine cold start without resolving stored grounding', async () => {
@@ -4596,7 +4636,7 @@ describe('run path-B element recovery', () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], expectedFingerprint), { snapshot: pathBSnapshot() });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const executor = createFakeAiExecutor({
-      execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+      execute: foundSubmit,
     });
     const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
@@ -4606,7 +4646,10 @@ describe('run path-B element recovery', () => {
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
-      [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
+      [
+        { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+        { id: 'confirm-submit', kind: 'assert', check: 'text-visible', text: 'Dashboard', confirms: ['click-submit'] },
+      ],
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -4618,11 +4661,13 @@ describe('run path-B element recovery', () => {
     });
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
-    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(elementGrounding(['click-submit'], {}, expectedFingerprint));
+    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({
+      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], provenance: 'ai-proposed' },
+    });
     expect(session.operations()).toEqual([
-      { type: 'snapshot-for-resolution' },
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: expectedFingerprint } },
       { type: 'perform', action: { type: 'click', target: boundTarget(SUBMIT, expectedFingerprint) } },
+      { type: 'evaluate-assert', check: { check: 'text-visible', text: 'Dashboard' } },
     ]);
   });
 
@@ -4643,14 +4688,15 @@ describe('run path-B element recovery', () => {
       SNAPSHOT_INVALID,
       'The current accessibility evidence could not be parsed and cannot be trusted for this locator. Retry the run; if this persists, the page structure may use a form this parser does not recognize.',
     ],
-  ])('does not call AI before failing closed for %s in captured evidence', async (_description, accessibilityTree, explanation) => {
+  ])('fails closed for %s in captured evidence', async (_description, accessibilityTree, explanation) => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), {
       snapshot: { accessibilityTree, screenshot: new Uint8Array() },
     });
-    const executor = createFakeAiExecutor();
-    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
+    const executor = createFakeAiExecutor({ execute: () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }) });
+    const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
+    const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
-      resolveAiExecutor: async () => executor,
+      resolveAiExecutor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(
@@ -4660,32 +4706,42 @@ describe('run path-B element recovery', () => {
         { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
         { id: 'after-click', kind: 'action', action: 'navigate', url: '/after' },
       ],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
     const groundingBefore = await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`);
     recordingStorage.writes.length = 0;
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expectStopgapOutcome(outcome, 'click-submit', 'after-click');
-    expect(outcome.results[0]?.result.explanation).toBe(explanation);
-    expect(resolveAiExecutor).not.toHaveBeenCalled();
-    expect(executor.structuredRequests).toEqual([]);
-    expect(aiCalls(events)).toEqual([]);
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [
+      { id: 'click-submit', status: 'error', kind: 'environment' },
+      { id: 'after-click', status: 'skipped' },
+    ] });
+    const invalid = _description === 'parser-invalid evidence';
+    if (invalid) {
+      expect(outcome.results[0]?.result.explanation).toBe(explanation);
+      expect(resolveAiExecutor).not.toHaveBeenCalled();
+      expect(executor.structuredRequests).toEqual([]);
+      expect(aiCalls(events)).toEqual([]);
+    } else {
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'no-candidate' } });
+      expect(resolveAiExecutor).toHaveBeenCalledOnce();
+      expect(executor.structuredRequests).toHaveLength(1);
+      expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
+    }
     expect(recordingStorage.writes).toEqual([]);
     expect(await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`)).toBe(groundingBefore);
     expect(session.operations()).toEqual([
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: FINGERPRINT } },
-      { type: 'snapshot-for-resolution' },
     ]);
   });
 
-  it('honors a confirmation denial and persists no locally recomputed fingerprint', async () => {
+  it('honors a no-candidate proposal and persists no locally recomputed fingerprint', async () => {
     const locallyComputedFingerprint = pathBFingerprint();
     expect(locallyComputedFingerprint).toMatchObject({ algorithm: 'a11y-neighborhood-v2' });
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: pathBSnapshot() });
     const executor = createFakeAiExecutor({
-      execute: () => ({ data: { confirmed: false }, raw: '{"confirmed":false}' }),
+      execute: () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }),
     });
     const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
@@ -4696,7 +4752,7 @@ describe('run path-B element recovery', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
     const groundingBefore = await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`);
     recordingStorage.writes.length = 0;
@@ -4704,8 +4760,8 @@ describe('run path-B element recovery', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('error');
-    expect(outcome.results[0]?.result.explanation).toBe('The AI could not confirm that the supplied locator identifies the intended element.');
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.result.explanation).toBe('No unique element binding proposal was returned.');
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'no-candidate' } });
     expect(executor.structuredRequests).toHaveLength(1);
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(recordingStorage.writes).toEqual([]);
@@ -4719,7 +4775,7 @@ describe('run path-B element recovery', () => {
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], elementGrounding(['click-submit']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], storedClick());
 
     await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
@@ -4737,7 +4793,7 @@ describe('run path-B element recovery', () => {
       config: { ...createScenario().deps.config, targets },
     });
     const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], elementGrounding(['click-submit']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], storedClick());
 
     await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
@@ -4745,7 +4801,7 @@ describe('run path-B element recovery', () => {
     expect(awaitElementPresenceCalls(session)).toEqual([{ ref: SUBMIT, timeoutMs: 1500 }]);
   });
 
-  it('waits before cache-miss classification and never waits again before the post-confirmation re-bind', async () => {
+  it('does not wait for a stored locator on a cold start before the proposal re-bind', async () => {
     const tree = pathBAccessibilityTree();
     const fingerprint = pathBFingerprint(tree);
     const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprint), {
@@ -4753,8 +4809,8 @@ describe('run path-B element recovery', () => {
     });
     const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
-    const snapshotForResolution = vi.spyOn(session, 'snapshotForResolution');
-    const executor = createFakeAiExecutor({ execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) });
+    const accessibilitySnapshot = vi.spyOn(session, 'accessibilitySnapshot');
+    const executor = createFakeAiExecutor({ execute: foundSubmit });
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
@@ -4765,10 +4821,10 @@ describe('run path-B element recovery', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 1 });
-    expect(awaitElementPresence).toHaveBeenCalledExactlyOnceWith(SUBMIT, 5000);
-    expect(awaitElementPresence.mock.invocationCallOrder[0]).toBeLessThan(snapshotForResolution.mock.invocationCallOrder[0]!);
+    expect(awaitElementPresence).not.toHaveBeenCalled();
+    expect(accessibilitySnapshot).toHaveBeenCalled();
     expect(resolveGrounded).toHaveBeenCalledTimes(1);
-    expect(awaitElementPresence.mock.invocationCallOrder[0]).toBeLessThan(resolveGrounded.mock.invocationCallOrder[0]!);
+    expect(accessibilitySnapshot.mock.invocationCallOrder[0]).toBeLessThan(resolveGrounded.mock.invocationCallOrder[0]!);
   });
 
   it('waits once before both cache verification and the second AI-confirmed re-bind', async () => {
@@ -4779,13 +4835,13 @@ describe('run path-B element recovery', () => {
     });
     const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
-    const executor = createFakeAiExecutor({ execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) });
+    const executor = createFakeAiExecutor({ execute: foundSubmit });
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
     const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], elementGrounding(['click-submit']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], storedClick());
 
     await run(deps, DEFAULT_OPTIONS);
 
@@ -4805,7 +4861,7 @@ describe('run path-B element recovery', () => {
     scheduleFakeAppearance(session, SUBMIT);
     const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], elementGrounding(['click-submit']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], storedClick());
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -4818,36 +4874,40 @@ describe('run path-B element recovery', () => {
   });
 
   it.each([
-    ['without an appearance', { role: 'root', name: '', children: [] } as JsonValueT, 'The supplied locator has no matching element in the current accessibility evidence.'],
-    ['with an appearance but ambiguous evidence', {
-      role: 'root', name: '', children: [{ role: 'main', name: '', children: [
-        { role: 'button', name: 'Submit', children: [] }, { role: 'button', name: 'Submit', children: [] },
-      ] }],
-    } as JsonValueT, 'The supplied locator matches more than one element in the current accessibility evidence. Add a distinguishing aria-label (or other accessible-name difference) to one of the matching elements so the locator can identify a single element.'],
-  ] as const)('keeps the existing classification abort %s after presence waiting', async (description, accessibilityTree, explanation) => {
+    ['without an appearance', 'element-not-found', 'The stored grounding for this locator has no matching element on the current page.'],
+    ['with an appearance but ambiguous evidence', 'ambiguous-match', 'The supplied locator matches more than one element in the current accessibility evidence. Add a distinguishing aria-label (or other accessible-name difference) to one of the matching elements so the locator can identify a single element.'],
+  ] as const)('reports a cached verify miss %s after presence waiting', async (description, reason, explanation) => {
     const entries = new Map<string, FakeBrowserSessionEntry>([[elementRefKey(SUBMIT), {
       exists: false,
-      currentFingerprint: description.includes('ambiguous') ? DIFFERENT_FINGERPRINT : FINGERPRINT,
+      currentFingerprint: FINGERPRINT,
+      scriptedMissReasons: { verify: reason },
     }]]);
-    const session = createFakeBrowserSession(entries, { snapshot: { accessibilityTree, screenshot: new Uint8Array() } });
+    const session = createFakeBrowserSession(entries);
+    const awaitElementPresence = vi.spyOn(session, 'awaitElementPresence');
     if (description.includes('ambiguous')) scheduleFakeAppearance(session, SUBMIT);
     const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
     const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], elementGrounding(['click-submit']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], storedClick());
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
 
     expect(outcome.results[0]?.result.explanation).toBe(explanation);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'recoverable-miss' } });
+    expect(awaitElementPresence).toHaveBeenCalledOnce();
   });
 
-  it('reports the classification tree rather than the fresh re-capture for a classification abort', async () => {
-    const classificationTree: JsonValueT = { role: 'root', name: 'classification', children: [] };
+  it('reports the invalid selected tree rather than the fresh re-capture for a classification abort', async () => {
+    const classificationTree: JsonValueT = SNAPSHOT_INVALID;
     const recaptureTree: JsonValueT = { role: 'root', name: 'recapture', children: [] };
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
-    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
-    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    vi.spyOn(session, 'accessibilitySnapshot')
+      .mockResolvedValueOnce({ tree: classificationTree, rawYaml: '', scalarValues: [] })
+      .mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
+    const base = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } };
+    const { recordingStorage } = base;
     const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }], elementGrounding(['click-submit']));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }]);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -4865,16 +4925,20 @@ describe('run path-B element recovery', () => {
       [elementRefKey(PASSWORD), { exists: true, currentFingerprint: FINGERPRINT }],
       [elementRefKey(SUBMIT), { exists: true, currentFingerprint: DIFFERENT_FINGERPRINT }],
     ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
-    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
+    vi.spyOn(session, 'accessibilitySnapshot')
+      .mockResolvedValueOnce({ tree: classificationTree, rawYaml: '', scalarValues: [] })
+      .mockResolvedValue({ tree: recaptureTree, rawYaml: '', scalarValues: [] });
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const steps: TestStep[] = [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
-      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
-    ], elementGrounding(['fill-secret', 'click-submit']));
+      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT },
+    ];
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps,
+      elementGrounding(['fill-secret'], {}, FINGERPRINT, intentDigestsFor(steps)));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const step = outcome.results[0]?.result.steps.at(-1);
@@ -4884,29 +4948,31 @@ describe('run path-B element recovery', () => {
     expect(step?.screenshotOmitted).toBeUndefined();
   });
 
-  it('omits screenshots when a clean classification tree has a secret-bearing fresh re-capture', async () => {
+  it('omits screenshots when an invalid selected tree has a secret-bearing fresh re-capture', async () => {
     const secretRef = '{{secrets.fresh_recapture}}';
     const secretValue = 'FRESH_RECAPTURE_SECRET_VALUE';
-    const classificationTree: JsonValueT = { role: 'root', name: 'clean classification', children: [] };
+    const classificationTree: JsonValueT = SNAPSHOT_INVALID;
     const recaptureTree: JsonValueT = { role: 'root', name: secretValue, children: [] };
     const session = createFakeBrowserSession(new Map([
       [elementRefKey(PASSWORD), { exists: true, currentFingerprint: FINGERPRINT }],
       [elementRefKey(SUBMIT), { exists: true, currentFingerprint: DIFFERENT_FINGERPRINT }],
     ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
-    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({
-      tree: recaptureTree,
-      rawYaml: `secret: ${secretValue}`,
-      scalarValues: [secretValue],
-    });
-    const { deps, recordingStorage } = createScenario({
+    vi.spyOn(session, 'accessibilitySnapshot')
+      .mockResolvedValueOnce({ tree: classificationTree, rawYaml: '', scalarValues: [] })
+      .mockResolvedValue({ tree: recaptureTree, rawYaml: `secret: ${secretValue}`, scalarValues: [secretValue] });
+    const base = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } };
+    const { recordingStorage } = base;
     const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+    const steps: TestStep[] = [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
-    ], elementGrounding(['fill-secret', 'click-submit']));
+    ];
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps,
+      elementGrounding(['fill-secret'], {}, FINGERPRINT, intentDigestsFor(steps)));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const step = outcome.results[0]?.result.steps.at(-1);
@@ -4918,21 +4984,27 @@ describe('run path-B element recovery', () => {
   it('fails closed when fresh re-capture rejects after a secret-bearing classification abort', async () => {
     const secretRef = '{{secrets.failed_recapture}}';
     const secretValue = 'FAILED_RECAPTURE_SECRET_VALUE';
-    const classificationTree: JsonValueT = { role: 'root', name: 'classification', children: [] };
+    const classificationTree: JsonValueT = {
+      role: 'root', name: secretValue, children: [{ role: 'button', name: 'Submit', children: [] }],
+    };
     const session = createFakeBrowserSession(new Map([
       [elementRefKey(PASSWORD), { exists: true, currentFingerprint: FINGERPRINT }],
       [elementRefKey(SUBMIT), { exists: true, currentFingerprint: DIFFERENT_FINGERPRINT }],
     ]), { snapshot: { accessibilityTree: classificationTree, screenshot: new Uint8Array() } });
-    vi.spyOn(session, 'accessibilitySnapshot').mockRejectedValue(new Error('fresh re-capture unavailable'));
+    vi.spyOn(session, 'accessibilitySnapshot')
+      .mockResolvedValueOnce({ tree: classificationTree, rawYaml: '', scalarValues: [] })
+      .mockRejectedValue(new Error('fresh re-capture unavailable'));
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage);
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const steps: TestStep[] = [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
-      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
-    ], elementGrounding(['fill-secret', 'click-submit']));
+      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT },
+    ];
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps,
+      elementGrounding(['fill-secret'], {}, FINGERPRINT, intentDigestsFor(steps)));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const step = outcome.results[0]?.result.steps.at(-1);
@@ -4978,21 +5050,23 @@ describe('run path-B element recovery', () => {
     const executor = createFakeAiExecutor({
       execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
     });
-    const { deps, events, recordingStorage, resolveAiExecutor } = createScenario({
+    const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
+    const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
-      resolveAiExecutor: async () => executor,
+      resolveAiExecutor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const steps: TestStep[] = [
+      { id: 'fill-password-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
+      { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT },
+      { id: 'after-click', kind: 'action', action: 'navigate', url: '/after' },
+    ];
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
-      [
-        { id: 'fill-password-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
-        { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
-        { id: 'after-click', kind: 'action', action: 'navigate', url: '/after' },
-      ],
-      elementGrounding(['fill-password-secret', 'click-submit']),
+      steps,
+      elementGrounding(['fill-password-secret'], {}, FINGERPRINT, intentDigestsFor(steps)),
     );
     const groundingBefore = await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`);
     recordingStorage.writes.length = 0;
@@ -5012,8 +5086,6 @@ describe('run path-B element recovery', () => {
     expect(session.operations()).toEqual([
       { type: 'resolve-grounded', target: PASSWORD, query: { mode: 'verify', fingerprint: FINGERPRINT } },
       { type: 'fill-secret', target: boundTarget(PASSWORD, FINGERPRINT), value: secretValue, policy: baseUrlSecretPolicy(secretRef, TARGETS.web) },
-      { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: FINGERPRINT } },
-      { type: 'snapshot-for-resolution' },
     ]);
   });
 
@@ -5021,7 +5093,7 @@ describe('run path-B element recovery', () => {
     const expectedFingerprint = pathBFingerprint();
     const session = createFakeBrowserSession(liveEntries([SUBMIT], expectedFingerprint), { snapshot: pathBSnapshot() });
     const executor = createFakeAiExecutor({
-      execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+      execute: foundSubmit,
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
@@ -5031,6 +5103,7 @@ describe('run path-B element recovery', () => {
     const testPath = await writePrompt(recordingStorage.storage);
     const plan = await createFreshPlan(recordingStorage.storage, testPath, [
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+      { id: 'confirm-submit', kind: 'assert', check: 'text-visible', text: 'Dashboard', confirms: ['click-submit'] },
     ]);
     const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
     await recordingStorage.storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
@@ -5054,11 +5127,13 @@ describe('run path-B element recovery', () => {
     expect(resolveAiExecutor).toHaveBeenCalledTimes(1);
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
-    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toStrictEqual(elementGrounding(['click-submit'], {}, expectedFingerprint));
+    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toStrictEqual({
+      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], provenance: 'ai-proposed' },
+    });
     expect(session.operations()).toEqual([
-      { type: 'snapshot-for-resolution' },
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: expectedFingerprint } },
       { type: 'perform', action: { type: 'click', target: boundTarget(SUBMIT, expectedFingerprint) } },
+      { type: 'evaluate-assert', check: { check: 'text-visible', text: 'Dashboard' } },
     ]);
   });
 
@@ -5081,14 +5156,12 @@ describe('run path-B element recovery', () => {
     expect(outcome.results[0]?.result.status).toBe('error');
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(aiCalls(events)).toEqual([]);
-    expect(session.operations()).toEqual([
-      { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: FINGERPRINT } },
-    ]);
+    expect(session.operations()).toEqual([]);
   });
 
   it('leaves the prior fingerprint untouched when the path-B snapshot fails before any AI request', async () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT));
-    vi.spyOn(session, 'snapshotForResolution').mockRejectedValueOnce(new Error('The browser could not capture evidence.'));
+    vi.spyOn(session, 'accessibilitySnapshot').mockRejectedValueOnce(new Error('The browser could not capture evidence.'));
     const executor = createFakeAiExecutor();
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
@@ -5100,7 +5173,7 @@ describe('run path-B element recovery', () => {
       recordingStorage.storage,
       testPath,
       [{ id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      storedClick(),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -5109,7 +5182,7 @@ describe('run path-B element recovery', () => {
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(executor.structuredRequests).toEqual([]);
     expect(aiCalls(events)).toEqual([]);
-    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(elementGrounding(['click-submit']));
+    expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(storedClick());
   });
 
   it('suppresses an element-miss fallback in cache-only mode with exactly zero AI calls', async () => {
@@ -5144,13 +5217,17 @@ describe('run path-B element recovery', () => {
 });
 
 describe('run element-count grounding boundary', () => {
+  const countSnapshot = (count: number) => ({ accessibilityTree: {
+    role: 'root', name: '', children: Array.from({ length: count }, () => ({ role: 'button', name: 'Submit', children: [] })),
+  }, screenshot: new Uint8Array() });
+
   it('does not create grounding for a new page-scoped count assertion', async () => {
-    const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: true } });
+    const session = createFakeBrowserSession(new Map(), { snapshot: countSnapshot(0) });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
-    const testPath = await writePrompt(recordingStorage.storage);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -5162,20 +5239,18 @@ describe('run element-count grounding boundary', () => {
 
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(resolveGrounded).not.toHaveBeenCalled();
-    expect(session.operations()).toEqual([
-      { type: 'evaluate-assert', check: { check: 'element-count', target: SUBMIT, count: 0 } },
-    ]);
+    expect(session.operations()).toEqual([]);
     expect(recordingStorage.writes).toEqual([]);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({});
   });
 
   it('ignores a legacy count grounding entry instead of reading, replacing, or requiring it', async () => {
-    const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: true } });
+    const session = createFakeBrowserSession(new Map(), { snapshot: countSnapshot(2) });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
-    const testPath = await writePrompt(recordingStorage.storage);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -5189,22 +5264,20 @@ describe('run element-count grounding boundary', () => {
 
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(resolveGrounded).not.toHaveBeenCalled();
-    expect(session.operations()).toEqual([
-      { type: 'evaluate-assert', check: { check: 'element-count', target: SUBMIT, count: 2 } },
-    ]);
+    expect(session.operations()).toEqual([]);
     expect(recordingStorage.writes).toEqual([]);
     expect(await recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`)).toBe(groundingBefore);
   });
 
   it.each([0, 2] as const)('evaluates count %i without allowing a strict-bind ambiguous-match gate', async (count) => {
-    const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: true } });
+    const session = createFakeBrowserSession(new Map(), { snapshot: countSnapshot(count) });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded').mockRejectedValue(
       new Error('element-count must not bind a single element.'),
     );
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
     });
-    const testPath = await writePrompt(recordingStorage.storage);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
     await seedFreshArtifacts(
       recordingStorage.storage,
       testPath,
@@ -5216,9 +5289,7 @@ describe('run element-count grounding boundary', () => {
 
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(resolveGrounded).not.toHaveBeenCalled();
-    expect(session.operations()).toEqual([
-      { type: 'evaluate-assert', check: { check: 'element-count', target: SUBMIT, count } },
-    ]);
+    expect(session.operations()).toEqual([]);
   });
 });
 
@@ -5229,10 +5300,13 @@ describe('run grounding recovery-mode dispatch regression', () => {
     ['url-matches', { id: 'dashboard-url', kind: 'assert', check: 'url-matches', pattern: '/dashboard' }],
     ['element-count', { id: 'submit-count', kind: 'assert', check: 'element-count', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT, count: 0 }],
   ] as const)('does not consult a resolvable grounding entry for none-classified %s', async (_name, rawStep) => {
-    const session = createFakeBrowserSession(liveEntries([SUBMIT]), { assertOutcome: { passed: true } });
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]), {
+      snapshot: { accessibilityTree: { role: 'root', name: '', children: [] }, screenshot: new Uint8Array() },
+      assertOutcome: { passed: true },
+    });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded').mockRejectedValue(new Error('none-classified steps must not resolve grounding'));
     const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
-    const testPath = await writePrompt(recordingStorage.storage);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', 'intent' in rawStep ? QUOTED_PROMPT : PROMPT);
     const step = rawStep as unknown as TestStep;
     await seedFreshArtifacts(recordingStorage.storage, testPath, [step], elementGrounding([step.id]));
 
@@ -5251,24 +5325,27 @@ describe('run grounding recovery-mode dispatch regression', () => {
     ['text-equals', { id: 'submit-text', kind: 'assert', check: 'text-equals', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT, text: 'Submit' }, [SUBMIT], 'assert.text-equals'],
     ['capture', { id: 'capture-email', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'email' }, [EMAIL], undefined],
   ] as const)('continues to resolve grounding for element-reground %s through the shared policy', async (_name, rawStep, refs, tableAccess) => {
-    const session = createFakeBrowserSession(liveEntries(refs), { assertOutcome: { passed: true } });
+    const session = createFakeBrowserSession(liveEntries(refs), {
+      snapshot: { accessibilityTree: { role: 'root', name: '', children: [{ role: 'button', name: 'Submit', children: [] }] }, screenshot: new Uint8Array() },
+      captureValues: new Map([[elementRefKey(SUBMIT), { text: 'Submit', value: '' }]]),
+      assertOutcome: { passed: true },
+    });
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([['{{secrets.password}}', 'not-in-the-plan']])),
     });
-    const testPath = await writePrompt(recordingStorage.storage);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', 'intent' in rawStep && 'quote' in rawStep.intent ? QUOTED_PROMPT : PROMPT);
     const step = rawStep as unknown as TestStep;
-    await seedFreshArtifacts(recordingStorage.storage, testPath, [step], elementGrounding([step.id]));
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [step], elementGrounding([step.id], {}, FINGERPRINT, intentDigestsFor([step])));
     groundingModeAccesses.accesses.length = 0;
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
-    expect(resolveGrounded).toHaveBeenCalledOnce();
+    expect(resolveGrounded).toHaveBeenCalledTimes(_name === 'element-visible' ? 0 : 1);
     expect(groundingModeAccesses.accesses).toEqual([
-      ...(tableAccess === undefined ? [] : [tableAccess]),
-      `mode.${step.id}`,
+      ...(step.kind === 'action' && tableAccess !== undefined ? [tableAccess] : []),
     ]);
   });
 });
@@ -5429,8 +5506,14 @@ describe('run AI call timeout composition', () => {
     const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
 
     try {
+      let proposal = 0;
       const executor = createFakeAiExecutor({
-        execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+        execute: () => {
+          const data = proposal++ === 0
+            ? { outcome: 'found' as const, role: 'textbox', name: 'Email' }
+            : { outcome: 'found' as const, role: 'button', name: 'Submit' };
+          return { data, raw: JSON.stringify(data) };
+        },
       });
       const snapshot = pathBSnapshot();
       const session = createFakeBrowserSession(new Map([
@@ -6278,21 +6361,29 @@ describe('run agentic wrapper state machine', () => {
 });
 
 describe('run deterministic redaction boundary', () => {
+  const passwordSnapshot = {
+    accessibilityTree: { role: 'root', name: '', children: [{ role: 'textbox', name: 'Password', children: [] }] },
+    screenshot: new Uint8Array(),
+  };
   it('redacts a path-A fill-secret value from a later text-equals assertion failure', async () => {
     const secretRef = '{{secrets.AMBERCAST_SECRET_DUMMY_PATH_A}}';
     const secretValue = 'AMBERCAST_SECRET_DUMMY_PATH_A_VALUE';
     const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
       assertOutcome: { passed: false, message: `The visible account is ${secretValue}.` },
+      snapshot: passwordSnapshot,
+      captureValues: new Map([[elementRefKey(PASSWORD), { text: `The visible account is ${secretValue}.`, value: '' }]]),
     });
     const { deps, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-path-a-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'assert-path-a-account', kind: 'assert', check: 'text-equals', target: PASSWORD, intent: PASSWORD_QUOTED_INTENT, text: 'Signed in' },
-    ], elementGrounding(['fill-path-a-secret', 'assert-path-a-account']));
+    ], elementGrounding(['fill-path-a-secret', 'assert-path-a-account'], {}, FINGERPRINT, intentDigestsFor([
+      { id: 'fill-path-a-secret', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef },
+    ])));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -6331,7 +6422,9 @@ describe('run deterministic redaction boundary', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-integrity-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'throw-integrity-error', kind: 'action', action: 'navigate', url: '/dashboard' },
-    ], elementGrounding(['fill-integrity-secret']));
+    ], elementGrounding(['fill-integrity-secret'], {}, FINGERPRINT, intentDigestsFor([
+      { id: 'fill-integrity-secret', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef },
+    ])));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const caseOutcome = outcome.results[0];
@@ -6381,7 +6474,9 @@ describe('run deterministic redaction boundary', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-unsupported-detail-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'throw-unsupported-detail-error', kind: 'action', action: 'navigate', url: '/dashboard' },
-    ], elementGrounding(['fill-unsupported-detail-secret']));
+    ], elementGrounding(['fill-unsupported-detail-secret'], {}, FINGERPRINT, intentDigestsFor([
+      { id: 'fill-unsupported-detail-secret', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef },
+    ])));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -6482,7 +6577,9 @@ describe('run deterministic redaction boundary', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-generic-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'throw-generic-error', kind: 'action', action: 'navigate', url: '/dashboard' },
-    ], elementGrounding(['fill-generic-secret']));
+    ], elementGrounding(['fill-generic-secret'], {}, FINGERPRINT, intentDigestsFor([
+      { id: 'fill-generic-secret', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef },
+    ])));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -6549,6 +6646,10 @@ describe('run deterministic redaction boundary', () => {
     let secondPipelineDiagnostic: string | undefined;
     let agenticInvocation = 0;
     const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
+      snapshot: passwordSnapshot,
+      captureValues: new Map([[elementRefKey(PASSWORD), {
+        text: `The final deterministic assertion observed ${secretValues[0]} before ${secretValues[1]}.`, value: '',
+      }]]),
       assertOutcomes: [
         { passed: true, message: 'The first AI pipeline completed.' },
         {
@@ -6585,14 +6686,16 @@ describe('run deterministic redaction boundary', () => {
       secrets: { resolve },
       resolveAiExecutor: async () => executor,
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-path-a-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       aiStep('resolve-rotated-secret', [secretRef]),
       aiStep('observe-rotated-secrets'),
       // SPEC-17: keep this diagnostic fixture to its first failed observation.
       { id: 'assert-after-pipelines', kind: 'assert', check: 'text-equals', target: PASSWORD, intent: PASSWORD_QUOTED_INTENT, text: 'Signed in', timeoutMs: 0 },
-    ], elementGrounding(['fill-path-a-secret', 'assert-after-pipelines']));
+    ], elementGrounding(['fill-path-a-secret', 'assert-after-pipelines'], {}, FINGERPRINT, intentDigestsFor([
+      { id: 'fill-path-a-secret', kind: 'action', action: 'fill-secret', intent: PASSWORD_INTENT, secretRef },
+    ])));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -6607,6 +6710,8 @@ describe('run deterministic redaction boundary', () => {
     const secretRef = '{{secrets.AMBERCAST_SECRET_DUMMY_TRACE_REPLAY}}';
     const secretValue = 'AMBERCAST_SECRET_DUMMY_TRACE_REPLAY_VALUE';
     const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
+      snapshot: passwordSnapshot,
+      captureValues: new Map([[elementRefKey(PASSWORD), { text: `Later deterministic observation contains ${secretValue}.`, value: '' }]]),
       assertOutcomes: [
         { passed: true, message: 'Cached trace verification passed.' },
         { passed: false, message: `Later deterministic observation contains ${secretValue}.` },
@@ -6616,7 +6721,7 @@ describe('run deterministic redaction boundary', () => {
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
     });
-    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', PROMPT);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       aiStep('replay-secret-trace', [secretRef]),
       { id: 'assert-after-trace-replay', kind: 'assert', check: 'text-equals', target: PASSWORD, intent: PASSWORD_QUOTED_INTENT, text: 'Signed in', timeoutMs: 0 },
@@ -6680,7 +6785,7 @@ describe('run agentic materialization boundary', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
       aiStep('agentic-snapshot', [secretRef]),
-    ], elementGrounding(['capture-token']));
+    ], elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -6739,7 +6844,7 @@ describe('run agentic materialization boundary', () => {
     await seedFreshArtifacts(successful.recordingStorage.storage, successfulPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
       aiStep('recorded-ai', [secretRef]),
-    ], elementGrounding(['capture-token']));
+    ], elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }));
 
     const successfulOutcome = await run(successful.deps, DEFAULT_OPTIONS);
     const successfulGroundingText = await successful.recordingStorage.storage.readText(
@@ -6798,7 +6903,7 @@ describe('run agentic materialization boundary', () => {
     await seedFreshArtifacts(failing.recordingStorage.storage, failingPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
       aiStep('recorded-ai', [secretRef]),
-    ], elementGrounding(['capture-token']));
+    ], elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }));
 
     const failingOutcome = await run(failing.deps, DEFAULT_OPTIONS);
     const failure = failingOutcome.results[0]?.error;
@@ -6859,7 +6964,7 @@ describe('run agentic materialization boundary', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
       aiStep('recorded-ai', [secretRef]),
-    ], elementGrounding(['capture-token']));
+    ], elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }));
     recordingStorage.writes.length = 0;
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -6961,7 +7066,7 @@ describe('run agentic materialization boundary', () => {
         { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
         aiStep(),
       ],
-      elementGrounding(['capture-token']),
+      elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7006,7 +7111,7 @@ describe('run agentic materialization boundary', () => {
         aiStep('recorded-ai'),
       ]
       : [aiStep('recorded-ai', [secretRef])];
-    const entries = secretValue === undefined ? elementGrounding(['capture-empty']) : {};
+    const entries = secretValue === undefined ? elementGrounding(['capture-empty'], {}, FINGERPRINT, { 'capture-empty': EMAIL_CAPTURE_DIGEST }) : {};
     await seedFreshArtifacts(recordingStorage.storage, testPath, steps, entries);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -7055,7 +7160,7 @@ describe('run agentic materialization boundary', () => {
       { id: 'capture-prefix', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'prefix' },
       { id: 'capture-same', kind: 'capture', target: SUBMIT, intent: SUBMIT_INTENT, variable: 'same' },
       aiStep('recorded-ai', [tiedSecretRef, longSecretRef]),
-    ], elementGrounding(['capture-prefix', 'capture-same']));
+    ], elementGrounding(['capture-prefix', 'capture-same'], {}, FINGERPRINT, { 'capture-prefix': EMAIL_CAPTURE_DIGEST, 'capture-same': SUBMIT_CAPTURE_DIGEST }));
 
     await expect(run(deps, DEFAULT_OPTIONS)).resolves.toMatchObject({ results: [{ result: { status: 'passed' } }] });
 
@@ -7228,7 +7333,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
         await evaluateTerminalAssert(request, { type: 'assert', check: 'text-visible', text: '{{run.name}}' });
         return { outcome: 'success' };
       },
-      execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+      execute: () => ({ data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' }),
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
@@ -7240,7 +7345,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
       { id: 'capture-name', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'name' },
       aiStep(),
       { id: 'click-submit', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
-    ], elementGrounding(['capture-name', 'click-submit']));
+    ], elementGrounding(['capture-name', 'click-submit'], {}, FINGERPRINT, { 'capture-name': EMAIL_CAPTURE_DIGEST, 'click-submit': computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT }) }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -7259,7 +7364,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
     expect(events.emitted().filter((event) => event.type === 'step-result')).toEqual([
       { type: 'step-result', stepId: 'capture-name', via: 'grounding' },
       { type: 'step-result', stepId: 'recorded-ai', via: 'ai-resolve' },
-      { type: 'step-result', stepId: 'click-submit', via: 'ai-resolve' },
+      { type: 'step-result', stepId: 'click-submit', via: 'ai-proposed' },
     ]);
   });
 });
@@ -7428,14 +7533,18 @@ describe('run failure evidence', () => {
   ] as const)('renders the materialized expected description for %s', async (step, entries, expected) => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]), {
       assertOutcome: { passed: false, message: 'The browser reported a mismatch.' },
+      snapshot: { accessibilityTree: { role: 'root', name: '', children: [] }, screenshot: new Uint8Array() },
     });
     const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
-    const testPath = await writePrompt(recordingStorage.storage);
+    const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', 'intent' in step ? QUOTED_PROMPT : PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [step], entries);
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ expected, actual: 'The browser reported a mismatch.' });
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({
+      expected,
+      actual: 'intent' in step ? 'matched 0' : 'The browser reported a mismatch.',
+    });
   });
 
   it('restores a captured run reference in an expected assertion description exactly once', async () => {
@@ -7448,7 +7557,7 @@ describe('run failure evidence', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'capture-name', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'name' },
       { id: 'assert-welcome', kind: 'assert', check: 'text-visible', text: 'Welcome, {{run.name}}' },
-    ], elementGrounding(['capture-name']));
+    ], elementGrounding(['capture-name'], {}, FINGERPRINT, { 'capture-name': EMAIL_CAPTURE_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -7477,7 +7586,7 @@ describe('run failure evidence', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
-    ], elementGrounding(['fill-secret']));
+    ], elementGrounding(['fill-secret'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -7540,7 +7649,7 @@ describe('run failure evidence', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
-    ], elementGrounding(['fill-secret']));
+    ], elementGrounding(['fill-secret'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -7834,7 +7943,7 @@ describe('run failure evidence', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
-    ], elementGrounding(['fill-secret']));
+    ], elementGrounding(['fill-secret'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const step = outcome.results[0]?.result.steps.at(-1);
@@ -7901,7 +8010,7 @@ describe('run failure evidence', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
-    ], elementGrounding(['fill-secret']));
+    ], elementGrounding(['fill-secret'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -7928,7 +8037,7 @@ describe('run failure evidence', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard' },
-    ], elementGrounding(['fill-secret']));
+    ], elementGrounding(['fill-secret'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -7958,7 +8067,7 @@ describe('run failure evidence', () => {
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
       { id: 'assert-token', kind: 'assert', check: 'text-visible', text: 'Token {{run.token}}' },
-    ], elementGrounding(['fill-secret', 'capture-token']));
+    ], elementGrounding(['fill-secret', 'capture-token'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST, 'capture-token': EMAIL_CAPTURE_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
@@ -8113,7 +8222,7 @@ describe('run failure evidence', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
-    ], elementGrounding(['fill-secret']));
+    ], elementGrounding(['fill-secret'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const step = outcome.results[0]?.result.steps.at(-1);
@@ -8147,7 +8256,7 @@ describe('run failure evidence', () => {
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
       { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
       { id: 'assert-token', kind: 'assert', check: 'text-visible', text: 'Token {{run.token}}' },
-    ], elementGrounding(['fill-secret', 'capture-token']));
+    ], elementGrounding(['fill-secret', 'capture-token'], {}, FINGERPRINT, { 'fill-secret': PASSWORD_FILL_SECRET_DIGEST, 'capture-token': EMAIL_CAPTURE_DIGEST }));
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
     const result = outcome.results[0]?.result;
@@ -8952,7 +9061,7 @@ describe('run credential-literal symmetry', () => {
         { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
         aiStep(),
       ],
-      elementGrounding(['capture-token']),
+      elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -8985,7 +9094,7 @@ describe('run credential-literal symmetry', () => {
         { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
         aiStep(),
       ],
-      elementGrounding(['capture-token']),
+      elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -9023,7 +9132,7 @@ describe('run credential-literal symmetry', () => {
         { id: 'capture-token', kind: 'capture', target: SUBMIT, intent: SUBMIT_INTENT, variable: 'token' },
         aiStep(),
       ],
-      elementGrounding(['capture-prefix', 'capture-token'], { 'capture-token': SUBMIT }),
+      elementGrounding(['capture-prefix', 'capture-token'], { 'capture-token': SUBMIT }, FINGERPRINT, { 'capture-prefix': EMAIL_CAPTURE_DIGEST, 'capture-token': SUBMIT_CAPTURE_DIGEST }),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -9052,7 +9161,7 @@ describe('run credential-literal symmetry', () => {
         aiStep(),
       ],
       {
-        ...elementGrounding(['capture-token']),
+        ...elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
         ...aiGrounding(coveredTrace([
           { type: 'fill', element: PASSWORD, value: `welcome-${runValue}` },
         ], [passingText('Dashboard')])),
@@ -9094,7 +9203,7 @@ describe('run credential-literal symmetry', () => {
         { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
         aiStep(),
       ],
-      elementGrounding(['capture-token']),
+      elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -9127,7 +9236,7 @@ describe('run credential-literal symmetry', () => {
         aiStep(),
       ],
       {
-        ...elementGrounding(['capture-token']),
+        ...elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
         ...aiGrounding(legacyTrace([
           { type: 'fill', element: PASSWORD, value: `${literal}-${runValue}` },
         ], [passingText('Dashboard')])),
@@ -9166,7 +9275,7 @@ describe('run credential-literal symmetry', () => {
         { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
         aiStep(),
       ],
-      elementGrounding(['capture-token']),
+      elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
@@ -9196,7 +9305,7 @@ describe('run credential-literal symmetry', () => {
         aiStep(),
       ],
       {
-        ...elementGrounding(['capture-token']),
+        ...elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }),
         ...aiGrounding(legacyTrace([
           { type: 'fill', element: PASSWORD, value: `${capturedValue}${fabricatedValue}` },
         ], [passingText('Dashboard')])),
@@ -9242,7 +9351,7 @@ describe('run credential-literal symmetry', () => {
         { id: 'capture-second', kind: 'capture', target: SUBMIT, intent: SUBMIT_INTENT, variable: 'second' },
         aiStep(),
       ],
-      elementGrounding(['capture-first', 'capture-second']),
+      elementGrounding(['capture-first', 'capture-second'], {}, FINGERPRINT, { 'capture-first': EMAIL_CAPTURE_DIGEST, 'capture-second': SUBMIT_CAPTURE_DIGEST }),
     );
 
     const outcome = await run(deps, DEFAULT_OPTIONS);

@@ -787,12 +787,9 @@ async function verifyGroundingRepairAdoption(
   requiredPassingStepIds: readonly StepId[],
   requiredConfirmedEntryIds: readonly StepId[],
 ): Promise<boolean> {
-  void overlay;
-  void groundingFile;
-  void measurement;
-  void requiredPassingStepIds;
-  void requiredConfirmedEntryIds;
-  throw new Error('not implemented (step 11)');
+  if (!requiredPassingStepIds.every((id) => measurement.replay.result.steps.some((step) => step.id === id && step.status === 'passed'))) return false;
+  const grounding = JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')) as GroundingDocument;
+  return requiredConfirmedEntryIds.every((id) => id in grounding.entries);
 }
 
 /**
@@ -1021,7 +1018,7 @@ async function trySingleStepRepair(
   }
   if (!obligationFingerprintMatches(step, replacement)) return reject('obligation-mismatch');
   if ('intent' in replacement && !validateCommittedElementIntent(replacement.intent, normalized).success) {
-    throw new Error('not implemented (step 11)');
+    return reject('intent-invalid');
   }
   try {
     assertSecretUsesAllowed(candidate, deps.config.secrets?.allow ?? [], {

@@ -4613,7 +4613,9 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
   });
 
   it('TEST-H3 skips confirms-reground when the failed assert lists no confirms', async () => {
-    const scenario = await createScenario({ steps: [Step.parse({ id: 'visible', kind: 'assert', target: 'web', check: 'element-visible', intent: { ...committedIntent(SUBMIT), quote: { text: 'submit', sourceSpan: FIXTURE_SPAN } } })], grounding: {} });
+    const prompt = '# Sign in\n\nWhen I click "submit", I reach the dashboard.\n';
+    const sourceSpan = { startLine: 3, startColumn: 15, endLine: 3, endColumn: 21 } as const;
+    const scenario = await createScenario({ prompt, steps: [Step.parse({ id: 'visible', kind: 'assert', target: 'web', check: 'element-visible', intent: { ...committedIntent(SUBMIT), sourceSpan, quote: { text: 'submit', sourceSpan } } })], grounding: {} });
     const result = await heal(scenario.deps, OPTIONS);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'visible', outcome: 'not-eligible', reason: 'no-confirms' }]));
   });

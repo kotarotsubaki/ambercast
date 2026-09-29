@@ -63,6 +63,7 @@ export function toTargetDefinition(target: ResolvedTargetConfigEntry): TargetDef
     surface: 'web',
     baseUrl: target.baseUrl,
     ...(target.secretSinkOrigins === undefined ? {} : { secretSinkOrigins: target.secretSinkOrigins }),
+    ...(target.locale === undefined ? {} : { locale: target.locale }),
   };
 }
 

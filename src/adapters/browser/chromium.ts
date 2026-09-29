@@ -827,7 +827,7 @@ class PlaywrightUiExecutor implements UiExecutor {
     let context: PlaywrightContextHandle | undefined;
 
     try {
-      context = await browser.newContext({ baseURL: target.baseUrl });
+      context = await browser.newContext({ baseURL: target.baseUrl, ...(target.locale === undefined ? {} : { locale: target.locale }) });
       const page = await context.newPage();
       return new ChromiumBrowserSession(page, context, browser);
     } catch (error) {

@@ -396,6 +396,7 @@ function rejectLegacyBrowserKey(document: unknown, configPath: string): void {
 function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedConfig['targets']): ResolvedConfig['targets'] {
   return Object.fromEntries(
     Object.entries(source).map(([name, target]) => {
+      const locale = canonicalizeLocale(target.locale, name);
       return [name, {
         ...target,
         surface: target.surface ?? 'web',
@@ -405,7 +406,7 @@ function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedCo
         },
         healReplayIsolation: target.healReplayIsolation ?? 'stateful',
         resolveTimeoutMs: target.resolveTimeoutMs ?? 5000,
-        locale: canonicalizeLocale(target.locale, name),
+        ...(locale === undefined ? {} : { locale }),
       }];
     }),
   );
@@ -424,7 +425,19 @@ function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedCo
  * name, and a `{ target: targetName }` context object.
  */
 function canonicalizeLocale(value: string | undefined, targetName: string): string | undefined {
-  throw new Error('not implemented (step 11)');
+  if (value === undefined) return undefined;
+
+  let locales: string[];
+  try {
+    locales = Intl.getCanonicalLocales(value);
+  } catch {
+    throw new ConfigInvalidError(`targets.${targetName}.locale is not a valid locale.`, { target: targetName });
+  }
+
+  if (locales.length !== 1) {
+    throw new ConfigInvalidError(`targets.${targetName}.locale is not a valid locale.`, { target: targetName });
+  }
+  return locales[0];
 }
 
 function resolveSecretAllowlist(

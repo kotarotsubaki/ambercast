@@ -219,7 +219,14 @@ class ElementIntentAttributionError extends Error {
  * and this call's `stepId`. The check returns normally without a value when it passes.
  */
 function rejectTextEqualsSelfQuote(text: string, quoteText: string, stepId: string): void {
-  throw new Error('not implemented (step 11)');
+  const normalizeName = (name: string): string => name.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (normalizeName(text) === normalizeName(quoteText)) {
+    throw new ElementIntentAttributionError([{
+      code: 'text-equals-self-quote',
+      path: ['text'],
+      message: 'Expected text must differ from the target intent quote.',
+    }], stepId);
+  }
 }
 
 /**

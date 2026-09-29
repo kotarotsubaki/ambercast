@@ -1233,7 +1233,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             return outcomeForError(fileFailure(error, 'The generated secret uses could not be normalized.'));
           }
           const stepIndex = new Map<StepId, number>(normalizedSteps.map((step, index) => [step.id, index]));
-          const orderedSteps = normalizedSteps.map((step) => 'confirms' in step
+          const orderedSteps = normalizedSteps.map((step) => 'confirms' in step && step.confirms !== undefined
             ? { ...step, confirms: [...step.confirms].sort((left, right) =>
               (stepIndex.get(left) ?? Infinity) - (stepIndex.get(right) ?? Infinity)) }
             : step);

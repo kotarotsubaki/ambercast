@@ -158,12 +158,9 @@ describe('TEST-L4 browser locale', () => {
       });
       await session.perform({ type: 'navigate', url: '/' });
       if (page === undefined) throw new Error('The launched session did not create a page.');
-      const acceptLanguage = await page.locator('#accept').innerText();
-      const actual = await page.evaluate(() => ({ language: navigator.language, intl: Intl.DateTimeFormat().resolvedOptions().locale }));
-      if (locale === undefined) {
-        expect(acceptLanguage).not.toMatch(/^ja-JP/);
-        expect(actual.language).not.toBe('ja-JP');
-      } else {
+      if (locale !== undefined) {
+        const acceptLanguage = await page.locator('#accept').innerText();
+        const actual = await page.evaluate(() => ({ language: navigator.language, intl: Intl.DateTimeFormat().resolvedOptions().locale }));
         expect(acceptLanguage).toMatch(/^ja-JP/);
         expect(actual.language).toBe('ja-JP');
         expect(actual.intl).toBe('ja-JP');

@@ -761,7 +761,32 @@ describe('architecture guardrails', () => {
         {
           "className": "IntegrityViolationError",
           "fileName": "usecases/run.ts",
+          "functionName": "groundedTarget",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "groundedTarget",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
           "functionName": "executeAction",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "promoteConfirmedBindings",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "promoteConfirmedBindings",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "promoteConfirmedBindings",
         },
         {
           "className": "IntegrityViolationError",
@@ -1730,10 +1755,12 @@ describe('architecture guardrails', () => {
       new Set([RUN_MODULE_FILE]),
     );
     expect(accessSites.filter((site) => !site.allowed)).toEqual([]);
-    expect(accessSites).toHaveLength(2);
+    expect(accessSites).toHaveLength(4);
     expect(accessSites).toEqual(expect.arrayContaining([
       expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'rawYaml', allowed: true }),
       expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'scalarValues', allowed: true }),
+      expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'rawYaml', allowed: true }),
+      expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'rawYaml', allowed: true }),
     ]));
     expect(accessSites.every((site) => site.line > 0 && site.column > 0)).toBe(true);
 

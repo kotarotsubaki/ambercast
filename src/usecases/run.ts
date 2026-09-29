@@ -194,6 +194,7 @@ interface CapturedRunValue {
 }
 
 type RunState = ReadonlyMap<RunVariableName, CapturedRunValue>;
+type ElementBindingStep = ActionStep | CaptureStep;
 
 /** Project captured values for legacy readers that do not need writer identity. */
 function runStateValues(runState: RunState): ReadonlyMap<RunVariableName, string> {
@@ -268,7 +269,7 @@ interface DispatchContext {
   readonly bindingStates: Map<StepId, BindingState>;
   /** Reverse index built once by buildConfirmsIndex. */
   readonly confirmsIndex: ReadonlyMap<StepId, readonly StepId[]>;
-  readonly actionSteps: ReadonlyMap<StepId, ActionStep>;
+  readonly actionSteps: ReadonlyMap<StepId, ElementBindingStep>;
   readonly validConfirmationSteps: Set<StepId>;
   readonly aiTimeoutMs: number;
   readonly signal?: AbortSignal;
@@ -2670,7 +2671,7 @@ const ELEMENT_BINDING_PROPOSAL = z.discriminatedUnion('outcome', [
 
 async function groundedTarget(
   context: DispatchContext,
-  step: ActionStep | CaptureStep,
+  step: ElementBindingStep,
   intent: ElementIntent,
 ): Promise<BoundElement> {
   const session = await sessionForStep(context, step);
@@ -3093,6 +3094,8 @@ async function executeCapture(step: Step, context: DispatchContext): Promise<Dis
   const target = await groundedTarget(context, step, step.intent);
   const value = await (await sessionForStep(context, step)).captureValue(target, 'text');
   context.runState.set(step.variable, { value, stepId: step.id, target: step.target });
+  const binding = context.bindingStates.get(step.id);
+  if (binding !== undefined) context.bindingStates.set(step.id, { ...binding, stage: binding.provenance === 'grounding' ? 'confirmed' : 'acted' });
   return { kind: 'passed' };
 }
 
@@ -3318,13 +3321,14 @@ function promoteConfirmedBindings(
     if (state?.stage === 'confirmed') continue;
     if (state?.stage !== 'acted') throw new IntegrityViolationError('A confirming step has no acted binding.');
     const actionStep = context.actionSteps.get(actionId);
-    if (actionStep === undefined || actionStep.action === 'navigate') throw new IntegrityViolationError('A confirming step references no element action.');
+    if (actionStep === undefined || (actionStep.kind === 'action' && actionStep.action === 'navigate')) throw new IntegrityViolationError('A confirming step references no element action.');
     context.bindingStates.set(actionId, { ...state, stage: 'confirmed' });
     const provenance = state.provenance === 'grounding'
       ? context.grounding.entries[actionId]?.kind === 'element' ? context.grounding.entries[actionId].provenance : undefined
       : state.provenance;
     if (provenance === undefined) throw new IntegrityViolationError('A cached binding has no persisted provenance.');
-    context.updateGroundingEntry(actionId, { kind: 'element', locator: state.locator, fingerprint: state.fingerprint, intentDigest: computeIntentDigest({ stepKind: 'action', operation: actionStep.action, intent: actionStep.intent }), provenance });
+    const operation = actionStep.kind === 'capture' ? 'capture' : actionStep.action;
+    context.updateGroundingEntry(actionId, { kind: 'element', locator: state.locator, fingerprint: state.fingerprint, intentDigest: computeIntentDigest({ stepKind: actionStep.kind, operation, intent: actionStep.intent }), provenance });
   }
 }
 
@@ -4078,7 +4082,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       resolvedVias,
       bindingStates: new Map<StepId, BindingState>(),
       confirmsIndex: buildConfirmsIndex(plan.steps),
-      actionSteps: new Map(plan.steps.filter((candidate): candidate is ActionStep => candidate.kind === 'action').map((candidate) => [candidate.id, candidate])),
+      actionSteps: new Map(plan.steps.filter((candidate): candidate is ElementBindingStep => candidate.kind === 'capture' || candidate.kind === 'action' && candidate.action !== 'navigate').map((candidate) => [candidate.id, candidate])),
       validConfirmationSteps: new Set<StepId>(),
       aiTimeoutMs: deps.config.ai.timeoutMs,
       ...(signal === undefined ? {} : { signal }),

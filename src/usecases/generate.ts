@@ -828,7 +828,7 @@ function consentRowsForPlan(plan: PlanDocumentType, rows: readonly GenerateSecre
 /** Emits unconfirmed actions in plan order after collecting all referenced IDs. */
 function actionUnconfirmedWarnings(plan: PlanDocumentType): GenerateWarning[] {
   const confirmed = new Set(plan.steps.flatMap((step) => 'confirms' in step ? step.confirms ?? [] : []));
-  return plan.steps.flatMap((step) => step.kind === 'action' && step.action !== 'navigate' && !confirmed.has(step.id)
+  return plan.steps.flatMap((step) => (step.kind === 'capture' || (step.kind === 'action' && step.action !== 'navigate')) && !confirmed.has(step.id)
     ? [{ kind: 'action-unconfirmed' as const, stepId: step.id }]
     : []);
 }

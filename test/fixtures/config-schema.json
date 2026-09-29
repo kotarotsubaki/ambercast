@@ -70,6 +70,10 @@
               }
             }
           },
+          "locale": {
+            "type": "string",
+            "minLength": 1
+          },
           "executor": {
             "type": "object",
             "properties": {

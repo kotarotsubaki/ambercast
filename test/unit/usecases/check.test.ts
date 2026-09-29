@@ -135,6 +135,7 @@ describe('check', () => {
     await storage.writeText(testPath, PROMPT);
     const plan = freshPlan(PROMPT, { web: { ...TARGETS.web, locale: 'ja-JP' } });
     await writePlan(storage, layout, testPath, plan);
+    await writeGrounding(storage, layout, testPath, plan);
     const originalConfig = createConfig({ targets: { web: { ...RESOLVED_TARGETS.web, locale: 'ja-JP' } } });
     const original = await check({ storage, layout, discoverTestFiles: createDiscovery(), config: originalConfig }, { ...OPTIONS, files: [testPath] });
     expect(original.results).toEqual([expect.objectContaining({ status: 'fresh' })]);

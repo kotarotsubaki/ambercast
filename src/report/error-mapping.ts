@@ -81,6 +81,7 @@ export const REPORT_ERROR_DETAILS = {
   'grounding-unresolved': {
     kind: 'usage',
     code: 'GROUNDING_UNRESOLVED',
+    hint: 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.',
   },
   'browser-launch-failed': {
     kind: 'environment',
@@ -114,7 +115,16 @@ export const REPORT_ERROR_DETAILS = {
  */
 export function groundingUnresolvedHint(reason: 'missing' | 'recoverable-miss' | 'no-candidate' |
   'ambiguous' | 'proposal-rejected' | 'candidate-changed'): string {
-  throw new Error('not implemented (step 11)');
+  switch (reason) {
+    case 'missing':
+    case 'recoverable-miss':
+      return 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.';
+    case 'no-candidate':
+    case 'ambiguous':
+    case 'proposal-rejected':
+    case 'candidate-changed':
+      return 'Quote the UI text in the prompt or run `ambercast heal` to update the binding.';
+  }
 }
 
 /**
@@ -180,10 +190,6 @@ export function reportError(
     throw new Error(`Error kind ${error.kind} cannot be serialized at run scope.`);
   }
 
-  const tableHint = 'hint' in details ? details.hint : undefined;
-  const instanceHint = readRecordField(error.details, 'hint');
-  const hint = tableHint ?? (typeof instanceHint === 'string' ? instanceHint : undefined);
-  const hintField = hint === undefined ? {} : { hint };
   const sourceDetails = error.details;
   const browserLaunchDetails = error.kind === 'browser-launch-failed'
     && location.scope === 'case'
@@ -242,6 +248,12 @@ export function reportError(
             : error.kind === 'browser-launch-failed'
               ? browserLaunchDetails
             : undefined;
+  const tableHint = 'hint' in details ? details.hint : undefined;
+  const instanceHint = readRecordField(error.details, 'hint');
+  const hint = error.kind === 'grounding-unresolved' && detailsByCode?.success
+    ? groundingUnresolvedHint((detailsByCode.data as ReturnType<typeof GroundingUnresolvedDetails.parse>).reason)
+    : tableHint ?? (typeof instanceHint === 'string' ? instanceHint : undefined);
+  const hintField = hint === undefined ? {} : { hint };
   const diagnosticDetails = detailsByCode?.success ? { details: detailsByCode.data } : {};
 
   const partiallyWritten = readRecordField(error.details, 'partiallyWritten');

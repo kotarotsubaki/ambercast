@@ -418,7 +418,7 @@ describe('repair trace schema 3.6 contract', () => {
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
-    expectAccepted(RepairTraceEntry, { ...stage1, outcome });
+    expectAccepted(RepairTraceEntry, outcome === 'not-eligible' ? { ...stage1, outcome, reason: 'no-confirming-step' } : { ...stage1, outcome });
   });
 
   it('rejects invalid or non-strict stage1 entries', () => {

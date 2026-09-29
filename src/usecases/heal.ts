@@ -999,7 +999,11 @@ async function trySingleStepRepair(
   } catch (error) {
     return propagate(error);
   }
-  if (!prepared.success) return reject('coverage-invalid');
+  if (!prepared.success) {
+    // Only AI steps produce instruction-coverage issues here; element-bearing
+    // steps produce intent attribution or self-quote issues instead.
+    return reject(generated.steps[0]!.kind === 'ai' ? 'coverage-invalid' : 'intent-invalid');
+  }
   let replacement;
   let candidate: TrustedPlan;
   try {

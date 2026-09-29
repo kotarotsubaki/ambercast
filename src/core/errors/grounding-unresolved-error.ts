@@ -3,7 +3,7 @@
 import { AmbercastError } from './types.js';
 
 /** Distinguishes an absent grounding entry from a trace that cannot be replayed safely. */
-export type GroundingUnresolvedReason = 'missing' | 'recoverable-miss';
+export type GroundingUnresolvedReason = 'missing' | 'recoverable-miss' | 'no-candidate' | 'ambiguous' | 'proposal-rejected' | 'candidate-changed';
 
 /**
  * Reports an AI or element step grounding miss when resolution is not permitted.

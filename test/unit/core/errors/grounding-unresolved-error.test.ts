@@ -25,7 +25,7 @@ describe('GroundingUnresolvedError', () => {
     expect(error.cause).toBe(cause);
   });
 
-  it('exposes only the two specified reason literals', () => {
-    expectTypeOf<GroundingUnresolvedReason>().toEqualTypeOf<'missing' | 'recoverable-miss'>();
+  it('exposes the six specified reason literals', () => {
+    expectTypeOf<GroundingUnresolvedReason>().toEqualTypeOf<'missing' | 'recoverable-miss' | 'no-candidate' | 'ambiguous' | 'proposal-rejected' | 'candidate-changed'>();
   });
 });

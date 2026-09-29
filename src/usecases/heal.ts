@@ -789,7 +789,7 @@ async function verifyGroundingRepairAdoption(
 ): Promise<boolean> {
   if (!requiredPassingStepIds.every((id) => measurement.replay.result.steps.some((step) => step.id === id && step.status === 'passed'))) return false;
   const grounding = JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')) as GroundingDocument;
-  return requiredConfirmedEntryIds.every((id) => id in grounding.entries);
+  return requiredConfirmedEntryIds.every((id) => Object.hasOwn(grounding.entries, id));
 }
 
 /**

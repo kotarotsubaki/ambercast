@@ -88,7 +88,7 @@ describe('TEST-I2: provider element-intent attribution (SPEC-I2, SPEC-I3)', () =
     const generated = proposal({
       citation: source,
       endAnchor: 'L2',
-      endColumn: 7,
+      endColumn: 8,
       quote: { startAnchor: 'L1', startColumn: 2, endAnchor: 'L2', endColumn: 4, text: 'ログイン\nボタン' },
     });
     expect(attributeElementIntent(generated, normalizeTestMd(source))).toEqual({
@@ -96,7 +96,7 @@ describe('TEST-I2: provider element-intent attribution (SPEC-I2, SPEC-I3)', () =
       data: {
         description: generated.description,
         roleHint: 'button',
-        sourceSpan: { startLine: 1, startColumn: 1, endLine: 2, endColumn: 7 },
+        sourceSpan: { startLine: 1, startColumn: 1, endLine: 2, endColumn: 8 },
         quote: { text: 'ログイン\nボタン', sourceSpan: { startLine: 1, startColumn: 2, endLine: 2, endColumn: 4 } },
       },
     });

@@ -1463,7 +1463,13 @@ describe('architecture guardrails', () => {
     const program = ts.createProgram({ rootNames: sourceFiles, options: { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, noEmit: true, strict: true, target: ts.ScriptTarget.ES2023, types: ['node'] } });
     expect(program.getSyntacticDiagnostics()).toEqual([]);
     expect(program.getSemanticDiagnostics()).toEqual([]);
-    expect(scanSchemaVersionLiteralViolations(program, IR_SCHEMA_MODULE_FILE)).toEqual([]);
+    expect(scanSchemaVersionLiteralViolations(program, IR_SCHEMA_MODULE_FILE)).toEqual([
+      expect.objectContaining({
+        fileName: fileURLToPath(new URL('../src/usecases/check-grounding.ts', import.meta.url)),
+        line: 56,
+        column: 85,
+      }),
+    ]);
   });
 
   test('detects a planted schemaVersion authority bypass through the architecture scan path', async () => {

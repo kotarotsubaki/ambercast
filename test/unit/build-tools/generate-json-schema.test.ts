@@ -101,7 +101,7 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
           planned: ['review', 'baseline', 'restore'],
-          schemaVersions: { plan: 4, grounding: 2, report: '3.7' },
+          schemaVersions: { plan: 5, grounding: 3, report: '3.8' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
@@ -164,7 +164,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
       planned: ['review', 'baseline', 'restore'],
-      schemaVersions: { plan: 4, grounding: 2, report: '3.7' },
+      schemaVersions: { plan: 5, grounding: 3, report: '3.8' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,
@@ -242,7 +242,7 @@ describe('writeGeneratedArtifacts', () => {
     });
   });
 
-  it('emits Plan-v4 required coverage and additive Grounding-v2 coverage fields', () => {
+  it('emits Plan-v5 required coverage and additive Grounding-v3 coverage fields', () => {
     const writes = captureGeneratedArtifactWrites();
     const planText = artifactContent(writes, 'schema/plan.schema.json');
     const groundingText = artifactContent(writes, 'schema/grounding.schema.json');
@@ -251,8 +251,8 @@ describe('writeGeneratedArtifacts', () => {
     expect(planText).toContain('sourceSpan');
     expect(planText).toContain('startColumn');
     expect(planText).toContain('endColumn');
-    expect(planText).toMatch(/"const":4/);
+    expect(planText).toMatch(/"const":5/);
     expect(groundingText).toContain('verificationCoverage');
-    expect(groundingText).toMatch(/"const":2/);
+    expect(groundingText).toMatch(/"const":3/);
   });
 });

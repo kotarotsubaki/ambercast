@@ -55,7 +55,6 @@ import {
   TraceRecord,
   type AccessibilityElementRef,
   type ActionStep,
-  type AssertStep,
   type CaptureStep,
   type ElementIntent,
   type ElementRef,
@@ -360,24 +359,6 @@ const RUN_REFERENCE_PATTERN = /\{\{run\.([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\}\}/
  * turning ordinary provider diagnostics into integrity failures.
  */
 const MIN_SECRET_MATCH_LENGTH = 3;
-
-/**
- * Defines the confirmation-only response accepted from AI-assisted element
- * re-resolution.
- *
- * The run pipeline derives the fingerprint from unredacted local snapshot
- * evidence before an AI call, so the provider has no authority to supply a
- * value that later becomes grounding. A strict binary judgment retains the
- * provider's semantic role while allowing an explicit denial and rejecting
- * invented response fields.
- */
-const CONFIRMATION_RESPONSE = z.strictObject({ confirmed: z.boolean() });
-
-/**
- * Couples the confirmation response's runtime validation to the structured AI
- * request without exposing a second, hand-maintained wire schema.
- */
-const CONFIRMATION_RESPONSE_SCHEMA = typedJsonSchema(CONFIRMATION_RESPONSE);
 
 /**
  * Invokes one AI request under this dispatch context's deadline policy.

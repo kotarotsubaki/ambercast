@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE,
+  GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE,
   GENERATOR_SECRET_POLICY_TEMPLATE,
   promptTemplateFingerprint,
   toAnchoredLines,
@@ -85,17 +86,27 @@ const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { surface: 'web' as const, baseUrl: 'https://example.test' } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
-const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
+const NAMED_INTENT_LINE = 'Use "Account", "Token one", "Token two", "Alpha", "Beta", "First", "Second", "Retained", and "Added" fields.';
+const PROMPT = `# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\nPassword "Password"\n${NAMED_INTENT_LINE}\n`;
 const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
-const PASSWORD_TARGET = { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 }, quote: { text: 'Password', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } } } as const;
-const PASSWORD_INTENT = { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 }, quote: { text: 'Password', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 8 } } } as const;
-const GENERATED_PASSWORD_INTENT = { description: 'Password', roleHint: 'textbox', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 8, citation: 'Password', quote: { text: 'Password', startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 8 } } as const;
-const generatedNamedIntent = (name: string) => ({
-  ...GENERATED_PASSWORD_INTENT,
-  description: name,
-  quote: { ...GENERATED_PASSWORD_INTENT.quote, text: name },
-});
+const PASSWORD_TARGET = { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 4, startColumn: 1, endLine: 4, endColumn: 20 }, quote: { text: 'Password', sourceSpan: { startLine: 4, startColumn: 11, endLine: 4, endColumn: 19 } } } as const;
+const PASSWORD_INTENT = PASSWORD_TARGET;
+const GENERATED_PASSWORD_INTENT = { description: 'Password', roleHint: 'textbox', startAnchor: 'L4', startColumn: 1, endAnchor: 'L4', endColumn: 20, citation: 'Password "Password"', quote: { text: 'Password', startAnchor: 'L4', startColumn: 11, endAnchor: 'L4', endColumn: 19 } } as const;
+const generatedNamedIntent = (name: string) => {
+  const startColumn = NAMED_INTENT_LINE.indexOf(`"${name}"`) + 1;
+  if (startColumn === 0) throw new Error(`Missing quoted fixture name: ${name}`);
+  return {
+    description: name,
+    roleHint: 'textbox',
+    startAnchor: 'L5',
+    startColumn,
+    endAnchor: 'L5',
+    endColumn: startColumn + name.length + 2,
+    citation: `"${name}"`,
+    quote: { text: name, startAnchor: 'L5', startColumn: startColumn + 1, endAnchor: 'L5', endColumn: startColumn + name.length + 1 },
+  };
+};
 const QUOTED_PROMPT = '# Sign in\n\nClick "Password" button.\n';
 const QUOTED_INTENT = { description: '"Password" button', roleHint: 'button', startAnchor: 'L3', startColumn: 7, endAnchor: 'L3', endColumn: 24, citation: '"Password" button', quote: { text: 'Password', startAnchor: 'L3', startColumn: 8, endAnchor: 'L3', endColumn: 16 } } as const;
 const INSTRUCTION_PROOF_FIELD = ['cita', 'tion'].join('');
@@ -405,7 +416,7 @@ describe('generate', () => {
       const planText = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
       const plan = JSON.parse(planText) as Record<string, unknown>;
       expect(plan).toMatchObject({
-        schemaVersion: 4,
+        schemaVersion: 5,
         steps: [{
           id: 'reach-dashboard',
           kind: 'ai',
@@ -721,9 +732,9 @@ describe('generate', () => {
 
   it.each([
     ['text-visible', { type: 'assert', check: 'text-visible', text: 'Dashboard' }],
-    ['text-equals', { type: 'assert', check: 'text-equals', intent: PASSWORD_TARGET, text: 'Dashboard' }],
-    ['element-visible', { type: 'assert', check: 'element-visible', intent: PASSWORD_TARGET }],
-    ['element-count exact zero', { type: 'assert', check: 'element-count', intent: PASSWORD_TARGET, count: 0 }],
+    ['text-equals', { type: 'assert', check: 'text-equals', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, text: 'Dashboard' }],
+    ['element-visible', { type: 'assert', check: 'element-visible', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' } }],
+    ['element-count exact zero', { type: 'assert', check: 'element-count', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, count: 0 }],
   ] as const)('accepts provider terminal intent vocabulary %s', async (_name, assertion) => {
     const response = {
       ...coveredResponse,
@@ -737,9 +748,9 @@ describe('generate', () => {
     });
     await writePrompt(recordingStorage.storage);
 
-    await expect(generate(deps, DEFAULT_OPTIONS)).resolves.toMatchObject({
-      results: [{ status: 'generated' }],
-    });
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome).toMatchObject({ results: [{ status: 'generated' }] });
   });
 
   it('prefixes the deterministic generation task with the exact exported generator policy', async () => {
@@ -757,7 +768,7 @@ describe('generate', () => {
     await generate(deps, DEFAULT_OPTIONS);
 
     expect(request?.prompt).toBe(
-      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan. Assign target: web to every step. Do not report target ambiguity.`, // SPEC-11
+      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan. Assign target: web to every step. Do not report target ambiguity.`, // SPEC-11
     );
     expect(request?.context).toEqual({
       testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
@@ -1411,6 +1422,10 @@ describe('generate', () => {
       warnings: [
         { kind: 'secret-name-reused-across-targets', name: 'Z', stepIds: ['z-first', 'z-second'] },
         { kind: 'secret-name-reused-across-targets', name: 'a', stepIds: ['a-first', 'a-second'] },
+        { kind: 'action-unconfirmed', stepId: 'z-first' },
+        { kind: 'action-unconfirmed', stepId: 'z-second' },
+        { kind: 'action-unconfirmed', stepId: 'a-first' },
+        { kind: 'action-unconfirmed', stepId: 'a-second' },
       ],
     });
     expect(execute).not.toHaveBeenCalled();
@@ -2348,7 +2363,7 @@ describe('generate', () => {
       });
       expect(artifact.source.inputsDigest).toBe(computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 4,
+        schemaVersion: 5,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: firstFingerprint,
         targetDefinitions: TARGETS,
@@ -3230,7 +3245,7 @@ describe('generate', () => {
 });
 
 describe('generate v5 element intent and confirmation contracts', () => {
-  const quotedPrompt = '# Sign in\n\nClick "Password" button.\n';
+  const quotedPrompt = QUOTED_PROMPT;
   const click = (intent: unknown, id = 'click-password') => ({
     id, kind: 'action', action: 'click', target: 'web', intent,
   });

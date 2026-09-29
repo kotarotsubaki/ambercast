@@ -14,9 +14,9 @@
     "restore"
   ],
   "schemaVersions": {
-    "plan": 4,
-    "grounding": 2,
-    "report": "3.7"
+    "plan": 5,
+    "grounding": 3,
+    "report": "3.8"
   },
   "fingerprintAlgorithm": "a11y-neighborhood-v2",
   "exitCodes": [

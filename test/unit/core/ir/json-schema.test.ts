@@ -204,9 +204,9 @@ describe('IR JSON Schema documents', () => {
   });
 
   // SPEC-C1 C1-2
-  it('publishes Plan v4 instruction coverage and Grounding-v2 trace coverage (SPEC-1, SPEC-3, SPEC-7)', () => {
-    const planV4 = {
-      schemaVersion: 4,
+  it('publishes Plan v5 instruction coverage and Grounding-v3 trace coverage (SPEC-1, SPEC-3, SPEC-7)', () => {
+    const planV5 = {
+      schemaVersion: 5,
       source: { inputsDigest: 'a'.repeat(64) },
       targets: { app: { surface: 'web', baseUrl: 'https://example.test' } },
       steps: [{
@@ -221,8 +221,8 @@ describe('IR JSON Schema documents', () => {
         }],
       }],
     };
-    const coveredGroundingV2 = {
-      schemaVersion: 2,
+    const coveredGroundingV3 = {
+      schemaVersion: 3,
       planDigest: 'b'.repeat(64),
       entries: {
         'reach-dashboard': {
@@ -236,15 +236,15 @@ describe('IR JSON Schema documents', () => {
       },
     };
 
-    expect(PlanDocument.safeParse(planV4).success).toBe(true);
-    expect(validators.plan(planV4)).toBe(true);
-    const { instructionCoverage: _coverage, ...aiStepWithoutCoverage } = planV4.steps[0]!;
-    const planWithoutCoverage = { ...planV4, steps: [aiStepWithoutCoverage] };
+    expect(PlanDocument.safeParse(planV5).success).toBe(true);
+    expect(validators.plan(planV5)).toBe(true);
+    const { instructionCoverage: _coverage, ...aiStepWithoutCoverage } = planV5.steps[0]!;
+    const planWithoutCoverage = { ...planV5, steps: [aiStepWithoutCoverage] };
     expect(PlanDocument.safeParse(planWithoutCoverage).success).toBe(false);
     expect(validators.plan(planWithoutCoverage)).toBe(false);
-    expect(PlanDocument.safeParse({ ...planV4, schemaVersion: 3 }).success).toBe(false);
-    expect(validators.plan({ ...planV4, schemaVersion: 3 })).toBe(false);
-    expect(GroundingDocument.safeParse(coveredGroundingV2).success).toBe(true);
-    expect(validators.grounding(coveredGroundingV2)).toBe(true);
+    expect(PlanDocument.safeParse({ ...planV5, schemaVersion: 3 }).success).toBe(false);
+    expect(validators.plan({ ...planV5, schemaVersion: 3 })).toBe(false);
+    expect(GroundingDocument.safeParse(coveredGroundingV3).success).toBe(true);
+    expect(validators.grounding(coveredGroundingV3)).toBe(true);
   });
 });

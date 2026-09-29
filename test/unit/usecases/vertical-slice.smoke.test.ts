@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computePlanDigest } from '#core/ir/digest.js';
+import { computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import {
   GroundingDocument,
   PlanDocument,
@@ -39,14 +39,14 @@ const GENERATED_RESPONSE: GeneratedPlanResponse = {
       id: 'fill-email',
       kind: 'action',
       action: 'fill',
-      target: 'web', intent: { description: 'Email textbox', roleHint: 'textbox', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 62, citation: 'When I submit valid credentials, I reach the dashboard.' },
+      target: 'web', intent: { description: 'Email textbox', roleHint: 'textbox', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, citation: 'When I submit valid credentials, I reach the dashboard.' },
       value: 'person@example.test',
     },
     {
       id: 'click-submit',
       kind: 'action',
       action: 'click',
-      target: 'web', intent: { description: 'Submit button', roleHint: 'button', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 62, citation: 'When I submit valid credentials, I reach the dashboard.' },
+      target: 'web', intent: { description: 'Submit button', roleHint: 'button', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, citation: 'When I submit valid credentials, I reach the dashboard.' },
     },
   ],
   ambiguities: [],
@@ -462,15 +462,16 @@ describe('fake vertical slice', () => {
         hash: String(index + 1).padStart(64, '0'),
       };
       const target: ElementRef = { strategy: 'accessibility', role: step.intent.roleHint ?? 'button', name: step.id === 'fill-email' ? 'Email' : 'Submit' };
-      return { stepId: step.id, target, intent: step.intent, fingerprint };
+      if (step.kind !== 'action') throw new Error('The generated smoke-test plan must contain only action steps.');
+      return { stepId: step.id, target, intentDigest: computeIntentDigest({ stepKind: 'action', operation: step.action, intent: step.intent }), fingerprint };
     });
     // Path B covers a cold-start grounding miss; this test exercises only pre-seeded grounding.
     const seededGrounding: GroundingDocument = {
       schemaVersion: 3,
       planDigest: computePlanDigest(plan),
-      entries: Object.fromEntries(sharedGroundingFixture.map(({ stepId, target, fingerprint }) => [
+      entries: Object.fromEntries(sharedGroundingFixture.map(({ stepId, target, intentDigest, fingerprint }) => [
         stepId,
-        { kind: 'element' as const, locator: target, fingerprint, intentDigest: 'a'.repeat(64), provenance: 'ai-proposed' as const },
+        { kind: 'element' as const, locator: target, fingerprint, intentDigest, provenance: 'ai-proposed' as const },
       ])),
     };
     await storage.writeText(

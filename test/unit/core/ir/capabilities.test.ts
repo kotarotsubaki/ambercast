@@ -54,7 +54,9 @@ describe('deriveRequiredCapabilities', () => {
   });
 
   it.each(['text-visible', 'element-visible', 'text-equals', 'url-matches', 'element-count'] as const)('maps assertion %s', (name) => {
-    expect(capabilities(deriveRequiredCapabilities(plan([assertion('a', name)]), undefined, { resolve: false }))).toEqual([name]);
+    expect(capabilities(deriveRequiredCapabilities(plan([assertion('a', name)]), undefined, { resolve: false }))).toEqual(
+      ['element-visible', 'text-equals', 'element-count'].includes(name) ? [name, 'snapshot'] : [name],
+    );
   });
 
   it('collects click, fill, and terminal text-visible from an AI trace', () => {
@@ -75,8 +77,8 @@ describe('deriveRequiredCapabilities', () => {
   it.each([
     ['click', action('s', 'click')], ['press', action('s', 'press')], ['fill', action('s', 'fill')], ['fill-secret', action('s', 'fill-secret')],
     ['element-visible', assertion('s', 'element-visible')], ['text-equals', assertion('s', 'text-equals')], ['element-count', assertion('s', 'element-count')], ['capture', capture('s')],
-  ] as const)('adds snapshot for element-bearing %s only with resolve enabled', (_name, step) => {
-    expect(capabilities(deriveRequiredCapabilities(plan([step]), undefined, { resolve: false }))).not.toContain('snapshot');
+  ] as const)('adds snapshot for element-bearing %s when required', (_name, step) => {
+    expect(capabilities(deriveRequiredCapabilities(plan([step]), undefined, { resolve: false })).includes('snapshot')).toBe(step.kind === 'assert');
     expect(capabilities(deriveRequiredCapabilities(plan([step]), undefined, { resolve: true }))).toEqual([step.kind === 'action' ? step.action : step.kind === 'assert' ? step.check : 'capture', 'snapshot']);
   });
 

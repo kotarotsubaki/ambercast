@@ -48,7 +48,7 @@ if (argv[0] === 'exec') {
     process.stderr.write('codex sentinel requires exactly one -o <output-path> argument\\n');
     process.exit(1);
   }
-  writeFileSync(outputPath, '{"confirmed":true}');
+  writeFileSync(outputPath, '{"outcome":"found","role":"button","name":"Submit"}');
   process.exit(0);
 }
 

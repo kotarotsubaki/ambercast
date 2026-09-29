@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { extractStepRunRefs, matchRunReferenceTokens } from '#core/ir/run-ref.js';
 import { Step } from '#core/ir/schema.js';
 
-const BUTTON = { strategy: 'accessibility' as const, role: 'textbox', name: 'Input' };
+const INTENT = { description: 'Input', roleHint: 'textbox', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 } };
+const QUOTED_INTENT = { ...INTENT, quote: { text: 'Input', sourceSpan: INTENT.sourceSpan } };
 
 describe('matchRunReferenceTokens', () => {
   it('preserves valid and malformed tokens in source order', () => {
@@ -26,9 +27,9 @@ describe('extractStepRunRefs', () => {
   it('enumerates every text-bearing step field, preserving field order and duplicates', () => {
     const steps = [
       Step.parse({ id: 'navigate', kind: 'action', action: 'navigate', target: 'app', url: 'https://example.test/{{run.order.id}}/{{run.order.id}}' }),
-      Step.parse({ id: 'fill', kind: 'action', action: 'fill', target: 'app', element: BUTTON, value: '{{run.form.value}}' }),
+      Step.parse({ id: 'fill', kind: 'action', action: 'fill', target: 'app', intent: INTENT, value: '{{run.form.value}}' }),
       Step.parse({ id: 'visible', kind: 'assert', check: 'text-visible', target: 'app', text: '{{run.message}}' }),
-      Step.parse({ id: 'equals', kind: 'assert', check: 'text-equals', target: 'app', element: BUTTON, text: '{{run.expected}}' }),
+      Step.parse({ id: 'equals', kind: 'assert', check: 'text-equals', target: 'app', intent: QUOTED_INTENT, text: '{{run.expected}}' }),
       Step.parse({ id: 'url', kind: 'assert', check: 'url-matches', target: 'app', pattern: '/{{run.path}}/' }),
       Step.parse({ id: 'ai', kind: 'ai', target: 'app', instruction: '{{run.first}} then {{run.second}}', instructionCoverage: [{ id: 'a', kind: 'action', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 } }] }),
     ];
@@ -39,7 +40,7 @@ describe('extractStepRunRefs', () => {
   });
 
   it('retains malformed references as raw obligations instead of dropping them', () => {
-    const step = Step.parse({ id: 'fill', kind: 'action', action: 'fill', target: 'app', element: BUTTON, value: '{{run.bad-name}} and {{run.good_name}}' });
+    const step = Step.parse({ id: 'fill', kind: 'action', action: 'fill', target: 'app', intent: INTENT, value: '{{run.bad-name}} and {{run.good_name}}' });
 
     expect(extractStepRunRefs(step)).toEqual(['{{run.bad-name}}', '{{run.good_name}}']);
   });

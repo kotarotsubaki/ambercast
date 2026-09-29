@@ -11,7 +11,7 @@ import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import {
@@ -58,6 +58,7 @@ const RUNS_DIR = '/workspace/tests/.runs';
 const TARGETS = { web: { baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
+const QUOTED_PROMPT = `${PROMPT}Click "submit" and inspect "Password".\n`;
 const SECRET_REF = '{{secrets.AMBERCAST_SECRET_DUMMY}}';
 const SECRET_VALUE = 'sk-AMBERCAST_SECRET_DUMMY';
 const SUCCESS_CRITERION_ID = 'dashboard-reached';
@@ -67,8 +68,8 @@ const EMAIL: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'E
 const PASSWORD: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Password' };
 const SUBMIT: ElementRef = { strategy: 'accessibility', role: 'button', name: 'Submit' };
 const PASSWORD_INTENT = { description: 'Password textbox', roleHint: 'textbox', sourceSpan: SUCCESS_SOURCE_SPAN };
-const SUBMIT_INTENT = { description: 'Submit button', roleHint: 'button', sourceSpan: SUCCESS_SOURCE_SPAN, quote: { text: 'submit', sourceSpan: SUCCESS_SOURCE_SPAN } };
-const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, quote: { text: 'credentials', sourceSpan: SUCCESS_SOURCE_SPAN } };
+const SUBMIT_INTENT = { description: 'Submit button', roleHint: 'button', sourceSpan: { startLine: 4, startColumn: 1, endLine: 4, endColumn: 39 }, quote: { text: 'submit', sourceSpan: { startLine: 4, startColumn: 8, endLine: 4, endColumn: 14 } } };
+const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, sourceSpan: { startLine: 4, startColumn: 1, endLine: 4, endColumn: 39 }, quote: { text: 'Password', sourceSpan: { startLine: 4, startColumn: 29, endLine: 4, endColumn: 37 } } };
 const RUN_OPTIONS: RunOptions = { files: [], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [],
@@ -124,8 +125,12 @@ function liveEntries(
   return new Map(refs.map((ref) => [elementRefKey(ref), { exists: true, currentFingerprint }]));
 }
 
-function elementGrounding(stepIds: readonly string[]): GroundingDocument['entries'] {
-  return Object.fromEntries(stepIds.map((id) => [id, { kind: 'element', fingerprint: FINGERPRINT }])) as GroundingDocument['entries'];
+function elementGrounding(stepIds: readonly ('fill-secret' | 'click-submit')[], fingerprint: Fingerprint = FINGERPRINT): GroundingDocument['entries'] {
+  return Object.fromEntries(stepIds.map((id) => [id, {
+    kind: 'element', locator: id === 'fill-secret' ? PASSWORD : SUBMIT, fingerprint,
+    intentDigest: computeIntentDigest({ stepKind: 'action', operation: id === 'fill-secret' ? 'fill-secret' : 'click', intent: id === 'fill-secret' ? PASSWORD_INTENT : SUBMIT_INTENT }),
+    provenance: 'ai-proposed',
+  }])) as GroundingDocument['entries'];
 }
 
 async function writePrompt(
@@ -144,13 +149,7 @@ async function createFreshPlan(
   steps: readonly Step[],
 ): Promise<PlanDocument> {
   const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
-  // SPEC-9/10: Plan v4 steps name the execution Target independently of
-  // their element locator. These historical fixtures used `target` as locator.
-  const committedSteps = steps.map((step) => {
-    const legacy = step as unknown as Record<string, unknown>;
-    const { target: oldTarget, ...rest } = legacy;
-    return { ...rest, target: 'web', ...(typeof oldTarget === 'object' && oldTarget !== null ? { element: oldTarget } : {}) };
-  });
+  const committedSteps = steps.map((step) => ({ ...step, target: 'web' }));
   const planTargets = { web: { surface: 'web' as const, baseUrl: TARGETS.web.baseUrl } };
   const inputsDigest = computeInputsDigest({
     normalizedTestMd,
@@ -578,6 +577,7 @@ describe('run secret sinks', () => {
       name: `Continue with ${persistenceOnlySecret}`,
     };
     const session = createFakeBrowserSession(liveEntries([PASSWORD, SUBMIT, unsafeTarget]), {
+      snapshot: { accessibilityTree: { role: 'root', name: '', children: [] }, screenshot: new Uint8Array() },
       assertOutcomes: [
         { passed: true },
         { passed: false, message: 'The dashboard was not visible.' },
@@ -594,12 +594,12 @@ describe('run secret sinks', () => {
     });
     const { deps, recordingStorage } = createRunScenario(session, executor);
     const rotatingSecrets = createRotatingSecretsProvider(SECRET_REF, [firstSecretValue, persistenceOnlySecret]);
-    const testPath = await writePrompt(recordingStorage.storage, PROMPT);
+    const testPath = await writePrompt(recordingStorage.storage, QUOTED_PROMPT);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [
       aiStep(),
       // SPEC-17: one failing observation is enough for this persistence-path fixture.
       { id: 'later-ordinary-assertion', kind: 'assert', check: 'element-visible', target: 'web', intent: SUBMIT_INTENT, timeoutMs: 0 },
-    ], elementGrounding(['later-ordinary-assertion']));
+    ]);
     recordingStorage.writes.length = 0;
 
     const outcome = await run({ ...deps, secrets: rotatingSecrets }, RUN_OPTIONS);
@@ -653,7 +653,7 @@ describe('run secret sinks', () => {
         kind: 'action',
         action: 'fill',
         target: 'web',
-        element: PASSWORD,
+        intent: { description: 'Password textbox', roleHint: 'textbox', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56, citation: 'When I submit valid credentials, I reach the dashboard.' },
         value: SECRET_VALUE,
       }],
       ambiguities: [],
@@ -676,14 +676,15 @@ describe('run secret sinks', () => {
 
   it('keeps AMBERCAST_SECRET_DUMMY out of rendered failed and classified-exception reports', async () => {
     const failedSession = createFakeBrowserSession(liveEntries([PASSWORD]), {
-      assertOutcome: { passed: false, message: `Expected text contained ${SECRET_VALUE}.` },
+      snapshot: { accessibilityTree: { role: 'root', name: '', children: [{ role: 'textbox', name: 'Password', children: [] }] }, screenshot: new Uint8Array() },
+      captureValues: new Map([[elementRefKey(PASSWORD), { text: `Expected text contained ${SECRET_VALUE}.`, value: '' }]]),
     });
     const failedScenario = createRunScenario(failedSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
-    const failedPath = await writePrompt(failedScenario.recordingStorage.storage, PROMPT);
+    const failedPath = await writePrompt(failedScenario.recordingStorage.storage, QUOTED_PROMPT);
     await seedFreshArtifacts(failedScenario.recordingStorage.storage, failedPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_INTENT, secretRef: SECRET_REF },
       { id: 'secret-assertion', kind: 'assert', check: 'text-equals', target: 'web', intent: PASSWORD_QUOTED_INTENT, text: 'Dashboard' },
-    ], elementGrounding(['fill-secret', 'secret-assertion']));
+    ], elementGrounding(['fill-secret']));
     const failedOutcome = await run(failedScenario.deps, RUN_OPTIONS);
 
     const exceptionSession = createFakeBrowserSession(liveEntries([PASSWORD]), {
@@ -694,7 +695,7 @@ describe('run secret sinks', () => {
       },
     });
     const exceptionScenario = createRunScenario(exceptionSession, createFakeAiExecutor(), new Map([[SECRET_REF, SECRET_VALUE]]));
-    const exceptionPath = await writePrompt(exceptionScenario.recordingStorage.storage, PROMPT);
+    const exceptionPath = await writePrompt(exceptionScenario.recordingStorage.storage, QUOTED_PROMPT);
     await seedFreshArtifacts(exceptionScenario.recordingStorage.storage, exceptionPath, [
       { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_INTENT, secretRef: SECRET_REF },
       { id: 'go-dashboard', kind: 'action', action: 'navigate', target: 'web', url: '/dashboard' },
@@ -766,7 +767,7 @@ describe('run secret sinks', () => {
       const { schemaPath, outputPath } = commandPaths(call.args);
       fingerprintSchemaPath = schemaPath;
       fingerprintSchema = await readFile(schemaPath, 'utf8');
-      await writeFile(outputPath, JSON.stringify({ confirmed: true }));
+      await writeFile(outputPath, JSON.stringify({ outcome: 'found', role: 'button', name: 'Submit' }));
       return { outcome: 'exited', stdout: '', stderr: '', exitCode: 0 };
     }]);
     const runExecutor = createCodexCliExecutor({ run: runRunner.run });
@@ -791,12 +792,11 @@ describe('run secret sinks', () => {
     }
     const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprint.fingerprint), { snapshot });
     const runScenario = createRunScenario(session, runExecutor);
-    const testPath = await writePrompt(runScenario.recordingStorage.storage, PROMPT, false);
+    const testPath = await writePrompt(runScenario.recordingStorage.storage, QUOTED_PROMPT, false);
     await seedFreshArtifacts(
       runScenario.recordingStorage.storage,
       testPath,
-      [{ id: 'click-submit', kind: 'action', action: 'click', target: 'web', intent: SUBMIT_INTENT }],
-      elementGrounding(['click-submit']),
+      [{ id: 'click-submit', kind: 'action', action: 'click', target: 'web', intent: { description: SUBMIT_INTENT.description, roleHint: SUBMIT_INTENT.roleHint, sourceSpan: SUBMIT_INTENT.sourceSpan } }],
     );
 
     await expect(run(runScenario.deps, RUN_OPTIONS)).resolves.toMatchObject({

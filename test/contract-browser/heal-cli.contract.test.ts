@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import { GroundingDocument, PlanDocument, type JsonValueT, type TargetDefinition } from '#core/ir/schema.js';
 import { ReportEnvelope } from '#report/schema.js';
@@ -16,7 +16,7 @@ import { resolveChromiumAvailability } from './support/chromium-availability.js'
 import { createCleanupRegistry } from './support/cleanup-registry.js';
 import { spawnSupervisedCli } from './support/supervised-cli.js';
 
-const PROMPT = '# Heal confirmation fixture\n';
+const PROMPT = '# Heal confirmation fixture\n\nClick Submit and see Submitted.\n';
 const CONFIRMATION_MESSAGE = 'Healing requires --yes when confirmation cannot be shown.';
 
 let chromiumAvailable = false;
@@ -79,7 +79,7 @@ describe('heal confirmation gate through the built CLI', () => {
           pageRequests += 1;
         }
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        response.end('<!doctype html><html lang="en"><body><main><button>Submit</button></main></body></html>');
+        response.end('<!doctype html><html lang="en"><body><main><button>Submit</button><p id="result"></p><script>document.querySelector("button").addEventListener("click", () => { document.querySelector("#result").textContent = "Submitted"; });</script></main></body></html>');
       });
       registry.deferResource(() => closeServer(server));
       const port = await listen(server);
@@ -91,11 +91,12 @@ describe('heal confirmation gate through the built CLI', () => {
       const targetDefinitions = {
         fixture: { surface: 'web', baseUrl: `http://127.0.0.1:${port}` },
       } as const satisfies Record<string, TargetDefinition>;
+      const intent = { description: 'Submit button', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 'Click Submit.'.length + 1 }, roleHint: 'button' };
       const plan = PlanDocument.parse({
-        schemaVersion: 4,
+        schemaVersion: 5,
         source: {
           inputsDigest: computeInputsDigest({
-            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
+            normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 5,
             generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
             planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions,
           }),
@@ -103,14 +104,15 @@ describe('heal confirmation gate through the built CLI', () => {
         targets: targetDefinitions,
         steps: [
           { id: 'go-to-fixture', kind: 'action', action: 'navigate', target: 'fixture', url: '/' },
-          { id: 'click-submit', kind: 'action', action: 'click', target: 'fixture', element: { strategy: 'accessibility', role: 'button', name: 'Submit' } },
+          { id: 'click-submit', kind: 'action', action: 'click', target: 'fixture', intent },
+          { id: 'confirm-submit', kind: 'assert', check: 'text-visible', target: 'fixture', text: 'Submitted', confirms: ['click-submit'] },
         ],
       });
       const grounding = GroundingDocument.parse({
-        schemaVersion: 2,
+        schemaVersion: 3,
         planDigest: computePlanDigest(plan),
         entries: {
-          'click-submit': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: '0'.repeat(64) } },
+          'click-submit': { kind: 'element', locator: { strategy: 'accessibility', role: 'button', name: 'Submit' }, fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: '0'.repeat(64) }, intentDigest: computeIntentDigest({ stepKind: 'action', operation: 'click', intent }), provenance: 'ai-proposed' },
         },
       });
       const planPath = join(tests, 'heal-confirmation.ambercast.plan.json');

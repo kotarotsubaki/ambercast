@@ -4,9 +4,9 @@ import { IntegrityViolationError } from '#core/errors/integrity-violation-error.
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
-import type { JsonValueT, TargetDefinition } from '#core/ir/schema.js';
+import type { ElementIntent, JsonValueT, TargetDefinition } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
 import { run, type RunDeps } from '#usecases/run.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
@@ -21,8 +21,13 @@ import type { BrowserSession } from '#ports/browser.js';
 
 const ROOT = '/multi-target';
 const FILE = `${ROOT}/case.test.md`;
-const PROMPT = '# Multi target\n\nThe dashboard is visible.\n';
+const PROMPT = '# Multi target\n\nThe dashboard is visible. The "Value" textbox is available.\n';
 const REF = { strategy: 'accessibility' as const, role: 'textbox', name: 'Value' };
+const INTENT = {
+  description: 'Value textbox', roleHint: 'textbox',
+  sourceSpan: { startLine: 3, startColumn: 32, endLine: 3, endColumn: 37 },
+  quote: { text: 'Value', sourceSpan: { startLine: 3, startColumn: 32, endLine: 3, endColumn: 37 } },
+};
 const SECRET_REF = '{{secrets.TOKEN}}';
 const FINGERPRINT = { algorithm: 'a11y-neighborhood-v2' as const, hash: 'a'.repeat(64) };
 const definitions = {
@@ -36,18 +41,22 @@ const configs = Object.fromEntries(Object.entries(definitions).map(([name, targe
 type TestStep = Record<string, unknown> & { id: string; target: 'A' | 'B' | 'C' };
 
 function action(id: string, target: TestStep['target'], kind: string, extra: Record<string, unknown> = {}): TestStep {
-  return { id, target, kind: 'action', action: kind, ...extra };
+  const { element, ...fields } = extra;
+  return { id, target, kind: 'action', action: kind, ...fields, ...(element === undefined ? {} : { intent: INTENT }) };
 }
 function assertion(id: string, target: TestStep['target'], check: string, timeoutMs: number, extra: Record<string, unknown> = {}): TestStep {
-  return { id, target, kind: 'assert', check, timeoutMs, ...extra };
+  const { element, ...fields } = extra;
+  return { id, target, kind: 'assert', check, timeoutMs, ...fields, ...(element === undefined ? {} : { intent: INTENT }) };
 }
 function capture(id: string, target: TestStep['target'], variable: string): TestStep {
-  return { id, target, kind: 'capture', element: REF, variable };
+  return { id, target, kind: 'capture', intent: INTENT, variable };
 }
 function session(name: 'A' | 'B' | 'C', options: Parameters<typeof createFakeBrowserSession>[1] = {}): FakeBrowserSession {
   return createFakeBrowserSession(new Map([[elementRefKey(REF), { exists: true, currentFingerprint: FINGERPRINT }]]), {
     baseUrl: definitions[name].baseUrl,
     currentUrl: definitions[name].baseUrl,
+    snapshot: { accessibilityTree: { role: 'root', name: '', children: [{ role: 'textbox', name: 'Value', children: [] }] }, screenshot: new Uint8Array() },
+    captureValues: new Map([[elementRefKey(REF), { text: 'Value', value: 'Value' }]]),
     ...options,
   });
 }
@@ -67,16 +76,18 @@ async function scenario(
   }])) as unknown as Record<string, TargetDefinition>;
   const inputsDigest = computeInputsDigest({
     normalizedTestMd: normalizeTestMd(PROMPT),
-    schemaVersion: 4,
+    schemaVersion: 5,
     generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
     planProducerBundleFingerprint: planProducerBundleFingerprint(),
     targetDefinitions: targets,
   });
-  const plan = { schemaVersion: 4, source: { inputsDigest }, targets, steps };
-  const entries = Object.fromEntries(steps.filter((step) => step.element !== undefined).map((step) => [step.id, {
-    kind: 'element', fingerprint: FINGERPRINT,
+  const plan = { schemaVersion: 5, source: { inputsDigest }, targets, steps };
+  const entries = Object.fromEntries(steps.filter((step) => (step.kind === 'action' || step.kind === 'capture') && step.intent !== undefined).map((step) => [step.id, {
+    kind: 'element', locator: REF, fingerprint: FINGERPRINT,
+    intentDigest: computeIntentDigest({ stepKind: step.kind as 'action' | 'capture', operation: (step.kind === 'capture' ? 'capture' : step.action) as 'capture' | 'click' | 'fill' | 'fill-secret', intent: step.intent as ElementIntent }),
+    provenance: 'quoted-match',
   }]));
-  const grounding = { schemaVersion: 2, planDigest: computePlanDigest(plan as never), entries };
+  const grounding = { schemaVersion: 3, planDigest: computePlanDigest(plan as never), entries };
   await storage.writeText(FILE, PROMPT);
   await storage.writeText(layout.planPathFor(FILE), toCanonicalArtifactText(plan as JsonValueT));
   const originalGrounding = toCanonicalArtifactText(grounding as JsonValueT);
@@ -132,7 +143,7 @@ describe('multi-target run contracts', () => {
 
   it('TEST-22 resolves once, replays without AI, and polls on the separate B session', async () => {
     const firstA = session('A', { captureValues: new Map([[elementRefKey(REF), { text: 'created', value: 'created' }]]) });
-    const firstB = session('B');
+    const firstB = session('B', { captureValues: new Map([[elementRefKey(REF), { text: 'created', value: 'created' }]]) });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
         await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: 'ready' }, 'ready');
@@ -153,7 +164,8 @@ describe('multi-target run contracts', () => {
     expect(first.events.emitted().filter((event) => event.type === 'ai-call').length).toBeGreaterThanOrEqual(1);
 
     const secondA = session('A', { captureValues: new Map([[elementRefKey(REF), { text: 'created', value: 'created' }]]) });
-    const secondB = session('B', { assertOutcomes: [{ passed: false, message: 'not yet' }, { passed: true }] });
+    const secondB = session('B');
+    vi.spyOn(secondB, 'captureValue').mockResolvedValueOnce('not yet').mockResolvedValue('created');
     const replayDriver = createFakeUiExecutor({ A: () => secondA, B: () => secondB }, definitions);
     const replayEvents = createRecordingEventSink();
     const replay = await run({ ...first.deps, uiExecutor: () => replayDriver, events: replayEvents.sink }, {
@@ -165,9 +177,9 @@ describe('multi-target run contracts', () => {
     expect(first.driver.launches.map((target) => target.baseUrl)).toEqual([definitions.A.baseUrl, definitions.B.baseUrl]);
     expect(replayDriver.launches.map((target) => target.baseUrl)).toEqual([definitions.A.baseUrl, definitions.B.baseUrl]);
     expect(firstA.operations().filter((operation) => operation.type === 'capture-value')).toHaveLength(1);
-    expect(firstB.operations().filter((operation) => operation.type === 'capture-value')).toEqual([]);
+    expect(firstB.operations().filter((operation) => operation.type === 'capture-value')).toHaveLength(1);
     expect(secondA.operations().filter((operation) => operation.type === 'evaluate-assert').map((operation) => operation.check.check)).toEqual(['text-visible']);
-    expect(secondB.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(2);
+    expect(secondB.operations().filter((operation) => operation.type === 'evaluate-assert')).toEqual([]);
     expect(secondB.bindCalls()).toBe(2);
     expect(first.clock.sleepCalls).toEqual([100]);
   });
@@ -196,12 +208,12 @@ describe('multi-target run contracts', () => {
     expect(a.operations().filter((operation) => operation.type === 'perform').map((operation) => operation.action.type)).toEqual(['navigate', 'click']);
     expect(b.operations().filter((operation) => operation.type === 'perform').map((operation) => operation.action.type)).toEqual(['navigate', 'fill']);
     expect(a.operations().filter((operation) => operation.type === 'capture-value')).toHaveLength(1);
-    expect(b.operations().filter((operation) => operation.type === 'capture-value')).toEqual([]);
+    expect(b.operations().filter((operation) => operation.type === 'capture-value')).toHaveLength(1);
     expect(b.operations().filter((operation) => operation.type === 'perform' && operation.action.type === 'click')).toEqual([]);
-    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(1);
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toEqual([]);
     expect(a.operations().filter((operation) => operation.type === 'evaluate-assert')).toEqual([]);
     expect(awaitElementPresenceCalls(a).map((call) => call.timeoutMs)).toEqual([111, 111]);
-    expect(awaitElementPresenceCalls(b).map((call) => call.timeoutMs)).toEqual([222, 222]);
+    expect(awaitElementPresenceCalls(b).map((call) => call.timeoutMs)).toEqual([222]);
   });
 
   it('TEST-12 sends secret fill only to the step target session', async () => {
@@ -328,19 +340,22 @@ describe('multi-target run contracts', () => {
     expect(rejected.outcome.results[0]?.result).toMatchObject({ sessions: { B: { state: 'close-failed' } } });
   });
 
-  it.each(['text-equals', 'element-count'] as const)('TEST-14 polls %s and binds only element checks', async (check) => {
-    const b = session('B', { assertOutcomes: [{ passed: false, message: 'first' }, { passed: false, message: 'second' }, { passed: true }] });
+  it.each(['text-equals', 'element-count'] as const)('TEST-14 polls %s from snapshots', async (check) => {
+    const b = session('B');
+    const emptyCapture = { rawYaml: '', tree: { role: 'root', name: '', children: [] }, scalarValues: [] };
+    const captureText = vi.spyOn(b, 'captureValue');
+    const captureSnapshot = vi.spyOn(b, 'accessibilitySnapshot');
+    if (check === 'text-equals') {
+      captureText.mockResolvedValueOnce('first').mockResolvedValueOnce('second');
+    } else {
+      captureSnapshot.mockResolvedValueOnce(emptyCapture).mockResolvedValueOnce(emptyCapture);
+    }
     const step = assertion('poll', 'B', check, 1000, check === 'text-equals' ? { element: REF, text: 'Value' } : { element: REF, count: 1 });
     const { outcome, clock } = await scenario([step], { B: b });
     expect(outcome.results[0]?.result.status).toBe('passed');
-    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(3);
-    if (check === 'element-count') {
-      expect(b.operations().filter((operation) => operation.type === 'evaluate-assert').map((operation) => operation.check)).toEqual([
-        { check: 'element-count', target: REF, count: 1 },
-        { check: 'element-count', target: REF, count: 1 },
-        { check: 'element-count', target: REF, count: 1 },
-      ]);
-    }
+    expect(captureSnapshot).toHaveBeenCalledTimes(3);
+    expect(captureText).toHaveBeenCalledTimes(check === 'text-equals' ? 3 : 0);
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toEqual([]);
     expect(b.bindCalls()).toBe(check === 'text-equals' ? 3 : 0);
     expect(clock.sleepCalls).toEqual([100, 100]);
   });
@@ -364,26 +379,29 @@ describe('multi-target run contracts', () => {
     expect(clock.sleepCalls).toEqual([150]);
   });
 
-  it.each(['bind-miss', 'adapter-reject', 'integrity-reject'] as const)('TEST-14 does not retry %s', async (failure) => {
-    const b = session('B', { assertOutcomes: [{ passed: false, message: 'first' }, { passed: true }] });
+  it.each(['bind-miss', 'adapter-reject', 'integrity-reject'] as const)('TEST-14 handles %s at the snapshot assertion boundary', async (failure) => {
+    const b = session('B');
     if (failure === 'bind-miss') {
-      vi.spyOn(b, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason: 'element-not-found' });
+      vi.spyOn(b, 'resolveGrounded').mockResolvedValueOnce({ kind: 'miss', reason: 'element-not-found' });
     } else if (failure === 'adapter-reject') {
-      vi.spyOn(b, 'evaluateAssert').mockRejectedValue(new Error('adapter failed'));
+      vi.spyOn(b, 'captureValue').mockRejectedValue(new Error('adapter failed'));
     } else {
       vi.spyOn(b, 'resolveGrounded').mockRejectedValue(new IntegrityViolationError('contaminated'));
     }
     const { outcome, clock, driver } = await scenario([assertion('poll', 'B', 'text-equals', 1000, { element: REF, text: 'wanted' })], { B: b });
     expect(driver.launches).toHaveLength(1);
-    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [{ status: 'error', kind: 'environment' }] });
+    if (failure === 'bind-miss') {
+      expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ status: 'failed', kind: 'assertion' }] });
+      expect(clock.sleepCalls).toEqual(Array(10).fill(100));
+    } else {
+      expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [{ status: 'error', kind: 'environment' }] });
+      expect(clock.sleepCalls).toEqual([]);
+    }
     if (failure === 'integrity-reject') {
       expect(outcome.results[0]?.error?.kind).toBe('integrity-violation');
-    } else if (failure === 'bind-miss') {
-      expect(outcome.results[0]?.result.explanation).toContain('no matching element');
-    } else {
+    } else if (failure === 'adapter-reject') {
       expect(outcome.results[0]?.result.explanation).toContain('browser session could not complete');
     }
-    expect(clock.sleepCalls).toEqual([]);
     expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(0);
   });
 

@@ -20,7 +20,7 @@ const goldenPrompt = readFileSync(new URL('stage2-repair-context.prompt.txt', fi
   .replace(/\n$/, '')
   .replaceAll('"baseUrl": "https://example.test",\n        "browser": "chromium"', '"surface": "web",\n        "baseUrl": "https://example.test"')
   .replaceAll('"baseUrl": "https://example.test",\n          "browser": "chromium"', '"surface": "web",\n          "baseUrl": "https://example.test"')
-  .replace('"schemaVersion": 3', '"schemaVersion": 4')
+  .replace('"schemaVersion": 3', '"schemaVersion": 5')
   .replaceAll('"id": "first",\n          "kind": "assert"', '"id": "first",\n          "target": "web",\n          "kind": "assert"')
   .replaceAll('"id": "first",\n        "kind": "assert"', '"id": "first",\n        "target": "web",\n        "kind": "assert"');
 
@@ -33,7 +33,7 @@ function step(id: string, text = id) {
 
 function plan(steps = [step('first')], generatorMeta?: Record<string, JsonValueT>): TrustedPlan {
   return PlanDocument.parse({
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: { inputsDigest: digest },
     ...(generatorMeta === undefined ? {} : { generatorMeta }),
     targets: { web: target },
@@ -84,7 +84,7 @@ describe('Stage 2 provider context', () => {
         allowedSecretNames: ['account.password'],
         targets: { web: target },
         currentPlan: {
-          schemaVersion: 4,
+          schemaVersion: 5,
           source: { inputsDigest: digest },
           targets: { web: target },
           steps: [step('first'), step('second')],

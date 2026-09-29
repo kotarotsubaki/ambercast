@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ElementRef as CoreElementRef, SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
+import { SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
 import {
   AiResponseIssue,
   CheckResult,
@@ -821,16 +821,16 @@ describe('heal result status branches', () => {
 });
 
 describe('report-local IR scalar equivalence', () => {
-  it('matches core ElementRef, SecretName, SecretRef, and StepId acceptance through report shapes', () => {
+  it('accepts intent summaries and matches core SecretName, SecretRef, and StepId acceptance through report shapes', () => {
     const values = {
-      element: [{ strategy: 'accessibility', role: 'button', name: 'Submit' }, { strategy: 'css', value: '#submit' }],
+      target: [{ description: 'Submit', roleHint: 'button', quote: { text: 'Submit' } }, { strategy: 'css', value: '#submit' }],
       name: ['API_TOKEN', 'bad-name!'],
       ref: ['{{secrets.API_TOKEN}}', '{{secrets.bad-name!}}'],
       stepId: ['fill-token', 'Fill_Token'],
     } as const;
 
-    for (const element of values.element) {
-      expect(GenerateResult.safeParse({ ...GENERATE_RESULT, warnings: [{ kind: 'secret-target-changed', name: 'API_TOKEN', stepId: 'fill-token', previousTarget: element, target: element }] }).success).toBe(CoreElementRef.safeParse(element).success);
+    for (const [index, target] of values.target.entries()) {
+      expect(GenerateResult.safeParse({ ...GENERATE_RESULT, warnings: [{ kind: 'secret-target-changed', name: 'API_TOKEN', stepId: 'fill-token', previousTarget: target, target }] }).success).toBe(index === 0);
     }
     for (const name of values.name) {
       expect(SecretConsentRequiredDetails.safeParse({ reason: 'consent-required', secrets: [{ name, stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }).success).toBe(CoreSecretName.safeParse(name).success);

@@ -4,7 +4,8 @@ import { Step } from '#core/ir/schema.js';
 
 const COVERAGE_SPAN = { startLine: 2, startColumn: 1, endLine: 2, endColumn: 24 };
 const NEXT_COVERAGE_SPAN = { startLine: 3, startColumn: 1, endLine: 3, endColumn: 24 };
-const BUTTON = { strategy: 'accessibility' as const, role: 'button', name: 'Continue' };
+const INTENT = { description: 'Continue', roleHint: 'button', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 9 } };
+const QUOTED_INTENT = { ...INTENT, quote: { text: 'Continue', sourceSpan: INTENT.sourceSpan } };
 
 function ai(overrides: Record<string, unknown> = {}) {
   return Step.parse({
@@ -24,16 +25,16 @@ describe('obligation fingerprints', () => {
   });
 
   it.each([
-    ['an action opcode', Step.parse({ id: 'step', kind: 'action', action: 'click', target: 'app', element: BUTTON }), Step.parse({ id: 'step', kind: 'action', action: 'press', target: 'app', element: BUTTON, key: 'Enter' })],
-    ['an assert opcode', Step.parse({ id: 'assertion', kind: 'assert', check: 'text-visible', target: 'app', text: 'Continue' }), Step.parse({ id: 'assertion', kind: 'assert', check: 'text-equals', target: 'app', element: BUTTON, text: 'Continue' })],
+    ['an action opcode', Step.parse({ id: 'step', kind: 'action', action: 'click', target: 'app', intent: INTENT }), Step.parse({ id: 'step', kind: 'action', action: 'press', target: 'app', intent: INTENT, key: 'Enter' })],
+    ['an assert opcode', Step.parse({ id: 'assertion', kind: 'assert', check: 'text-visible', target: 'app', text: 'Continue' }), Step.parse({ id: 'assertion', kind: 'assert', check: 'text-equals', target: 'app', intent: QUOTED_INTENT, text: 'Continue' })],
     // SPEC-C1 C1-12
     ['an AI secret reference', ai(), ai({ secrets: [{ ref: '{{secrets.auth.other}}' }] })],
-    ['a fill-secret reference', Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: 'app', element: BUTTON, secretRef: '{{secrets.auth.token}}' }), Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: 'app', element: BUTTON, secretRef: '{{secrets.auth.other}}' })],
+    ['a fill-secret reference', Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: 'app', intent: INTENT, secretRef: '{{secrets.auth.token}}' }), Step.parse({ id: 'secret', kind: 'action', action: 'fill-secret', target: 'app', intent: INTENT, secretRef: '{{secrets.auth.other}}' })],
     ['an instruction coverage id', ai(), ai({ instructionCoverage: [{ id: 'criterion-z', kind: 'action', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['an instruction coverage kind', ai(), ai({ instructionCoverage: [{ id: 'criterion-a', kind: 'success', sourceSpan: COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['an instruction coverage span', ai(), ai({ instructionCoverage: [{ id: 'criterion-a', kind: 'action', sourceSpan: NEXT_COVERAGE_SPAN }, { id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }] })],
     ['instruction coverage ordering', ai(), ai({ instructionCoverage: [{ id: 'criterion-b', kind: 'success', sourceSpan: NEXT_COVERAGE_SPAN }, { id: 'criterion-a', kind: 'action', sourceSpan: COVERAGE_SPAN }] })],
-    ['a capture variable', Step.parse({ id: 'capture', kind: 'capture', target: 'app', element: BUTTON, variable: 'orderId' }), Step.parse({ id: 'capture', kind: 'capture', target: 'app', element: BUTTON, variable: 'otherId' })],
+    ['a capture variable', Step.parse({ id: 'capture', kind: 'capture', target: 'app', intent: INTENT, variable: 'orderId' }), Step.parse({ id: 'capture', kind: 'capture', target: 'app', intent: INTENT, variable: 'otherId' })],
     ['a removed run reference', ai(), ai({ instruction: 'Open {{run.order.id}}' })],
     ['an added run reference', ai({ instruction: 'Open {{run.order.id}}' }), ai()],
     ['run reference ordering', ai({ instruction: 'Open {{run.order.id}} then {{run.user.id}}' }), ai({ instruction: 'Open {{run.user.id}} then {{run.order.id}}' })],
@@ -43,9 +44,9 @@ describe('obligation fingerprints', () => {
   });
 
   it('rejects replacement identity changes before comparing fingerprints', () => {
-    const step = Step.parse({ id: 'capture', kind: 'capture', target: 'app', element: BUTTON, variable: 'orderId' });
-    const renamed = Step.parse({ id: 'renamed', kind: 'capture', target: 'app', element: BUTTON, variable: 'orderId' });
-    const retyped = Step.parse({ id: 'capture', kind: 'action', action: 'click', target: 'app', element: BUTTON });
+    const step = Step.parse({ id: 'capture', kind: 'capture', target: 'app', intent: INTENT, variable: 'orderId' });
+    const renamed = Step.parse({ id: 'renamed', kind: 'capture', target: 'app', intent: INTENT, variable: 'orderId' });
+    const retyped = Step.parse({ id: 'capture', kind: 'action', action: 'click', target: 'app', intent: INTENT });
 
     expect(obligationFingerprintMatches(step, renamed)).toBe(false);
     expect(obligationFingerprintMatches(step, retyped)).toBe(false);

@@ -61,10 +61,10 @@ async function writeFixture(project: string, baseUrl: string): Promise<string> {
   await mkdir(tests);
   const targets = { fixture: { surface: 'web', baseUrl } } as const satisfies Record<string, TargetDefinition>;
   const plan = PlanDocument.parse({
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: {
       inputsDigest: computeInputsDigest({
-        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
+        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 5,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
       }),
@@ -81,7 +81,7 @@ async function writeFixture(project: string, baseUrl: string): Promise<string> {
       },
     ],
   });
-  const grounding = GroundingDocument.parse({ schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} });
+  const grounding = GroundingDocument.parse({ schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} });
   const groundingPath = join(tests, 'agentic-partial.ambercast.grounding.json');
   await Promise.all([
     writeFile(join(project, 'ambercast.config.json'), JSON.stringify({

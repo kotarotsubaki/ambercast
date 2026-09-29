@@ -16,7 +16,7 @@ import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
@@ -172,8 +172,14 @@ function committedIntent(ref: ElementRef) {
 function generatedIntent(ref: ElementRef) {
   return { description: ref.name, roleHint: ref.role, startAnchor: 'L3', startColumn: 8, endAnchor: 'L3', endColumn: 14, citation: 'submit' };
 }
-function groundingEntry(ref: ElementRef, fingerprint: Fingerprint) {
-  return { kind: 'element' as const, locator: ref, fingerprint, intentDigest: 'a'.repeat(64), provenance: 'ai-proposed' as const };
+function groundingEntry(ref: ElementRef, fingerprint: Fingerprint, intentRef: ElementRef = ref) {
+  return {
+    kind: 'element' as const,
+    locator: ref,
+    fingerprint,
+    intentDigest: computeIntentDigest({ stepKind: 'action', operation: 'click', intent: committedIntent(intentRef) }),
+    provenance: 'ai-proposed' as const,
+  };
 }
 const AI_STEP = Step.parse({
   id: 'ai-step',
@@ -186,6 +192,10 @@ const AI_STEP = Step.parse({
     sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 },
   }],
 });
+const CONFIRMED_SUBMIT_STEPS = [
+  Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+  Step.parse({ id: 'confirm-submit', kind: 'assert', target: 'web', check: 'text-visible', text: 'Dashboard', confirms: ['click-submit'] }),
+];
 const OPTIONS: HealOptions = {
   files: ['/workspace/tests/login.test.md'],
   dryRun: false,
@@ -203,6 +213,30 @@ type Stage2RequestContext = {
 
 function stage2Frontier(request: { readonly context?: unknown }): { readonly index: number; readonly stepId: string } | undefined {
   return (request.context as Stage2RequestContext | undefined)?.trustedInputs?.frontier;
+}
+
+function isElementBindingProposalRequest(request: { readonly prompt: string }): boolean {
+  return request.prompt.includes('Return one ElementBindingProposal outcome.');
+}
+
+function elementBindingProposal(request: { readonly context?: unknown }) {
+  const context = request.context as { readonly description?: string; readonly roleHint?: string; readonly accessibilityTree?: JsonValueT } | undefined;
+  const matches: { role: string; name: string }[] = [];
+  const visit = (value: JsonValueT): void => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return;
+    if (context !== undefined && typeof value.role === 'string' && typeof value.name === 'string'
+      && value.role === context.roleHint && value.name === context.description) {
+      matches.push({ role: value.role, name: value.name });
+    }
+    if (Array.isArray(value.children)) {
+      for (const child of value.children) visit(child);
+    }
+  };
+  if (context?.accessibilityTree !== undefined) visit(context.accessibilityTree);
+  const data = matches.length === 1
+    ? { outcome: 'found' as const, ...matches[0]! }
+    : { outcome: 'none' as const };
+  return { data, raw: JSON.stringify(data) };
 }
 
 /**
@@ -407,7 +441,7 @@ async function createScenario(options: {
         : createFakeUiExecutor(sessionFactory)),
       secrets: createFakeSecretsProvider(options.secrets ?? new Map()),
       resolveAiExecutor: vi.fn(async () => options.aiExecutor ?? createFakeAiExecutor({
-        execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }),
+        execute: async () => ({ data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' }),
       })),
       allocateCallId: createCallIdAllocator(),
       events: createRecordingEventSink().sink,
@@ -601,9 +635,9 @@ describe('heal state-machine contract', () => {
       B: { surface: 'web', baseUrl: 'https://b.example.test' },
     } as const;
     const plan = {
-      schemaVersion: 4,
+      schemaVersion: PLAN_SCHEMA_VERSION,
       source: { inputsDigest: computeInputsDigest({
-        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
+        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: PLAN_SCHEMA_VERSION,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions: definitions as unknown as Parameters<typeof computeInputsDigest>[0]['targetDefinitions'],
@@ -777,7 +811,11 @@ describe('heal state-machine contract', () => {
 
   it('aborts at the initial live measurement when its replay carries an integrity violation', async () => {
     const violation = new IntegrityViolationError('initial live evidence escaped containment');
-    const scenario = await createScenario();
+    const sessionEntries = new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }]]);
+    const scenario = await createScenario({ sessionEntries });
+    replayRunObserver.beforeRun = (_deps, _storage, options) => {
+      if (options.resolve === true) sessionEntries.set(elementRefKey(SUBMIT), { exists: true, currentFingerprint: FINGERPRINT });
+    };
     let injected = false;
     let injectionCount = 0;
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
@@ -817,10 +855,30 @@ describe('heal state-machine contract', () => {
 
   it('aborts at the Stage-1 replay when its replay carries an integrity violation', async () => {
     const violation = new IntegrityViolationError('stage one evidence escaped containment');
+    const sessionEntries = liveEntries(SUBMIT);
+    const quotedSpan = { startLine: 3, startColumn: 9, endLine: 3, endColumn: 15 } as const;
     const scenario = await createScenario({
+      steps: [Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: {
+        description: 'Submit', roleHint: 'button', sourceSpan: quotedSpan,
+        quote: { text: 'Submit', sourceSpan: quotedSpan },
+      } })],
+      prompt: PROMPT.replace('submit', '"Submit"'),
       grounding: {},
+      sessionEntries,
       aiExecutor: createFakeAiExecutor({ execute: async () => { throw new AiExecutorUnavailableError('AI is unavailable.'); } }),
     });
+    let performed = false;
+    scenario.sessionFactory.mockImplementation(() => createFakeBrowserSession(sessionEntries, {
+      baseUrl: TARGETS.web.baseUrl,
+      currentUrl: TARGETS.web.baseUrl,
+      snapshot: healSnapshot(sessionEntries),
+      onPerform() {
+        if (!performed) {
+          performed = true;
+          throw new Error('The first live action failed before Stage 1 retried it.');
+        }
+      },
+    }));
     const calls = injectReplayIntegrityViolation((call, options) => call === 3 && options.resolve === true, violation);
 
     const result = await heal(scenario.deps, OPTIONS);
@@ -846,8 +904,8 @@ describe('heal state-machine contract', () => {
         [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{"confirmed":true}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: response, raw: JSON.stringify(response) } }),
       assertOutcome: { passed: false, message: 'Dashboard is absent.' },
     });
@@ -968,7 +1026,8 @@ describe('heal state-machine contract', () => {
     generateRunObserver.afterGenerate = (outcome) => { generatedItem = outcome.results[0]; };
     const scenario = await createScenario({
       grounding: {},
-      aiExecutor: createFakeAiExecutor({ execute: async () => {
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         if (generation++ === 0) return { data: invalidStage2, raw: '{}' };
         throw violation;
       } }),
@@ -988,7 +1047,8 @@ describe('heal state-machine contract', () => {
     generateRunObserver.afterGenerate = (outcome) => { generatedItem = outcome.results[0]; };
     const scenario = await createScenario({
       grounding: {},
-      aiExecutor: createFakeAiExecutor({ execute: async () => {
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         if (generation++ === 0) return { data: invalidStage2, raw: '{}' };
         throw violation;
       } }),
@@ -1010,7 +1070,8 @@ describe('heal state-machine contract', () => {
     generateRunObserver.afterGenerate = (outcome) => { generatedItem = outcome.results[0]; };
     const scenario = await createScenario({
       grounding: {},
-      aiExecutor: createFakeAiExecutor({ execute: async () => {
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         if (generation++ === 0) return { data: invalidStage2, raw: '{}' };
         throw violation;
       } }),
@@ -1031,7 +1092,8 @@ describe('heal state-machine contract', () => {
     generateRunObserver.afterGenerate = () => { afterGenerateRan = true; };
     const scenario = await createScenario({
       grounding: {},
-      aiExecutor: createFakeAiExecutor({ execute: async () => {
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => {
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         if (generation++ === 0) return { data: invalidStage2, raw: '{}' };
         throw new Error('The mocked generate() rejection must happen before this executor call.');
       } }),
@@ -1192,7 +1254,7 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         return { data: generation++ === 0 ? stage2NoAdvance : stage3Pass, raw: '{}' };
       } }),
     });
@@ -1608,6 +1670,7 @@ describe('heal state-machine contract', () => {
   it('replaces a wrong-kind AI grounding entry when Stage 1 re-resolves an element-consuming step', async () => {
     const sessionEntries = liveEntries(SUBMIT);
     const scenario = await createScenario({
+      steps: CONFIRMED_SUBMIT_STEPS,
       sessionEntries,
       grounding: {
         'click-submit': {
@@ -1708,7 +1771,7 @@ describe('heal state-machine contract', () => {
 
   it('keeps the plan digest unchanged while Stage 1 re-resolves one changed element grounding entry', async () => {
     const sessionEntries = liveEntries(SUBMIT);
-    const scenario = await createScenario({ sessionEntries });
+    const scenario = await createScenario({ steps: CONFIRMED_SUBMIT_STEPS, sessionEntries });
     const originalPlanDigest = computePlanDigest(scenario.plan);
     const result = await heal(scenario.deps, OPTIONS);
 
@@ -1749,7 +1812,7 @@ describe('heal state-machine contract', () => {
   });
 
   it('describes buffered repairs by their concrete path without exposing stage labels', async () => {
-    const groundingOnly = await createScenario({ sessionEntries: liveEntries(SUBMIT) });
+    const groundingOnly = await createScenario({ steps: CONFIRMED_SUBMIT_STEPS, sessionEntries: liveEntries(SUBMIT) });
     const regeneratedTail = await createScenario({
       steps: [
         Step.parse({ id: 'click-password', kind: 'action', target: 'web', action: 'click', intent: committedIntent(PASSWORD) }),
@@ -1764,8 +1827,8 @@ describe('heal state-machine contract', () => {
         [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{"confirmed":true}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : {
           data: {
             steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }],
@@ -1844,14 +1907,14 @@ describe('heal state-machine contract', () => {
 
   it('accepts an allowed, non-colliding Stage-2 secret replacement', async () => {
     const events = createRecordingEventSink();
-    const response = { steps: [{ id: 'repair-me', kind: 'action', target: 'web', action: 'fill-secret', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] };
+    const response = { steps: [{ id: 'repair-me', kind: 'action', target: 'web', action: 'fill-secret', intent: generatedIntent(REPAIRED_SUBMIT), secret: { allowedName: 'continue' } }], ambiguities: [] };
     const scenario = await createScenario({
       steps: [Step.parse({ id: 'repair-me', kind: 'action', target: 'web', action: 'fill-secret', intent: committedIntent(SUBMIT), secretRef: '{{secrets.continue}}' })],
       grounding: {},
       sessionEntries: liveEntries(REPAIRED_SUBMIT),
       secrets: new Map([['{{secrets.continue}}', 'correct-horse-battery-staple']]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{"confirmed":true}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: response, raw: JSON.stringify(response) } }),
     });
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['continue'] } }, events: events.sink }, OPTIONS);
@@ -1862,8 +1925,8 @@ describe('heal state-machine contract', () => {
 
   it('reuses one successfully resolved executor across tail repair and full regeneration', async () => {
     const executor = createFakeAiExecutor({ execute: async (request) => {
-      if (request.prompt.startsWith('Confirm whether')) {
-        return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+      if (isElementBindingProposalRequest(request)) {
+        return elementBindingProposal(request);
       }
       return stage2Frontier(request) === undefined
         ? {
@@ -1913,8 +1976,8 @@ describe('heal state-machine contract', () => {
   });
 
   it('propagates an unclassified Stage-2 resolver failure as a case-scoped unexpected crash without Stage 3', async () => {
-    const executor = createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-      ? { data: { confirmed: true }, raw: '{"confirmed":true}' }
+    const executor = createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request)
       : {
         data: { steps: [{ id: 'regenerated-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] },
         raw: '{}',
@@ -1944,9 +2007,8 @@ describe('heal state-machine contract', () => {
 
   it('propagates an initial Stage-2 resolver failure as a case-scoped unexpected crash without Stage 3', async () => {
     const scenario = await createScenario({
-      sessionEntries: new Map([
-        [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
-      ]),
+      steps: [Step.parse({ id: 'repair-me', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
+      grounding: {},
     });
     const resolveAiExecutor = vi.fn(async () => { throw new Error('Provider is temporarily unavailable.'); });
 
@@ -2284,6 +2346,18 @@ describe('heal state-machine contract', () => {
     let observedCandidateBytes = false;
     let observedCandidateGroundingBytes = false;
     let artifactsObservedAtRejection: Promise<readonly [string, string]> | undefined;
+    replayRunObserver.beforeRun = async (_deps, storage, options) => {
+      if (options.resolve !== true) return;
+      const plan = PlanDocument.parse(JSON.parse(await storage.readText(PLAN)));
+      const repairStep = plan.steps.find((step) => step.id === 'repair-me');
+      if (repairStep?.kind !== 'action' || repairStep.action !== 'click' || repairStep.intent.description !== REPAIRED_SUBMIT.name) return;
+      // Stage a speculative second artifact so the rejection must restore both overlay paths.
+      await storage.writeText(GROUNDING, toCanonicalArtifactText({
+        schemaVersion: GROUNDING_SCHEMA_VERSION,
+        planDigest: computePlanDigest(plan),
+        entries: { 'repair-me': groundingEntry(REPAIRED_SUBMIT, freshFingerprint(candidateEntries, REPAIRED_SUBMIT)) },
+      } as JsonValueT));
+    };
     replayRunObserver.afterRun = async (_deps, storage) => {
       completedReplays += 1;
       if (completedReplays === 2) stageTwoStorage = storage;
@@ -2313,11 +2387,14 @@ describe('heal state-machine contract', () => {
     };
     const response = { steps: [{ id: 'repair-me', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] };
     const scenario = await createScenario({
-      steps: [Step.parse({ id: 'repair-me', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) })],
+      steps: [
+        Step.parse({ id: 'repair-me', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+        Step.parse({ id: 'confirm-repair', kind: 'assert', target: 'web', check: 'text-visible', text: 'Dashboard', confirms: ['repair-me'] }),
+      ],
       grounding: {},
       sessionEntries: candidateEntries,
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{"confirmed":true}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: response, raw: JSON.stringify(response) } }),
       uiExecutor: vi.fn<HealDeps['uiExecutor']>(() => createFakeUiExecutor(() => createFakeBrowserSession(candidateEntries, {
         baseUrl: TARGETS.web.baseUrl,
@@ -2343,7 +2420,7 @@ describe('heal state-machine contract', () => {
   it('passes only the first accepted replacement in the next Stage-2 repairHistory', async () => {
     const replacementRequests: { readonly context?: JsonValueT }[] = [];
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: JsonValueT }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       const frontier = stage2Frontier(request);
       if (frontier !== undefined) {
         replacementRequests.push({ context: structuredClone(request.context!) });
@@ -2408,8 +2485,8 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) {
-          return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        if (isElementBindingProposalRequest(request)) {
+          return elementBindingProposal(request);
         }
         const response = call++ === 0 ? stage2Invalid : stage3Replacement;
         return { data: response, raw: JSON.stringify(response) };
@@ -2479,8 +2556,8 @@ describe('heal state-machine contract', () => {
         id: 'committed-secret', kind: 'action', target: 'web', action: 'fill-secret', intent: committedIntent(PASSWORD), secretRef: '{{secrets.password}}',
       })], grounding: {}, secrets: new Map([['{{secrets.password}}', 'value']]),
       sessionEntries: liveEntries(REPAIRED_PASSWORD),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' } }),
     });
     let staged: { readonly plan: string; readonly grounding: string } | undefined;
@@ -2526,8 +2603,8 @@ describe('heal state-machine contract', () => {
       secrets: [{ ref: '{{secrets.persisted.ai.ref}}' }],
     });
     const executor = createFakeAiExecutor({
-      execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{}' }
+      execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : stage2Frontier(request) === undefined
           ? { data: { steps: [], ambiguities: [] }, raw: '{}' }
           : { data: replacement, raw: JSON.stringify(replacement) },
@@ -2614,7 +2691,7 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         const frontier = stage2Frontier(request);
         const data = frontier === undefined
           ? stage3ChangedSet
@@ -2674,8 +2751,8 @@ describe('heal state-machine contract', () => {
       grounding: {},
       secrets: new Map([['{{secrets.password}}', 'value']]),
       sessionEntries: liveEntries(REPAIRED_PASSWORD),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: stage2Frontier(request) === undefined ? candidate : stage2Invalid, raw: '{}' } }),
     });
     const updateTextExclusive = vi.fn(scenario.storage.updateTextExclusive);
@@ -2723,7 +2800,7 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         const frontier = stage2Frontier(request);
         const data = frontier === undefined ? stage3Candidate : frontier.index === 0 ? stage2Repair : stage2Invalid;
         return { data, raw: JSON.stringify(data) };
@@ -2873,8 +2950,8 @@ describe('heal state-machine contract', () => {
       ],
       sessionEntries,
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) {
-          return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        if (isElementBindingProposalRequest(request)) {
+          return elementBindingProposal(request);
         }
         const response = repairCall++ === 0 ? stage2Invalid : stage3Replacement;
         return { data: response, raw: JSON.stringify(response) };
@@ -2890,7 +2967,7 @@ describe('heal state-machine contract', () => {
       schemaVersion: GROUNDING_SCHEMA_VERSION,
       planDigest: computePlanDigest(secondPlan),
       entries: {
-        'click-continue': { ...groundingEntry(SUBMIT, freshFingerprint(sessionEntries, REPAIRED_SUBMIT)) },
+        'click-continue': { ...groundingEntry(REPAIRED_SUBMIT, freshFingerprint(sessionEntries, REPAIRED_SUBMIT)) },
       },
     };
     const secondPlanPath = scenario.deps.layout.planPathFor(second);
@@ -2942,8 +3019,8 @@ describe('heal state-machine contract', () => {
         [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) {
-          return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        if (isElementBindingProposalRequest(request)) {
+          return elementBindingProposal(request);
         }
         const response = call++ === 0 ? stage2Invalid : stage3Replacement;
         return { data: response, raw: JSON.stringify(response) };
@@ -3039,6 +3116,7 @@ describe('heal state-machine contract', () => {
 
   it('returns a commit capability only for healed or partially-healed candidates and never flushes during heal()', async () => {
     const scenario = await createScenario({
+      steps: CONFIRMED_SUBMIT_STEPS,
       sessionEntries: liveEntries(SUBMIT),
     });
     const result = await heal(scenario.deps, { ...OPTIONS, dryRun: false });
@@ -3050,7 +3128,7 @@ describe('heal state-machine contract', () => {
   });
 
   it('returns an integration-level zero-write integrity failure when the plan changes between heal preflight and commit', async () => {
-    const scenario = await createScenario({ sessionEntries: liveEntries(SUBMIT) });
+    const scenario = await createScenario({ steps: CONFIRMED_SUBMIT_STEPS, sessionEntries: liveEntries(SUBMIT) });
     const result = await heal(scenario.deps, { ...OPTIONS, dryRun: false });
     const commit = result.commits.get(OPTIONS.files[0]!);
     expect(commit).toBeDefined();
@@ -3100,7 +3178,7 @@ describe('heal state-machine contract', () => {
 
   it('returns an integration-level zero-write integrity failure when the plan is deleted between heal preflight and commit', async () => {
     const deletable = createDeletableStorage();
-    const scenario = await createScenario({ storage: deletable.storage, sessionEntries: liveEntries(SUBMIT) });
+    const scenario = await createScenario({ steps: CONFIRMED_SUBMIT_STEPS, storage: deletable.storage, sessionEntries: liveEntries(SUBMIT) });
     const result = await heal(scenario.deps, { ...OPTIONS, dryRun: false });
     const commit = result.commits.get(OPTIONS.files[0]!);
     expect(commit).toBeDefined();
@@ -3325,8 +3403,8 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT, AFTER_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) {
-          return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        if (isElementBindingProposalRequest(request)) {
+          return elementBindingProposal(request);
         }
         const repair: GeneratedPlanResponse = {
           steps: [
@@ -3353,7 +3431,7 @@ describe('heal state-machine contract', () => {
 
   it('adopts two advancing frontier replacements and settles healed without a Stage 3 request', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       const frontier = stage2Frontier(request);
       return {
         data: {
@@ -3380,17 +3458,17 @@ describe('heal state-machine contract', () => {
     const result = await heal(scenario.deps, OPTIONS);
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed', stopReason: 'settled', finalFirstFailureIndex: 2 });
     expect(execute.mock.calls.filter(([request]) => stage2Frontier(request) !== undefined)).toHaveLength(2);
-    expect(execute.mock.calls.filter(([request]) => !request.prompt.startsWith('Confirm whether') && stage2Frontier(request) === undefined)).toHaveLength(0);
+    expect(execute.mock.calls.filter(([request]) => !isElementBindingProposalRequest(request) && stage2Frontier(request) === undefined)).toHaveLength(0);
   });
 
   it('discards a non-advancing candidate then makes exactly one Stage 3 request and no further Stage 2 request', async () => {
-    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => request.prompt.startsWith('Confirm whether')
-      ? { data: { confirmed: true }, raw: '{}' }
+    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request)
       : { data: stage2Frontier(request) === undefined ? { steps: [{ id: 'full', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] } : { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(SUBMIT) }], ambiguities: [] }, raw: '{}' });
     const scenario = await createScenario({ sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT)]), aiExecutor: createFakeAiExecutor({ execute }) });
     await heal(scenario.deps, OPTIONS);
     expect(execute.mock.calls.filter(([request]) => stage2Frontier(request) !== undefined)).toHaveLength(1);
-    expect(execute.mock.calls.filter(([request]) => !request.prompt.startsWith('Confirm whether') && stage2Frontier(request) === undefined)).toHaveLength(1);
+    expect(execute.mock.calls.filter(([request]) => !isElementBindingProposalRequest(request) && stage2Frontier(request) === undefined)).toHaveLength(1);
   });
 
   it('routes a replay revisit of a visited frontier to Stage 3 without a second dispatch at that index', async () => {
@@ -3404,7 +3482,7 @@ describe('heal state-machine contract', () => {
       if (replayCount === 2) sessionEntries.get(elementRefKey(SUBMIT))!.exists = false;
     };
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       const frontier = stage2Frontier(request);
       return {
         data: {
@@ -3433,7 +3511,7 @@ describe('heal state-machine contract', () => {
     });
     await heal(scenario.deps, OPTIONS);
     expect(execute.mock.calls.filter(([request]) => stage2Frontier(request) !== undefined)).toHaveLength(1);
-    expect(execute.mock.calls.filter(([request]) => !request.prompt.startsWith('Confirm whether') && stage2Frontier(request) === undefined)).toHaveLength(1);
+    expect(execute.mock.calls.filter(([request]) => !isElementBindingProposalRequest(request) && stage2Frontier(request) === undefined)).toHaveLength(1);
   });
 
   it('dispatches Stage 2 and Stage 3 for launch failure evidence at index 0', async () => {
@@ -3445,7 +3523,7 @@ describe('heal state-machine contract', () => {
 
   it('reports attempt-limit before progress when the initial live measurement consumes the allowance', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       if (stage2Frontier(request)?.index === 0) return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
       throw new Error('Stage 3 remains unresolved.');
     });
@@ -3468,7 +3546,7 @@ describe('heal state-machine contract', () => {
   it('keeps attempt-limit precedence when the initial live measurement embeds a repairable navigation error', async () => {
     const violation = new PlanNavigationResolutionError('The initial live measurement retained a repairable navigation error.');
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       if (stage2Frontier(request)?.index === 0) return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
       throw new Error('Stage 3 remains unresolved.');
     });
@@ -3500,7 +3578,7 @@ describe('heal state-machine contract', () => {
 
   it('reports partially-healed when a first Stage 2 advance exhausts the next frontier allowance', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       const frontier = stage2Frontier(request);
       if (frontier?.index === 0) return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
       return { data: { steps: [{ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_AFTER_SUBMIT) }], ambiguities: [] }, raw: '{}' };
@@ -3518,14 +3596,14 @@ describe('heal state-machine contract', () => {
       aiExecutor: createFakeAiExecutor({ execute }),
     });
 
-    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 2 } } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 5 } } }, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'partially-healed', stopReason: 'attempt-limit' });
   });
 
   it('reports settled when an attempt-limit Stage 3 replay fully heals the plan', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       const frontier = stage2Frontier(request);
       return {
         data: {
@@ -3576,7 +3654,7 @@ describe('heal state-machine contract', () => {
   it('returns unresolved at a deadline before progress without entering Stage 3', async () => {
     let expired = false;
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       expired = true;
       return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
     });
@@ -3602,9 +3680,9 @@ describe('heal state-machine contract', () => {
     let stageTwoGenerationCompleted = false;
     let stageTwoCandidateReplayed = false;
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) {
+      if (isElementBindingProposalRequest(request)) {
         expect(stageTwoGenerationCompleted).toBe(true);
-        return { data: { confirmed: true }, raw: '{}' };
+        return elementBindingProposal(request);
       }
       if (stage2Frontier(request) !== undefined) stageTwoGenerationCompleted = true;
       return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
@@ -3631,7 +3709,7 @@ describe('heal state-machine contract', () => {
     expect(outcome).toMatchObject({ repairOutcome: 'partially-healed', stopReason: 'deadline' });
     expect(stageTwoGenerationCompleted).toBe(true);
     expect(stageTwoCandidateReplayed).toBe(true);
-    expect(execute.mock.calls.some(([request]) => request.prompt.startsWith('Confirm whether'))).toBe(true);
+    expect(execute.mock.calls.some(([request]) => isElementBindingProposalRequest(request))).toBe(true);
     const commit = result.commits.get(OPTIONS.files[0]!);
     await expect(commit?.commit()).resolves.toEqual({ outcome: 'committed' });
   });
@@ -3676,7 +3754,7 @@ describe('heal state-machine contract', () => {
 
   it('restores the best incremental candidate when Stage 3 replay does not fully pass', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       if (stage2Frontier(request) !== undefined) {
         return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
       }
@@ -3713,7 +3791,7 @@ describe('heal state-machine contract', () => {
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => {
-        if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{"confirmed":true}' };
+        if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
         const response = stage2Frontier(request) === undefined ? stage3Candidate : stage2Invalid;
         return { data: response, raw: JSON.stringify(response) };
       } }),
@@ -3756,7 +3834,7 @@ describe('heal state-machine contract', () => {
   it('classifies a no-Stage-3 measurement that reaches plan length as healed under R11', async () => {
     const scenario = await createScenario({
       sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT)]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether') ? { data: { confirmed: true }, raw: '{}' } : { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' } }),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request) ? elementBindingProposal(request) : { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' } }),
     });
     const result = await heal(scenario.deps, OPTIONS);
     const outcome = result.outcome.results[0]!;
@@ -3766,7 +3844,7 @@ describe('heal state-machine contract', () => {
 
   it('classifies a no-Stage-3 measurement that advances but still fails as partially-healed under R11', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       if (stage2Frontier(request)?.index === 0) {
         return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
       }
@@ -3797,22 +3875,27 @@ describe('heal state-machine contract', () => {
   });
 
   it.each(['none', 'ai-retrace', 'element-reground'] as const)('varies provider dispatches by %s grounding recovery mode', async (mode) => {
-    const execute = vi.fn(async (_request: { readonly context?: unknown }) => ({ data: { confirmed: false }, raw: '{}' }));
+    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
+      if (mode !== 'element-reground') throw new AiExecutorUnavailableError('No replacement candidate is available.');
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
+      if (stage2Frontier(request) !== undefined) return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
+      throw new AiExecutorUnavailableError('No full-plan candidate is available.');
+    });
     const executeAgentic = vi.fn(async () => ({ outcome: 'failure' as const }));
     const step = mode === 'none'
       ? Step.parse({ id: 'navigate', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })
       : mode === 'ai-retrace'
         ? AI_STEP
         : Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) });
-    const scenario = await createScenario({ steps: [step], grounding: {}, aiExecutor: createFakeAiExecutor({ execute, executeAgentic }) });
-    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 1 } } }, OPTIONS);
+    const scenario = await createScenario({ steps: [step], grounding: {}, ...(mode === 'element-reground' ? { sessionEntries: liveEntries(REPAIRED_SUBMIT) } : {}), aiExecutor: createFakeAiExecutor({ execute, executeAgentic }) });
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: mode === 'element-reground' ? 4 : 1 } } }, OPTIONS);
     const replacementDispatches = execute.mock.calls.filter(([request]) => stage2Frontier(request) !== undefined);
     const nonReplacementDispatches = execute.mock.calls.filter(([request]) => stage2Frontier(request) === undefined);
     const expected = mode === 'none'
       ? { replacement: 1, nonReplacement: 1, aiRetrace: 0 }
       : mode === 'ai-retrace'
         ? { replacement: 0, nonReplacement: 1, aiRetrace: 1 }
-        : { replacement: 1, nonReplacement: 1, aiRetrace: 0 };
+        : { replacement: 1, nonReplacement: 3, aiRetrace: 0 };
     expect({ replacement: replacementDispatches.length, nonReplacement: nonReplacementDispatches.length, aiRetrace: executeAgentic.mock.calls.length }).toEqual(expected);
     expect(result.outcome.results[0]?.aiCalls).toBe(expected.replacement + expected.nonReplacement + expected.aiRetrace);
   });
@@ -3974,7 +4057,7 @@ describe('heal state-machine contract', () => {
 
   it('heals an element-reground frontier through Stage 2 and retains the proposed replacement', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
     });
     const scenario = await createScenario({
@@ -4000,7 +4083,7 @@ describe('heal state-machine contract', () => {
   ] as const)('%s for an element-reground Stage 2 candidate', async (_name, action, shouldCommit) => {
     const events = createRecordingEventSink();
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       if (stage2Frontier(request) === undefined) throw new AiResponseInvalidError('No full-plan candidate is available.');
       return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action, ...(action === 'click' ? { intent: generatedIntent(REPAIRED_SUBMIT) } : { url: '/different-obligation' }) }], ambiguities: [] }, raw: '{}' };
     });
@@ -4034,7 +4117,7 @@ describe('heal state-machine contract', () => {
         expired = true;
         return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
       }
-      return { data: { confirmed: true }, raw: '{}' };
+      return elementBindingProposal(request);
     });
     const scenario = await createScenario({
       sessionEntries: new Map([
@@ -4063,7 +4146,16 @@ describe('heal state-machine contract', () => {
       deniedPhaseStorage!.readText(PLAN),
       deniedPhaseStorage!.readText(GROUNDING),
     ])).resolves.toEqual([originalPlan, originalGrounding]);
+    expect(execute.mock.calls.map(([request]) => stage2Frontier(request) !== undefined)).toEqual([false, false, true]);
     expect(events.emitted().filter((event) => event.type === 'ai-call' && event.stepId === 'click-submit')).toEqual([
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1, stepId: 'click-submit',
+      }),
+      expect.objectContaining({
+        type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
+        attempt: 1, attemptLimit: 1, stepId: 'click-submit',
+      }),
       expect.objectContaining({
         type: 'ai-call', callId: expect.stringMatching(/^ai-\d+$/), file: OPTIONS.files[0],
         attempt: 1, attemptLimit: 1, stepId: 'click-submit',
@@ -4075,7 +4167,7 @@ describe('heal state-machine contract', () => {
   it('starts the case deadline after preflight and does not charge preflight elapsed time', async () => {
     let preflightFinished = false;
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
     });
     const resolveAiExecutor = vi.fn(async () => createFakeAiExecutor({ execute }));
@@ -4122,8 +4214,8 @@ describe('heal state-machine contract', () => {
         [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' } }),
     });
     const secondPlan = scenario.deps.layout.planPathFor(second);
@@ -4458,8 +4550,8 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
   it('keeps every measured HealCaseOutcome field except durationMs mode-independent across fresh dry-run and apply fixtures', async () => {
     const buildFixture = () => ({
       sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT)]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' } }),
     });
     const dryRunScenario = await createScenario(buildFixture());
@@ -4519,8 +4611,8 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
   it('records an accepted Stage 2 repair before proceeding', async () => {
     const scenario = await createScenario({
       sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT)]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => request.prompt.startsWith('Confirm whether')
-        ? { data: { confirmed: true }, raw: '{}' }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
         : { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' } }),
     });
     const result = await heal(scenario.deps, OPTIONS);
@@ -4539,8 +4631,8 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
         [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
         ...liveEntries(REPAIRED_SUBMIT),
       ]),
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: request.prompt.startsWith('Confirm whether')
-        ? { confirmed: true }
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({ data: isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request).data
         : stage2Frontier(request) === undefined
           ? { steps: [{ id: 'regenerated-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }
           : { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'navigate', url: '/ignored' }], ambiguities: [] }, raw: '{}' }) }),
@@ -4604,8 +4696,8 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
 
   it('interrupts after the first completed repair without attempting the second frontier', async () => {
     const controller = new AbortController();
-    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => request.prompt.startsWith('Confirm whether')
-      ? { data: { confirmed: true }, raw: '{}' }
+    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request)
       : { data: { steps: stage2Frontier(request)?.index === 0
         ? [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }]
         : [{ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_AFTER_SUBMIT) }], ambiguities: [] }, raw: '{}' });
@@ -4631,7 +4723,7 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
 
   it('omits only the attempt-limit-denied Stage 2 entry while retaining non-chargeable and Stage 3 entries', async () => {
     const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => {
-      if (request.prompt.startsWith('Confirm whether')) return { data: { confirmed: true }, raw: '{}' };
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
       if (stage2Frontier(request)?.index === 0) return { data: { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }, raw: '{}' };
       throw new Error('Stage 3 remains unresolved.');
     });
@@ -4657,7 +4749,7 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
       } as JsonValueT));
     };
 
-    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 1 } } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 300_000, maxStepRepairs: 5 } } }, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ stopReason: 'attempt-limit' });
     expect(result.outcome.results[0]?.repairTrace).toEqual([
@@ -4669,8 +4761,8 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
   });
 
   it('preserves repair trace emission order across multiple frontiers', async () => {
-    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => request.prompt.startsWith('Confirm whether')
-      ? { data: { confirmed: true }, raw: '{}' }
+    const execute = vi.fn(async (request: { readonly prompt: string; readonly context?: unknown }) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request)
       : { data: { steps: stage2Frontier(request)?.index === 0
         ? [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }]
         : [{ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_AFTER_SUBMIT) }], ambiguities: [] }, raw: '{}' });

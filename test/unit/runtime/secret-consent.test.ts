@@ -72,13 +72,13 @@ describe('createInteractiveSecretConsent', () => {
       ...request(),
       items: [{
         file: 'login.test.md',
-        uses: [{ name: 'password', stepId: 'fill-password', ref: '{{secrets.password}}', selectionSource: 'target-slug', target: { strategy: 'accessibility', role: 'textbox', name: 'Password' }, envVar: 'PASSWORD' }],
+        uses: [{ name: 'password', stepId: 'fill-password', ref: '{{secrets.password}}', selectionSource: 'target-slug', target: { description: 'Password', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 9 }, roleHint: 'textbox' }, envVar: 'PASSWORD' }],
       }],
     } as unknown as ConsentRequest);
     input.end('y\n');
 
     await expect(pending).resolves.toEqual({ kind: 'allowed', renames: [] });
-    expect(captured.text()).toContain('fill-secret → textbox "Password"');
+    expect(captured.text()).toContain('fill-secret → Password (textbox)');
   });
 
   it.each(['y', 'yes'] as const)('accepts every remaining item globally for %s', async (answer) => {

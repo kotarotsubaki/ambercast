@@ -77,6 +77,7 @@ describe('TEST-I2: provider element-intent attribution (SPEC-I2, SPEC-I3)', () =
     ['zero-width quote span', proposal({ quote: { ...proposal().quote!, endColumn: 2 } }), SOURCE, 'quote-span-invalid'],
     ['quote text differs by one character', proposal({ quote: { ...proposal().quote!, text: 'ログイソ' } }), SOURCE, 'quote-text-mismatch'],
     ['opening and closing marks are unpaired', proposal({ citation: '「ログイン”', endColumn: 7 }), '「ログイン”', 'quote-unpaired'],
+    ['quote ends at source end without marks', proposal({ citation: ' ログイン', endColumn: 6 }), ' ログイン', 'quote-unpaired'],
     ['quote lies outside intent span', proposal({ startColumn: 7, citation: 'ボタンを押す' }), SOURCE, 'quote-outside-intent'],
     ['quote contains whitespace only', proposal({ citation: '「   」ボタンを押す', endColumn: 12, quote: { startAnchor: 'L1', startColumn: 2, endAnchor: 'L1', endColumn: 5, text: '   ' } }), '「   」ボタンを押す', 'quote-whitespace-only'],
   ] as const)('reports only %s', (_name, generated, source, code) => {

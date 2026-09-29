@@ -49,6 +49,16 @@ describe('validateConfirms (TEST-I4)', () => {
       .toEqual([issue('confirms-duplicate', 1, 1)]);
   });
 
+  it('reports a repeated unknown ID only as a duplicate on its second entry', () => {
+    expect(validateConfirms([assertion('check', ['missing', 'missing'])]))
+      .toEqual([issue('confirms-unknown-step', 0, 0), issue('confirms-duplicate', 0, 1)]);
+  });
+
+  it('reports a repeated not-earlier ID only as a duplicate on its second entry', () => {
+    expect(validateConfirms([assertion('check', ['check', 'check'])]))
+      .toEqual([issue('confirms-not-earlier', 0, 0), issue('confirms-duplicate', 0, 1)]);
+  });
+
   it('reports a descending plan-order entry', () => {
     expect(validateConfirms([action('first'), action('second'), assertion('check', ['second', 'first'])]))
       .toEqual([issue('confirms-unsorted', 2, 1)]);

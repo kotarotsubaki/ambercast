@@ -76,7 +76,8 @@ function quoteIssues(
   const before = source[quoteBounds.start - 1];
   const after = source[quoteBounds.end];
   const pairs = new Map([['「', '」'], ['『', '』'], ['“', '”'], ['"', '"'], ["'", "'"]]);
-  if (before === undefined || pairs.get(before) !== after) {
+  const close = before === undefined ? undefined : pairs.get(before);
+  if (close === undefined || after !== close) {
     issues.push(issue('quote-unpaired', ['quote'], 'The quote is not surrounded by matching marks.'));
   }
   if (intentSpan !== undefined) {

@@ -83,6 +83,16 @@ export function validateConfirms(steps: readonly Step[]): ConfirmsValidationIssu
       const entryId = step.confirms[entryIndex]!;
       const path = ['steps', stepIndex, 'confirms', entryIndex] as const;
 
+      if (seenIds.has(entryId)) {
+        issues.push({
+          code: 'confirms-duplicate',
+          path,
+          message: `step id "${entryId}" is repeated in the confirms array`,
+        });
+        continue;
+      }
+      seenIds.set(entryId, entryIndex);
+
       // Check 1: Unknown step ID
       const referencedIndex = stepIndexMap.get(entryId);
       if (referencedIndex === undefined) {
@@ -104,7 +114,6 @@ export function validateConfirms(steps: readonly Step[]): ConfirmsValidationIssu
         });
         // Skip the next check for this entry (confirms-not-action)
         // But we still need to track for unsorted check
-        seenIds.set(entryId, seenIds.size);
         lastReferencedPlanIndex = referencedIndex;
         continue;
       }
@@ -124,19 +133,7 @@ export function validateConfirms(steps: readonly Step[]): ConfirmsValidationIssu
         });
       }
 
-      // Check 4 (separate): Detect duplicates - report on second (and further) occurrences
-      if (seenIds.has(entryId)) {
-        issues.push({
-          code: 'confirms-duplicate',
-          path,
-          message: `step id "${entryId}" is repeated in the confirms array`,
-        });
-        // Don't update lastReferencedPlanIndex for duplicates
-        continue;
-      }
-      seenIds.set(entryId, seenIds.size);
-
-      // Check 5 (separate): Must be in ascending plan order
+      // Check 4 (separate): Must be in ascending plan order
       // Only compare if this entry passed the earlier checks (known, earlier, valid-kind)
       // Report unsorted only if this is NOT a duplicate (i.e., new ID with wrong order)
       if (lastReferencedPlanIndex >= 0 && referencedIndex <= lastReferencedPlanIndex) {

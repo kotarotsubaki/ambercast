@@ -21,6 +21,8 @@ import {
   Fingerprint,
   GroundingDocument,
   GeneratedInstructionCriterion,
+  GeneratedElementIntent,
+  GeneratedQuotedElementIntent,
   GeneratedAiStep,
   GeneratedAiStepSecretUse,
   GeneratedFillSecretAction,
@@ -224,6 +226,11 @@ describe('TEST-I1 element intent schemas', () => {
   const sourceSpan = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 };
   const intent = { description: 'x', sourceSpan };
   const quote = { text: 'x', sourceSpan };
+  const generated = {
+    description: 'x', startAnchor: 'L1', startColumn: 1,
+    endAnchor: 'L1', endColumn: 2, citation: 'x',
+    quote: { startAnchor: 'L1', startColumn: 1, endAnchor: 'L1', endColumn: 2, text: 'x' },
+  };
 
   it.each([
     [0, false], [1, true], [4096, true], [4097, false],
@@ -244,6 +251,14 @@ describe('TEST-I1 element intent schemas', () => {
     expectAccepted(ElementIntent, { ...intent, quote });
     expectAccepted(QuotedElementIntent, { ...intent, quote });
     expectRejected(QuotedElementIntent, intent);
+  });
+
+  it('rejects secret literals in provider quote text, including required quotes', () => {
+    const withSecret = { ...generated, quote: { ...generated.quote, text: '{{secrets.x}}' } };
+    expectRejected(GeneratedElementIntent, withSecret);
+    expectRejected(GeneratedQuotedElementIntent, withSecret);
+    expectAccepted(GeneratedElementIntent, generated);
+    expectAccepted(GeneratedQuotedElementIntent, generated);
   });
 });
 

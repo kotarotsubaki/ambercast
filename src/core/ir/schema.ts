@@ -391,7 +391,7 @@ export const GeneratedElementIntent = z.strictObject({
     startColumn: GeneratedInstructionCriterion.shape.startColumn,
     endAnchor: GeneratedInstructionCriterion.shape.endAnchor,
     endColumn: GeneratedInstructionCriterion.shape.endColumn,
-    text: z.string().min(1).max(4096),
+    text: z.string().min(1).max(4096).regex(NO_SECRETS_LITERAL_PATTERN),
   }).optional(),
 });
 /** The parsed provider element-intent proposal. */

@@ -817,7 +817,7 @@ class PlaywrightUiExecutor implements UiExecutor {
    * creation independent of fixture availability and leaves navigation under
    * the run step that requested it.
    *
-   * Starting layer 1, if the target-provided `locale` is present, it is passed
+   * If the target-provided `locale` is present, it is passed
    * through to `newContext`; otherwise only `baseURL` is passed.
    *
    * @throws If Playwright cannot start a browser session for the target.

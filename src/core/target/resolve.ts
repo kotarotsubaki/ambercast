@@ -54,7 +54,7 @@ export function projectPlanTargets(
  * it must not alter a committed plan or make an otherwise fresh plan stale.
  * In v4 the projection uses web `surface` in place of `browser`, so executor
  * changes remain live runtime choices rather than Plan freshness changes.
- * Starting layer 1, the projection also conditionally includes `locale` when
+ * The projection also conditionally includes `locale` when
  * the resolved target config entry has one, mirroring how `secretSinkOrigins`
  * is already handled.
  */

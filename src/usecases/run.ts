@@ -391,6 +391,7 @@ async function callAiExecutor<T>(
   stepId: StepId,
   deadline: AiDeadline,
   invoke: () => Promise<T>,
+  onDuration?: (durationMs: number) => void,
 ): Promise<T> {
   const callId = context.allocateCallId();
   context.events.emit({
@@ -419,12 +420,14 @@ async function callAiExecutor<T>(
 
     throw error;
   } finally {
+    const durationMs = Math.max(0, Math.round(context.clock.monotonicMs() - startedMs));
     context.events.emit({
       type: 'ai-result',
       callId,
-      durationMs: Math.max(0, Math.round(context.clock.monotonicMs() - startedMs)),
+      durationMs,
       outcome: providerOutcome,
     });
+    onDuration?.(durationMs);
   }
 }
 
@@ -2634,7 +2637,7 @@ async function executeAiStep(
  *    fingerprint. A miss is `candidate-changed`; a hit permits the operation.
  *
  * Stage 3 yields a `candidate` BindingState; only a successful operation may
- * advance it to `acted`. A separate part of this migration promotes `acted`
+ * advance it to `acted`. `promoteConfirmedBindings` promotes `acted`
  * to `confirmed` after every step listing this action in `confirms` passes,
  * updates the in-memory entry with kind, locator, fingerprint, intentDigest,
  * and provenance, and performs case-end write-back once under the existing
@@ -2723,9 +2726,7 @@ async function groundedTarget(
     const executor = await context.resolveAiExecutor();
     const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
     const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ElementBindingProposal), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
-    const aiStartedMs = context.clock.monotonicMs();
-    const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request));
-    aiProposalMs = Math.max(0, Math.round(context.clock.monotonicMs() - aiStartedMs));
+    const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request), (durationMs) => { aiProposalMs = durationMs; });
     if (result.data.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
     const matches = matchQuotedCandidates(selected.tree as AccessibilityNode, { text: result.data.name, roleHint: result.data.role });
     if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected' });

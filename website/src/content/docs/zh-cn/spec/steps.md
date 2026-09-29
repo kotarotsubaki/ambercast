@@ -128,7 +128,7 @@ description: "每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严�
 | `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 grounding 的步骤。 | repo:src/core/ir/schema.ts:521,707 |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account overview"}
 ```
 ### `assert` / `url-matches` {#assert-url-matches}
 

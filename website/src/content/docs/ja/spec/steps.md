@@ -130,7 +130,7 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,707 |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account overview"}
 ```
 
 ### `assert` / `url-matches` {#assert-url-matches}

@@ -127,7 +127,7 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 | `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | Steps whose grounding this assertion confirms when it passes. | repo:src/core/ir/schema.ts:521,707 |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account overview"}
 ```
 
 ### `assert` / `url-matches` {#assert-url-matches}

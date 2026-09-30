@@ -1,11 +1,11 @@
 ---
 title: "Ambercast Plan 仕様"
-description: "本仕様は、ambercast 0.6.0 が受け付けるアーティファクトについて記述する。"
+description: "本仕様は、ambercast 0.7.0 が受け付けるアーティファクトについて記述する。"
 ---
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.6.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 3 を受け付ける。[src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65)
+本仕様は、ambercast 0.7.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 3 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## 規範的文言 {#normative-language}
 
@@ -28,10 +28,10 @@ flowchart LR
 
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
-| Plan `schemaVersion` | `5` | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58) |
-| Grounding `schemaVersion` | `3` | [src/core/ir/schema.ts:65](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L65) |
-| Fingerprint アルゴリズム | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-| Report `schemaVersion` | `3.8` | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
+| Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
+| Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
+| Fingerprint アルゴリズム | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:255 |
+| Report `schemaVersion` | `3.8` | repo:src/report/schema.ts:57 |
 
 ## 読解順序 {#reading-order}
 

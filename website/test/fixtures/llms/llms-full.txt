@@ -2262,7 +2262,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/overview/
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.6.0. The implementation accepts Plan schema version 5 and Grounding schema version 3. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L73)
+This specification describes the artifacts accepted by ambercast 0.7.0. The implementation accepts Plan schema version 5 and Grounding schema version 3. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L73)
 
 ## Normative language {#normative-language}
 
@@ -2757,7 +2757,7 @@ A consumer MUST recompute the Plan digest and accept Grounding only when it equa
 
 After successful replay of an existing trace, an implementation MUST leave that entry unchanged. It MUST write or overwrite an AI entry only after successful agentic execution with exact terminal success-criterion coverage. For a successful agentic execution ending in a snapshot or failed assertion, a cold path MUST write no entry and a fallback path MUST delete the stale entry that caused fallback. It MUST leave an existing entry untouched after agentic failure or abort. [src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2051-L2127)
 
-An element entry MUST be written or overwritten only when its binding reaches `confirmed`: every step naming that element step in its own committed `confirms` list must pass in the same case. An `acted`-only binding is discarded at write-back and never persisted. [src/usecases/run.ts:147-160](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L147-L160) [src/usecases/run.ts:2627-2633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2627-L2633)
+An element entry MUST be written or overwritten only when its binding reaches `confirmed`: at least one step must name that element step in its own non-empty committed `confirms` list, and every such step must pass in the same case. An `acted`-only binding is discarded at write-back and never persisted. [src/usecases/run.ts:147-160](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L147-L160) [src/usecases/run.ts:2627-2633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L2627-L2633)
 
 For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/usecases/run.ts#L1075)
 

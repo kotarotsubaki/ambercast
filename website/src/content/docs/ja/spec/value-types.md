@@ -10,7 +10,7 @@ description: "他のすべての章は、それらの形状を再記述するの
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | `TargetDefinition` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | シークレットマーカーを含まない、作成されたHTTP(S)ベースURL。 | [src/core/ir/schema.ts:37-38](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37-L38), [src/core/ir/schema.ts:165-166](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165-L166) |
-|  | `browser` | string | required | literal `chromium` | 選択されたブラウザ。 | [src/core/ir/schema.ts:167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L167) |
+|  | `surface` | string | required | literal `web` | 実行サーフェス。 | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | シークレットごとの許可されたオリジン。 | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L168) |
 |  | `locale` | string | optional | min length 1 | config loader が正規化した後の BCP-47 形式の locale タグ。 | repo:src/core/ir/schema.ts:210 |
 | `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L183) |

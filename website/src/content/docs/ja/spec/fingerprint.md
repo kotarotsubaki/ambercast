@@ -21,7 +21,7 @@ description: "`Fingerprint."
 
 ## 引用のマッチング {#quote-matching}
 
-`matchQuotedCandidates(tree, {text, roleHint?})` は、フィンガープリントのマッチングと同じ順序で、合成ルートの子からアクセシビリティツリーを1回だけ線形走査する。名前には同じ `normalizeName` 規則（NFC、連続する空白の縮約、トリム）を適用し、`roleHint` はロールと厳密に比較する。`{{run.x}}` 形式の文字列は補間せず、順序付きの `{role,name}` ペアまたは `snapshot-invalid` を返す。この関数は、初回バインディングの引用ベースの段階と、グラウンディングを使わない要素アサーションの評価で使用される。
+`matchQuotedCandidates(tree, {text, roleHint?})` は、フィンガープリントのマッチングと同じ順序で、合成ルートの子からアクセシビリティツリーを1回だけ線形走査する。名前には同じ `normalizeName` 規則（NFC、連続する空白の縮約、トリム）を適用し、`roleHint` はロールと厳密に比較する。`{{run.x}}` 形式の文字列は補間せず、順序付きの `{role,name}` ペア、または無効なツリーに対して `{kind: 'snapshot-invalid'}` を返す。この関数は、初回バインディングの引用ベースの段階と、グラウンディングを使わない要素アサーションの評価で使用される。
 
 ## 設計根拠 {#rationale}
 

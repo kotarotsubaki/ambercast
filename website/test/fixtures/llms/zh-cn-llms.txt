@@ -55,7 +55,7 @@
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/mcp/): MCP 服务器的启动、传输、关闭和客户端注册参考。
 
 ## PLAN SPECIFICATION
-- [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.6.0 接受的工件。
+- [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.7.0 接受的工件。
 - [计划文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/plan-document/): `PlanDocument` 是一个严格对象。
 - [步骤](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/steps/): 每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严格分支；每个分支都具有 `id: StepId`。
 - [值类型](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/): 所有其他章节必须（MUST）使用这些定义，而不是重新陈述其形态。

@@ -76,7 +76,7 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 既存のトレースの再生に成功した後、実装はそのエントリを変更せずそのまま残さなければならない（MUST）。実装は、終了成功基準の厳密なカバレッジを伴うエージェント実行に成功した後にのみ、AI エントリを書き込むか上書きしなければならない（MUST）。スナップショットまたは失敗したアサーションで終了する成功したエージェント実行の場合、コールドパスはいかなるエントリも書き込んではならず（MUST NOT）、フォールバックパスはフォールバックを引き起こした古いエントリを削除しなければならない（MUST）。実装は、エージェント実行の失敗または中断の後は、既存のエントリに手を触れずに残さなければならない（MUST）。[src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
 
-要素エントリは、そのバインディングが `confirmed` に達した場合にのみ書き込むか上書きしなければならない（MUST）。これは、少なくとも1つのステップがその要素ステップを自身の空でないコミット済み `confirms` リストに挙げ、該当するすべてのステップが同じケースで成功した状態を指す。`acted` のみに達したバインディングは書き戻し時に破棄され、永続化されない。
+要素エントリは、そのバインディングが `confirmed` に達した場合にのみ書き込むか上書きしなければならない（MUST）。これは、少なくとも1つのステップがその要素ステップを自身の空でないコミット済み `confirms` リストに挙げ、該当するすべてのステップが同じケースで成功した状態を指す。確認ステップが `element-visible` アサーションの場合、その成功は候補がちょうど1つ一致した場合にのみ有効な確認根拠となる。複数の候補が一致して成功しても、バインディングは確認されない。`acted` のみに達したバインディングは書き戻し時に破棄され、永続化されない。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
 
 すべての `TraceFillSecret` について、`secretRef` はそれを含む Plan の AI ステップのコミットされた `secrets[].ref` セットに属していなければならない（MUST）。違反は整合性の失敗（integrity failure）であり、エージェント実行にフォールバックしてはならない（MUST NOT）。[src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
 

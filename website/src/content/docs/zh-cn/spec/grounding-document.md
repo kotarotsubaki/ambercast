@@ -76,7 +76,7 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 
 在成功重放现有 trace 之后，实现必须（MUST）保持该条目不变。它必须（MUST）仅在伴随确切终结成功标准覆盖的智能体执行成功后，才写入或覆盖 AI 条目。对于以快照或失败断言结束的成功智能体执行，冷路径必须（MUST）不写入任何条目，而后备路径必须（MUST）删除导致后备的陈旧条目。在智能体执行失败或中止后，它必须（MUST）保持现有条目不变。 [src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
 
-元素条目仅在其绑定达到 `confirmed` 时才可写入或覆盖：至少一个步骤须在自身非空且已提交的 `confirms` 列表中指定该元素步骤，并且所有此类步骤均须在同一用例中通过。仅达到 `acted` 的绑定在回写时被丢弃，绝不持久化。
+元素条目仅在其绑定达到 `confirmed` 时才可写入或覆盖：至少一个步骤须在自身非空且已提交的 `confirms` 列表中指定该元素步骤，并且所有此类步骤均须在同一用例中通过。若确认步骤是 `element-visible` 断言，其通过仅在恰好一个候选元素匹配时才构成有效的确认依据；多个候选元素匹配时，即使断言通过，也不能确认绑定。仅达到 `acted` 的绑定在回写时被丢弃，绝不持久化。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
 
 对于每个 `TraceFillSecret`，`secretRef` 必须（MUST）属于所在 Plan AI 步骤已提交的 `secrets[].ref` 集合。违规属于完整性故障，且严禁（MUST NOT）回退到智能体执行。 [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
 

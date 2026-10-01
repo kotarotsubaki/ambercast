@@ -11,7 +11,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.7 |
+| `schemaVersion` | literal 3.8 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -84,10 +84,12 @@ Step and review execution structures share common result branches.
 
 | Branch | Required Fields | Optional Fields |
 | --- | --- | --- |
-| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable` on capture only, `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed` |
+| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable` on capture only, `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
 | `observed` | `note: fixed OBSERVED_NOTE`, `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+
+An action step may include `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` after local verification. `confirmed` reflects the value at case end; the timing fields appear only when those stages ran. Earlier binding failures instead report a case error.
 
 Every executed run or completed heal result has a `sessions` entry for each Plan Target. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means that Target's launch did not return a session, including when execution stopped before reaching its first step. A failed close leaves the case status unchanged.
 
@@ -118,9 +120,9 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" or "recoverable-miss" }`; for an element step, `missing` means no grounding entry exists and `recoverable-miss` means an existing entry does not match the current page. |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing", "recoverable-miss", "no-candidate", "ambiguous", "proposal-rejected", or "candidate-changed" }`; for an element step, `missing` means no grounding entry exists and `recoverable-miss` means an existing entry does not match the current page. |
 
-For generated and would-generate results, `secrets` identifies the resolved candidate secret uses; a dry-run `skipped-fresh` result also includes it. Optional `warnings` records non-fatal policy warnings, including the high-risk `secrets.allow: "*"` configuration. These fields make consent-related output observable without exposing secret values.
+For generated and would-generate results, `secrets` identifies the resolved candidate secret uses; a dry-run `skipped-fresh` result also includes it. Optional `warnings` records non-fatal policy warnings, including the high-risk `secrets.allow: "*"` configuration and `{ kind: "action-unconfirmed", stepId }` for an unconfirmed action. These fields make consent-related output observable without exposing secret values.
 
 ## Report persistence {#persistence}
 
@@ -134,16 +136,16 @@ The `reportPersistence` property tracks the write outcome:
 Only the writer is pinned to the current schema version; the viewer reads any 3.x report leniently.
 
 ```json
-{"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.8","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.7","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.8","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.7","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.8","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.7","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.8","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}

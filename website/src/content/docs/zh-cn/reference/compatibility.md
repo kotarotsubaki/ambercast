@@ -12,10 +12,11 @@ ambercast 在不同版本之间定义了明确的产物格式兼容性与重新�
 | `0.1.0` | `2` | `1`（尚未确认） | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
 
 0.2.0 版本变更了 provider 请求契约，但并未递增 Plan 的 `schemaVersion`。该变更改变了 `producerBundleFingerprint` 以及每个提示词的 `inputsDigest`，导致 0.1.0 版本的 Plan 变为陈旧状态（stale）。
 
-模式版本为 1 或 2 的 Plan 均不会就地迁移。`generate` 将其视为非 fresh，并重新生成当前版本的 Plan；`check` 以只读方式将其报告为 `stale`；`run` 和 `heal` 则以 `INTEGRITY_VIOLATION`（退出代码 4）拒绝它。Plan v3 使用同意和 `secrets.allow` 替代 v2 的 secret-grant provenance 模型；如需分步升级说明，请参阅[在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)。
+模式版本为 1 或 2 的 Plan 均不会就地迁移。`generate` 将其视为非 fresh，并重新生成当前版本的 Plan；`check` 以只读方式将其报告为 `stale`；`run` 和 `heal` 则以 `INTEGRITY_VIOLATION`（退出代码 4）拒绝它。Plan v3 使用同意和 `secrets.allow` 替代 v2 的 secret-grant provenance 模型。Plan v4 同样不会就地迁移，并受到相同的非 fresh、`stale` 和 `INTEGRITY_VIOLATION` 处理。Plan v5 将 v4 的元素引用替换为有来源依据的 intent，并增加 `confirms`；Grounding v3 将 v2 中仅含指纹的条目替换为 locator、fingerprint、intentDigest 和 provenance。如需分步升级说明，请参阅[在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)。
 
 ## 重新生成边界 {#regeneration-boundary}
 

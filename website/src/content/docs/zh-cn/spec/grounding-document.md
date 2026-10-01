@@ -5,11 +5,11 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 
 ## Grounding 形状 {#grounding-shape}
 
-`GroundingDocument` 是一个严格对象，绑定到恰好一个 Plan 摘要。 [src/core/ir/schema.ts:1367](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1367)
+`GroundingDocument` 是一个严格对象，绑定到恰好一个 Plan 摘要。 [repo:src/core/ir/schema.ts:1367]
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | 必填 | 字面量 `2` | Grounding 格式版本。 | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1368) |
+| `schemaVersion` | integer | 必填 | 字面量 `3` | Grounding 格式版本。 | repo:src/core/ir/schema.ts:73,1663 |
 | `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联计划的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 grounding。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
 
@@ -17,8 +17,11 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntry` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | [src/core/ir/schema.ts:1093](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1093) |
-|  | `fingerprint` | `Fingerprint` | 必填 | 严格 v2 指纹 | 无障碍邻域证据。 | [src/core/ir/schema.ts:1095](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1095) |
+| `ElementGroundingEntryV3` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | repo:src/core/ir/schema.ts:1362 |
+|  | `locator` | `AccessibilityElementRef` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | repo:src/core/ir/schema.ts:1363 |
+|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | repo:src/core/ir/schema.ts:1364 |
+|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | repo:src/core/ir/schema.ts:1365 |
+|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | repo:src/core/ir/schema.ts:1366 |
 | `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。 | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114) |
 |  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可重放的成功 trace。 | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1116) |
 
@@ -59,7 +62,7 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -72,6 +75,8 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 ## Plan digest 绑定 {#plan-digest}
 
 在成功重放现有 trace 之后，实现必须（MUST）保持该条目不变。它必须（MUST）仅在伴随确切终结成功标准覆盖的智能体执行成功后，才写入或覆盖 AI 条目。对于以快照或失败断言结束的成功智能体执行，冷路径必须（MUST）不写入任何条目，而后备路径必须（MUST）删除导致后备的陈旧条目。在智能体执行失败或中止后，它必须（MUST）保持现有条目不变。 [src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
+
+元素条目仅在其绑定达到 `confirmed` 时才可写入或覆盖：至少一个步骤须在自身非空且已提交的 `confirms` 列表中指定该元素步骤，并且所有此类步骤均须在同一用例中通过。若确认步骤是 `element-visible` 断言，其通过仅在恰好一个候选元素匹配时才构成有效的确认依据；多个候选元素匹配时，即使断言通过，也不能确认绑定。仅达到 `acted` 的绑定在回写时被丢弃，绝不持久化。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
 
 对于每个 `TraceFillSecret`，`secretRef` 必须（MUST）属于所在 Plan AI 步骤已提交的 `secrets[].ref` 集合。违规属于完整性故障，且严禁（MUST NOT）回退到智能体执行。 [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
 

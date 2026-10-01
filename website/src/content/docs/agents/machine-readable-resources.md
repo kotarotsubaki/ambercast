@@ -31,6 +31,6 @@ This page outlines published machine-readable resources and the rules governing 
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | available |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | available |
 
-`schemas/plan.v2.schema.json` and `schemas/plan.v3.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v4 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
+`schemas/plan.v2.schema.json`, `schemas/plan.v3.schema.json`, `schemas/plan.v4.schema.json`, and `schemas/grounding.v2.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v5 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
 
 Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)

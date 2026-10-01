@@ -7,6 +7,10 @@ description: "コミットされたすべてのステップは、`kind` によ�
 
 コミットされたすべてのステップは、`kind` によって判別される `Step` の厳格なブランチであり、すべてのブランチは `id: StepId` を持つ。[src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:742](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L742)
 
+### 確認参照 {#confirmation-references}
+
+アサーションまたは `ai` ステップは、成功時にそのグラウンディングを確認する、先行する `click`、`press`、`fill`、`fill-secret`、または `capture` ステップの ID を、空でない任意の `confirms` 配列に指定できる。未知の ID は `confirms-unknown-step`、同じ位置または後続のステップは `confirms-not-earlier`、対象外のステップは `confirms-not-action`、重複 ID は `confirms-duplicate`、Plan の順序に対して昇順でない ID は `confirms-unsorted` として報告される。ターゲットの同一性は検査しない。
+
 ### `action` / `click` {#action-click}
 
 | field | type | required/optional | constraint | description | evidence |
@@ -15,10 +19,10 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:438](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L438) |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `click` | Action discriminator. | [src/core/ir/schema.ts:439](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L439) |
-| `element` | `ElementRef` | required | accessibility branch currently | Element to click. | [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:540 |
 
 ```json
-{"id":"click-login","kind":"action","action":"click","target":"app","element":{"strategy":"accessibility","role":"button","name":"Log in"}}
+{"id":"click-login","kind":"action","action":"click","target":"app","intent":{"description":"Click Log in","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}}}
 ```
 
 ### `action` / `navigate` {#action-navigate}
@@ -44,11 +48,11 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:476](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L476) |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `press` | Action discriminator. | [src/core/ir/schema.ts:477](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L477) |
-| `element` | `ElementRef` | required | strict locator | Recipient. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:574-579 |
 | `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | Key. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
 
 ```json
-{"id":"submit","kind":"action","action":"press","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"key":"Enter"}
+{"id":"submit","kind":"action","action":"press","target":"app","intent":{"description":"Press Enter in Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21}},"key":"Enter"}
 ```
 
 ### `action` / `fill` {#action-fill}
@@ -59,11 +63,11 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:495](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L495) |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill` | Action discriminator. | [src/core/ir/schema.ts:496](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L496) |
-| `element` | `ElementRef` | required | strict locator | Field. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:594-599 |
 | `value` | `InterpolatableText` | required | no secret marker | Non-secret or run-state text. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
 
 ```json
-{"id":"fill-email","kind":"action","action":"fill","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Email"},"value":"a@example.test"}
+{"id":"fill-email","kind":"action","action":"fill","target":"app","intent":{"description":"Fill Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":11}},"value":"a@example.test"}
 ```
 
 ### `action` / `fill-secret` {#action-fill-secret}
@@ -74,11 +78,11 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `action` | string | required | literal `fill-secret` | Action discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `element` | `ElementRef` | required | strict locator | Secret sink field. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:617-622 |
 | `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
 
 ```json
-{"id":"fill-password","kind":"action","action":"fill-secret","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Password"},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
+{"id":"fill-password","kind":"action","action":"fill-secret","target":"app","intent":{"description":"Fill Password","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":14}},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
 ### `assert` / `text-visible` {#assert-text-visible}
@@ -90,6 +94,7 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `check` | string | required | literal `text-visible` | Assertion discriminator. | [src/core/ir/schema.ts:559](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L559) |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `text` | `InterpolatableText` | required | no secret marker | Expected visible text. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,663 |
 
 ```json
 {"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
@@ -104,10 +109,11 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-visible` | Assertion discriminator. | [src/core/ir/schema.ts:578](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L578) |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Expected visible element. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
+| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:680 |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,684 |
 
 ```json
-{"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","element":{"strategy":"accessibility","role":"navigation","name":"Main"}}
+{"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","intent":{"description":"Main navigation 「Main」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":23},"quote":{"text":"Main","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":22}}}}
 ```
 
 ### `assert` / `text-equals` {#assert-text-equals}
@@ -119,11 +125,12 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `text-equals` | Assertion discriminator. | [src/core/ir/schema.ts:597](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L597) |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Element under test. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
+| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:703 |
 | `text` | `InterpolatableText` | required | no secret marker | Exact expected text. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,707 |
 
 ```json
-{"id":"title","kind":"assert","check":"text-equals","target":"app","element":{"strategy":"accessibility","role":"heading","name":"Account"},"text":"Account"}
+{"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account overview"}
 ```
 
 ### `assert` / `url-matches` {#assert-url-matches}
@@ -135,6 +142,7 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `check` | string | required | literal `url-matches` | Assertion discriminator. | [src/core/ir/schema.ts:617](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L617) |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
 | `pattern` | `InterpolatableText` | required | no secret marker | Expected URL matching text. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,730 |
 
 ```json
 {"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
@@ -149,11 +157,12 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
 | `check` | string | required | literal `element-count` | Assertion discriminator. | [src/core/ir/schema.ts:636](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L636) |
 | `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Matching element. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
+| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:749 |
 | `count` | integer | required | nonnegative | Expected count, including zero. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,753 |
 
 ```json
-{"id":"one-alert","kind":"assert","check":"element-count","target":"app","element":{"strategy":"accessibility","role":"alert","name":"Error"},"count":1}
+{"id":"one-alert","kind":"assert","check":"element-count","target":"app","intent":{"description":"Error alerts 「Error」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21},"quote":{"text":"Error","sourceSpan":{"startLine":1,"startColumn":15,"endLine":1,"endColumn":20}}},"count":1}
 ```
 
 ### `capture` {#capture}
@@ -163,11 +172,11 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
 | `kind` | string | required | literal `capture` | Step discriminator. | [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674) |
 | `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `element` | `ElementRef` | required | strict locator | Source element. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:788 |
 | `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | Bare run-state variable name. | [src/core/ir/schema.ts:675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L675) |
 
 ```json
-{"id":"capture-code","kind":"capture","target":"app","element":{"strategy":"accessibility","role":"textbox","name":"Code"},"variable":"code"}
+{"id":"capture-code","kind":"capture","target":"app","intent":{"description":"Capture Code","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}},"variable":"code"}
 ```
 
 ### `ai` {#ai}
@@ -179,6 +188,7 @@ description: "コミットされたすべてのステップは、`kind` によ�
 | `instruction` | `InterpolatableText` | required | no secret marker | Agent instruction. | [src/core/ir/schema.ts:419](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L419) |
 | `secrets` | `AiStepSecretUse[]` | optional | strict entries | Committed secret uses. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
 | `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,824 |
 
 ```json
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
@@ -196,7 +206,11 @@ description: "コミットされたすべてのステップは、`kind` によ�
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
+アサーションの `element-visible`、`text-equals`、`element-count` はグラウンディングを参照も更新もせず、AI も呼び出さない。`--resolve` の有無にかかわらず、期限まで `accessibilitySnapshot()` と `matchQuotedCandidates` を使って同じように評価する。
+
 ## 生成形式 {#generated-forms}
+
+生成された `click`、`press`、`fill`、`fill-secret`、`capture` の形式は `GeneratedElementIntent` を持ち、生成された `element-visible`、`text-equals`、`element-count` の形式は `GeneratedQuotedElementIntent` を持つ。
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |

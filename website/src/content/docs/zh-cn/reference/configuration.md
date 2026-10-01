@@ -16,6 +16,10 @@ description: 本页定义了配置键及其解析逻辑。
 
 目标配置提供浏览器目的地；其 `healReplayIsolation` 设置在 heal 之前、`resolveTimeoutMs` 设置在元素解析之前分别完成实时解析，二者均不是 Plan 或 inputs-digest 字段。
 
+加载配置时，`src/config/load.ts` 使用 `Intl.getCanonicalLocales` 规范化所写的 `locale`，若结果恰好只有一项，便保存该值。例如，`"ja-jp"` 会变为 `"ja-JP"`。导致 `RangeError` 的值、空字符串或非字符串值均会在问题路径 `targets.<name>.locale` 处以 `CONFIG_INVALID`（退出码 2）被拒绝。规范化后的值会进入 Plan 的目标定义和运行时的 Playwright 浏览器上下文（`newContext({ baseURL, locale })`），影响该目标页面的 `navigator.language` 以及首次请求的 `Accept-Language` 请求头。
+
+此设置的作用范围止于 `Accept-Language`、`navigator.language` 和 Intl 解析。它不会控制时区或应用侧的语言 Cookie、偏好设置，也不会规定其与这些机制之间的优先级。
+
 ## 配置键列表 {#key-table}
 
 | 键路径 | 类型 | 默认值 | 约束 | 使用方 |

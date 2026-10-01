@@ -5,11 +5,11 @@ description: "`PlanDocument` 是一个严格对象。"
 
 ## 文档形态 {#document-shape}
 
-`PlanDocument` 是一个严格对象。生成方必须（MUST）输出字面量版本 3，且消费方必须（MUST）拒绝未知属性及其他版本。[src/core/ir/schema.ts:1205-1224](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1224)
+`PlanDocument` 是一个严格对象。生成方必须（MUST）输出字面量版本 5，且消费方必须（MUST）拒绝未知属性及其他版本。[src/core/ir/schema.ts:1205-1224](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1224)
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `4` | 计划格式版本。 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1207) |
+| `schemaVersion` | integer | required | literal `5` | 计划格式版本。 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1207) |
 | `source` | strict object | required | exactly `inputsDigest` | 新鲜度包装器。 | [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
 | `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | 生成输入的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
 | `generatorMeta` | record string → `JsonValue` | optional | JSON only | 从 `planDigest` 中排除的元数据。 | [src/core/ir/schema.ts:1189-1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189-L1193); [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128-L131) |
@@ -24,7 +24,7 @@ description: "`PlanDocument` 是一个严格对象。"
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "source": {"inputsDigest": "0000000000000000000000000000000000000000000000000000000000000000"},
   "targets": {"app": {"surface": "web", "baseUrl": "https://example.test"}},
   "steps": [{"id": "open-home", "kind": "action", "action": "navigate", "target": "app", "url": "https://example.test"}]
@@ -38,6 +38,8 @@ description: "`PlanDocument` 是一个严格对象。"
 ## 仅提供方生成响应 {#provider-generation-response}
 
 提供方不创作 `schemaVersion`、`source` 或 `targets`；本地生成会在已提交计划验证之前添加它们。provider 的机密命名意图会在形成已提交的 `SecretRef` 前于本地解析。[src/core/ir/schema.ts:729-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L729-L833) [src/core/ir/schema.ts:1242-1254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1242-L1254)
+
+带有元素的步骤提议还使用与 `GeneratedInstructionCriterion` 相同锚点坐标的瞬态 `GeneratedElementIntent`／`GeneratedQuotedElementIntent`，而非已提交的 `ElementIntent`／`QuotedElementIntent`。
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |

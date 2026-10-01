@@ -22,17 +22,19 @@ description: "`inputsDigest` は、正確にこれら5つのメンバー（`norm
 | id | `check` ステータス | 導出 | 結果分類 |
 | --- | --- | --- | --- |
 | CHK-01 | `fresh` | プランがパース可能で、正規形式であり、有効なコミット済みカバレッジを持ち、その `inputsDigest` が一致し、かつそのコンパニオンが有効である。 | pass |
-| CHK-02 | `stale` | プランの JSON／スキーマ／正規形式、またはコミット済みカバレッジが無効であるか、あるいはその `inputsDigest` が異なる。 | fail |
+| CHK-02 | `stale` | プランの JSON／スキーマ／正規形式、またはコミット済みカバレッジが無効であるか、廃止された `schemaVersion: 4` を使用するか、コミット済み `ElementIntent` / `QuotedElementIntent` の source span が無効であるか、あるいはその `inputsDigest` が異なる。 | fail |
 | CHK-03 | `fresh-without-grounding` | プランが fresh であり、コンパニオンが有効ではなく、リポジトリポリシーが `uncommitted` である。 | pass |
 | CHK-04 | `missing-grounding` | プランが fresh であり、コンパニオン検査が `missing` であり、ポリシーがコミット済みグラウンディングを要求している。 | fail |
 | CHK-05 | `invalid-grounding` | プランが fresh であり、コンパニオン検査が `invalid` である（JSON／スキーマ／正規形式カバレッジの失敗）。 | fail |
-| CHK-06 | `stale-grounding` | プランが fresh であり、コンパニオン検査が `stale` である（別の `planDigest`）。 | fail |
+| CHK-06 | `stale-grounding` | プランが fresh であり、コンパニオン検査が `stale` である（別の `planDigest`、またはコンパニオン自身のスキーマ形状検証より先に確認される廃止済みの Grounding `schemaVersion: 2`）。 | fail |
 | CHK-07 | `missing-plan` | 選択されたテストにプランアーティファクトが存在しない。 | fail |
 | CHK-08 | `orphaned-plan` | スコープ内のプランが、存在しないテストパスへと逆マッピングされる。 | fail |
 | CHK-09 | `orphaned-grounding` | スコープ内のグラウンディングアーティファクトが、対応するテストプロンプトが存在しないパスへと逆マッピングされる。 | fail |
 | CHK-10 | `invalid-artifact-name` | アーティファクトのパスからテスト識別子を逆導出できない。 | fail |
 | CHK-11 | `listed` | ディスカバリのみのリスト表示では、選択されたパスを検査しない。 | skipped |
 | CHK-12 | `skipped` | 中断により、識別情報のみの保留行が残される。 | skipped |
+
+それ以外は有効かつ最新の Grounding ドキュメントでは、エントリの `intentDigest` の不一致、Plan に存在しない ID、またはアクション種別ではないステップのエントリは、この表の分類を変えない。`run` は自身のステップごとの境界で、そのようなエントリを存在しないものとして扱う。
 
 `fresh` および `fresh-without-grounding` の行は pass であり、上記で fail と分類されたすべての行は failure の要因となり、`listed` および `skipped` は skipped である。[src/usecases/check-report.ts:71](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-report.ts#L71)
 

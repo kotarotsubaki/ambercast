@@ -24,6 +24,10 @@ ambercast の設定キーと設定解決の仕様について説明します。�
 
 ターゲット設定はブラウザの接続先を提供します。ターゲットの `healReplayIsolation` 設定は修復（heal）の実行前に、`resolveTimeoutMs` 設定は要素解決の実行前にそれぞれライブに解決され、いずれも Plan や inputs-digest のフィールドには含まれません。なお、`healReplayIsolation` の既定値は `stateful` です。
 
+設定読み込み時に、`src/config/load.ts` が指定された `locale` を `Intl.getCanonicalLocales` で正規化し、結果がちょうど1要素ならその値を保持します。たとえば `"ja-jp"` は `"ja-JP"` になります。`RangeError` を投げる値、空文字、文字列以外の値は、issue path `targets.<name>.locale` に対する `CONFIG_INVALID`（終了コード 2）として拒否されます。正規化された値は Plan のターゲット定義と実行時の Playwright ブラウザコンテキスト（`newContext({ baseURL, locale })`）に渡され、そのターゲットのページにおける `navigator.language` と最初のリクエストの `Accept-Language` ヘッダーに反映されます。
+
+この設定の対象範囲は `Accept-Language`、`navigator.language`、Intl による解決までです。タイムゾーンやアプリケーション側の言語 Cookie・設定は制御せず、それらとの優先順位も定めません。
+
 ## 設定キー一覧 {#key-table}
 
 | キーパス | 型 | デフォルト値 | 制約 | 利用箇所 |

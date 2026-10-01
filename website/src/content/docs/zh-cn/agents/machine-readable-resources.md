@@ -33,7 +33,7 @@ description: 明确列出已发布的机器可读资源及其可用性规则。
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 可用 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 可用 |
 
-`schemas/plan.v2.schema.json` 与 `schemas/plan.v3.schema.json` 是复制到文档站点的冻结、已提交历史快照。当前构建会生成 config Schema、Plan v4 Schema、grounding Schema、report Schema、`capabilities.json` 与 `manifest/cli.json`，其文档站点与 npm 分发包中的字节完全一致。
+`schemas/plan.v2.schema.json`、`schemas/plan.v3.schema.json`、`schemas/plan.v4.schema.json` 与 `schemas/grounding.v2.schema.json` 是复制到文档站点的冻结、已提交历史快照。当前构建会生成 config Schema、Plan v5 Schema、grounding Schema、report Schema、`capabilities.json` 与 `manifest/cli.json`，其文档站点与 npm 分发包中的字节完全一致。
 
 本页面介绍在本次发布中已上线的产物。
 

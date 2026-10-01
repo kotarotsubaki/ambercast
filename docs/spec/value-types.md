@@ -9,9 +9,17 @@ All other chapters MUST use these definitions rather than restating their shapes
 | `TargetDefinition` with `surface` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Authored HTTP(S) base URL with no secret marker. | repo:src/core/ir/schema.ts:37-38,165-166 |
 |  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | repo:src/core/ir/schema.ts:168 |
+|  | `locale` | string | optional | min length 1 | Authored BCP-47-shaped locale tag, canonicalized by the config loader before this point. | repo:src/core/ir/schema.ts:210 |
 | `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | repo:src/core/ir/schema.ts:183 |
 |  | `role` | string | required | min 1 | Exact accessibility role. | repo:src/core/ir/schema.ts:185 |
 |  | `name` | string | required | min 1 | Accessible name. | repo:src/core/ir/schema.ts:186 |
+| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | Literal quoted excerpt text. | repo:src/core/ir/schema.ts:359 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the quoted excerpt. | repo:src/core/ir/schema.ts:360 |
+| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | Source-backed natural-language element description. | repo:src/core/ir/schema.ts:367 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the description excerpt. | repo:src/core/ir/schema.ts:368 |
+|  | `roleHint` | string | optional | `/^[a-z]+$/` | Optional lowercase accessibility role hint. | repo:src/core/ir/schema.ts:369 |
+|  | `quote` | `Quote` | optional | strict nested object | Optional literal UI-text quote independently located in the prompt. | repo:src/core/ir/schema.ts:370 |
+| `QuotedElementIntent` (extends `ElementIntent`) | `quote` | `Quote` | required | strict nested object | Required literal UI-text quote. | repo:src/core/ir/schema.ts:376 |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | Locator-evidence format. | repo:src/core/ir/schema.ts:221 |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | Lowercase SHA-256. | repo:src/core/ir/schema.ts:35,223 |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | One-based UTF-16 start line. | repo:src/core/ir/schema.ts:332 |

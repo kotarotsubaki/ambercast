@@ -10,11 +10,19 @@ description: "所有其他章节必须（MUST）使用这些定义，而不是�
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | `TargetDefinition` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | 无 secret 标记的已创作 HTTP(S) 基准 URL。 | [src/core/ir/schema.ts:37-38](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37-L38), [src/core/ir/schema.ts:165-166](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165-L166) |
-|  | `browser` | string | required | literal `chromium` | 所选浏览器。 | [src/core/ir/schema.ts:167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L167) |
+|  | `surface` | string | required | literal `web` | 执行界面。 | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | 每个 secret 允许的源。 | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L168) |
+|  | `locale` | string | optional | min length 1 | 由配置加载器规范化后的 BCP-47 格式 locale 标签。 | repo:src/core/ir/schema.ts:210 |
 | `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L183) |
 |  | `role` | string | required | min 1 | 精确的可访问性角色。 | [src/core/ir/schema.ts:185](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L185) |
 |  | `name` | string | required | min 1 | 可访问名称。 | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L186) |
+| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 字面引用的摘录文本。 | repo:src/core/ir/schema.ts:359 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用摘录的位置。 | repo:src/core/ir/schema.ts:360 |
+| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | 有来源依据的自然语言元素描述。 | repo:src/core/ir/schema.ts:367 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 描述摘录的位置。 | repo:src/core/ir/schema.ts:368 |
+|  | `roleHint` | string | optional | `/^[a-z]+$/` | 可选的小写无障碍角色提示。 | repo:src/core/ir/schema.ts:369 |
+|  | `quote` | `Quote` | optional | strict nested object | 可选的 UI 文本字面引用，在提示词中独立定位。 | repo:src/core/ir/schema.ts:370 |
+| `QuotedElementIntent`（扩展 `ElementIntent`） | `quote` | `Quote` | required | strict nested object | 必需的 UI 文本字面引用。 | repo:src/core/ir/schema.ts:376 |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | 定位器证据格式。 | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小写 SHA-256。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:223](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L223) |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | 基于 1 的 UTF-16 起始行。 | [src/core/ir/schema.ts:332](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L332) |

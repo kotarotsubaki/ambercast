@@ -97,9 +97,9 @@ describe('TEST-21 v4 documentation golden expectations', () => {
       const section = steps.split(heading)[1]?.split(/^### /m)[0];
       expect(section, heading).toBeDefined();
       expect(section, heading).toMatch(/\| `target` \| (?:string|`TargetName`)/);
-      expect(section, heading).toMatch(/\| `element` \| `ElementRef`/);
+      expect(section, heading).toMatch(/\| `intent` \| `(?:Quoted)?ElementIntent`/);
       expect(section, heading).toMatch(/"target":"[^"]+"/);
-      expect(section, heading).toMatch(/"element":\{"strategy":"accessibility"/);
+      expect(section, heading).toMatch(/"intent":\{"description":"[^"]+","sourceSpan":\{"startLine":\d+,"startColumn":\d+,"endLine":\d+,"endColumn":\d+\}/);
     }
     for (const check of expected.assertChecks) {
       const section = steps.split(`### \`assert\` / \`${check}\``)[1]?.split(/^### /m)[0];
@@ -112,7 +112,7 @@ describe('TEST-21 v4 documentation golden expectations', () => {
   it('documents v4 plan, v2 grounding, and executor-free target definitions', () => {
     const plan = spec('plan-document');
     expect(plan).toContain(`literal \`${expected.versions.plan}\``);
-    expect(plan).toMatch(/"schemaVersion":\s*4/);
+    expect(plan).toMatch(/"schemaVersion":\s*5/);
     expect(plan).toMatch(/"surface":\s*"web"/);
     expect(plan).not.toMatch(/"browser":\s*"chromium"/);
     const values = spec('value-types');
@@ -120,7 +120,7 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     expect(values).not.toMatch(/\|\s*`browser`\s*\|/);
     const grounding = spec('grounding-document');
     expect(grounding).toContain(`literal \`${expected.versions.grounding}\``);
-    expect(grounding).toMatch(/"schemaVersion":\s*2/);
+    expect(grounding).toMatch(/"schemaVersion":\s*3/);
     expect(grounding).toContain('`element`');
     expect(grounding).not.toMatch(/`target`,\s*`(?:key|value|text|count)`/);
   });
@@ -140,6 +140,9 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     expect(changelog).toMatch(/(?:Plan|plan)[^\n]*v4|v4[^\n]*(?:Plan|plan)/);
     expect(changelog).toMatch(/(?:grounding|Grounding)[^\n]*v2|v2[^\n]*(?:grounding|Grounding)/);
     expect(changelog).toContain(expected.versions.report);
+    const compatibility = reference('compatibility');
+    const versionRow = compatibility.split('\n').find((value) => value.startsWith('| `0.7.0` |'));
+    expect(versionRow).toMatch(/^\| `0\.7\.0` \| `5` \| `3` \|[^\n]*\| `3\.8` \|$/);
   });
 
   it('keeps --target only on generate and explains config target semantics', () => {
@@ -156,6 +159,9 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     expect(config).toContain('`targets.<name>.description`');
     expect(config).toContain('`targets.<name>.executor.kind`');
     expect(config).toContain('`targets.<name>.executor.browser`');
+    expect(config).toContain('`targets.<name>.locale`');
+    expect(config).toContain('`Intl.getCanonicalLocales`');
+    expect(config).toMatch(/`CONFIG_INVALID` \(exit 2\) at issue path `targets\.<name>\.locale`/);
     expect(config).not.toContain('`targets.<name>.browser`');
     expect(config).toMatch(/`defaultTarget`[^\n]*(?:generat|prompt)/i);
   });

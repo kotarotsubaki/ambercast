@@ -2,7 +2,7 @@
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.3.1. The implementation accepts Plan schema version 3 and Grounding schema version 1. [repo:src/core/ir/schema.ts:58] [repo:src/core/ir/schema.ts:65]
+This specification describes the artifacts accepted by ambercast 0.7.0. The implementation accepts Plan schema version 5 and Grounding schema version 3. [repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## Normative language {#normative-language}
 
@@ -25,10 +25,10 @@ Every digest path MUST use [[spec/canonical-json#digest-form]]. `inputsDigest` b
 
 | Artifact | Accepted value | Evidence |
 | --- | --- | --- |
-| Plan `schemaVersion` | `3` | repo:src/core/ir/schema.ts:58 |
-| Grounding `schemaVersion` | `1` | repo:src/core/ir/schema.ts:65 |
-| Fingerprint algorithm | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:221 |
-| Report `schemaVersion` | `3.6` | repo:src/report/schema.ts:42 |
+| Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
+| Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
+| Fingerprint algorithm | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
+| Report `schemaVersion` | `3.8` | repo:src/report/schema.ts:57 |
 
 ## Reading order {#reading-order}
 

@@ -9,7 +9,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.7` |
+| `schemaVersion` | リテラル `3.8` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -86,10 +86,12 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 
 | ブランチ | 必須フィールド | オプションフィールド |
 | --- | --- | --- |
-| `step` | `id`, `type: action/assert/capture/ai`, `status: passed/failed/error/skipped` | `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed` |
+| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable`（capture のみ）、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
 | `observed` | `note`: 固定値 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+
+action ステップでは、ローカル検証後に `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非負整数, aiProposalMs?: 非負整数 }` を含められます。`confirmed` はケース終了時の値であり、所要時間のフィールドは該当する段階を実行した場合にのみ現れます。それ以前の binding 失敗はケースエラーとして報告されます。
 
 ## review の懸念事項 {#review-concerns}
 
@@ -118,9 +120,9 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
 | `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" または "recoverable-miss" }`。element step では、`missing` は grounding entry が存在しない場合、`recoverable-miss` は既存 entry が現在のページと一致しない場合を表します。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing"、"recoverable-miss"、"no-candidate"、"ambiguous"、"proposal-rejected"、または "candidate-changed" }`。element step では、`missing` は grounding entry が存在しない場合、`recoverable-miss` は既存 entry が現在のページと一致しない場合を表します。 |
 
-`generated` と `would-generate` の結果では、`secrets` が解決済みの候補シークレット使用を示し、dry run の `skipped-fresh` 結果にも含まれます。任意の `warnings` は、高リスクな `secrets.allow: "*"` 設定など、致命的でないポリシー警告を記録します。これらのフィールドにより、シークレット値を公開せずに同意関連の出力を観測できます。
+`generated` と `would-generate` の結果では、`secrets` が解決済みの候補シークレット使用を示し、dry run の `skipped-fresh` 結果にも含まれます。任意の `warnings` は、高リスクな `secrets.allow: "*"` 設定や、未確認の action を示す `{ kind: "action-unconfirmed", stepId }` など、致命的でない警告を記録します。これらのフィールドにより、シークレット値を公開せずに同意関連の出力を観測できます。
 
 ## レポートの永続化 {#persistence}
 
@@ -135,19 +137,19 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 現行スキーマ版に固定されるのは書き込み側のみです。viewer は 3.x のレポートをすべて寛容に読み取ります。
 
 ```json
-{"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.8","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.7","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.8","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.7","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.8","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.7","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.8","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}

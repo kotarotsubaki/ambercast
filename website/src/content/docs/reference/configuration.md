@@ -19,6 +19,10 @@ A supplied `targets` object replaces, rather than deep-merges with, default targ
 
 A target configuration supplies a web surface and a browser destination; its `healReplayIsolation` and `resolveTimeoutMs` settings are resolved live (before heal, and before element resolution respectively) and are not Plan or inputs-digest fields.
 
+At config load time, `src/config/load.ts` canonicalizes an authored `locale` with `Intl.getCanonicalLocales` and stores the lone result: `"ja-jp"` becomes `"ja-JP"`. A value that throws `RangeError`, an empty string, or a non-string value fails with `CONFIG_INVALID` (exit 2) at issue path `targets.<name>.locale`. The normalized locale reaches the Plan's target definition and the live Playwright browser context (`newContext({ baseURL, locale })`), affecting `navigator.language` and the first request's `Accept-Language` header for that target's pages.
+
+This setting's scope stops at `Accept-Language`, `navigator.language`, and Intl resolution. It does not control the timezone or an application-side language cookie or preference, nor does it establish a priority order against those mechanisms.
+
 ## Key table {#key-table}
 
 | Key path | Type | Default | Constraint | Consumers |

@@ -19,6 +19,10 @@ description: "`Fingerprint."
 
 `hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、および `snapshot-invalid` は、それぞれ異なる解決結果である。ツリーが存在しないか不正な形式である場合は `element-not-found` となり、正規化されたロール／名前の一致が複数存在する場合は `ambiguous-match` となり、古いハッシュまたは異なるハッシュである場合は `fingerprint-mismatch` となる。[src/core/ir/fingerprint.ts:347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L347), [src/core/ir/fingerprint.ts:388](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L388) 孤立サロゲートは、生成時にはフィンガープリントを生成せず、解決時には `element-not-found` を生じさせる。[src/core/ir/fingerprint.ts:181](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L181)
 
+## 引用のマッチング {#quote-matching}
+
+`matchQuotedCandidates(tree, {text, roleHint?})` は、フィンガープリントのマッチングと同じ順序で、合成ルートの子からアクセシビリティツリーを1回だけ線形走査する。名前には同じ `normalizeName` 規則（NFC、連続する空白の縮約、トリム）を適用し、`roleHint` はロールと厳密に比較する。`{{run.x}}` 形式の文字列は補間せず、順序付きの `{role,name}` ペア、または無効なツリーに対して `{kind: 'snapshot-invalid'}` を返す。この関数は、初回バインディングの引用ベースの段階と、グラウンディングを使わない要素アサーションの評価で使用される。
+
 ## 設計根拠 {#rationale}
 
 課題は、古くなったロケータが視覚的に類似した要素に対してリプレイされることを許容せずに、局所的な UI ドリフトを検出することである。境界付けられた近傍は、その証拠を明示的なものにする。

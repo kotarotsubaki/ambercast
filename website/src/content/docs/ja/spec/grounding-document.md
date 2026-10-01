@@ -5,11 +5,11 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 ## グラウンディングの形状 {#grounding-shape}
 
-`GroundingDocument` は、厳密に1つの Plan ダイジェストにバインドされた厳格なオブジェクトである。[src/core/ir/schema.ts:1367](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1367)
+`GroundingDocument` は、厳密に1つの Plan ダイジェストにバインドされた厳格なオブジェクトである。[repo:src/core/ir/schema.ts:1367]
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `2` | グラウンディングフォーマットのバージョン。 | [src/core/ir/schema.ts:64](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L64), [src/core/ir/schema.ts:1368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1368) |
+| `schemaVersion` | integer | required | literal `3` | グラウンディングフォーマットのバージョン。 | repo:src/core/ir/schema.ts:73,1663 |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | 関連する計画のダイジェスト。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | ID をキーとするキャッシュされたステップグラウンディング。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
 
@@ -17,8 +17,11 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntry` | `kind` | string | required | literal `element` | Element エントリの識別子。 | [src/core/ir/schema.ts:1093](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1093) |
-|  | `fingerprint` | `Fingerprint` | required | strict v2 fingerprint | アクセシビリティ近傍のエビデンス。 | [src/core/ir/schema.ts:1095](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1095) |
+| `ElementGroundingEntryV3` | `kind` | string | required | literal `element` | Element エントリの識別子。 | repo:src/core/ir/schema.ts:1362 |
+|  | `locator` | `AccessibilityElementRef` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | 意図に結び付けられた観測済みロケータ。 | repo:src/core/ir/schema.ts:1363 |
+|  | `fingerprint` | `Fingerprint` | required | [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) | アクセシビリティ近傍のエビデンス。 | repo:src/core/ir/schema.ts:1364 |
+|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | repo:src/core/ir/schema.ts:1365 |
+|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | repo:src/core/ir/schema.ts:1366 |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114) |
 |  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1116) |
 
@@ -59,7 +62,7 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -72,6 +75,8 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 ## Plan ダイジェストのバインディング {#plan-digest}
 
 既存のトレースの再生に成功した後、実装はそのエントリを変更せずそのまま残さなければならない（MUST）。実装は、終了成功基準の厳密なカバレッジを伴うエージェント実行に成功した後にのみ、AI エントリを書き込むか上書きしなければならない（MUST）。スナップショットまたは失敗したアサーションで終了する成功したエージェント実行の場合、コールドパスはいかなるエントリも書き込んではならず（MUST NOT）、フォールバックパスはフォールバックを引き起こした古いエントリを削除しなければならない（MUST）。実装は、エージェント実行の失敗または中断の後は、既存のエントリに手を触れずに残さなければならない（MUST）。[src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
+
+要素エントリは、そのバインディングが `confirmed` に達した場合にのみ書き込むか上書きしなければならない（MUST）。これは、少なくとも1つのステップがその要素ステップを自身の空でないコミット済み `confirms` リストに挙げ、該当するすべてのステップが同じケースで成功した状態を指す。確認ステップが `element-visible` アサーションの場合、その成功は候補がちょうど1つ一致した場合にのみ有効な確認根拠となる。複数の候補が一致して成功しても、バインディングは確認されない。`acted` のみに達したバインディングは書き戻し時に破棄され、永続化されない。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
 
 すべての `TraceFillSecret` について、`secretRef` はそれを含む Plan の AI ステップのコミットされた `secrets[].ref` セットに属していなければならない（MUST）。違反は整合性の失敗（integrity failure）であり、エージェント実行にフォールバックしてはならない（MUST NOT）。[src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
 

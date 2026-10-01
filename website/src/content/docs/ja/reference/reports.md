@@ -86,7 +86,7 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 
 | ブランチ | 必須フィールド | オプションフィールド |
 | --- | --- | --- |
-| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | capture のみ `variable`、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
+| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable`（capture のみ）、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
 | `observed` | `note`: 固定値 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |

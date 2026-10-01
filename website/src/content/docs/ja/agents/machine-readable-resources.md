@@ -35,7 +35,7 @@ description: ambercast で公開されている機械可読リソースと、そ
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 利用可能 |
 
-`schemas/plan.v2.schema.json` と `schemas/plan.v3.schema.json` は、コミット済みの履歴スナップショットをサイトへコピーした凍結アーティファクトです。現在のビルドは config スキーマ、Plan v4 スキーマ、grounding スキーマ、report スキーマ、`capabilities.json`、および `manifest/cli.json` を生成し、サイト向けと npm 配布向けで同一のバイト列になります。
+`schemas/plan.v2.schema.json`、`schemas/plan.v3.schema.json`、`schemas/plan.v4.schema.json`、`schemas/grounding.v2.schema.json` は、コミット済みの履歴スナップショットをサイトへコピーした凍結アーティファクトです。現在のビルドは config スキーマ、Plan v5 スキーマ、grounding スキーマ、report スキーマ、`capabilities.json`、および `manifest/cli.json` を生成し、サイト向けと npm 配布向けで同一のバイト列になります。
 
 本ドキュメントは、このリリースで公開されたアーティファクトを扱います。
 

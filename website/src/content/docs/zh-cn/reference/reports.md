@@ -84,7 +84,7 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 
 | 分支 | 必需字段 | 可选字段 |
 | --- | --- | --- |
-| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | 仅 capture 可有 `variable`、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
+| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable`（仅 capture 可有）、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
 | `observed` | `note`: 固定为 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |

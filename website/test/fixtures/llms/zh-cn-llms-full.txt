@@ -1038,7 +1038,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.7` |
+| `schemaVersion` | 字面量 `3.8` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -1113,10 +1113,12 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 
 | 分支 | 必需字段 | 可选字段 |
 | --- | --- | --- |
-| `step` | `id`, `type: action/assert/capture/ai`, `status: passed/failed/error/skipped` | `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed` |
+| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | 仅 capture 可有 `variable`、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
 | `observed` | `note`: 固定为 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+
+action 步骤经过本地验证后，可包含 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非负整数, aiProposalMs?: 非负整数 }`。`confirmed` 表示测试用例结束时的值；仅在相应阶段执行后才会出现耗时字段。更早发生的绑定失败则通过测试用例错误报告。
 
 ## Review 关注事项 {#review-concerns}
 
@@ -1145,9 +1147,9 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
 | `PROMPT_PATH_INVALID` | `{ path: 非空白字符串, reason: "outside-test-dir"、"not-test-md" 或 "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" 或 "recoverable-miss" }`；对于 element step，`missing` 表示没有 grounding 条目，`recoverable-miss` 表示已有条目与当前页面不匹配。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing"、"recoverable-miss"、"no-candidate"、"ambiguous"、"proposal-rejected" 或 "candidate-changed" }`；对于 element step，`missing` 表示没有 grounding 条目，`recoverable-miss` 表示已有条目与当前页面不匹配。 |
 
-对于 `generated` 与 `would-generate` 结果，`secrets` 标识已解析的候选机密使用；dry run 的 `skipped-fresh` 结果也会包含该字段。可选的 `warnings` 会记录非致命策略警告，包括高风险的 `secrets.allow: "*"` 配置。这些字段使同意相关输出可被观测，而不会暴露机密值。
+对于 `generated` 与 `would-generate` 结果，`secrets` 标识已解析的候选机密使用；dry run 的 `skipped-fresh` 结果也会包含该字段。可选的 `warnings` 会记录非致命警告，包括高风险的 `secrets.allow: "*"` 配置以及表示 action 尚未确认的 `{ kind: "action-unconfirmed", stepId }`。这些字段使同意相关输出可被观测，而不会暴露机密值。
 
 ## 报告持久化 {#persistence}
 
@@ -1161,16 +1163,16 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 只有写入方会固定使用当前的 schema 版本；查看器会宽松地读取任意 3.x 版本的报告。
 
 ```json
-{"schemaVersion":"3.7","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.8","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.7","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.8","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.7","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.8","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.7","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.8","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}
@@ -2271,7 +2273,7 @@ flowchart LR
 | --- | --- | --- |
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
 | Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
-| 指纹算法 | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:255 |
+| 指纹算法 | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
 | Report `schemaVersion` | `3.8` | repo:src/report/schema.ts:57 |
 
 ## 阅读顺序 {#reading-order}

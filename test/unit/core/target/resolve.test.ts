@@ -10,6 +10,10 @@ import {
   type TargetSelection,
 } from '#core/target/resolve.js';
 import type { ResolvedTargetConfigEntry } from '#core/config/schema.js';
+import { readFileSync } from 'node:fs';
+import { toCanonicalDigestBytes } from '#core/ir/canonical-json.js';
+import type { JsonValueT } from '#core/ir/schema.js';
+import { projectPlanTargets } from '#core/target/resolve.js';
 
 const WEB = Object.freeze({ baseUrl: 'https://web.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 });
 const ADMIN = Object.freeze({ baseUrl: 'https://admin.example.test', executor: { kind: 'playwright', browser: 'chromium' } as const, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 });
@@ -53,6 +57,16 @@ function inheritedTarget(name: string, definition: Readonly<TargetDefinition> = 
 }
 
 describe('resolveTarget', () => {
+  it('TEST-L2 projects locale only when configured and preserves the no-locale golden bytes', () => {
+    const without = projectPlanTargets(['web'], { web: WEB });
+    const japanese = projectPlanTargets(['web'], { web: { ...WEB, locale: 'ja-JP' } });
+    const english = projectPlanTargets(['web'], { web: { ...WEB, locale: 'en-US' } });
+    expect(Object.keys(without.web!)).not.toContain('locale');
+    const golden = readFileSync(new URL('../../../fixtures/ir/golden/target-no-locale.digest-bytes', import.meta.url), 'utf8').trimEnd();
+    expect(toCanonicalDigestBytes(without as JsonValueT)).toEqual(Buffer.from(golden));
+    expect(japanese.web?.locale).toBe('ja-JP');
+    expect(english.web?.locale).toBe('en-US');
+  });
   it('projects live replay isolation out of plan and input-digest target definitions', () => {
     const idempotent: ResolvedTargetConfigEntry = { baseUrl: 'https://web.example.test', executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'idempotent', resolveTimeoutMs: 5000 };
     const stateful: ResolvedTargetConfigEntry = { ...idempotent, healReplayIsolation: 'stateful', resolveTimeoutMs: 5000 };

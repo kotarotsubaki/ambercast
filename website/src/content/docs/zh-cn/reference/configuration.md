@@ -33,6 +33,7 @@ description: 本页定义了配置键及其解析逻辑。
 | `targets.<name>.executor.browser` | `chromium` | `chromium` | 运行时浏览器；不计入 Plan 摘要 | run、heal 的 executor 配置 |
 | `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | 缺省 secret 条目时仅允许 `baseUrl`；空数组将在所有位置拒绝该 secret；非空数组替换该默认值 | generate、run、heal 的 secret 接收方策略；check（新鲜度） |
 | `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal 要求所选目标必须为 `idempotent` | heal |
+| `targets.<name>.locale` | string | absent | 通过 `Intl.getCanonicalLocales` 规范化；规范化失败的值为 `CONFIG_INVALID` | generate 与 Plan 目标定义；run 的浏览器上下文 |
 | `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
 | `defaultTarget` | string | `web-user` | 必须解析为一个目标 | generate、run、check、heal 目标选择 |
 | `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |

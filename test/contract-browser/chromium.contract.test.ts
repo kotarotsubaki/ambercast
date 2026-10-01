@@ -121,6 +121,57 @@ const MATERIALIZED_SECRET = 'contract-only-materialized-secret';
 
 let chromiumAvailable = false;
 
+describe('TEST-L4 browser locale', () => {
+  it.each([
+    ['configured', 'ja-JP'],
+    ['omitted', undefined],
+  ] as const)('reflects the %s locale in HTTP and browser APIs', async (_case, locale) => {
+    const server = createServer((request, response) => {
+      response.setHeader('content-type', 'text/html');
+      response.end(`<html><body><span id="accept">${request.headers['accept-language'] ?? ''}</span></body></html>`);
+    });
+    const baseUrl = await listenOnLoopback(server);
+    let session: BrowserSession | undefined;
+    let page: PlaywrightPage | undefined;
+    const observation: MutableOperationObservation = { ariaSnapshotCalls: 0, roleLocatorCalls: 0, finalOperationCalls: 0, strictAcquisitionCalls: 0, physicalFillCalls: 0, physicalDisposeCalls: 0 };
+    const launcher: PlaywrightLauncher = {
+      async launch(options) {
+        const browser = await chromium.launch(options);
+        return {
+          async newContext(contextOptions) {
+            const context = await browser.newContext(contextOptions);
+            return {
+              ...observeContext(context, observation),
+              async newPage() {
+                page = await context.newPage();
+                return observePage(page, observation);
+              },
+            };
+          },
+          close: () => browser.close(),
+        };
+      },
+    };
+    try {
+      session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG, { launcher }).launch({
+        surface: 'web', baseUrl, ...(locale === undefined ? {} : { locale }),
+      });
+      await session.perform({ type: 'navigate', url: '/' });
+      if (page === undefined) throw new Error('The launched session did not create a page.');
+      if (locale !== undefined) {
+        const acceptLanguage = await page.locator('#accept').innerText();
+        const actual = await page.evaluate(() => ({ language: navigator.language, intl: Intl.DateTimeFormat().resolvedOptions().locale }));
+        expect(acceptLanguage).toMatch(/^ja-JP/);
+        expect(actual.language).toBe('ja-JP');
+        expect(actual.intl).toBe('ja-JP');
+      }
+    } finally {
+      await session?.close();
+      await closeLoopbackServer(server);
+    }
+  });
+});
+
 beforeAll(async () => {
   chromiumAvailable = await resolveChromiumAvailability(() => chromium.launch());
 });

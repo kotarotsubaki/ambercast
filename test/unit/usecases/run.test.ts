@@ -852,6 +852,32 @@ describe('run', () => {
     expect(uiExecutor).not.toHaveBeenCalled();
   });
 
+  it('TEST-L5 rejects a locale-changed config before any browser session launches', async () => {
+    const { deps, uiExecutor, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    const plan = await createFreshPlan(recordingStorage.storage, testPath, [
+      { id: 'open-dashboard', kind: 'action', action: 'navigate', url: '/dashboard' },
+    ]);
+    const japaneseTargets = { web: { ...plan.targets.web!, locale: 'ja-JP' } };
+    const japanesePlan = {
+      ...plan,
+      targets: japaneseTargets,
+      source: { inputsDigest: computeInputsDigest({
+        normalizedTestMd: normalizeTestMd(PROMPT),
+        schemaVersion: 4,
+        generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
+        planProducerBundleFingerprint: planProducerBundleFingerprint(),
+        targetDefinitions: japaneseTargets,
+      }) },
+    };
+    await recordingStorage.storage.writeText(deps.layout.planPathFor(testPath), toCanonicalArtifactText(japanesePlan as unknown as JsonValueT));
+    const config = { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, locale: 'en-US' } } };
+    const outcome = await run({ ...deps, config }, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toBeInstanceOf(StaleIrError);
+    expect(outcome.results[0]?.error).toMatchObject({ exitCode: 4 });
+    expect(uiExecutor).not.toHaveBeenCalled();
+  });
+
   it('rejects legacy secret syntax before target resolution or browser launch', async () => {
     const { deps, uiExecutor, recordingStorage } = createScenario();
     await writePrompt(recordingStorage.storage, 'login.test.md', `${PROMPT}\n@ambercast-${'secret'} {{secrets.FOO}}\n`);

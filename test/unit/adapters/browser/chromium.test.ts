@@ -394,12 +394,12 @@ class FakePlaywrightContext implements PlaywrightContextHandle {
 
 class FakePlaywrightBrowser implements PlaywrightBrowserHandle {
   closeFailure: Error | undefined;
-  readonly newContextOptions: { readonly baseURL: string }[] = [];
+  readonly newContextOptions: { readonly baseURL: string; readonly locale?: string }[] = [];
   readonly closeCalls: undefined[] = [];
 
   constructor(readonly context: FakePlaywrightContext) {}
 
-  async newContext(options: { readonly baseURL: string }): Promise<PlaywrightContextHandle> {
+  async newContext(options: { readonly baseURL: string; readonly locale?: string }): Promise<PlaywrightContextHandle> {
     this.newContextOptions.push(options);
     return this.context;
   }
@@ -679,6 +679,23 @@ describe('createPlaywrightUiExecutor()', () => {
       expect(launcher.browser.newContextOptions).toEqual([{ baseURL: TARGET.baseUrl }]);
       expect(launcher.context.newPageCalls).toHaveLength(1);
     });
+  });
+
+  it.each([
+    ['configured', 'ja-JP', ['baseURL', 'locale']],
+    ['omitted', undefined, ['baseURL']],
+  ] as const)('TEST-L3 passes exactly the %s locale context options', async (_case, locale, keys) => {
+    const launcher = new FakePlaywrightLauncher();
+    const target = { ...TARGET, ...(locale === undefined ? {} : { locale }) };
+    const session = await createPlaywrightUiExecutor(EXECUTOR_CONFIG, { launcher }).launch(target);
+    try {
+      const options = launcher.browser.newContextOptions[0];
+      expect(options).toBeDefined();
+      expect(Object.keys(options!).sort()).toEqual([...keys].sort());
+      expect(options).toEqual({ baseURL: TARGET.baseUrl, ...(locale === undefined ? {} : { locale }) });
+    } finally {
+      await session.close();
+    }
   });
 
   it('does not navigate while launching a session', async () => {

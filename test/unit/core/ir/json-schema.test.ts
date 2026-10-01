@@ -54,6 +54,15 @@ const validators = {
   grounding: ajv.compile(getGroundingJsonSchema()),
 };
 
+describe('TEST-L6 plan target locale JSON Schema', () => {
+  it('publishes optional string TargetDefinition.locale', () => {
+    const schema = getPlanJsonSchema() as unknown as { properties: { targets: { additionalProperties: { properties: { locale: { type: string } }; required?: string[] } } } };
+    const target = schema.properties.targets.additionalProperties;
+    expect(target.properties.locale.type).toBe('string');
+    expect(target.required ?? []).not.toContain('locale');
+  });
+});
+
 // SPEC-C1 C1-1
 interface InvalidPlanReason {
   code: string;

@@ -183,6 +183,29 @@ async function createDiscoveryConflictFixture(): Promise<StorageAdapter> {
 }
 
 describe('loadConfig', () => {
+  describe('TEST-L1 target locale', () => {
+    it.each([
+      ['ja-jp', 'ja-JP'],
+      ['en-US', 'en-US'],
+      ['zh-Hant-TW', 'zh-Hant-TW'],
+      ['und', 'und'],
+    ] as const)('canonicalizes %s to %s', async (locale, expected) => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, ANCESTOR_CONFIG_PATH, { targets: { app: { baseUrl: 'http://app.test', locale } } });
+      expect((await load(storage)).targets.app?.locale).toBe(expected);
+    });
+
+    it.each(['', 'not a locale!!', 123] as const)('rejects invalid locale %s at the dotted path', async (locale) => {
+      const storage = createInMemoryStorage();
+      await writeConfig(storage, ANCESTOR_CONFIG_PATH, { targets: { app: { baseUrl: 'http://app.test', locale } } });
+      const error = await expectConfigInvalid(load(storage));
+      expect(error.kind).toBe('config-invalid');
+      expect(error.exitCode).toBe(2);
+      expect(error.message).toContain('targets.app.locale');
+      if (locale === '') expect(error.message).not.toContain('""');
+      if (locale === 123) expect(error.message).not.toContain('123');
+    });
+  });
   describe('configuration selection', () => {
     it.each([
       [

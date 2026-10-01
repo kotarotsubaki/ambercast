@@ -299,7 +299,7 @@ function resolveExplicitPath(path: string, cwd: string): string {
  * @param text - UTF-8 configuration text supplied by the selected storage path.
  * @param path - Selected path retained in diagnostics for malformed or invalid input.
  * @returns The validated partial configuration before defaults and path resolution.
- * @throws {ConfigInvalidError} When JSON is malformed, unsafe raw keys are present, or the document violates RawConfig.
+ * @throws {ConfigInvalidError} When JSON is malformed, unsafe raw keys are present, or the document violates RawConfig; schema violations list issue paths in the message.
  */
 export function parseAndValidateRawConfig(text: string, path: string): RawConfigShape {
   let document: unknown;
@@ -317,8 +317,11 @@ export function parseAndValidateRawConfig(text: string, path: string): RawConfig
   rejectLegacyBrowserKey(document, path);
   const result = RawConfig.safeParse(document);
   if (!result.success) {
+    const issuePaths = result.error.issues
+      .map((issue) => issue.path.length > 0 ? issue.path.join('.') : '<config root>')
+      .join(', ');
     throw new ConfigInvalidError(
-      'Configuration file does not match the expected schema.',
+      `Configuration file does not match the expected schema: ${issuePaths}.`,
       { configPath: path, issues: result.error.issues },
     );
   }
@@ -388,11 +391,12 @@ function rejectLegacyBrowserKey(document: unknown, configPath: string): void {
  * `resolveTimeoutMs` likewise defaults to 5000 here, so runtime eligibility
  * and behavior checks never receive an undefaulted value. Its default remains
  * outside the separate digest-projection boundary for the same live-only
- * reason.
+ * reason. An optional locale is canonicalized for each target during this copy.
  */
 function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedConfig['targets']): ResolvedConfig['targets'] {
   return Object.fromEntries(
     Object.entries(source).map(([name, target]) => {
+      const locale = canonicalizeLocale(target.locale, name);
       return [name, {
         ...target,
         surface: target.surface ?? 'web',
@@ -402,9 +406,38 @@ function copyTargets(source: NonNullable<RawConfigShape['targets']> | ResolvedCo
         },
         healReplayIsolation: target.healReplayIsolation ?? 'stateful',
         resolveTimeoutMs: target.resolveTimeoutMs ?? 5000,
+        ...(locale === undefined ? {} : { locale }),
       }];
     }),
   );
+}
+
+/**
+ * Canonicalizes an optional target locale at the authoritative config-loading boundary.
+ *
+ * @param value - The configured locale; `undefined` passes through unchanged.
+ * @param targetName - The target name used in the issue path.
+ * @returns The sole result of `Intl.getCanonicalLocales(value)`, or `undefined`.
+ * @throws {ConfigInvalidError} For a non-string value, an empty string, a
+ * `RangeError`, or any result other than exactly one locale. Report
+ * `CONFIG_INVALID` (exit 2) with a message such as
+ * `targets.<name>.locale is not a valid locale.`, embedding the actual target
+ * name, and a `{ target: targetName }` context object.
+ */
+function canonicalizeLocale(value: string | undefined, targetName: string): string | undefined {
+  if (value === undefined) return undefined;
+
+  let locales: string[];
+  try {
+    locales = Intl.getCanonicalLocales(value);
+  } catch {
+    throw new ConfigInvalidError(`targets.${targetName}.locale is not a valid locale.`, { target: targetName });
+  }
+
+  if (locales.length !== 1) {
+    throw new ConfigInvalidError(`targets.${targetName}.locale is not a valid locale.`, { target: targetName });
+  }
+  return locales[0];
 }
 
 function resolveSecretAllowlist(

@@ -142,7 +142,7 @@ export interface PlaywrightContextHandle {
  * The browser operation Chromium replay needs after launch.
  */
 export interface PlaywrightBrowserHandle {
-  newContext(options: { readonly baseURL: string }): Promise<PlaywrightContextHandle>;
+  newContext(options: { readonly baseURL: string; readonly locale?: string }): Promise<PlaywrightContextHandle>;
   close(): Promise<void>;
 }
 
@@ -817,6 +817,9 @@ class PlaywrightUiExecutor implements UiExecutor {
    * creation independent of fixture availability and leaves navigation under
    * the run step that requested it.
    *
+   * Starting layer 1, if the target-provided `locale` is present, it is passed
+   * through to `newContext`; otherwise only `baseURL` is passed.
+   *
    * @throws If Playwright cannot start a browser session for the target.
    */
   async launch(target: TargetDefinition): Promise<BrowserSession> {
@@ -824,7 +827,7 @@ class PlaywrightUiExecutor implements UiExecutor {
     let context: PlaywrightContextHandle | undefined;
 
     try {
-      context = await browser.newContext({ baseURL: target.baseUrl });
+      context = await browser.newContext({ baseURL: target.baseUrl, ...(target.locale === undefined ? {} : { locale: target.locale }) });
       const page = await context.newPage();
       return new ChromiumBrowserSession(page, context, browser);
     } catch (error) {

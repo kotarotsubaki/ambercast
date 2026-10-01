@@ -79,6 +79,7 @@ export const TargetConfigEntry = z.strictObject({
   description: z.string().optional(),
   baseUrl: TargetDefinition.shape.baseUrl,
   secretSinkOrigins: TargetDefinition.shape.secretSinkOrigins,
+  locale: TargetDefinition.shape.locale,
   executor: UiExecutorConfig.optional(),
   healReplayIsolation: z.enum(['idempotent', 'stateful']).optional(),
   resolveTimeoutMs: z.int().min(0).max(60000).optional(),

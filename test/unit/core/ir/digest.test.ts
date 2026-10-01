@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  computeIntentDigest,
   computeInputsDigest,
   computePlanDigest,
   isPlanDigestCurrent,
@@ -11,6 +12,54 @@ import type { JsonValueT, TargetDefinition } from '../../../../src/core/ir/schem
 
 const DIGEST_A = 'a'.repeat(64);
 const DIGEST_B = 'b'.repeat(64);
+
+describe('TEST-I7 computeIntentDigest', () => {
+  const sourceSpan = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 7 };
+  const baseline = {
+    stepKind: 'action' as const,
+    operation: 'click' as const,
+    intent: {
+      description: 'Submit',
+      sourceSpan,
+      roleHint: 'button',
+      quote: { text: 'Submit', sourceSpan },
+    },
+  };
+
+  it('pins the digest of a fixed input', () => {
+    expect(computeIntentDigest(baseline)).toBe('e765672a1bc3a07695aa183977e60030539d03a323c01effa9c4491d29719687');
+  });
+
+  it('returns the same digest for the same input twice', () => {
+    expect(computeIntentDigest(baseline)).toMatch(/^[0-9a-f]{64}$/);
+    expect(computeIntentDigest(baseline)).toBe(computeIntentDigest(baseline));
+  });
+
+  it.each([
+    ['description', { ...baseline, intent: { ...baseline.intent, description: 'Send' } }],
+    ['one span coordinate', { ...baseline, intent: { ...baseline.intent, sourceSpan: { ...sourceSpan, endColumn: 6 } } }],
+    ['roleHint', { ...baseline, intent: { ...baseline.intent, roleHint: 'link' } }],
+    ['quote', { ...baseline, intent: { ...baseline.intent, quote: { ...baseline.intent.quote, text: 'Send' } } }],
+    ['operation', { ...baseline, operation: 'press' as const }],
+    ['stepKind', { ...baseline, stepKind: 'capture' as const }],
+  ])('changes when only %s changes', (_field, changed) => {
+    expect(computeIntentDigest(changed)).not.toBe(computeIntentDigest(baseline));
+  });
+
+  it('ignores key insertion order in an equivalent object', () => {
+    const reordered = {
+      intent: {
+        quote: { sourceSpan: { endColumn: 7, endLine: 1, startColumn: 1, startLine: 1 }, text: 'Submit' },
+        roleHint: 'button',
+        sourceSpan: { endColumn: 7, endLine: 1, startColumn: 1, startLine: 1 },
+        description: 'Submit',
+      },
+      operation: 'click' as const,
+      stepKind: 'action' as const,
+    };
+    expect(computeIntentDigest(reordered)).toBe(computeIntentDigest(baseline));
+  });
+});
 
 function targetDefinition(baseUrl = 'https://example.test'): TargetDefinition {
   return { surface: 'web', baseUrl };

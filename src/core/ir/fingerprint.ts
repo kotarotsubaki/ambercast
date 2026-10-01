@@ -108,6 +108,53 @@ function normalizeName(name: string): string {
 }
 
 /**
+ * Finds literal quoted-text candidates in an accessibility snapshot.
+ *
+ * @remarks A single linear walk starts with the synthetic root's children,
+ * in the same order as fingerprint matching. It applies the existing
+ * {@link normalizeName} to query text and node names, compares an optional
+ * role hint exactly, and never interpolates `{{run.x}}`-shaped strings.
+ * Invalid snapshots return `snapshot-invalid` through
+ * {@link isSnapshotInvalid}. The linear walk is the performance contract for
+ * the later 5,000-node/10ms test; no index or memo is built.
+ *
+ * @param tree - The synthetic-root ARIA snapshot tree.
+ * @param criteria - Literal quote text and optional role filter.
+ * @returns Ordered matching role/name pairs or invalid-snapshot status.
+ */
+export function matchQuotedCandidates(
+  tree: AccessibilityNode,
+  criteria: { readonly text: string; readonly roleHint?: string },
+): { role: string; name: string }[] | { kind: 'snapshot-invalid' } {
+  if (isSnapshotInvalid(tree)) {
+    return { kind: 'snapshot-invalid' };
+  }
+
+  const matches: { role: string; name: string }[] = [];
+  const normalizedText = normalizeName(criteria.text);
+
+  function visit(parent: AccessibilityNode): void {
+    for (let index = 0; index < parent.children.length; index += 1) {
+      const node = parent.children[index];
+
+      if (node === undefined) {
+        continue;
+      }
+
+      if (normalizeName(node.name) === normalizedText
+        && (criteria.roleHint === undefined || node.role === criteria.roleHint)) {
+        matches.push({ role: node.role, name: node.name });
+      }
+
+      visit(node);
+    }
+  }
+
+  visit(tree);
+  return matches;
+}
+
+/**
  * Collects every accessibility node whose role and normalized name match a
  * reference.
  *

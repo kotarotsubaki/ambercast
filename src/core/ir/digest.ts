@@ -13,6 +13,8 @@ import { createHash } from 'node:crypto';
 import { toCanonicalDigestBytes } from './canonical-json.js';
 import type { NormalizedTestMd } from './normalize.js';
 import type {
+  ElementIntent,
+  HexSha256,
   GroundingDocument,
   JsonValueT,
   PlanDocument,
@@ -32,6 +34,29 @@ import type {
  */
 export function sha256HexOfCanonicalJson(value: JsonValueT): string {
   return createHash('sha256').update(toCanonicalDigestBytes(value)).digest('hex');
+}
+
+/**
+ * Computes the stable digest of an action or capture element intent.
+ *
+ * @remarks The complete preimage is exactly `{ stepKind, operation, intent }`.
+ * Canonical JSON and SHA-256 come from {@link sha256HexOfCanonicalJson}; no
+ * locator or grounding value participates in this provenance claim.
+ *
+ * @param step - The operation identity and committed element intent.
+ * @returns The lowercase canonical JSON SHA-256 digest.
+ */
+export function computeIntentDigest(step: {
+  readonly stepKind: 'action' | 'capture';
+  readonly operation: 'click' | 'press' | 'fill' | 'fill-secret' | 'capture';
+  readonly intent: ElementIntent;
+}): HexSha256 {
+  const preimage = {
+    stepKind: step.stepKind,
+    operation: step.operation,
+    intent: step.intent,
+  };
+  return sha256HexOfCanonicalJson(preimage as JsonValueT);
 }
 
 /**

@@ -101,6 +101,33 @@ export const REPORT_ERROR_DETAILS = {
 }>>;
 
 /**
+ * Selects the CLI hint text for a grounding-unresolved failure reason.
+ *
+ * @remarks `missing` and `recoverable-miss` keep pointing callers at
+ * `--resolve`. The four reasons introduced by the first-binding sequence
+ * (`no-candidate`, `ambiguous`, `proposal-rejected`, `candidate-changed`)
+ * instead point at quoting the UI text in the prompt or running `ambercast
+ * heal`, since re-running with `--resolve` alone cannot fix a binding the
+ * first-binding sequence already attempted and could not complete.
+ *
+ * @param reason - The grounding-unresolved reason this run ended with.
+ * @returns The hint string to attach as `error.details.hint`.
+ */
+export function groundingUnresolvedHint(reason: 'missing' | 'recoverable-miss' | 'no-candidate' |
+  'ambiguous' | 'proposal-rejected' | 'candidate-changed'): string {
+  switch (reason) {
+    case 'missing':
+    case 'recoverable-miss':
+      return 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.';
+    case 'no-candidate':
+    case 'ambiguous':
+    case 'proposal-rejected':
+    case 'candidate-changed':
+      return 'Quote the UI text in the prompt or run `ambercast heal` to update the binding.';
+  }
+}
+
+/**
  * Converts a classified error into a serializable run- or case-scoped report
  * error.
  *
@@ -163,10 +190,6 @@ export function reportError(
     throw new Error(`Error kind ${error.kind} cannot be serialized at run scope.`);
   }
 
-  const tableHint = 'hint' in details ? details.hint : undefined;
-  const instanceHint = readRecordField(error.details, 'hint');
-  const hint = tableHint ?? (typeof instanceHint === 'string' ? instanceHint : undefined);
-  const hintField = hint === undefined ? {} : { hint };
   const sourceDetails = error.details;
   const browserLaunchDetails = error.kind === 'browser-launch-failed'
     && location.scope === 'case'
@@ -225,6 +248,12 @@ export function reportError(
             : error.kind === 'browser-launch-failed'
               ? browserLaunchDetails
             : undefined;
+  const tableHint = 'hint' in details ? details.hint : undefined;
+  const instanceHint = readRecordField(error.details, 'hint');
+  const hint = error.kind === 'grounding-unresolved' && detailsByCode?.success
+    ? groundingUnresolvedHint((detailsByCode.data as ReturnType<typeof GroundingUnresolvedDetails.parse>).reason)
+    : tableHint ?? (typeof instanceHint === 'string' ? instanceHint : undefined);
+  const hintField = hint === undefined ? {} : { hint };
   const diagnosticDetails = detailsByCode?.success ? { details: detailsByCode.data } : {};
 
   const partiallyWritten = readRecordField(error.details, 'partiallyWritten');

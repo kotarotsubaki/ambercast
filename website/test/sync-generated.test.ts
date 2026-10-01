@@ -15,8 +15,8 @@ afterEach(() => {
 
 const requiredSources = {
   'dist/schema/config.schema.json': '{"schema":"config","unicode":"雪"}\n',
-  'dist/schema/plan.schema.json': '{"schema":"plan","current":"v4"}\n',
-  'dist/schema/grounding.schema.json': '{"schema":"grounding"}\n',
+  'dist/schema/plan.schema.json': '{"schema":"plan","current":"v5"}\n',
+  'dist/schema/grounding.schema.json': '{"schema":"grounding","current":"v3"}\n',
   'dist/schema/report.schema.json': '{"schema":"report"}\n',
   'dist/manifest/capabilities.json': '{"commands":["generate"]}\n',
   'dist/manifest/cli.json': '{"version":"0.3.1"}\n',
@@ -25,17 +25,21 @@ const requiredSources = {
 const frozenSchemaSource = {
   'website/src/schemas-frozen/plan.v2.schema.json': '{"schema":"plan","frozen":"v2"}\n',
   'website/src/schemas-frozen/plan.v3.schema.json': '{"schema":"plan","frozen":"v3"}\n',
+  'website/src/schemas-frozen/plan.v4.schema.json': '{"schema":"plan","frozen":"v4"}\n',
+  'website/src/schemas-frozen/grounding.v2.schema.json': '{"schema":"grounding","frozen":"v2"}\n',
 };
 
 const publications: ReadonlyArray<readonly [string, string]> = [
   ['dist/schema/config.schema.json', 'website/public/schemas/config.schema.json'],
-  ['dist/schema/plan.schema.json', 'website/public/schemas/plan.v4.schema.json'],
-  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.v2.schema.json'],
+  ['dist/schema/plan.schema.json', 'website/public/schemas/plan.v5.schema.json'],
+  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.v3.schema.json'],
   ['dist/schema/report.schema.json', 'website/public/schemas/report.v3.schema.json'],
   ['dist/manifest/capabilities.json', 'website/public/capabilities.json'],
   ['dist/manifest/cli.json', 'website/public/manifest/cli.json'],
   ['website/src/schemas-frozen/plan.v3.schema.json', 'website/public/schemas/plan.v3.schema.json'],
   ['website/src/schemas-frozen/plan.v2.schema.json', 'website/public/schemas/plan.v2.schema.json'],
+  ['website/src/schemas-frozen/plan.v4.schema.json', 'website/public/schemas/plan.v4.schema.json'],
+  ['website/src/schemas-frozen/grounding.v2.schema.json', 'website/public/schemas/grounding.v2.schema.json'],
 ];
 
 function fixtureFor(files: Record<string, string>) {
@@ -90,7 +94,7 @@ describe('sync-generated CLI entry point', () => {
     expect(existsSync(join(fixture.root, 'website/public/manifest/config-defaults.json'))).toBe(false);
   });
 
-  it('publishes Plan v4 and frozen Plan v2 schemas from their distinct source roots', () => {
+  it('publishes Plan v5 and frozen Plan v2 schemas from their distinct source roots', () => {
     const fixture = fixtureFor({ ...requiredSources, ...frozenSchemaSource });
 
     const result = runEntryPoint(new URL('../scripts/sync-generated.mjs', import.meta.url), fixture.website);
@@ -99,7 +103,7 @@ describe('sync-generated CLI entry point', () => {
     const currentPlanSchema = readFileSync(join(fixture.root, 'dist/schema/plan.schema.json'));
     const frozenPlanSchema = readFileSync(join(fixture.root, 'website/src/schemas-frozen/plan.v2.schema.json'));
     expect(currentPlanSchema).not.toStrictEqual(frozenPlanSchema);
-    expect(readFileSync(join(fixture.root, 'website/public/schemas/plan.v4.schema.json'))).toStrictEqual(currentPlanSchema);
+    expect(readFileSync(join(fixture.root, 'website/public/schemas/plan.v5.schema.json'))).toStrictEqual(currentPlanSchema);
     expect(readFileSync(join(fixture.root, 'website/public/schemas/plan.v2.schema.json'))).toStrictEqual(frozenPlanSchema);
   });
 
@@ -164,10 +168,9 @@ describe('sync-generated CLI entry point', () => {
   });
 
   it('rejects a missing frozen Plan v2 schema before publishing any artifact and removes stale outputs', () => {
-    const fixture = fixtureFor({
-      ...requiredSources,
-      'website/src/schemas-frozen/plan.v3.schema.json': frozenSchemaSource['website/src/schemas-frozen/plan.v3.schema.json'],
-    });
+    const files = { ...requiredSources, ...frozenSchemaSource };
+    delete files['website/src/schemas-frozen/plan.v2.schema.json'];
+    const fixture = fixtureFor(files);
     writeStaleOutputs(fixture.root);
 
     const result = runEntryPoint(new URL('../scripts/sync-generated.mjs', import.meta.url), fixture.website);
@@ -180,9 +183,10 @@ describe('sync-generated CLI entry point', () => {
   });
 
   it('rejects a frozen Plan v2 schema path that is not a regular file without partial publication', () => {
+    const files = { ...requiredSources, ...frozenSchemaSource };
+    delete files['website/src/schemas-frozen/plan.v2.schema.json'];
     const fixture = fixtureFor({
-      ...requiredSources,
-      'website/src/schemas-frozen/plan.v3.schema.json': frozenSchemaSource['website/src/schemas-frozen/plan.v3.schema.json'],
+      ...files,
       'website/src/schemas-frozen/plan.v2.schema.json/placeholder': 'not a schema file\n',
     });
 
@@ -269,8 +273,8 @@ describe('frozen Plan v2 schema integrity', () => {
   });
 });
 
-describe('Plan v4 publication', () => {
-  it('publishes current Plan v4 from dist and frozen Plan v3 from its committed snapshot', () => {
+describe('Plan v5 publication', () => {
+  it('publishes current Plan v5 from dist and frozen Plan v3 from its committed snapshot', () => {
     const fixture = fixtureFor({
       ...requiredSources,
       ...frozenSchemaSource,
@@ -279,7 +283,7 @@ describe('Plan v4 publication', () => {
     const result = runEntryPoint(new URL('../scripts/sync-generated.mjs', import.meta.url), fixture.website);
 
     expect(result.status).toBe(0);
-    expect(readFileSync(join(fixture.root, 'website/public/schemas/plan.v4.schema.json'))).toStrictEqual(
+    expect(readFileSync(join(fixture.root, 'website/public/schemas/plan.v5.schema.json'))).toStrictEqual(
       readFileSync(join(fixture.root, 'dist/schema/plan.schema.json')),
     );
     expect(readFileSync(join(fixture.root, 'website/public/schemas/plan.v3.schema.json'))).toStrictEqual(

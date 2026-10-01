@@ -161,14 +161,17 @@ describe('canonical JSON serialization', () => {
 
   it('canonically serializes committed secret provenance alongside ordinary plan data', () => {
     const plan = PlanDocument.parse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       source: { inputsDigest: 'a'.repeat(64) },
       targets: { web: { surface: 'web', baseUrl: 'https://example.test' } },
       steps: [{
         id: 'fill-password',
         kind: 'action',
         action: 'fill-secret',
-        target: 'web', element: { strategy: 'accessibility', role: 'textbox', name: 'Password' },
+        target: 'web', intent: {
+          description: 'Password',
+          sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 9 },
+        },
         secretRef: '{{secrets.account.password}}',
       }, {
         id: 'verify-account',
@@ -186,8 +189,8 @@ describe('canonical JSON serialization', () => {
 
     const digest = digestText(asJsonValue(plan));
     expect(JSON.parse(digest)).toEqual(plan);
-    expect(digest).toContain('"schemaVersion":4');
-    expect(digest).toContain('"element":{"name":"Password","role":"textbox","strategy":"accessibility"}');
+    expect(digest).toContain('"schemaVersion":5');
+    expect(digest).toContain('"intent":{"description":"Password","sourceSpan":{"endColumn":9,"endLine":1,"startColumn":1,"startLine":1}}');
     expect(digest).toContain('"target":"web"');
     expect(digest).toContain('"surface":"web"');
     const artifact = toCanonicalArtifactText(asJsonValue(plan));

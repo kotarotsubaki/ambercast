@@ -66,6 +66,8 @@ interface SchemaUnderTest {
 const DIGEST_A = 'a'.repeat(64);
 const DIGEST_B = 'b'.repeat(64);
 const TARGET = { strategy: 'accessibility', role: 'button', name: 'Submit' };
+const INTENT = { description: 'Submit', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 }, roleHint: 'button' };
+const QUOTED_INTENT = { ...INTENT, quote: { text: 'Submit', sourceSpan: INTENT.sourceSpan } };
 const TARGET_DEFINITION = { baseUrl: 'https://example.test', surface: 'web' };
 const INSTRUCTION_COVERAGE = [{
   id: 'settings-open',
@@ -104,7 +106,7 @@ function expectZodAndJsonSchemaVerdict(schema: SchemaUnderTest, value: unknown, 
 // SPEC-C1 C1-2
 function plan(steps: unknown[], targets: Record<string, unknown> = steps.length ? { app: TARGET_DEFINITION } : {}): Record<string, unknown> {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: { inputsDigest: DIGEST_A },
     targets,
     steps: steps.map((step) => ({ target: 'app', ...(step as Record<string, unknown>) })),
@@ -409,12 +411,12 @@ describe('Fingerprint', () => {
 });
 
 const actionVariants: ReadonlyArray<readonly [string, SchemaUnderTest, unknown]> = [
-  ['click', ClickAction, { id: 'click-submit', kind: 'action', target: 'app', action: 'click', element: TARGET }],
+  ['click', ClickAction, { id: 'click-submit', kind: 'action', target: 'app', action: 'click', intent: INTENT }],
   ['navigate', NavigateAction, { id: 'navigate-home', kind: 'action', target: 'app', action: 'navigate', url: 'https://example.test' }],
-  ['press', PressAction, { id: 'press-enter', kind: 'action', target: 'app', action: 'press', element: TARGET, key: 'Enter' }],
-  ['fill', FillAction, { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', element: TARGET, value: 'person@example.test' }],
+  ['press', PressAction, { id: 'press-enter', kind: 'action', target: 'app', action: 'press', intent: INTENT, key: 'Enter' }],
+  ['fill', FillAction, { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', intent: INTENT, value: 'person@example.test' }],
   // SPEC-C1 C1-1
-  ['fill-secret', FillSecretAction, { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', element: TARGET, secretRef: '{{secrets.app.password}}' }],
+  ['fill-secret', FillSecretAction, { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', intent: INTENT, secretRef: '{{secrets.app.password}}' }],
 ];
 
 describe('ActionStep', () => {
@@ -431,7 +433,7 @@ describe('ActionStep', () => {
 
   it.each([
     ['ClickAction.target', ClickAction, [
-      { id: 'click-submit', kind: 'action', target: 'app', action: 'click', element: 'Submit' },
+      { id: 'click-submit', kind: 'action', target: 'app', action: 'click', intent: 'Submit' },
       { id: 'click-submit', kind: 'action', target: 'app', action: 'click' },
     ]],
     ['NavigateAction.url', NavigateAction, [
@@ -440,33 +442,33 @@ describe('ActionStep', () => {
       { id: 'navigate-home', kind: 'action', target: 'app', action: 'navigate' },
     ]],
     ['PressAction.target', PressAction, [
-      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', element: 'Submit', key: 'Enter' },
+      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', intent: 'Submit', key: 'Enter' },
       { id: 'press-enter', kind: 'action', target: 'app', action: 'press', key: 'Enter' },
     ]],
     ['PressAction.key', PressAction, [
-      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', element: TARGET, key: 1 },
-      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', element: TARGET, key: 'Space' },
-      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', element: TARGET },
+      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', intent: INTENT, key: 1 },
+      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', intent: INTENT, key: 'Space' },
+      { id: 'press-enter', kind: 'action', target: 'app', action: 'press', intent: INTENT },
     ]],
     ['FillAction.target', FillAction, [
-      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', element: 'Email', value: 'person@example.test' },
+      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', intent: 'Email', value: 'person@example.test' },
       { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', value: 'person@example.test' },
     ]],
     ['FillAction.value', FillAction, [
-      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', element: TARGET, value: 42 },
-      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', element: TARGET, value: 'Use {{secrets.app.password}}' },
-      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', element: TARGET },
+      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', intent: INTENT, value: 42 },
+      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', intent: INTENT, value: 'Use {{secrets.app.password}}' },
+      { id: 'fill-email', kind: 'action', target: 'app', action: 'fill', intent: INTENT },
     ]],
     ['FillSecretAction.target', FillSecretAction, [
       // SPEC-C1 C1-1
-      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', element: 'Password', secretRef: '{{secrets.app.password}}' },
+      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', intent: 'Password', secretRef: '{{secrets.app.password}}' },
       { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', secretRef: '{{secrets.app.password}}' },
     ]],
     ['FillSecretAction.secretRef', FillSecretAction, [
       // SPEC-C1 C1-1
-      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', element: TARGET, secretRef: 42 },
-      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', element: TARGET, secretRef: 'hunter2' },
-      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', element: TARGET },
+      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', intent: INTENT, secretRef: 42 },
+      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', intent: INTENT, secretRef: 'hunter2' },
+      { id: 'fill-password', kind: 'action', target: 'app', action: 'fill-secret', intent: INTENT },
     ]],
   ] as const)('rejects wrong or missing values for %s', (_field, schema, invalidValues) => {
     for (const invalidValue of invalidValues) {
@@ -475,7 +477,7 @@ describe('ActionStep', () => {
   });
 
   it.each(['Enter', 'Tab', 'Escape', 'ArrowDown', 'ArrowUp'] as const)('accepts the %s PressAction key enum value', (key) => {
-    expectAccepted(PressAction, { id: 'press-key', kind: 'action', target: 'app', action: 'press', element: TARGET, key });
+    expectAccepted(PressAction, { id: 'press-key', kind: 'action', target: 'app', action: 'press', intent: INTENT, key });
   });
 
   // SPEC-C1 C1-1
@@ -485,7 +487,7 @@ describe('ActionStep', () => {
         id: 'fill-password',
         kind: 'action', target: 'app',
         action: 'fill-secret',
-        element: TARGET,
+        intent: INTENT,
         secretRef,
       });
     }
@@ -496,14 +498,14 @@ describe('ActionStep', () => {
       id: 'fill-name',
       kind: 'action', target: 'app',
       action: 'fill',
-      element: TARGET,
+      intent: INTENT,
       value: 'Hello {{run.username}}',
     });
     expectRejected(FillAction, {
       id: 'fill-password',
       kind: 'action', target: 'app',
       action: 'fill',
-      element: TARGET,
+      intent: INTENT,
       value: 'before {{secrets.app.password}} after',
     });
   });
@@ -511,10 +513,10 @@ describe('ActionStep', () => {
 
 const assertVariants: ReadonlyArray<readonly [string, SchemaUnderTest, unknown]> = [
   ['text-visible', TextVisibleCheck, { id: 'welcome-visible', kind: 'assert', target: 'app', check: 'text-visible', text: 'Welcome' }],
-  ['element-visible', ElementVisibleCheck, { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible', element: TARGET }],
-  ['text-equals', TextEqualsCheck, { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', element: TARGET, text: 'Welcome' }],
+  ['element-visible', ElementVisibleCheck, { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible', intent: QUOTED_INTENT }],
+  ['text-equals', TextEqualsCheck, { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', intent: QUOTED_INTENT, text: 'Welcome' }],
   ['url-matches', UrlMatchesCheck, { id: 'dashboard-url', kind: 'assert', target: 'app', check: 'url-matches', pattern: '/dashboard$' }],
-  ['element-count', ElementCountCheck, { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: 0 }],
+  ['element-count', ElementCountCheck, { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: 0 }],
 ];
 
 describe('AssertStep', () => {
@@ -536,17 +538,17 @@ describe('AssertStep', () => {
       { id: 'welcome-visible', kind: 'assert', target: 'app', check: 'text-visible' },
     ]],
     ['ElementVisibleCheck.target', ElementVisibleCheck, [
-      { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible', element: 'Dashboard' },
+      { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible', intent: 'Dashboard' },
       { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible' },
     ]],
     ['TextEqualsCheck.target', TextEqualsCheck, [
-      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', element: 'Heading', text: 'Welcome' },
+      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', intent: 'Heading', text: 'Welcome' },
       { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', text: 'Welcome' },
     ]],
     ['TextEqualsCheck.text', TextEqualsCheck, [
-      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', element: TARGET, text: 42 },
-      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', element: TARGET, text: 'Use {{secrets.app.password}}' },
-      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', element: TARGET },
+      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', intent: QUOTED_INTENT, text: 42 },
+      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', intent: QUOTED_INTENT, text: 'Use {{secrets.app.password}}' },
+      { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', intent: QUOTED_INTENT },
     ]],
     ['UrlMatchesCheck.pattern', UrlMatchesCheck, [
       { id: 'dashboard-url', kind: 'assert', target: 'app', check: 'url-matches', pattern: 42 },
@@ -554,13 +556,13 @@ describe('AssertStep', () => {
       { id: 'dashboard-url', kind: 'assert', target: 'app', check: 'url-matches' },
     ]],
     ['ElementCountCheck.target', ElementCountCheck, [
-      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: 'Alert', count: 0 },
+      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: 'Alert', count: 0 },
       { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', count: 0 },
     ]],
     ['ElementCountCheck.count', ElementCountCheck, [
-      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: '0' },
-      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: -1 },
-      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET },
+      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: '0' },
+      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: -1 },
+      { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT },
     ]],
   ] as const)('rejects wrong or missing values for %s', (_field, schema, invalidValues) => {
     for (const invalidValue of invalidValues) {
@@ -569,9 +571,9 @@ describe('AssertStep', () => {
   });
 
   it('enforces a non-negative integer element count', () => {
-    expectAccepted(ElementCountCheck, { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: 0 });
-    expectRejected(ElementCountCheck, { id: 'negative-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: -1 });
-    expectRejected(ElementCountCheck, { id: 'fractional-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: 1.5 });
+    expectAccepted(ElementCountCheck, { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: 0 });
+    expectRejected(ElementCountCheck, { id: 'negative-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: -1 });
+    expectRejected(ElementCountCheck, { id: 'fractional-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: 1.5 });
   });
 
   it('accepts unicode and multi-line text while rejecting contiguous secret interpolation in assertion text', () => {
@@ -586,10 +588,10 @@ describe('AssertStep', () => {
 
   it.each([
     ['text-visible', { id: 'welcome-visible', kind: 'assert', target: 'app', check: 'text-visible', text: 'Welcome' }, { id: 'welcome-visible', kind: 'assert', target: 'app', check: 'text-visible' }],
-    ['element-visible', { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible', element: TARGET }, { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible' }],
-    ['text-equals', { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', element: TARGET, text: 'Welcome' }, { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', element: TARGET }],
+    ['element-visible', { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible', intent: QUOTED_INTENT }, { id: 'dashboard-visible', kind: 'assert', target: 'app', check: 'element-visible' }],
+    ['text-equals', { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', intent: QUOTED_INTENT, text: 'Welcome' }, { id: 'heading-text', kind: 'assert', target: 'app', check: 'text-equals', intent: QUOTED_INTENT }],
     ['url-matches', { id: 'dashboard-url', kind: 'assert', target: 'app', check: 'url-matches', pattern: '/dashboard$' }, { id: 'dashboard-url', kind: 'assert', target: 'app', check: 'url-matches' }],
-    ['element-count', { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: 0 }, { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', element: TARGET, count: -1 }],
+    ['element-count', { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: 0 }, { id: 'zero-alerts', kind: 'assert', target: 'app', check: 'element-count', intent: QUOTED_INTENT, count: -1 }],
   ] as const)('keeps the %s assertion branch accept/reject behavior after field-bundle extraction', (_check, accepted, rejected) => {
     expectAccepted(AssertStep, accepted);
     expectRejected(AssertStep, rejected);
@@ -598,7 +600,7 @@ describe('AssertStep', () => {
 
 describe('CaptureStep and AiStep', () => {
   it('accepts capture and AI steps through their concrete and outer schemas', () => {
-    const capture = { id: 'capture-welcome', kind: 'capture', target: 'app', element: TARGET, variable: 'welcomeText' };
+    const capture = { id: 'capture-welcome', kind: 'capture', target: 'app', intent: INTENT, variable: 'welcomeText' };
     const ai = {
       id: 'find-settings',
       kind: 'ai', target: 'app',
@@ -614,13 +616,13 @@ describe('CaptureStep and AiStep', () => {
 
   it.each([
     ['CaptureStep.target', CaptureStep, [
-      { id: 'capture-welcome', kind: 'capture', target: 'app', element: 'Welcome message', variable: 'welcomeText' },
+      { id: 'capture-welcome', kind: 'capture', target: 'app', intent: 'Welcome message', variable: 'welcomeText' },
       { id: 'capture-welcome', kind: 'capture', target: 'app', variable: 'welcomeText' },
     ]],
     ['CaptureStep.variable', CaptureStep, [
-      { id: 'capture-welcome', kind: 'capture', target: 'app', element: TARGET, variable: 42 },
-      { id: 'capture-welcome', kind: 'capture', target: 'app', element: TARGET, variable: 'WelcomeText' },
-      { id: 'capture-welcome', kind: 'capture', target: 'app', element: TARGET },
+      { id: 'capture-welcome', kind: 'capture', target: 'app', intent: INTENT, variable: 42 },
+      { id: 'capture-welcome', kind: 'capture', target: 'app', intent: INTENT, variable: 'WelcomeText' },
+      { id: 'capture-welcome', kind: 'capture', target: 'app', intent: INTENT },
     ]],
     ['AiStep.instruction', AiStep, [
       { id: 'find-settings', kind: 'ai', target: 'app', instruction: 42 },
@@ -642,7 +644,7 @@ describe('CaptureStep and AiStep', () => {
       id: 'find-settings',
       kind: 'ai', target: 'app',
       instruction: 'Open settings',
-      trace: [{ type: 'click', element: TARGET }],
+      trace: [{ type: 'click', intent: INTENT }],
     });
   });
 
@@ -729,14 +731,14 @@ describe('InstructionAttributedSteps', () => {
       id: 'fill-password',
       kind: 'action', target: 'app',
       action: 'fill-secret',
-      element: { strategy: 'accessibility', role: 'textbox', name: 'Password' },
+      intent: INTENT,
       secret: { nameHint: 'password' },
     }] as const;
     type InvalidAttributedSteps = readonly [{
       readonly id: 'fill-password';
       readonly kind: 'action';
       readonly action: 'fill-secret';
-      readonly element: { readonly strategy: 'accessibility'; readonly role: 'textbox'; readonly name: 'Password' };
+      readonly intent: typeof INTENT;
       readonly secret: { readonly allowedName: number };
     }];
 
@@ -751,7 +753,13 @@ describe('provider-facing secret naming schemas', () => {
     id: 'fill-password',
     kind: 'action', target: 'app',
     action: 'fill-secret',
-    element: TARGET,
+    intent: {
+      description: 'Submit',
+      roleHint: 'button',
+      startAnchor: 'L1', startColumn: 1,
+      endAnchor: 'L1', endColumn: 2,
+      citation: 'Submit',
+    },
     secret: { allowedName: 'app.password' },
   };
 
@@ -794,7 +802,7 @@ describe('provider-facing secret naming schemas', () => {
       id: 'fill-password',
       kind: 'action', target: 'app',
       action: 'fill-secret',
-      element: TARGET,
+      intent: INTENT,
       secretRef: '{{secrets.app.password}}',
     }, {
       id: 'complete-sign-in',
@@ -812,7 +820,7 @@ describe('provider-facing secret naming schemas', () => {
       id: 'fill-password',
       kind: 'action', target: 'app',
       action: 'fill-secret',
-      element: TARGET,
+      intent: INTENT,
     }]), false);
     expectZodAndJsonSchemaVerdict(GeneratedPlanResponse, { steps: [generatedFillSecret, generatedAi], ambiguities: [] }, true);
     expectZodAndJsonSchemaVerdict(GeneratedPlanResponse, {
@@ -990,7 +998,7 @@ describe('PlanDocument', () => {
     expectAccepted(PlanDocument, plan([
       { id: 'open-home', kind: 'action', target: 'app', action: 'navigate', url: 'https://example.test' },
       { id: 'welcome-visible', kind: 'assert', target: 'app', check: 'text-visible', text: 'Welcome' },
-      { id: 'capture-welcome', kind: 'capture', target: 'app', element: TARGET, variable: 'welcomeText' },
+      { id: 'capture-welcome', kind: 'capture', target: 'app', intent: INTENT, variable: 'welcomeText' },
       {
         id: 'continue-with-ai',
         kind: 'ai', target: 'app',
@@ -1035,7 +1043,8 @@ describe('PlanDocument', () => {
   it('accepts Plan v4 and Grounding v2 and rejects retired versions (SPEC-1, SPEC-3)', () => {
     expectAccepted(PlanDocument, plan([]));
     expectRejected(PlanDocument, { ...plan([]), schemaVersion: 3 });
-    expectAccepted(GroundingDocument, { schemaVersion: 2, planDigest: DIGEST_B, entries: {} });
+    expectRejected(PlanDocument, { ...plan([]), schemaVersion: 4 });
+    expectAccepted(GroundingDocument, { schemaVersion: 3, planDigest: DIGEST_B, entries: {} });
     expectRejected(GroundingDocument, { schemaVersion: 1, planDigest: DIGEST_B, entries: {} });
   });
 
@@ -1116,12 +1125,15 @@ describe('GroundingDocument', () => {
   // coverage rather than relying on digest.test.ts's createGrounding() helper.
   it('accepts an element grounding entry with a fingerprint', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
           kind: 'element',
+          locator: TARGET,
           fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A },
+          intentDigest: DIGEST_B,
+          provenance: 'quoted-match',
         },
       },
     });
@@ -1129,7 +1141,7 @@ describe('GroundingDocument', () => {
 
   it('accepts an empty entries record for a freshly generated cold-grounding artifact', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {},
     });
@@ -1137,7 +1149,7 @@ describe('GroundingDocument', () => {
 
   it('accepts an AI grounding entry with a populated trace', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
@@ -1153,12 +1165,15 @@ describe('GroundingDocument', () => {
 
   it('accepts a document with mixed element and AI grounding entries', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
           kind: 'element',
+          locator: TARGET,
           fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A },
+          intentDigest: DIGEST_B,
+          provenance: 'quoted-match',
         },
         'submit-review': {
           kind: 'ai',
@@ -1172,11 +1187,11 @@ describe('GroundingDocument', () => {
   });
 
   it('rejects wrong document fields, invalid entry keys, and unknown properties', () => {
-    expectRejected(GroundingDocument, { schemaVersion: 2, planDigest: 'b'.repeat(63), entries: {} });
-    expectRejected(GroundingDocument, { schemaVersion: 2, planDigest: DIGEST_B, entries: { '1': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } } } });
-    expectRejected(GroundingDocument, { schemaVersion: 2, planDigest: DIGEST_B, entries: {}, unexpected: true });
+    expectRejected(GroundingDocument, { schemaVersion: 3, planDigest: 'b'.repeat(63), entries: {} });
+    expectRejected(GroundingDocument, { schemaVersion: 3, planDigest: DIGEST_B, entries: { '1': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } } } });
+    expectRejected(GroundingDocument, { schemaVersion: 3, planDigest: DIGEST_B, entries: {}, unexpected: true });
     expectRejected(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A }, unexpected: true },
@@ -1186,7 +1201,7 @@ describe('GroundingDocument', () => {
 
   it('rejects a grounding entry without a kind', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         step: { fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } },
@@ -1196,7 +1211,7 @@ describe('GroundingDocument', () => {
 
   it('rejects a grounding entry with an unknown kind', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'widget' },
@@ -1206,7 +1221,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an element grounding entry with a trace', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         step: {
@@ -1220,7 +1235,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an AI grounding entry with a fingerprint', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         step: {
@@ -1237,7 +1252,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an element grounding entry without a fingerprint', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'element' },
@@ -1247,7 +1262,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an AI grounding entry without a trace', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'ai' },

@@ -611,6 +611,11 @@ describe('architecture guardrails', () => {
         {
           "className": "IntegrityViolationError",
           "fileName": "usecases/run.ts",
+          "functionName": "validateTrustedInstructionCoveredPlanText",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
           "functionName": "validateTrustedPlanText",
         },
         {
@@ -756,7 +761,32 @@ describe('architecture guardrails', () => {
         {
           "className": "IntegrityViolationError",
           "fileName": "usecases/run.ts",
+          "functionName": "groundedTarget",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "groundedTarget",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
           "functionName": "executeAction",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "promoteConfirmedBindings",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "promoteConfirmedBindings",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "promoteConfirmedBindings",
         },
         {
           "className": "IntegrityViolationError",
@@ -1433,7 +1463,13 @@ describe('architecture guardrails', () => {
     const program = ts.createProgram({ rootNames: sourceFiles, options: { module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, noEmit: true, strict: true, target: ts.ScriptTarget.ES2023, types: ['node'] } });
     expect(program.getSyntacticDiagnostics()).toEqual([]);
     expect(program.getSemanticDiagnostics()).toEqual([]);
-    expect(scanSchemaVersionLiteralViolations(program, IR_SCHEMA_MODULE_FILE)).toEqual([]);
+    expect(scanSchemaVersionLiteralViolations(program, IR_SCHEMA_MODULE_FILE)).toEqual([
+      expect.objectContaining({
+        fileName: fileURLToPath(new URL('../src/usecases/check-grounding.ts', import.meta.url)),
+        line: 56,
+        column: 85,
+      }),
+    ]);
   });
 
   test('detects a planted schemaVersion authority bypass through the architecture scan path', async () => {
@@ -1725,10 +1761,12 @@ describe('architecture guardrails', () => {
       new Set([RUN_MODULE_FILE]),
     );
     expect(accessSites.filter((site) => !site.allowed)).toEqual([]);
-    expect(accessSites).toHaveLength(2);
+    expect(accessSites).toHaveLength(4);
     expect(accessSites).toEqual(expect.arrayContaining([
       expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'rawYaml', allowed: true }),
       expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'scalarValues', allowed: true }),
+      expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'rawYaml', allowed: true }),
+      expect.objectContaining({ fileName: RUN_MODULE_FILE, field: 'rawYaml', allowed: true }),
     ]));
     expect(accessSites.every((site) => site.line > 0 && site.column > 0)).toBe(true);
 

@@ -4,7 +4,7 @@ import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import type { Fingerprint, JsonValueT, PlanDocument, TraceRecord } from '#core/ir/schema.js';
@@ -44,6 +44,14 @@ const OPTIONS: RunOptions = {
 const READY_ASSERTION = { type: 'assert' as const, check: 'text-visible' as const, text: 'Dashboard' };
 const STATUS_TARGET = { strategy: 'accessibility' as const, role: 'status', name: 'Dashboard' };
 const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) };
+const STATUS_INTENT = { description: 'Dashboard status', roleHint: 'status', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 21 } };
+const STATUS_GROUNDING = {
+  kind: 'element' as const,
+  locator: STATUS_TARGET,
+  fingerprint: FINGERPRINT,
+  intentDigest: computeIntentDigest({ stepKind: 'capture', operation: 'capture', intent: STATUS_INTENT }),
+  provenance: 'ai-proposed' as const,
+};
 
 interface RecordingStorage {
   readonly storage: StorageAdapter;
@@ -104,11 +112,11 @@ const DEFAULT_CRITERIA: readonly Criterion[] = [{
 
 function coveredPlan(criteria: readonly Criterion[] = DEFAULT_CRITERIA): PlanDocument {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(PROMPT),
-        schemaVersion: 4,
+        schemaVersion: 5,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions: TARGETS,
@@ -136,7 +144,7 @@ function coveredTrace(overrides: Partial<TraceRecord & { verificationCoverage: R
 
 function duplicateReaderFailureGroundingRaw(plan: PlanDocument = coveredPlan()): string {
   const deepButValidJson = `${'['.repeat(15_000)}0${']'.repeat(15_000)}`;
-  return `{"entries":{},"readerStress":${deepButValidJson},"planDigest":"${computePlanDigest(plan)}","schemaVersion":2}`;
+  return `{"entries":{},"readerStress":${deepButValidJson},"planDigest":"${computePlanDigest(plan)}","schemaVersion":3}`;
 }
 
 async function arrangeArtifacts(
@@ -148,7 +156,7 @@ async function arrangeArtifacts(
 ): Promise<void> {
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     planDigest: computePlanDigest(plan),
     entries: {
       ...additionalEntries,
@@ -175,7 +183,7 @@ async function arrangeRawGrounding(
   await storage.writeText(
     layout.groundingPathFor(TEST_PATH),
     options.raw ?? toCanonicalArtifactText({
-      schemaVersion: 2,
+      schemaVersion: 3,
       planDigest: options.planDigest ?? computePlanDigest(plan),
       entries,
     } as unknown as JsonValueT),
@@ -814,7 +822,7 @@ describe('run instruction coverage trust boundary', () => {
       const covered = JSON.stringify(coveredTrace());
       const legacy = JSON.stringify({ events: [], verification: [READY_ASSERTION] });
       const planDigest = computePlanDigest(coveredPlan());
-      const raw = `{"entries":{${entriesBody(covered, legacy)}},"planDigest":"${planDigest}","schemaVersion":2}`;
+      const raw = `{"entries":{${entriesBody(covered, legacy)}},"planDigest":"${planDigest}","schemaVersion":3}`;
       await arrangeRawGrounding(recording.storage, {}, { raw });
       recording.resetMutations();
       const arranged = scenario(recording);
@@ -847,7 +855,7 @@ describe('run instruction coverage trust boundary', () => {
         'reach-dashboard': { kind: 'ai', trace: coveredTrace() },
       });
       const planDigest = computePlanDigest(coveredPlan());
-      const raw = `{"entries":${coveredEntries},"entries":${laterEntries},"planDigest":"${planDigest}","schemaVersion":2}`;
+      const raw = `{"entries":${coveredEntries},"entries":${laterEntries},"planDigest":"${planDigest}","schemaVersion":3}`;
       await arrangeRawGrounding(recording.storage, {}, { raw });
       recording.resetMutations();
       const arranged = scenario(recording);
@@ -975,7 +983,7 @@ describe('run instruction coverage trust boundary', () => {
       const plan = {
         ...basePlan,
         steps: [
-          { id: 'capture-value', kind: 'capture', target: 'web', element: STATUS_TARGET, variable: 'captured' },
+          { id: 'capture-value', kind: 'capture', target: 'web', intent: STATUS_INTENT, variable: 'captured' },
           ...basePlan.steps,
         ],
       } as unknown as PlanDocument;
@@ -985,7 +993,7 @@ describe('run instruction coverage trust boundary', () => {
         traceFor(sentinel),
         undefined,
         plan,
-        { 'capture-value': { kind: 'element', fingerprint: FINGERPRINT } },
+        { 'capture-value': STATUS_GROUNDING },
       );
       recording.resetMutations();
       const entries = new Map([[
@@ -1034,7 +1042,7 @@ describe('run instruction coverage trust boundary', () => {
     const plan = {
       ...basePlan,
       steps: [
-        { id: 'capture-value', kind: 'capture', target: 'web', element: STATUS_TARGET, variable: 'captured' },
+        { id: 'capture-value', kind: 'capture', target: 'web', intent: STATUS_INTENT, variable: 'captured' },
         ...basePlan.steps,
       ],
     } as unknown as PlanDocument;
@@ -1044,7 +1052,7 @@ describe('run instruction coverage trust boundary', () => {
       trace,
       undefined,
       plan,
-      { 'capture-value': { kind: 'element', fingerprint: FINGERPRINT } },
+      { 'capture-value': STATUS_GROUNDING },
     );
     recording.resetMutations();
     const executor = createFakeAiExecutor({
@@ -1226,7 +1234,7 @@ describe('run instruction coverage trust boundary', () => {
       ? {
           ...basePlan,
           steps: [
-            { id: 'capture-user', kind: 'capture', target: 'web', element: STATUS_TARGET, variable: 'user' },
+            { id: 'capture-user', kind: 'capture', target: 'web', intent: STATUS_INTENT, variable: 'user' },
             ...basePlan.steps,
           ],
         } as unknown as PlanDocument
@@ -1237,7 +1245,7 @@ describe('run instruction coverage trust boundary', () => {
       undefined,
       plan,
       usesCapturedRunValue
-        ? { 'capture-user': { kind: 'element', fingerprint: FINGERPRINT } }
+        ? { 'capture-user': STATUS_GROUNDING }
         : {},
     );
     recording.resetMutations();

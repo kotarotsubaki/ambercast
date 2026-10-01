@@ -3,7 +3,7 @@ import {
   isGroundingCanonicalForClaim,
   rawGroundingHasCoverageClaim,
 } from '#core/ir/grounding-coverage-claim.js';
-import { GroundingDocument, type PlanDocument } from '#core/ir/schema.js';
+import { GroundingDocument, RETIRED_GROUNDING_SCHEMA_VERSION, type PlanDocument } from '#core/ir/schema.js';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 
 /*
@@ -17,8 +17,8 @@ import type { ReadStorageAdapter } from '#ports/storage.js';
 /**
  * `missing` denotes an absent companion, `invalid` content that cannot be
  * parsed or satisfy the grounding schema, a coverage-bearing document whose
- * bytes are not its canonical serialization, `stale` a valid document for
- * another plan, and `valid` a matching companion.
+ * bytes are not its canonical serialization, `stale` a version 2 companion or
+ * a valid document for another plan, and `valid` a matching companion.
  *
  * @remarks
  * The inspection rejects JSON or schema failures before comparing the plan
@@ -26,6 +26,8 @@ import type { ReadStorageAdapter } from '#ports/storage.js';
  * coverage claim. A storage read failure is deliberately not another kind:
  * the caller already owns the CheckFileError path for I/O failures and must
  * retain that error rather than recast it as an invalid artifact.
+ * Per-entry intent digest mismatches, absent plan step IDs, and entries for
+ * non-action steps do not change classification; run treats them as no entry.
  */
 export type GroundingInspection =
   | { readonly kind: 'missing' }
@@ -40,7 +42,8 @@ export type GroundingInspection =
  * Parsing, provenance, and conditional canonicality classification need no
  * storage capability. Healing can therefore validate one retained snapshot,
  * while the exported inspector retains its existing read-only storage contract
- * and behavior.
+ * and behavior. A version 2 companion is stale before schema parsing, as is a
+ * current companion whose plan digest does not match.
  */
 export function inspectGroundingArtifactText(text: string, plan: PlanDocument): GroundingInspection {
   let parsed: unknown;
@@ -48,6 +51,10 @@ export function inspectGroundingArtifactText(text: string, plan: PlanDocument): 
     parsed = JSON.parse(text);
   } catch {
     return { kind: 'invalid' };
+  }
+
+  if (typeof parsed === 'object' && parsed !== null && 'schemaVersion' in parsed && parsed.schemaVersion === RETIRED_GROUNDING_SCHEMA_VERSION) {
+    return { kind: 'stale' };
   }
 
   const grounding = GroundingDocument.safeParse(parsed);

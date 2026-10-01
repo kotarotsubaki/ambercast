@@ -2,7 +2,7 @@
   "document": "plan",
   "expected": "valid",
   "value": {
-    "schemaVersion": 4,
+    "schemaVersion": 5,
     "source": {
       "inputsDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
@@ -17,12 +17,26 @@
         "id": "dashboard-visible",
         "kind": "assert",
         "check": "element-visible",
-        "element": {
-          "strategy": "accessibility",
-          "role": "main",
-          "name": "Dashboard"
-        },
-        "target": "app"
+        "target": "app",
+        "intent": {
+          "description": "Dashboard",
+          "sourceSpan": {
+            "startLine": 1,
+            "startColumn": 1,
+            "endLine": 1,
+            "endColumn": 2
+          },
+          "roleHint": "main",
+          "quote": {
+            "text": "Dashboard",
+            "sourceSpan": {
+              "startLine": 1,
+              "startColumn": 1,
+              "endLine": 1,
+              "endColumn": 2
+            }
+          }
+        }
       }
     ]
   }

@@ -19,7 +19,7 @@ import { toTargetDefinition } from '../../../src/core/target/resolve.js';
 
 const file = '/workspace/tests/unresolved.test.md';
 const plan = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   source: { inputsDigest: 'a'.repeat(64) },
   targets: { missing: { surface: 'web', baseUrl: 'https://missing.example.test' } },
   steps: [{ id: 'visit-missing', kind: 'action', action: 'navigate', target: 'missing', url: 'https://missing.example.test' }],
@@ -81,7 +81,7 @@ describe('unconfigured Plan Target preflight', () => {
   });
 });
 
-describe('retired Plan v3 preflight', () => {
+describe('retired Plan preflight', () => {
   it('check reports the Plan schema reason before Target resolution', async () => {
     const { deps } = await scenario();
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText({
@@ -94,10 +94,10 @@ describe('retired Plan v3 preflight', () => {
     expect(result.results).toContainEqual(expect.objectContaining({ id: file, status: 'stale', reason: 'The plan does not match the plan schema.' }));
   });
 
-  it('run and heal classify Plan v3 as stale-ir exit 4 before browser launch', async () => {
+  it('run and heal classify Plan v4 as stale-ir exit 4 before browser launch', async () => {
     const { deps, launch } = await scenario();
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText({
-      schemaVersion: 3,
+      schemaVersion: 4,
       source: { inputsDigest: 'a'.repeat(64) },
       targets: { app: { baseUrl: 'https://app.example.test', executor: { kind: 'playwright', browser: 'chromium' } } },
       steps: [{ id: 'visit-app', kind: 'action', action: 'navigate', url: 'https://app.example.test' }],
@@ -111,7 +111,7 @@ describe('retired Plan v3 preflight', () => {
 });
 
 describe('current Plan and grounding freshness', () => {
-  it('check accepts a v4 Plan with a current v2 grounding cache', async () => {
+  it('check accepts a v5 Plan with a current v3 grounding cache', async () => {
     const { deps } = await scenario();
     const current = {
       ...plan,
@@ -123,7 +123,7 @@ describe('current Plan and grounding freshness', () => {
       }).inputsDigest },
     };
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText(current));
-    await deps.storage.writeText(deps.layout.groundingPathFor(file), toCanonicalArtifactText({ schemaVersion: 2, planDigest: computePlanDigest(current as unknown as PlanDocument), entries: {} }));
+    await deps.storage.writeText(deps.layout.groundingPathFor(file), toCanonicalArtifactText({ schemaVersion: 3, planDigest: computePlanDigest(current as unknown as PlanDocument), entries: {} }));
     const result = await check({ storage: deps.storage, layout: deps.layout, discoverTestFiles: deps.discoverTestFiles, config: deps.config }, { files: [file], allowEmpty: false, list: false });
     expect(result.results).toContainEqual(expect.objectContaining({ id: file, status: 'fresh' }));
   });
@@ -131,13 +131,13 @@ describe('current Plan and grounding freshness', () => {
   it('treats a v1 grounding cache as unresolved when replay cannot use AI resolution', async () => {
     const { deps } = await scenario();
     const current = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       source: { inputsDigest: deriveCurrentPlanInputProvenance({
         normalizedTestMd: normalizeTestMd('# Visit missing\n'),
         targetDefinitions: { app: toTargetDefinition(deps.config.targets.app) },
       }).inputsDigest },
       targets: { app: { surface: 'web', baseUrl: 'https://app.example.test' } },
-      steps: [{ id: 'click-app', kind: 'action', action: 'click', target: 'app', element: { strategy: 'accessibility', role: 'button', name: 'Continue' } }],
+      steps: [{ id: 'click-app', kind: 'action', action: 'click', target: 'app', intent: { description: 'Continue button', roleHint: 'button', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 16 } } }],
     };
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText(current));
     await deps.storage.writeText(deps.layout.groundingPathFor(file), toCanonicalArtifactText({ schemaVersion: 1, planDigest: computePlanDigest(current as unknown as PlanDocument), entries: {} }));

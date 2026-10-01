@@ -72,7 +72,7 @@ function asNormalizedTestMd(value: string): NormalizedTestMd {
 function createInputs(overrides: Partial<DigestInputs> = {}): DigestInputs {
   return {
     normalizedTestMd: asNormalizedTestMd('# Smoke\n'),
-    schemaVersion: 4,
+    schemaVersion: 5,
     generatorPromptTemplateFingerprint: 'generator-template-v2',
     planProducerBundleFingerprint: 'producer-bundle-v1',
     targetDefinitions: { app: targetDefinition() },
@@ -92,7 +92,7 @@ function createPlan({
   generatorMeta?: Record<string, JsonValueT>;
 } = {}): PlanDocument {
   return PlanDocument.parse({
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: { inputsDigest },
     ...(generatorMeta === undefined ? {} : { generatorMeta }),
     targets: { app: targetDefinition(targetBaseUrl) },
@@ -110,7 +110,7 @@ function createPlan({
 
 function createGrounding(planDigest: string): GroundingDocument {
   return GroundingDocument.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     planDigest,
     entries: {},
   });
@@ -143,10 +143,10 @@ describe('computeInputsDigest', () => {
   });
 
   // The expected SHA-256 was calculated without calling the implementation.
-  // SPEC-1 and SPEC-4 bind the oracle to Plan v4 and the web surface rather than a browser choice.
-  // Its exact JCS preimage is {"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":4,"targetDefinitions":{"app":{"baseUrl":"https://example.test","surface":"web"}}}.
+  // SPEC-1 and SPEC-4 bind the oracle to Plan v5 and the web surface rather than a browser choice.
+  // Its exact JCS preimage is {"generatorPromptTemplateFingerprint":"generator-template-v2","normalizedTestMd":"# Smoke\n","planProducerBundleFingerprint":"producer-bundle-v1","schemaVersion":5,"targetDefinitions":{"app":{"baseUrl":"https://example.test","surface":"web"}}}.
   it('matches the independently derived SHA-256 oracle for the fixed preimage', () => {
-    expect(computeInputsDigest(createInputs())).toBe('8fb2ca4bdceb738e1592987be8c4a11df9e2c6d8baa351b2eb62bb1a047f941a');
+    expect(computeInputsDigest(createInputs())).toBe('474ed74c14cd605a7fd5e7fbdcef48e267735833ef188789529cb6d11b921a5a');
   });
 
   // The `-?` modifier prevents a future optional DigestInputs field from silently evading this completeness check.

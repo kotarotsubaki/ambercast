@@ -1,4 +1,5 @@
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
+import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
 import { composeAiDeadline, isAiDeadlineTimeout, type AiDeadline } from '#core/ai/ai-deadline.js';
 import type { ResolvedConfig, ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
@@ -21,7 +22,9 @@ import { projectCauseName } from '#report/error-mapping.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import { computePlanDigest } from '#core/ir/digest.js';
-import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
+import { computeAccessibilityFingerprint, matchQuotedCandidates } from '#core/ir/fingerprint.js';
+import type { AccessibilityNode } from '#core/ir/aria-snapshot.js';
+import { computeIntentDigest } from '#core/ir/digest.js';
 import { matchRunReferenceTokens } from '#core/ir/run-ref.js';
 import {
   isGroundingCanonicalForClaim,
@@ -29,7 +32,6 @@ import {
 } from '#core/ir/grounding-coverage-claim.js';
 import {
   ACTION_GROUNDING_MODE,
-  ASSERT_GROUNDING_MODE,
   groundingRecoveryModeForStep,
 } from '#core/ir/grounding-recovery-mode.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
@@ -45,15 +47,18 @@ import {
 import {
   GROUNDING_SCHEMA_VERSION,
   PLAN_SCHEMA_VERSION,
+  ElementBindingProposal,
   GroundingDocument,
   PlanDocument,
   TraceAction,
   TraceAssert,
   TraceRecord,
+  type AccessibilityElementRef,
   type ActionStep,
-  type AssertStep,
   type CaptureStep,
+  type ElementIntent,
   type ElementRef,
+  type Fingerprint,
   type GroundingEntry,
   type GroundingDocument as GroundingDocumentType,
   type GroundingDocumentWithCoverageStorage,
@@ -103,8 +108,10 @@ import type {
 } from './instruction-coverage-policy.js';
 import {
   classifyPreScannedTraceCoverage,
+  extractSpan,
   validateCommittedInstructionCoverage,
 } from './instruction-coverage-policy.js';
+import { validateCommittedElementIntent } from './element-intent-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 import { createSessionPool, type SessionPool } from './session-pool.js';
@@ -129,11 +136,38 @@ type ResultWithoutDuration = Omit<ExecutedRunResult, 'durationMs' | 'sessions' |
  */
 type FailureDetail = Pick<StepResult, 'expected' | 'actual' | 'screenshot' | 'screenshotOmitted' | 'observed'>;
 
-type ResolutionVia = 'grounding' | 'ai-resolve' | 'trace-replay';
+// Issue #472 reserves `ai-resolve` for executeAgentic's own live execution, never element binding.
+type ResolutionVia = 'grounding' | 'ai-resolve' | 'quoted-match' | 'ai-proposed' | 'trace-replay';
 
+// Only element-visible sets confirmationBasisValid: exactly one match is a valid confirmation basis; other passes leave it undefined and valid.
 type DispatchOutcome =
-  | { readonly kind: 'passed'; readonly via?: ResolutionVia }
+  | { readonly kind: 'passed'; readonly via?: ResolutionVia; readonly confirmationBasisValid?: boolean }
   | { readonly kind: 'assertion-failed'; readonly expected: string; readonly actual: string };
+
+/**
+ * Tracks an action-kind step's transient binding during one runCase call.
+ *
+ * @remarks
+ * SPEC-R5 transitions a locally verified SPEC-R4 stage-3 first binding from
+ * candidate to acted after the operation succeeds, then to confirmed when
+ * every step listing that action in `confirms` passes. A SPEC-R2 hit against
+ * an existing v3 entry enters directly at acted, with no candidate stage and
+ * zero AI calls. `grounding` reports that fast path; `quoted-match` and
+ * `ai-proposed` report fresh SPEC-R4 stage-1 and stage-2 bindings. This
+ * transient and StepResult-facing vocabulary is wider than the persisted
+ * entry's provenance: on fast-path confirmation, write back the entry's own
+ * unchanged provenance, never `grounding` (SPEC-R9).
+ *
+ * `quoteWaitMs` and `aiProposalMs` exist only if their respective first-binding
+ * stage actually ran; the fast path has neither, and neither is backfilled.
+ * SPEC-R6 forbids acting without candidate (except the fast-path acted entry),
+ * persisting an acted-only state, and retrying an operation after its action
+ * failed within the same run.
+ */
+type BindingState =
+  | { readonly stage: 'candidate'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
+  | { readonly stage: 'acted'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
+  | { readonly stage: 'confirmed'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number };
 
 /**
  * Carries a materialized secret fill through the private run dispatcher.
@@ -160,10 +194,31 @@ interface CapturedRunValue {
 }
 
 type RunState = ReadonlyMap<RunVariableName, CapturedRunValue>;
+type ElementBindingStep = ActionStep | CaptureStep;
 
 /** Project captured values for legacy readers that do not need writer identity. */
 function runStateValues(runState: RunState): ReadonlyMap<RunVariableName, string> {
   return new Map([...runState].map(([name, writer]) => [name, writer.value]));
+}
+
+/**
+ * Indexes each action ID by the confirming step IDs in plan order, once per
+ * runCase call, avoiding a whole-plan scan after every step. The validated
+ * plan's SPEC-I5 validateConfirms guarantee supplies existence, earlier
+ * action-kind targets, and uniqueness; this function does not revalidate.
+ * Stage 1 SPEC-H2 eligibility in heal.ts also consumes this reverse index.
+ */
+export function buildConfirmsIndex(steps: readonly Step[]): ReadonlyMap<StepId, readonly StepId[]> {
+  const index = new Map<StepId, StepId[]>();
+  for (const step of steps) {
+    if (!('confirms' in step) || !step.confirms?.length) continue;
+    for (const actionId of step.confirms) {
+      const confirmingSteps = index.get(actionId) ?? [];
+      confirmingSteps.push(step.id);
+      index.set(actionId, confirmingSteps);
+    }
+  }
+  return index;
 }
 
 interface DispatchContext {
@@ -175,6 +230,8 @@ interface DispatchContext {
    * absolute path even when progress rendering later makes it relative.
    */
   readonly file: string;
+  readonly normalizedTestMd: NormalizedTestMd;
+  stepStartedMs: number;
   /**
    * Supplies one monotonic time source for dispatch-only measurement so local
    * request preparation cannot be counted as provider latency.
@@ -208,6 +265,12 @@ interface DispatchContext {
   readonly updateGroundingEntry: (stepId: Step['id'], entry: GroundingEntry) => void;
   readonly deleteGroundingEntry: (stepId: Step['id']) => void;
   readonly resolvedVias: Map<Step['id'], ResolutionVia>;
+  /** SPEC-R5 binding states local to this runCase call. */
+  readonly bindingStates: Map<StepId, BindingState>;
+  /** Reverse index built once by buildConfirmsIndex. */
+  readonly confirmsIndex: ReadonlyMap<StepId, readonly StepId[]>;
+  readonly actionSteps: ReadonlyMap<StepId, ElementBindingStep>;
+  readonly validConfirmationSteps: Set<StepId>;
   readonly aiTimeoutMs: number;
   readonly signal?: AbortSignal;
 }
@@ -298,24 +361,6 @@ const RUN_REFERENCE_PATTERN = /\{\{run\.([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\}\}/
 const MIN_SECRET_MATCH_LENGTH = 3;
 
 /**
- * Defines the confirmation-only response accepted from AI-assisted element
- * re-resolution.
- *
- * The run pipeline derives the fingerprint from unredacted local snapshot
- * evidence before an AI call, so the provider has no authority to supply a
- * value that later becomes grounding. A strict binary judgment retains the
- * provider's semantic role while allowing an explicit denial and rejecting
- * invented response fields.
- */
-const CONFIRMATION_RESPONSE = z.strictObject({ confirmed: z.boolean() });
-
-/**
- * Couples the confirmation response's runtime validation to the structured AI
- * request without exposing a second, hand-maintained wire schema.
- */
-const CONFIRMATION_RESPONSE_SCHEMA = typedJsonSchema(CONFIRMATION_RESPONSE);
-
-/**
  * Invokes one AI request under this dispatch context's deadline policy.
  *
  * A confirmed local expiry becomes an `AiExecutorUnavailableError` with the
@@ -327,6 +372,7 @@ async function callAiExecutor<T>(
   stepId: StepId,
   deadline: AiDeadline,
   invoke: () => Promise<T>,
+  onDuration?: (durationMs: number) => void,
 ): Promise<T> {
   const callId = context.allocateCallId();
   context.events.emit({
@@ -355,12 +401,14 @@ async function callAiExecutor<T>(
 
     throw error;
   } finally {
+    const durationMs = Math.max(0, Math.round(context.clock.monotonicMs() - startedMs));
     context.events.emit({
       type: 'ai-result',
       callId,
-      durationMs: Math.max(0, Math.round(context.clock.monotonicMs() - startedMs)),
+      durationMs,
       outcome: providerOutcome,
     });
+    onDuration?.(durationMs);
   }
 }
 
@@ -438,10 +486,12 @@ export interface TrustedInstructionCoveredPlan {
  * Validates an already-observed Plan artifact.
  *
  * @remarks
- * Parsing, canonical serialization, freshness, and instruction-coverage
- * checks stay pure over supplied text. Preflight validates a one-read snapshot
- * without rereading storage, while established public readers delegate here
- * with unchanged consumer-facing signatures and error behavior.
+ * Parsing, canonical serialization, and digest freshness precede committed
+ * instruction-coverage and element-intent revalidation over supplied text.
+ * Element intents use the same span policy as check's
+ * inspectCommittedElementIntents and generate's self-check, but run and heal
+ * check the digest first so retired plans report StaleIrError (SPEC-R8).
+ * Preflight validates a one-read snapshot without rereading storage.
  */
 export function validateTrustedInstructionCoveredPlanText(
   text: string,
@@ -462,6 +512,16 @@ export function validateTrustedInstructionCoveredPlanText(
     }
     instructionCoverageByStepId.set(step.id, result.data);
   }
+  for (const step of plan.steps) {
+    if (!('intent' in step)) continue;
+    const result = validateCommittedElementIntent(step.intent, normalizedTestMd);
+    if (!result.success) {
+      throw new IntegrityViolationError('The generated plan contains invalid element intents or source spans.', {
+        planPath,
+        issues: result.issues,
+      });
+    }
+  }
   return { plan, instructionCoverageByStepId };
 }
 
@@ -474,10 +534,13 @@ export function validateTrustedInstructionCoveredPlanText(
  * @param normalizedTestMd - Canonical prompt used to re-extract every span.
  * @returns The trusted Plan plus step-keyed local criterion projections.
  * @remarks
- * Strict schema, canonical bytes, digest equality, and committed instruction
- * coverage all complete before grounding inspection, browser launch, or AI
- * resolution. Invalid source coordinates or whitespace-only re-extraction are
- * integrity failures rather than authority-bearing metadata.
+ * Strict schema, canonical bytes, and digest equality complete before
+ * committed instruction coverage and element-intent revalidation, then
+ * grounding inspection, browser launch, or AI resolution. Intent spans follow
+ * check's inspectCommittedElementIntents and generate's self-check policy,
+ * with digest before intent here (the reverse of check, per SPEC-R8).
+ * Invalid source coordinates or whitespace-only re-extraction are integrity
+ * failures rather than authority-bearing metadata.
  */
 export async function readTrustedInstructionCoveredPlan(
   storage: StorageAdapter,
@@ -1766,7 +1829,7 @@ function redactJsonStrings(
  * @returns `true` when a supported string value or, unless disabled, object
  * key contains a resolved secret or the scan budget is exceeded.
  */
-function jsonContainsResolvedSecret(
+export function jsonContainsResolvedSecret(
   value: unknown,
   resolvedSecrets: ReadonlyMap<string, ReadonlySet<string>>,
   options: { readonly scanObjectKeys?: boolean; readonly excludePaths?: ReadonlySet<string> } = {},
@@ -2495,117 +2558,171 @@ async function executeAiStep(
 }
 
 /**
- * Re-resolves an element grounding miss through a structured AI confirmation
- * request when the caller has allowed fallback.
+ * Binds a source-backed element intent for an action or capture step.
  *
- * Local classification before an AI call fails fast when the page offers no
- * safe candidate and supplies evidence for a focused confirmation request.
- * The AI sees only redacted evidence, so its confirmation cannot expose a
- * resolved secret.
+ * An existing entry is confirmed only when `grounding.entries[step.id]` is a
+ * v3 element entry whose `intentDigest` equals `computeIntentDigest(step)`.
+ * Absence, another kind, or a digest mismatch means no entry for this step;
+ * none invalidates the whole grounding document. For a confirmed entry,
+ * await its locator's presence with the remaining step budget and verify-bind
+ * against its fingerprint. A hit returns the operation-ready element without
+ * AI and reports `grounding` provenance. A missing entry with `--resolve` off
+ * throws `GroundingUnresolvedError` with reason `missing`; a verify miss with
+ * `--resolve` off uses reason `recoverable-miss`. Both exit 4 and perform no
+ * operation for this step.
  *
- * A post-confirmation bind uses verify mode, not compute mode, to retain
- * continuity with the AI-confirmed candidate. A compute bind could accept a
- * different unique element that appeared during the AI round trip; verify
- * mode detects that change against a fresh observation before producing the
- * operation-ready handle.
+ * The sole waiting deadline is step start plus `resolveTimeoutMs`. Presence
+ * waiting for the old locator and first-binding stage 1 share it. After a
+ * verify miss, stage 1 receives only the remaining time. Judge the deadline
+ * when a snapshot capture starts: evaluate a capture started by the deadline
+ * even if it completes later, and never start another after the deadline.
+ * Stage 1 always takes its first snapshot, including at zero remaining time.
  *
- * Grounding changes only after a successful binding. Any miss, denial, or
- * unavailable candidate leaves the existing grounding untouched, preventing
- * failed recovery from replacing known evidence with unconfirmed data.
+ * With `--resolve` on and no usable entry, first binding has four stages:
  *
- * This waits once for element presence after the recovery-mode guard and
- * before reading grounding state, regardless of resolution policy or a
- * grounding-cache hit. That narrows the race where an element appears just
- * after this step starts while leaving AI-call and resolution accounting
- * unchanged. It does not wait before the later post-confirmation re-bind,
- * whose explicit exclusion keeps that fresh verify path independent.
+ * 1. If the intent has a quote, poll `accessibilitySnapshot()` every 100 ms
+ *    until the shared deadline and select the snapshot when
+ *    `matchQuotedCandidates` returns exactly one candidate; provenance is
+ *    `quoted-match`. Without a quote, poll every 100 ms until consecutive
+ *    snapshots have equal `rawYaml`, then use that snapshot for stage 2; at
+ *    the deadline use the last snapshot. If the deadline arrives before a
+ *    second capture, judge the first and proceed without waiting past it.
+ *    Exclude `snapshot-invalid` captures from candidate selection and keep
+ *    polling. If the last snapshot at the deadline is invalid, abort with
+ *    the existing `snapshot-invalid` CaseAbort classification (exit 3),
+ *    without calling AI.
+ * 2. If stage 1 found no candidate, send at most one AI proposal request per
+ *    step per run. Its context is `{ description, quote?, roleHint?, excerpt,
+ *    accessibilityTree }`, where `excerpt` is re-extracted source-span text.
+ *    Redact it with `redactJsonStrings`, then check immediately before send
+ *    with `jsonContainsResolvedSecret`; a match aborts as the existing
+ *    `secret-contaminated` CaseAbort (exit 3). The `ElementBindingProposal`
+ *    response is discriminated by `outcome`: `none` throws
+ *    `GroundingUnresolvedError` reason `no-candidate`, and `ambiguous` uses
+ *    reason `ambiguous`. Never ask again. Provider failures and `aiTimeoutMs`
+ *    timeouts retain the current AI error classification via `callAiExecutor`.
+ *    This proposal replaces the old `{ confirmed: boolean }` call and uses
+ *    the same AI dispatch path, `ai-call` / `ai-result` events, and heal AI
+ *    dispatch accounting.
+ * 3. Verify locally against the selected stage-1 snapshot, or the original
+ *    unredacted source snapshot for stage 2. Accept an AI proposal only when
+ *    `matchQuotedCandidates(tree, { text: name, roleHint: role })` returns
+ *    exactly one node. Build the locator from that node's observed `{ role,
+ *    name }`, never the proposal strings; stage 1 also uses observed values.
+ *    Continue only if `computeAccessibilityFingerprint` returns `ok` and its
+ *    role matches `roleHint` when supplied. Zero or multiple proposal matches,
+ *    `no-match`, `ambiguous-match`, and a role mismatch become
+ *    `proposal-rejected`; `snapshot-invalid` and `secret-contaminated` retain
+ *    their existing classifications.
+ * 4. Immediately before the operation, verify-bind again using the stage-3
+ *    fingerprint. A miss is `candidate-changed`; a hit permits the operation.
  *
- * The dispatcher calls this boundary only for variants the shared recovery
- * table classifies as element-reground. A local invariant rejects any other
- * caller, keeping accidental grounding of bare-target steps visible even when
- * a switch branch is otherwise type-correct.
+ * Stage 3 yields a `candidate` BindingState; only a successful operation may
+ * advance it to `acted`. `promoteConfirmedBindings` promotes `acted`
+ * to `confirmed` after every step listing this action in `confirms` passes,
+ * updates the in-memory entry with kind, locator, fingerprint, intentDigest,
+ * and provenance, and performs case-end write-back once under the existing
+ * write-back and secret checks. That write-back replaces only confirmed step
+ * entries, preserving all other loaded entries, including stale digests,
+ * unknown IDs, and entries for non-action steps. Never operate without a
+ * candidate (except a verified confirmed-entry hit), persist an `acted`-only
+ * binding, or retry an operation after its failure in the same run; discard
+ * that binding and fail the step. A later failure never deletes a confirmed
+ * entry that hit. An unconfirmed replacement after verify miss leaves the
+ * old entry untouched.
+ *
+ * For `fill-secret`, `executeAction` checks sink origin and resolves the
+ * secret before calling this function for all binding stages, then fills.
+ * A denied sink or unresolved secret takes no snapshot and makes no AI call.
+ *
  */
+/** Builds the redacted stage-2 proposal context before the pre-send secret check. */
+export function buildRedactedAiProposalContext(
+  value: { description: string; quote?: string; roleHint?: string; excerpt: string; accessibilityTree: unknown },
+  resolvedSecrets: ReadonlyMap<string, ReadonlySet<string>>,
+  runState: ReadonlyMap<RunVariableName, string>,
+  redactor: typeof redactJsonStrings = redactJsonStrings,
+): unknown {
+  const redacted = redactor(value, resolvedSecrets, runState);
+  if (jsonContainsResolvedSecret(redacted, resolvedSecrets)) throw groundingAbort('secret-contaminated');
+  return redacted;
+}
+
 async function groundedTarget(
   context: DispatchContext,
-  step: ActionStep | AssertStep | CaptureStep,
-  target: ElementRef,
+  step: ElementBindingStep,
+  intent: ElementIntent,
 ): Promise<BoundElement> {
-  if (groundingRecoveryModeForStep(step) !== 'element-reground') {
-    throw new Error('groundedTarget called for a step kind classified outside element-reground.');
-  }
   const session = await sessionForStep(context, step);
-  await session.awaitElementPresence(target, configForStep(context, step).resolveTimeoutMs);
+  const deadlineMs = context.stepStartedMs + configForStep(context, step).resolveTimeoutMs;
   const entry = context.grounding.entries[step.id];
-  if (entry?.kind === 'element') {
-    const resolved = await session.resolveGrounded(target, {
-      mode: 'verify',
-      fingerprint: entry.fingerprint,
-    });
-    if (resolved.kind === 'hit') {
-      return resolved.element;
+  const operation = step.kind === 'capture' ? 'capture' : step.action;
+  if (operation === 'navigate') throw new IntegrityViolationError('Navigation cannot bind an element intent.');
+  const intentDigest = computeIntentDigest({ stepKind: step.kind, operation, intent });
+  const stored = entry?.kind === 'element' && entry.intentDigest === intentDigest ? entry : undefined;
+  if (stored !== undefined) {
+    await session.awaitElementPresence(stored.locator, Math.max(0, deadlineMs - context.clock.monotonicMs()));
+    const verified = await session.resolveGrounded(stored.locator, { mode: 'verify', fingerprint: stored.fingerprint });
+    if (verified.kind === 'hit') {
+      context.bindingStates.set(step.id, { stage: 'acted', locator: stored.locator, fingerprint: stored.fingerprint, provenance: 'grounding' });
+      context.resolvedVias.set(step.id, 'grounding');
+      return verified.element;
     }
-    if (!context.resolve) {
-      throw new GroundingUnresolvedError(unresolvedMessage(resolved.reason), { stepId: step.id, reason: 'recoverable-miss' });
-    }
-  }
-
-  if (!context.resolve) {
+    if (!context.resolve) throw new GroundingUnresolvedError(unresolvedMessage(verified.reason), { stepId: step.id, reason: 'recoverable-miss' });
+  } else if (!context.resolve) {
     throw new GroundingUnresolvedError(unresolvedMessage('missing'), { stepId: step.id, reason: 'missing' });
   }
 
-  const snapshot = await session.snapshotForResolution();
-  const classification = computeAccessibilityFingerprint(
-    snapshot.accessibilityTree,
-    target,
-    context.resolvedSecrets.values(),
-  );
-  switch (classification.kind) {
-    case 'no-match':
-      throw groundingClassificationAbort('element-not-found', snapshot.accessibilityTree);
-    case 'ambiguous-match':
-      throw groundingClassificationAbort('ambiguous-match', snapshot.accessibilityTree);
-    case 'snapshot-invalid':
-      throw groundingClassificationAbort('snapshot-invalid', snapshot.accessibilityTree);
-    case 'secret-contaminated':
-      throw groundingClassificationAbort('secret-contaminated', snapshot.accessibilityTree);
-    case 'ok':
-      break;
+  const quoteStartedMs = context.clock.monotonicMs();
+  let selected: AccessibilityCapture | undefined;
+  let quotedCandidate: { role: string; name: string } | undefined;
+  let previousRawYaml: string | undefined;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    selected = capture;
+    if (!isSnapshotInvalid(capture.tree)) {
+      if (intent.quote !== undefined) {
+        const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: intent.quote.text, ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }) });
+        if (Array.isArray(matches) && matches.length === 1) { quotedCandidate = matches[0]; break; }
+      } else if (previousRawYaml === capture.rawYaml) break;
+      previousRawYaml = capture.rawYaml;
+    }
+    const remaining = deadlineMs - context.clock.monotonicMs();
+    if (remaining <= 0) break;
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    // The capture started at the deadline is still eligible for judgment.
+    if (context.clock.monotonicMs() > deadlineMs) break;
   }
-
-  const executor = await context.resolveAiExecutor();
-  const redactedAccessibilityTree = redactJsonStrings(
-    snapshot.accessibilityTree,
-    context.resolvedSecrets,
-    runStateValues(context.runState),
-  ) as JsonValueT;
-  const deadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
-  const request = {
-    prompt: 'Confirm whether the supplied locator still identifies the intended element.',
-    responseSchema: CONFIRMATION_RESPONSE_SCHEMA,
-    context: {
-      target,
-      snapshot: {
-        accessibilityTree: redactedAccessibilityTree,
-      },
-    },
-    signal: deadline.signal,
-  };
-  const response = await callAiExecutor(context, step.id, deadline, () => executor.execute(request));
-  if (!response.data.confirmed) {
-    throw new CaseAbort('The AI could not confirm that the supplied locator identifies the intended element.');
+  if (selected === undefined || isSnapshotInvalid(selected.tree)) throw groundingClassificationAbort('snapshot-invalid', selected?.tree ?? null);
+  const quoteWaitMs = Math.max(0, Math.round(context.clock.monotonicMs() - quoteStartedMs));
+  let candidate = quotedCandidate;
+  let provenance: 'quoted-match' | 'ai-proposed' = 'quoted-match';
+  let aiProposalMs: number | undefined;
+  if (candidate === undefined) {
+    const excerpt = extractSpan(context.normalizedTestMd, intent.sourceSpan);
+    if (excerpt === undefined) throw new IntegrityViolationError('The validated element intent source span could not be re-extracted.');
+    const proposalContext = buildRedactedAiProposalContext({ description: intent.description, ...(intent.quote === undefined ? {} : { quote: intent.quote.text }), ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }), excerpt, accessibilityTree: selected.tree }, context.resolvedSecrets, runStateValues(context.runState));
+    if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
+    const executor = await context.resolveAiExecutor();
+    const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
+    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ElementBindingProposal), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
+    const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request), (durationMs) => { aiProposalMs = durationMs; });
+    if (result.data.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
+    const matches = matchQuotedCandidates(selected.tree as AccessibilityNode, { text: result.data.name, roleHint: result.data.role });
+    if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected' });
+    candidate = matches[0];
+    provenance = 'ai-proposed';
   }
-
-  const resolved = await session.resolveGrounded(target, {
-    mode: 'verify',
-    fingerprint: classification.fingerprint,
-  });
-  if (resolved.kind === 'miss') {
-    throw groundingAbort(resolved.reason);
-  }
-
-  context.updateGroundingEntry(step.id, { kind: 'element', fingerprint: resolved.element.fingerprint });
-  context.resolvedVias.set(step.id, 'ai-resolve');
-  return resolved.element;
+  const locator: AccessibilityElementRef = { strategy: 'accessibility', role: candidate!.role, name: candidate!.name };
+  const fingerprint = computeAccessibilityFingerprint(selected.tree, locator, context.resolvedSecrets.values());
+  if (fingerprint.kind === 'snapshot-invalid' || fingerprint.kind === 'secret-contaminated') throw groundingClassificationAbort(fingerprint.kind, selected.tree);
+  if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected' });
+  context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
+  const verified = await session.resolveGrounded(locator, { mode: 'verify', fingerprint: fingerprint.fingerprint });
+  if (verified.kind === 'miss') throw new GroundingUnresolvedError('The selected element changed before the operation.', { stepId: step.id, reason: 'candidate-changed' });
+  context.resolvedVias.set(step.id, provenance);
+  return verified.element;
 }
 
 /**
@@ -2698,7 +2815,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
   switch (step.action) {
     case 'click':
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A click action must consume element grounding.');
-      action = { type: 'click', target: await groundedTarget(context, step, step.element) };
+      action = { type: 'click', target: await groundedTarget(context, step, step.intent) };
       break;
     case 'navigate':
       action = { type: 'navigate', url: step.url };
@@ -2707,7 +2824,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A press action must consume element grounding.');
       action = {
         type: 'press',
-        target: await groundedTarget(context, step, step.element),
+        target: await groundedTarget(context, step, step.intent),
         key: step.key,
       };
       break;
@@ -2718,7 +2835,7 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
       }
       action = {
         type: 'fill',
-        target: await groundedTarget(context, step, step.element),
+        target: await groundedTarget(context, step, step.intent),
         value: step.value,
       };
       break;
@@ -2736,14 +2853,135 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
 
       recordResolvedSecret(context.resolvedSecrets, step.secretRef, value);
       if (ACTION_GROUNDING_MODE[step.action] !== 'element-reground') throw new Error('A secret fill action must consume element grounding.');
-      const target = await groundedTarget(context, step, step.element);
+      const target = await groundedTarget(context, step, step.intent);
       action = { type: 'fill-secret', target, value, policy };
       break;
     }
   }
 
   await performMaterializedAction(action, await sessionForStep(context, step));
+  const binding = context.bindingStates.get(step.id);
+  if (binding !== undefined) context.bindingStates.set(step.id, { ...binding, stage: binding.provenance === 'grounding' ? 'confirmed' : 'acted' });
   return { kind: 'passed' };
+}
+
+/**
+ * Polls accessibility snapshots every 100 ms until the shared deadline for
+ * an element-visible assertion, without grounding or AI in either resolve mode.
+ * Each observation matches `step.intent.quote.text` and its optional roleHint
+ * with `matchQuotedCandidates`. One or more matches pass. On deadline, return
+ * the existing assertion failure (exit 1): expected uses the quote text and
+ * appends the role when hinted; actual comes from the last observation as
+ * `matched <n>` for zero matches or another count mismatch, or
+ * `snapshot-invalid` for an invalid snapshot. Invalid snapshots are retryable.
+ * A passed outcome must set `confirmationBasisValid` true for exactly one match and false for multiple matches.
+ *
+ */
+async function evaluateElementVisibleAssert(
+  step: Extract<Step, { kind: 'assert'; check: 'element-visible' }>,
+  context: DispatchContext,
+  deadline: number,
+): Promise<DispatchOutcome> {
+  const session = await sessionForStep(context, step);
+  const quote = step.intent.quote;
+  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" is visible.`;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
+    if (Array.isArray(matches) && matches.length > 0) return { kind: 'passed', confirmationBasisValid: matches.length === 1 };
+    const actual = Array.isArray(matches) ? `matched ${matches.length}` : 'snapshot-invalid';
+    const remaining = deadline - context.clock.monotonicMs();
+    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
+  }
+}
+
+/**
+ * Polls accessibility snapshots every 100 ms until the shared deadline for
+ * a text-equals assertion, without grounding or AI in either resolve mode.
+ * Match `step.intent.quote.text` and its optional roleHint using
+ * `matchQuotedCandidates`; exactly one candidate can pass. Compute-bind its
+ * `{role,name}` with `session.resolveGrounded(ref, { mode: 'compute',
+ * resolvedSecrets: context.resolvedSecrets.values() })`, then require
+ * `session.captureValue(bound, 'text')` to equal the run-expanded `step.text`
+ * byte for byte, without normalization. A compute-bind miss or
+ * `BoundElementRejectedError` from capture is `binding-lost` and retryable;
+ * all other exceptions propagate as case errors. Two or more matches are
+ * retryable `ambiguous`; an invalid snapshot is retryable `snapshot-invalid`.
+ * On deadline return the existing assertion failure (exit 1): expected uses
+ * the quote text and appends the role when hinted; actual is the last sample's
+ * `matched 0`, `snapshot-invalid`, `binding-lost`, `ambiguous`, or the
+ * mismatching `innerText` from the single bound candidate.
+ *
+ */
+async function evaluateTextEqualsAssert(
+  step: Extract<Step, { kind: 'assert'; check: 'text-equals' }>,
+  context: DispatchContext,
+  deadline: number,
+): Promise<DispatchOutcome> {
+  const session = await sessionForStep(context, step);
+  const quote = step.intent.quote;
+  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" has text "${step.text}".`;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
+    let actual: string;
+    if (!Array.isArray(matches)) actual = 'snapshot-invalid';
+    else if (matches.length > 1) actual = 'ambiguous';
+    else if (matches.length === 0) actual = 'matched 0';
+    else {
+      const bound = await session.resolveGrounded({ strategy: 'accessibility', role: matches[0]!.role, name: matches[0]!.name }, { mode: 'compute', resolvedSecrets: context.resolvedSecrets.values() });
+      if (bound.kind === 'miss') actual = 'binding-lost';
+      else {
+        try {
+          actual = await session.captureValue(bound.element, 'text');
+          if (actual === step.text) return { kind: 'passed' };
+        } catch (error) {
+          if (!(error instanceof BoundElementRejectedError)) throw error;
+          actual = 'binding-lost';
+        }
+      }
+    }
+    const remaining = deadline - context.clock.monotonicMs();
+    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
+  }
+}
+
+/**
+ * Polls accessibility snapshots every 100 ms until the shared deadline for
+ * an element-count assertion, without grounding or AI in either resolve mode.
+ * Each observation matches `step.intent.quote.text` and its optional roleHint
+ * with `matchQuotedCandidates`. Pass when the match count equals `step.count`,
+ * including zero. On deadline return the existing assertion failure (exit 1):
+ * expected uses the quote text and appends the role when hinted; actual from
+ * the last sample is `matched <n>` for a count mismatch or
+ * `snapshot-invalid` for an invalid snapshot. Invalid snapshots are retryable.
+ *
+ */
+async function evaluateElementCountAssert(
+  step: Extract<Step, { kind: 'assert'; check: 'element-count' }>,
+  context: DispatchContext,
+  deadline: number,
+): Promise<DispatchOutcome> {
+  const session = await sessionForStep(context, step);
+  const quote = step.intent.quote;
+  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" has count ${step.count}.`;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const capture = await session.accessibilitySnapshot();
+    const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
+    if (Array.isArray(matches) && matches.length === step.count) return { kind: 'passed' };
+    const actual = Array.isArray(matches) ? `matched ${matches.length}` : 'snapshot-invalid';
+    const remaining = deadline - context.clock.monotonicMs();
+    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
+    await context.clock.sleep(Math.min(100, remaining), context.signal);
+    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
+  }
 }
 
 /**
@@ -2754,18 +2992,16 @@ async function executeAction(step: Step, context: DispatchContext): Promise<Disp
  * than the authored plan step, so a failure explains the value the browser
  * actually evaluated after run-value materialization.
  *
- * The per-assertion lookup uses the same shared classification as healing.
- * This preserves bare-target checks while making a new assertion variant
- * choose its recovery treatment at the typed IR table.
+ * Element assertions delegate to their own snapshot polling loops. Text
+ * visibility and URL matching retain the browser check and shared loop.
  */
 async function pollAssert(step: Step, context: DispatchContext, deadline: number): Promise<DispatchOutcome> {
   // V4 polling fixes its deadline immediately after step-start, before
   // acquisition or materialization. The first observation always runs;
   // only a false result waits up to 100 ms or the remaining budget. A wait
   // reaching the deadline returns the last mismatch without another bind.
-  // Element-visible and text-equals bind anew for each observation. The other
-  // three checks do not bind; element-count passes its ElementRef directly.
-  // Bind failure, adapter rejection, and abort keep their terminal paths.
+  // Element assertions return to their dedicated snapshot loops. The shared
+  // browser loop handles text-visible and url-matches only.
   if (step.kind !== 'assert') {
     throw new Error('The assertion dispatcher received a non-assertion step.');
   }
@@ -2778,30 +3014,14 @@ async function pollAssert(step: Step, context: DispatchContext, deadline: number
       check = { check: 'text-visible', text: step.text };
       break;
     case 'element-visible':
-      if (ASSERT_GROUNDING_MODE[step.check] !== 'element-reground') throw new Error('An element-visible assertion must consume element grounding.');
-      check = {
-        check: 'element-visible',
-        target: await groundedTarget(context, step, step.element),
-      };
-      break;
+      return evaluateElementVisibleAssert(step, context, deadline);
     case 'text-equals':
-      if (ASSERT_GROUNDING_MODE[step.check] !== 'element-reground') throw new Error('A text-equals assertion must consume element grounding.');
-      check = {
-        check: 'text-equals',
-        target: await groundedTarget(context, step, step.element),
-        text: step.text,
-      };
-      break;
+      return evaluateTextEqualsAssert(step, context, deadline);
     case 'url-matches':
       check = { check: 'url-matches', pattern: step.pattern };
       break;
     case 'element-count':
-      check = {
-        check: 'element-count',
-        target: step.element,
-        count: step.count,
-      };
-      break;
+      return evaluateElementCountAssert(step, context, deadline);
   }
 
   const outcome = await (await sessionForStep(context, step)).evaluateAssert(check);
@@ -2848,9 +3068,11 @@ async function executeCapture(step: Step, context: DispatchContext): Promise<Dis
     throw new Error('The capture dispatcher received a non-capture step.');
   }
 
-  const target = await groundedTarget(context, step, step.element);
+  const target = await groundedTarget(context, step, step.intent);
   const value = await (await sessionForStep(context, step)).captureValue(target, 'text');
   context.runState.set(step.variable, { value, stepId: step.id, target: step.target });
+  const binding = context.bindingStates.get(step.id);
+  if (binding !== undefined) context.bindingStates.set(step.id, { ...binding, stage: binding.provenance === 'grounding' ? 'confirmed' : 'acted' });
   return { kind: 'passed' };
 }
 
@@ -3009,6 +3231,101 @@ const DISPATCH_TABLE = {
 } satisfies Record<Exclude<Step['kind'], 'ai' | 'assert'>, StepExecutor>;
 
 /**
+ * SPEC-R9 reports bindings only for steps that passed stage 3; a step stopped
+ * before stage 3 has no state and no binding. `confirmed` reflects the current
+ * state here, then the case-end backfill accounts for later confirmation.
+ */
+function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult['binding'] {
+  const state = context.bindingStates.get(stepId);
+  if (state === undefined) return undefined;
+  return {
+    provenance: state.provenance,
+    confirmed: state.stage === 'confirmed',
+    ...(state.quoteWaitMs === undefined ? {} : { quoteWaitMs: state.quoteWaitMs }),
+    ...(state.aiProposalMs === undefined ? {} : { aiProposalMs: state.aiProposalMs }),
+  };
+}
+
+/**
+ * Promote bindings after a passing step, with no effect unless it has a
+ * non-empty `confirms` list (available only on assertions and AI steps).
+ * Each listed action ID is a possible confirmation trigger. For an
+ * element-visible assertion, only `outcome.confirmationBasisValid === true`
+ * makes this pass a valid basis: a pass on multiple matches remains an
+ * assertion pass but cannot confirm. Ordinary passes from the other four
+ * assertion kinds and AI steps are valid bases. An invalid basis leaves the
+ * case running and may be followed by another confirmer for the same action.
+ *
+ * Confirm an action only when every ID in `context.confirmsIndex.get(actionId)`
+ * has a passing result in this case with a valid basis. Missing, skipped,
+ * unreached, and not-yet-executed results do not satisfy that requirement.
+ * Since this runs once per newly passed step, consult `completed`, not merely
+ * `passedStep`.
+ *
+ * On first confirmation, the action must already have a BindingState at
+ * stage `acted`; an absent state or `candidate` is an invariant violation.
+ * Change its stage to `confirmed`, retaining locator, fingerprint,
+ * provenance, and timings. Update the in-memory grounding entry with
+ * `{ kind: 'element', locator, fingerprint, intentDigest:
+ * computeIntentDigest(actionStep), provenance }`. For a SPEC-R2 fast-path
+ * binding, report provenance is `grounding`, but persisted provenance must
+ * remain the pre-existing entry's `quoted-match` or `ai-proposed` value;
+ * never persist the literal `grounding` as that entry's provenance.
+ *
+ * Never demote or re-promote an already confirmed binding. This function
+ * updates only the in-memory binding map and, through updateGroundingEntry,
+ * the in-memory grounding document. The existing case-end finally block
+ * alone handles one disk write, subject to groundingWriteBackAllowed and its
+ * immediate pre-write secret scan.
+ *
+ * @param context - Case-local dispatch and binding state.
+ * @param passedStep - The newly passed confirming step.
+ * @param outcome - Dispatch result supplying the confirmation basis.
+ * @param completed - Accumulated case results, including `passedStep`.
+ */
+function promoteConfirmedBindings(
+  context: DispatchContext,
+  passedStep: Step,
+  outcome: DispatchOutcome,
+  completed: readonly StepResult[],
+): void {
+  if (outcome.kind !== 'passed' || !('confirms' in passedStep) || !passedStep.confirms?.length) return;
+  if (passedStep.kind === 'assert' && passedStep.check === 'element-visible' && outcome.confirmationBasisValid !== true) return;
+  for (const actionId of passedStep.confirms) {
+    const confirmingIds = context.confirmsIndex.get(actionId) ?? [];
+    if (!confirmingIds.every((id) => context.validConfirmationSteps.has(id) && completed.some((entry) => entry.id === id && entry.status === 'passed'))) continue;
+    const state = context.bindingStates.get(actionId);
+    if (state?.stage === 'confirmed') continue;
+    if (state?.stage !== 'acted') throw new IntegrityViolationError('A confirming step has no acted binding.');
+    const actionStep = context.actionSteps.get(actionId);
+    if (actionStep === undefined || (actionStep.kind === 'action' && actionStep.action === 'navigate')) throw new IntegrityViolationError('A confirming step references no element action.');
+    context.bindingStates.set(actionId, { ...state, stage: 'confirmed' });
+    const provenance = state.provenance === 'grounding'
+      ? context.grounding.entries[actionId]?.kind === 'element' ? context.grounding.entries[actionId].provenance : undefined
+      : state.provenance;
+    if (provenance === undefined) throw new IntegrityViolationError('A cached binding has no persisted provenance.');
+    const operation = actionStep.kind === 'capture' ? 'capture' : actionStep.action;
+    context.updateGroundingEntry(actionId, { kind: 'element', locator: state.locator, fingerprint: state.fingerprint, intentDigest: computeIntentDigest({ stepKind: actionStep.kind, operation, intent: actionStep.intent }), provenance });
+  }
+}
+
+/**
+ * SPEC-R5 requires `confirmed` to reflect case-end state, including a later
+ * confirming step that changes a binding projected earlier as false.
+ */
+function backfillConfirmedBindings(
+  context: DispatchContext | undefined,
+  steps: readonly StepResult[],
+): StepResult[] {
+  if (context === undefined) return [...steps];
+  return steps.map((entry) => {
+    if (entry.binding === undefined) return entry;
+    const confirmed = context.bindingStates.get(entry.id as StepId)?.stage === 'confirmed';
+    return confirmed === entry.binding.confirmed ? entry : { ...entry, binding: { ...entry.binding, confirmed } };
+  });
+}
+
+/**
  * Creates the report representation of one executed or skipped plan step.
  *
  * Failure evidence is an object rather than additional positional arguments
@@ -3022,7 +3339,9 @@ function stepResult(
   status: StepResult['status'],
   kind?: StepResult['kind'],
   detail?: FailureDetail,
+  context?: DispatchContext,
 ): StepResult {
+  const binding = context === undefined ? undefined : reportBindingFor(context, step.id);
   const presentDetail = Object.fromEntries(
     Object.entries(detail ?? {}).filter(([, value]) => value !== undefined),
   ) as FailureDetail;
@@ -3034,6 +3353,7 @@ function stepResult(
     ...(status === 'passed' && step.kind === 'capture' ? { variable: step.variable } : {}),
     ...(kind === undefined ? {} : { kind }),
     ...presentDetail,
+    ...(binding === undefined ? {} : { binding }),
   } as StepResult;
 }
 
@@ -3059,6 +3379,7 @@ function resultForAbort(
   steps: readonly Step[],
   completed: readonly StepResult[],
   currentStep: Step | undefined,
+  context: DispatchContext | undefined,
   explanation: string,
   detail?: FailureDetail,
 ): ResultWithoutDuration {
@@ -3068,7 +3389,7 @@ function resultForAbort(
     status: 'error',
     steps: currentStep === undefined
       ? [...completed]
-      : [...completed, stepResult(currentStep, 'error', 'environment', detail), ...skippedSteps(steps, currentIndex)],
+      : [...completed, stepResult(currentStep, 'error', 'environment', detail, context), ...skippedSteps(steps, currentIndex)],
     explanation,
   };
 }
@@ -3602,7 +3923,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     const loadedGrounding = await readUsableGrounding(deps.storage, groundingPath, plan, () => { retiredGrounding = true; });
     grounding = loadedGrounding;
     if (retiredGrounding && !options.resolve) {
-      const firstGroundedStep = plan.steps.find((step) => groundingRecoveryModeForStep(step) === 'element-reground');
+      const firstGroundedStep = plan.steps.find((step) => step.kind !== 'assert' && groundingRecoveryModeForStep(step) === 'element-reground');
       if (firstGroundedStep !== undefined) {
         currentStep = firstGroundedStep;
         throw new GroundingUnresolvedError(
@@ -3708,6 +4029,8 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       sessions,
       targets: sessionTargets,
       file,
+      normalizedTestMd,
+      stepStartedMs: 0,
       clock: deps.clock,
       allocateCallId: deps.allocateCallId,
       aiCalls: 0,
@@ -3734,6 +4057,10 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         }
       },
       resolvedVias,
+      bindingStates: new Map<StepId, BindingState>(),
+      confirmsIndex: buildConfirmsIndex(plan.steps),
+      actionSteps: new Map(plan.steps.filter((candidate): candidate is ElementBindingStep => candidate.kind === 'capture' || candidate.kind === 'action' && candidate.action !== 'navigate').map((candidate) => [candidate.id, candidate])),
+      validConfirmationSteps: new Set<StepId>(),
       aiTimeoutMs: deps.config.ai.timeoutMs,
       ...(signal === undefined ? {} : { signal }),
     };
@@ -3748,6 +4075,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
        * resolution path because it reports the step's `via` field.
        */
       deps.events.emit({ type: 'step-start', stepId: originalStep.id });
+      activeContext.stepStartedMs = deps.clock.monotonicMs();
       signal?.throwIfAborted();
       const deadline = originalStep.kind === 'assert'
         ? deps.clock.monotonicMs() + (originalStep.timeoutMs ?? sessionTargets[originalStep.target]!.config.resolveTimeoutMs)
@@ -3795,7 +4123,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           status: 'failed',
           steps: [
             ...completed,
-            stepResult(originalStep, 'failed', 'assertion', { ...evidence, expected, actual }),
+            stepResult(originalStep, 'failed', 'assertion', { ...evidence, expected, actual }, activeContext),
             ...skippedSteps(planSteps, index),
           ],
           explanation: actual,
@@ -3803,10 +4131,14 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         break;
       }
 
-      completed.push(stepResult(originalStep, 'passed'));
+      completed.push(stepResult(originalStep, 'passed', undefined, undefined, activeContext));
+      if (originalStep.kind !== 'assert' || originalStep.check !== 'element-visible' || outcome.confirmationBasisValid === true) {
+        activeContext.validConfirmationSteps.add(originalStep.id);
+      }
       if (originalStep.kind === 'capture') {
         allowedRunRefs.add(originalStep.variable);
       }
+      promoteConfirmedBindings(activeContext, originalStep, outcome, completed);
       deps.events.emit({
         type: 'step-result',
         stepId: originalStep.id,
@@ -3866,21 +4198,21 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       }
     }
     if (signal?.aborted && !(classificationError instanceof IntegrityViolationError)) {
-      result = resultForAbort(identity, planSteps, completed, currentStep, 'The run was interrupted.', evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, 'The run was interrupted.', evidence);
     } else if (classificationError instanceof AmbercastError) {
       classifiedError = redactedError(
         classificationError,
         resolvedSecrets ?? new Map(),
         runStateValues(runState ?? new Map()),
       ) as AmbercastErrorType;
-      result = resultForAbort(identity, planSteps, completed, currentStep, classifiedError.message, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, classifiedError.message, evidence);
     } else if (classificationError instanceof CaseAbort) {
-      result = resultForAbort(identity, planSteps, completed, currentStep, classificationError.message, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, classificationError.message, evidence);
     } else if (classificationError instanceof AgenticTargetRejection) {
       const explanation = classificationError.exhausted
         ? `The AI-directed interaction exhausted its browser target budget: ${classificationError.tool} was rejected (${classificationError.reason}) after ${AGENTIC_TARGET_REJECTION_LIMIT} recoverable rejections.`
         : `The AI-directed interaction was rejected by a browser target it could not resolve (${classificationError.tool}: ${classificationError.reason}).`;
-      result = resultForAbort(identity, planSteps, completed, currentStep, explanation, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, explanation, evidence);
     } else {
       const name = projectCauseName(classificationError);
       deps.events.emit(buildUnclassifiedRejectionEvent(
@@ -3891,7 +4223,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         runStateValues(runState ?? new Map()),
       ));
       const explanation = `The browser session could not complete this case and no deterministic fallback is available (${name}).`;
-      result = resultForAbort(identity, planSteps, completed, currentStep, explanation, evidence);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, explanation, evidence);
     }
   } finally {
     if (sessions !== undefined) await sessions.closeAll();
@@ -3960,6 +4292,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   return {
     result: {
       ...result!,
+      steps: backfillConfirmedBindings(context, result!.steps),
       durationMs,
       aiCalls: context?.aiCalls ?? 0,
       sessions: Object.fromEntries(Object.entries(sessionTargets).map(([name, target]) => [name, {

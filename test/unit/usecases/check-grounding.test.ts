@@ -15,7 +15,7 @@ import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js
 const GROUNDING_PATH = '/workspace/tests/login.ambercast.grounding.json';
 
 const plan = PlanDocument.parse({
-  schemaVersion: 4,
+  schemaVersion: 5,
   source: { inputsDigest: '0'.repeat(64) },
   targets: { web: { surface: 'web', baseUrl: 'https://example.test' } },
   steps: [{ id: 'visit', kind: 'action', action: 'navigate', target: 'web', url: '/' }],
@@ -25,7 +25,7 @@ function validGrounding(
   overrides: Partial<GroundingDocumentType> = {},
 ): GroundingDocumentType {
   return GroundingDocument.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     planDigest: computePlanDigest(plan),
     entries: {},
     ...overrides,
@@ -53,7 +53,7 @@ describe('inspectGroundingArtifact', () => {
   });
 
   it('classifies a wrong grounding schema version as invalid', async () => {
-    // SPEC-3: grounding v1 is the retired negative fixture under Plan v4.
+    // Grounding v1 remains an invalid-schema negative fixture under Plan v5.
     await expect(inspectStoredText(JSON.stringify({ ...validGrounding(), schemaVersion: 1 }))).resolves.toEqual({ kind: 'invalid' });
   });
 
@@ -93,7 +93,10 @@ describe('inspectGroundingArtifact', () => {
       entries: {
         'click-submit': {
           kind: 'element',
+          locator: { strategy: 'accessibility', role: 'button', name: 'Submit' },
           fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) },
+          intentDigest: 'b'.repeat(64),
+          provenance: 'ai-proposed',
           unexpected: true,
         },
       },
@@ -113,7 +116,10 @@ describe('inspectGroundingArtifact', () => {
       entries: {
         'click-submit': {
           kind: 'element',
+          locator: { strategy: 'accessibility', role: 'button', name: 'Submit' },
           fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) },
+          intentDigest: 'b'.repeat(64),
+          provenance: 'ai-proposed',
         },
       },
     })))).resolves.toEqual({ kind: 'valid' });
@@ -159,7 +165,10 @@ describe('inspectGroundingArtifact', () => {
       entries: {
         'click-submit': {
           kind: 'element',
+          locator: { strategy: 'accessibility', role: 'button', name: 'Submit' },
           fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) },
+          intentDigest: 'b'.repeat(64),
+          provenance: 'ai-proposed',
         },
       },
     });

@@ -33,6 +33,8 @@ import type {
 import { validateCommittedInstructionCoverage } from './instruction-coverage-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
 import { inspectGroundingArtifact } from './check-grounding.js';
+import { validateCommittedElementIntent, type ElementIntentIssue, type ElementIntentResult } from './element-intent-policy.js';
+import { isRetiredPlanVersion } from './run.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
 
 /**
@@ -63,6 +65,31 @@ export function inspectCommittedInstructionCoverage(
     else trusted.set(step.id, result.data);
   }
   return issues.length === 0 ? { success: true, data: trusted } : { success: false, issues };
+}
+
+/**
+ * Performs the prompt-dependent committed-element-intent portion of freshness.
+ *
+ * @param plan - Strict, canonical plan document under inspection.
+ * @param normalizedTestMd - Current canonical source prompt.
+ * @returns Success or the complete deterministic issue list.
+ * @remarks
+ * Check invokes the same committed span revalidation policy as generation and
+ * run for every step whose schema carries an intent, including element and
+ * quoted element intents. Any anchor, span, citation, or quote issue makes the
+ * artifact stale.
+ */
+export function inspectCommittedElementIntents(
+  plan: PlanDocument,
+  normalizedTestMd: NormalizedTestMd,
+): ElementIntentResult<void> {
+  const issues: ElementIntentIssue[] = [];
+  for (const step of plan.steps) {
+    if (!('intent' in step)) continue;
+    const result = validateCommittedElementIntent(step.intent, normalizedTestMd);
+    if (!result.success) issues.push(...result.issues);
+  }
+  return issues.length === 0 ? { success: true, data: undefined } : { success: false, issues };
 }
 
 /**
@@ -368,6 +395,15 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
         continue;
       }
 
+      if (typeof rawPlan === 'object' && rawPlan !== null && 'schemaVersion' in rawPlan && isRetiredPlanVersion(rawPlan.schemaVersion)) {
+        results.push({
+          ...identity,
+          status: 'stale',
+          reason: 'The plan uses retired schema version 4; regenerate it with `ambercast generate`.',
+        });
+        continue;
+      }
+
       const parsedPlan = PlanDocument.safeParse(rawPlan);
       if (!parsedPlan.success) {
         results.push({ ...identity, status: 'stale', reason: 'The plan does not match the plan schema.' });
@@ -410,6 +446,15 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
           ...identity,
           status: 'stale',
           reason: 'The plan has invalid instruction coverage or source spans.',
+        });
+        continue;
+      }
+      const elementIntents = inspectCommittedElementIntents(parsedPlan.data, normalizedTestMd);
+      if (!elementIntents.success) {
+        results.push({
+          ...identity,
+          status: 'stale',
+          reason: 'The plan has invalid element intents or source spans.',
         });
         continue;
       }

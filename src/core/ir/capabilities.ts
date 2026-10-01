@@ -68,9 +68,9 @@ export const UI_CAPABILITIES: readonly UiCapability[] = [
  * every `trace.events[].type` (using `check` for an `assert` event) and every
  * `trace.verification.check` into that AI step's target requirements.
  *
- * When `resolve` is true, a target with any element-bearing step (click,
- * press, fill, fill-secret, element-visible, text-equals, element-count, or
- * capture) additionally requires `snapshot`; any target with an AI step
+ * Element-visible, text-equals, and element-count assertions always require
+ * `snapshot`. When `resolve` is true, a target with a click, press, fill,
+ * fill-secret, or capture step additionally requires `snapshot`; an AI step
  * requires `agentic`, even without a trace or an expected fallback. An AI step
  * without a trace requires nothing when `resolve` is false. The result
  * deduplicates each target's requirements and iterates `UI_CAPABILITIES`
@@ -105,12 +105,14 @@ export function deriveRequiredCapabilities(
       }
     }
 
+    if (step.kind === 'assert' &&
+      (step.check === 'element-visible' || step.check === 'text-equals' || step.check === 'element-count')) {
+      capabilities.add('snapshot');
+    }
     if (options.resolve) {
       if (
         (step.kind === 'action' &&
           (step.action === 'click' || step.action === 'press' || step.action === 'fill' || step.action === 'fill-secret')) ||
-        (step.kind === 'assert' &&
-          (step.check === 'element-visible' || step.check === 'text-equals' || step.check === 'element-count')) ||
         step.kind === 'capture'
       ) {
         capabilities.add('snapshot');

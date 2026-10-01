@@ -1,5 +1,5 @@
 import type {
-  ElementRef,
+  ElementIntent,
   InstructionAttributedSteps,
   SecretName,
   SecretRef,
@@ -18,7 +18,7 @@ import { secretNameFor } from '#core/ir/secret-ref.js';
  * use by construction. AI steps retain the original array index because
  * duplicate references must be named and diagnosed before the later
  * deduplicate-and-sort normalization can erase their individual identity.
- * `target` similarly exists only where an accessibility target can influence
+ * `target` similarly exists only where an intent summary can influence
  * a fill-secret name or cross-target reuse warning. The six selection sources
  * distinguish a projected explicit name, target-derived name, provider hint,
  * stable ordinal, reconstructed committed plan, and interactive rename
@@ -29,7 +29,7 @@ export interface SecretUse {
   readonly name: SecretName;
   readonly stepId: StepId;
   readonly useIndex?: number;
-  readonly target?: ElementRef;
+  readonly target?: SecretTargetSummary;
   readonly selectionSource: 'allowed-name' | 'target-slug' | 'hint' | 'ordinal' | 'existing-plan' | 'interactive-rename';
 }
 
@@ -38,12 +38,12 @@ export interface SecretUse {
  * reporting. The union defines the complete warning vocabulary so consent and
  * repair behavior share one stable report shape:
  * cross-target reuse identifies all affected steps, target change retains the
- * before-and-after locators for one step, and truncation records counts rather
+ * before-and-after intent summaries for one step, and truncation records counts rather
  * than exposing an omitted name list.
  */
 export type SecretWarning =
   | { readonly kind: 'secret-name-reused-across-targets'; readonly name: SecretName; readonly stepIds: readonly StepId[] }
-  | { readonly kind: 'secret-target-changed'; readonly name: SecretName; readonly stepId: StepId; readonly previousTarget: ElementRef; readonly target: ElementRef }
+  | { readonly kind: 'secret-target-changed'; readonly name: SecretName; readonly stepId: StepId; readonly previousTarget: SecretTargetSummary; readonly target: SecretTargetSummary }
   | { readonly kind: 'allowed-names-truncated'; readonly kept: number; readonly dropped: number };
 
 /**
@@ -61,7 +61,7 @@ export interface ExistingPlanSecretReservation {
   readonly useIndex?: number;
   readonly ref: SecretRef;
   readonly name: SecretName;
-  readonly target?: ElementRef;
+  readonly target?: SecretTargetSummary;
   readonly targetKey?: string;
   readonly selectionSource: 'existing-plan';
 }
@@ -122,7 +122,7 @@ export function deriveStage2ReplacementSecretNames(
   for (const [stepIndex, step] of input.plan.steps.entries()) {
     if (stepIndex === input.replacementIndex) continue;
     if (step.kind === 'action' && step.action === 'fill-secret') {
-      reservations.push({ stepIndex, stepId: step.id, ref: step.secretRef, name: secretNameFor(step.secretRef), target: step.element, targetKey: canonicalTargetKey(step.element), selectionSource: 'existing-plan' });
+      reservations.push({ stepIndex, stepId: step.id, ref: step.secretRef, name: secretNameFor(step.secretRef), target: summarizeSecretTarget(step.intent), targetKey: canonicalTargetKey(step.intent), selectionSource: 'existing-plan' });
     } else if (step.kind === 'ai') {
       for (const [useIndex, { ref }] of (step.secrets ?? []).entries()) {
         reservations.push({ stepIndex, stepId: step.id, useIndex, ref, name: secretNameFor(ref), selectionSource: 'existing-plan' });
@@ -158,8 +158,8 @@ export function deriveStage2ReplacementSecretNames(
  * retaining a reportable account of every use (SPEC-C1-3, C1-4).
  *
  * The algorithm names each fill-secret use by exact membership in
- * the projected set P, then a non-empty slug of its target name, then a name
- * hint, then its one-based step ordinal. AI uses omit target slug and use an
+ * the projected set P, then a non-empty slug of its quoted text when the intent
+ * has one, then a name hint, then its one-based step ordinal. AI uses omit target slug and use an
  * ordinal containing their one-based original array position. P is not the
  * allowlist A: P permits an explicit `allowedName`; A only permits promotion
  * of an already derived name. An all-allowing A authorizes execution but never
@@ -201,7 +201,7 @@ export function deriveSecretNames(
     readonly stepIndex: number;
     readonly stepId: StepId;
     readonly useIndex?: number;
-    readonly target?: ElementRef;
+    readonly target?: SecretTargetSummary;
     readonly targetKey?: string;
     readonly explicit: boolean;
     readonly candidate: SecretName;
@@ -221,10 +221,11 @@ export function deriveSecretNames(
         invalidIssues.push({ code: 'secret-allowed-name-not-projected', path: `steps[${stepIndex}].secret.allowedName`, stepId: step.id });
         continue;
       }
-      const target = current.element as ElementRef;
-      const targetSlug = slug(target.name);
+      const intent = current.intent as ElementIntent;
+      const target = summarizeSecretTarget(intent);
+      const targetSlug = intent.quote !== undefined ? slug(intent.quote.text) : '';
       const name = (choice?.allowedName ?? targetSlug) || choice?.nameHint || `secret_step_${stepIndex + 1}`;
-      candidates.push({ step: current, stepIndex, stepId: step.id, target, targetKey: canonicalTargetKey(target), explicit: choice?.allowedName !== undefined, candidate: name as SecretName, selectionSource: choice?.allowedName !== undefined ? 'allowed-name' : targetSlug ? 'target-slug' : choice?.nameHint !== undefined ? 'hint' : 'ordinal' });
+      candidates.push({ step: current, stepIndex, stepId: step.id, target, targetKey: canonicalTargetKey(intent), explicit: choice?.allowedName !== undefined, candidate: name as SecretName, selectionSource: choice?.allowedName !== undefined ? 'allowed-name' : targetSlug ? 'target-slug' : choice?.nameHint !== undefined ? 'hint' : 'ordinal' });
     } else if (current.kind === 'ai') {
       for (const [useIndex, choice] of ((current.secrets as readonly { allowedName?: SecretName; nameHint?: SecretName }[] | undefined) ?? []).entries()) {
         if (choice.allowedName !== undefined && !projected.has(choice.allowedName)) {
@@ -376,6 +377,17 @@ export function compareSecretWarnings(left: SecretWarning, right: SecretWarning)
   return 0;
 }
 
-function canonicalTargetKey(target: ElementRef): string {
-  return JSON.stringify([target.strategy, target.role, target.name]);
+/** Stable report identity for a secret field, excluding source-span offsets. */
+export type SecretTargetSummary = Pick<ElementIntent, 'description' | 'roleHint'> & { readonly quote?: { readonly text: string } };
+
+export function summarizeSecretTarget(intent: ElementIntent): SecretTargetSummary {
+  return {
+    description: intent.description,
+    ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }),
+    ...(intent.quote === undefined ? {} : { quote: { text: intent.quote.text } }),
+  };
+}
+
+export function canonicalTargetKey(intent: ElementIntent): string {
+  return JSON.stringify([intent.roleHint ?? null, intent.quote?.text ?? null, intent.description]);
 }

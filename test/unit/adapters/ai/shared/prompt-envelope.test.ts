@@ -10,6 +10,7 @@ import { buildPromptEnvelope, toAnchoredLines } from '#core/ai/prompt-envelope.j
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import * as corePromptEnvelope from '#core/ai/prompt-envelope.js';
 import * as adapterPromptEnvelope from '#adapters/ai/shared/prompt-envelope.js';
+import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
 
 describe('prompt envelope', () => {
   it('frames structured task and context as data under stable sections', () => {
@@ -38,11 +39,12 @@ describe('prompt envelope', () => {
     const task = 'Generate the sign-in plan.';
     const rendered = corePromptEnvelope.buildGeneratorPromptEnvelope(task);
     const generatorPolicy = corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim();
+    const elementPolicy = corePromptEnvelope.GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE.trim();
     const secretPolicy = corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim();
     const agenticPolicy = corePromptEnvelope.AGENTIC_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim();
 
-    expect(rendered).toBe(buildPromptEnvelope(`${generatorPolicy}\n\n${secretPolicy}\n\n${task}`));
-    expect(rendered).toContain(`## Task\n${generatorPolicy}\n\n${secretPolicy}\n\n${task}`);
+    expect(rendered).toBe(buildPromptEnvelope(`${generatorPolicy}\n\n${elementPolicy}\n\n${secretPolicy}\n\n${task}`));
+    expect(rendered).toContain(`## Task\n${generatorPolicy}\n\n${elementPolicy}\n\n${secretPolicy}\n\n${task}`);
     expect(rendered).not.toContain(agenticPolicy);
     expect(corePromptEnvelope.GENERATOR_PROMPT_TEMPLATE).toContain(generatorPolicy);
     expect(promptTemplateFingerprint()).toBe(
@@ -65,14 +67,17 @@ describe('prompt envelope', () => {
   });
 
   it('pins the C1-10 generator secret policy bytes directly', () => {
-    expect(corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE).toBe('Secret inputs (passwords, one-time codes, API keys) must never be written as values. Represent each secret input as a "fill-secret" step. If context.allowedSecretNames contains a name whose meaning clearly matches the field, set "secret" to { "allowedName": "<that name>" }. For a new secret, propose { "nameHint": "<short_ascii_name>" }. When unsure, omit "secret" entirely. Example: { "id": "fill-password", "kind": "action", "action": "fill-secret", "target": { "strategy": "accessibility", "role": "textbox", "name": "Password" }, "secret": { "nameHint": "password" } }');
+    expect(corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE).toContain('Represent each secret input as a "fill-secret" step.');
+    const example = JSON.parse(corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.split('Example: ')[1] ?? '');
+    expect(GeneratedPlanResponseRequest.parse({ steps: [example], ambiguities: [] }).steps[0]).toEqual(example);
+    expect(example.intent).toMatchObject({ description: 'Password field', startAnchor: 'L3', endAnchor: 'L3' });
   });
 
   it('exports one generator task composer with the fingerprinted policy delimiter', () => {
     const task = 'Generate the sign-in plan.';
 
     expect(corePromptEnvelope.buildGeneratorTask(task)).toBe(
-      `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\n${task}`,
+      `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\n${task}`,
     );
   });
 
@@ -102,7 +107,7 @@ describe('prompt envelope', () => {
   });
 
   it('fingerprints the generator policy in both static task-slot variants with exact delimiter order', () => {
-    const taskSlot = `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\n{{ambercast.task}}`;
+    const taskSlot = `${corePromptEnvelope.GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE.trim()}\n\n${corePromptEnvelope.GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\n{{ambercast.task}}`;
     const absentVariant = `## Task\n${taskSlot}\n\n## Context\n(none)`;
     const fencedVariant = `## Task\n${taskSlot}\n\n## Context\n\`\`\`json\n{{ambercast.context}}\n\`\`\``;
 

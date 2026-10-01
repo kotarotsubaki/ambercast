@@ -5,9 +5,9 @@ import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
-import type { JsonValueT, TargetDefinition } from '#core/ir/schema.js';
+import type { ElementIntent, JsonValueT, TargetDefinition } from '#core/ir/schema.js';
 import { createLayoutResolver } from '#core/layout/resolve.js';
 import { run, type RunCaseOutcome, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { buildRunReport } from '#usecases/run-report.js';
@@ -21,6 +21,7 @@ import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 const ROOT = '/preflight';
 const PROMPT = '# Executor preflight\n\nCheck the page.\n';
 const REF = { strategy: 'accessibility' as const, role: 'button', name: 'Submit' };
+const INTENT = { description: 'Submit button', roleHint: 'button', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 16 } };
 const FINGERPRINT = { algorithm: 'a11y-neighborhood-v2' as const, hash: 'a'.repeat(64) };
 const EXECUTOR = { kind: 'playwright' as const, browser: 'chromium' as const };
 const SECRET_REF = '{{secrets.TOKEN}}';
@@ -31,11 +32,11 @@ const definitions = {
 type Step = Record<string, unknown> & { id: string; target: 'A' | 'B' };
 
 function click(id: string, target: Step['target']): Step {
-  return { id, target, kind: 'action', action: 'click', element: REF };
+  return { id, target, kind: 'action', action: 'click', intent: INTENT };
 }
 
 function secretFill(id: string, target: Step['target']): Step {
-  return { id, target, kind: 'action', action: 'fill-secret', element: REF, secretRef: SECRET_REF };
+  return { id, target, kind: 'action', action: 'fill-secret', intent: INTENT, secretRef: SECRET_REF };
 }
 
 function navigate(id: string, target: Step['target']): Step {
@@ -88,13 +89,17 @@ async function scenario(cases: readonly {
       secretSinkOrigins: { [SECRET_REF]: [definitions[name].baseUrl] },
     }])) as Record<string, TargetDefinition>;
     const inputsDigest = computeInputsDigest({
-      normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
+      normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 5,
       generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
       planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
     });
-    const plan = { schemaVersion: 4, source: { inputsDigest }, targets, steps: item.steps };
-    const elementEntries = Object.fromEntries(item.steps.filter((step) => step.element !== undefined).map((step) => [step.id, { kind: 'element', fingerprint: FINGERPRINT }]));
-    const grounding = { schemaVersion: 2, planDigest: computePlanDigest(plan as never), entries: { ...elementEntries, ...item.groundingEntries } };
+    const plan = { schemaVersion: 5, source: { inputsDigest }, targets, steps: item.steps };
+    const elementEntries = Object.fromEntries(item.steps.filter((step) => step.intent !== undefined).map((step) => [step.id, {
+      kind: 'element', locator: REF, fingerprint: FINGERPRINT,
+      intentDigest: computeIntentDigest({ stepKind: 'action', operation: step.action as 'click' | 'fill-secret', intent: step.intent as ElementIntent }),
+      provenance: 'ai-proposed',
+    }]));
+    const grounding = { schemaVersion: 3, planDigest: computePlanDigest(plan as never), entries: { ...elementEntries, ...item.groundingEntries } };
     await storage.writeText(item.file, PROMPT);
     await storage.writeText(layout.planPathFor(item.file), toCanonicalArtifactText(plan as unknown as JsonValueT));
     await storage.writeText(layout.groundingPathFor(item.file), toCanonicalArtifactText(grounding as JsonValueT));
@@ -242,9 +247,9 @@ describe('run executor preflight', () => {
     const { resolved: config } = await loadConfig({ cwd: ROOT, storage });
     const targets = { A: { ...definitions.A } };
     const plan = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       source: { inputsDigest: computeInputsDigest({
-        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 4,
+        normalizedTestMd: normalizeTestMd(PROMPT), schemaVersion: 5,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
       }) },
@@ -253,7 +258,7 @@ describe('run executor preflight', () => {
     await storage.writeText(file, PROMPT);
     await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as unknown as JsonValueT));
     await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText({
-      schemaVersion: 2, planDigest: computePlanDigest(plan as never), entries: {},
+      schemaVersion: 3, planDigest: computePlanDigest(plan as never), entries: {},
     } as JsonValueT));
     const executor = createFakeUiExecutor(() => session('A'));
     const deps: RunDeps = {

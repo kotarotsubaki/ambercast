@@ -32,6 +32,7 @@ import {
 export const PLAN_PRODUCER_SEMANTIC_REVISIONS = Object.freeze({
   instructionCoveragePolicy: 3,
   generatorSecretPolicy: 5,
+  elementIntentPolicy: 1,
 } as const);
 
 /**
@@ -48,6 +49,7 @@ export interface PlanProducerBundleInputs {
   readonly generatedPlanResponseLocalContract: JsonValueT;
   readonly instructionCoveragePolicyRevision: number;
   readonly generatorSecretPolicyRevision: number;
+  readonly elementIntentPolicyRevision: number;
 }
 
 /**
@@ -64,6 +66,7 @@ export const PLAN_PRODUCER_BUNDLE_COMPONENT_NAMES = Object.freeze([
   'generatedPlanResponseLocalContract',
   'instructionCoveragePolicyRevision',
   'generatorSecretPolicyRevision',
+  'elementIntentPolicyRevision',
 ] as const satisfies readonly (keyof PlanProducerBundleInputs)[]);
 
 /**
@@ -92,6 +95,7 @@ export function planProducerBundleManifest(inputs: PlanProducerBundleInputs): Pl
     generatedPlanResponseLocalContract: inputs.generatedPlanResponseLocalContract,
     instructionCoveragePolicyRevision: inputs.instructionCoveragePolicyRevision,
     generatorSecretPolicyRevision: inputs.generatorSecretPolicyRevision,
+    elementIntentPolicyRevision: inputs.elementIntentPolicyRevision,
   };
 }
 
@@ -146,6 +150,7 @@ export function liveProducerBundleInputs(): PlanProducerBundleInputs {
     generatedPlanResponseLocalContract: typedJsonSchema(GeneratedPlanResponseForPolicy) as unknown as JsonValueT,
     instructionCoveragePolicyRevision: PLAN_PRODUCER_SEMANTIC_REVISIONS.instructionCoveragePolicy,
     generatorSecretPolicyRevision: PLAN_PRODUCER_SEMANTIC_REVISIONS.generatorSecretPolicy,
+    elementIntentPolicyRevision: PLAN_PRODUCER_SEMANTIC_REVISIONS.elementIntentPolicy,
   };
 }
 
@@ -163,6 +168,7 @@ export interface PlanProducerBundleComponentDiagnostics {
   readonly generatedPlanResponseLocalContract: string;
   readonly instructionCoveragePolicyRevision: number;
   readonly generatorSecretPolicyRevision: number;
+  readonly elementIntentPolicyRevision: number;
 }
 
 /**
@@ -184,5 +190,6 @@ export function planProducerBundleComponentDiagnostics(
     generatedPlanResponseLocalContract: sha256HexOfCanonicalJson(inputs.generatedPlanResponseLocalContract),
     instructionCoveragePolicyRevision: inputs.instructionCoveragePolicyRevision,
     generatorSecretPolicyRevision: inputs.generatorSecretPolicyRevision,
+    elementIntentPolicyRevision: inputs.elementIntentPolicyRevision,
   };
 }

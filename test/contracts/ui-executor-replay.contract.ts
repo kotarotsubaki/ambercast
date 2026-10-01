@@ -51,20 +51,24 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
       const config = 'resolved' in loaded ? loaded.resolved : loaded;
       const targets = { app: harness.target };
       const plan: PlanDocument = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         source: { inputsDigest: computeInputsDigest({
-          normalizedTestMd: normalizeTestMd(prompt), schemaVersion: 4,
+          normalizedTestMd: normalizeTestMd(prompt), schemaVersion: 5,
           generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
           planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: targets,
         }) },
         targets,
         steps: [
           { id: 'open-entry', target: 'app', kind: 'action', action: 'navigate', url: harness.entryUrl },
-          { id: 'click-submit', target: 'app', kind: 'action', action: 'click', element: harness.element },
-          { id: 'see-ready', target: 'app', kind: 'assert', check: 'text-visible', text: harness.readyText, timeoutMs: 5000 },
+          { id: 'click-submit', target: 'app', kind: 'action', action: 'click', intent: {
+            description: harness.element.name,
+            roleHint: harness.element.role,
+            sourceSpan: { startLine: 3, startColumn: 7, endLine: 3, endColumn: 13 },
+          } },
+          { id: 'see-ready', target: 'app', kind: 'assert', check: 'text-visible', text: harness.readyText, timeoutMs: 5000, confirms: ['click-submit'] },
         ],
       };
-      const grounding: GroundingDocument = { schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} };
+      const grounding: GroundingDocument = { schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} };
       await storage.writeText(file, prompt);
       await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as JsonValueT));
       await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText(grounding as JsonValueT));
@@ -77,7 +81,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
           runId: '2026-09-24T000000Z-550e8400-e29b-41d4-a716-446655440000',
           uiExecutor: createUiExecutorResolver({ headed: false, factories: { playwright: factorySpy } }),
           secrets: createFakeSecretsProvider(new Map()),
-          resolveAiExecutor: async () => createFakeAiExecutor({ execute: () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) }),
+          resolveAiExecutor: async () => createFakeAiExecutor({ execute: () => ({ data: { outcome: 'found', role: harness.element.role, name: harness.element.name }, raw: JSON.stringify({ outcome: 'found', role: harness.element.role, name: harness.element.name }) }) }),
           events: events.sink, discoverTestFiles: async () => [file], isCI: false,
           config, allocateCallId: createCallIdAllocator(),
         };
@@ -96,7 +100,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
       expect(s1.outcome.results[0]?.result).toMatchObject({ status: 'passed' });
       expect(s1.events.filter((event) => event.type === 'step-result')).toEqual([
         { type: 'step-result', stepId: 'open-entry', via: 'grounding' },
-        { type: 'step-result', stepId: 'click-submit', via: 'ai-resolve' },
+        { type: 'step-result', stepId: 'click-submit', via: 'ai-proposed' },
         { type: 'step-result', stepId: 'see-ready', via: 'grounding' },
       ]);
       const firstEntry = JSON.parse(s1.groundingBytes).entries['click-submit'];
@@ -130,7 +134,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
 
       const s4 = await execute(harness.divergentObservationFactory, true);
       expect(s4.outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 1 });
-      expect(s4.events.filter((event) => event.type === 'step-result')).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'ai-resolve' });
+      expect(s4.events.filter((event) => event.type === 'step-result')).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'ai-proposed' });
       expect(s4.events.filter((event) => event.type === 'ai-call')).toHaveLength(1);
       expect(JSON.parse(s4.groundingBytes).entries['click-submit'].fingerprint.hash).not.toBe(firstEntry.fingerprint.hash);
       if (stage === 4) return;

@@ -24,7 +24,7 @@ describe('system port shapes', () => {
   it('defines run-event variants and the synchronous event sink', () => {
     expectTypeOf<RunEvent>().toEqualTypeOf<
       | { readonly type: 'step-start'; readonly stepId: StepId }
-      | { readonly type: 'step-result'; readonly stepId: StepId; readonly via: 'grounding' | 'ai-resolve' | 'trace-replay' }
+      | { readonly type: 'step-result'; readonly stepId: StepId; readonly via: 'grounding' | 'ai-resolve' | 'quoted-match' | 'ai-proposed' | 'trace-replay' }
       | {
         readonly type: 'ai-call';
         readonly callId: string;

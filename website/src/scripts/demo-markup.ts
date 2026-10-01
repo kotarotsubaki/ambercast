@@ -1,6 +1,8 @@
 import type { DemoPhase } from './demo-state-machine.ts';
 import { demoPlan, demoPrompt } from '../data/demo-plan.ts';
 import { classifyPromptLine, escapeHtml, highlightJsonLine } from './landing-format.ts';
+import { toCanonicalArtifactText } from '../../../src/core/ir/canonical-json.ts';
+import type { JsonValueT } from '../../../src/core/ir/schema.ts';
 
 /**
  * These plain-string builders are shared by the SSR fallback and client adapter, making a done
@@ -24,7 +26,7 @@ export const PLAN_LINES: readonly PlanLine[] = [
   { text: `  "schemaVersion": ${demoPlan.schemaVersion},` },
   { text: `  "source": ${JSON.stringify(demoPlan.source)},` },
   { text: '  "steps": [' },
-  ...demoPlan.steps.map((step, index) => ({ text: `    ${JSON.stringify(step)}${index === demoPlan.steps.length - 1 ? '' : ','}`, step: index })),
+  ...demoPlan.steps.map((step, index) => ({ text: `    ${JSON.stringify(JSON.parse(toCanonicalArtifactText(step as JsonValueT)))}${index === demoPlan.steps.length - 1 ? '' : ','}`, step: index })),
   { text: '  ],' },
   { text: `  "targets": ${JSON.stringify(demoPlan.targets)}` },
   { text: '}' },

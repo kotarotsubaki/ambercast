@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ElementRef as CoreElementRef, SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
+import { SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
 import {
   AiResponseIssue,
   CheckResult,
@@ -123,7 +123,7 @@ const CASE_FS_IO_ERROR = {
   caseId: 'login-succeeds',
 };
 
-describe('TEST-20 report schema 3.7', () => {
+describe('TEST-20 report schema 3.8', () => {
   const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
   const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
   const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
@@ -147,9 +147,9 @@ describe('TEST-20 report schema 3.7', () => {
     expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
   });
 
-  it('pins the shared report version to 3.7', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
-    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.7' }));
+  it('pins the shared report version to 3.8', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.8' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
   });
 });
@@ -170,7 +170,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.7',
+    schemaVersion: '3.8',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -401,11 +401,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.7', () => {
+  it('requires schema version 3.8', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.7' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.8' });
   });
 });
 
@@ -413,8 +413,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.7', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
+  it('exports schema version 3.8', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -821,16 +821,16 @@ describe('heal result status branches', () => {
 });
 
 describe('report-local IR scalar equivalence', () => {
-  it('matches core ElementRef, SecretName, SecretRef, and StepId acceptance through report shapes', () => {
+  it('accepts intent summaries and matches core SecretName, SecretRef, and StepId acceptance through report shapes', () => {
     const values = {
-      element: [{ strategy: 'accessibility', role: 'button', name: 'Submit' }, { strategy: 'css', value: '#submit' }],
+      target: [{ description: 'Submit', roleHint: 'button', quote: { text: 'Submit' } }, { strategy: 'css', value: '#submit' }],
       name: ['API_TOKEN', 'bad-name!'],
       ref: ['{{secrets.API_TOKEN}}', '{{secrets.bad-name!}}'],
       stepId: ['fill-token', 'Fill_Token'],
     } as const;
 
-    for (const element of values.element) {
-      expect(GenerateResult.safeParse({ ...GENERATE_RESULT, warnings: [{ kind: 'secret-target-changed', name: 'API_TOKEN', stepId: 'fill-token', previousTarget: element, target: element }] }).success).toBe(CoreElementRef.safeParse(element).success);
+    for (const [index, target] of values.target.entries()) {
+      expect(GenerateResult.safeParse({ ...GENERATE_RESULT, warnings: [{ kind: 'secret-target-changed', name: 'API_TOKEN', stepId: 'fill-token', previousTarget: target, target }] }).success).toBe(index === 0);
     }
     for (const name of values.name) {
       expect(SecretConsentRequiredDetails.safeParse({ reason: 'consent-required', secrets: [{ name, stepId: 'fill-token', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }] }).success).toBe(CoreSecretName.safeParse(name).success);
@@ -918,7 +918,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.7');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
   });
 
   it.each(generateBranches)(

@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { validateConfirms } from '#core/ir/confirms-validation.js';
-import type { Step } from '#core/ir/schema.js';
+import { Step } from '#core/ir/schema.js';
 
-const element = { strategy: 'accessibility', role: 'button', name: 'Submit' } as const;
+const intent = { description: 'Submit', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 } } as const;
 
 function action(id: string, action: 'click' | 'navigate' = 'click', target = 'app'): Step {
   return action === 'click'
-    ? { id, target, kind: 'action', action, element }
+    ? { id, target, kind: 'action', action, intent }
     : { id, target, kind: 'action', action, url: 'https://example.com' };
 }
 
 function assertion(id: string, confirms: string[], target = 'app'): Step {
-  // Layer 2 deliberately leaves confirms outside the Step schema until Plan v5 is wired.
-  return { id, target, kind: 'assert', check: 'text-visible', text: 'Done', confirms } as unknown as Step;
+  return { id, target, kind: 'assert', check: 'text-visible', text: 'Done', confirms };
 }
 
 function issue(code: string, stepIndex: number, entryIndex: number) {
@@ -20,6 +19,12 @@ function issue(code: string, stepIndex: number, entryIndex: number) {
 }
 
 describe('validateConfirms (TEST-I4)', () => {
+  it('requires a nonempty confirms array at the Step schema boundary', () => {
+    const valid = assertion('check', ['a']);
+    expect(Step.safeParse(valid).success).toBe(true);
+    expect(Step.safeParse({ ...valid, confirms: [] }).success).toBe(false);
+  });
+
   it('reports an unknown step ID at its entry', () => {
     expect(validateConfirms([action('a'), assertion('check', ['missing'])]))
       .toEqual([issue('confirms-unknown-step', 1, 0)]);
@@ -69,7 +74,7 @@ describe('validateConfirms (TEST-I4)', () => {
   });
 
   it('accepts an earlier capture step', () => {
-    const capture: Step = { id: 'capture', target: 'app', kind: 'capture', element, variable: 'saved' };
+    const capture: Step = { id: 'capture', target: 'app', kind: 'capture', intent, variable: 'saved' };
     expect(validateConfirms([capture, assertion('check', ['capture'])])).toEqual([]);
   });
 });

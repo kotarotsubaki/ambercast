@@ -88,11 +88,11 @@ describe('hand-authored trace replay against real Chromium', () => {
         fixture: { surface: 'web', baseUrl },
       } as const satisfies Record<string, TargetDefinition>;
       const plan = PlanDocument.parse({
-        schemaVersion: 4,
+        schemaVersion: 5,
         source: {
           inputsDigest: computeInputsDigest({
             normalizedTestMd: normalizeTestMd(PROMPT),
-            schemaVersion: 4,
+            schemaVersion: 5,
             generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
             planProducerBundleFingerprint: planProducerBundleFingerprint(),
             targetDefinitions: targets,
@@ -117,7 +117,7 @@ describe('hand-authored trace replay against real Chromium', () => {
       // hand. Relative navigation keeps replay on the local fixture origin,
       // where a real browser verifies the DOM without an AI adapter.
       const grounding = GroundingDocument.parse({
-        schemaVersion: 2,
+        schemaVersion: 3,
         planDigest: computePlanDigest(plan),
         entries: {
           'verify-hand-authored-trace': {

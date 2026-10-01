@@ -87,7 +87,7 @@ function reportOutput(exitCode: RunCommandOutput['exitCode'], errors: ReportErro
   const output = {
     exitCode,
     envelope: {
-      schemaVersion: '3.7' as const,
+      schemaVersion: '3.8' as const,
       command: 'run',
       startedAt: '2026-08-09T00:00:00Z',
       durationMs: 1,
@@ -129,7 +129,7 @@ function prepareRealReportFixture<T>(outcome: T): T {
 }
 
 const rawRunEnvelopeForRendererBoundary = ReportEnvelope.parse({
-  schemaVersion: '3.7', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+  schemaVersion: '3.8', command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
   summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [], reportPersistence: 'not-attempted',
 }) as Extract<ReportEnvelope, { command: 'run' }>;
 // @ts-expect-error The renderer-derived run output cannot carry an unbranded envelope.
@@ -383,7 +383,7 @@ describe('runRunCommand', () => {
       ...baseOutput,
       envelope: {
         ...baseOutput.envelope,
-        schemaVersion: '3.7',
+        schemaVersion: '3.8',
         results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'passed', durationMs: 1, explanation: 'passed', steps: [] }],
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
       },
@@ -417,7 +417,7 @@ describe('runRunCommand', () => {
       ...baseOutput,
       envelope: {
         ...baseOutput.envelope,
-        schemaVersion: '3.7',
+        schemaVersion: '3.8',
         results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'passed', durationMs: 1, explanation: 'passed', steps: [] }],
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
       },
@@ -500,7 +500,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.8' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 2, passed: 1, failed: 1, errored: 0, skipped: 0 }, errors: [], results: persistedResults,
         reportPersistence: 'not-attempted',
       },
@@ -571,7 +571,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.8' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{
           id: 'tests/login.test.md',
@@ -649,7 +649,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 1,
       envelope: {
-        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.8' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{
           id: 'tests/login.test.md', file: 'tests/login.test.md', planFile: 'tests/login.ambercast.plan.json',
@@ -1167,7 +1167,7 @@ describe('runRunCommand', () => {
     const output = {
       exitCode: 0,
       envelope: {
-        schemaVersion: '3.7' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
+        schemaVersion: '3.8' as const, command: 'run', startedAt: '2026-08-09T00:00:00Z', durationMs: 1,
         summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }, errors: [],
         results: [outcome.results[0]!.result], reportPersistence: 'not-attempted',
       },

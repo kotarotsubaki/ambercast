@@ -26,7 +26,9 @@ description: 明确列出已发布的机器可读资源及其可用性规则。
 | [`schemas/plan.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json) | 可用 |
 | [`schemas/plan.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json) | 可用 |
 | [`schemas/plan.v4.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json) | 可用 |
+| [`schemas/plan.v5.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json) | 可用 |
 | [`schemas/grounding.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json) | 可用 |
+| [`schemas/grounding.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json) | 可用 |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | 可用 |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 可用 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 可用 |

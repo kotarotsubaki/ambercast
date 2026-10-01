@@ -65,11 +65,11 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
     ci: { heal: ciHeal },
   }));
   const plan = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     source: {
       inputsDigest: computeInputsDigest({
         normalizedTestMd: normalizeTestMd(FIXTURE_PROMPT),
-        schemaVersion: 4,
+        schemaVersion: 5,
         generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
         planProducerBundleFingerprint: planProducerBundleFingerprint(),
         targetDefinitions,
@@ -84,7 +84,7 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
   );
   await writeFile(
     join(project, 'tests', 'test.ambercast.grounding.json'),
-    toCanonicalArtifactText({ schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {} }),
+    toCanonicalArtifactText({ schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} }),
   );
 }
 
@@ -141,7 +141,7 @@ describe('bin/ambercast.js (e2e)', () => {
     expect(result.exitCode).toBe(0);
     const envelope = JSON.parse(result.stdout);
     expect(ReportEnvelope.safeParse(envelope).success).toBe(true);
-    expect(envelope.schemaVersion).toBe('3.7');
+    expect(envelope.schemaVersion).toBe('3.8');
     expect(envelope.results).toEqual([expect.objectContaining({ file: expect.stringContaining('test.test.md'), status: 'listed' })]);
   });
 

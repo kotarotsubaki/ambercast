@@ -8,13 +8,16 @@ import { extractStepRunRefs } from './run-ref.js';
  *
  * @param step - The step whose semantic obligations form the canonical hash preimage.
  * @returns A SHA-256 fingerprint of the step's opcode, secret obligations,
- * instruction coverage, capture variable, and ordered run-reference usage.
+ * instruction coverage, capture variable, confirms list, and ordered run-reference usage.
  * @remarks
  * The preimage intentionally omits the step id and kind because the
  * replacement boundary checks those identity preconditions separately. It
  * keeps empty secret obligations, ordered coverage, and duplicate references
  * explicit so a provider cannot turn an omitted, reordered, or malformed
  * obligation into an apparently equivalent replacement.
+ * Including `confirms` makes a Stage 2 replacement that drops or changes the
+ * list fail the existing fingerprint comparison instead of adopting a different
+ * confirmation obligation.
  */
 export function computeObligationFingerprint(step: Step): string {
   const opcode = step.kind === 'action' ? step.action : step.kind === 'assert' ? step.check : null;
@@ -27,7 +30,8 @@ export function computeObligationFingerprint(step: Step): string {
     ? step.instructionCoverage.map(({ id, kind, sourceSpan }) => ({ id, kind, sourceSpan }))
     : [];
   const capture = step.kind === 'capture' ? step.variable : null;
-  return createHash('sha256').update(toCanonicalDigestBytes({ opcode, secrets, instructionCoverage, capture, runRefs: [...extractStepRunRefs(step)] })).digest('hex');
+  const confirms = 'confirms' in step ? (step.confirms ?? []) : [];
+  return createHash('sha256').update(toCanonicalDigestBytes({ opcode, secrets, instructionCoverage, capture, confirms, runRefs: [...extractStepRunRefs(step)] })).digest('hex');
 }
 
 /**

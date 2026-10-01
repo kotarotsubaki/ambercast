@@ -42,9 +42,9 @@ const AI_RESULT_ERROR_EVENT: RunEvent = {
 };
 const STAGE_TWO_REJECTED_EVENTS: readonly RunEvent[] = [
   'provider-error', 'response-shape', 'id-mismatch', 'secret-name-invalid',
-  'coverage-invalid', 'obligation-mismatch', 'literal-secret', 'no-advance',
+  'coverage-invalid', 'obligation-mismatch', 'intent-invalid', 'literal-secret', 'no-advance',
 ].map((reason) => ({ type: 'heal-stage2-rejected', stepId: 'resolve-form', reason } as RunEvent));
-const STAGE_TWO_REJECTED_EVENT = STAGE_TWO_REJECTED_EVENTS[7]!;
+const STAGE_TWO_REJECTED_EVENT = STAGE_TWO_REJECTED_EVENTS[8]!;
 
 export function registerEventSinkContract(harness: EventSinkContractHarness): void {
   describe('EventSink contract', () => {

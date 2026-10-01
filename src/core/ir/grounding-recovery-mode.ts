@@ -6,12 +6,14 @@
  * keeps the policy next to other artifact-only facts such as grounding
  * coverage claims, rather than letting replay and healing own competing
  * copies.
+ * All five assert kinds use `confirms-reground`: an assert's own committed
+ * `confirms` field signals the Stage 1 reground target set instead of its check kind.
  */
 
 import type { ActionStep, AssertStep, Step } from './schema.js';
 
 /** The Stage 1 recovery treatment available for one plan-step variant. */
-export type GroundingRecoveryMode = 'element-reground' | 'ai-retrace' | 'none';
+export type GroundingRecoveryMode = 'element-reground' | 'confirms-reground' | 'ai-retrace' | 'none';
 
 /**
  * Classifies every action variant for grounding recovery.
@@ -22,6 +24,7 @@ export type GroundingRecoveryMode = 'element-reground' | 'ai-retrace' | 'none';
  * it cannot make that nested decision exhaustive. Replay consumes this exact
  * constant at its dispatch boundary so it does not reconstruct a second table
  * that merely happens to agree with healing.
+ * Actions retain `element-reground` or `none`; `confirms-reground` applies to asserts.
  */
 export const ACTION_GROUNDING_MODE: Record<ActionStep['action'], GroundingRecoveryMode> = {
   click: 'element-reground',
@@ -38,13 +41,15 @@ export const ACTION_GROUNDING_MODE: Record<ActionStep['action'], GroundingRecove
  * their own literal union. The typed key space makes the compiler identify an
  * unclassified future check where the table is authored, before a dispatcher
  * can silently choose a different treatment.
+ * All five assert kinds use `confirms-reground` because each assert's committed
+ * `confirms` field signals the Stage 1 reground target set.
  */
 export const ASSERT_GROUNDING_MODE: Record<AssertStep['check'], GroundingRecoveryMode> = {
-  'element-visible': 'element-reground',
-  'text-equals': 'element-reground',
-  'text-visible': 'none',
-  'url-matches': 'none',
-  'element-count': 'none',
+  'element-visible': 'confirms-reground',
+  'text-equals': 'confirms-reground',
+  'text-visible': 'confirms-reground',
+  'url-matches': 'confirms-reground',
+  'element-count': 'confirms-reground',
 };
 
 /**

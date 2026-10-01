@@ -6,23 +6,22 @@ import {
 } from '#core/ir/grounding-recovery-mode.js';
 import { ActionStep, AiStep, AssertStep, CaptureStep, Step } from '#core/ir/schema.js';
 
-const INTENT = { description: 'Submit', roleHint: 'button', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 7 } };
-const QUOTED_INTENT = { ...INTENT, quote: { text: 'Submit', sourceSpan: INTENT.sourceSpan } };
+const SOURCE_SPAN = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 };
 
 function actionFixture(action: keyof typeof ACTION_GROUNDING_MODE) {
-  return action === 'click' ? { id: 'click', kind: 'action', action, target: 'web', intent: INTENT }
+  return action === 'click' ? { id: 'click', kind: 'action', action, target: 'web', intent: { description: 'Click the submit button.', sourceSpan: SOURCE_SPAN } }
     : action === 'navigate' ? { id: 'navigate', kind: 'action', action, target: 'web', url: '/dashboard' }
-      : action === 'press' ? { id: 'press', kind: 'action', action, target: 'web', intent: INTENT, key: 'Enter' }
-        : action === 'fill' ? { id: 'fill', kind: 'action', action, target: 'web', intent: INTENT, value: 'value' }
-          : { id: 'fill-secret', kind: 'action', action, target: 'web', intent: INTENT, secretRef: '{{secrets.PASSWORD}}' };
+      : action === 'press' ? { id: 'press', kind: 'action', action, target: 'web', intent: { description: 'Press Enter on the submit button.', sourceSpan: SOURCE_SPAN }, key: 'Enter' }
+        : action === 'fill' ? { id: 'fill', kind: 'action', action, target: 'web', intent: { description: 'Fill the submit field.', sourceSpan: SOURCE_SPAN }, value: 'value' }
+          : { id: 'fill-secret', kind: 'action', action, target: 'web', intent: { description: 'Fill the password field.', sourceSpan: SOURCE_SPAN }, secretRef: '{{secrets.PASSWORD}}' };
 }
 
 function assertFixture(check: keyof typeof ASSERT_GROUNDING_MODE) {
   return check === 'text-visible' ? { id: 'text-visible', kind: 'assert', check, target: 'web', text: 'Dashboard' }
-    : check === 'element-visible' ? { id: 'element-visible', kind: 'assert', check, target: 'web', intent: QUOTED_INTENT }
-      : check === 'text-equals' ? { id: 'text-equals', kind: 'assert', check, target: 'web', intent: QUOTED_INTENT, text: 'Dashboard' }
+    : check === 'element-visible' ? { id: 'element-visible', kind: 'assert', check, target: 'web', intent: { description: 'Confirm the submit button is visible.', sourceSpan: SOURCE_SPAN, quote: { text: 'submit', sourceSpan: SOURCE_SPAN } } }
+      : check === 'text-equals' ? { id: 'text-equals', kind: 'assert', check, target: 'web', intent: { description: 'Confirm the dashboard text matches.', sourceSpan: SOURCE_SPAN, quote: { text: 'Dashboard', sourceSpan: SOURCE_SPAN } }, text: 'Dashboard' }
         : check === 'url-matches' ? { id: 'url-matches', kind: 'assert', check, target: 'web', pattern: '/dashboard' }
-          : { id: 'element-count', kind: 'assert', check, target: 'web', intent: QUOTED_INTENT, count: 1 };
+          : { id: 'element-count', kind: 'assert', check, target: 'web', intent: { description: 'Count the submit buttons.', sourceSpan: SOURCE_SPAN, quote: { text: 'submit', sourceSpan: SOURCE_SPAN } }, count: 1 };
 }
 
 describe('groundingRecoveryModeForStep', () => {
@@ -42,15 +41,15 @@ describe('groundingRecoveryModeForStep', () => {
       ...AssertStep.options.map((variant) => {
         const check = variant.shape.check.value as keyof typeof ASSERT_GROUNDING_MODE;
         const expected = {
-          'element-visible': 'element-reground',
-          'text-equals': 'element-reground',
-          'text-visible': 'none',
-          'url-matches': 'none',
-          'element-count': 'none',
+          'element-visible': 'confirms-reground',
+          'text-equals': 'confirms-reground',
+          'text-visible': 'confirms-reground',
+          'url-matches': 'confirms-reground',
+          'element-count': 'confirms-reground',
         } as const;
         return [Step.parse(assertFixture(check)), expected[check]] as const;
       }),
-      [CaptureStep.parse({ id: 'capture', kind: 'capture', target: 'web', intent: INTENT, variable: 'result' }), 'element-reground'] as const,
+      [CaptureStep.parse({ id: 'capture', kind: 'capture', target: 'web', intent: { description: 'Capture the submit button.', sourceSpan: SOURCE_SPAN }, variable: 'result' }), 'element-reground'] as const,
       [AiStep.parse({ id: 'ai', kind: 'ai', target: 'web', instruction: 'Verify the dashboard.', instructionCoverage: [{ id: 'dashboard', kind: 'success', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 22 } }] }), 'ai-retrace'] as const,
     ];
 
@@ -65,6 +64,6 @@ describe('groundingRecoveryModeForStep', () => {
     expect(Object.keys(ACTION_GROUNDING_MODE).sort()).toEqual(schemaActions);
     expect(Object.keys(ASSERT_GROUNDING_MODE).sort()).toEqual(schemaChecks);
     expect([...Object.values(ACTION_GROUNDING_MODE), ...Object.values(ASSERT_GROUNDING_MODE), 'element-reground', 'ai-retrace'].sort())
-      .toEqual(['ai-retrace', 'element-reground', 'element-reground', 'element-reground', 'element-reground', 'element-reground', 'element-reground', 'element-reground', 'none', 'none', 'none', 'none'].sort());
+      .toEqual(['ai-retrace', 'confirms-reground', 'confirms-reground', 'confirms-reground', 'confirms-reground', 'confirms-reground', 'element-reground', 'element-reground', 'element-reground', 'element-reground', 'element-reground', 'none'].sort());
   });
 });

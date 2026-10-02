@@ -1,7 +1,7 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import { getReportJsonSchema } from '#report/json-schema.js';
-import { ReportEnvelope } from '#report/schema.js';
+import { AiResponseIssueCode, ReportEnvelope } from '#report/schema.js';
 
 const REPORT_METADATA = {
   $id: 'https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json',
@@ -244,6 +244,23 @@ const reportDocuments = [
 ] as const;
 
 describe('report JSON Schema document', () => {
+  it('exports exactly the Zod AI-response issue code vocabulary', () => {
+    const schema = getReportJsonSchema();
+    const at = (value: unknown, ...path: readonly (string | number)[]): unknown =>
+      path.reduce<unknown>((node, segment) => (node as Record<string | number, unknown> | undefined)?.[segment], value);
+    const generatedCodes = new Set<string>();
+    for (const command of at(schema, 'oneOf') as unknown[]) {
+      for (const errorGroup of at(command, 'properties', 'errors', 'items', 'anyOf') as unknown[]) {
+        for (const error of (at(errorGroup, 'oneOf') as unknown[] | undefined) ?? []) {
+          for (const issue of (at(error, 'properties', 'details', 'properties', 'issues', 'items', 'anyOf') as unknown[] | undefined) ?? []) {
+            for (const code of (at(issue, 'properties', 'code', 'enum') as string[] | undefined) ?? []) generatedCodes.add(code);
+          }
+        }
+      }
+    }
+    expect(generatedCodes).toEqual(new Set(AiResponseIssueCode.options));
+  });
+
   it('derives an equal but independent schema for every call', () => {
     const first = getReportJsonSchema();
     const second = getReportJsonSchema();

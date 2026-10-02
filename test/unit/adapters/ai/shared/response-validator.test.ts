@@ -5,6 +5,7 @@ import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
+import { AiResponseIssue } from '#report/schema.js';
 
 function schema() {
   return typedJsonSchema(z.object({ ok: z.boolean(), count: z.int().positive() }));
@@ -23,6 +24,8 @@ describe('validateAiResponse', () => {
       validateAiResponse(raw, schema());
     } catch (error) {
       expect(error).toMatchObject({ kind: 'ai-response-invalid', details: { raw, issues: [{ code: 'invalid-json', path: [] }] } });
+      expect((error as AiResponseInvalidError).details?.issues).not.toHaveLength(0);
+      expect(((error as AiResponseInvalidError).details?.issues as unknown[] | undefined)?.every((issue) => AiResponseIssue.safeParse(issue).success)).toBe(true);
     }
   });
 
@@ -42,6 +45,8 @@ describe('validateAiResponse', () => {
           ]),
         },
       });
+      expect((error as AiResponseInvalidError).details?.issues).not.toHaveLength(0);
+      expect(((error as AiResponseInvalidError).details?.issues as unknown[] | undefined)?.every((issue) => AiResponseIssue.safeParse(issue).success)).toBe(true);
     }
   });
 

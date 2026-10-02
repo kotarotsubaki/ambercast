@@ -6,6 +6,7 @@ import type {
   Step,
   StepId,
 } from '#core/ir/schema.js';
+import type { AiResponseIssueCode, AiResponseIssuePath } from '#report/schema.js';
 import { PlanDocument } from '#core/ir/schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { secretNameFor } from '#core/ir/secret-ref.js';
@@ -178,12 +179,11 @@ export function deriveStage2ReplacementSecretNames(
  * those target conflicts. Warnings are ordered by their specified
  * UTF-16 sort keys: `reuse = [kind, name, stepIds[0] ?? ""]`,
  * `target = [kind, name, stepId]`, and `truncation = [kind, "", ""]`. Each
- * unprojected explicit name becomes an `AiResponseInvalidError` issue with
- * code `secret-allowed-name-not-projected`, path
- * `steps[n].secret.allowedName` or `steps[n].secrets[u].allowedName` (both
- * zero-based), and its required `stepId`; each target conflict uses
- * `secret-conflicting-target-names` at `steps[n].secret`, also with its
- * required `stepId`. The returned steps still require
+ * unprojected explicit name and each target conflict becomes an
+ * `AiResponseInvalidError` issue with its required `stepId` and a step-relative
+ * array path (see the `invalidIssues`/`targetIssues` construction below): no path
+ * carries a `steps[n]` prefix, because `stepId` already identifies the step. The
+ * returned steps still require
  * {@link normalizeAiStepSecretUses}; keeping normalization separate preserves
  * the original AI use identity needed for errors and selection provenance.
  */
@@ -211,14 +211,14 @@ export function deriveSecretNames(
   };
   const projected = new Set(sets.projected);
   const candidates: Candidate[] = [];
-  const invalidIssues: { code: string; path: string; stepId: StepId }[] = [];
+  const invalidIssues: { code: Extract<AiResponseIssueCode, 'secret-allowed-name-not-projected'>; path: AiResponseIssuePath; stepId: StepId }[] = [];
   for (const [stepIndex, step] of attributed.entries()) {
     if (sets.candidateStepIndexes !== undefined && !sets.candidateStepIndexes.has(stepIndex)) continue;
     const current = step as unknown as Record<string, unknown>;
     if (current.kind === 'action' && current.action === 'fill-secret') {
       const choice = current.secret as { allowedName?: SecretName; nameHint?: SecretName } | undefined;
       if (choice?.allowedName !== undefined && !projected.has(choice.allowedName)) {
-        invalidIssues.push({ code: 'secret-allowed-name-not-projected', path: `steps[${stepIndex}].secret.allowedName`, stepId: step.id });
+        invalidIssues.push({ code: 'secret-allowed-name-not-projected', path: ['secret', 'allowedName'], stepId: step.id });
         continue;
       }
       const intent = current.intent as ElementIntent;
@@ -229,7 +229,7 @@ export function deriveSecretNames(
     } else if (current.kind === 'ai') {
       for (const [useIndex, choice] of ((current.secrets as readonly { allowedName?: SecretName; nameHint?: SecretName }[] | undefined) ?? []).entries()) {
         if (choice.allowedName !== undefined && !projected.has(choice.allowedName)) {
-          invalidIssues.push({ code: 'secret-allowed-name-not-projected', path: `steps[${stepIndex}].secrets[${useIndex}].allowedName`, stepId: step.id });
+          invalidIssues.push({ code: 'secret-allowed-name-not-projected', path: ['secrets', useIndex, 'allowedName'], stepId: step.id });
           continue;
         }
         const name = choice.allowedName ?? choice.nameHint ?? `secret_step_${stepIndex + 1}_${useIndex + 1}`;
@@ -241,13 +241,20 @@ export function deriveSecretNames(
 
   const owners = new Map<SecretName, { readonly source: SecretUse['selectionSource'] }>();
   const targetNames = new Map<string, SecretName>();
-  const targetIssues: { code: string; path: string; stepId: StepId }[] = [];
+  const targetIssues: { code: Extract<AiResponseIssueCode, 'secret-conflicting-target-names'>; path: AiResponseIssuePath; stepId: StepId }[] = [];
+
+  // Fails to compile if either secret-naming code is ever removed from the
+  // report vocabulary, since Exclude would then include it and no empty
+  // object could satisfy the required key.
+  const _secretNamingCodesKnownToReport: Record<Exclude<'secret-allowed-name-not-projected' | 'secret-conflicting-target-names', AiResponseIssueCode>, never> = {};
+  void _secretNamingCodesKnownToReport;
+
   for (const reservation of sets.reservations ?? []) {
     if (!owners.has(reservation.name)) owners.set(reservation.name, { source: reservation.selectionSource });
     if (reservation.targetKey === undefined) continue;
     const establishedForTarget = targetNames.get(reservation.targetKey);
     if (establishedForTarget !== undefined && establishedForTarget !== reservation.name) {
-      targetIssues.push({ code: 'secret-conflicting-target-names', path: `steps[${reservation.stepIndex}].secret`, stepId: reservation.stepId });
+      targetIssues.push({ code: 'secret-conflicting-target-names', path: ['secret'], stepId: reservation.stepId });
       continue;
     }
     if (establishedForTarget === undefined) targetNames.set(reservation.targetKey, reservation.name);
@@ -266,7 +273,7 @@ export function deriveSecretNames(
     if (candidate.targetKey === undefined) continue;
     const establishedForTarget = targetNames.get(candidate.targetKey);
     if (establishedForTarget !== undefined && establishedForTarget !== candidate.candidate) {
-      targetIssues.push({ code: 'secret-conflicting-target-names', path: `steps[${candidate.stepIndex}].secret`, stepId: candidate.stepId });
+      targetIssues.push({ code: 'secret-conflicting-target-names', path: ['secret'], stepId: candidate.stepId });
       continue;
     }
     if (establishedForTarget === undefined) targetNames.set(candidate.targetKey, candidate.candidate);

@@ -5,6 +5,7 @@ import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { AiResponseIssue } from '#report/schema.js';
 import { reportError } from '#report/error-mapping.js';
 import { ReportError } from '#report/schema.js';
 import type { BuildInvocation } from '#adapters/ai/agentic/agentic-executor.js';
@@ -196,8 +197,11 @@ describe('createClaudeCodeCliExecutor', () => {
       run: createFakeCommandRunner([{ outcome: 'exited', stdout, stderr: '', exitCode: 0 }]).run,
     });
 
-    await expect(executor.execute({ prompt: 'Generate.', responseSchema: schema() }))
-      .rejects.toMatchObject({ details: { issues: [{ code: 'schema-mismatch', path: [] }] } });
+    const error = await executor.execute({ prompt: 'Generate.', responseSchema: schema() }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(AiResponseInvalidError);
+    expect(error).toMatchObject({ details: { issues: [{ code: 'schema-mismatch', path: [] }] } });
+    expect((error as AiResponseInvalidError).details?.issues).not.toHaveLength(0);
+    expect(((error as AiResponseInvalidError).details?.issues as unknown[] | undefined)?.every((issue) => AiResponseIssue.safeParse(issue).success)).toBe(true);
   });
 
   it.each([

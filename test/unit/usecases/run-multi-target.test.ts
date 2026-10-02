@@ -64,7 +64,7 @@ function session(name: 'A' | 'B' | 'C', options: Parameters<typeof createFakeBro
 async function scenario(
   steps: TestStep[],
   sessions: Partial<Record<'A' | 'B' | 'C', FakeBrowserSession>>,
-  options: { readonly abort?: AbortSignal; readonly launchError?: string; readonly advanceOnLaunchMs?: number; readonly targetConfigs?: RunDeps['config']['targets']; readonly resolveAiExecutor?: RunDeps['resolveAiExecutor'] } = {},
+  options: { readonly abort?: AbortSignal; readonly launchError?: string; readonly advanceOnLaunchMs?: number; readonly targetConfigs?: RunDeps['config']['targets']; readonly resolveAiExecutor?: RunDeps['resolveAiExecutor']; readonly clock?: ReturnType<typeof createFixedClock> } = {},
 ) {
   const storage = createInMemoryStorage();
   const layout = createLayoutResolver({ testDir: ROOT, runsDir: `${ROOT}/.runs` });
@@ -92,7 +92,7 @@ async function scenario(
   await storage.writeText(layout.planPathFor(FILE), toCanonicalArtifactText(plan as JsonValueT));
   const originalGrounding = toCanonicalArtifactText(grounding as JsonValueT);
   await storage.writeText(layout.groundingPathFor(FILE), originalGrounding);
-  const clock = createFixedClock(new Date('2026-09-23T00:00:00Z'), 0);
+  const clock = options.clock ?? createFixedClock(new Date('2026-09-23T00:00:00Z'), 0);
   const events = createRecordingEventSink();
   const factories = Object.fromEntries(Object.entries(sessions).map(([name, value]) => [name, () => {
     if (name === options.launchError) throw new Error('launch failed');
@@ -361,11 +361,141 @@ describe('multi-target run contracts', () => {
   });
 
   it.each([0, 150])('TEST-14 stops at timeoutMs %i with the final mismatch', async (timeoutMs) => {
-    const b = session('B', { assertOutcomes: [{ passed: false, message: 'first' }, { passed: false, message: 'second' }] });
+    const b = session('B', { assertOutcomes: [{ passed: false, message: 'first' }, { passed: false, message: 'second' }, { passed: false, message: 'third' }] });
     const { outcome, clock } = await scenario([assertion('poll', 'B', 'text-visible', timeoutMs, { text: 'wanted' })], { B: b });
-    expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ kind: 'assertion', expected: 'Text "wanted" is visible.', actual: timeoutMs === 0 ? 'first' : 'second' }] });
-    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(timeoutMs === 0 ? 1 : 2);
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ kind: 'assertion', expected: 'Text "wanted" is visible.', actual: timeoutMs === 0 ? 'first' : 'third' }] });
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(timeoutMs === 0 ? 1 : 3);
     expect(clock.sleepCalls).toEqual(timeoutMs === 0 ? [] : [100, 50]);
+  });
+
+  it.each([0, 1, 99, 100, 101, 1000])('TEST-3 observes the final browser check at budget %i', async (timeoutMs) => {
+    const count = timeoutMs === 0 ? 1 : Math.ceil(timeoutMs / 100) + 1;
+    const b = session('B', { assertOutcomes: Array.from({ length: count }, (_, index) => ({ passed: false, message: `sample-${index}` })) });
+    const { outcome, clock } = await scenario([assertion('poll', 'B', 'text-visible', timeoutMs, { text: 'wanted' })], { B: b });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ actual: `sample-${count - 1}` }] });
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(count);
+    expect(clock.sleepCalls).toHaveLength(count - 1);
+  });
+
+  it.each(['text-visible', 'url-matches'] as const)('TEST-1 accepts %s only on its deadline observation', async (check) => {
+    const b = session('B', { assertOutcomes: [...Array(10).fill({ passed: false, message: 'pending' }), { passed: true }] });
+    const extra = check === 'text-visible' ? { text: 'wanted' } : { pattern: 'wanted' };
+    const { outcome, clock } = await scenario([assertion('poll', 'B', check, 1000, extra)], { B: b });
+    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(11);
+    expect(clock.sleepCalls).toEqual(Array(10).fill(100));
+  });
+
+  it.each(['text-visible', 'url-matches'] as const)('TEST-1 rejects %s first satisfied after its deadline observation', async (check) => {
+    const b = session('B', { assertOutcomes: [
+      ...Array(10).fill({ passed: false, message: 'pending' }),
+      { passed: false, message: 'deadline mismatch' },
+      { passed: true },
+    ] });
+    const extra = check === 'text-visible' ? { text: 'wanted' } : { pattern: 'wanted' };
+    const { outcome, clock } = await scenario([assertion('poll', 'B', check, 1000, extra)], { B: b });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ kind: 'assertion', actual: 'deadline mismatch' }] });
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(11);
+    expect(clock.sleepCalls).toEqual(Array(10).fill(100));
+  });
+
+  it.each(['element-visible', 'text-equals', 'element-count'] as const)('TEST-3 observes the final %s sample at each budget', async (check) => {
+    for (const timeoutMs of [0, 1, 99, 100, 101, 1000]) {
+      const count = timeoutMs === 0 ? 1 : Math.ceil(timeoutMs / 100) + 1;
+      const b = session('B');
+      const empty = { rawYaml: '', tree: { role: 'root', name: '', children: [] }, scalarValues: [] };
+      const snapshots = vi.spyOn(b, 'accessibilitySnapshot');
+      const values = vi.spyOn(b, 'captureValue');
+      if (check === 'text-equals') {
+        for (let index = 0; index < count; index++) values.mockResolvedValueOnce(`sample-${index}`);
+      }
+      else snapshots.mockResolvedValue(empty);
+      const extra = check === 'text-equals' ? { element: REF, text: 'wanted' } : check === 'element-count' ? { element: REF, count: 1 } : { element: REF };
+      const { outcome, clock } = await scenario([assertion('poll', 'B', check, timeoutMs, extra)], { B: b });
+      expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ actual: check === 'text-equals' ? `sample-${count - 1}` : 'matched 0' }] });
+      expect(snapshots).toHaveBeenCalledTimes(count + 1);
+      expect(values).toHaveBeenCalledTimes(check === 'text-equals' ? count : 0);
+      expect(clock.sleepCalls).toHaveLength(count - 1);
+    }
+  });
+
+  it.each(['element-visible', 'text-equals', 'element-count'] as const)('TEST-1 accepts %s on its deadline observation', async (check) => {
+    const b = session('B');
+    const empty = { rawYaml: '', tree: { role: 'root', name: '', children: [] }, scalarValues: [] };
+    const snapshots = vi.spyOn(b, 'accessibilitySnapshot');
+    const values = vi.spyOn(b, 'captureValue');
+    if (check !== 'text-equals') {
+      for (let index = 0; index < 10; index++) snapshots.mockResolvedValueOnce(empty);
+    }
+    const extra = check === 'text-equals' ? { element: REF, text: 'wanted' } : check === 'element-count' ? { element: REF, count: 1 } : { element: REF };
+    if (check === 'text-equals') {
+      for (let index = 0; index < 10; index++) values.mockResolvedValueOnce('pending');
+      values.mockResolvedValueOnce('wanted');
+    }
+    const { outcome, clock } = await scenario([assertion('poll', 'B', check, 1000, extra)], { B: b });
+    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(snapshots).toHaveBeenCalledTimes(11);
+    expect(values).toHaveBeenCalledTimes(check === 'text-equals' ? 11 : 0);
+    expect(clock.sleepCalls).toEqual(Array(10).fill(100));
+  });
+
+  it.each([
+    ['element-visible', undefined], ['element-visible', 'textbox'],
+    ['text-equals', undefined], ['text-equals', 'textbox'],
+    ['element-count', undefined], ['element-count', 'textbox'],
+  ] as const)('TEST-6 formats %s expected with role %s', async (check, roleHint) => {
+      const b = session('B');
+      vi.spyOn(b, 'accessibilitySnapshot').mockResolvedValue({ rawYaml: '', tree: { role: 'root', name: '', children: [] }, scalarValues: [] });
+      const intent = roleHint === undefined ? { description: INTENT.description, sourceSpan: INTENT.sourceSpan, quote: INTENT.quote } : INTENT;
+      const extra = check === 'text-equals' ? { intent, text: 'wanted' } : check === 'element-count' ? { intent, count: 1 } : { intent };
+      const clause = check === 'text-equals' ? 'has text "wanted".' : check === 'element-count' ? 'has count 1.' : 'is visible.';
+      const { outcome } = await scenario([assertion('poll', 'B', check, 0, extra)], { B: b });
+      expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ expected: `Element ${roleHint === undefined ? '' : 'textbox ' }"Value" ${clause}` }] });
+  });
+
+  it('TEST-5 propagates an integrity failure from the final text-equals observation', async () => {
+    const b = session('B');
+    vi.spyOn(b, 'captureValue').mockResolvedValueOnce('pending').mockRejectedValueOnce(new IntegrityViolationError('final capture contaminated'));
+    const { outcome, clock } = await scenario([assertion('poll', 'B', 'text-equals', 100, { element: REF, text: 'wanted' })], { B: b });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [{ status: 'error', kind: 'environment' }] });
+    expect(outcome.results[0]?.error?.kind).toBe('integrity-violation');
+    expect(b.bindCalls()).toBe(2);
+    expect(clock.sleepCalls).toEqual([100]);
+  });
+
+  it('TEST-5 uses the assert timeoutMs before the target resolveTimeoutMs', async () => {
+    const b = session('B', { assertOutcomes: [
+      { passed: false, message: 'first' },
+      { passed: false, message: 'second' },
+      { passed: false, message: 'second' },
+    ] });
+    const targetConfigs = { ...configs, B: { ...configs.B, resolveTimeoutMs: 1000 } } as RunDeps['config']['targets'];
+    const { outcome, clock } = await scenario(
+      [assertion('poll', 'B', 'text-visible', 150, { text: 'wanted' })],
+      { B: b }, { targetConfigs },
+    );
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ kind: 'assertion', actual: 'second' }] });
+    expect(clock.sleepCalls).toEqual([100, 50]);
+  });
+
+  it('TEST-5 launches one session across multiple assert observations', async () => {
+    const b = session('B', { assertOutcomes: [{ passed: false, message: 'pending' }, { passed: true }] });
+    const { outcome, driver, clock } = await scenario(
+      [assertion('poll', 'B', 'text-visible', 200, { text: 'wanted' })], { B: b },
+    );
+    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(2);
+    expect(clock.sleepCalls).toEqual([100]);
+    expect(driver.launches).toEqual([definitions.B]);
+  });
+
+  it.each([107, 99])('TEST-2 takes exactly one observation after a jittered final wait of %i ms', async (elapsed) => {
+    const b = session('B', { assertOutcomes: [{ passed: false, message: 'before' }, { passed: true }] });
+    const clock = createFixedClock(new Date('2026-09-23T00:00:00Z'), 0, () => elapsed);
+    const { outcome } = await scenario([assertion('poll', 'B', 'text-visible', 100, { text: 'wanted' })], { B: b }, { clock });
+    expect(outcome.results[0]?.result.status).toBe('passed');
+    expect(b.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(2);
+    expect(clock.sleepCalls).toEqual([100]);
   });
 
   it('TEST-14 starts the deadline before session acquisition', async () => {
@@ -393,6 +523,7 @@ describe('multi-target run contracts', () => {
     if (failure === 'bind-miss') {
       expect(outcome.results[0]?.result).toMatchObject({ status: 'failed', steps: [{ status: 'failed', kind: 'assertion' }] });
       expect(clock.sleepCalls).toEqual(Array(10).fill(100));
+      expect(b.bindCalls()).toBe(10);
     } else {
       expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [{ status: 'error', kind: 'environment' }] });
       expect(clock.sleepCalls).toEqual([]);

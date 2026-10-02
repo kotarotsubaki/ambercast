@@ -1665,6 +1665,33 @@ describe('heal state-machine contract', () => {
     expect(writeBinary).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps a deadline-time assert out of the cached-baseline repair frontier', async () => {
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'assert-dashboard', kind: 'assert', target: 'web', check: 'text-visible', text: 'Dashboard', timeoutMs: 100 })],
+      grounding: {},
+    });
+    scenario.sessionFactory.mockImplementation(() => createFakeBrowserSession(new Map(), {
+      baseUrl: TARGETS.web.baseUrl,
+      currentUrl: TARGETS.web.baseUrl,
+      assertOutcomes: [
+        { passed: false, message: 'Dashboard is absent before the deadline.' },
+        { passed: true },
+      ],
+    }));
+    let baselineStepStatus: string | undefined;
+    replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
+      if (options.resolve === false) baselineStepStatus = outcome.results[0]?.result.steps[0]?.status;
+    };
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(baselineStepStatus).toBe('passed');
+    expect(result.outcome.results[0]).toMatchObject({
+      repairOutcome: 'no-changes-needed',
+      baselineFirstFailureIndex: scenario.plan.steps.length,
+    });
+  });
+
   it('replays Stage 1 when an element-consuming failing step has no grounding entry', async () => {
     const scenario = await createScenario({
       steps: CONFIRMED_SUBMIT_STEPS,

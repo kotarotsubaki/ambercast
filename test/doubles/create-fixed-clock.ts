@@ -10,7 +10,7 @@ import type { Clock } from '../../src/ports/system.js';
  * @param monotonicMs - Stable elapsed-time reading supplied by the scenario.
  * @returns A clock with independently repeatable values.
  */
-export function createFixedClock(now: Date, monotonicMs: number): Clock & { readonly sleepCalls: number[] } {
+export function createFixedClock(now: Date, monotonicMs: number, elapsedOnSleep: (ms: number) => number = (ms) => ms): Clock & { readonly sleepCalls: number[] } {
   const timestamp = now.getTime();
   const sleepCalls: number[] = [];
   let elapsed = monotonicMs;
@@ -26,7 +26,7 @@ export function createFixedClock(now: Date, monotonicMs: number): Clock & { read
     async sleep(ms: number, signal?: AbortSignal): Promise<void> {
       sleepCalls.push(ms);
       if (signal?.aborted) throw signal.reason;
-      elapsed += ms;
+      elapsed += elapsedOnSleep(ms);
       await Promise.resolve();
       if (signal?.aborted) throw signal.reason;
     },

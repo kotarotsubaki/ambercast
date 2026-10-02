@@ -2297,12 +2297,15 @@ describe('run', () => {
       session: ReturnType<typeof createFakeBrowserSession>,
       intent: typeof SUBMIT_INTENT | typeof SUBMIT_QUOTED_INTENT,
       executor = scriptedAi({ outcome: 'none' }),
-      options: { clock?: Clock; entries?: GroundingDocument['entries']; timeoutMs?: number; confirms?: boolean } = {},
+      options: { clock?: Clock; entries?: GroundingDocument['entries']; timeoutMs?: number; confirms?: boolean; signal?: AbortSignal } = {},
     ) {
+      const sessionFactory = vi.fn(() => session);
+      const uiExecutor = vi.fn(() => createFakeUiExecutor(sessionFactory));
       const { deps, recordingStorage, resolveAiExecutor } = createScenario({
-        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+        uiExecutor,
         resolveAiExecutor: async () => executor,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
       });
       const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', intent === SUBMIT_QUOTED_INTENT ? QUOTED_PROMPT : PROMPT);
       await seedFreshArtifacts(recordingStorage.storage, testPath, [
@@ -2314,7 +2317,7 @@ describe('run', () => {
         config: { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: options.timeoutMs } } },
       };
       const outcome = await run(timedDeps, DEFAULT_OPTIONS);
-      return { outcome, session, executor, resolveAiExecutor, recordingStorage, testPath };
+      return { outcome, session, executor, resolveAiExecutor, recordingStorage, testPath, uiExecutor, sessionFactory };
     }
 
     it.each([
@@ -2427,6 +2430,179 @@ describe('run', () => {
       expect(clock.monotonicMs()).toBe(130);
       expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'quoted-match' } });
       expect(result.executor.structuredRequests).toHaveLength(0);
+    });
+
+    it.each([
+      ['quoted', SUBMIT_QUOTED_INTENT],
+      ['quote-less', SUBMIT_INTENT],
+    ] as const)('TEST-1 binds %s intent from the deadline-time observation', async (_label, intent) => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      const starts: number[] = [];
+      vi.spyOn(session, 'accessibilitySnapshot').mockImplementation(async () => {
+        const now = clock.monotonicMs();
+        starts.push(now);
+        return now === 100 ? capture(['Submit'], 'stable') : capture([], 'stable');
+      });
+      const result = await scenario(session, intent, scriptedAi({ outcome: 'found', role: 'button', name: 'Submit' }), { clock, timeoutMs: 100 });
+
+      expect(starts).toEqual([0, 100]);
+      expect(clock.sleepCalls).toEqual([100]);
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: intent === SUBMIT_QUOTED_INTENT ? 'quoted-match' : 'ai-proposed' } });
+      expect(result.executor.structuredRequests).toHaveLength(intent === SUBMIT_QUOTED_INTENT ? 0 : 1);
+      if (intent === SUBMIT_INTENT) {
+        expect((result.executor.structuredRequests[0]?.context as { accessibilityTree: unknown }).accessibilityTree).toEqual(capture(['Submit'], 'stable').tree);
+      }
+    });
+
+    it.each([0, 1, 99, 100, 101, 1000])('TEST-3 observes the final quote-less binding snapshot at budget %i', async (timeoutMs) => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(new Map());
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot').mockImplementation(async () =>
+        capture([], `changing-${clock.monotonicMs()}-${snapshots.mock.calls.length}`));
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: 'none' }), { clock, timeoutMs });
+      const expectedCount = timeoutMs === 0 ? 1 : Math.ceil(timeoutMs / 100) + 1;
+
+      // The unresolved case captures observed evidence once after stage 1 ends.
+      expect(snapshots).toHaveBeenCalledTimes(expectedCount + 1);
+      expect(clock.sleepCalls).toHaveLength(expectedCount - 1);
+      expect(result.outcome.results[0]?.error).toMatchObject({ details: { reason: 'no-candidate' } });
+      expect(result.executor.structuredRequests).toHaveLength(1);
+    });
+
+    it.each([107, 99])('TEST-2 binds from the only valid snapshot after a jittered final wait of %i ms', async (elapsed) => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0, () => elapsed);
+      const valid = capture(['Submit'], 'valid-after-final-wait');
+      const invalid = { ...capture([]), tree: SNAPSHOT_INVALID };
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot')
+        .mockResolvedValueOnce(invalid).mockResolvedValueOnce(valid);
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: 'found', role: 'button', name: 'Submit' }), { clock, timeoutMs: 100 });
+
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect((result.executor.structuredRequests[0]?.context as { accessibilityTree: unknown }).accessibilityTree).toEqual(valid.tree);
+      expect(snapshots).toHaveBeenCalledTimes(2);
+      expect(clock.sleepCalls).toEqual([100]);
+    });
+
+    it.each([
+      ['quoted', SUBMIT_QUOTED_INTENT],
+      ['quote-less', SUBMIT_INTENT],
+    ] as const)('TEST-4 keeps the last valid %s snapshot when the final observation is invalid', async (_label, intent) => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const alternate = { strategy: 'accessibility', role: 'button', name: 'Alternate' } as const;
+      const valid = capture(['Submit', 'Submit', 'Alternate'], 'valid');
+      const invalid = { ...capture([]), tree: SNAPSHOT_INVALID };
+      const fingerprint = computeAccessibilityFingerprint(valid.tree, alternate, []);
+      if (fingerprint.kind !== 'ok') throw new Error('The last valid capture must contain a fingerprintable Alternate button.');
+      const session = createFakeBrowserSession(liveEntries([alternate], fingerprint.fingerprint));
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot')
+        .mockResolvedValueOnce(valid).mockResolvedValueOnce(invalid).mockResolvedValue(invalid);
+      const result = await scenario(session, intent, scriptedAi({ outcome: 'found', role: 'button', name: 'Alternate' }), { clock, timeoutMs: 100 });
+
+      expect(snapshots).toHaveBeenCalledTimes(2);
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect((result.executor.structuredRequests[0]?.context as { accessibilityTree: unknown }).accessibilityTree).toEqual(valid.tree);
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+    });
+
+    it.each([
+      ['quoted', SUBMIT_QUOTED_INTENT],
+      ['quote-less', SUBMIT_INTENT],
+    ] as const)('TEST-4 classifies all-invalid %s observations as snapshot-invalid', async (_label, intent) => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(new Map());
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ ...capture([]), tree: SNAPSHOT_INVALID });
+      const result = await scenario(session, intent, undefined, { clock, timeoutMs: 100 });
+
+      expect(snapshots).toHaveBeenCalledTimes(3);
+      expect(result.outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [{ status: 'error', kind: 'environment' }] });
+      expect(result.executor.structuredRequests).toHaveLength(0);
+    });
+
+    it('TEST-4 compares quote-less rawYaml across an invalid intervening observation', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot')
+        .mockResolvedValueOnce(capture(['Submit'], 'same'))
+        .mockResolvedValueOnce({ ...capture([]), tree: SNAPSHOT_INVALID })
+        .mockResolvedValue(capture(['Submit'], 'same'));
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: 'found', role: 'button', name: 'Submit' }), { clock, timeoutMs: 200 });
+
+      expect(snapshots).toHaveBeenCalledTimes(3);
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+      expect(result.executor.structuredRequests).toHaveLength(1);
+    });
+
+    it('TEST-5 acquires one session across multiple stage-1 observations', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot')
+        .mockResolvedValueOnce(capture([])).mockResolvedValue(capture(['Submit']));
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, timeoutMs: 100 });
+
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed' });
+      expect(snapshots).toHaveBeenCalledTimes(2);
+      expect(result.uiExecutor).toHaveBeenCalledTimes(1);
+      expect(result.sessionFactory).toHaveBeenCalledTimes(1);
+    });
+
+    it('TEST-5 propagates an integrity error from the final stage-1 observation', async () => {
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(new Map());
+      const violation = new IntegrityViolationError('Final capture violated integrity.');
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot')
+        .mockResolvedValueOnce(capture([])).mockRejectedValueOnce(violation);
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, timeoutMs: 100 });
+
+      expect(snapshots).toHaveBeenCalledTimes(2);
+      expect(clock.sleepCalls).toEqual([100]);
+      expect(result.outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+    });
+
+    it('TEST-5 interrupts a stage-1 wait on abort', async () => {
+      const controller = new AbortController();
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const session = createFakeBrowserSession(new Map());
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture([]));
+      const sleep = vi.spyOn(clock, 'sleep').mockImplementation(async () => {
+        controller.abort(new Error('binding aborted during wait'));
+        throw controller.signal.reason;
+      });
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, timeoutMs: 100, signal: controller.signal });
+
+      expect(snapshots).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledTimes(1);
+      expect(result.outcome.results[0]?.result.status).toBe('error');
+    });
+
+    it('TEST-5 observes no stage-1 snapshot when already aborted', async () => {
+      const controller = new AbortController();
+      controller.abort(new Error('binding already aborted'));
+      const session = createFakeBrowserSession(new Map());
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot');
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { signal: controller.signal });
+
+      expect(snapshots).not.toHaveBeenCalled();
+      expect(result.outcome.interrupted).toBe(true);
+    });
+
+    it('TEST-5 checks abort before the observation following a wait', async () => {
+      const controller = new AbortController();
+      const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+      const originalSleep = clock.sleep.bind(clock);
+      vi.spyOn(clock, 'sleep').mockImplementation(async (ms, signal) => {
+        await originalSleep(ms, signal);
+        controller.abort(new Error('binding aborted before next observation'));
+      });
+      const session = createFakeBrowserSession(new Map());
+      const snapshots = vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture([]));
+      const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, timeoutMs: 100, signal: controller.signal });
+
+      expect(clock.sleepCalls).toEqual([100]);
+      expect(snapshots).toHaveBeenCalledTimes(2); // One stage-1 capture plus failure evidence.
+      expect(result.outcome.results[0]?.result.status).toBe('error');
     });
 
     it.each([

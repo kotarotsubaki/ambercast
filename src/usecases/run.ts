@@ -413,6 +413,42 @@ async function callAiExecutor<T>(
 }
 
 /**
+ * Takes an observation before checking the deadline, including when the
+ * initial budget is already exhausted. A completed observation returns
+ * immediately. After a non-completing observation, this loop owns the
+ * remaining-budget check, bounded wait, abort check, and final termination.
+ *
+ * A wait that consumes the remaining budget is marked final before sleeping.
+ * Its follow-up observation is taken exactly once and decides the result
+ * regardless of whether the real timer fires early or late. Reading the clock
+ * after that wait to decide whether to observe would allow timer jitter to
+ * skip the deadline sample or add extra observations.
+ *
+ * The caller acquires its session once before invoking this loop; `observe`
+ * reuses that session and owns only snapshot validity and candidate or assertion
+ * meaning. This loop assigns none of those meanings and never acquires a session
+ * itself.
+ */
+async function pollUntilDeadline<T>(
+  context: DispatchContext,
+  deadline: number,
+  observe: () => Promise<{ done: true; value: T } | { done: false; last: T }>,
+): Promise<T> {
+  let finalWaitTaken = false;
+  for (;;) {
+    context.signal?.throwIfAborted();
+    const result = await observe();
+    if (result.done) return result.value;
+    if (finalWaitTaken) return result.last;
+    const remaining = deadline - context.clock.monotonicMs();
+    if (remaining <= 0) return result.last;
+    const waitMs = Math.min(100, remaining);
+    if (waitMs === remaining) finalWaitTaken = true;
+    await context.clock.sleep(waitMs, context.signal);
+  }
+}
+
+/**
  * Marks an abort that has no reportable error kind while retaining a useful
  * case-level explanation.
  */
@@ -2573,24 +2609,23 @@ async function executeAiStep(
  *
  * The sole waiting deadline is step start plus `resolveTimeoutMs`. Presence
  * waiting for the old locator and first-binding stage 1 share it. After a
- * verify miss, stage 1 receives only the remaining time. Judge the deadline
- * when a snapshot capture starts: evaluate a capture started by the deadline
- * even if it completes later, and never start another after the deadline.
- * Stage 1 always takes its first snapshot, including at zero remaining time.
+ * verify miss, stage 1 receives only the remaining time. Its first snapshot
+ * is always taken, including at zero remaining time. A matching observation
+ * ends polling immediately; otherwise another wait occurs only while time
+ * remains. When a wait consumes the remaining budget, one more snapshot is
+ * taken unconditionally and judged even if the real timer overruns.
  *
  * With `--resolve` on and no usable entry, first binding has four stages:
  *
- * 1. If the intent has a quote, poll `accessibilitySnapshot()` every 100 ms
- *    until the shared deadline and select the snapshot when
+ * 1. If the intent has a quote, poll `accessibilitySnapshot()` with waits of
+ *    at most 100 ms and select the snapshot when
  *    `matchQuotedCandidates` returns exactly one candidate; provenance is
- *    `quoted-match`. Without a quote, poll every 100 ms until consecutive
- *    snapshots have equal `rawYaml`, then use that snapshot for stage 2; at
- *    the deadline use the last snapshot. If the deadline arrives before a
- *    second capture, judge the first and proceed without waiting past it.
- *    Exclude `snapshot-invalid` captures from candidate selection and keep
- *    polling. If the last snapshot at the deadline is invalid, abort with
- *    the existing `snapshot-invalid` CaseAbort classification (exit 3),
- *    without calling AI.
+ *    `quoted-match`. Without a quote, compare `rawYaml` across consecutive
+ *    valid snapshots, ignoring invalid snapshots between them. If no match
+ *    ends polling, stage 2 uses the last valid snapshot. Classify
+ *    `snapshot-invalid` as a CaseAbort (exit 3) without calling AI only when
+ *    every observation in the loop is invalid, including the observation
+ *    after the final wait.
  * 2. If stage 1 found no candidate, send at most one AI proposal request per
  *    step per run. Its context is `{ description, quote?, roleHint?, excerpt,
  *    accessibilityTree }`, where `excerpt` is re-extracted source-span text.
@@ -2674,27 +2709,27 @@ async function groundedTarget(
   }
 
   const quoteStartedMs = context.clock.monotonicMs();
-  let selected: AccessibilityCapture | undefined;
+  let lastValidCapture: AccessibilityCapture | undefined;
   let quotedCandidate: { role: string; name: string } | undefined;
   let previousRawYaml: string | undefined;
-  for (;;) {
+  const result = await pollUntilDeadline(context, deadlineMs, async () => {
     context.signal?.throwIfAborted();
     const capture = await session.accessibilitySnapshot();
-    selected = capture;
     if (!isSnapshotInvalid(capture.tree)) {
+      lastValidCapture = capture;
       if (intent.quote !== undefined) {
         const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: intent.quote.text, ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }) });
-        if (Array.isArray(matches) && matches.length === 1) { quotedCandidate = matches[0]; break; }
-      } else if (previousRawYaml === capture.rawYaml) break;
+        if (Array.isArray(matches) && matches.length === 1) { quotedCandidate = matches[0]; return { done: true, value: { capture, quotedCandidate: matches[0] } }; }
+      } else if (previousRawYaml === capture.rawYaml) {
+        return { done: true, value: { capture, quotedCandidate: undefined } };
+      }
       previousRawYaml = capture.rawYaml;
     }
-    const remaining = deadlineMs - context.clock.monotonicMs();
-    if (remaining <= 0) break;
-    await context.clock.sleep(Math.min(100, remaining), context.signal);
-    // The capture started at the deadline is still eligible for judgment.
-    if (context.clock.monotonicMs() > deadlineMs) break;
-  }
-  if (selected === undefined || isSnapshotInvalid(selected.tree)) throw groundingClassificationAbort('snapshot-invalid', selected?.tree ?? null);
+    return { done: false, last: { capture, quotedCandidate } };
+  });
+  // A matching observation records a valid capture before completing, so this
+  // all-invalid path receives the last non-matching observation's raw capture.
+  if (lastValidCapture === undefined) throw groundingClassificationAbort('snapshot-invalid', result.capture.tree ?? null);
   const quoteWaitMs = Math.max(0, Math.round(context.clock.monotonicMs() - quoteStartedMs));
   let candidate = quotedCandidate;
   let provenance: 'quoted-match' | 'ai-proposed' = 'quoted-match';
@@ -2702,21 +2737,21 @@ async function groundedTarget(
   if (candidate === undefined) {
     const excerpt = extractSpan(context.normalizedTestMd, intent.sourceSpan);
     if (excerpt === undefined) throw new IntegrityViolationError('The validated element intent source span could not be re-extracted.');
-    const proposalContext = buildRedactedAiProposalContext({ description: intent.description, ...(intent.quote === undefined ? {} : { quote: intent.quote.text }), ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }), excerpt, accessibilityTree: selected.tree }, context.resolvedSecrets, runStateValues(context.runState));
+    const proposalContext = buildRedactedAiProposalContext({ description: intent.description, ...(intent.quote === undefined ? {} : { quote: intent.quote.text }), ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }), excerpt, accessibilityTree: lastValidCapture.tree }, context.resolvedSecrets, runStateValues(context.runState));
     if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
     const executor = await context.resolveAiExecutor();
     const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
     const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ElementBindingProposal), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
     const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request), (durationMs) => { aiProposalMs = durationMs; });
     if (result.data.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
-    const matches = matchQuotedCandidates(selected.tree as AccessibilityNode, { text: result.data.name, roleHint: result.data.role });
+    const matches = matchQuotedCandidates(lastValidCapture.tree as AccessibilityNode, { text: result.data.name, roleHint: result.data.role });
     if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected' });
     candidate = matches[0];
     provenance = 'ai-proposed';
   }
   const locator: AccessibilityElementRef = { strategy: 'accessibility', role: candidate!.role, name: candidate!.name };
-  const fingerprint = computeAccessibilityFingerprint(selected.tree, locator, context.resolvedSecrets.values());
-  if (fingerprint.kind === 'snapshot-invalid' || fingerprint.kind === 'secret-contaminated') throw groundingClassificationAbort(fingerprint.kind, selected.tree);
+  const fingerprint = computeAccessibilityFingerprint(lastValidCapture.tree, locator, context.resolvedSecrets.values());
+  if (fingerprint.kind === 'snapshot-invalid' || fingerprint.kind === 'secret-contaminated') throw groundingClassificationAbort(fingerprint.kind, lastValidCapture.tree);
   if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected' });
   context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
   const verified = await session.resolveGrounded(locator, { mode: 'verify', fingerprint: fingerprint.fingerprint });
@@ -2884,18 +2919,17 @@ async function evaluateElementVisibleAssert(
 ): Promise<DispatchOutcome> {
   const session = await sessionForStep(context, step);
   const quote = step.intent.quote;
-  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" is visible.`;
-  for (;;) {
+  const expected = step.intent.roleHint === undefined
+    ? `Element "${quote.text}" is visible.`
+    : `Element ${step.intent.roleHint} "${quote.text}" is visible.`;
+  return pollUntilDeadline(context, deadline, async (): Promise<{ done: true; value: DispatchOutcome } | { done: false; last: DispatchOutcome }> => {
     context.signal?.throwIfAborted();
     const capture = await session.accessibilitySnapshot();
     const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
-    if (Array.isArray(matches) && matches.length > 0) return { kind: 'passed', confirmationBasisValid: matches.length === 1 };
+    if (Array.isArray(matches) && matches.length > 0) return { done: true, value: { kind: 'passed', confirmationBasisValid: matches.length === 1 } };
     const actual = Array.isArray(matches) ? `matched ${matches.length}` : 'snapshot-invalid';
-    const remaining = deadline - context.clock.monotonicMs();
-    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
-    await context.clock.sleep(Math.min(100, remaining), context.signal);
-    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
-  }
+    return { done: false, last: { kind: 'assertion-failed', expected, actual } };
+  });
 }
 
 /**
@@ -2923,8 +2957,10 @@ async function evaluateTextEqualsAssert(
 ): Promise<DispatchOutcome> {
   const session = await sessionForStep(context, step);
   const quote = step.intent.quote;
-  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" has text "${step.text}".`;
-  for (;;) {
+  const expected = step.intent.roleHint === undefined
+    ? `Element "${quote.text}" has text "${step.text}".`
+    : `Element ${step.intent.roleHint} "${quote.text}" has text "${step.text}".`;
+  return pollUntilDeadline(context, deadline, async (): Promise<{ done: true; value: DispatchOutcome } | { done: false; last: DispatchOutcome }> => {
     context.signal?.throwIfAborted();
     const capture = await session.accessibilitySnapshot();
     const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
@@ -2938,18 +2974,15 @@ async function evaluateTextEqualsAssert(
       else {
         try {
           actual = await session.captureValue(bound.element, 'text');
-          if (actual === step.text) return { kind: 'passed' };
+          if (actual === step.text) return { done: true, value: { kind: 'passed' } };
         } catch (error) {
           if (!(error instanceof BoundElementRejectedError)) throw error;
           actual = 'binding-lost';
         }
       }
     }
-    const remaining = deadline - context.clock.monotonicMs();
-    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
-    await context.clock.sleep(Math.min(100, remaining), context.signal);
-    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
-  }
+    return { done: false, last: { kind: 'assertion-failed', expected, actual } };
+  });
 }
 
 /**
@@ -2970,18 +3003,17 @@ async function evaluateElementCountAssert(
 ): Promise<DispatchOutcome> {
   const session = await sessionForStep(context, step);
   const quote = step.intent.quote;
-  const expected = `Element ${step.intent.roleHint ?? ''} "${quote.text}" has count ${step.count}.`;
-  for (;;) {
+  const expected = step.intent.roleHint === undefined
+    ? `Element "${quote.text}" has count ${step.count}.`
+    : `Element ${step.intent.roleHint} "${quote.text}" has count ${step.count}.`;
+  return pollUntilDeadline(context, deadline, async (): Promise<{ done: true; value: DispatchOutcome } | { done: false; last: DispatchOutcome }> => {
     context.signal?.throwIfAborted();
     const capture = await session.accessibilitySnapshot();
     const matches = matchQuotedCandidates(capture.tree as AccessibilityNode, { text: quote.text, ...(step.intent.roleHint === undefined ? {} : { roleHint: step.intent.roleHint }) });
-    if (Array.isArray(matches) && matches.length === step.count) return { kind: 'passed' };
+    if (Array.isArray(matches) && matches.length === step.count) return { done: true, value: { kind: 'passed' } };
     const actual = Array.isArray(matches) ? `matched ${matches.length}` : 'snapshot-invalid';
-    const remaining = deadline - context.clock.monotonicMs();
-    if (remaining <= 0) return { kind: 'assertion-failed', expected, actual };
-    await context.clock.sleep(Math.min(100, remaining), context.signal);
-    if (context.clock.monotonicMs() >= deadline) return { kind: 'assertion-failed', expected, actual };
-  }
+    return { done: false, last: { kind: 'assertion-failed', expected, actual } };
+  });
 }
 
 /**
@@ -2996,41 +3028,32 @@ async function evaluateElementCountAssert(
  * visibility and URL matching retain the browser check and shared loop.
  */
 async function pollAssert(step: Step, context: DispatchContext, deadline: number): Promise<DispatchOutcome> {
-  // V4 polling fixes its deadline immediately after step-start, before
-  // acquisition or materialization. The first observation always runs;
-  // only a false result waits up to 100 ms or the remaining budget. A wait
-  // reaching the deadline returns the last mismatch without another bind.
-  // Element assertions return to their dedicated snapshot loops. The shared
-  // browser loop handles text-visible and url-matches only.
   if (step.kind !== 'assert') {
     throw new Error('The assertion dispatcher received a non-assertion step.');
   }
 
-  for (;;) {
-  if (context.signal?.aborted) throw context.signal.reason;
-  let check: AssertCheck;
   switch (step.check) {
-    case 'text-visible':
-      check = { check: 'text-visible', text: step.text };
-      break;
     case 'element-visible':
       return evaluateElementVisibleAssert(step, context, deadline);
     case 'text-equals':
       return evaluateTextEqualsAssert(step, context, deadline);
-    case 'url-matches':
-      check = { check: 'url-matches', pattern: step.pattern };
-      break;
     case 'element-count':
       return evaluateElementCountAssert(step, context, deadline);
-  }
-
-  const outcome = await (await sessionForStep(context, step)).evaluateAssert(check);
-  if (outcome.passed) return { kind: 'passed' };
-  const mismatch: DispatchOutcome = { kind: 'assertion-failed', expected: expectedForAssert(check), actual: outcome.message };
-  const remaining = deadline - context.clock.monotonicMs();
-  if (remaining <= 0) return mismatch;
-  await context.clock.sleep(Math.min(100, remaining), context.signal);
-  if (context.clock.monotonicMs() >= deadline) return mismatch;
+    case 'text-visible':
+    case 'url-matches': {
+      const session = await sessionForStep(context, step);
+      const check: AssertCheck = step.check === 'text-visible'
+        ? { check: 'text-visible', text: step.text }
+        : { check: 'url-matches', pattern: step.pattern };
+      return pollUntilDeadline(context, deadline, async () => {
+        context.signal?.throwIfAborted();
+        const outcome = await session.evaluateAssert(check);
+        if (outcome.passed) return { done: true, value: { kind: 'passed' } as DispatchOutcome };
+        const expected = expectedForAssert(check);
+        const mismatch: DispatchOutcome = { kind: 'assertion-failed', expected, actual: outcome.message };
+        return { done: false, last: mismatch };
+      });
+    }
   }
 }
 

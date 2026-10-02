@@ -109,7 +109,7 @@ Report errors are strict objects scoped to either the overall command run or a s
 
 | Code | Optional `details` shape |
 | --- | --- |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: any instruction-coverage issue code, "invalid-json", or "schema-mismatch"; path: Array<string or non-negative integer>; stepId?: StepId }>, attempts?: ... }` |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: any instruction-coverage or element-intent issue code, "text-equals-self-quote", "invalid-json", "schema-mismatch", "secret-allowed-name-not-projected", or "secret-conflicting-target-names" (the last two always carry stepId); path: Array<string or non-negative integer>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk, credential-prefix-ghp, credential-prefix-aws-access-key, high-entropy-token, or embedded-secret-reference; path: non-whitespace string; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", or "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: non-whitespace string }> }` |

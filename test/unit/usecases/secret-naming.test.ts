@@ -96,7 +96,7 @@ describe('deriveSecretNames', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(AiResponseInvalidError);
       expect((error as AiResponseInvalidError).details).toMatchObject({
-        issues: [{ code: 'secret-allowed-name-not-projected', path: 'steps[0].secret.allowedName', stepId: 'allowlist-only' }],
+        issues: [{ code: 'secret-allowed-name-not-projected', path: ['secret', 'allowedName'], stepId: 'allowlist-only' }],
       });
     }
 
@@ -128,10 +128,10 @@ describe('deriveSecretNames', () => {
       derive();
     } catch (error) {
       expect(error).toBeInstanceOf(AiResponseInvalidError);
-      const issues = (error as AiResponseInvalidError).details?.issues as Array<{ code: string; path: string; stepId: string }>;
+      const issues = (error as AiResponseInvalidError).details?.issues as Array<{ code: string; path: readonly (string | number)[]; stepId: string }>;
       expect(issues).toEqual([
-        { code: 'secret-allowed-name-not-projected', path: 'steps[0].secret.allowedName', stepId: 'unprojected-fill' },
-        { code: 'secret-allowed-name-not-projected', path: 'steps[1].secrets[0].allowedName', stepId: 'unprojected-ai' },
+        { code: 'secret-allowed-name-not-projected', path: ['secret', 'allowedName'], stepId: 'unprojected-fill' },
+        { code: 'secret-allowed-name-not-projected', path: ['secrets', 0, 'allowedName'], stepId: 'unprojected-ai' },
       ]);
       expect(issues).not.toContainEqual(expect.objectContaining({ code: 'secret-conflicting-target-names' }));
     }
@@ -245,7 +245,7 @@ describe('deriveSecretNames', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(AiResponseInvalidError);
       expect((error as AiResponseInvalidError).details).toMatchObject({
-        issues: [{ code: 'secret-conflicting-target-names', path: 'steps[1].secret', stepId: 'promoted' }],
+        issues: [{ code: 'secret-conflicting-target-names', path: ['secret'], stepId: 'promoted' }],
       });
     }
   });

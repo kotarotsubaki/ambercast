@@ -107,7 +107,7 @@ action 步骤经过本地验证后，可包含 `binding: { provenance: "groundin
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任一 instruction-coverage issue code、"invalid-json" 或 "schema-mismatch"; path: Array<string 或非负整数>; stepId?: StepId }>, attempts?: ... }` |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任一 instruction-coverage 或 element-intent issue code、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected" 或 "secret-conflicting-target-names"（后两者始终带有 stepId）; path: Array<string 或非负整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token 或 embedded-secret-reference; path: 非空白字符串; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 非空白字符串, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required"、"declined" 或 "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 非空白字符串, reason: 非空白字符串 }> }` |

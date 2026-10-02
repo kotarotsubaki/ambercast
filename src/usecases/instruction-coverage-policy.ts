@@ -45,6 +45,7 @@ import type {
   SafeLegacyTraceRecord,
 } from '#ports/ai.js';
 import { INSTRUCTION_COVERAGE_ISSUE_CODES } from '#report/schema.js';
+import type { AiResponseIssueCode } from '#report/schema.js';
 
 /** Provider-only fields that generation validates and then separates. */
 export interface GeneratedInstructionCoverage {
@@ -104,6 +105,12 @@ export type InstructionCoverageIssueCode =
 
 // This legal usecases-to-report edge keeps report literals aligned with the usecase-owned union.
 const _reportIssueCodesTripwire = INSTRUCTION_COVERAGE_ISSUE_CODES satisfies readonly InstructionCoverageIssueCode[];
+
+// The reverse edge: fails to compile if InstructionCoverageIssueCode ever gains a
+// member the report vocabulary does not know about, which satisfies readonly
+// InstructionCoverageIssueCode[] above does not catch by itself (it only checks
+// that report's list is a subset of this union, not the other way around).
+const _reportIssueCodesReverseTripwire: Record<Exclude<InstructionCoverageIssueCode, AiResponseIssueCode>, never> = {};
 
 /** Step-relative roots used by deterministic policy diagnostics. */
 export type InstructionCoverageIssuePathRoot =

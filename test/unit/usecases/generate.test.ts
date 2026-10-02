@@ -3332,23 +3332,19 @@ describe('generate v5 element intent and confirmation contracts', () => {
   });
 
   it.each([
-    ...intentFailures.map(([code, intent, prompt]) => [code, { steps: [click(intent)], ambiguities: [] }, ['intent'], prompt] as const),
-    ['secret-allowed-name-not-projected', { steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'LOGIN_PASSWORD' } }], ambiguities: [] }, ['secret', 'allowedName'], PROMPT],
-    ['secret-conflicting-target-names', { steps: [click(QUOTED_INTENT)], ambiguities: [] }, ['secret'], quotedPrompt],
-    ['text-equals-self-quote', { steps: [{ id: 'assert-password', kind: 'assert', check: 'text-equals', target: 'web', intent: QUOTED_INTENT, text: ' Password ' }], ambiguities: [] }, ['text'], quotedPrompt],
-  ] as const)('TEST-10 keeps %s in terminal report and generated JSON Schema', async (code, invalid, expectedPrefix, prompt) => {
+    ...intentFailures.map(([code, intent, prompt]) => [code, { steps: [click(intent)], ambiguities: [] }, ['intent'], prompt, '*'] as const),
+    ['secret-allowed-name-not-projected', { steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'LOGIN_PASSWORD' } }], ambiguities: [] }, ['secret', 'allowedName'], PROMPT, '*'],
+    ['secret-conflicting-target-names', { steps: [
+      { id: 'fill-password-a', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'password_a' } },
+      { id: 'fill-password-b', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'password_b' } },
+    ], ambiguities: [] }, ['secret'], PROMPT, ['password_a', 'password_b']],
+    ['text-equals-self-quote', { steps: [{ id: 'assert-password', kind: 'assert', check: 'text-equals', target: 'web', intent: QUOTED_INTENT, text: ' Password ' }], ambiguities: [] }, ['text'], quotedPrompt, '*'],
+  ] as const)('TEST-10 keeps %s in terminal report and generated JSON Schema', async (code, invalid, expectedPrefix, prompt, allow) => {
     const response = invalid as unknown as GeneratedPlanResponse;
     const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
     const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
     const file = await writePrompt(scenario.recordingStorage.storage, 'login.test.md', prompt ?? quotedPrompt);
-    if (code === 'secret-conflicting-target-names') {
-      secretNamingMocks.deriveSecretNames.mockImplementation(() => {
-        throw new AiResponseInvalidError('Generated secret names conflict for one target.', {
-          issues: [{ code, path: ['secret'], stepId: 'click-password' }],
-        });
-      });
-    }
-    const outcome = await generate(withSecretConfig(scenario.deps, '*'), { ...DEFAULT_OPTIONS, maxAttempts: 2 });
+    const outcome = await generate(withSecretConfig(scenario.deps, allow), { ...DEFAULT_OPTIONS, maxAttempts: 2 });
     const error = outcome.results[0]?.error;
     expect(execute).toHaveBeenCalledTimes(2);
     expect(error).toBeInstanceOf(AiResponseInvalidError);
@@ -3358,7 +3354,7 @@ describe('generate v5 element intent and confirmation contracts', () => {
     expect(issue).toBeDefined();
     expect(Array.isArray(issue?.path)).toBe(true);
     expect(issue?.path.slice(0, expectedPrefix.length)).toEqual(expectedPrefix);
-    expect(issue?.stepId).toBe(code === 'text-equals-self-quote' ? 'assert-password' : code === 'secret-allowed-name-not-projected' ? 'fill-password' : 'click-password');
+    expect(issue?.stepId).toBe(code === 'text-equals-self-quote' ? 'assert-password' : code === 'secret-allowed-name-not-projected' ? 'fill-password' : code === 'secret-conflicting-target-names' ? 'fill-password-b' : 'click-password');
     expect(details?.attempts).toHaveLength(2);
     const projectedError = reportError(error!, { scope: 'run' });
     const projectedDetails = 'details' in projectedError ? projectedError.details : undefined;

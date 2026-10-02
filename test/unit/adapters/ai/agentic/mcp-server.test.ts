@@ -10,6 +10,7 @@ import { IntegrityViolationError } from '#core/errors/integrity-violation-error.
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import type { InstructionCoverageAiActionController } from '#ports/ai.js';
 import { reportError } from '#report/error-mapping.js';
+import { AiResponseIssue } from '#report/schema.js';
 import { ERROR_DETAILS_KEY_ORDER } from '../../../../../src/cli/main.js';
 
 function createController(overrides: Partial<InstructionCoverageAiActionController> = {}) {
@@ -275,6 +276,8 @@ describe('startAgenticMcpServer', () => {
       { code: 'schema-mismatch', path: ['action'] },
       { code: 'schema-mismatch', path: [] },
     ]);
+    expect((latched as AiResponseInvalidError).details?.issues).not.toHaveLength(0);
+    expect(((latched as AiResponseInvalidError).details?.issues as unknown[] | undefined)?.every((issue) => AiResponseIssue.safeParse(issue).success)).toBe(true);
     genericToolError(await client.callTool({ name: 'ambercast_perform', arguments: { action } }));
     await client.close();
     await server.close();

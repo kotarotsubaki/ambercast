@@ -35,6 +35,10 @@ import type { AiExecuteRequest, AiExecuteResult } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
 import { generate, projectAllowedNames, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import { getReportJsonSchema } from '#report/json-schema.js';
+import { AiResponseInvalidDetails, REPORT_SCHEMA_VERSION, ReportEnvelope } from '#report/schema.js';
+import { reportError } from '#report/error-mapping.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
@@ -2845,6 +2849,24 @@ describe('generate', () => {
       });
     });
 
+    it('normalizes an array with an invalid issue member to empty retry feedback', async () => {
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        if (dispatch++ === 0) {
+          throw new AiResponseInvalidError('Malformed issue member.', { issues: [{ code: 'schema-mismatch' }] });
+        }
+        return { data: RESPONSE, raw: JSON.stringify(RESPONSE) };
+      });
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(execute.mock.calls[1]?.[0].context).toMatchObject({
+        previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [] }],
+      });
+    });
+
     it('normalizes no-details invalid responses before attaching terminal history', async () => {
       const execute = vi.fn(async () => { throw new AiResponseInvalidError('No details.'); });
       const { deps, recordingStorage } = createScenario({
@@ -3250,6 +3272,108 @@ describe('generate v5 element intent and confirmation contracts', () => {
     id, kind: 'action', action: 'click', target: 'web', intent,
   });
 
+  const intentFailures = [
+    ['anchor-invalid', { ...QUOTED_INTENT, startAnchor: 'L999' }],
+    ['intent-span-invalid', { ...QUOTED_INTENT, startColumn: 24, endColumn: 7 }],
+    ['intent-span-whitespace-only', { ...QUOTED_INTENT, startColumn: 6, endColumn: 7, citation: ' ' }],
+    ['intent-citation-mismatch', { ...QUOTED_INTENT, citation: 'wrong citation' }],
+    ['quote-span-invalid', { ...QUOTED_INTENT, quote: { ...QUOTED_INTENT.quote, startAnchor: 'L999' } }],
+    ['quote-text-mismatch', { ...QUOTED_INTENT, quote: { ...QUOTED_INTENT.quote, text: 'Wrong' } }],
+    ['quote-unpaired', { ...QUOTED_INTENT, quote: { ...QUOTED_INTENT.quote, startColumn: 7, endColumn: 16, text: '"Password' } }],
+    ['quote-outside-intent', { ...QUOTED_INTENT, startColumn: 17, citation: ' button' }],
+    ['quote-whitespace-only', { ...QUOTED_INTENT, startColumn: 1, endColumn: 12, citation: '「   」ボタンを押す', quote: { ...QUOTED_INTENT.quote, startColumn: 2, endColumn: 5, text: '   ' } }, '# Sign in\n\n「   」ボタンを押す\n'],
+  ] as ReadonlyArray<readonly [string, unknown, string?]>;
+
+  it.each(intentFailures)('TEST-9 prefixes %s from element-intent attribution in retry and terminal details', async (code, intent, prompt) => {
+    const invalid = { steps: [click(intent)], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: invalid, raw: JSON.stringify(invalid) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', typeof prompt === 'string' ? prompt : quotedPrompt);
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 2 });
+    const feedback = (execute.mock.calls as unknown as Array<[{ context: { previousAttempts?: Array<{ issues: Array<{ code: string; path: unknown[] }> }> } }]>)[1]?.[0].context.previousAttempts;
+    const retryIssue = feedback?.[0]?.issues.find((issue) => issue.code === code);
+    const terminalIssue = (outcome.results[0]?.error?.details?.issues as Array<{ code: string; path: unknown[] }> | undefined)?.find((issue) => issue.code === code);
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(retryIssue?.path[0]).toBe('intent');
+    expect(terminalIssue?.path[0]).toBe('intent');
+  });
+
+  it('TEST-9 leaves coverage-origin anchor-invalid at its instructionCoverage path', async () => {
+    const coveredStep = coveredResponse.steps[0] as Extract<GeneratedPlanResponse['steps'][number], { kind: 'ai' }>;
+    const invalid = { ...coveredResponse, steps: [{ ...coveredStep, instructionCoverage: [{ ...coveredStep.instructionCoverage[0], startColumn: 0 }] }] } as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: invalid, raw: JSON.stringify(invalid) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 2 });
+    const feedback = (execute.mock.calls as unknown as Array<[{ context: { previousAttempts?: Array<{ issues: Array<{ code: string; path: unknown[] }> }> } }]>)[1]?.[0].context.previousAttempts;
+    const retryIssue = feedback?.[0]?.issues.find((issue) => issue.code === 'anchor-invalid');
+    const terminalIssue = (outcome.results[0]?.error?.details?.issues as Array<{ code: string; path: unknown[] }> | undefined)?.find((issue) => issue.code === 'anchor-invalid');
+    expect(retryIssue?.path[0]).toBe('instructionCoverage');
+    expect(terminalIssue?.path[0]).toBe('instructionCoverage');
+  });
+
+  it.each([
+    ['fill-secret', { steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'LOGIN_PASSWORD' } }], ambiguities: [] }, ['secret', 'allowedName']],
+    ['AI secret use', { steps: [{ ...coveredResponse.steps[0], id: 'fill-password', secrets: [{ allowedName: 'LOGIN_PASSWORD' }] }], ambiguities: [] }, ['secrets', 0, 'allowedName']],
+  ] as const)('TEST-9 carries %s secret naming issue as a step-relative array', async (_kind, invalid, expectedPath) => {
+    let attempt = 0;
+    const execute = vi.fn(async () => {
+      const data = attempt++ === 0 ? invalid : RESPONSE;
+      return { data: data as GeneratedPlanResponse, raw: JSON.stringify(data) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    await generate(withSecretConfig(scenario.deps, '*'), DEFAULT_OPTIONS);
+    const context = (execute.mock.calls as unknown as Array<[{ context: { previousAttempts?: Array<{ issues: unknown[] }> } }]>)[1]?.[0].context;
+    expect(context?.previousAttempts?.[0]?.issues).toContainEqual({
+      code: 'secret-allowed-name-not-projected', path: expectedPath, stepId: 'fill-password',
+    });
+  });
+
+  it.each([
+    ...intentFailures.map(([code, intent, prompt]) => [code, { steps: [click(intent)], ambiguities: [] }, ['intent'], prompt, '*'] as const),
+    ['secret-allowed-name-not-projected', { steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'LOGIN_PASSWORD' } }], ambiguities: [] }, ['secret', 'allowedName'], PROMPT, '*'],
+    ['secret-conflicting-target-names', { steps: [
+      { id: 'fill-password-a', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'password_a' } },
+      { id: 'fill-password-b', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'password_b' } },
+    ], ambiguities: [] }, ['secret'], PROMPT, ['password_a', 'password_b']],
+    ['text-equals-self-quote', { steps: [{ id: 'assert-password', kind: 'assert', check: 'text-equals', target: 'web', intent: QUOTED_INTENT, text: ' Password ' }], ambiguities: [] }, ['text'], quotedPrompt, '*'],
+  ] as const)('TEST-10 keeps %s in terminal report and generated JSON Schema', async (code, invalid, expectedPrefix, prompt, allow) => {
+    const response = invalid as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const file = await writePrompt(scenario.recordingStorage.storage, 'login.test.md', prompt ?? quotedPrompt);
+    const outcome = await generate(withSecretConfig(scenario.deps, allow), { ...DEFAULT_OPTIONS, maxAttempts: 2 });
+    const error = outcome.results[0]?.error;
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(error).toBeInstanceOf(AiResponseInvalidError);
+    expect(reportError(error!, { scope: 'run' }).code).toBe('AI_RESPONSE_INVALID');
+    const details = error?.details;
+    const issue = (details?.issues as Array<{ code: string; path: unknown[]; stepId?: string }> | undefined)?.find((candidate) => candidate.code === code);
+    expect(issue).toBeDefined();
+    expect(Array.isArray(issue?.path)).toBe(true);
+    expect(issue?.path.slice(0, expectedPrefix.length)).toEqual(expectedPrefix);
+    expect(issue?.stepId).toBe(code === 'text-equals-self-quote' ? 'assert-password' : code === 'secret-allowed-name-not-projected' ? 'fill-password' : code === 'secret-conflicting-target-names' ? 'fill-password-b' : 'click-password');
+    expect(details?.attempts).toHaveLength(2);
+    const projectedError = reportError(error!, { scope: 'run' });
+    const projectedDetails = 'details' in projectedError ? projectedError.details : undefined;
+    expect(AiResponseInvalidDetails.safeParse(projectedDetails).success).toBe(true);
+    expect(projectedDetails).toMatchObject({ issues: expect.arrayContaining([expect.objectContaining({ code })]), attempts: expect.any(Array) });
+
+    const report = {
+      schemaVersion: REPORT_SCHEMA_VERSION,
+      startedAt: '2026-10-02T00:00:00Z', durationMs: 1,
+      summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
+      errors: [projectedError],
+      command: 'generate',
+      results: [{ id: 'login', file, status: 'failed', dryRun: false }],
+    };
+    expect(ReportEnvelope.safeParse(report).success).toBe(true);
+    const validate = new Ajv2020({ strict: true }).compile(getReportJsonSchema());
+    expect(validate(report), JSON.stringify(validate.errors)).toBe(true);
+  });
+
   it.each([
     ['intent attribution', { ...QUOTED_INTENT, citation: 'not in the prompt' }, 'intent-citation-mismatch'],
     ['quote attribution', { ...QUOTED_INTENT, quote: { ...QUOTED_INTENT.quote, text: 'Not Password' } }, 'quote-text-mismatch'],
@@ -3427,7 +3551,7 @@ describe('generate secret naming and consent boundaries', () => {
       previousAttempts: [{
         attempt: 1,
         code: 'AI_RESPONSE_INVALID',
-        issues: [expect.objectContaining({ code: 'secret-allowed-name-not-projected' })],
+        issues: [expect.objectContaining({ code: 'secret-allowed-name-not-projected', path: ['secret', 'allowedName'], stepId: 'fill-password' })],
       }],
     });
   });
@@ -3461,7 +3585,7 @@ describe('generate secret naming and consent boundaries', () => {
       throw new AiResponseInvalidError('Generated secret names conflict for one target.', {
         issues: [{
           code: 'secret-conflicting-target-names',
-          path: 'steps[2].secret',
+          path: ['secret'],
           stepId: 'conflicting-later',
         }],
       });
@@ -3479,7 +3603,7 @@ describe('generate secret naming and consent boundaries', () => {
         code: 'AI_RESPONSE_INVALID',
         issues: [{
           code: 'secret-conflicting-target-names',
-          path: 'steps[2].secret',
+          path: ['secret'],
           stepId: 'conflicting-later',
         }],
       }],

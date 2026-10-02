@@ -52,7 +52,9 @@ import type { AiExecutor } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink } from '#ports/system.js';
 import { REPORT_ERROR_DETAILS } from '#report/error-mapping.js';
-import type { ReportErrorCode } from '#report/schema.js';
+import { z } from 'zod';
+import { AiResponseIssue } from '#report/schema.js';
+import type { AiResponseIssueCode, AiResponseIssuePath, ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
   assertNoLiteralSecrets,
@@ -188,10 +190,16 @@ type PrepareInstructionCoveredStepsResult =
 
 /** Retryable refusal when one assertion uses its target quote as its expected value. */
 type TextEqualsSelfQuoteIssue = {
-  readonly code: 'text-equals-self-quote';
+  readonly code: Extract<AiResponseIssueCode, 'text-equals-self-quote'>;
   readonly path: readonly (string | number)[];
   readonly message: string;
 };
+
+// Fails to compile if 'text-equals-self-quote' is ever removed from or renamed
+// away in the report vocabulary, since Extract would then resolve to never and
+// no value could satisfy TextEqualsSelfQuoteIssue['code'].
+const _selfQuoteCodeKnownToReport: TextEqualsSelfQuoteIssue['code'] = 'text-equals-self-quote';
+void _selfQuoteCodeKnownToReport;
 
 /** Non-fatal report warning for an action with no confirming step. */
 type ActionUnconfirmedWarning = { readonly kind: 'action-unconfirmed'; readonly stepId: StepId };
@@ -243,7 +251,11 @@ function rejectTextEqualsSelfQuote(text: string, quoteText: string, stepId: stri
  * Element intent and self-quote issues are collected across all non-AI steps:
  * SPEC-G4 requires that other defects continue to be collected, and SPEC-I3
  * orders them by step index and then path. AI coverage failures retain their
- * immediate failure path. Generation maps the returned issues to
+ * immediate failure path. Issues returned by `attributeElementIntent` receive
+ * an `['intent', ...]` path prefix before joining `issues`; their origin, rather
+ * than their code, decides this because `anchor-invalid` can also come from
+ * coverage validation. Self-quote issues from `rejectTextEqualsSelfQuote` keep
+ * `path: ['text']`. Generation maps the returned issues to
  * `AiResponseInvalidError`, then performs no artifact write.
  */
 export function prepareInstructionCoveredSteps(
@@ -259,7 +271,7 @@ export function prepareInstructionCoveredSteps(
           || (step.kind === 'assert' && (step.check === 'element-visible' || step.check === 'text-equals' || step.check === 'element-count'))) {
           const attributed = attributeElementIntent(step.intent, normalizedTestMd);
           if (!attributed.success) {
-            issues.push(...attributed.issues.map((issue) => ({ ...issue, stepId: step.id })));
+            issues.push(...attributed.issues.map((issue) => ({ ...issue, path: ['intent', ...issue.path], stepId: step.id })));
             return step;
           }
           if (step.kind === 'assert' && step.check === 'text-equals' && attributed.data.quote !== undefined) {
@@ -652,8 +664,8 @@ type PreparedCandidate = {
  * feedback and report diagnostics.
  */
 type GenerateResponseIssue = {
-  readonly code: string;
-  readonly path: readonly (string | number)[];
+  readonly code: AiResponseIssueCode;
+  readonly path: AiResponseIssuePath;
   readonly stepId?: string;
 };
 
@@ -707,10 +719,20 @@ const ATTEMPTS_ELIGIBLE_CODES = new Set<ReportErrorCode>([
  * about the same error. Terminal invalid-response reconstruction stores this
  * normalized array back into `details.issues`, so report projection has the
  * required key even when the original error did not.
+ * Runtime `safeParse` validation against the report's `AiResponseIssue` array
+ * schema replaces a type assertion; any invalid member makes the list empty,
+ * so a producer's code outside the report vocabulary cannot pass silently.
  */
 function responseIssues(error: AiResponseInvalidError): readonly GenerateResponseIssue[] {
   const issues = error.details?.['issues'];
-  return Array.isArray(issues) ? issues as readonly GenerateResponseIssue[] : [];
+  if (!Array.isArray(issues)) return [];
+  const parsed = z.array(AiResponseIssue).safeParse(issues);
+  if (!parsed.success) return [];
+  return parsed.data.map((issue) => ({
+    code: issue.code,
+    path: issue.path,
+    ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
+  }));
 }
 
 /**

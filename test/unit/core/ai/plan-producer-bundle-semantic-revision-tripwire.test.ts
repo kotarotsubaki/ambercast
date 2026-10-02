@@ -8,7 +8,7 @@ const INSTRUCTION_COVERAGE_POLICY_FILE = fileURLToPath(new URL('../../../../src/
 const GENERATOR_SECRET_POLICY_FILE = fileURLToPath(new URL('../../../../src/usecases/generator-secret-policy.ts', import.meta.url));
 
 // Producer-bundle revisions can advance independently of this policy file's bytes because instruction-coverage semantics also reside in prompt-layer inputs such as the generator template.
-const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 3, sourceSha256: '836f4376bba094f1c89d0d85c38e1a096912b35ce2ad139c302ee199103c144d' } as const;
+const INSTRUCTION_COVERAGE_POLICY_PIN = { revision: 3, sourceSha256: '48f772723737653e78e857252ad69cfa4cedd536c61e88e3c38efa95633761ae' } as const;
 // The source hash covers offset-ordered candidate-list resolution and diagnostic step-identity plumbing; the semantic revision reflects the policy's changed behavior.
 const GENERATOR_SECRET_POLICY_PIN = { revision: 5, sourceSha256: '876881a48bb958e8e0d782516126ec6b77fc9598c1c44acbc9bcb454f1f308ce' } as const;
 

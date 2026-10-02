@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
 import {
   AiResponseIssue,
+  AiResponseIssueCode,
+  ELEMENT_INTENT_ISSUE_CODES,
+  INSTRUCTION_COVERAGE_ISSUE_CODES,
   CheckResult,
   GenerateResult,
   HealResult,
@@ -698,6 +701,9 @@ describe('SPEC-K5 report error details', () => {
     expectRejected(ReportError, { ...errorFor('SECRET_LITERAL_REJECTED', 'run'), details: { detector: 'credential-prefix-sk', path: ' \t\n' } });
     expectAccepted(AiResponseIssue, { code: 'schema-mismatch', path: ['steps', 0, 'id'] });
     expectAccepted(AiResponseIssue, { code: 'invalid-json', path: [] });
+    for (const code of ['anchor-invalid', ...ELEMENT_INTENT_ISSUE_CODES, 'text-equals-self-quote']) {
+      expectAccepted(AiResponseIssue, { code, path: ['intent'], stepId: 'step-id' });
+    }
     expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: ['steps', -1] });
     expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: ['steps', 1.5] });
     expectRejected(AiResponseIssue, { code: 'schema-mismatch', path: [], message: 'not report-safe' });
@@ -708,6 +714,15 @@ describe('SPEC-K5 report error details', () => {
     expectRejected(AiResponseIssue, { code: 'secret-conflicting-target-names', path: [] });
     expectAccepted(AiResponseIssue, { code: 'secret-allowed-name-not-projected', path: [], stepId: 'step-id' });
     expectAccepted(AiResponseIssue, { code: 'secret-conflicting-target-names', path: [], stepId: 'step-id' });
+  });
+
+  it('keeps the issue vocabulary free of duplicate values', () => {
+    expect(new Set(AiResponseIssueCode.options).size).toBe(AiResponseIssueCode.options.length);
+  });
+
+  it('keeps coverage and element-intent source lists disjoint', () => {
+    const coverage = new Set<string>(INSTRUCTION_COVERAGE_ISSUE_CODES);
+    expect(ELEMENT_INTENT_ISSUE_CODES.filter((code) => coverage.has(code))).toEqual([]);
   });
 
   it.each(CAUSE_NAMES)(

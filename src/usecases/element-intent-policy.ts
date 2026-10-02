@@ -6,6 +6,8 @@ import type {
   QuotedElementIntent,
 } from '#core/ir/schema.js';
 import { extractSpan, resolveBoundaryOffset } from './instruction-coverage-policy.js';
+import { ELEMENT_INTENT_ISSUE_CODES } from '#report/schema.js';
+import type { AiResponseIssueCode } from '#report/schema.js';
 
 /** Closed diagnostic reasons for source attribution failures. */
 export type ElementIntentIssueCode =
@@ -18,6 +20,15 @@ export type ElementIntentIssueCode =
   | 'quote-unpaired'
   | 'quote-outside-intent'
   | 'quote-whitespace-only';
+
+// This legal usecases-to-report edge keeps report literals aligned with the usecase-owned union.
+const _reportIssueCodesTripwire = ELEMENT_INTENT_ISSUE_CODES satisfies readonly ElementIntentIssueCode[];
+
+// The reverse edge: fails to compile if ElementIntentIssueCode ever gains a
+// member the report vocabulary does not know about, which satisfies readonly
+// ElementIntentIssueCode[] above does not catch by itself (it only checks
+// that report's list is a subset of this union, not the other way around).
+const _reportIssueCodesReverseTripwire: Record<Exclude<ElementIntentIssueCode, AiResponseIssueCode>, never> = {};
 
 /** One actionable issue at a caller-prefixed step path. */
 export interface ElementIntentIssue {

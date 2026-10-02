@@ -109,7 +109,7 @@ action ステップでは、ローカル検証後に `binding: { provenance: "gr
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任意の instruction-coverage issue code、"invalid-json"、または "schema-mismatch"; path: Array<string または非負整数>; stepId?: StepId }>, attempts?: ... }` |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任意の instruction-coverage または element-intent issue code、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected"、または "secret-conflicting-target-names"（後者2つは常に stepId を伴う）; path: Array<string または非負整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token、または embedded-secret-reference; path: 空白以外の文字列; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", または "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 空白以外の文字列, reason: 空白以外の文字列 }> }` |

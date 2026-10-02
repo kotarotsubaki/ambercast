@@ -137,17 +137,36 @@ export const INSTRUCTION_COVERAGE_ISSUE_CODES = [
   'verification-coverage-index-invalid', 'verification-assertion-repeated',
 ] as const;
 
+// Mirrors INSTRUCTION_COVERAGE_ISSUE_CODES's role for element-intent attribution
+// and revalidation (`src/usecases/element-intent-policy.ts`). `anchor-invalid` is
+// deliberately absent here: it is already listed above because the same code is
+// also raised by instruction-coverage validation, and the two call sites are
+// distinguished by which function produced the issue, not by a second code entry.
+export const ELEMENT_INTENT_ISSUE_CODES = [
+  'intent-span-invalid', 'intent-span-whitespace-only', 'intent-citation-mismatch',
+  'quote-span-invalid', 'quote-text-mismatch', 'quote-unpaired',
+  'quote-outside-intent', 'quote-whitespace-only',
+] as const;
+
 /** Keeps provider-validation causes machine-readable without serializing prose diagnostics. */
 export const AiResponseIssueCode = z.enum([
   ...INSTRUCTION_COVERAGE_ISSUE_CODES,
+  ...ELEMENT_INTENT_ISSUE_CODES,
   'invalid-json',
   'schema-mismatch',
   'secret-allowed-name-not-projected',
   'secret-conflicting-target-names',
+  'text-equals-self-quote',
 ]);
+
+/** A stable machine-readable code for a provider or coverage validation issue. */
+export type AiResponseIssueCode = z.infer<typeof AiResponseIssueCode>;
 
 /** Preserves literal fields and nonnegative array indices in a report issue path. */
 export const AiResponseIssuePath = z.array(z.union([NonNegativeInteger, z.string()]));
+
+/** A step-relative or transport-relative path to one field named by an {@link AiResponseIssue}. */
+export type AiResponseIssuePath = z.infer<typeof AiResponseIssuePath>;
 
 /**
  * One strict, report-safe projection of a provider or coverage validation issue.
@@ -170,6 +189,8 @@ export const AiResponseIssue = z.union([
     stepId: StepId,
   }),
 ]);
+
+export type AiResponseIssue = z.infer<typeof AiResponseIssue>;
 
 /** Reserves every literal-secret detector identifier in the public closed enum. */
 export const SecretDetector = z.enum([

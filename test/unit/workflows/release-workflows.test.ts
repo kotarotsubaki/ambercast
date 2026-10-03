@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,8 +7,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getJobLines,
+  getJobNames,
   getOnKeys,
   getScannableJobLines,
+  listJobs,
+  checkCancelledPropagation,
   readWorkflowText,
   splitStepsIntoBlocks,
 } from './workflow-text.js';
@@ -17,18 +21,11 @@ const releaseWorkflow = readWorkflowText(fileURLToPath(new URL('../../../.github
 const websiteBuildWorkflow = readWorkflowText(fileURLToPath(new URL('../../../.github/workflows/website-build.yml', import.meta.url)));
 const deployPagesRef = 'actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346';
 const agentsText = readFileSync(fileURLToPath(new URL('../../../AGENTS.md', import.meta.url)), 'utf8');
+const deployIf = "    if: ${{ !cancelled() && needs.build-website.result == 'success' }}";
+const completeIf = "    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true')) }}";
 
 function hasBareCancelled(lines: readonly string[]): boolean {
   return lines.some((line) => /(?<!!)cancelled\(\)/.test(line));
-}
-
-function jobNames(workflowText: string): string[] {
-  const lines = workflowText.split('\n');
-  const jobsIndex = lines.findIndex((line) => line === 'jobs:');
-  if (jobsIndex === -1) throw new Error('Workflow has no jobs: block.');
-  return lines.slice(jobsIndex + 1)
-    .map((line) => /^  ([a-z][a-z0-9-]*):$/.exec(line)?.[1])
-    .filter((name): name is string => name !== undefined);
 }
 
 function normalizeStep(block: readonly string[]): string {
@@ -74,6 +71,203 @@ function pullRequestPaths(workflowText: string): string[] {
 }
 
 describe('release workflows', () => {
+  it('RELEASE-1: pins the deploy-website job byte for byte', () => {
+    expect(getJobLines(releaseWorkflow, 'deploy-website').join('\n')).toBe([
+      '  deploy-website:',
+      '    needs: build-website',
+      deployIf,
+      '    runs-on: ubuntu-latest',
+      '    permissions:',
+      '      pages: write',
+      '      id-token: write',
+      '    environment:',
+      '      name: github-pages',
+      '      url: ${{ steps.deployment.outputs.page_url }}',
+      '    concurrency:',
+      '      group: pages',
+      '      cancel-in-progress: false',
+      '    steps:',
+      '      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1',
+      '        id: deployment',
+    ].join('\n'));
+  });
+
+  it('RELEASE-2: pins each release gate and their shared event predicates', () => {
+    const condition = (job: string) => getScannableJobLines(releaseWorkflow, job).find((line) => line.startsWith('    if:'));
+    const publish = condition('publish');
+    const build = condition('build-website');
+    const deploy = condition('deploy-website');
+    const complete = condition('release-complete');
+    expect(publish).toBe("    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true' && needs.recover.outputs.publish_needed == 'true')) }}");
+    expect(build).toBe("    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true' && needs.publish.result == 'success') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true' && (needs.publish.result == 'success' || (needs.publish.result == 'skipped' && needs.recover.outputs.publish_needed == 'false')))) }}");
+    expect(deploy).toBe(deployIf);
+    expect(complete).toBe(completeIf);
+    const pushGate = "github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true'";
+    const dispatchGate = "github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true'";
+    for (const line of [publish, build]) expect(line).toContain(pushGate);
+    for (const line of [publish, build, complete]) expect(line).toContain(dispatchGate);
+  });
+
+  it('RELEASE-3: checks every repository workflow and the conditional-ancestor controls', () => {
+    const workflowDirectory = fileURLToPath(new URL('../../../.github/workflows/', import.meta.url));
+    const names = readdirSync(workflowDirectory).filter((name) => /\.ya?ml$/.test(name));
+    expect(names).toContain('docs.yml');
+    expect(names).toContain('release-please.yml');
+    for (const name of names) {
+      const violations = checkCancelledPropagation(readWorkflowText(join(workflowDirectory, name)), name);
+      expect(violations, name).toEqual([]);
+    }
+    expect(checkCancelledPropagation(docsWorkflow, 'docs.yml').filter((item) => item.jobId === 'deploy')).toEqual([]);
+    expect(getScannableJobLines(releaseWorkflow, 'publish')).toContain("        if: github.event_name == 'workflow_dispatch'");
+    expect(checkCancelledPropagation(releaseWorkflow, 'release-please.yml').filter((item) => item.jobId === 'publish')).toEqual([]);
+  });
+
+  it('RELEASE-3: checks every specified malformed and valid fixture', () => {
+    const a = "jobs:\n  a:\n    if: github.event_name == 'push'\n    runs-on: ubuntu-latest\n  b:\n    needs: a\n    runs-on: ubuntu-latest\n";
+    const b = (body: string, first = "  a:\n    if: github.event_name == 'push'\n") => `jobs:\n${first}  b:\n${body}\n`;
+    const cases: { id: string; source: string; expected?: { workflow: string; jobId: string; reason: string }[]; error?: string | RegExp; filename?: string }[] = [
+      { id: 'a', source: a, expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-if' }] },
+      { id: 'b', source: b("    needs: a\n    if: always() && needs.a.result == 'success'"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'bad-if-prefix' }] },
+      { id: 'c', source: b("    needs: a\n    if: ${{ !cancelled() }}\n    env:\n      X: ${{ needs.a.result }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'bad-if-prefix' }] },
+      { id: 'd', source: b("    needs: a\n    if: ${{ !cancelled() && true }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-needs-reference:a' }] },
+      { id: 'e', source: b("    needs:\n      - a\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
+      { id: 'f', source: b("    needs: [a"), error: 'Unparseable needs: in job "b".' },
+      { id: 'g', source: b("    needs: missing-job"), error: 'needs references unknown job "missing-job" from "b".' },
+      { id: 'h', source: "jobs:\n  a:\n    needs: b\n  b:\n    needs: a\n", error: /needs cycle detected/ },
+      { id: 'self-cycle', source: "jobs:\n  a:\n    needs: a\n", error: /needs cycle detected/ },
+      { id: 'folded-if', source: b("    if: >\n      !cancelled() && true"), error: 'Folded if: is not supported in job "b".' },
+      { id: 'literal-if', source: b("    if: |\n      !cancelled() && true"), error: 'Folded if: is not supported in job "b".' },
+      { id: 'i', source: a, filename: 'fixture.yaml', expected: [{ workflow: 'fixture.yaml', jobId: 'b', reason: 'missing-if' }] },
+      { id: 'j', source: a.replace('  b:', '  b_two:'), expected: [{ workflow: 'fixture.yml', jobId: 'b_two', reason: 'missing-if' }] },
+      { id: 'k', source: "jobs:\n  dup:\n    runs-on: ubuntu-latest\n  dup:\n    runs-on: ubuntu-latest\n", error: 'Duplicate job id "dup".' },
+      { id: 'l', source: b("    needs: [a, a]"), error: 'Duplicate needs entry "a" in job "b".' },
+      { id: 'm', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    # needs.a.result\n    steps:\n      - run: echo needs.a.result"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-needs-reference:a' }] },
+      { id: 'quoted', source: b("    needs: ['a']\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
+      { id: 'bare-quoted', source: b("    needs: 'a'\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
+      { id: 'block-comment', source: b("    needs:\n      - 'a' # upstream\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
+      { id: 'inline-comment', source: "jobs:\n  a:\n    if: github.event_name == 'push'\n  b:\n    if: github.event_name == 'push'\n  c:\n    needs: [a, b]  # fan-in\n    if: ${{ !cancelled() && needs.a.result == 'success' && needs.b.result == 'success' }}\n", expected: [] },
+      { id: 'env-only', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    env:\n      X: ${{ needs.a.result }}"), expected: [] },
+      { id: 'unconditional-ancestor', source: "jobs:\n  a:\n    runs-on: ubuntu-latest\n  b:\n    needs: a\n", expected: [] },
+      { id: 'invalid-id', source: "jobs:\n  bad.id:\n    runs-on: ubuntu-latest\n", error: 'Invalid job id "bad.id".' },
+      { id: 'bare-followed-by-block', source: b("    needs: a\n      - a"), error: 'Unparseable needs: in job "b".' },
+      { id: 'inline-trailing-text', source: b("    needs: [a] garbage"), error: 'Unparseable needs: in job "b".' },
+      { id: 'block-stops-at-first-other-line', source: b("    needs:\n      - a\n\n      - missing\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
+      { id: 'embedded-colon-id', source: "jobs:\n  bad:id:\n    runs-on: ubuntu-latest\n", error: 'Invalid job id "bad:id".' },
+      { id: 'missing-space-after-and', source: b("    needs: a\n    if: ${{ !cancelled() &&needs.a.result == 'success' }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'bad-if-prefix' }] },
+      { id: 'services-env-is-not-step-env', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    services:\n      database:\n        env:\n          RESULT: ${{ needs.a.result }}\n    steps:\n      - run: echo ready"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-needs-reference:a' }] },
+    ];
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), 'ambercast-release-fixtures-'));
+    try {
+      for (const fixture of cases) {
+        const filename = fixture.filename ?? 'fixture.yml';
+        const path = join(temporaryDirectory, filename);
+        writeFileSync(path, fixture.source, 'utf8');
+        const enumerated = readdirSync(temporaryDirectory).filter((name) => /\.ya?ml$/.test(name));
+        expect(enumerated, fixture.id).toContain(filename);
+        const source = readWorkflowText(path);
+        if (fixture.error) expect(() => listJobs(source), fixture.id).toThrow(fixture.error);
+        else expect(checkCancelledPropagation(source, filename), fixture.id).toEqual(fixture.expected);
+        rmSync(path);
+      }
+    } finally {
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('RELEASE-4: pins the release-complete job shape and step environment', () => {
+    const job = getJobLines(releaseWorkflow, 'release-complete');
+    expect(job.slice(0, 6)).toEqual([
+      '  release-complete:',
+      '    needs: [release-please, recover, publish, build-website, deploy-website]',
+      '    runs-on: ubuntu-latest',
+      '    permissions: {}',
+      completeIf,
+      '    steps:',
+    ]);
+    const scannable = getScannableJobLines(releaseWorkflow, 'release-complete');
+    const steps = splitStepsIntoBlocks(scannable);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toEqual(expect.arrayContaining([
+      '      - run: |',
+      '        env:',
+      '          EVENT: ${{ github.event_name }}',
+      '          PUBLISH: ${{ needs.publish.result }}',
+      '          PUBLISH_NEEDED: ${{ needs.recover.outputs.publish_needed }}',
+      '          BUILD: ${{ needs.build-website.result }}',
+      '          DEPLOY: ${{ needs.deploy-website.result }}',
+    ]));
+    expect(steps[0]!.slice(steps[0]!.indexOf('        env:'))).toEqual([
+      '        env:',
+      '          EVENT: ${{ github.event_name }}',
+      '          PUBLISH: ${{ needs.publish.result }}',
+      '          PUBLISH_NEEDED: ${{ needs.recover.outputs.publish_needed }}',
+      '          BUILD: ${{ needs.build-website.result }}',
+      '          DEPLOY: ${{ needs.deploy-website.result }}',
+    ]);
+  });
+
+  it.skipIf(process.platform === 'win32').each([
+    { name: 'push complete', event: 'push', publish: 'success', needed: undefined, build: 'success', deploy: 'success', exit: 0, missing: [] },
+    { name: 'push skipped publish', event: 'push', publish: 'skipped', needed: undefined, build: 'success', deploy: 'success', exit: 1, missing: ['publish'] },
+    { name: 'push failed publish and cancelled build', event: 'push', publish: 'failure', needed: undefined, build: 'cancelled', deploy: 'success', exit: 1, missing: ['publish', 'build-website'] },
+    { name: 'dispatch permitted skipped publish', event: 'workflow_dispatch', publish: 'skipped', needed: 'false', build: 'success', deploy: 'success', exit: 0, missing: [] },
+    { name: 'dispatch required skipped publish', event: 'workflow_dispatch', publish: 'skipped', needed: 'true', build: 'success', deploy: 'success', exit: 1, missing: ['publish'] },
+    { name: 'dispatch missing build', event: 'workflow_dispatch', publish: 'success', needed: 'true', build: '', deploy: 'success', exit: 1, missing: ['build-website'] },
+  ])('RELEASE-4: executes the summary gate for $name', ({ event, publish, needed, build, deploy, exit, missing }) => {
+    const job = getScannableJobLines(releaseWorkflow, 'release-complete');
+    const start = job.indexOf('      - run: |');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const bodyLines: string[] = [];
+    for (const line of job.slice(start + 1)) {
+      if (line.trim() && line.length - line.trimStart().length <= 8) break;
+      bodyLines.push(line);
+    }
+    const first = bodyLines.find((line) => line.trim());
+    expect(first).toBeDefined();
+    const indent = first!.length - first!.trimStart().length;
+    expect(indent).toBe(10);
+    const script = bodyLines.map((line) => line.trim() ? line.slice(indent) : '').join('\n');
+    expect(script).not.toBe('');
+    expect(script).toContain('missing=');
+    const directory = mkdtempSync(join(tmpdir(), 'ambercast-release-summary-'));
+    const summary = join(directory, 'summary.txt');
+    const stderrFile = join(directory, 'stderr.txt');
+    try {
+      writeFileSync(summary, '', 'utf8');
+      writeFileSync(stderrFile, '', 'utf8');
+      const env = { ...process.env, EVENT: event, PUBLISH: publish, BUILD: build, DEPLOY: deploy, GITHUB_STEP_SUMMARY: summary };
+      if (needed === undefined) delete (env as Record<string, string | undefined>).PUBLISH_NEEDED;
+      else (env as Record<string, string | undefined>).PUBLISH_NEEDED = needed;
+      const result = spawnSync('bash', ['-e'], { input: script, env, encoding: 'utf8' });
+      writeFileSync(stderrFile, result.stderr, 'utf8');
+      const summaryText = readFileSync(summary, 'utf8');
+      const stderrText = readFileSync(stderrFile, 'utf8');
+      expect(result.status).toBe(exit);
+      if (exit === 0) {
+        expect(summaryText).toContain('Release complete');
+        expect(stderrText).toBe('');
+      } else {
+        const exact = `Release incomplete:${missing.map((stage) => ` ${stage}`).join('')}`;
+        expect(summaryText.trim()).toBe(exact);
+        expect(stderrText.trim()).toBe(exact);
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('RELEASE-6: documents recovery checks and the next push outcome', () => {
+    const start = agentsText.indexOf('**Manual recovery path**:');
+    const end = agentsText.indexOf('**Stacked pull requests**', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const policy = agentsText.slice(start, end);
+    for (const phrase of ['release-complete', 'job summary', 'docs.yml', 'workflow run release-please.yml', 'pages', 'concurrency', 'next real release']) {
+      expect(policy).toContain(phrase);
+    }
+    expect(policy).toMatch(/prior.*maintainer.*authoriz/i);
+    expect(policy).toMatch(/manual.*docs\.yml.*dispatch/i);
+  });
   it('RECOVER-1: declares the exact dispatch inputs and keeps push and concurrency', () => {
     expect(getOnKeys(releaseWorkflow)).toEqual(new Set(['push', 'workflow_dispatch']));
     const lines = releaseWorkflow.split('\n');
@@ -164,7 +358,7 @@ describe('release workflows', () => {
       "    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true' && needs.publish.result == 'success') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true' && (needs.publish.result == 'success' || (needs.publish.result == 'skipped' && needs.recover.outputs.publish_needed == 'false')))) }}",
       '    with:', '      ref: ${{ needs.recover.outputs.sha }}',
     ]));
-    // TEST-5 retains the unchanged deploy-website assertions.
+    // TEST-5 also asserts deploy-website's own if: line.
   });
 
   it('RECOVER-8: forwards an optional ref while docs keeps its default call', () => {
@@ -256,7 +450,7 @@ describe('release workflows', () => {
   });
 
   it('TEST-5: builds and deploys the website after a release-created publish', () => {
-    expect(jobNames(releaseWorkflow)).toEqual(['release-please', 'recover', 'publish', 'build-website', 'deploy-website']);
+    expect(getJobNames(releaseWorkflow)).toEqual(['release-please', 'recover', 'publish', 'build-website', 'deploy-website', 'release-complete']);
     const build = getScannableJobLines(releaseWorkflow, 'build-website');
     const deploy = getScannableJobLines(releaseWorkflow, 'deploy-website');
     expect(build).toEqual(expect.arrayContaining([
@@ -271,7 +465,7 @@ describe('release workflows', () => {
       '      name: github-pages', '      url: ${{ steps.deployment.outputs.page_url }}',
       '      group: pages', '      cancel-in-progress: false',
     ]));
-    expect(deploy.some((line) => line.startsWith('    if:'))).toBe(false);
+    expect(deploy).toContain("    if: ${{ !cancelled() && needs.build-website.result == 'success' }}");
     const steps = splitStepsIntoBlocks(deploy);
     expect(steps).toHaveLength(1);
     expect(steps[0]).toContain('        id: deployment');
@@ -337,7 +531,7 @@ describe('release workflows', () => {
         if: steps.recheck.outputs.skip != 'true'`);
   });
 
-  it('TEST-8: relies on ordinary needs propagation for release website jobs', () => {
+  it('TEST-8: gates both release website jobs behind !cancelled()-prefixed job-level if: expressions', () => {
     const combined = [
       ...getScannableJobLines(releaseWorkflow, 'build-website'),
       ...getScannableJobLines(releaseWorkflow, 'deploy-website'),
@@ -348,11 +542,12 @@ describe('release workflows', () => {
     expect(hasBareCancelled(combined)).toBe(false);
     expect(combined.filter((line) => line.startsWith('    if:'))).toEqual([
       "    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true' && needs.publish.result == 'success') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true' && (needs.publish.result == 'success' || (needs.publish.result == 'skipped' && needs.recover.outputs.publish_needed == 'false')))) }}",
+      "    if: ${{ !cancelled() && needs.build-website.result == 'success' }}",
     ]);
   });
 
   it('TEST-9: gives every Pages deployment the shared non-cancelling concurrency policy', () => {
-    const deployments = [docsWorkflow, releaseWorkflow].flatMap((workflow) => jobNames(workflow)
+    const deployments = [docsWorkflow, releaseWorkflow].flatMap((workflow) => getJobNames(workflow)
       .map((name) => getScannableJobLines(workflow, name))
       .filter((lines) => lines.join('\n').includes('actions/deploy-pages')));
     expect(deployments).toHaveLength(2);
@@ -394,6 +589,7 @@ describe('release workflows', () => {
 
     expect(() => getOnKeys('name: no triggers\n')).toThrow('Workflow has no on: block.');
     const noJobsFixture = 'on:\n  workflow_dispatch:\n';
+    expect(() => listJobs(noJobsFixture)).toThrow('Workflow has no jobs: block.');
     expect(() => getJobLines(noJobsFixture, 'build')).toThrow('Workflow has no jobs: block.');
     expect(() => getScannableJobLines(noJobsFixture, 'build')).toThrow('Workflow has no jobs: block.');
 

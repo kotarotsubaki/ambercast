@@ -115,6 +115,7 @@ jobs:
 
   deploy-website:
     needs: build-website
+    if: ${{ !cancelled() && needs.build-website.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -128,3 +129,30 @@ jobs:
     steps:
       - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment
+
+  release-complete:
+    needs: [release-please, recover, publish, build-website, deploy-website]
+    runs-on: ubuntu-latest
+    permissions: {}
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true') || (github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true')) }}
+    steps:
+      - run: |
+          missing=""
+          if [ "$EVENT" = push ]; then
+            if [ "$PUBLISH" = success ]; then :; else missing="$missing publish"; fi
+          else
+            if [ "$PUBLISH" = success ] || { [ "$PUBLISH" = skipped ] && [ "$PUBLISH_NEEDED" = false ]; }; then :; else missing="$missing publish"; fi
+          fi
+          if [ "$BUILD" = success ]; then :; else missing="$missing build-website"; fi
+          if [ "$DEPLOY" = success ]; then :; else missing="$missing deploy-website"; fi
+          if [ -n "$missing" ]; then
+            echo "Release incomplete:$missing" | tee -a "$GITHUB_STEP_SUMMARY" >&2
+            exit 1
+          fi
+          echo "Release complete" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          EVENT: ${{ github.event_name }}
+          PUBLISH: ${{ needs.publish.result }}
+          PUBLISH_NEEDED: ${{ needs.recover.outputs.publish_needed }}
+          BUILD: ${{ needs.build-website.result }}
+          DEPLOY: ${{ needs.deploy-website.result }}

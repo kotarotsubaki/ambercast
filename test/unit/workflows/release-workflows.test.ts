@@ -104,7 +104,7 @@ describe('release workflows', () => {
     expect(complete).toBe(completeIf);
     const pushGate = "github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true'";
     const dispatchGate = "github.event_name == 'workflow_dispatch' && needs.recover.result == 'success' && needs.recover.outputs.deploy == 'true'";
-    for (const line of [publish, build]) expect(line).toContain(pushGate);
+    for (const line of [publish, build, complete]) expect(line).toContain(pushGate);
     for (const line of [publish, build, complete]) expect(line).toContain(dispatchGate);
   });
 
@@ -125,7 +125,7 @@ describe('release workflows', () => {
   it('RELEASE-3: checks every specified malformed and valid fixture', () => {
     const a = "jobs:\n  a:\n    if: github.event_name == 'push'\n    runs-on: ubuntu-latest\n  b:\n    needs: a\n    runs-on: ubuntu-latest\n";
     const b = (body: string, first = "  a:\n    if: github.event_name == 'push'\n") => `jobs:\n${first}  b:\n${body}\n`;
-    const cases: { id: string; source: string; expected?: { workflow: string; jobId: string; reason: string }[]; error?: string | RegExp; filename?: string }[] = [
+    const cases: { id: string; source: string; expected?: { workflow: string; jobId: string; reason: string }[]; error?: string | RegExp; filename?: string; throwsFrom?: 'listJobs' | 'checkCancelledPropagation' }[] = [
       { id: 'a', source: a, expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-if' }] },
       { id: 'b', source: b("    needs: a\n    if: always() && needs.a.result == 'success'"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'bad-if-prefix' }] },
       { id: 'c', source: b("    needs: a\n    if: ${{ !cancelled() }}\n    env:\n      X: ${{ needs.a.result }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'bad-if-prefix' }] },
@@ -135,8 +135,9 @@ describe('release workflows', () => {
       { id: 'g', source: b("    needs: missing-job"), error: 'needs references unknown job "missing-job" from "b".' },
       { id: 'h', source: "jobs:\n  a:\n    needs: b\n  b:\n    needs: a\n", error: /needs cycle detected/ },
       { id: 'self-cycle', source: "jobs:\n  a:\n    needs: a\n", error: /needs cycle detected/ },
-      { id: 'folded-if', source: b("    if: >\n      !cancelled() && true"), error: 'Folded if: is not supported in job "b".' },
-      { id: 'literal-if', source: b("    if: |\n      !cancelled() && true"), error: 'Folded if: is not supported in job "b".' },
+      { id: 'folded-if', source: b("    needs: a\n    if: >\n      !cancelled() && true"), error: 'Folded if: is not supported in job "b".', throwsFrom: 'checkCancelledPropagation' },
+      { id: 'literal-if', source: b("    needs: a\n    if: |\n      !cancelled() && true"), error: 'Folded if: is not supported in job "b".', throwsFrom: 'checkCancelledPropagation' },
+      { id: 'needs-folded-scalar', source: b("    needs: >\n      a\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), error: 'Unparseable needs: in job "b".' },
       { id: 'i', source: a, filename: 'fixture.yaml', expected: [{ workflow: 'fixture.yaml', jobId: 'b', reason: 'missing-if' }] },
       { id: 'j', source: a.replace('  b:', '  b_two:'), expected: [{ workflow: 'fixture.yml', jobId: 'b_two', reason: 'missing-if' }] },
       { id: 'k', source: "jobs:\n  dup:\n    runs-on: ubuntu-latest\n  dup:\n    runs-on: ubuntu-latest\n", error: 'Duplicate job id "dup".' },
@@ -147,14 +148,24 @@ describe('release workflows', () => {
       { id: 'block-comment', source: b("    needs:\n      - 'a' # upstream\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
       { id: 'inline-comment', source: "jobs:\n  a:\n    if: github.event_name == 'push'\n  b:\n    if: github.event_name == 'push'\n  c:\n    needs: [a, b]  # fan-in\n    if: ${{ !cancelled() && needs.a.result == 'success' && needs.b.result == 'success' }}\n", expected: [] },
       { id: 'env-only', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    env:\n      X: ${{ needs.a.result }}"), expected: [] },
+      { id: 'embedded-brace-in-segment', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    env:\n      X: ${{ contains(github.ref, '}') }}-${{ needs.a.result }}"), expected: [] },
+      { id: 'env-value-after-blank-line', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    env:\n      UNRELATED: foo\n\n      X: ${{ needs.a.result }}"), expected: [] },
       { id: 'unconditional-ancestor', source: "jobs:\n  a:\n    runs-on: ubuntu-latest\n  b:\n    needs: a\n", expected: [] },
       { id: 'invalid-id', source: "jobs:\n  bad.id:\n    runs-on: ubuntu-latest\n", error: 'Invalid job id "bad.id".' },
       { id: 'bare-followed-by-block', source: b("    needs: a\n      - a"), error: 'Unparseable needs: in job "b".' },
       { id: 'inline-trailing-text', source: b("    needs: [a] garbage"), error: 'Unparseable needs: in job "b".' },
-      { id: 'block-stops-at-first-other-line', source: b("    needs:\n      - a\n\n      - missing\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
+      { id: 'block-continues-past-blank-line', source: b("    needs:\n      - a\n\n      - missing\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), error: 'needs references unknown job "missing" from "b".' },
       { id: 'embedded-colon-id', source: "jobs:\n  bad:id:\n    runs-on: ubuntu-latest\n", error: 'Invalid job id "bad:id".' },
       { id: 'missing-space-after-and', source: b("    needs: a\n    if: ${{ !cancelled() &&needs.a.result == 'success' }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'bad-if-prefix' }] },
       { id: 'services-env-is-not-step-env', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    services:\n      database:\n        env:\n          RESULT: ${{ needs.a.result }}\n    steps:\n      - run: echo ready"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-needs-reference:a' }] },
+      { id: 'n', source: b("    needs:\n      - a\n\n      # between a and missing2\n      - missing2\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), error: 'needs references unknown job "missing2" from "b".' },
+      { id: 'block-array-starts-after-blank-line', source: b("    needs:\n\n      # leading comment before the first item\n      - a\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), expected: [] },
+      { id: 'o', source: b("    needs: a\n    needs: a\n    if: ${{ !cancelled() && needs.a.result == 'success' }}"), error: 'Duplicate needs: key in job "b".' },
+      { id: 'p', source: "jobs:\n  bad:id:  # note\n    runs-on: ubuntu-latest\n", error: 'Invalid job id "bad:id".' },
+      { id: 'q', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    env:\n      X: needs.a.result ${{ github.event_name }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-needs-reference:a' }] },
+      { id: 'r', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    env:\n      X: ${{ needs.a.resultExtra }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-needs-reference:a' }] },
+      { id: 'embedded-needs-prefix', source: b("    needs: a\n    if: ${{ !cancelled() && true }}\n    env:\n      X: ${{ xneeds.a.result }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'missing-needs-reference:a' }] },
+      { id: 's', source: b("    needs: a\n    if: !cancelled() && needs.a.result == 'success'\n    env:\n      X: ${{ needs.a.result }}"), expected: [{ workflow: 'fixture.yml', jobId: 'b', reason: 'bad-if-prefix' }] },
     ];
     const temporaryDirectory = mkdtempSync(join(tmpdir(), 'ambercast-release-fixtures-'));
     try {
@@ -165,13 +176,23 @@ describe('release workflows', () => {
         const enumerated = readdirSync(temporaryDirectory).filter((name) => /\.ya?ml$/.test(name));
         expect(enumerated, fixture.id).toContain(filename);
         const source = readWorkflowText(path);
-        if (fixture.error) expect(() => listJobs(source), fixture.id).toThrow(fixture.error);
+        if (fixture.error) expect(() => fixture.throwsFrom === 'checkCancelledPropagation' ? checkCancelledPropagation(source, filename) : listJobs(source), fixture.id).toThrow(fixture.error);
         else expect(checkCancelledPropagation(source, filename), fixture.id).toEqual(fixture.expected);
         rmSync(path);
       }
     } finally {
       rmSync(temporaryDirectory, { recursive: true, force: true });
     }
+    expect(getJobNames('jobs:\n  build:  # note\n    runs-on: ubuntu-latest\n')).toEqual(['build']);
+    expect(checkCancelledPropagation('jobs:\n  build:  # note\n    runs-on: ubuntu-latest\n', 'fixture.yml')).toEqual([]);
+
+    expect(listJobs('jobs:\n  a:\n    needs: []\n    runs-on: ubuntu-latest\n')).toEqual([{ id: 'a', needs: [] }]);
+    expect(checkCancelledPropagation('jobs:\n  a:\n    needs: []\n    runs-on: ubuntu-latest\n', 'fixture.yml')).toEqual([]);
+
+    expect(listJobs('jobs:\n  a:\n    if: >\n      true\n    runs-on: ubuntu-latest\n')).toEqual([{ id: 'a', ifExpr: '>', needs: [] }]);
+    expect(checkCancelledPropagation('jobs:\n  a:\n    if: >\n      true\n    runs-on: ubuntu-latest\n', 'fixture.yml')).toEqual([]);
+
+    expect(checkCancelledPropagation("jobs:\n  a:\n    if: >\n      true\n  b:\n    needs: a\n    if: ${{ !cancelled() && needs.a.result == 'success' }}\n", 'fixture.yml')).toEqual([]);
   });
 
   it('RELEASE-4: pins the release-complete job shape and step environment', () => {
@@ -204,6 +225,9 @@ describe('release workflows', () => {
       '          BUILD: ${{ needs.build-website.result }}',
       '          DEPLOY: ${{ needs.deploy-website.result }}',
     ]);
+    const envIndex = steps[0]!.indexOf('        env:');
+    const scriptBody = steps[0]!.slice(1, envIndex).join('\n');
+    expect(scriptBody).not.toContain('${{');
   });
 
   it.skipIf(process.platform === 'win32').each([
@@ -213,6 +237,8 @@ describe('release workflows', () => {
     { name: 'dispatch permitted skipped publish', event: 'workflow_dispatch', publish: 'skipped', needed: 'false', build: 'success', deploy: 'success', exit: 0, missing: [] },
     { name: 'dispatch required skipped publish', event: 'workflow_dispatch', publish: 'skipped', needed: 'true', build: 'success', deploy: 'success', exit: 1, missing: ['publish'] },
     { name: 'dispatch missing build', event: 'workflow_dispatch', publish: 'success', needed: 'true', build: '', deploy: 'success', exit: 1, missing: ['build-website'] },
+    { name: 'push skipped deploy', event: 'push', publish: 'success', needed: undefined, build: 'success', deploy: 'skipped', exit: 1, missing: ['deploy-website'] },
+    { name: 'dispatch unknown deploy value', event: 'workflow_dispatch', publish: 'skipped', needed: 'false', build: 'success', deploy: 'bogus', exit: 1, missing: ['deploy-website'] },
   ])('RELEASE-4: executes the summary gate for $name', ({ event, publish, needed, build, deploy, exit, missing }) => {
     const job = getScannableJobLines(releaseWorkflow, 'release-complete');
     const start = job.indexOf('      - run: |');
@@ -267,6 +293,7 @@ describe('release workflows', () => {
     }
     expect(policy).toMatch(/prior.*maintainer.*authoriz/i);
     expect(policy).toMatch(/manual.*docs\.yml.*dispatch/i);
+    expect(policy).toMatch(/maintainer.*merges.*release PR.*confirm/i);
   });
   it('RECOVER-1: declares the exact dispatch inputs and keeps push and concurrency', () => {
     expect(getOnKeys(releaseWorkflow)).toEqual(new Set(['push', 'workflow_dispatch']));

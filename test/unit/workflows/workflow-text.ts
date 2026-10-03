@@ -8,8 +8,20 @@ function isCommentLine(line: string): boolean {
   return /^\s*#/.test(line);
 }
 
+function stripTrailingComment(line: string): string {
+  return line.replace(/\s+#.*$/, '');
+}
+
+/**
+ * Extracts a job identifier from a line that looks like a job heading.
+ *
+ * Strips a trailing `# comment` from the line (via `stripTrailingComment()`)
+ * before matching the job ID grammar (`^[A-Za-z_][A-Za-z0-9_-]*$`). Returns
+ * the identifier if the line matches the heading pattern, or `undefined`
+ * otherwise.
+ */
 function jobHeading(line: string): string | undefined {
-  return /^  ([A-Za-z_][A-Za-z0-9_-]*):$/.exec(line)?.[1];
+  return /^  ([A-Za-z_][A-Za-z0-9_-]*):$/.exec(stripTrailingComment(line))?.[1];
 }
 
 /**
@@ -172,9 +184,10 @@ export function splitStepsIntoBlocks(jobLines: string[]): string[][] {
  * The `id` is the job's identifier as declared in the workflow YAML. `ifExpr`
  * holds the raw expression from the job-level `if:` line, if present; it is
  * optional because jobs without an explicit `if:` inherit the implicit
- * `success()` behavior from GitHub Actions. `needs` is always a non-empty
- * array when the job declares dependencies; a job with no `needs:` clause
- * contains an empty array.
+ * `success()` behavior from GitHub Actions. `needs` is an empty array both
+ * when the job has no `needs:` clause at all and when it declares an
+ * explicit, empty `needs: []`; a non-empty `needs` array always holds at
+ * least one dependency name.
  *
  * The design deliberately exposes the raw `if:` value without parsing it into
  * an AST: this type serves static analysis tools that need to inspect or
@@ -195,7 +208,12 @@ export type JobInfo = { id: string; ifExpr?: string; needs: string[] };
  * ID grammar (`^[A-Za-z_][A-Za-z0-9_-]*$`) is treated as a structural parsing
  * error and throws `Invalid job id "<key>".`. This is intentional: `listJobs`
  * serves as a static checker, not a best-effort parser, so malformed fixtures
- * fail fast rather than silently skipping unrecognized entries.
+ * fail fast rather than silently skipping unrecognized entries. Both the
+ * heading-acceptance path (`jobHeading()`) and the invalid-job-id rejection
+ * path call the same `stripTrailingComment()` helper before validating a
+ * candidate line's grammar, so a comment-suffixed valid heading and a
+ * comment-suffixed malformed heading are recognized identically by both
+ * paths rather than risking the two independently diverging.
  *
  * Duplicate job IDs within the same file throw `Duplicate job id "<id>".`,
  * ensuring the workflow's job namespace is well-formed.
@@ -204,21 +222,31 @@ export type JobInfo = { id: string; ifExpr?: string; needs: string[] };
  * matching single or double quotes from each entry:
  * - **bare scalar**: `needs: <name>` — a single unquoted or quoted name.
  * - **inline array**: `needs: [<names>]` — comma-separated entries, with
- *   `needs: []` (empty) throwing `needs: must not be empty in job "<id>".`
+ *   `needs: []` (empty) returning an empty array `[]` (no error).
  * - **block array**: `needs:` followed by `  - <name>` lines, each with
- *   trailing comment (`#.*`) stripped before unquoting.
- *
- * Block/folded scalars (`if: >` / `if: |`) are rejected with
- * `Folded if: is not supported in job "<id>".` since the cancelled-propagation
- * rule requires a single-line `if:` expression for reliable prefix matching.
+ *   trailing comment (`#.*`) stripped before unquoting. Deciding bare-scalar
+ *   vs. block-array, and collecting the block-array's items, both skip blank
+ *   and comment-only lines via one shared `isBlankOrCommentLine` predicate
+ *   (so neither sees blank/comment lines as a terminator): the lookahead
+ *   advances past them to the *next significant* line after `needs:` to make
+ *   that decision, and the collection loop likewise skips them between items
+ *   (and before the first item), collecting every `- <name>` entry until a
+ *   true terminator (next job heading or sibling job-level key) is reached.
  *
  * A name that does not match the job-ID grammar, or does not name a job
  * present in this file's output, throws `needs references unknown job "<name>"
  * from "<id>".`. A name repeated within the same job's `needs` throws
- * `Duplicate needs entry "<name>" in job "<id>".`.
+ * `Duplicate needs entry "<name>" in job "<id>".`. A job with multiple
+ * `needs:` keys (distinct `needs:` lines at the same indentation level)
+ * throws `Duplicate needs: key in job "<id>".`.
  *
  * The returned array preserves the declaration order of jobs as they appear
- * in the workflow text.
+ * in the workflow text. A job-level `if:` written as a multi-line block or
+ * folded scalar (`if: >` / `if: |`) is not rejected here: its raw marker
+ * (`">"` or `"|"`) is returned as that job's `ifExpr` unvalidated, because
+ * whether a folded `if:` is actually an error depends on whether the job is
+ * subject to the cancelled-propagation rule — a determination only
+ * `checkCancelledPropagation` can make (see its documentation).
  *
  * Note: `listJobs` does not accept a `workflowLabel` parameter because it is
  * only used for structured metadata extraction; the caller (which knows the
@@ -230,7 +258,7 @@ export type JobInfo = { id: string; ifExpr?: string; needs: string[] };
  * @returns An array of job metadata, ordered by declaration.
  * @throws {Error} If the workflow is malformed (missing `jobs:` block),
  *   contains invalid job IDs, duplicate job IDs, unparseable needs, unknown
- *   job references, duplicate needs entries, or folded block scalars.
+ *   job references, duplicate needs entries, or duplicate needs: keys.
  */
 export function listJobs(workflowText: string): JobInfo[] {
   const lines = normalizedLines(workflowText);
@@ -248,7 +276,7 @@ export function listJobs(workflowText: string): JobInfo[] {
   function finalizeJob() {
     if (currentJobName === undefined) return;
 
-    const ifExpr = extractJobIf(currentJobLines, currentJobName);
+    const ifExpr = extractJobIf(currentJobLines);
     const needs = parseNeeds(currentJobLines, currentJobName);
 
     if (jobIdSet.has(currentJobName)) {
@@ -271,14 +299,14 @@ export function listJobs(workflowText: string): JobInfo[] {
       currentJobName = heading;
       currentJobLines = [line];
     } else if (currentJobName !== undefined) {
-      const maybeJobLine = /^  (?!#)(\S.*):$/.exec(line);
+      const maybeJobLine = /^  (?!#)(\S.*):$/.exec(stripTrailingComment(line));
       if (maybeJobLine !== null) {
         const key = maybeJobLine[1];
         throw new Error(`Invalid job id "${key}".`);
       }
       currentJobLines.push(line);
     } else {
-      const maybeJobLine = /^  (?!#)(\S.*):$/.exec(line);
+      const maybeJobLine = /^  (?!#)(\S.*):$/.exec(stripTrailingComment(line));
       if (maybeJobLine !== null) {
         const key = maybeJobLine[1];
         throw new Error(`Invalid job id "${key}".`);
@@ -302,27 +330,39 @@ export function listJobs(workflowText: string): JobInfo[] {
   return jobInfos;
 }
 
-function extractJobIf(lines: string[], jobId: string): string | undefined {
+function extractJobIf(lines: string[]): string | undefined {
   for (const line of lines) {
     if (line.startsWith('    if:')) {
       const match = /^    if: (.+)$/.exec(line);
       if (match !== null) {
-        // Check for folded scalar
-        const value = match[1]!;
-        if (value.startsWith('>') || value.startsWith('|')) {
-          throw new Error(`Folded if: is not supported in job "${jobId}".`);
-        }
-        return value;
+        return match[1]!;
       }
     }
   }
   return undefined;
 }
 
-function parseNeeds(lines: string[], jobId: string): string[] {
-  const needsLineIndex = lines.findIndex((l) => l.startsWith('    needs:'));
+function isBlankOrCommentLine(line: string): boolean {
+  return line.trim() === '' || isCommentLine(line);
+}
 
-  if (needsLineIndex === -1) {
+function nextSignificantLineIndex(lines: string[], fromIndex: number): number | undefined {
+  for (let i = fromIndex; i < lines.length; i++) {
+    if (!isBlankOrCommentLine(lines[i]!)) return i;
+  }
+  return undefined;
+}
+
+function parseNeeds(lines: string[], jobId: string): string[] {
+  const needsIndices: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.startsWith('    needs:')) needsIndices.push(i);
+  }
+  if (needsIndices.length > 1) {
+    throw new Error(`Duplicate needs: key in job "${jobId}".`);
+  }
+  const needsLineIndex = needsIndices[0];
+  if (needsLineIndex === undefined) {
     return [];
   }
 
@@ -330,11 +370,12 @@ function parseNeeds(lines: string[], jobId: string): string[] {
   const value = needsLine.slice('    needs:'.length).replace(/\s+#.*$/, '').trim();
 
   if (value.startsWith('>') || value.startsWith('|')) {
-    throw new Error(`Folded if: is not supported in job "${jobId}".`);
+    throw new Error(`Unparseable needs: in job "${jobId}".`);
   }
 
   if (!value.startsWith('[')) {
-    const nextIsBlockItem = /^      - /.test(lines[needsLineIndex + 1] ?? '');
+    const nextSignificant = nextSignificantLineIndex(lines, needsLineIndex + 1);
+    const nextIsBlockItem = nextSignificant !== undefined && /^      - /.test(lines[nextSignificant]!);
     if (value !== '' && nextIsBlockItem) {
       throw new Error(`Unparseable needs: in job "${jobId}".`);
     }
@@ -356,7 +397,7 @@ function parseNeeds(lines: string[], jobId: string): string[] {
     }
     const inner = value.slice(1, endBracket);
     if (inner.trim() === '') {
-      throw new Error(`needs: must not be empty in job "${jobId}".`);
+      return [];
     }
     const entries = inner.split(',').map((e) => stripQuotes(e.trim()));
     validateNeedsEntries(entries, jobId);
@@ -366,6 +407,7 @@ function parseNeeds(lines: string[], jobId: string): string[] {
   const blockArrayLines: string[] = [];
   for (let i = needsLineIndex + 1; i < lines.length; i++) {
     const line = lines[i]!;
+    if (isBlankOrCommentLine(line)) continue;
     const itemMatch = /^      - (.+)$/.exec(line);
     if (itemMatch === null) break;
     let item = itemMatch[1]!;
@@ -479,8 +521,10 @@ export function getJobNames(workflowText: string): string[] {
  * - `"missing-if"`: the job has an ancestor with a job-level `if:` but the
  *   job itself lacks any job-level `if:` clause.
  * - `"bad-if-prefix"`: the job has an ancestor with `if:` and defines its own
- *   `if:`, but the expression does not begin with the required
- *   `!cancelled() && ` gate prefix with a non-empty right operand.
+ *   `if:`, but the expression either is not wrapped in `${{ }}` or, when
+ *   wrapped, does not begin with the required `!cancelled() && ` gate prefix
+ *   with a non-empty right operand. Unwrapped expressions (bare scalars) are
+ *   also rejected as `bad-if-prefix` violations.
  * - `"missing-needs-reference:<name>"`: the job's `if:`/`env:` values do not
  *   contain a `needs.<name>.result` reference for at least one direct need
  *   `<name>`, where `<name>` is the specific missing dependency name.
@@ -503,9 +547,17 @@ export type Violation = { workflow: string; jobId: string; reason: 'missing-if' 
  * job with a job-level `if:` must itself:
  *
  * 1. Have a job-level `if:` clause,
- * 2. Have an `if:` expression that starts with `!cancelled() && ` and has a non-empty right operand, and
+ * 2. Have an `if:` expression that is wrapped in `${{ }}` and starts with
+ *    `!cancelled() && ` with a non-empty right operand (unwrapped expressions
+ *    are rejected as `bad-if-prefix` violations), and
  * 3. Reference `needs.<name>.result` for every direct dependency in its own
- *    `if:` or `env:` values.
+ *    `if:` or `env:` values. A value may contain more than one `${{ ... }}`
+ *    segment (e.g. `${{ github.event_name }}-${{ needs.a.result }}`); every
+ *    segment in the value is checked independently, and the reference must
+ *    match as a whole word inside one of them (word boundaries on both
+ *    sides, so neither `needs.a.resultExtra` nor `xneeds.a.result` count).
+ *    Text outside every `${{ ... }}` segment of the same value never counts,
+ *    even on the same line as a real segment.
  *
  * The rule applies only to jobs with at least one ancestor that has an
  * explicit `if:`. Jobs like `docs.yml`'s `deploy`, whose sole ancestor `build`
@@ -525,11 +577,12 @@ export type Violation = { workflow: string; jobId: string; reason: 'missing-if' 
  * step-level `env:` entries.
  *
  * The cancellation prefix check follows this exact algorithm:
- * - If the `if:` value starts with `${{` and ends with `}}`, strip those
- *   three-character markers from each end and trim whitespace from both ends
- *   to obtain the *inner expression*; otherwise (a bare expression, which
- *   GitHub Actions also permits) the inner expression is the trimmed raw
- *   value as-is.
+ * - If the `if:` value does not start with `${{` and end with `}}`, the job
+ *   immediately fails as `bad-if-prefix` — an unwrapped (bare) `if:` is
+ *   always a violation for a job this rule covers, regardless of its text,
+ *   even if that text would otherwise satisfy the prefix check below.
+ * - Otherwise, strip those three-character markers from each end and trim
+ *   whitespace from both ends to obtain the *inner expression*.
  * - The job passes only if the inner expression, compared as a string, starts
  *   with exactly `!cancelled() && ` (case-sensitive, one literal space on
  *   each side of `&&`, and the prefix must be followed by at least one
@@ -538,6 +591,13 @@ export type Violation = { workflow: string; jobId: string; reason: 'missing-if' 
  * - Expressions starting with `always()` or `success()` fail trivially because
  *   they do not share that prefix.
  *
+ * A multi-line (`if: >` / `if: |`) job-level `if:` is a parse error only for
+ * a job this function evaluates (i.e., one with at least one ancestor that
+ * has a job-level `if:`). For such jobs, `listJobs` returns the raw folded
+ * marker (`">"` or `"|"`) as that job's `ifExpr` without further validation;
+ * `checkCancelledPropagation` throws `Folded if: is not supported in job
+ * "<id>".` when it encounters a folded scalar in a job it evaluates.
+ *
  * The returned violations array is empty if and only if every job in the
  * workflow either has no conditional ancestors or fully complies with the
  * three conditions above.
@@ -545,7 +605,8 @@ export type Violation = { workflow: string; jobId: string; reason: 'missing-if' 
  * @param workflowText - The YAML workflow text to analyze.
  * @param workflowLabel - The filename identifier for violation reports.
  * @returns An array of violations, empty if all jobs comply with the rule.
- * @throws {Error} If a needs cycle is detected in the workflow dependency graph.
+ * @throws {Error} If a needs cycle is detected in the workflow dependency graph,
+ *   or if a folded block scalar is encountered in a job this function evaluates.
  */
 export function checkCancelledPropagation(workflowText: string, workflowLabel: string): Violation[] {
   const jobInfos = listJobs(workflowText);
@@ -593,8 +654,22 @@ export function checkCancelledPropagation(workflowText: string, workflowLabel: s
       continue;
     }
 
-    // A complete gate needs both the exact operator spacing and a right operand.
-    const innerExpr = extractInnerExpression(job.ifExpr);
+    // These three checks run in this order because each guards the next: a
+    // folded if: is only an error once the job is known to be subject to
+    // this rule (exemption was already decided above, via the ancestor set,
+    // not inside listJobs); the ${{ }} wrapper must be present before an
+    // inner expression can be sliced out at all; and only then is the
+    // literal gate-prefix text compared.
+    if (job.ifExpr.startsWith('>') || job.ifExpr.startsWith('|')) {
+      throw new Error(`Folded if: is not supported in job "${job.id}".`);
+    }
+
+    if (!job.ifExpr.startsWith('${{') || !job.ifExpr.endsWith('}}')) {
+      violations.push({ workflow: workflowLabel, jobId: job.id, reason: 'bad-if-prefix' });
+      continue;
+    }
+
+    const innerExpr = job.ifExpr.slice(3, -2).trim();
     const gatePrefix = '!cancelled() && ';
     if (!innerExpr.startsWith(gatePrefix) || innerExpr.slice(gatePrefix.length).trim() === '') {
       violations.push({ workflow: workflowLabel, jobId: job.id, reason: 'bad-if-prefix' });
@@ -607,14 +682,7 @@ export function checkCancelledPropagation(workflowText: string, workflowLabel: s
 
     let missingReference: string | undefined;
     for (const need of job.needs) {
-      const needed = `needs.${need}.result`;
-      let found = false;
-      for (const value of ifEnvValues) {
-        if (value.includes(needed)) {
-          found = true;
-          break;
-        }
-      }
+      const found = ifEnvValues.some((value) => containsNeedsResultReference(value, need));
       if (!found) {
         missingReference = need;
         break;
@@ -629,18 +697,24 @@ export function checkCancelledPropagation(workflowText: string, workflowLabel: s
   return violations;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
- * Extracts the inner expression from an if: value by stripping ${{
- * wrapper if present.
+ * Checks whether `value` contains a whole-word `needs.<name>.result`
+ * reference inside at least one `${{ ... }}` expression segment of `value`.
+ * Every segment is checked independently; text outside every segment never
+ * counts, even on the same line as a real segment. A quoted string literal
+ * inside a segment (`'...'` or `"..."`) may itself contain `}` without
+ * ending the segment early.
  */
-function extractInnerExpression(ifExpr: string): string {
-  if (ifExpr.startsWith('${{') && ifExpr.endsWith('}}')) {
-    // Strip ${{ and }}, then trim
-    const inner = ifExpr.slice(3, -2);
-    return inner.trim();
+function containsNeedsResultReference(value: string, name: string): boolean {
+  const pattern = new RegExp(`\\bneeds\\.${escapeRegExp(name)}\\.result\\b`);
+  for (const match of value.matchAll(/\$\{\{((?:'[^']*'|"[^"]*"|[^}])*)\}\}/g)) {
+    if (pattern.test(match[1]!)) return true;
   }
-  // Bare expression
-  return ifExpr.trim();
+  return false;
 }
 
 /**
@@ -661,6 +735,7 @@ function collectIfEnvValues(lines: string[]): string[] {
     const envIndex = block.indexOf(heading);
     if (envIndex === -1) return;
     for (const line of block.slice(envIndex + 1)) {
+      if (line.trim() === '') continue;
       const match = entry.exec(line);
       if (match === null) break;
       values.push(match[1]!);

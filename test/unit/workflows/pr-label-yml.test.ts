@@ -32,7 +32,6 @@ describe('pr-label workflow', () => {
       '          PR_TITLE: ${{ github.event.pull_request.title }}',
       '          PR_NUMBER: ${{ github.event.pull_request.number }}',
       '          PR_AUTHOR: ${{ github.event.pull_request.user.login }}',
-      '          PR_HAS_ASSIGNEE: ${{ github.event.pull_request.assignees[0] != null }}',
       '        run: node scripts/lib/pr-labels.mjs',
     ]);
     expect(workflow).not.toMatch(/^\s+area: /m);

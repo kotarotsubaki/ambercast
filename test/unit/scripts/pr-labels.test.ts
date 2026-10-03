@@ -24,12 +24,14 @@ function success() {
 }
 
 /** Fixing all workflow inputs here keeps command assertions about behavior, not setup. */
-function setPr(title: string, hasAssignee: string) {
+function setPr(title: string, assignees: string[]) {
   process.env.PR_TITLE = title;
   process.env.PR_NUMBER = '505';
   process.env.PR_AUTHOR = 'author';
-  process.env.PR_HAS_ASSIGNEE = hasAssignee;
-  vi.mocked(spawnSync).mockReturnValue(success());
+  vi.mocked(spawnSync).mockImplementation((_cmd, args) =>
+    args?.[1] === 'view'
+      ? { status: 0, stdout: JSON.stringify({ assignees }), stderr: '' } as ReturnType<typeof spawnSync>
+      : success());
 }
 
 afterEach(() => {
@@ -118,49 +120,54 @@ describe('deriveLabels', () => {
 
 describe('main', () => {
   it('adds all acceptance labels in one call and assigns the author separately', async () => {
-    setPr('fix(mcp)!: improve MCP support', 'false');
+    setPr('fix(mcp)!: improve MCP support', []);
     await runMain();
-    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(spawnSync).toHaveBeenCalledTimes(3);
     expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual([
       'gh', ['pr', 'edit', '505', '--add-label', 'type: bug', '--add-label', 'breaking-change', '--add-label', 'area: mcp'],
     ]);
-    expect(vi.mocked(spawnSync).mock.calls[1]?.slice(0, 2)).toEqual([
+    expect(vi.mocked(spawnSync).mock.calls[1]?.slice(0, 2)).toEqual(['gh', ['pr', 'view', '505', '--json', 'assignees']]);
+    expect(vi.mocked(spawnSync).mock.calls[2]?.slice(0, 2)).toEqual([
       'gh', ['pr', 'edit', '505', '--add-assignee', 'author'],
     ]);
   });
 
   it('preserves an existing assignee while adding labels', async () => {
-    setPr('fix: change', 'true');
+    setPr('fix: change', ['human']);
     await runMain();
-    expect(spawnSync).toHaveBeenCalledTimes(1);
+    expect(spawnSync).toHaveBeenCalledTimes(2);
     expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual([
       'gh', ['pr', 'edit', '505', '--add-label', 'type: bug'],
     ]);
+    expect(vi.mocked(spawnSync).mock.calls[1]?.slice(0, 2)).toEqual(['gh', ['pr', 'view', '505', '--json', 'assignees']]);
   });
 
-  it('makes zero child calls when neither mutation is needed', async () => {
-    setPr('FIX: malformed', 'true');
+  it('makes no mutation calls when neither mutation is needed', async () => {
+    setPr('FIX: malformed', ['human']);
     await runMain();
-    expect(spawnSync).not.toHaveBeenCalled();
+    expect(spawnSync).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual(['gh', ['pr', 'view', '505', '--json', 'assignees']]);
   });
 
   it('assigns the author even when a malformed title yields no labels', async () => {
-    setPr('FIX: malformed', 'false');
+    setPr('FIX: malformed', []);
     await runMain();
-    expect(spawnSync).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual([
+    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual(['gh', ['pr', 'view', '505', '--json', 'assignees']]);
+    expect(vi.mocked(spawnSync).mock.calls[1]?.slice(0, 2)).toEqual([
       'gh', ['pr', 'edit', '505', '--add-assignee', 'author'],
     ]);
   });
 
   it('reports label failure and still attempts the independent assignment', async () => {
-    setPr('fix: change', 'false');
-    vi.mocked(spawnSync).mockReturnValueOnce({ status: 1, stdout: '', stderr: 'label failed' } as ReturnType<typeof spawnSync>);
+    setPr('fix: change', []);
+    vi.mocked(spawnSync).mockImplementationOnce(() => ({ status: 1, stdout: '', stderr: 'label failed' } as ReturnType<typeof spawnSync>));
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await runMain();
-    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(spawnSync).toHaveBeenCalledTimes(3);
     expect(vi.mocked(spawnSync).mock.calls.map((call) => call.slice(0, 2))).toEqual([
       ['gh', ['pr', 'edit', '505', '--add-label', 'type: bug']],
+      ['gh', ['pr', 'view', '505', '--json', 'assignees']],
       ['gh', ['pr', 'edit', '505', '--add-assignee', 'author']],
     ]);
     expect(log).toHaveBeenCalledWith('::error::gh pr edit label failed: label failed');
@@ -168,13 +175,14 @@ describe('main', () => {
   });
 
   it('reports assignment failure after a successful label call', async () => {
-    setPr('fix: change', 'false');
-    vi.mocked(spawnSync).mockReturnValueOnce(success()).mockReturnValueOnce({ status: 1, stdout: '', stderr: 'assignee failed' } as ReturnType<typeof spawnSync>);
+    setPr('fix: change', []);
+    vi.mocked(spawnSync).mockImplementationOnce(() => success()).mockImplementationOnce(() => ({ status: 0, stdout: '{"assignees":[]}', stderr: '' } as ReturnType<typeof spawnSync>)).mockImplementationOnce(() => ({ status: 1, stdout: '', stderr: 'assignee failed' } as ReturnType<typeof spawnSync>));
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await runMain();
-    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(spawnSync).toHaveBeenCalledTimes(3);
     expect(vi.mocked(spawnSync).mock.calls.map((call) => call.slice(0, 2))).toEqual([
       ['gh', ['pr', 'edit', '505', '--add-label', 'type: bug']],
+      ['gh', ['pr', 'view', '505', '--json', 'assignees']],
       ['gh', ['pr', 'edit', '505', '--add-assignee', 'author']],
     ]);
     expect(log).toHaveBeenCalledWith('::error::gh pr edit assignee failed: assignee failed');
@@ -182,11 +190,11 @@ describe('main', () => {
   });
 
   it('reports a spawn launch failure with null status without throwing', async () => {
-    setPr('fix: change', 'true');
-    vi.mocked(spawnSync).mockReturnValue({ status: null, error: new Error('spawn gh ENOENT'), stdout: '', stderr: '' } as ReturnType<typeof spawnSync>);
+    setPr('fix: change', ['human']);
+    vi.mocked(spawnSync).mockImplementationOnce(() => ({ status: null, error: new Error('spawn gh ENOENT'), stdout: '', stderr: '' } as ReturnType<typeof spawnSync>));
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await runMain();
-    expect(spawnSync).toHaveBeenCalledTimes(1);
+    expect(spawnSync).toHaveBeenCalledTimes(2);
     expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual([
       'gh', ['pr', 'edit', '505', '--add-label', 'type: bug'],
     ]);
@@ -198,12 +206,40 @@ describe('main', () => {
     delete process.env.PR_TITLE;
     delete process.env.PR_NUMBER;
     delete process.env.PR_AUTHOR;
-    delete process.env.PR_HAS_ASSIGNEE;
-    vi.mocked(spawnSync).mockReturnValue(success());
+    vi.mocked(spawnSync).mockImplementation((_cmd, args) => args?.[1] === 'view'
+      ? { status: 0, stdout: '{"assignees":[]}', stderr: '' } as ReturnType<typeof spawnSync>
+      : success());
     await expect(runMain()).resolves.toBeUndefined();
-    expect(spawnSync).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual([
+    expect(spawnSync).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(spawnSync).mock.calls[0]?.slice(0, 2)).toEqual(['gh', ['pr', 'view', '', '--json', 'assignees']]);
+    expect(vi.mocked(spawnSync).mock.calls[1]?.slice(0, 2)).toEqual([
       'gh', ['pr', 'edit', '', '--add-assignee', ''],
     ]);
+  });
+
+  it('skips assignment and reports a failed assignee lookup', async () => {
+    setPr('fix: change', []);
+    vi.mocked(spawnSync).mockImplementationOnce(() => success()).mockImplementationOnce(() => ({ status: 1, stdout: '', stderr: 'lookup failed' } as ReturnType<typeof spawnSync>));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await runMain();
+    expect(vi.mocked(spawnSync).mock.calls.map((call) => call.slice(0, 2))).toEqual([
+      ['gh', ['pr', 'edit', '505', '--add-label', 'type: bug']],
+      ['gh', ['pr', 'view', '505', '--json', 'assignees']],
+    ]);
+    expect(log).toHaveBeenCalledWith('::error::gh pr view assignees failed: lookup failed');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('skips assignment and reports unparseable assignee lookup output', async () => {
+    setPr('fix: change', []);
+    vi.mocked(spawnSync).mockImplementationOnce(() => success()).mockImplementationOnce(() => ({ status: 0, stdout: 'not JSON', stderr: '' } as ReturnType<typeof spawnSync>));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await runMain();
+    expect(vi.mocked(spawnSync).mock.calls.map((call) => call.slice(0, 2))).toEqual([
+      ['gh', ['pr', 'edit', '505', '--add-label', 'type: bug']],
+      ['gh', ['pr', 'view', '505', '--json', 'assignees']],
+    ]);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^::error::gh pr view assignees failed: /));
+    expect(process.exitCode).toBe(1);
   });
 });

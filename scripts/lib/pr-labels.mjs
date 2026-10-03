@@ -100,13 +100,12 @@ export function deriveLabels(title) {
  * Adds labels derived from the PR title and assigns the author when unassigned.
  *
  * @remarks
- * Inputs are `PR_TITLE`, `PR_NUMBER`, `PR_AUTHOR`, and `PR_HAS_ASSIGNEE` from
- * the workflow environment. The sole caller, `pr-label.yml`, always sets all
- * four; direct invocation with missing values uses empty strings and treats
- * an unset assignee flag as false. Existing manual labels and assignees are
- * preserved. Labeling and assignment are independent mutations: either may
- * fail without suppressing the other, and any failure logs an operation-specific
- * `::error::` with stderr and sets `process.exitCode = 1` without throwing.
+ * The sole caller, `pr-label.yml`, supplies `PR_TITLE`, `PR_NUMBER`, and
+ * `PR_AUTHOR`; direct invocation with missing values uses empty strings.
+ * Assignment uses the PR's current assignees, preserving human assignments
+ * made after the workflow event. A failed lookup never permits assignment.
+ * Labeling and assignment are independent: failures log an operation-specific
+ * `::error::` and set `process.exitCode = 1` without throwing.
  */
 async function main() {
   const exec = ({ cmd, args }) => {
@@ -123,7 +122,6 @@ async function main() {
   const title = process.env.PR_TITLE ?? '';
   const prNumber = process.env.PR_NUMBER ?? '';
   const prAuthor = process.env.PR_AUTHOR ?? '';
-  const hasAssignee = process.env.PR_HAS_ASSIGNEE ?? 'false';
 
   const { labels } = deriveLabels(title);
 
@@ -136,7 +134,24 @@ async function main() {
     }
   }
 
-  if (hasAssignee !== 'true') {
+  const assigneesResult = exec({ cmd: 'gh', args: ['pr', 'view', prNumber, '--json', 'assignees'] });
+  if (assigneesResult.code !== 0) {
+    console.log(`::error::gh pr view assignees failed: ${assigneesResult.stderr}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  let assignees;
+  try {
+    assignees = JSON.parse(assigneesResult.stdout).assignees;
+    if (!Array.isArray(assignees)) throw new Error('assignees is not an array');
+  } catch (error) {
+    console.log(`::error::gh pr view assignees failed: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (assignees.length === 0) {
     const assigneeArgs = ['pr', 'edit', prNumber, '--add-assignee', prAuthor];
     const result = exec({ cmd: 'gh', args: assigneeArgs });
     if (result.code !== 0) {

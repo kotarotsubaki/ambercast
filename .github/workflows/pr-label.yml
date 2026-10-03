@@ -1,7 +1,8 @@
 name: pr-label
 
+# pull_request_target grants fork PRs write access safely: checkout uses the base branch without a ref override.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, edited, reopened, synchronize]
 
 # PR assignment uses the Issues API, so label-write permission alone is insufficient.

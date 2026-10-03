@@ -6,8 +6,8 @@ const workflow = readWorkflowText(fileURLToPath(new URL('../../../.github/workfl
 
 describe('pr-label workflow', () => {
   it('triggers only on the four requested pull request events', () => {
-    expect(getOnKeys(workflow)).toEqual(new Set(['pull_request']));
-    expect(workflow).toMatch(/^on:\n  pull_request:\n    types: \[opened, edited, reopened, synchronize\]$/m);
+    expect(getOnKeys(workflow)).toEqual(new Set(['pull_request_target']));
+    expect(workflow).toMatch(/^on:\n  pull_request_target:\n    types: \[opened, edited, reopened, synchronize\]$/m);
   });
 
   it('grants both required permissions at the top level before jobs', () => {

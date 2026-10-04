@@ -172,7 +172,19 @@ const digestInputRestrictions = [
 ];
 
 export default [
-  { ignores: ['dist/**', 'test/fixtures/architecture/**', 'website/**'] },
+  {
+    ignores: [
+      'dist/**',
+      'test/fixtures/architecture/**',
+      'website/**',
+      // Local AI agent scratch directories; ESLint reads neither .gitignore nor .git/info/exclude.
+      '.claude/impl/**',
+      '.claude/impl-archive/**',
+      '.claude/logs/**',
+      '.claude/todos/**',
+      '.claude/worktrees/**',
+    ],
+  },
   ...tseslint.configs.recommended,
   {
     files: ['**/*.ts'],

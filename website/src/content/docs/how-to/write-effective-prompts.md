@@ -16,9 +16,13 @@ Focused test prompts keep test cases clear and make plan review straightforward.
    A success criterion should name something visible at the destination—a heading, message, or element—not only that a URL was reached.
 
    > …I reach the dashboard and see the heading "Welcome back".
-2. Split unrelated user outcomes into separate `<name>.test.md` files to keep cases focused.
-3. Do not put secret values, secret references, or legacy grant lines in the prompt. When generation discovers a needed secret name, review it through the consent prompt or pre-populate `secrets.allow`; see [Manage secrets](/ambercast/how-to/manage-secrets/).
-4. Run `npx ambercast generate tests/ambercast/checkout.test.md --dry-run`. A valid preview result has status `would-generate` and `dryRun: true`; it does not claim a committed write.
+2. Quote text in an action's success criterion that appears only on the screen after the action. Text already visible before the action, such as the name of the link or button you clicked, cannot show that the screen changed.
+
+   > Bad: I click the "Sign in" link in the header and see "Sign in".
+   > Good: I click the "Sign in" link in the header and see the "Continue with email" button.
+3. Split unrelated user outcomes into separate `<name>.test.md` files to keep cases focused.
+4. Do not put secret values, secret references, or legacy grant lines in the prompt. When generation discovers a needed secret name, review it through the consent prompt or pre-populate `secrets.allow`; see [Manage secrets](/ambercast/how-to/manage-secrets/).
+5. Run `npx ambercast generate tests/ambercast/checkout.test.md --dry-run`. A valid preview result has status `would-generate` and `dryRun: true`; it does not claim a committed write.
 
 ## Verification {#verification}
 

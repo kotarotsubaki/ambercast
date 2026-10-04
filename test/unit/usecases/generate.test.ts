@@ -41,6 +41,7 @@ import { AiResponseInvalidDetails, REPORT_SCHEMA_VERSION, ReportEnvelope } from 
 import { reportError } from '#report/error-mapping.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
+import { detectSecretLiteral } from '#usecases/generator-secret-policy.js';
 import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
@@ -2630,6 +2631,179 @@ describe('generate', () => {
       return value;
     }
 
+    const citationMismatch = (id: string): GeneratedPlanResponse => ({
+      ...coveredResponse,
+      steps: [{
+        ...coveredResponse.steps[0],
+        id,
+        instructionCoverage: [{
+          id: 'dashboard-reached', kind: 'success', startAnchor: 'L3', startColumn: 1, endAnchor: 'L3', endColumn: 56,
+          [INSTRUCTION_PROOF_FIELD]: 'A different citation.',
+        }],
+      }],
+    } as GeneratedPlanResponse);
+
+    it('TEST-1 rejects a secret-shaped step id before citation diagnostics without leaking or writing artifacts', async () => {
+      const response = citationMismatch('sk-abc123');
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({ data: response, raw: JSON.stringify(response) }));
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      const file = await writePrompt(recordingStorage.storage);
+      recordingStorage.reset();
+
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+      const error = outcome.results[0]?.error;
+      const projected = reportError(error!, { scope: 'run' });
+      const previousAttempts = requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context);
+
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(error).toBeInstanceOf(SecretLiteralRejectedError);
+      expect(error?.exitCode).toBe(2);
+      expect(projected.code).toBe('SECRET_LITERAL_REJECTED');
+      expect('details' in projected ? projected.details : undefined).toEqual({
+        detector: 'credential-prefix-sk',
+        path: 'steps[0].id',
+        attempts: [
+          { attempt: 1, code: 'SECRET_LITERAL_REJECTED' },
+          { attempt: 2, code: 'SECRET_LITERAL_REJECTED' },
+        ],
+      });
+      expect(JSON.stringify(projected)).not.toContain('sk-abc123');
+      expect(previousAttempts).toEqual([{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }]);
+      expect(JSON.stringify(previousAttempts)).not.toContain('sk-abc123');
+      expect(recordingStorage.writes.map(({ path }) => path)).not.toContain(deps.layout.planPathFor(file));
+      expect(recordingStorage.writes.map(({ path }) => path)).not.toContain(deps.layout.groundingPathFor(file));
+    });
+
+    it('TEST-2 classifies a high-entropy step id before citation diagnostics', async () => {
+      const id = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0';
+      expect(detectSecretLiteral(id)).toBe('high-entropy-token');
+      const response = citationMismatch(id);
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({ data: response, raw: JSON.stringify(response) }));
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(outcome.results[0]?.error).toBeInstanceOf(SecretLiteralRejectedError);
+      expect(outcome.results[0]?.error?.details).toMatchObject({ detector: 'high-entropy-token', path: 'steps[0].id' });
+    });
+
+    it('TEST-4 reports the first secret-shaped step id in array order', async () => {
+      const response = {
+        ...coveredResponse,
+        steps: [
+          citationMismatch('reach-dashboard').steps[0],
+          { ...coveredResponse.steps[0], id: 'sk-first-secret' },
+          { ...coveredResponse.steps[0], id: 'sk-second-secret' },
+        ],
+      } as GeneratedPlanResponse;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({ data: response, raw: JSON.stringify(response) }));
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results[0]?.error).toBeInstanceOf(SecretLiteralRejectedError);
+      expect(outcome.results[0]?.error?.details?.path).toBe('steps[1].id');
+    });
+
+    it('TEST-5 retries a rejected step id and generates from the next valid response', async () => {
+      const responses = [citationMismatch('sk-abc123'), coveredResponse] as const;
+      let index = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        const response = responses[index++];
+        if (response === undefined) throw new Error('Unexpected retry dispatch.');
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context))
+        .toEqual([{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }]);
+    });
+
+    it('TEST-6 retains invalid-response then secret-rejection codes in attempt order', async () => {
+      const responses = [citationMismatch('reach-dashboard'), citationMismatch('sk-abc123')] as const;
+      let index = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        const response = responses[index++];
+        if (response === undefined) throw new Error('Unexpected retry dispatch.');
+        return { data: response, raw: JSON.stringify(response) };
+      });
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+      const previousAttempts = requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context);
+
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(outcome.results[0]?.error).toBeInstanceOf(SecretLiteralRejectedError);
+      expect(outcome.results[0]?.error?.details?.attempts).toEqual([
+        { attempt: 1, code: 'AI_RESPONSE_INVALID' },
+        { attempt: 2, code: 'SECRET_LITERAL_REJECTED' },
+      ]);
+      expect(previousAttempts[0]).toMatchObject({ attempt: 1, code: 'AI_RESPONSE_INVALID' });
+    });
+
+    const mixedResponseIssues = [
+      { code: 'schema-mismatch', path: ['steps'] },
+      { code: 'schema-mismatch' },
+      { code: 'schema-mismatch', path: ['steps', 0] },
+      { code: 'schema-mismatch', path: ['steps'], message: 'x' },
+    ];
+    const validResponseIssues = [
+      { code: 'schema-mismatch', path: ['steps'] },
+      { code: 'schema-mismatch', path: ['steps', 0] },
+    ];
+
+    it('TEST-8 projects valid issues individually into retry feedback in original order', async () => {
+      let dispatch = 0;
+      const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+        if (dispatch++ === 0) throw new AiResponseInvalidError('Mixed issues.', { issues: mixedResponseIssues });
+        return { data: coveredResponse, raw: JSON.stringify(coveredResponse) };
+      });
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+      const previousAttempts = requireRawPreviousAttempts(execute.mock.calls[1]?.[0].context);
+      const first = requireRawObject(previousAttempts[0], 'the first previous attempt');
+
+      expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(Reflect.get(first, 'issues')).toEqual(validResponseIssues);
+    });
+
+    it('TEST-9 treats a surviving terminal URL issue as terminal despite an invalid sibling', async () => {
+      const terminalIssue = { code: 'terminal-url-matches-forbidden', path: ['verificationIntent', 0, 'assertion'] };
+      const execute = vi.fn(async () => {
+        throw new AiResponseInvalidError('Mixed terminal issues.', {
+          issues: [{ code: 'schema-mismatch' }, terminalIssue],
+        });
+      });
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+      expect(execute).toHaveBeenCalledOnce();
+      expect(outcome.results[0]?.error?.details?.issues).toEqual([terminalIssue]);
+    });
+
+    it('TEST-10 keeps individually valid issues in the terminal report after two attempts', async () => {
+      const execute = vi.fn(async () => { throw new AiResponseInvalidError('Mixed issues.', { issues: mixedResponseIssues }); });
+      const { deps, recordingStorage } = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+      await writePrompt(recordingStorage.storage);
+      const outcome = await generate(deps, DEFAULT_OPTIONS);
+      const error = outcome.results[0]?.error;
+      const projected = reportError(error!, { scope: 'run' });
+
+      expect(execute).toHaveBeenCalledTimes(2);
+      const details = 'details' in projected ? projected.details : undefined;
+      expect(details).toBeDefined();
+      expect((details as { issues?: unknown[] } | undefined)?.issues).toEqual(validResponseIssues);
+      expect((details as { attempts?: unknown[] } | undefined)?.attempts).toHaveLength(2);
+    });
+
     it('retries a non-positive provider column as anchor-invalid rather than schema-mismatch', async () => {
       const invalid = {
         ...coveredResponse,
@@ -3329,6 +3503,27 @@ describe('generate v5 element intent and confirmation contracts', () => {
     expect(context?.previousAttempts?.[0]?.issues).toContainEqual({
       code: 'secret-allowed-name-not-projected', path: expectedPath, stepId: 'fill-password',
     });
+  });
+
+  it('TEST-3 rejects a secret-shaped step id before secret naming can disclose it', async () => {
+    const response = {
+      steps: [{ id: 'sk-abc123', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'LOGIN_PASSWORD' } }],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', PROMPT);
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), DEFAULT_OPTIONS);
+    const error = outcome.results[0]?.error;
+    const projected = reportError(error!, { scope: 'run' });
+    const previousAttempts = (execute.mock.calls as unknown as Array<[{ readonly context: unknown }]>)[1]?.[0].context;
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(error).toBeInstanceOf(SecretLiteralRejectedError);
+    expect(projected.code).toBe('SECRET_LITERAL_REJECTED');
+    expect(JSON.stringify(projected)).not.toContain('sk-abc123');
+    expect(JSON.stringify(previousAttempts)).not.toContain('sk-abc123');
+    expect(previousAttempts).toMatchObject({ previousAttempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }] });
   });
 
   it.each([

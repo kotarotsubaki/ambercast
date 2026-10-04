@@ -105,10 +105,11 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these twelve codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these thirteen codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
 
 | Code | Optional `details` shape |
 | --- | --- |
+| `AGENTIC_STEP_FAILED` | Case scope only: `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible", "element-visible", "text-equals", "url-matches", or "element-count"; expected: string } }`; counters describe completed tool calls. |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: any instruction-coverage, element-intent, or confirms issue code (`confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, `confirms-duplicate`), "text-equals-self-quote", "invalid-json", "schema-mismatch", "secret-allowed-name-not-projected", or "secret-conflicting-target-names" (the last two always carry stepId); path: Array<string or non-negative integer>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk, credential-prefix-ghp, credential-prefix-aws-access-key, high-entropy-token, or embedded-secret-reference; path: non-whitespace string; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |

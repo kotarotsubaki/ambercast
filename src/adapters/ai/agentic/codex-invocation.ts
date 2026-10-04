@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 
-import type { InvocationResource } from './agentic-executor.js';
+import { attachChildProcess, type InvocationResource } from './agentic-executor.js';
 import { FinalOutcome, parseFinalOutcome } from './final-outcome.js';
 
 /**
@@ -43,7 +43,14 @@ export async function buildCodexInvocation(
       ],
       env: { AMBERCAST_MCP_BEARER_TOKEN: token },
       cleanup: async () => rm(directory, { recursive: true, force: true }),
-      readFinalOutcome: async () => parseFinalOutcome(await readFile(outputPath, 'utf8')),
+      readFinalOutcome: async (runResult) => {
+        try {
+          return parseFinalOutcome(await readFile(outputPath, 'utf8'));
+        } catch (error) {
+          attachChildProcess(error, runResult);
+          throw error;
+        }
+      },
     };
   } catch (error) {
     await rm(directory, { recursive: true, force: true }).catch(() => undefined);

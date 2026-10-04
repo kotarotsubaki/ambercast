@@ -25,6 +25,8 @@ export type ExitCode = 0 | 1 | 2 | 3 | 4 | 5;
  * three secret-policy kinds remain distinct because syntax migration,
  * environment-name ambiguity, and absent consent have different remediation
  * paths even though each is caller-correctable.
+ * `agentic-step-failed` identifies a child agent's explicit failure after a
+ * normal exit, preserving case-level diagnostic evidence.
  */
 export type ErrorKind =
   | 'assertion-failed'
@@ -43,6 +45,7 @@ export type ErrorKind =
   | 'browser-launch-failed'
   | 'ai-executor-unavailable'
   | 'ai-response-invalid'
+  | 'agentic-step-failed'
   | 'executor-unsupported'
   | 'fs-io-error'
   | 'unexpected-crash'

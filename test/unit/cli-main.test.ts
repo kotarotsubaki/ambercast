@@ -1133,6 +1133,26 @@ describe('main()', () => {
   });
 
   describe('renderHumanReport', () => {
+    it('TEST-B13 renders AGENTIC_STEP_FAILED fields in schema order, including nested assertion detail', () => {
+      expect(ERROR_DETAILS_KEY_ORDER.AGENTIC_STEP_FAILED).toEqual([
+        'stepId', 'actions', 'assertions', 'passedAssertions', 'failedAssertions', 'targetRejections', 'lastFailedAssertion',
+      ]);
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED', caseId: 'login',
+          message: 'The AI-directed interaction did not complete successfully.',
+          details: {
+            targetRejections: 1, failedAssertions: 2, passedAssertions: 1, assertions: 3,
+            actions: 1, stepId: 'recorded-ai',
+            lastFailedAssertion: { check: 'text-visible', expected: 'Text "X" is visible.' },
+          },
+        }],
+      } as never, false);
+      expect(rendered).toBe('error AGENTIC_STEP_FAILED [login]: The AI-directed interaction did not complete successfully.\n'
+        + '  details: stepId=recorded-ai; actions=1; assertions=3; passedAssertions=1; failedAssertions=2; targetRejections=1; '
+        + 'lastFailedAssertion={"check":"text-visible","expected":"Text \\"X\\" is visible."}\n');
+    });
     it('renders the run-scope error line without optional hint or details', () => {
       const rendered = renderHumanReport({
         ...RUN_ENVELOPE,

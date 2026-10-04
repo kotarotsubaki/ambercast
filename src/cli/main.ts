@@ -186,6 +186,7 @@ export const ERROR_DETAILS_KEY_ORDER: Readonly<Record<string, readonly string[]>
   BROWSER_LAUNCH_FAILED: ['reason', 'engine'],
   PROMPT_PATH_INVALID: ['path', 'reason'],
   AI_RESPONSE_INVALID: ['issues', 'attempts'],
+  AGENTIC_STEP_FAILED: ['stepId', 'actions', 'assertions', 'passedAssertions', 'failedAssertions', 'targetRejections', 'lastFailedAssertion'],
   SECRET_LITERAL_REJECTED: ['detector', 'path', 'attempts'],
   SECRET_ENV_VAR_COLLISION: ['envVar', 'refs'],
   SECRET_CONSENT_REQUIRED: ['reason', 'secrets'],

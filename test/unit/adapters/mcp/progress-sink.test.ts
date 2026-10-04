@@ -19,6 +19,14 @@ const messages = [
 ];
 
 describe('mcp/progress-sink TEST-B7', () => {
+  it('TEST-B15 never forwards child stderr through MCP progress notifications', async () => {
+    const send = vi.fn(async (_message: string) => {});
+    const sink = createMcpProgressSink({ command: 'run', sessionRoot: '/workspace', send });
+    sink.emit({ type: 'unclassified-rejection', file: '/workspace/tests/login.test.md', name: 'Error', message: 'failed',
+      childProcess: { exitCode: 1, signal: null, stderrTail: 'CHILD_STDERR_PRIVATE' } } as never);
+    await sink.flush();
+    expect(JSON.stringify(send.mock.calls)).not.toContain('CHILD_STDERR_PRIVATE');
+  });
   it('projects the four wire messages in event order and observes even suppressed events', async () => {
     const send = vi.fn(async (_message: string) => {});
     const onEvent = vi.fn((_event: unknown) => {});

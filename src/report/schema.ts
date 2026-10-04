@@ -88,6 +88,7 @@ const ENVIRONMENT_REPORT_ERROR_CODES = [
   'BROWSER_LAUNCH_FAILED',
   'AI_EXECUTOR_UNAVAILABLE',
   'AI_RESPONSE_INVALID',
+  'AGENTIC_STEP_FAILED',
   'FS_IO_ERROR',
   'UNEXPECTED_CRASH',
   'INTERRUPTED',
@@ -294,6 +295,31 @@ export const BrowserLaunchFailedDetails = z.strictObject({
 });
 
 /**
+ * Case-only evidence for a child agent's explicit failure outcome.
+ *
+ * @remarks
+ * Counters describe completed tool calls, not intermediate polling samples.
+ * The optional final failure records the evaluated check kind and its safe
+ * expected text without admitting arbitrary provider diagnostics.
+ */
+export const AgenticStepFailedDetails = z.strictObject({
+  stepId: NonWhitespaceString,
+  actions: NonNegativeInteger,
+  assertions: NonNegativeInteger,
+  passedAssertions: NonNegativeInteger,
+  failedAssertions: NonNegativeInteger,
+  targetRejections: NonNegativeInteger,
+  lastFailedAssertion: z.strictObject({
+    // Deliberately duplicates the five assert-check kinds in core/ir/schema.ts:
+    // reports do not import core IR runtime values, as with CONFIRMS_ISSUE_CODES.
+    // A sixth kind needs a manual update here; there is no exported core union
+    // for a compile-time satisfies cross-check.
+    check: z.enum(['text-visible', 'element-visible', 'text-equals', 'url-matches', 'element-count']),
+    expected: z.string(),
+  }).optional(),
+});
+
+/**
  * Stable executor-unsupported evidence accepted by the report contract.
  *
  * @remarks
@@ -378,6 +404,7 @@ const CaseOtherEnvironmentReportError = z.discriminatedUnion('code', [
   CaseEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED'), details: BrowserLaunchFailedDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('AI_EXECUTOR_UNAVAILABLE'), details: AiExecutorUnavailableDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('AI_RESPONSE_INVALID'), details: AiResponseInvalidDetails.optional() }),
+  CaseEnvironmentErrorBase.extend({ code: z.literal('AGENTIC_STEP_FAILED'), details: AgenticStepFailedDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('UNEXPECTED_CRASH'), details: UnexpectedCrashDetails.optional() }),
 ]);
 

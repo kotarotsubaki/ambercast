@@ -12,6 +12,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # TypeScript 7.0 ships no JS compiler API, which typescript-eslint (peer <6.1.0),
+      # dependency-cruiser (<7) and tools/ scanners need. Revisit when 7.1 ships one (#516).
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
+      # tsdown >=0.22 requires Node ^22.18, above the engines/CI floor of 22.14.
+      # Revisit when that floor reaches 22.18 (#516).
+      - dependency-name: "tsdown"
+        versions: [">=0.22.0"]
     groups:
       development:
         dependency-type: development

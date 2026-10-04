@@ -105,27 +105,48 @@ function extractFlagTokens(text: string): string[] {
   return text.match(/(?<![\w-])--[a-z][a-z-]*(?![\w-])/g) ?? [];
 }
 
+interface PackageJson {
+  [key: string]: unknown;
+  bin?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  description?: string;
+  devDependencies?: Record<string, string>;
+  engines?: Record<string, string>;
+  files?: string[];
+  name?: string;
+  scripts?: Record<string, string>;
+}
+
+const PACKAGE_TOP_LEVEL_KEYS = ['name', 'version', 'description', 'keywords', 'license', 'type', 'repository', 'homepage', 'bugs', 'bin', 'exports', 'files', 'imports', 'engines', 'scripts', 'devDependencies', 'dependencies'];
+const PUBLICATION_METADATA_KEYS = ['name', 'description', 'keywords', 'license', 'type', 'repository', 'homepage', 'bugs', 'bin', 'files', 'imports', 'engines'];
+const CONSUMER_INSTALL_SCRIPTS = ['preinstall', 'install', 'postinstall', 'prepare'];
+
+function loadPackage(): PackageJson {
+  return JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as PackageJson;
+}
+
 /**
- * Removes package.json's version line so SPEC-2's hash pins only the bytes a
- * release should change deliberately (files, bin, the absence of agents, and
- * every other package.json field) rather than the version bump every release
- * PR performs by design. The hash removes the entire matched line — not just
- * the version's own quoted characters — so future edits (a longer
- * pre-release identifier, say) do not shift the pinned byte length in a way
- * that would otherwise look like a metadata-relevant change. The regex assumes
- * package.json's 2-space-indented, LF-terminated formatting and throws when
- * it finds anything other than exactly one match, so a reformat (or a stray
- * second "version"-shaped line) fails the
- * test loudly instead of silently hashing bytes SPEC-2 no longer intends.
+ * Projects the published package's observable shape so dependency-range bumps
+ * from Dependabot, maintainer script additions or removals, key order, and
+ * formatting do not trip this pin when the public contract has not changed.
+ * A real change to that shape should still be detected. `exports` has its own
+ * allowlist test, so its value is outside this projection. A deleted
+ * metadata key is caught the same way a changed value is: indexing a parsed
+ * object with a missing key yields `undefined`, so the key still shows up in
+ * `metadata` with a value that differs from the pinned literal rather than
+ * disappearing from the comparison.
+ *
+ * Expects a parsed package.json-shaped object; the calling test checks the
+ * shape of `scripts` separately. It leaves the input unchanged and returns
+ * the same result for the same input.
  */
-function stripVersionField(bytes: Buffer): Buffer {
-  const text = bytes.toString('utf8');
-  const versionLine = /^ {2}"version": "[^"]*",\n/m;
-  const matches = text.match(new RegExp(versionLine.source, 'gm'));
-  if (matches?.length !== 1) {
-    throw new Error(`expected exactly one package.json version line, found ${matches?.length ?? 0}`);
-  }
-  return Buffer.from(text.replace(versionLine, ''), 'utf8');
+function publicationMetadata(pkg: PackageJson) {
+  const scripts = pkg.scripts ?? {};
+  return {
+    topLevelKeys: Object.keys(pkg).sort(),
+    metadata: Object.fromEntries(PUBLICATION_METADATA_KEYS.map((key) => [key, pkg[key]])),
+    consumerInstallScripts: CONSUMER_INSTALL_SCRIPTS.filter((name) => Object.hasOwn(scripts, name)),
+  };
 }
 
 describe('official ambercast skill', () => {
@@ -200,24 +221,84 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-2 pins the approved package publication metadata', () => {
-    const packageBytes = readFileSync(new URL('../../../package.json', import.meta.url));
-    const pkg = JSON.parse(packageBytes.toString('utf8'));
-
-    expect(pkg.files).toStrictEqual(['bin', 'dist', 'skills']);
-    expect(createHash('sha256').update(stripVersionField(packageBytes)).digest('hex')).toBe('11ffc4de1e16d59da7beb846161fe31d2ed82e7f82dbb6143786be8f0dfc6010');
+    const pkg = loadPackage();
+    expect(typeof pkg.scripts).toBe('object');
+    expect(pkg.scripts).not.toBeNull();
+    expect(Array.isArray(pkg.scripts)).toBe(false);
+    const { topLevelKeys, metadata, consumerInstallScripts } = publicationMetadata(pkg);
+    expect(topLevelKeys).toStrictEqual([...PACKAGE_TOP_LEVEL_KEYS].sort());
+    expect(metadata).toStrictEqual({
+      name: 'ambercast',
+      description: 'Prompt-native E2E testing: AI generates a deterministic, lockfile-like execution plan from natural-language test prompts, replayed with zero AI calls. Under active development.',
+      keywords: ['e2e', 'testing', 'ai', 'prompt', 'automation', 'deterministic'],
+      license: 'MIT',
+      type: 'module',
+      repository: { type: 'git', url: 'git+https://github.com/kotarotsubaki/ambercast.git' },
+      homepage: 'https://github.com/kotarotsubaki/ambercast#readme',
+      bugs: { url: 'https://github.com/kotarotsubaki/ambercast/issues' },
+      bin: { ambercast: 'bin/ambercast.js' },
+      files: ['bin', 'dist', 'skills'],
+      imports: {
+        '#core/*': './src/core/*',
+        '#ports/*': './src/ports/*',
+        '#adapters/*': './src/adapters/*',
+        '#usecases/*': './src/usecases/*',
+        '#report/*': './src/report/*',
+        '#config/*': './src/config/*',
+        '#runtime/*': './src/runtime/*',
+      },
+      engines: { node: '>=22.14' },
+    });
+    expect(consumerInstallScripts).toStrictEqual([]);
   });
 
-  it('SPEC-2 keeps the publication-metadata pin independent of the released version', () => {
-    const packageBytes = readFileSync(new URL('../../../package.json', import.meta.url));
-    const pinnedHash = createHash('sha256').update(stripVersionField(packageBytes)).digest('hex');
+  it.each([
+    ['the version changes', (clone) => { clone.version = '999.999.999-regression-probe'; }],
+    ['a devDependencies value changes', (clone) => { clone.devDependencies!.vitest = '^5.0.3'; }],
+    ['a devDependencies key is deleted', (clone) => { delete clone.devDependencies!['dependency-cruiser']; }],
+    ['a dependencies value changes', (clone) => { clone.dependencies!.zod = '^0.0.0-probe'; }],
+    ['a dependencies key is added', (clone) => { clone.dependencies!['probe-dep'] = '1.0.0'; }],
+    ['a scripts value changes', (clone) => { clone.scripts!.test = 'vitest run --probe'; }],
+    ['a scripts key is added', (clone) => { clone.scripts!['probe-added'] = 'true'; }],
+    ['a scripts key is deleted', (clone) => { delete clone.scripts!.lint; }],
+    ['the top-level keys are reordered', (clone) => Object.fromEntries(Object.entries(clone).reverse())],
+  ] satisfies Array<[string, (clone: PackageJson) => PackageJson | void]>)('SPEC-2 keeps the publication-metadata pin unchanged when only %s', (_label, mutate) => {
+    const pkg = loadPackage();
+    const clone = structuredClone(pkg) as PackageJson;
+    const mutated = mutate(clone) ?? clone;
+    expect(publicationMetadata(mutated)).toStrictEqual(publicationMetadata(pkg));
+  });
 
-    const mutatedBytes = Buffer.from(
-      packageBytes.toString('utf8').replace(/"version": "[^"]*"/, '"version": "999.999.999-regression-probe"'),
-      'utf8',
-    );
-    const mutatedHash = createHash('sha256').update(stripVersionField(mutatedBytes)).digest('hex');
+  it.each([
+    ['engines.node changes', (clone) => { clone.engines!.node = '>=99'; }, ['metadata']],
+    ['bin gains a key', (clone) => { clone.bin = { ...clone.bin!, probe: 'bin/probe.js' }; }, ['metadata']],
+    ['files gains an entry', (clone) => { clone.files = [...clone.files!, 'src']; }, ['metadata']],
+    ['name is deleted', (clone) => { delete clone.name; }, ['metadata', 'topLevelKeys']],
+    ['a top-level key is added', (clone) => { clone.publishConfig = {}; }, ['topLevelKeys']],
+    ['devDependencies is deleted', (clone) => { delete clone.devDependencies; }, ['topLevelKeys']],
+    ['scripts gains postinstall', (clone) => { clone.scripts!.postinstall = 'node probe.js'; }, ['consumerInstallScripts']],
+    ['scripts gains prepare', (clone) => { clone.scripts!.prepare = 'node probe.js'; }, ['consumerInstallScripts']],
+  ] satisfies Array<[string, (clone: PackageJson) => void, Array<'topLevelKeys' | 'metadata' | 'consumerInstallScripts'>]>)('SPEC-2 detects a changed package shape: %s', (_label, mutate, changedFields) => {
+    const pkg = loadPackage();
+    const clone = structuredClone(pkg) as PackageJson;
+    mutate(clone);
+    const before = publicationMetadata(pkg);
+    const after = publicationMetadata(clone);
+    for (const field of (['topLevelKeys', 'metadata', 'consumerInstallScripts'] as const)) {
+      if ((changedFields as Array<'topLevelKeys' | 'metadata' | 'consumerInstallScripts'>).includes(field)) expect(after[field]).not.toStrictEqual(before[field]);
+      else expect(after[field]).toStrictEqual(before[field]);
+    }
+  });
 
-    expect(mutatedHash).toBe(pinnedHash);
+  it.each(PUBLICATION_METADATA_KEYS)('SPEC-2 detects a changed publication metadata value: %s', (key) => {
+    const pkg = loadPackage();
+    const clone = structuredClone(pkg) as PackageJson;
+    clone[key] = '__probe__';
+    const before = publicationMetadata(pkg);
+    const after = publicationMetadata(clone);
+    expect(after.metadata).not.toStrictEqual(before.metadata);
+    expect(after.topLevelKeys).toStrictEqual(before.topLevelKeys);
+    expect(after.consumerInstallScripts).toStrictEqual(before.consumerInstallScripts);
   });
 
   it('SPEC-3 keeps the skill directory intentionally small', () => {

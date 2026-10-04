@@ -3072,7 +3072,7 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
                 "node_modules/", "dist/", "*.tgz",
                 "# local AI agent state (shared Claude/Codex config is committed)",
                 ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
-                ".claude/impl/", "CLAUDE.local.md",
+                ".claude/impl/", ".claude/impl-archive/", "CLAUDE.local.md",
                 "# product runtime artifacts (run results, screenshots — see AGENTS.md)",
                 ".runs/", ".env", ".env.*", "!.env.example", "coverage/", ".DS_Store",
             ),
@@ -3086,7 +3086,8 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
             [
                 "node_modules/", "dist/", "*.tgz",
                 ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
-                ".claude/impl/", "CLAUDE.local.md", ".runs/", ".env", ".env.*",
+                ".claude/impl/", ".claude/impl-archive/", "CLAUDE.local.md",
+                ".runs/", ".env", ".env.*",
                 "!.env.example", "coverage/", ".DS_Store",
             ],
         )

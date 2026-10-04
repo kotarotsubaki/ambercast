@@ -1131,7 +1131,7 @@ admission-denied フェーズは `repairTrace` エントリを追加しません
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
 
-action ステップでは、ローカル検証後に `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非負整数, aiProposalMs?: 非負整数 }` を含められます。`confirmed` はケース終了時の値であり、所要時間のフィールドは該当する段階を実行した場合にのみ現れます。それ以前の binding 失敗はケースエラーとして報告されます。
+action と capture のステップでは、ローカル検証後に `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非負整数, aiProposalMs?: 非負整数 }` を含められます。`confirmed` は `grounding` では常に `true` です（以前の実行で確定済みの entry に由来し、この実行で entry を書き込んだことは意味しません）。`quoted-match` と `ai-proposed` ではケース終了時の値です。所要時間のフィールドは該当する段階を実行した場合にのみ現れます。それ以前の binding 失敗はケースエラーとして報告されます。
 
 ## review の懸念事項 {#review-concerns}
 

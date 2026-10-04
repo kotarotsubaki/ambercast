@@ -486,11 +486,14 @@ export const StepResult = z.strictObject({
   screenshotOmitted: z.literal('secret-detected').optional(),
   observed: Observed.optional(),
   /**
-   * Action-kind binding evidence emitted after local verification, including
-   * confirmed grounding, candidate-changed, and action-failure outcomes. Steps
-   * stopped earlier (such as missing or no-candidate) report their reason in
-   * the case error instead. `confirmed` is its value at case end, even when a
-   * later confirming step flips it; stage timings appear only if each ran.
+   * Action- and capture-kind binding evidence emitted after local verification,
+   * including confirmed grounding, candidate-changed, and action-failure
+   * outcomes. Steps stopped earlier (such as missing or no-candidate) report
+   * their reason in the case error instead. `confirmed` is always true for
+   * `grounding`, because the binding came from an entry confirmed in an earlier
+   * run (it does not mean the entry was written in this run); for `quoted-match`
+   * and `ai-proposed` it is the value at case end, even when a later confirming
+   * step flips it. Stage timings appear only if each ran.
    */
   binding: z.strictObject({
     provenance: z.enum(['grounding', 'quoted-match', 'ai-proposed']),

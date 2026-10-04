@@ -6,7 +6,7 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 
 ### Confirmation references {#confirmation-references}
 
-An assertion or `ai` step may have a non-empty `confirms` array naming earlier `click`, `press`, `fill`, `fill-secret`, or `capture` steps whose grounding it confirms when it passes. Validation reports `confirms-unknown-step` for an unknown ID, `confirms-not-earlier` for the same or a later step, `confirms-not-action` for an ineligible step, `confirms-duplicate` for a repeated ID, and `confirms-unsorted` when IDs are not in ascending Plan order; see [[spec/conformance#semantic-validation]]. Target identity is not checked. [repo:src/core/ir/confirms-validation.ts:35]
+An assertion or `ai` step may have a non-empty `confirms` array naming earlier `click`, `press`, `fill`, `fill-secret`, or `capture` steps whose grounding it confirms when it passes. `generate` and `heal` remove `confirms` references to `navigate` steps before validation. Validation reports `confirms-unknown-step` for an unknown ID, `confirms-not-earlier` for the same or a later step, `confirms-not-action` for an ineligible step, `confirms-duplicate` for a repeated ID, and `confirms-unsorted` when IDs are not in ascending Plan order; see [[spec/conformance#semantic-validation]]. Target identity is not checked. [repo:src/core/ir/confirms-validation.ts:35]
 
 ### `action` / `click` {#action-click}
 
@@ -203,7 +203,7 @@ Each member of a committed AI step's optional `secrets` array is a strict `AiSte
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once.
+Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once. The eight polling sites in `run.ts` are first-binding stage 1, four plan assert loops (the three quoted-element checks and the `text-visible` / `url-matches` browser-check path), the AI-directed assert tool, and the two trace replay pass/fail judgments (events and verification). The AI-directed assert tool and trace replay use the Target's `resolveTimeoutMs`; each site makes one final observation after a wait that reaches the deadline, and that observation determines the result.
 
 `element-visible`, `text-equals`, and `element-count` never consult or update grounding or call AI: with or without `--resolve`, they poll `accessibilitySnapshot()` and `matchQuotedCandidates` until their deadline. [repo:src/usecases/run.ts:2780-2855]
 

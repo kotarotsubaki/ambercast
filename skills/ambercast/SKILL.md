@@ -57,6 +57,7 @@ Structure:
 - One verification per sentence, and every action sentence ends in an observable result: a page, a message, a visible value.
 - Quote the literal UI text naming each element you act on or check, using straight double quotes or your prompt's local quotation marks. This gives `generate` a concrete text anchor when it first finds the element.
 - Put an exact display requirement in its own assert sentence, with the expected text quoted. Text quoted in an action sentence helps find the element to act on; it does not assert what the next screen displays.
+- Quote text in a success criterion that appears only after the action; text already visible before it, such as the clicked link or button name, cannot confirm the screen changed.
 - If `generate` warns `action-unconfirmed`, no assertion or agentic step confirms that action. Its element binding cannot be cached, so every later `run` of that step needs `--resolve`. When the UI offers something meaningful to check, add a verification sentence after the action.
 - Write data preparation as user actions inside the prompt (create the record through the UI before checking it).
 - One file per user story. Put unrelated flows in separate files.

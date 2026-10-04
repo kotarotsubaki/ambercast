@@ -16,6 +16,46 @@ export interface ConfirmsValidationIssue {
   readonly message: string;
 }
 
+/**
+ * Removes navigation references from confirmation lists before plan validation.
+ *
+ * @remarks A confirmation is held by an assert or ai step, referencing an
+ * earlier click, press, fill, fill-secret action, or capture step whose outcome
+ * it depends on and that a later repair can ground again. Navigation has no locator
+ * to rebind, so a provider's navigation reference cannot serve that role.
+ * Rejecting it as `confirms-not-action` would conflate this structural mismatch
+ * with an incorrectly chosen confirmable action, though the rejection path has
+ * no distinct recovery for navigation. The reference is therefore inert.
+ * The minimal structural bound accepts both committed plan steps and Stage 2
+ * provider steps without coupling their otherwise different schemas.
+ * Every caller's `T` must declare `confirms` as a genuinely optional
+ * `readonly string[] | undefined` field, never a required field or tuple.
+ * The explicit `undefined` also matches Zod output under
+ * `exactOptionalPropertyTypes`.
+ * Removing an emptied `confirms` property requires an internal `as T` cast
+ * because the structural bound cannot exclude stricter callers. Every real
+ * caller declares `confirms` as genuinely optional, so the cast is sound for
+ * both current call sites; future callers must preserve that contract.
+ *
+ * @param steps - Steps to project without changing their other fields.
+ * @param navigateIds - IDs of navigation actions in the caller's plan context.
+ * @returns Steps with those IDs removed from `confirms`; an emptied list has
+ * no `confirms` property, and a step lacking `confirms` stays untouched.
+ */
+export function dropNavigateConfirms<T extends { id: string; confirms?: readonly string[] | undefined }>(
+  steps: readonly T[],
+  navigateIds: ReadonlySet<string>,
+): T[] {
+  return steps.map((step) => {
+    if (step.confirms === undefined) return step;
+    const confirms = step.confirms.filter((id) => !navigateIds.has(id));
+    if (confirms.length === step.confirms.length) return step;
+    if (confirms.length > 0) return { ...step, confirms };
+    const { confirms: _removed, ...withoutConfirms } = step;
+    return withoutConfirms as T; // ponytail: as T trusts every caller's confirms to stay optional; upgrade to a branded/exact-shape type if a stricter-confirms caller appears.
+  });
+}
+
 // Type guard to check if a step has the confirms property
 function hasConfirms(step: Step): step is Step & { confirms: readonly string[] } {
   const confirms = (step as { confirms?: unknown }).confirms;

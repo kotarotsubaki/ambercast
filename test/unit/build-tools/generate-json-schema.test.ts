@@ -57,6 +57,7 @@ const EXPECTED_REPORT_ERROR_CODES = [
   'BROWSER_LAUNCH_FAILED',
   'AI_EXECUTOR_UNAVAILABLE',
   'AI_RESPONSE_INVALID',
+  'AGENTIC_STEP_FAILED',
   'FS_IO_ERROR',
   'UNEXPECTED_CRASH',
   'INTERRUPTED',
@@ -101,7 +102,7 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
           planned: ['review', 'baseline', 'restore'],
-          schemaVersions: { plan: 5, grounding: 3, report: '3.8' },
+          schemaVersions: { plan: 5, grounding: 3, report: '3.9' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
@@ -164,7 +165,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
       planned: ['review', 'baseline', 'restore'],
-      schemaVersions: { plan: 5, grounding: 3, report: '3.8' },
+      schemaVersions: { plan: 5, grounding: 3, report: '3.9' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,

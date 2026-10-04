@@ -49,7 +49,7 @@ import type { AiAgenticRequest, InstructionCoveredAiAgenticRequest } from '#port
 import type { BrowserSession, GroundedResolution, PerformableAction } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { buildRedactedAiProposalContext, classifyBrowserLaunchFailure, jsonContainsResolvedSecret, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
+import { buildRedactedAiProposalContext, buildUnclassifiedRejectionEvent, classifyBrowserLaunchFailure, jsonContainsResolvedSecret, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { buildRunReport } from '#usecases/run-report.js';
@@ -217,8 +217,8 @@ describe('TEST-R11 report and event vocabulary', () => {
   const stepEvents = (events: ReturnType<typeof createRecordingEventSink>) =>
     events.emitted().filter((event): event is Extract<RunEvent, { type: 'step-result' }> => event.type === 'step-result');
 
-  it('accepts report 3.8 bindings and all four new unresolved reasons', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
+  it('accepts report 3.9 bindings and all four new unresolved reasons', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
     expect(StepResult.parse({
       id: 'click-submit', type: 'action', target: 'web', status: 'passed',
       binding: { provenance: 'grounding', confirmed: true },
@@ -802,6 +802,11 @@ function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
   };
 
   return { deps, uiExecutor, events, recordingStorage, sessionFactory, resolveAiExecutor };
+}
+
+function withSingleAssertionObservation(deps: RunDeps): RunDeps {
+  // These cases isolate non-polling behavior; TEST-B1-B8 cover retries with a positive budget.
+  return { ...deps, config: { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } };
 }
 
 function elementGrounding(stepIds: readonly string[], locators: Readonly<Record<string, ElementRef>> = {}, fingerprint: Fingerprint = FINGERPRINT, intentDigests: Readonly<Record<string, string>> = {}): GroundingDocument['entries'] {
@@ -3716,6 +3721,7 @@ describe('run AI lifecycle accounting', () => {
       .mockReturnValueOnce(100)
       .mockReturnValueOnce(100)
       .mockReturnValueOnce(200.4)
+      .mockReturnValueOnce(200.4)
       .mockReturnValueOnce(208)
       .mockReturnValueOnce(250);
     const executor = createFakeAiExecutor({
@@ -3749,7 +3755,7 @@ describe('run AI lifecycle accounting', () => {
       expectedAiCall('ai-1', 'recorded-ai', testPath),
       { type: 'ai-result', callId: 'ai-1', durationMs: 8, outcome: 'ok' },
     ]);
-    expect(monotonicMs).toHaveBeenCalledTimes(5);
+    expect(monotonicMs).toHaveBeenCalledTimes(6);
   });
 
   it('emits an error result for execute rejection, clamps a negative delta, and still counts the dispatch', async () => {
@@ -3805,6 +3811,76 @@ describe('run AI lifecycle accounting', () => {
 });
 
 describe('run agentic fallback pipeline', () => {
+  it('TEST-B6 polls a verification-only trace without calling AI', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]), { assertOutcomes: [
+      { passed: false, message: 'Not yet.' }, { passed: true },
+    ] });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()], aiGrounding(coveredTrace([], [
+      { type: 'assert', check: 'element-visible', element: SUBMIT },
+    ])));
+    const outcome = await run(base.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed' });
+    expect(base.events.emitted()).toContainEqual({ type: 'step-result', stepId: 'recorded-ai', via: 'trace-replay' });
+    expect(base.resolveAiExecutor).not.toHaveBeenCalled();
+    expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(2);
+    expect(session.operations().filter((operation) => operation.type === 'resolve-grounded')).toHaveLength(1);
+    expect(clock.sleepCalls).toEqual([100]);
+  });
+
+  it.each([300, 0])('TEST-B7 samples the verification deadline at %i ms before reporting unresolved', async (resolveTimeoutMs) => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const observations: number[] = [];
+    const session = createFakeBrowserSession(new Map(), {
+      assertOutcome: { passed: false, message: 'Still absent.' },
+      onEvaluateAssert: () => observations.push(clock.monotonicMs()),
+    });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs } } } };
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()], aiGrounding(coveredTrace([], [passingText('Dashboard')])));
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', exitCode: 4 });
+    expect(observations).toHaveLength(resolveTimeoutMs === 0 ? 1 : 4);
+    expect(observations.at(-1)).toBe(resolveTimeoutMs);
+    expect(clock.sleepCalls.reduce((sum, value) => sum + value, 0)).toBe(resolveTimeoutMs);
+    expect(base.resolveAiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('TEST-B7 falls through to agentic execution after the verification deadline with resolve enabled', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: false, message: 'Still absent.' } });
+    const executor = createFakeAiExecutor({ async executeAgentic() { return { outcome: 'failure' }; } });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 300 } } } };
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()], aiGrounding(coveredTrace([], [passingText('Dashboard')])));
+    await run(deps, DEFAULT_OPTIONS);
+    expect(executor.agenticRequests).toHaveLength(1);
+    expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(4);
+    expect(clock.sleepCalls.reduce((sum, ms) => sum + ms, 0)).toBe(300);
+  });
+
+  it('TEST-B8 polls an events assertion and continues with recorded actions', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const session = createFakeBrowserSession(new Map(), { assertOutcomes: [
+      { passed: false, message: 'Not yet.' }, { passed: true }, { passed: true },
+    ] });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()], aiGrounding(coveredTrace(
+      [passingText('Ready'), { type: 'navigate', url: '/dashboard' }], [passingText('Dashboard')],
+    )));
+    const outcome = await run(base.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'passed' });
+    expect(base.events.emitted()).toContainEqual({ type: 'step-result', stepId: 'recorded-ai', via: 'trace-replay' });
+    expect(session.operations().map((operation) => operation.type)).toEqual([
+      'evaluate-assert', 'evaluate-assert', 'perform', 'evaluate-assert',
+    ]);
+    expect(base.resolveAiExecutor).not.toHaveBeenCalled();
+  });
   it('records one cold-start AI call, persists its unresolved trace, then replays it without an AI call or write', async () => {
     const firstSession = createFakeBrowserSession(new Map());
     const secondSession = createFakeBrowserSession(new Map());
@@ -4322,7 +4398,7 @@ describe('run agentic fallback pipeline', () => {
 
     expect(controllerRejection).toBeInstanceOf(Error);
     expect((controllerRejection as Error).message).toBe(`Fresh agentic browser rejected ${secretRef}.`);
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'agentic-step-failed' });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       explanation: 'The AI-directed interaction did not complete successfully.',
@@ -4384,7 +4460,7 @@ describe('run agentic fallback pipeline', () => {
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()], aiGrounding(priorTrace));
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result).toMatchObject({ status: 'passed' });
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
@@ -4440,7 +4516,7 @@ describe('run agentic fallback pipeline', () => {
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()], aiGrounding(priorTrace));
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
@@ -4583,7 +4659,7 @@ describe('run agentic fallback pipeline', () => {
       aiGrounding(coveredTrace([], [passingText('Cached dashboard')])),
     );
 
-    const outcome = await run(deps, { ...DEFAULT_OPTIONS, resolve: false });
+    const outcome = await run(withSingleAssertionObservation(deps), { ...DEFAULT_OPTIONS, resolve: false });
 
     expect(outcome.results[0]?.error).toMatchObject({
       kind: 'grounding-unresolved',
@@ -6276,6 +6352,280 @@ describe('run path-C pre-scan', () => {
 });
 
 describe('run agentic wrapper state machine', () => {
+  it('TEST-B9 counts a fail-then-pass poll as one passed assertion without retaining its intermediate miss', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const session = createFakeBrowserSession(new Map(), { assertOutcomes: [
+      { passed: false, message: 'Not yet.' }, { passed: true },
+    ] });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await request.controller.evaluateAssert(passingText('X'));
+      return { outcome: 'failure' };
+    } });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+    expect(report.envelope.errors[0]).toMatchObject({ code: 'AGENTIC_STEP_FAILED', details: {
+      stepId: 'recorded-ai', actions: 0, assertions: 1, passedAssertions: 1, failedAssertions: 0, targetRejections: 0,
+    } });
+    const failure = report.envelope.errors.find((error) => error.code === 'AGENTIC_STEP_FAILED');
+    if (failure?.code === 'AGENTIC_STEP_FAILED') expect(failure.details).not.toHaveProperty('lastFailedAssertion');
+    expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(2);
+  });
+  it('TEST-B9 retains an earlier failed call after a separate fail-then-pass call', async () => {
+    let sleeps = 0;
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0, () => ++sleeps === 1 ? 5_000 : 100);
+    const session = createFakeBrowserSession(new Map(), { assertOutcomes: [
+      { passed: false, message: 'First call failed.' },
+      { passed: false, message: 'Second call is waiting.' }, { passed: true },
+    ] });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      expect((await request.controller.evaluateAssert(passingText('First'))).passed).toBe(false);
+      expect((await request.controller.evaluateAssert(passingText('Second'))).passed).toBe(true);
+      return { outcome: 'failure' };
+    } });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+    expect(report.envelope.errors[0]).toMatchObject({ code: 'AGENTIC_STEP_FAILED', details: {
+      assertions: 2, passedAssertions: 1, failedAssertions: 1,
+      lastFailedAssertion: { check: 'text-visible', expected: 'Text "First" is visible.' },
+    } });
+    expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(3);
+  });
+  it('TEST-B3 classifies an AI deadline that aborts assertion polling as AI_EXECUTOR_UNAVAILABLE', async () => {
+    vi.useFakeTimers();
+    try {
+      let entered!: () => void;
+      const pollingEntered = new Promise<void>((resolve) => { entered = resolve; });
+      const fixedClock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0, () => 0);
+      const clock = {
+        ...fixedClock,
+        async sleep(ms: number, signal?: AbortSignal): Promise<void> {
+          entered();
+          await new Promise<void>((resolve) => setTimeout(resolve, ms));
+          signal?.throwIfAborted();
+        },
+      };
+      const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: false, message: 'Still missing.' } });
+      let caughtAbort: unknown;
+      let deadlineReason: unknown;
+      const executor = createFakeAiExecutor({ async executeAgentic(request) {
+        try { await request.controller.evaluateAssert(passingText('Dashboard')); }
+        catch (error) {
+          caughtAbort = error;
+          deadlineReason = request.signal?.reason;
+          throw error;
+        }
+        return { outcome: 'success' };
+      } });
+      const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+      const deps = { ...base.deps, config: { ...base.deps.config, ai: { ...base.deps.config.ai, timeoutMs: 1_000 } } };
+      const testPath = await writePrompt(base.recordingStorage.storage);
+      await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+      const pending = run(deps, DEFAULT_OPTIONS);
+      await pollingEntered;
+      await vi.advanceTimersByTimeAsync(1_000);
+      const outcome = await pending;
+      await vi.advanceTimersByTimeAsync(100);
+      expectAiTimeoutOutcome(outcome, 'recorded-ai');
+      expect(deadlineReason).toBeInstanceOf(Error);
+      expect(caughtAbort).toBe(deadlineReason);
+      expect(session.operations().filter((operation) => operation.type === 'evaluate-assert').length).toBeGreaterThan(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('TEST-B3 preserves caller interruption while polling an assertion', async () => {
+    const interruption = new AbortController();
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0, (ms) => {
+      interruption.abort(new Error('Stop the run.'));
+      return ms;
+    });
+    const session = createFakeBrowserSession(new Map(), { assertOutcome: { passed: false, message: 'Still missing.' } });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await request.controller.evaluateAssert(passingText('Dashboard'));
+      return { outcome: 'success' };
+    } });
+    const base = createScenario({ signal: interruption.signal, clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    expectCallerAbortOutcome(outcome, 'recorded-ai');
+    expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(1);
+  });
+
+  it('TEST-B3 returns a completed passing observation even if interruption fires during it', async () => {
+    const interruption = new AbortController();
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    let calls = 0;
+    let observed: boolean | undefined;
+    const session = createFakeBrowserSession(new Map(), {
+      assertOutcomes: [{ passed: false, message: 'Waiting.' }, { passed: true }],
+      onEvaluateAssert: () => { if (++calls === 2) interruption.abort(new Error('Stop after observation.')); },
+    });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      observed = (await request.controller.evaluateAssert(passingText('Dashboard'))).passed;
+      return { outcome: 'failure' };
+    } });
+    const base = createScenario({ signal: interruption.signal, clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    await run(base.deps, DEFAULT_OPTIONS);
+    expect(observed).toBe(true);
+    expect(calls).toBe(2);
+  });
+  it('TEST-B11 excludes resolved secret text from explicit-failure report JSON', async () => {
+    const secretRef = '{{secrets.AGENTIC_FAILURE_DUMMY}}';
+    const secretValue = 'AGENTIC_FAILURE_DUMMY_SECRET_VALUE';
+    const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
+      assertOutcome: { passed: false, message: `Visible text contained ${secretValue}.` },
+    });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+      await request.controller.evaluateAssert(passingText('X'));
+      return { outcome: 'failure' };
+    } });
+    const base = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep('recorded-ai', [secretRef])]);
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+    expect(report.envelope.errors[0]).toMatchObject({ code: 'AGENTIC_STEP_FAILED' });
+    expect(JSON.stringify(report.envelope)).not.toContain(secretValue);
+  });
+  it('TEST-B5 returns target rejection before evaluation and without a polling wait', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+    vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason: 'element-not-found' });
+    let caught: unknown;
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      try { await request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', element: SUBMIT }); }
+      catch (error) { caught = error; }
+      return { outcome: 'success' };
+    } });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    expect(caught).toMatchObject({ tool: 'ambercast_evaluate_assert', reason: 'element-not-found' });
+    expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(0);
+    expect(clock.sleepCalls).toEqual([]);
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation: 'The AI-directed interaction completed without terminal verification evidence.' });
+  });
+
+  it('TEST-B5 includes four seconds of binding in the five-second evaluation deadline', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const observations: number[] = [];
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]), {
+      assertOutcome: { passed: false, message: 'Still missing.' },
+      onEvaluateAssert: () => observations.push(clock.monotonicMs()),
+    });
+    const bind = session.resolveGrounded.bind(session);
+    vi.spyOn(session, 'resolveGrounded').mockImplementation(async (...args) => {
+      await clock.sleep(4_000);
+      return bind(...args);
+    });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await request.controller.evaluateAssert({ type: 'assert', check: 'element-visible', element: SUBMIT });
+      return { outcome: 'failure' };
+    } });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    await run(base.deps, DEFAULT_OPTIONS);
+    expect(observations[0]).toBe(4_000);
+    expect(observations.at(-1)).toBe(5_000);
+    expect(clock.sleepCalls.reduce((sum, ms) => sum + ms, 0)).toBe(5_000);
+  });
+  it('TEST-B9 classifies explicit failure with completed-call counters and preserves grounding', async () => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const staleTrace = legacyTrace([], [passingText('Cached')]);
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]), { assertOutcomes: [
+      { passed: false, message: 'Cached trace missed.' },
+      { passed: true }, { passed: false, message: 'Missing A.' }, { passed: false, message: 'Missing B.' },
+    ] });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await request.controller.perform({ type: 'navigate', url: '/dashboard' });
+      try { await request.controller.perform({ type: 'click', element: PASSWORD }); } catch (error) {
+        expect(error).toBeInstanceOf(AgenticTargetRejection);
+      }
+      await request.controller.evaluateAssert(passingText('Present'));
+      await request.controller.evaluateAssert(passingText('Missing A'));
+      await request.controller.evaluateAssert(passingText('X'));
+      return { outcome: 'failure' };
+    } });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } };
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()], aiGrounding(staleTrace));
+    const groundingBefore = await base.recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`);
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error', explanation: 'The AI-directed interaction did not complete successfully.',
+      steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
+    });
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'agentic-step-failed', exitCode: 3 });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED', caseId: outcome.results[0]!.result.id,
+      message: 'The AI-directed interaction did not complete successfully.',
+      details: { stepId: 'recorded-ai', actions: 1, assertions: 3, passedAssertions: 1,
+        failedAssertions: 2, targetRejections: 1,
+        lastFailedAssertion: { check: 'text-visible', expected: 'Text "X" is visible.' } },
+    }]);
+    expect(await base.recordingStorage.storage.readText(`${TEST_DIR}/login.ambercast.grounding.json`)).toBe(groundingBefore);
+  });
+
+  it('TEST-B10 omits the last-failure key when the child declares failure without tools', async () => {
+    const executor = createFakeAiExecutor({ async executeAgentic() { return { outcome: 'failure' }; } });
+    const base = createScenario({ resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+    expect(report.envelope.errors[0]).toMatchObject({ code: 'AGENTIC_STEP_FAILED', details: {
+      stepId: 'recorded-ai', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0,
+    } });
+    const failure = report.envelope.errors.find((error) => error.code === 'AGENTIC_STEP_FAILED');
+    expect(failure).toBeDefined();
+    if (failure?.code === 'AGENTIC_STEP_FAILED') expect(failure.details).not.toHaveProperty('lastFailedAssertion');
+  });
+  it.each([
+    { name: 'TEST-B1 waits for a second passing observation', timeoutMs: 500, outcomes: [{ passed: false, message: 'Waiting.' }, { passed: true }], expected: true, calls: 2, elapsed: 100 },
+    { name: 'TEST-B2 samples an always-failing assertion at the deadline', timeoutMs: 300, outcomes: undefined, expected: false, calls: 4, elapsed: 300 },
+    { name: 'TEST-B4 performs one observation with a zero timeout', timeoutMs: 0, outcomes: undefined, expected: false, calls: 1, elapsed: 0 },
+  ] as const)('$name', async ({ timeoutMs, outcomes, expected, calls, elapsed }) => {
+    const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
+    const observations: number[] = [];
+    const session = createFakeBrowserSession(new Map(), {
+      ...(outcomes === undefined ? { assertOutcome: { passed: false, message: 'Waiting.' } } : { assertOutcomes: outcomes }),
+      onEvaluateAssert: () => observations.push(clock.monotonicMs()),
+    });
+    let observed: boolean | undefined;
+    const executor = createFakeAiExecutor({
+      async executeAgentic(request) {
+        observed = (await request.controller.evaluateAssert(passingText('Dashboard'))).passed;
+        return { outcome: 'failure' };
+      },
+    });
+    const base = createScenario({ clock, uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: timeoutMs } } } };
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    await run(deps, DEFAULT_OPTIONS);
+    expect(observed).toBe(expected);
+    expect(observations).toHaveLength(calls);
+    expect(observations.at(-1)).toBe(elapsed);
+    expect(clock.sleepCalls.reduce((sum, value) => sum + value, 0)).toBe(elapsed);
+  });
   it('writes a trace with a single trailing passed assertion and retains earlier actions as events', async () => {
     const session = createFakeBrowserSession(new Map());
     const executor = createFakeAiExecutor({
@@ -6385,7 +6735,7 @@ describe('run agentic wrapper state machine', () => {
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(aiGrounding(coveredTrace(
@@ -6460,7 +6810,7 @@ describe('run agentic wrapper state machine', () => {
       const testPath = await writePrompt(recordingStorage.storage);
       const prior = options.fallback ? aiGrounding(legacyTrace([], [passingText('Cached trace')])) : {};
       await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()], prior);
-      return { outcome: await run(deps, DEFAULT_OPTIONS), storage: recordingStorage.storage, testPath };
+      return { outcome: await run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS), storage: recordingStorage.storage, testPath };
     }
 
     it('a: rejects success after a passing assertion and target rejection without changing grounding', async () => {
@@ -6549,7 +6899,7 @@ describe('run agentic wrapper state machine', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()], aiGrounding(staleTrace));
     recordingStorage.writes.length = 0;
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result.status).toBe('passed');
     expect(recordingStorage.writes).toHaveLength(1);
@@ -6576,7 +6926,7 @@ describe('run agentic wrapper state machine', () => {
     const testPath = await writePrompt(recordingStorage.storage);
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()], aiGrounding(staleTrace));
 
-    await expect(run(deps, DEFAULT_OPTIONS)).resolves.toMatchObject({ results: [{ result: { status: 'passed' } }] });
+    await expect(run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS)).resolves.toMatchObject({ results: [{ result: { status: 'passed' } }] });
 
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual(aiGrounding(coveredTrace(
       [{ type: 'navigate', url: '/fresh' }],
@@ -6616,7 +6966,7 @@ describe('run agentic wrapper state machine', () => {
     await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()], aiGrounding(staleTrace));
     recordingStorage.writes.length = 0;
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const outcome = await run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS);
 
     // SPEC-16: an explicit cancellation ends the case as interrupted.
     expect(outcome.results[0]?.result.status).toBe('error');
@@ -6626,6 +6976,65 @@ describe('run agentic wrapper state machine', () => {
 });
 
 describe('run deterministic redaction boundary', () => {
+  it('TEST-B14 keeps child stderr in DEBUG event only, out of reports and persisted run artifacts', async () => {
+    const stderrValue = 'PRIVATE_CHILD_STDERR_CONTENT';
+    const childError = new Error('Agentic provider did not complete successfully.');
+    Object.defineProperty(childError, 'childProcess', {
+      value: { exitCode: 1, signal: null, stderr: stderrValue }, enumerable: false,
+    });
+    const executor = createFakeAiExecutor({ async executeAgentic() { throw childError; } });
+    const base = createScenario({ resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [aiStep()]);
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+    expect(base.events.emitted()).toContainEqual(expect.objectContaining({
+      type: 'unclassified-rejection', childProcess: { exitCode: 1, signal: null, stderrTail: stderrValue },
+    }));
+    expect(JSON.stringify(report.envelope)).not.toContain(stderrValue);
+    expect(JSON.stringify(base.recordingStorage.writes)).not.toContain(stderrValue);
+  });
+  it('TEST-B14 redacts before truncating child stderr at a 2,000-code-point boundary', () => {
+    const secretRef = '{{secrets.X}}';
+    const secretValue = 'A123456789B123456789C123456789';
+    const rawStderr = 'A'.repeat(990) + secretValue + '😀' + 'B'.repeat(1979);
+    expect([...rawStderr]).toHaveLength(3_000);
+    const error = new Error('Child process failed.');
+    Object.defineProperty(error, 'childProcess', {
+      value: { exitCode: 1, signal: null, stderr: rawStderr }, enumerable: false,
+    });
+    const event = buildUnclassifiedRejectionEvent(
+      `${TEST_DIR}/login.test.md`, aiStep(), error,
+      new Map([[secretRef, new Set([secretValue])]]), new Map(),
+    );
+    expect(event).toMatchObject({
+      type: 'unclassified-rejection',
+      childProcess: { exitCode: 1, signal: null, stderrTail: 'A'.repeat(7) + secretRef + '😀' + 'B'.repeat(1979) },
+    });
+    expect(JSON.stringify(event)).not.toContain(secretValue);
+    expect(JSON.stringify(error)).not.toContain(rawStderr);
+  });
+  it('TEST-B14 keeps a surrogate pair intact at the 2,000-code-point stderr cut', () => {
+    const rawStderr = 'A'.repeat(1_000) + '😀' + 'B'.repeat(1_999);
+    expect([...rawStderr]).toHaveLength(3_000);
+    const error = new Error('Child process failed.');
+    Object.defineProperty(error, 'childProcess', {
+      value: { exitCode: 1, signal: null, stderr: rawStderr }, enumerable: false,
+    });
+    const event = buildUnclassifiedRejectionEvent(
+      `${TEST_DIR}/login.test.md`, aiStep(), error, new Map(), new Map(),
+    );
+    expect(event).toMatchObject({ childProcess: {
+      stderrTail: '😀' + 'B'.repeat(1_999),
+    } });
+    const childProcess = (event as unknown as { childProcess?: { stderrTail: string } }).childProcess;
+    expect(childProcess).toBeDefined();
+    if (childProcess !== undefined) {
+      expect([...childProcess.stderrTail]).toHaveLength(2_000);
+      expect(childProcess.stderrTail.charCodeAt(0)).toBe(0xd83d);
+      expect(childProcess.stderrTail.charCodeAt(1)).toBe(0xde00);
+    }
+  });
   const passwordSnapshot = {
     accessibilityTree: { role: 'root', name: '', children: [{ role: 'textbox', name: 'Password', children: [] }] },
     screenshot: new Uint8Array(),

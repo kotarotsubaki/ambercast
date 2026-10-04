@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import { AgenticStepFailedError } from '#core/errors/agentic-step-failed-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
@@ -46,6 +47,7 @@ import {
 } from '#usecases/heal.js';
 import type { GenerateDeps } from '#usecases/generate.js';
 import { PlanNavigationResolutionError, type RunOutcome } from '#usecases/run.js';
+import { buildHealReport } from '#usecases/heal-report.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
@@ -809,6 +811,86 @@ describe('heal state-machine contract', () => {
     await heal(scenario.deps, OPTIONS);
 
     expect(resolves).toEqual([false, true, true]);
+  });
+
+  it('TEST-B12 keeps a declared failure out of heal errors after a Stage-applied final replay', async () => {
+    let attempts = 0;
+    const executor = createFakeAiExecutor({
+      async executeAgentic(request) {
+        attempts += 1;
+        void request;
+        return { outcome: 'failure' };
+      },
+      execute: async (request) => ({
+        data: stage2Frontier(request) === undefined
+          ? { steps: [{
+            id: AI_STEP.id, kind: 'ai', target: 'web', instruction: 'Click Submit',
+            instructionCoverage: [{
+              id: 'dashboard-reached', kind: 'success', startAnchor: 'L3', startColumn: 1,
+              endAnchor: 'L3', endColumn: 56,
+              [GENERATED_INSTRUCTION_TEXT_FIELD]: 'When I submit valid credentials, I reach the dashboard.',
+            }],
+            verificationIntent: [{ criterionId: 'dashboard-reached', assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' } }],
+          }], ambiguities: [] }
+          : { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'navigate', url: '/ignored' }], ambiguities: [] },
+        raw: '{}',
+      }),
+    });
+    const scenario = await createScenario({ steps: [AI_STEP], grounding: {}, aiExecutor: executor });
+    let classifiedFinalReplays = 0;
+    replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
+      if (options.resolve !== true) return;
+      const replay = outcome.results[0] as { error?: AgenticStepFailedError; result: { status: string } } | undefined;
+      if (replay?.result.status !== 'error') return;
+      replay.error = new AgenticStepFailedError('The AI-directed interaction did not complete successfully.', {
+        stepId: 'recorded-ai', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0,
+      });
+      classifiedFinalReplays += 1;
+    };
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(attempts).toBe(3);
+    expect(classifiedFinalReplays).toBeGreaterThan(0);
+    expect(result.outcome.errors).toEqual([]);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 }]));
+    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(result.outcome.results[0]?.stage3Error).toBeUndefined();
+    expect(buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false },
+      outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
+    }).exitCode).toBe(1);
+  });
+
+  it('TEST-B12 omits the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
+    let declarations = 0;
+    const executor = createFakeAiExecutor({
+      async executeAgentic() { declarations += 1; return { outcome: 'failure' }; },
+      execute: async (request) => ({ data: stage2Frontier(request) === undefined
+        ? { steps: [{ id: 'candidate', kind: 'action', target: 'web', action: 'fill-secret', intent: generatedIntent(PASSWORD), secret: { allowedName: 'other' } }], ambiguities: [] }
+        : { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'navigate', url: '/ignored' }], ambiguities: [] }, raw: '{}' }),
+    });
+    const scenario = await createScenario({
+      steps: [AI_STEP, Step.parse({ id: 'retained', kind: 'action', target: 'web', action: 'fill-secret', intent: committedIntent(PASSWORD), secretRef: '{{secrets.password}}' })],
+      grounding: {}, aiExecutor: executor,
+    });
+    let classified = 0;
+    replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
+      if (options.resolve !== true || outcome.results[0]?.result.status !== 'error') return;
+      (outcome.results[0] as { error?: AgenticStepFailedError }).error = new AgenticStepFailedError(
+        'The AI-directed interaction did not complete successfully.',
+        { stepId: 'recorded-ai', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
+      );
+      classified += 1;
+    };
+    const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['other', 'password'] } } }, OPTIONS);
+    expect(declarations).toBeGreaterThan(0);
+    expect(classified).toBeGreaterThan(0);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'secret-set-rejected' }]));
+    expect(result.outcome.errors).toEqual([]);
+    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false },
+      outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
+    }).exitCode).toBe(1);
   });
 
   it('aborts at the initial live measurement when its replay carries an integrity violation', async () => {
@@ -4705,6 +4787,75 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
     });
     const result = await heal(scenario.deps, OPTIONS);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason: 'obligation-mismatch' }]));
+  });
+
+  it.each([
+    ['one click', ['click-submit'], ['visit', 'click-submit']],
+    ['two clicks in reverse provider order', ['click-submit', 'click-after'], ['click-after', 'visit', 'click-submit']],
+  ] as const)('TEST-A8 accepts Stage 2 confirms with %s and retains original action order', async (_name, originalConfirms, confirms) => {
+    const secondClick = Step.parse({ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: committedIntent(AFTER_SUBMIT) });
+    let launch = 0;
+    const scenario = await createScenario({
+      steps: [
+        CONFIRMED_SUBMIT_STEPS[0]!,
+        ...(originalConfirms.length === 2 ? [secondClick] : []),
+        Step.parse({ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: [...originalConfirms] }),
+        Step.parse({ id: 'visit', kind: 'action', target: 'web', action: 'navigate', url: 'https://example.test' }),
+      ],
+      grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT), ...(originalConfirms.length === 2 ? { 'click-after': groundingEntry(AFTER_SUBMIT, FINGERPRINT) } : {}) },
+      sessionEntries: liveEntries(SUBMIT, AFTER_SUBMIT),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => {
+        const entries = liveEntries(SUBMIT, AFTER_SUBMIT);
+        return createFakeBrowserSession(entries, {
+          baseUrl: TARGETS.web.baseUrl, currentUrl: TARGETS.web.baseUrl, snapshot: healSnapshot(entries),
+          assertOutcome: launch++ >= 3 ? { passed: true } : { passed: false, message: 'Dashboard is absent.' },
+        });
+      })),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
+        : { data: { steps: [{ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: [...confirms] }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'repair-me', outcome: 'accepted' },
+    ]));
+    await expect(result.commits.get(OPTIONS.files[0]!)?.commit()).resolves.toEqual({ outcome: 'committed' });
+    const accepted = PlanDocument.parse(JSON.parse(await scenario.storage.readText(PLAN)));
+    expect(accepted.steps.find((step) => step.id === 'repair-me')).toHaveProperty('confirms', originalConfirms);
+  });
+
+  it('TEST-A9 maps a surviving unknown Stage 2 confirms reference to obligation-mismatch', async () => {
+    const scenario = await createScenario({
+      steps: [CONFIRMED_SUBMIT_STEPS[0]!, Step.parse({ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] })],
+      grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) },
+      sessionEntries: liveEntries(SUBMIT),
+      assertOutcome: { passed: false, message: 'Dashboard is absent.' },
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
+        : { data: { steps: [{ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit', 'unknown-action'] }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason: 'obligation-mismatch' },
+    ]));
+  });
+
+  it('TEST-A8 rejects a new known click confirmation as obligation-mismatch', async () => {
+    const secondClick = Step.parse({ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: committedIntent(AFTER_SUBMIT) });
+    const scenario = await createScenario({
+      steps: [CONFIRMED_SUBMIT_STEPS[0]!, secondClick,
+        Step.parse({ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] })],
+      grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT), 'click-after': groundingEntry(AFTER_SUBMIT, FINGERPRINT) },
+      sessionEntries: liveEntries(SUBMIT, AFTER_SUBMIT),
+      assertOutcome: { passed: false, message: 'Dashboard is absent.' },
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
+        : { data: { steps: [{ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit', 'click-after'] }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason: 'obligation-mismatch' },
+    ]));
   });
 
   it('TEST-H5 rejects invalid replacement intent with intent-invalid', async () => {

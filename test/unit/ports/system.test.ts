@@ -46,6 +46,7 @@ describe('system port shapes', () => {
         readonly name: string;
         readonly message: string;
         readonly stack?: string;
+        readonly childProcess?: { readonly exitCode: number | null; readonly signal: string | null; readonly stderrTail: string };
       }
       | {
         readonly type: 'heal-stage2-rejected';

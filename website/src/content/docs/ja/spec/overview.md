@@ -31,7 +31,7 @@ flowchart LR
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
 | Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
-| Report `schemaVersion` | `3.8` | repo:src/report/schema.ts:57 |
+| Report `schemaVersion` | `3.9` | repo:src/report/schema.ts:57 |
 
 ## 読解順序 {#reading-order}
 

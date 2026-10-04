@@ -55,7 +55,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.8' as const,
+  schemaVersion: '3.9' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -65,7 +65,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.8' as const,
+  schemaVersion: '3.9' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -76,7 +76,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.8' as const,
+  schemaVersion: '3.9' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -101,7 +101,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.8' as const,
+  schemaVersion: '3.9' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -270,7 +270,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.8', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.9', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -291,7 +291,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.8', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.9', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -1133,6 +1133,26 @@ describe('main()', () => {
   });
 
   describe('renderHumanReport', () => {
+    it('TEST-B13 renders AGENTIC_STEP_FAILED fields in schema order, including nested assertion detail', () => {
+      expect(ERROR_DETAILS_KEY_ORDER.AGENTIC_STEP_FAILED).toEqual([
+        'stepId', 'actions', 'assertions', 'passedAssertions', 'failedAssertions', 'targetRejections', 'lastFailedAssertion',
+      ]);
+      const rendered = renderHumanReport({
+        ...RUN_ENVELOPE,
+        errors: [{
+          scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED', caseId: 'login',
+          message: 'The AI-directed interaction did not complete successfully.',
+          details: {
+            targetRejections: 1, failedAssertions: 2, passedAssertions: 1, assertions: 3,
+            actions: 1, stepId: 'recorded-ai',
+            lastFailedAssertion: { check: 'text-visible', expected: 'Text "X" is visible.' },
+          },
+        }],
+      } as never, false);
+      expect(rendered).toBe('error AGENTIC_STEP_FAILED [login]: The AI-directed interaction did not complete successfully.\n'
+        + '  details: stepId=recorded-ai; actions=1; assertions=3; passedAssertions=1; failedAssertions=2; targetRejections=1; '
+        + 'lastFailedAssertion={"check":"text-visible","expected":"Text \\"X\\" is visible."}\n');
+    });
     it('renders the run-scope error line without optional hint or details', () => {
       const rendered = renderHumanReport({
         ...RUN_ENVELOPE,

@@ -32,6 +32,7 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'browser-launch-failed', reportCode: 'BROWSER_LAUNCH_FAILED', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'executor-unsupported', reportCode: 'EXECUTOR_UNSUPPORTED', exitCode: 2, reportKind: 'usage' },
   { errorKind: 'ai-executor-unavailable', reportCode: 'AI_EXECUTOR_UNAVAILABLE', exitCode: 3, reportKind: 'environment' },
+  { errorKind: 'agentic-step-failed', reportCode: 'AGENTIC_STEP_FAILED', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'ai-response-invalid', reportCode: 'AI_RESPONSE_INVALID', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'fs-io-error', reportCode: 'FS_IO_ERROR', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'unexpected-crash', reportCode: 'UNEXPECTED_CRASH', exitCode: 3, reportKind: 'environment' },
@@ -57,6 +58,7 @@ const REPORTABLE_ERROR_KINDS = [
   'browser-launch-failed',
   'executor-unsupported',
   'ai-executor-unavailable',
+  'agentic-step-failed',
   'ai-response-invalid',
   'fs-io-error',
   'unexpected-crash',
@@ -89,7 +91,7 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     expect(new Set(mappedKinds)).toStrictEqual(new Set(REPORTABLE_ERROR_KINDS));
   });
 
-  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind, reportCode }) => errorKind !== 'interrupted' && errorKind !== 'prompt-path-invalid' && !CASE_SCOPE_ONLY_CODES.includes(reportCode as (typeof CASE_SCOPE_ONLY_CODES)[number])))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
+  it.each(ERROR_CODE_CORRESPONDENCE.filter(({ errorKind, reportCode }) => errorKind !== 'interrupted' && errorKind !== 'prompt-path-invalid' && reportCode !== 'AGENTIC_STEP_FAILED' && !CASE_SCOPE_ONLY_CODES.includes(reportCode as (typeof CASE_SCOPE_ONLY_CODES)[number])))('accepts $reportCode through both ReportError scopes', ({ reportCode, reportKind }) => {
     expectAccepted(ReportError, {
       scope: 'run',
       kind: reportKind,
@@ -111,6 +113,16 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     });
     expect(ReportError.safeParse({
       scope: 'run', kind: 'usage', code: 'GROUNDING_UNRESOLVED', message: 'No cached grounding is available.',
+    }).success).toBe(false);
+  });
+
+  it('TEST-B13 accepts AGENTIC_STEP_FAILED only with case-scoped environment details', () => {
+    const details = { stepId: 'recorded-ai', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0 };
+    expectAccepted(ReportError, {
+      scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED', message: 'Agent declared failure.', caseId: 'case-a', details,
+    });
+    expect(ReportError.safeParse({
+      scope: 'run', kind: 'environment', code: 'AGENTIC_STEP_FAILED', message: 'Agent declared failure.', details,
     }).success).toBe(false);
   });
 

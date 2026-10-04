@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ConfirmsValidationIssueCode } from '#core/ir/confirms-validation.js';
 
 /*
  * Defines the versioned structured-report contract shared by CLI JSON and MCP
@@ -50,11 +51,10 @@ const UiCapability = z.enum([
 /**
  * Version shared by every structured report envelope.
  *
- * V5 binding evidence and generation warnings advance the shared report
- * contract to 3.8 rather than allowing command branches to choose versions
- * separately.
+ * Confirmation issue codes extend the shared report contract to 3.9 so retry
+ * feedback and every command envelope use the same versioned vocabulary.
  */
-export const REPORT_SCHEMA_VERSION = '3.8' as const;
+export const REPORT_SCHEMA_VERSION = '3.9' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -88,6 +88,7 @@ const ENVIRONMENT_REPORT_ERROR_CODES = [
   'BROWSER_LAUNCH_FAILED',
   'AI_EXECUTOR_UNAVAILABLE',
   'AI_RESPONSE_INVALID',
+  'AGENTIC_STEP_FAILED',
   'FS_IO_ERROR',
   'UNEXPECTED_CRASH',
   'INTERRUPTED',
@@ -148,10 +149,27 @@ export const ELEMENT_INTENT_ISSUE_CODES = [
   'quote-outside-intent', 'quote-whitespace-only',
 ] as const;
 
+/**
+ * Reportable confirmation failures share their vocabulary with core validation.
+ *
+ * The Exclude check deliberately leaves `confirms-unsorted` internal: generation
+ * sorts provider confirmations before plan validation, so that condition cannot
+ * appear in retry feedback. The compile-time check ensures each listed code
+ * is a legal validation code other than `confirms-unsorted`; it does not check
+ * that the list is exhaustive or import a core runtime value into reports.
+ */
+export const CONFIRMS_ISSUE_CODES = [
+  'confirms-unknown-step',
+  'confirms-not-earlier',
+  'confirms-not-action',
+  'confirms-duplicate',
+] as const satisfies readonly Exclude<ConfirmsValidationIssueCode, 'confirms-unsorted'>[];
+
 /** Keeps provider-validation causes machine-readable without serializing prose diagnostics. */
 export const AiResponseIssueCode = z.enum([
   ...INSTRUCTION_COVERAGE_ISSUE_CODES,
   ...ELEMENT_INTENT_ISSUE_CODES,
+  ...CONFIRMS_ISSUE_CODES,
   'invalid-json',
   'schema-mismatch',
   'secret-allowed-name-not-projected',
@@ -277,6 +295,31 @@ export const BrowserLaunchFailedDetails = z.strictObject({
 });
 
 /**
+ * Case-only evidence for a child agent's explicit failure outcome.
+ *
+ * @remarks
+ * Counters describe completed tool calls, not intermediate polling samples.
+ * The optional final failure records the evaluated check kind and its safe
+ * expected text without admitting arbitrary provider diagnostics.
+ */
+export const AgenticStepFailedDetails = z.strictObject({
+  stepId: NonWhitespaceString,
+  actions: NonNegativeInteger,
+  assertions: NonNegativeInteger,
+  passedAssertions: NonNegativeInteger,
+  failedAssertions: NonNegativeInteger,
+  targetRejections: NonNegativeInteger,
+  lastFailedAssertion: z.strictObject({
+    // Deliberately duplicates the five assert-check kinds in core/ir/schema.ts:
+    // reports do not import core IR runtime values, as with CONFIRMS_ISSUE_CODES.
+    // A sixth kind needs a manual update here; there is no exported core union
+    // for a compile-time satisfies cross-check.
+    check: z.enum(['text-visible', 'element-visible', 'text-equals', 'url-matches', 'element-count']),
+    expected: z.string(),
+  }).optional(),
+});
+
+/**
  * Stable executor-unsupported evidence accepted by the report contract.
  *
  * @remarks
@@ -361,6 +404,7 @@ const CaseOtherEnvironmentReportError = z.discriminatedUnion('code', [
   CaseEnvironmentErrorBase.extend({ code: z.literal('BROWSER_LAUNCH_FAILED'), details: BrowserLaunchFailedDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('AI_EXECUTOR_UNAVAILABLE'), details: AiExecutorUnavailableDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('AI_RESPONSE_INVALID'), details: AiResponseInvalidDetails.optional() }),
+  CaseEnvironmentErrorBase.extend({ code: z.literal('AGENTIC_STEP_FAILED'), details: AgenticStepFailedDetails.optional() }),
   CaseEnvironmentErrorBase.extend({ code: z.literal('UNEXPECTED_CRASH'), details: UnexpectedCrashDetails.optional() }),
 ]);
 

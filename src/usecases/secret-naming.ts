@@ -138,6 +138,9 @@ export function deriveStage2ReplacementSecretNames(
     candidateStepIndexes: new Set([input.replacementIndex]),
   });
   const replacement = normalizeAiStepSecretUses([named.steps[input.replacementIndex]!])[0]!;
+  // Whole-candidate validation preserves the confirms invariant after
+  // navigation stripping. Stage 2 rejects a surviving invalid reference,
+  // such as an unknown ID, as obligation-mismatch; navigation alone is inert.
   const parsedCandidate = PlanDocument.parse({
     ...input.plan,
     steps: [...input.plan.steps.slice(0, input.replacementIndex), replacement, ...input.plan.steps.slice(input.replacementIndex + 1)],

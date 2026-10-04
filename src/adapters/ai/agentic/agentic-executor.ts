@@ -36,6 +36,19 @@ export interface InvocationResource {
 /** Builds one provider-specific invocation after the loopback MCP server is listening. */
 export type BuildInvocation = (url: string, token: string) => Promise<InvocationResource>;
 
+/** Retains raw child diagnostics privately until the run boundary redacts them. */
+export function attachChildProcess(error: unknown, result: CommandRunResult): void {
+  if (!(error instanceof Error)) return;
+  Object.defineProperty(error, 'childProcess', {
+    value: {
+      exitCode: result.outcome === 'exited' ? result.exitCode : null,
+      signal: result.outcome === 'signaled' ? result.signal : null,
+      stderr: result.stderr,
+    },
+    enumerable: false,
+  });
+}
+
 /**
  * Coordinates one agentic provider process with its loopback MCP server.
  *
@@ -98,7 +111,9 @@ export async function executeAgentic(
     if (runError !== undefined) throw runError;
 
     if (runResult === undefined || runResult.outcome !== 'exited' || runResult.exitCode !== 0) {
-      throw new Error('Agentic provider did not complete successfully.');
+      const error = new Error('Agentic provider did not complete successfully.');
+      if (runResult !== undefined) attachChildProcess(error, runResult);
+      throw error;
     }
 
     return await invocation.readFinalOutcome(runResult);

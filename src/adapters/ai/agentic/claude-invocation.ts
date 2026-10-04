@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 
-import type { InvocationResource } from './agentic-executor.js';
+import { attachChildProcess, type InvocationResource } from './agentic-executor.js';
 import { FinalOutcome, parseFinalOutcome } from './final-outcome.js';
 
 /**
@@ -49,17 +49,22 @@ export async function buildClaudeInvocation(
       env: {},
       cleanup: async () => rm(directory, { recursive: true, force: true }),
       readFinalOutcome: async (runResult) => {
-        const response: unknown = JSON.parse(runResult.stdout);
-        if (response === null || typeof response !== 'object' || Array.isArray(response)) {
-          throw new Error('The Claude Code CLI response did not contain a string result.');
-        }
+        try {
+          const response: unknown = JSON.parse(runResult.stdout);
+          if (response === null || typeof response !== 'object' || Array.isArray(response)) {
+            throw new Error('The Claude Code CLI response did not contain a string result.');
+          }
 
-        const result = (response as Record<string, unknown>).result;
-        if (typeof result !== 'string') {
-          throw new Error('The Claude Code CLI response did not contain a string result.');
-        }
+          const result = (response as Record<string, unknown>).result;
+          if (typeof result !== 'string') {
+            throw new Error('The Claude Code CLI response did not contain a string result.');
+          }
 
-        return parseFinalOutcome(result);
+          return parseFinalOutcome(result);
+        } catch (error) {
+          attachChildProcess(error, runResult);
+          throw error;
+        }
       },
     };
   } catch (error) {

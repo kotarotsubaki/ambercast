@@ -1,5 +1,6 @@
 import type { AmbercastError, ErrorKind } from '#core/errors/types.js';
 import {
+  AgenticStepFailedDetails,
   AiExecutorUnavailableDetails,
   AiResponseInvalidDetails,
   BrowserLaunchFailedDetails,
@@ -64,7 +65,8 @@ export function projectCauseName(cause: unknown): CauseName {
  * not coupled to a particular report builder as its home. In the opposite
  * direction, secret syntax, consent, and environment-key collision failures
  * are case-only: their evidence describes one selected prompt and must never
- * be promoted to a run-wide error.
+ * be promoted to a run-wide error. An agentic step failure is likewise
+ * case-only because its counters describe one selected step.
  */
 export const REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
@@ -91,6 +93,7 @@ export const REPORT_ERROR_DETAILS = {
   'executor-unsupported': { kind: 'usage', code: 'EXECUTOR_UNSUPPORTED' },
   'ai-executor-unavailable': { kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE' },
   'ai-response-invalid': { kind: 'environment', code: 'AI_RESPONSE_INVALID' },
+  'agentic-step-failed': { kind: 'environment', code: 'AGENTIC_STEP_FAILED' },
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
   'unexpected-crash': { kind: 'environment', code: 'UNEXPECTED_CRASH' },
   interrupted: { kind: 'environment', code: 'INTERRUPTED' },
@@ -189,6 +192,9 @@ export function reportError(
   if ((error.kind === 'secret-env-var-collision' || error.kind === 'secret-consent-required' || error.kind === 'secret-syntax-rejected') && location.scope === 'run') {
     throw new Error(`Error kind ${error.kind} cannot be serialized at run scope.`);
   }
+  if (error.kind === 'agentic-step-failed' && location.scope === 'run') {
+    throw new Error('Error kind agentic-step-failed cannot be serialized at run scope.');
+  }
 
   const sourceDetails = error.details;
   const browserLaunchDetails = error.kind === 'browser-launch-failed'
@@ -209,6 +215,16 @@ export function reportError(
       issues: readRecordField(sourceDetails, 'issues'),
       ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
     })
+    : error.kind === 'agentic-step-failed'
+      ? AgenticStepFailedDetails.safeParse({
+        stepId: readRecordField(sourceDetails, 'stepId'),
+        actions: readRecordField(sourceDetails, 'actions'),
+        assertions: readRecordField(sourceDetails, 'assertions'),
+        passedAssertions: readRecordField(sourceDetails, 'passedAssertions'),
+        failedAssertions: readRecordField(sourceDetails, 'failedAssertions'),
+        targetRejections: readRecordField(sourceDetails, 'targetRejections'),
+        ...(readRecordField(sourceDetails, 'lastFailedAssertion') === undefined ? {} : { lastFailedAssertion: readRecordField(sourceDetails, 'lastFailedAssertion') }),
+      })
     : error.kind === 'secret-literal-rejected'
       ? SecretLiteralRejectedDetails.safeParse({
         detector: readRecordField(sourceDetails, 'detector'),

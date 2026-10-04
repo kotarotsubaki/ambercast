@@ -14,7 +14,7 @@ ambercast が生成する Plan や Grounding などのアーティファクト�
 | `0.1.0` | `2` | `1`（未確認） | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
-| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
 
 バージョン 0.2.0 では、Plan のスキーマバージョンを変更することなくプロバイダのリクエスト規約が変更されました。この変更により `producerBundleFingerprint` およびすべてのプロンプトの `inputsDigest` が変化するため、0.1.0 で生成された Plan は stale（陳腐化）として扱われます。
 

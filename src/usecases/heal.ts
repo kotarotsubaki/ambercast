@@ -1,4 +1,5 @@
 import type { AmbercastError } from '#core/errors/types.js';
+import { AgenticStepFailedError } from '#core/errors/agentic-step-failed-error.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import type { FsIoError } from '#core/errors/fs-io-error.js';
 import { reportError } from '#report/error-mapping.js';
@@ -12,6 +13,7 @@ import { computePlanDigest } from '#core/ir/digest.js';
 import { deriveCurrentPlanInputProvenance } from '#core/ai/plan-input-provenance.js';
 import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
+import { dropNavigateConfirms } from '#core/ir/confirms-validation.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
 import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, GroundingDocument, PlanDocument, type JsonValueT, type SecretName, type StepId } from '#core/ir/schema.js';
 import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
@@ -43,6 +45,7 @@ import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { isRepairableNavigationFailure } from '#usecases/run.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { ZodError } from 'zod';
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collision-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
@@ -993,9 +996,13 @@ async function trySingleStepRepair(
   const generated = parsed.data;
   if (generated.steps[0]?.id !== step.id) return reject('id-mismatch');
 
+  // Remove original-plan navigation IDs from the provider's GeneratedStep[]
+  // before attribution. Sort surviving confirms by original plan order before
+  // comparing obligation fingerprints, so response order cannot create drift.
   let prepared;
   try {
-    prepared = prepareInstructionCoveredSteps(generated, normalized);
+    const navigateIds = new Set(plan.steps.filter((candidate) => candidate.kind === 'action' && candidate.action === 'navigate').map((candidate) => candidate.id));
+    prepared = prepareInstructionCoveredSteps({ ...generated, steps: dropNavigateConfirms(generated.steps, navigateIds) }, normalized);
   } catch (error) {
     return propagate(error);
   }
@@ -1004,13 +1011,19 @@ async function trySingleStepRepair(
     // steps produce intent attribution or self-quote issues instead.
     return reject(generated.steps[0]!.kind === 'ai' ? 'coverage-invalid' : 'intent-invalid');
   }
+  const attributedReplacement = prepared.data[0]!;
+  const stepIndex = new Map(plan.steps.map((candidate, index) => [candidate.id, index]));
+  const orderedReplacement = 'confirms' in attributedReplacement && attributedReplacement.confirms !== undefined
+    ? { ...attributedReplacement, confirms: [...attributedReplacement.confirms].sort((left, right) =>
+      (stepIndex.get(left) ?? Infinity) - (stepIndex.get(right) ?? Infinity)) }
+    : attributedReplacement;
   let replacement;
   let candidate: TrustedPlan;
   try {
     const named = deriveStage2ReplacementSecretNames({
       plan,
       replacementIndex: start,
-      attributedReplacement: prepared.data[0]!,
+      attributedReplacement: orderedReplacement,
       projected: projectAllowedNames(deps.config.secrets?.allow ?? []).names,
       allowlist: deps.config.secrets?.allow ?? [],
     });
@@ -1018,6 +1031,13 @@ async function trySingleStepRepair(
     candidate = named.candidate;
   } catch (error) {
     if (error instanceof AiResponseInvalidError) return reject('secret-name-invalid');
+    if (error instanceof ZodError && error.issues.length > 0 && error.issues.every((issue) =>
+      issue.code === 'custom' && [
+        'confirms-unknown-step', 'confirms-not-earlier', 'confirms-not-action',
+        'confirms-duplicate', 'confirms-unsorted',
+      ].includes(String(issue.params?.confirmsCode)))) {
+      return reject('obligation-mismatch');
+    }
     return propagate(error);
   }
   if (!obligationFingerprintMatches(step, replacement)) return reject('obligation-mismatch');
@@ -1248,7 +1268,9 @@ function caseOutcome(
     finalFirstFailureIndex: measurement.firstFailureIndex,
     stopReason,
     stage3Error,
-    finalReplayError: measurement.replay.error,
+    // SPEC-B3 preserves the prior unclassified CaseAbort's exit code and errors array;
+    // exposing this classification as a heal diagnostic would change both.
+    finalReplayError: measurement.replay.error instanceof AgenticStepFailedError ? undefined : measurement.replay.error,
     repairTrace,
   };
 }
@@ -1499,7 +1521,9 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
                 stopReason,
                 stage3Error: undefined,
                 stage3Rejection: full.stage3Rejection,
-                finalReplayError: bestMeasurement.replay.error,
+                // SPEC-B3 preserves the prior unclassified CaseAbort's exit code and errors array;
+                // exposing this classification as a heal diagnostic would change both.
+                finalReplayError: bestMeasurement.replay.error instanceof AgenticStepFailedError ? undefined : bestMeasurement.replay.error,
                 repairTrace: [...repairTrace, { stage: 'stage3' as const, outcome: 'secret-set-rejected' as const }],
               };
               return { interrupted: false, outcome, commit: undefined };

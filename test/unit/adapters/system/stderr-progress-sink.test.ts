@@ -98,8 +98,35 @@ describe('createStderrProgressSink()', () => {
     vi.stubEnv('AMBERCAST_DEBUG', '');
     const stderr = createRecordingStderr();
     const sink = createStderrProgressSink({ command: 'run', stderr: stderr.stderr, projectRoot: '/workspace', isCI: false, clock: createMutableClock().clock });
-    sink.emit({ type: 'unclassified-rejection', file: 'login.test.md', name: 'Error', message: 'ignored' });
+    sink.emit({ type: 'unclassified-rejection', file: 'login.test.md', name: 'Error', message: 'ignored',
+      childProcess: { exitCode: 1, signal: null, stderrTail: 'PRIVATE_CHILD_STDERR' } } as never);
     expect(stderr.output).toEqual([]);
+    sink.close();
+  });
+
+  it.each([
+    [{ exitCode: 1, signal: null, stderrTail: 'tail\nline' }, 'child process: exit 1\nchild stderr:\ntail\nline\n'],
+    [{ exitCode: null, signal: 'SIGTERM', stderrTail: 'short' }, 'child process: signal SIGTERM\nchild stderr:\nshort\n'],
+    [{ exitCode: 0, signal: null, stderrTail: '' }, 'child process: exit 0\nchild stderr: (empty)\n'],
+  ] as const)('TEST-B15 appends DEBUG child diagnostics after the stack', (childProcess, suffix) => {
+    vi.stubEnv('AMBERCAST_DEBUG', '1');
+    const stderr = createRecordingStderr();
+    const sink = createStderrProgressSink({ command: 'run', stderr: stderr.stderr, projectRoot: '/workspace', isCI: false, clock: createMutableClock().clock });
+    sink.emit({
+      type: 'unclassified-rejection', file: 'login.test.md', name: 'Error', message: 'failed', stack: 'Error: failed\n at run',
+      childProcess,
+    } as never);
+    expect(stderr.output.join('')).toBe(`unclassified rejection in login.test.md: Error: failed\nError: failed\n at run\n${suffix}`);
+    sink.close();
+  });
+
+  it('TEST-B14 keeps stderr newlines and surrogate pairs while escaping terminal controls', () => {
+    vi.stubEnv('AMBERCAST_DEBUG', '1');
+    const stderr = createRecordingStderr();
+    const sink = createStderrProgressSink({ command: 'run', stderr: stderr.stderr, projectRoot: '/workspace', isCI: false, clock: createMutableClock().clock });
+    sink.emit({ type: 'unclassified-rejection', file: 'login.test.md', name: 'Error', message: 'failed',
+      stack: 'Error: failed', childProcess: { exitCode: 1, signal: null, stderrTail: 'first\u0001\n😀 second' } } as never);
+    expect(stderr.output.join('')).toBe('unclassified rejection in login.test.md: Error: failed\nError: failed\nchild process: exit 1\nchild stderr:\nfirst\\u0001\n😀 second\n');
     sink.close();
   });
 

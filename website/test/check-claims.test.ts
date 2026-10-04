@@ -73,6 +73,22 @@ describe('command enumeration', () => {
 });
 
 describe('site links', () => {
+  it.each([['md', '{#t1}'], ['mdx', '\\{#t1}']] as const)('resolves a Steps heading anchor in a .%s page', async (ext, anchor) => {
+    const content = `<Steps>\n\n1. ## T ${anchor}\n\n</Steps>\n`;
+    const pages = Object.fromEntries(['', 'ja/', 'zh-cn/'].map((locale) => [`website/src/content/docs/${locale}guide.${ext}`, content]));
+    const f = fixture('[text](/ambercast/guide/#t1)', pages);
+    expect((await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule.startsWith('link-'))).toEqual([]);
+  });
+
+  it('reports a missing fragment when Steps markup has no separating blank lines', async () => {
+    const content = '<Steps>\n1. ## T {#t1}\n</Steps>\n';
+    const pages = Object.fromEntries(['', 'ja/', 'zh-cn/'].map((locale) => [`website/src/content/docs/${locale}guide.md`, content]));
+    const f = fixture('[text](/ambercast/guide/#t1)', pages);
+    expect((await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule.startsWith('link-'))).toEqual([
+      expect.objectContaining({ rule: 'link-missing-fragment', actual: '/ambercast/guide/#t1' }),
+    ]);
+  });
+
   it.each([
     ['/ambercast/missing/', 'link-missing-page'],
     ['/ambercast/reference/cli/view/#missing', 'link-missing-fragment'],

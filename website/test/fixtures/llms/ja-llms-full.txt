@@ -2323,7 +2323,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 
 ## 依存関係モデル {#dependency-model}
 
-```mermaid
+```mermaid alt="正規化されたプロンプトからinputsDigest、PlanDocument、planDigest、GroundingDocumentを経てリプレイに至るフローチャート"
 flowchart LR
   P[normalized prompt] --> I[inputsDigest]
   I --> D[PlanDocument]

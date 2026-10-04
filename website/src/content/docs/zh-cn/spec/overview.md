@@ -13,7 +13,7 @@ description: "本规范描述了 ambercast 0.7.0 接受的工件。"
 
 ## 依赖模型 {#dependency-model}
 
-```mermaid
+```mermaid alt="从规范化提示词经由inputsDigest、PlanDocument、planDigest和GroundingDocument到重放的流程图"
 flowchart LR
   P[normalized prompt] --> I[inputsDigest]
   I --> D[PlanDocument]

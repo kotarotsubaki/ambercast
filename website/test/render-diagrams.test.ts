@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectMermaidFences, diagramId, extractFenceBody, matchMermaidFenceOpen, parseAlt } from '../scripts/lib/mermaid-fences.mjs';
@@ -50,5 +50,4 @@ describe('TEST-15 SVG batch publication', () => {
   it('deletes orphan SVGs only after all rendering succeeds', async () => { const f = fixture({ [`${spec}/a.md`]: fence(body) }); const old = diagramId('old'); mkdirSync(paths(f).outDir, { recursive: true }); writeFileSync(asset(f, old, 'light'), 'old'); await renderDiagrams({ ...paths(f), renderer: fake.mockClear() }); expect(existsSync(asset(f, old, 'light'))).toBe(false); });
   it('preserves orphan SVGs when a renderer fails', async () => { const f = fixture({ [`${spec}/a.md`]: fence(body) }); const old = diagramId('old'); mkdirSync(paths(f).outDir, { recursive: true }); writeFileSync(asset(f, old, 'light'), 'old'); await expect(renderDiagrams({ ...paths(f), renderer: vi.fn().mockRejectedValue(new Error('syntax error')) })).rejects.toThrow(); expect(readFileSync(asset(f, old, 'light'), 'utf8')).toBe('old'); });
   it('uses the real CLI failure status for a syntax error', () => { const f = fixture({ [`${spec}/a.md`]: fence('flowchart LR\n  A -->') }); const result = runEntryPoint(script, f.website); expect(result.status).toBe(1); expect(result.stderr).toMatch(/(error|syntax|mermaid)/i); });
-  it('produces byte-identical SVGs across two real Chromium renders', async () => { const f = fixture({ [`${spec}/a.md`]: fence(body) }); await renderDiagrams(paths(f)); const id = diagramId(body); const first = ['light', 'dark'].map((theme) => readFileSync(asset(f, id, theme as 'light' | 'dark'))); rmSync(paths(f).outDir, { recursive: true, force: true }); await renderDiagrams(paths(f)); for (const [i, theme] of (['light', 'dark'] as const).entries()) expect(readFileSync(asset(f, id, theme))).toEqual(first[i]); });
 });

@@ -206,6 +206,8 @@ description: "コミットされたすべてのステップは、`kind` によ�
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
+アサーションは、観測に失敗した後、ステップの締切まで最大 100ms 間隔で再度ポーリングする。`timeoutMs` はこの締切について Target の `resolveTimeoutMs` を上書きし、0 でも 1 回は評価する。`run.ts` の 8 箇所のポーリング箇所は、初回 binding 段 1、4 つの plan assert ループ（3 種の引用要素チェックと `text-visible` / `url-matches` の browser-check 経路）、AI による assert ツール、trace 再生の合否判定 2 箇所（イベントと検証）である。AI による assert ツールと trace 再生は Target の `resolveTimeoutMs` を使う。各箇所は締切に届く待機の後に最後の 1 回を観測し、その観測が結果を決定する。
+
 アサーションの `element-visible`、`text-equals`、`element-count` はグラウンディングを参照も更新もせず、AI も呼び出さない。`--resolve` の有無にかかわらず、期限まで `accessibilitySnapshot()` と `matchQuotedCandidates` を使って同じように評価する。
 
 ## 生成形式 {#generated-forms}

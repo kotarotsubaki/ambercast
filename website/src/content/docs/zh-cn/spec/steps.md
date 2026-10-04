@@ -200,7 +200,7 @@ description: "每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严�
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-断言检查在观测失败后以最多 100ms 的间隔轮询，直至步骤截止时间。`timeoutMs` 会覆盖 Target 的 `resolveTimeoutMs`；即使为零也会求值一次。
+断言检查在观测失败后以最多 100ms 的间隔轮询，直至步骤截止时间。`timeoutMs` 会覆盖 Target 的 `resolveTimeoutMs`；即使为零也会求值一次。`run.ts` 中的八个轮询站点为：首次绑定阶段 1；四个 plan assert 循环（三种带引用元素检查，以及 `text-visible` / `url-matches` 的浏览器检查路径）；AI 引导的断言工具；以及追踪重放的两个合格/不合格判定（事件与验证）。AI 引导的断言工具和追踪重放使用 Target 的 `resolveTimeoutMs`；每个站点都会在到达截止时间的等待之后进行最后一次观测，并以该次观测结果判定最终结果。
 
 `element-visible`、`text-equals` 和 `element-count` 从不查询或更新 grounding，也不会调用 AI：无论是否启用 `--resolve`，均通过 `accessibilitySnapshot()` 和 `matchQuotedCandidates` 轮询求值，直至截止时间。
 

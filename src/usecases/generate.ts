@@ -53,7 +53,6 @@ import type { AiExecutor } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink } from '#ports/system.js';
 import { REPORT_ERROR_DETAILS } from '#report/error-mapping.js';
-import { z } from 'zod';
 import { AiResponseIssue, CONFIRMS_ISSUE_CODES } from '#report/schema.js';
 import type { AiResponseIssueCode, AiResponseIssuePath, ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
@@ -720,20 +719,20 @@ const ATTEMPTS_ELIGIBLE_CODES = new Set<ReportErrorCode>([
  * about the same error. Terminal invalid-response reconstruction stores this
  * normalized array back into `details.issues`, so report projection has the
  * required key even when the original error did not.
- * Runtime `safeParse` validation against the report's `AiResponseIssue` array
- * schema replaces a type assertion; any invalid member makes the list empty,
- * so a producer's code outside the report vocabulary cannot pass silently.
+ * Each member is validated against the report's strict `AiResponseIssue`
+ * schema and only invalid members are dropped, preserving order, so one
+ * producer member outside the report vocabulary cannot erase the valid
+ * diagnostics beside it.
  */
 function responseIssues(error: AiResponseInvalidError): readonly GenerateResponseIssue[] {
   const issues = error.details?.['issues'];
   if (!Array.isArray(issues)) return [];
-  const parsed = z.array(AiResponseIssue).safeParse(issues);
-  if (!parsed.success) return [];
-  return parsed.data.map((issue) => ({
-    code: issue.code,
-    path: issue.path,
-    ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
-  }));
+  return issues.flatMap((candidate) => {
+    const parsed = AiResponseIssue.safeParse(candidate);
+    if (!parsed.success) return [];
+    const issue = parsed.data;
+    return [{ code: issue.code, path: issue.path, ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }) }];
+  });
 }
 
 /**
@@ -1217,6 +1216,19 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             ));
           }
 
+          // SEC-05: provider-authored step ids flow into issue diagnostics and
+          // retry feedback below, so this check inspects only each step's
+          // `id` (not the rest of the response, which would widen the check
+          // beyond what SEC-05 requires) before either path below (source
+          // attribution, secret naming) can let the id reach an issue.
+          // Rejects rather than redacts, because a redacted id cannot
+          // satisfy the `StepId` grammar that the report's
+          // `AiResponseIssue.stepId` field requires.
+          try {
+            assertNoLiteralSecrets({ steps: parsedResponse.data.steps.map(({ id }) => ({ id })) });
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
+          }
           let prepared: PrepareInstructionCoveredStepsResult;
           try {
             prepared = prepareInstructionCoveredSteps(parsedResponse.data, normalizedTestMd);

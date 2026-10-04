@@ -1118,7 +1118,7 @@ admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
 
-action 步骤经过本地验证后，可包含 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非负整数, aiProposalMs?: 非负整数 }`。`confirmed` 表示测试用例结束时的值；仅在相应阶段执行后才会出现耗时字段。更早发生的绑定失败则通过测试用例错误报告。
+action 和 capture 步骤经过本地验证后，可包含 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非负整数, aiProposalMs?: 非负整数 }`。对于 `grounding`，`confirmed` 始终为 `true`（该绑定来自之前运行中已确认的 entry，并不表示本次运行写入了该 entry）；对于 `quoted-match` 和 `ai-proposed`，它表示测试用例结束时的值。仅在相应阶段执行后才会出现耗时字段。更早发生的绑定失败则通过测试用例错误报告。
 
 ## Review 关注事项 {#review-concerns}
 

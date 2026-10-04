@@ -192,6 +192,7 @@ describe('TEST-R11 report and event vocabulary', () => {
     executor?: ReturnType<typeof createFakeAiExecutor>;
     clock?: Clock;
     resolveTimeoutMs?: number;
+    signal?: AbortSignal;
   } = {}) {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprint),
       options.onPerform === undefined ? {} : { onPerform: options.onPerform });
@@ -203,6 +204,7 @@ describe('TEST-R11 report and event vocabulary', () => {
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       ...(options.executor === undefined ? {} : { resolveAiExecutor: async () => options.executor! }),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
     const deps = options.resolveTimeoutMs === undefined ? base.deps : {
       ...base.deps,
@@ -247,6 +249,39 @@ describe('TEST-R11 report and event vocabulary', () => {
     expect(stepEvents(f.events)).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'grounding' });
   });
 
+  it('TEST-1 reports a grounding hit as confirmed when its operation throws before a confirmer', async () => {
+    const f = await fixture({ steps: [click, confirm] as readonly TestStep[], entries: { 'click-submit': { ...entry, fingerprint } }, onPerform: () => { throw new Error('operation failed'); } });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'error', binding: { provenance: 'grounding', confirmed: true } });
+    expect(outcome.results[0]?.result.steps[0]?.binding).not.toHaveProperty('quoteWaitMs');
+    expect(outcome.results[0]?.result.steps[0]?.binding).not.toHaveProperty('aiProposalMs');
+    expect(outcome.results[0]?.result.steps[1]).toMatchObject({ status: 'skipped' });
+    expect(outcome.results[0]?.result.steps[1]).not.toHaveProperty('binding');
+  });
+
+  it('TEST-2 reports a grounding capture as confirmed when captureValue throws', async () => {
+    const captureStep = { id: 'capture-submit', kind: 'capture', target: SUBMIT, intent, variable: 'captured' } as const;
+    const captureDigest = computeIntentDigest({ stepKind: 'capture', operation: 'capture', intent });
+    const f = await fixture({
+      steps: [captureStep],
+      entries: elementGrounding(['capture-submit'], { 'capture-submit': SUBMIT }, fingerprint, { 'capture-submit': captureDigest }),
+    });
+    vi.spyOn(f.session, 'captureValue').mockRejectedValueOnce(new Error('capture failed'));
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'error', binding: { provenance: 'grounding', confirmed: true } });
+  });
+
+  it('TEST-3 retains grounding confirmation when an operation aborts the case', async () => {
+    const controller = new AbortController();
+    const f = await fixture({
+      entries: { 'click-submit': { ...entry, fingerprint } }, signal: controller.signal,
+      onPerform: () => { controller.abort(); throw new Error('operation interrupted'); },
+    });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation: 'The run was interrupted.' });
+    expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'grounding', confirmed: true });
+  });
+
   it('reports binding after stage 3 when re-observation returns candidate-changed', async () => {
     const f = await fixture();
     vi.spyOn(f.session, 'resolveGrounded').mockResolvedValueOnce({ kind: 'miss', reason: 'fingerprint-mismatch' });
@@ -278,6 +313,31 @@ describe('TEST-R11 report and event vocabulary', () => {
     if (_label === 'skipped') vi.spyOn(f.session, 'evaluateAssert').mockResolvedValue({ passed: false, message: 'Never shown' });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
     expect(outcome.results[0]?.result.steps[0]?.binding?.confirmed).toBe(confirmed);
+  });
+
+  it.each([
+    ['passed', [click, confirm], [capture(['Submit']), capture(['Submit'])]],
+    ['failed', [click, { id: 'confirm-submit', kind: 'assert', check: 'text-visible', text: 'Never shown', confirms: ['click-submit'] }], [capture(['Submit'])]],
+    ['skipped', [click, { id: 'fail-later', kind: 'assert', check: 'text-visible', text: 'Never shown' }, confirm], [capture(['Submit'])]],
+    ['absent', [click], [capture(['Submit'])]],
+  ] as const)('TEST-4 retains grounding confirmation with a %s later confirmer', async (label, steps, samples) => {
+    const f = await fixture({ steps: steps as readonly TestStep[], samples, entries: { 'click-submit': { ...entry, fingerprint } } });
+    if (label === 'skipped' || label === 'failed') vi.spyOn(f.session, 'evaluateAssert').mockResolvedValue({ passed: false, message: 'Never shown' });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'grounding', confirmed: true });
+    if (label !== 'absent') expect(outcome.results[0]?.result.steps.at(-1)?.status).toBe(label);
+  });
+
+  it.each([
+    ['passed', [capture(['Submit']), capture(['Submit'])], true],
+    ['failed', [capture(['Submit']), capture([])], false],
+  ] as const)('TEST-7 keeps ai-proposed confirmation %s after a later confirmer', async (_label, samples, confirmed) => {
+    const executor = createFakeAiExecutor({ execute: async () => ({
+      data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}',
+    }) });
+    const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }, confirm] as readonly TestStep[], samples, executor, resolveTimeoutMs: 0 });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'ai-proposed', confirmed });
   });
 
   it('measures stage-1 quote wait with an integer fake-clock duration and no AI timing', async () => {
@@ -2801,6 +2861,35 @@ describe('run', () => {
       expect(outcome.results[0]?.result.status).toBe('error');
       expect(perform).toHaveBeenCalledTimes(1);
       expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeUndefined();
+    });
+
+    it('TEST-5 preserves the grounding file when a confirmed hit operation throws', async () => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], submitFingerprint), { onPerform: () => { throw new Error('operation failed'); } });
+      const perform = vi.spyOn(session, 'perform');
+      const f = await fixture({ session, steps: [click], entries: { 'click-submit': hitEntry } });
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'error', binding: { provenance: 'grounding', confirmed: true } });
+      expect(perform).toHaveBeenCalledTimes(1);
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+    });
+
+    it('TEST-6 writes a preceding independent confirmation but preserves a throwing hit entry', async () => {
+      const firstClick = { ...click, id: 'click-first' };
+      const firstConfirm = { ...confirm, id: 'confirm-first', confirms: ['click-first'] };
+      let performed = 0;
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], submitFingerprint), {
+        onPerform: () => { if (++performed === 2) throw new Error('second operation failed'); },
+      });
+      const perform = vi.spyOn(session, 'perform');
+      const f = await fixture({ session, steps: [firstClick, firstConfirm, click], entries: { 'click-submit': hitEntry } });
+      const beforeHit = JSON.parse(f.before).entries['click-submit'];
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      const after = await readGrounding(f.recordingStorage.storage, f.testPath);
+      expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'quoted-match', confirmed: true });
+      expect(outcome.results[0]?.result.steps[2]).toMatchObject({ status: 'error', binding: { provenance: 'grounding', confirmed: true } });
+      expect(perform).toHaveBeenCalledTimes(2);
+      expect(after.entries['click-first']).toMatchObject({ kind: 'element', intentDigest: digest, locator: SUBMIT, provenance: 'quoted-match' });
+      expect(after.entries['click-submit']).toEqual(beforeHit);
     });
 
     it('TEST-R8 retains a verified hit when a later unrelated step fails', async () => {

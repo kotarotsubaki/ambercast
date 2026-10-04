@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Linter, type Linter as LinterTypes } from 'eslint';
+import { fileURLToPath } from 'node:url';
+import { ESLint, Linter, type Linter as LinterTypes } from 'eslint';
 import tseslint from 'typescript-eslint';
 import { describe, expect, it, test } from 'vitest';
 // @ts-expect-error -- the flat ESM config has no declaration file.
@@ -447,5 +448,31 @@ describe('ESLint architecture and determinism rules', () => {
         ruleId: BOUNDARIES_ELEMENT_TYPES_RULE,
       }),
     ]);
+  });
+});
+
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+
+describe('repository lint scope', () => {
+  const eslint = new ESLint({ cwd: REPO_ROOT });
+
+  test.each([
+    '.claude/impl',
+    '.claude/impl-archive',
+    '.claude/logs',
+    '.claude/todos',
+    '.claude/worktrees',
+  ])('ignores %s', async (directory) => {
+    expect(await eslint.isPathIgnored(`${directory}/issue-1/probe.test.ts`)).toBe(true);
+  });
+
+  test.each([
+    'src/core/paths.ts',
+    'scripts/worktree-remove.mjs',
+    'eslint.config.js',
+    '.claude/rules/probe.mjs',
+    '.claude/impl-other/probe.ts',
+  ])('keeps %s in lint scope', async (path) => {
+    expect(await eslint.isPathIgnored(path)).toBe(false);
   });
 });

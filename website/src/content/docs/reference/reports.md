@@ -89,7 +89,7 @@ Step and review execution structures share common result branches.
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
 
-An action step may include `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` after local verification. `confirmed` reflects the value at case end; the timing fields appear only when those stages ran. Earlier binding failures instead report a case error.
+An action or capture step may include `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` after local verification. `confirmed` is always `true` for `grounding`, because the binding came from an entry confirmed in an earlier run (it does not mean the entry was written in this run); for `quoted-match` and `ai-proposed`, it reflects the value at case end. The timing fields appear only when those stages ran. Earlier binding failures instead report a case error.
 
 Every executed run or completed heal result has a `sessions` entry for each Plan Target. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means that Target's launch did not return a session, including when execution stopped before reaching its first step. A failed close leaves the case status unchanged.
 

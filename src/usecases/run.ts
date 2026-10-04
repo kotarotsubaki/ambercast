@@ -3,6 +3,7 @@ import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
 import { composeAiDeadline, isAiDeadlineTimeout, type AiDeadline } from '#core/ai/ai-deadline.js';
 import type { ResolvedConfig, ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import { AgenticStepFailedError } from '#core/errors/agentic-step-failed-error.js';
 import {
   AGENTIC_TARGET_REJECTION_LIMIT,
   AgenticTargetRejection,
@@ -323,6 +324,8 @@ type TraceReplayMaterializationContext = Pick<
  * and local run-value capabilities are sufficient for replay.
  */
 export interface CoveredTraceReplayContext {
+  readonly clock: Clock;
+  readonly resolveTimeoutMs: number;
   /** Live browser session used only after local coverage validation. */
   readonly session: BrowserSession;
 
@@ -430,7 +433,7 @@ async function callAiExecutor<T>(
  * itself.
  */
 async function pollUntilDeadline<T>(
-  context: DispatchContext,
+  context: Pick<DispatchContext, 'signal' | 'clock'>,
   deadline: number,
   observe: () => Promise<{ done: true; value: T } | { done: false; last: T }>,
 ): Promise<T> {
@@ -1404,10 +1407,16 @@ export async function replayCoveredTraceWithoutAi(
   context: CoveredTraceReplayContext,
   secretRefs: ReadonlySet<string>,
 ): Promise<boolean> {
+  // A retry checks the same target; only its observed outcome can change, so resolving it again adds no value.
   for (const entry of trace.events) {
     context.signal?.throwIfAborted();
     if (entry.type === 'assert') {
-      const outcome = await context.session.evaluateAssert(await materializeTraceAssert(entry, context));
+      const materialized = await materializeTraceAssert(entry, context);
+      const deadline = context.clock.monotonicMs() + context.resolveTimeoutMs;
+      const outcome = await pollUntilDeadline<AssertOutcome>(context, deadline, async () => {
+        const observed = await context.session.evaluateAssert(materialized);
+        return observed.passed ? { done: true, value: observed } : { done: false, last: observed };
+      });
       if (!outcome.passed) {
         return false;
       }
@@ -1437,7 +1446,12 @@ export async function replayCoveredTraceWithoutAi(
 
   for (const assertion of trace.verification) {
     context.signal?.throwIfAborted();
-    const outcome = await context.session.evaluateAssert(await materializeTraceAssert(assertion, context));
+    const materialized = await materializeTraceAssert(assertion, context);
+    const deadline = context.clock.monotonicMs() + context.resolveTimeoutMs;
+    const outcome = await pollUntilDeadline<AssertOutcome>(context, deadline, async () => {
+      const observed = await context.session.evaluateAssert(materialized);
+      return observed.passed ? { done: true, value: observed } : { done: false, last: observed };
+    });
     if (!outcome.passed) {
       return false;
     }
@@ -2067,7 +2081,9 @@ function redactedError(
  * string conversion, then pass their extracted values through
  * `templateMaterializedValues` before the event carries them. Keeping this
  * construction pure makes the writer contract independently testable without
- * requiring a case run or stderr adapter.
+ * requiring a case run or stderr adapter. Child-process stderr is
+ * redacted and truncated to 2,000 code points here before entering the
+ * optional DEBUG-only event field; truncation must preserve surrogate pairs.
  */
 export function buildUnclassifiedRejectionEvent(
   file: string,
@@ -2078,6 +2094,7 @@ export function buildUnclassifiedRejectionEvent(
 ): Extract<RunEvent, { readonly type: 'unclassified-rejection' }> {
   const message = templateMaterializedValues(readDiagnosticMessage(error), resolvedSecrets, runState);
   const stack = readDiagnosticStack(error);
+  const child = error instanceof Error ? (error as Error & { childProcess?: { exitCode: number | null; signal: string | null; stderr: string } }).childProcess : undefined;
   return {
     type: 'unclassified-rejection',
     file,
@@ -2087,6 +2104,11 @@ export function buildUnclassifiedRejectionEvent(
     ...(stack === undefined ? {} : {
       stack: templateMaterializedValues(stack, resolvedSecrets, runState),
     }),
+    ...(child === undefined ? {} : { childProcess: {
+      exitCode: child.exitCode,
+      signal: child.signal,
+      stderrTail: [...templateMaterializedValues(child.stderr, resolvedSecrets, runState)].slice(-2_000).join(''),
+    } }),
   };
 }
 
@@ -2215,9 +2237,24 @@ export type AgenticInstructionCoverageFinalization =
  * verification.
  */
 class AgenticRunPipeline implements InstructionCoverageAiActionController {
+  // Five diagnostic counters (actions, assertions, passedAssertions,
+  // failedAssertions, targetRejections) and lastFailedAssertion update
+  // once per completed tool call from its final result, never per intermediate
+  // poll observation. A fail-then-pass call counts as one pass and leaves
+  // lastFailedAssertion untouched: it neither records the intermediate fail
+  // nor clears a prior call's failure. Only a call whose final result fails
+  // replaces it, using expectedForAssert on the actually-evaluated expanded
+  // check for its expected value.
   readonly #journal: Array<TraceAction | TraceAssert> = [];
   readonly #passedAssertionTags: Array<import('#core/ir/schema.js').InstructionCriterionId | undefined> = [];
   readonly #secretRefs: ReadonlySet<string>;
+  readonly #aiDeadlineSignal: AbortSignal | undefined;
+  #actions = 0;
+  #assertions = 0;
+  #passedAssertions = 0;
+  #failedAssertions = 0;
+  #targetRejections = 0;
+  #lastFailedAssertion: { check: AssertCheck['check']; expected: string } | undefined;
   #trailingPassedAssertRun = 0;
   /**
    * Records a recoverable target rejection until a new passing assertion
@@ -2232,8 +2269,10 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
     secretRefs: readonly string[],
     private readonly step: Extract<Step, { kind: 'ai' }>,
     private readonly fallbackFromReplay: boolean,
+    aiDeadlineSignal: AbortSignal | undefined,
   ) {
     this.#secretRefs = new Set(secretRefs);
+    this.#aiDeadlineSignal = aiDeadlineSignal;
   }
 
   /**
@@ -2279,11 +2318,13 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
       await performMaterializedAction(materialized, await sessionForStep(this.context, this.step));
     } catch (error) {
       if (error instanceof AgenticTargetRejection) {
+        this.#targetRejections += 1;
         this.#trailingPassedAssertRun = 0;
         this.#rejectionBarrier = true;
         throw error;
       }
       if (error instanceof BoundElementRejectedError && error.reason !== 'provenance-invalid') {
+        this.#targetRejections += 1;
         this.#trailingPassedAssertRun = 0;
         this.#rejectionBarrier = true;
         throw new AgenticTargetRejection('ambercast_perform', error.reason);
@@ -2291,6 +2332,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
       throw scrubBrowserRejection(error, this.context.resolvedSecrets, runStateValues(this.context.runState));
     }
     this.#journal.push(parsed.data);
+    this.#actions += 1;
   }
 
   /**
@@ -2311,6 +2353,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
     check: TraceAssert,
     criterionId?: import('#core/ir/schema.js').InstructionCriterionId,
   ): Promise<AssertOutcome> {
+    const startedMs = this.context.clock.monotonicMs();
     const parsed = TraceAssert.safeParse(check);
     if (!parsed.success) {
       throw new IntegrityViolationError('The AI adapter supplied an invalid assertion observation.', {
@@ -2320,6 +2363,7 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
 
     assertNoMaterializedLiteral(parsed.data, this.context, this.context.resolvedSecrets);
     let outcome: AssertOutcome;
+    let evaluatedCheck: AssertCheck | undefined;
     try {
       const materializationContext: TraceReplayMaterializationContext = {
         ...this.context,
@@ -2328,28 +2372,44 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
         runState: runStateValues(this.context.runState),
         onBindMiss: (reason) => { throw new AgenticTargetRejection('ambercast_evaluate_assert', reason); },
       };
+      const session = await sessionForStep(this.context, this.step);
       const materialized = await materializeTraceAssert(parsed.data, materializationContext);
-      outcome = await (await sessionForStep(this.context, this.step)).evaluateAssert(materialized);
+      evaluatedCheck = materialized;
+      outcome = await pollUntilDeadline<AssertOutcome>(
+        { clock: this.context.clock, ...(this.#aiDeadlineSignal === undefined ? {} : { signal: this.#aiDeadlineSignal }) },
+        startedMs + configForStep(this.context, this.step).resolveTimeoutMs,
+        async () => {
+          const observed = await session.evaluateAssert(materialized);
+          return observed.passed ? { done: true, value: observed } : { done: false, last: observed };
+        },
+      );
     } catch (error) {
       if (error instanceof AgenticTargetRejection) {
+        this.#targetRejections += 1;
         this.#trailingPassedAssertRun = 0;
         this.#rejectionBarrier = true;
         throw error;
       }
       if (error instanceof BoundElementRejectedError && error.reason !== 'provenance-invalid') {
+        this.#targetRejections += 1;
         this.#trailingPassedAssertRun = 0;
         this.#rejectionBarrier = true;
         throw new AgenticTargetRejection('ambercast_evaluate_assert', error.reason);
       }
+      if (this.#aiDeadlineSignal?.aborted && error === this.#aiDeadlineSignal.reason) throw error;
       throw scrubBrowserRejection(error, this.context.resolvedSecrets, runStateValues(this.context.runState));
     }
+    this.#assertions += 1;
     if (outcome.passed) {
+      this.#passedAssertions += 1;
       this.#rejectionBarrier = false;
       this.#trailingPassedAssertRun += 1;
       this.#lastObservation = 'passed-assert';
       this.#journal.push(parsed.data);
       this.#passedAssertionTags.push(criterionId);
     } else {
+      this.#failedAssertions += 1;
+      this.#lastFailedAssertion = { check: parsed.data.check, expected: expectedForAssert(evaluatedCheck!) };
       this.#trailingPassedAssertRun = 0;
       this.#lastObservation = 'failed-assert';
     }
@@ -2400,7 +2460,12 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
    */
   finalize(outcome: 'success' | 'failure'): DispatchOutcome {
     if (outcome === 'failure') {
-      throw new CaseAbort('The AI-directed interaction did not complete successfully.');
+      throw new AgenticStepFailedError('The AI-directed interaction did not complete successfully.', {
+        stepId: this.step.id, actions: this.#actions, assertions: this.#assertions,
+        passedAssertions: this.#passedAssertions, failedAssertions: this.#failedAssertions,
+        targetRejections: this.#targetRejections,
+        ...(this.#lastFailedAssertion === undefined ? {} : { lastFailedAssertion: this.#lastFailedAssertion }),
+      });
     }
 
     if (this.#rejectionBarrier) {
@@ -2488,10 +2553,12 @@ async function executeAgentic(
   priorTrace: import('#ports/ai.js').SafeLegacyTraceRecord | undefined,
   fallbackFromReplay: boolean,
 ): Promise<DispatchOutcome> {
+  // Pipeline polling and the provider must share the identical AbortSignal instance:
+  // AI deadline classification compares signal references, not just timeout timing.
   const secretRefs = step.secrets?.map((grant) => grant.ref) ?? [];
   const executor = await context.resolveAiExecutor();
-  const pipeline = new AgenticRunPipeline(context, secretRefs, step, fallbackFromReplay);
   const deadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
+  const pipeline = new AgenticRunPipeline(context, secretRefs, step, fallbackFromReplay, deadline.signal);
   const request = {
     instructionPrompt: step.instruction,
     allowedSecretRefs: secretRefs,
@@ -2564,6 +2631,8 @@ async function executeAiStep(
   }
   try {
     const replayContext: CoveredTraceReplayContext = {
+      clock: context.clock,
+      resolveTimeoutMs: configForStep(context, step).resolveTimeoutMs,
       session: await sessionForStep(context, step),
       target: targetForStep(context, step),
       runState: runStateValues(context.runState),

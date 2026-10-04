@@ -30,6 +30,7 @@ const EXPECTED_REPORT_ERROR_DETAILS = {
   'browser-launch-failed': { kind: 'environment', code: 'BROWSER_LAUNCH_FAILED', hint: BROWSER_LAUNCH_FAILED_HINT },
   'executor-unsupported': { kind: 'usage', code: 'EXECUTOR_UNSUPPORTED' },
   'ai-executor-unavailable': { kind: 'environment', code: 'AI_EXECUTOR_UNAVAILABLE' },
+  'agentic-step-failed': { kind: 'environment', code: 'AGENTIC_STEP_FAILED' },
   'ai-response-invalid': { kind: 'environment', code: 'AI_RESPONSE_INVALID' },
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
   'unexpected-crash': { kind: 'environment', code: 'UNEXPECTED_CRASH' },
@@ -59,6 +60,25 @@ describe('REPORT_ERROR_DETAILS', () => {
 });
 
 describe('reportError', () => {
+  it('keeps agentic failure case-scoped and projects completed-call diagnostics', () => {
+    const error = new ClassifiedError('agentic-step-failed', 'The AI-directed interaction did not complete successfully.', {
+      stepId: 'recorded-ai', actions: 1, assertions: 2, passedAssertions: 1,
+      failedAssertions: 1, targetRejections: 0,
+      lastFailedAssertion: { check: 'text-visible', expected: 'Text "X" is visible.' },
+      ignored: 'private',
+    });
+    expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login' })).toEqual({
+      scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED', caseId: 'login',
+      message: error.message,
+      details: {
+        stepId: 'recorded-ai', actions: 1, assertions: 2, passedAssertions: 1,
+        failedAssertions: 1, targetRejections: 0,
+        lastFailedAssertion: { check: 'text-visible', expected: 'Text "X" is visible.' },
+      },
+    });
+    expect(() => errorMapping.reportError(error, { scope: 'run' }))
+      .toThrow('Error kind agentic-step-failed cannot be serialized at run scope.');
+  });
   it('round-trips case-scoped grounding-unresolved details through the report schema', () => {
     const error = new GroundingUnresolvedError('No cached grounding is available.', {
       stepId: 'sign-in', reason: 'recoverable-miss',

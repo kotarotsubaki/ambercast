@@ -28,6 +28,20 @@ beforeEach(async () => {
 afterEach(() => vi.clearAllMocks());
 
 describe('buildClaudeInvocation', () => {
+  it('TEST-B15 retains exit-zero stderr privately when final output cannot be parsed', async () => {
+    const invocation = await buildClaudeInvocation('http://127.0.0.1:4312/mcp', 'test-token');
+    try {
+      let rejection: unknown;
+      try { await invocation.readFinalOutcome({ outcome: 'exited', stdout: 'not-json', stderr: 'PRIVATE_CHILD_STDERR', exitCode: 0 }); }
+      catch (error) { rejection = error; }
+      expect(rejection).toBeInstanceOf(Error);
+      const privateDiagnostics = Object.values(Object.getOwnPropertyDescriptors(rejection))
+        .filter(({ enumerable }) => enumerable === false).map(({ value }) => value);
+      expect(JSON.stringify(privateDiagnostics)).toContain('PRIVATE_CHILD_STDERR');
+      expect(JSON.stringify(privateDiagnostics)).toContain('0');
+      expect(JSON.stringify(rejection)).not.toContain('PRIVATE_CHILD_STDERR');
+    } finally { await invocation.cleanup(); }
+  });
   it('keeps the bearer token in a mode-0600 MCP config and parses Claude structured output', async () => {
     const token = 'test-token';
     const invocation = await buildClaudeInvocation('http://127.0.0.1:4312/mcp', token);

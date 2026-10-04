@@ -203,7 +203,7 @@ Each member of a committed AI step's optional `secrets` array is a strict `AiSte
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once.
+Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once. The eight polling sites in `run.ts` are first-binding stage 1, four plan assert loops (the three quoted-element checks and the `text-visible` / `url-matches` browser-check path), the AI-directed assert tool, and the two trace replay pass/fail judgments (events and verification). The AI-directed assert tool and trace replay use the Target's `resolveTimeoutMs`; each site makes one final observation after a wait that reaches the deadline, and that observation determines the result.
 
 `element-visible`, `text-equals`, and `element-count` never consult or update grounding or call AI: with or without `--resolve`, they poll `accessibilitySnapshot()` and `matchQuotedCandidates` until their deadline. [repo:src/usecases/run.ts:2780-2855]
 

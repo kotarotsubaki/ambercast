@@ -257,6 +257,8 @@ describe('run instruction coverage trust boundary', () => {
     });
 
     await expect(replayCoveredTraceWithoutAi(coveredTrace() as unknown as CoveredTraceRecord, {
+      clock: createFixedClock(new Date('2026-08-21T00:00:00.000Z'), 0),
+      resolveTimeoutMs: 0,
       session,
       target: TARGETS.web,
       runState: new Map(),
@@ -288,6 +290,8 @@ describe('run instruction coverage trust boundary', () => {
     } as unknown as CoveredTraceRecord;
 
     await expect(replayCoveredTraceWithoutAi(trace, {
+      clock: createFixedClock(new Date('2026-08-21T00:00:00.000Z'), 0),
+      resolveTimeoutMs: 0,
       session,
       target: TARGETS.web,
       runState: new Map(),
@@ -316,6 +320,8 @@ describe('run instruction coverage trust boundary', () => {
     } as unknown as CoveredTraceRecord;
 
     await expect(replayCoveredTraceWithoutAi(trace, {
+      clock: createFixedClock(new Date('2026-08-21T00:00:00.000Z'), 0),
+      resolveTimeoutMs: 0,
       session,
       target: TARGETS.web,
       runState: new Map(),
@@ -1302,7 +1308,13 @@ describe('run instruction coverage trust boundary', () => {
     const resolveAiExecutor = vi.fn(async () => executor);
     const arranged = scenario(
       recording,
-      { resolveAiExecutor },
+      { resolveAiExecutor, config: {
+        testDir: TEST_DIR, testMatch: ['**/*.test.md'], testIgnore: ['**/.runs/**'],
+        targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } }, defaultTarget: 'web',
+        ai: { provider: 'codex', timeoutMs: 1000, maxGenerateAttempts: 2 },
+        ci: { heal: false, updateGroundingCache: false },
+        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
+      } },
       { passed: true },
       { assertOutcomes: [
         { passed: false, message: 'The covered replay drifted.' },

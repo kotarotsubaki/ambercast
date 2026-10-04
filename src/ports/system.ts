@@ -162,13 +162,18 @@ export type RunEvent =
       readonly outcome: 'ok' | 'error';
     }
   | {
-      /** Carries opt-in diagnostics for a case exception without changing report data. */
+      /**
+       * Carries opt-in diagnostics for a case exception without changing report
+       * data. An optional childProcess field contains exitCode, signal,
+       * and a redacted, bounded stderrTail for local DEBUG rendering only.
+       */
       readonly type: 'unclassified-rejection';
       readonly file: string;
       readonly stepId?: StepId;
       readonly name: string;
       readonly message: string;
       readonly stack?: string;
+      readonly childProcess?: { readonly exitCode: number | null; readonly signal: string | null; readonly stderrTail: string };
     }
   | {
       readonly type: 'heal-stage2-rejected';

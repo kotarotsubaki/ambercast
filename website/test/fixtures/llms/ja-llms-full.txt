@@ -1145,10 +1145,11 @@ action と capture のステップでは、ローカル検証後に `binding: { 
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の12コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の13コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
+| `AGENTIC_STEP_FAILED` | case スコープのみ: `{ stepId: 空白以外の文字列, actions: 非負整数, assertions: 非負整数, passedAssertions: 非負整数, failedAssertions: 非負整数, targetRejections: 非負整数, lastFailedAssertion?: { check: "text-visible"・"element-visible"・"text-equals"・"url-matches"・"element-count" のいずれか; expected: 文字列 } }`。カウンターは完了したツール呼び出しを表します。 |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任意の instruction-coverage・element-intent・confirms issue code（`confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`）、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected"、または "secret-conflicting-target-names"（後者2つは常に stepId を伴う）; path: Array<string または非負整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token、または embedded-secret-reference; path: 空白以外の文字列; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
@@ -1226,6 +1227,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | browser launch fails |
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |
+| AGENTIC_STEP_FAILED | environment | case | 3 | AI による操作が失敗と宣言された |
 | FS_IO_ERROR | environment | run/case | 3 | filesystem operation fails |
 | UNEXPECTED_CRASH | environment | run/case | 3 | uncategorized crash |
 | INTERRUPTED | environment | run only | 3 | batch cancellation |
@@ -1243,7 +1245,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | `confirms-not-action` | 参照先が対象のアクションまたは capture ではない |
 | `confirms-duplicate` | ステップ ID が重複 |
 
-caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
+caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`AGENTIC_STEP_FAILED` の details には step ID、完了したツール呼び出しのカウンター、任意の最後の失敗した assertion が入ります。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
 
 レポートの構造については [レポート](/ambercast/ja/reference/reports/#errors)、終了コードの一覧については [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、トラブルシューティングの手順については [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/) を参照してください。
 
@@ -1296,7 +1298,7 @@ Ambercastが読み取る環境変数と、AIプロバイダーの子プロセス
 | `AMBERCAST_AI_PROVIDER` | `readConfigEnvironment()` → `aiProviderRaw` | `claude`、`codex`、または `auto` として検証された後、設定ファイルまたは既定値の `ai.provider` を置き換えます。 | `--ai` が優先され、次にこの変数、次に設定ファイルの `ai.provider`、最後に既定値の `auto` の順になります。空値は未指定として扱われ、サポートされていない非空の値は無効となります。 |
 | `AMBERCAST_SECRET_*` | `createEnvSecretsProvider().resolve()` | シークレットプロバイダーの境界において、特定の `{{secrets.*}}` 参照を解決します。 | ドットはアンダースコアに変換され、各セグメントは大文字化されます（例: `{{secrets.a.b}}` は `AMBERCAST_SECRET_A_B` にマッピングされます）。キーが存在しない場合は `undefined` を返します。このマッピングは単射ではないため、`a.b` と `a_b` のような参照を同時に使用してはなりません。 |
 | `CI` | `createProcessEnvironmentInfo().isCI()` | ランタイムコマンドが消費するCIポリシーのブール値を提供します。 | 定義されており、空ではなく、かつ正確に小文字の `false` でない場合にのみアクティブになります。`FALSE`、`0`、および空白文字はアクティブとして扱われます。 |
-| `AMBERCAST_DEBUG` | `main.ts` の bare catch、`stderr-progress-sink.ts` の run 進行状況シンク | クラッシュ原因のメッセージとスタックを stderr に出力します。 | run の分類不能なケース例外について、分類名、redact 済みのメッセージ、スタックも stderr に出力します。これらの診断にはリクエスト由来の機微なテキストが含まれる可能性があります。未設定、空、正確に `0`、または正確に `false` のとき非アクティブです。それ以外ではアクティブになり、大文字・小文字を区別して空白をトリムしません。 |
+| `AMBERCAST_DEBUG` | `main.ts` の bare catch、`stderr-progress-sink.ts` の run 進行状況シンク | クラッシュ原因のメッセージとスタックを stderr に出力します。 | run の分類不能なケース例外について、分類名、redact 済みのメッセージ、スタックも stderr に出力します。これらの診断にはリクエスト由来の機微なテキストが含まれる可能性があります。未設定、空、正確に `0`、または正確に `false` のとき非アクティブです。それ以外ではアクティブになり、大文字・小文字を区別して空白をトリムしません。 子プロセスの診断がある場合は、`child process: exit <n>` または `child process: signal <name>` と、本文（または `(empty)`）を伴う `child stderr:` も出力します。これらの新しい行にもリクエスト由来の機微なテキストが含まれる可能性があります。 |
 
 プロバイダーの解決では、読み込まれたプロバイダーの前にコマンドの `--ai` による上書きが適用されます。`auto` 以外の値はプローブを行わずに返されますが、`auto` は `claude`、次に `codex` の順でプローブします。
 

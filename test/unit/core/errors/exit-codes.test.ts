@@ -20,6 +20,7 @@ const ALL_ERROR_KINDS = [
   'browser-launch-failed',
   'port-unavailable',
   'ai-executor-unavailable',
+  'agentic-step-failed',
   'ai-response-invalid',
   'fs-io-error',
   'unexpected-crash',
@@ -52,6 +53,7 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
     case 'browser-launch-failed':
     case 'port-unavailable':
     case 'ai-executor-unavailable':
+    case 'agentic-step-failed':
     case 'ai-response-invalid':
     case 'fs-io-error':
     case 'unexpected-crash':

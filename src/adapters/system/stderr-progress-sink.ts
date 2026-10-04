@@ -93,4 +93,9 @@ function emitUnclassifiedRejection(
   const step = event.stepId === undefined ? '' : ` ${event.stepId}`;
   const stack = event.stack === undefined ? '' : `${escapeStackControlChars(event.stack)}\n`;
   stderr.write(`unclassified rejection in ${escapeControlChars(event.file)}${step}: ${event.name}: ${escapeControlChars(event.message)}\n${stack}`);
+  if (event.childProcess !== undefined) {
+    const child = event.childProcess;
+    stderr.write(`child process: ${child.signal === null ? `exit ${child.exitCode}` : `signal ${child.signal}`}\n`);
+    stderr.write(child.stderrTail === '' ? 'child stderr: (empty)\n' : `child stderr:\n${escapeStackControlChars(child.stderrTail)}\n`);
+  }
 }

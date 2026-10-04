@@ -20,6 +20,33 @@ function invocation(order: string[], readFinalOutcome: () => Promise<{ readonly 
 }
 
 describe('executeAgentic', () => {
+  it.each([
+    { label: 'exit 1', result: { outcome: 'exited' as const, stdout: '', stderr: 'PRIVATE_CHILD_STDERR', exitCode: 1 }, expected: 1 },
+    { label: 'SIGTERM', result: { outcome: 'signaled' as const, stdout: '', stderr: 'PRIVATE_CHILD_STDERR', signal: 'SIGTERM' as const }, expected: 'SIGTERM' },
+  ])('TEST-B14/B15 retains non-enumerable child diagnostics for $label', async ({ result, expected }) => {
+    const order: string[] = [];
+    mcp.start.mockResolvedValue({ url: 'http://127.0.0.1:1', token: 'token', awaitDrain: async () => undefined, peekLatchedError: () => undefined, close: async () => { order.push('close'); } });
+    const run: CommandRunner = async (_command, _args, options) => { options?.onChildSettled?.(result); return result; };
+    let rejection: unknown;
+    try { await executeAgentic(request(), run, invocation(order, async () => ({ outcome: 'success' }))); }
+    catch (error) { rejection = error; }
+    expect(rejection).toBeInstanceOf(Error);
+    const descriptors = Object.getOwnPropertyDescriptors(rejection);
+    const privateDiagnostics = Object.values(descriptors).filter(({ enumerable }) => enumerable === false).map(({ value }) => value);
+    expect(JSON.stringify(privateDiagnostics)).toContain('PRIVATE_CHILD_STDERR');
+    expect(JSON.stringify(privateDiagnostics)).toContain(String(expected));
+    expect(JSON.stringify(rejection)).not.toContain('PRIVATE_CHILD_STDERR');
+    expect(order).toEqual(['cleanup', 'close']);
+  });
+
+  it('TEST-B15 keeps an MCP-latched classified error ahead of a non-zero child exit', async () => {
+    const latch = new AiResponseInvalidError('MCP classified failure', { issues: [{ code: 'schema-mismatch', path: ['action'] }] });
+    mcp.start.mockResolvedValue({ url: 'http://127.0.0.1:1', token: 'token', awaitDrain: async () => undefined, peekLatchedError: () => latch, close: async () => undefined });
+    const result = { outcome: 'exited' as const, stdout: '', stderr: 'PRIVATE_CHILD_STDERR', exitCode: 1 };
+    const run: CommandRunner = async (_command, _args, options) => { options?.onChildSettled?.(result); return result; };
+    await expect(executeAgentic(request(), run, invocation([], async () => ({ outcome: 'success' })))).rejects.toBe(latch);
+    expect(JSON.stringify(latch)).not.toContain('PRIVATE_CHILD_STDERR');
+  });
   it('rejects an already-aborted request promptly without building or running a provider', async () => {
     const order: string[] = [];
     const abort = new Error('caller aborted before execution');

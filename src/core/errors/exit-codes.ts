@@ -33,7 +33,8 @@ export type ErrorExitCode = Exclude<ExitCode, 0>;
  * caller-correctable usage status because they are rejected before a browser
  * or provider performs work. The zero-match outcome remains distinct so an
  * empty invocation cannot be mistaken for an assertion failure or invalid
- * input.
+ * input. An explicit agentic failure after a normal child exit is an
+ * execution-environment failure.
  */
 export const ERROR_EXIT_CODES = {
   'assertion-failed': 1,
@@ -52,6 +53,7 @@ export const ERROR_EXIT_CODES = {
   'browser-launch-failed': 3,
   'ai-executor-unavailable': 3,
   'ai-response-invalid': 3,
+  'agentic-step-failed': 3,
   'executor-unsupported': 2,
   'fs-io-error': 3,
   'unexpected-crash': 3,

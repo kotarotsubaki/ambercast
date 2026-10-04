@@ -35,6 +35,20 @@ function paths(args: readonly string[]): { readonly schemaPath: string; readonly
 }
 
 describe('buildCodexInvocation', () => {
+  it('TEST-B15 retains exit-zero stderr privately when the final-output file is unreadable', async () => {
+    const invocation = await buildCodexInvocation('http://127.0.0.1:4312/mcp', 'test-token');
+    try {
+      let rejection: unknown;
+      try { await invocation.readFinalOutcome({ outcome: 'exited', stdout: '', stderr: 'PRIVATE_CHILD_STDERR', exitCode: 0 }); }
+      catch (error) { rejection = error; }
+      expect(rejection).toBeInstanceOf(Error);
+      const privateDiagnostics = Object.values(Object.getOwnPropertyDescriptors(rejection))
+        .filter(({ enumerable }) => enumerable === false).map(({ value }) => value);
+      expect(JSON.stringify(privateDiagnostics)).toContain('PRIVATE_CHILD_STDERR');
+      expect(JSON.stringify(privateDiagnostics)).toContain('0');
+      expect(JSON.stringify(rejection)).not.toContain('PRIVATE_CHILD_STDERR');
+    } finally { await invocation.cleanup(); }
+  });
   it('uses the isolated MCP configuration, puts its token in env, and reads the output file', async () => {
     const token = 'test-token';
     const invocation = await buildCodexInvocation('http://127.0.0.1:4312/mcp', token);

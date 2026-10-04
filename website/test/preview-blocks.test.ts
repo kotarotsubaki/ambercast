@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,7 @@ afterEach(() => {
   for (const root of fixtures.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function runPreview(mode: 'existing' | 'SIGINT' | 'SIGTERM' | 'nonzero' | 'unlink-fails' | 'unlink-fails-zero' | 'spawn-error' | 'spawn-throws') {
+function runPreview(mode: 'existing' | 'SIGINT' | 'SIGTERM' | 'nonzero' | 'signal-killed' | 'unlink-fails' | 'unlink-fails-zero' | 'spawn-error' | 'spawn-throws') {
   const root = mkdtempSync(join(tmpdir(), 'ambercast-preview-blocks-'));
   fixtures.push(root);
   const sourcePath = join(root, 'blocks.mdx');
@@ -44,6 +44,8 @@ const spawnFn = () => {
   };
   if (mode === 'nonzero' || mode === 'unlink-fails' || mode === 'unlink-fails-zero') {
     setImmediate(() => { mark('child-exit'); child.emit('exit', mode === 'unlink-fails-zero' ? 0 : 7, null); });
+  } else if (mode === 'signal-killed') {
+    setImmediate(() => { mark('child-exit'); child.emit('exit', null, 'SIGKILL'); });
   } else if (mode === 'SIGINT' || mode === 'SIGTERM') {
     setTimeout(() => process.kill(process.pid, mode), 30);
   }
@@ -91,17 +93,26 @@ describe('previewBlocks temporary page lifecycle', () => {
     expect(existsSync(destPath)).toBe(false);
   });
 
+  it('removes the copy and exits nonzero after a signal-only child exit', () => {
+    const { result, markers, destPath } = runPreview('signal-killed');
+    expect(result.status).not.toBe(0);
+    expect(markers).toEqual(['spawn', 'copy-bytes-match', 'child-exit', 'unlink', `process-exit:${result.status}`]);
+    expect(existsSync(destPath)).toBe(false);
+  });
+
   it('runs the real CLI, copies the page, starts npm run dev, and removes the page', () => {
-    const root = mkdtempSync(join(tmpdir(), 'ambercast-preview-cli-'));
+    const root = mkdtempSync(join(tmpdir(), 'ambercast-preview #cli-'));
     fixtures.push(root);
     const marker = join(root, 'npm-marker');
     const fakeNpm = join(root, 'npm');
+    const cliPath = join(root, 'preview #blocks.mjs');
     const sourcePath = join(root, 'blocks.mdx');
     const destPath = join(root, 'preview-blocks.mdx');
+    writeFileSync(cliPath, readFileSync(fileURLToPath(scriptUrl)));
     writeFileSync(sourcePath, Buffer.from([0, 10, 65, 255]));
     writeFileSync(fakeNpm, `#!${process.execPath}\nconst fs = require('node:fs');\nif (process.argv.slice(2).join(' ') !== 'run dev') process.exit(2);\nfs.writeFileSync(${JSON.stringify(marker)}, fs.readFileSync(${JSON.stringify(destPath)}));\n`);
     chmodSync(fakeNpm, 0o755);
-    const result = spawnSync(process.execPath, [fileURLToPath(scriptUrl)], {
+    const result = spawnSync(process.execPath, [realpathSync(cliPath)], {
       encoding: 'utf8', timeout: 5000,
       env: {
         ...process.env,
@@ -111,6 +122,7 @@ describe('previewBlocks temporary page lifecycle', () => {
       },
     });
     expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
     expect(readFileSync(marker)).toEqual(readFileSync(sourcePath));
     expect(existsSync(destPath)).toBe(false);

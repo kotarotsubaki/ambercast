@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import {
   GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE,
   GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE,
@@ -35,6 +36,7 @@ import type { AiExecuteRequest, AiExecuteResult } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
 import { generate, projectAllowedNames, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
+import { buildGenerateReport } from '#usecases/generate-report.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { getReportJsonSchema } from '#report/json-schema.js';
 import { AiResponseInvalidDetails, REPORT_SCHEMA_VERSION, ReportEnvelope } from '#report/schema.js';
@@ -59,6 +61,158 @@ vi.mock('#core/secrets/env-var-name.js', async (importOriginal) => {
   envVarNameMocks.actualAssertNoEnvVarCollision = actual.assertNoEnvVarCollision;
   envVarNameMocks.assertNoEnvVarCollision.mockImplementation(actual.assertNoEnvVarCollision);
   return { ...actual, assertNoEnvVarCollision: envVarNameMocks.assertNoEnvVarCollision };
+});
+
+describe('TEST-A1, TEST-A2, TEST-A5 and TEST-A7 generation confirms', () => {
+  const click = { id: 'click-submit', kind: 'action', action: 'click', target: 'web', intent: QUOTED_INTENT };
+  const navigate = { id: 'visit', kind: 'action', action: 'navigate', target: 'web', url: 'https://example.test' };
+
+  it.each([
+    ['separate assertions', [navigate,
+      { id: 'after-visit', kind: 'assert', check: 'text-visible', target: 'web', text: 'Home', confirms: ['visit'] },
+      click,
+      { id: 'after-click', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms: ['click-submit'] },
+    ]],
+    ['one mixed assertion', [navigate, click,
+      { id: 'after-click', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms: ['visit', 'click-submit'] },
+    ]],
+  ] as const)('drops navigation from %s with one provider call', async (_kind, steps) => {
+    const data = { steps, ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data, raw: JSON.stringify(data) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const file = await writePrompt(scenario.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const stderrWrites: string[] = [];
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      stderrWrites.push(String(chunk));
+      return true;
+    });
+    let outcome: Awaited<ReturnType<typeof generate>>;
+    try {
+      outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    } finally {
+      stderrWrite.mockRestore();
+    }
+    expect(execute).toHaveBeenCalledOnce();
+    expect(scenario.events.emitted().filter((event) => event.type === 'ai-call')).toHaveLength(1);
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    const plan = PlanDocument.parse(JSON.parse(await scenario.deps.storage.readText(scenario.deps.layout.planPathFor(file))));
+    const afterClick = plan.steps.find((step) => step.id === 'after-click');
+    expect(afterClick).toHaveProperty('confirms', ['click-submit']);
+    const afterVisit = plan.steps.find((step) => step.id === 'after-visit');
+    if (_kind === 'separate assertions') expect(afterVisit).toBeDefined();
+    if (afterVisit) {
+      expect(plan.steps[1]).toEqual(afterVisit);
+      expect(afterVisit).not.toHaveProperty('confirms');
+      expect(plan.steps[3]).toEqual(afterClick);
+    }
+    expect(JSON.stringify(outcome)).not.toContain('confirms-not-action');
+    const report = buildGenerateReport({ outcome, options: DEFAULT_OPTIONS, startedAt: '2026-10-04T00:00:00Z', durationMs: 1 });
+    expect(JSON.stringify(report.envelope)).not.toContain('confirms-not-action');
+    expect(stderrWrites.join('')).not.toContain('confirms');
+  });
+
+  it.each([
+    ['duplicate', ['visit', 'visit']],
+    ['forward reference', ['future', 'visit']],
+  ] as const)('TEST-A3/A4 removes %s navigation references without retry', async (_name, confirms) => {
+    const data = { steps: [navigate,
+      { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms },
+      { ...navigate, id: 'future' },
+    ], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data, raw: JSON.stringify(data) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const file = await writePrompt(scenario.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(scenario.events.emitted().filter((event) => event.type === 'ai-call')).toHaveLength(1);
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    const plan = PlanDocument.parse(JSON.parse(await scenario.deps.storage.readText(scenario.deps.layout.planPathFor(file))));
+    expect(plan.steps.find((step) => step.id === 'verify')).not.toHaveProperty('confirms');
+  });
+
+  it('sends an attributed unknown confirms issue without the unknown value or stepId', async () => {
+    const missingId = 'missing-action';
+    const invalid = { steps: [click, { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms: [missingId] }], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const corrected = { steps: [click], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    let attempts = 0;
+    const execute = vi.fn(async () => {
+      const data = attempts++ === 0 ? invalid : corrected;
+      return { data, raw: JSON.stringify(data) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    await generate(scenario.deps, DEFAULT_OPTIONS);
+    const context = (execute.mock.calls as unknown as Array<[{ context: { previousAttempts?: Array<{ issues?: unknown[] }> } }]>)[1]?.[0].context;
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(context?.previousAttempts?.[0]?.issues).toEqual([{ code: 'confirms-unknown-step', path: ['steps', 1, 'confirms', 0] }]);
+    expect(JSON.stringify(context?.previousAttempts)).not.toContain(missingId);
+  });
+
+  it('TEST-A7 leaves an unrelated PlanDocument violation as schema-mismatch', async () => {
+    const data = { steps: [click, { ...click }], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data, raw: JSON.stringify(data) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+    expect(outcome.results[0]?.error?.details?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'schema-mismatch' }),
+    ]));
+  });
+
+  it.each([
+    ['confirms-unknown-step', [{ id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms: ['missing-action'] }], ['steps', 0, 'confirms', 0]],
+    ['confirms-not-earlier', [{ id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms: ['click-submit'] }, click], ['steps', 0, 'confirms', 0]],
+    ['confirms-not-action', [{ id: 'first', kind: 'assert', check: 'text-visible', target: 'web', text: 'Ready' }, { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms: ['first'] }], ['steps', 1, 'confirms', 0]],
+    ['confirms-duplicate', [click, { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Done', confirms: ['click-submit', 'click-submit'] }], ['steps', 1, 'confirms', 1]],
+  ] as const)('TEST-A6 reports %s without provider values', async (code, steps, path) => {
+    const data = { steps, ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data, raw: JSON.stringify(data) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 2 });
+    expect(execute).toHaveBeenCalledTimes(2);
+    const report = buildGenerateReport({ outcome, options: DEFAULT_OPTIONS, startedAt: '2026-10-04T00:00:00Z', durationMs: 1 });
+    const reportError = report.envelope.errors[0];
+    const issues = reportError && 'details' in reportError && reportError.details && 'issues' in reportError.details
+      ? reportError.details.issues : undefined;
+    expect(issues).toEqual([{ code, path }]);
+    const previousAttempts = (execute.mock.calls as unknown as Array<[{ context: { previousAttempts?: unknown[] } }]>)[1]?.[0].context.previousAttempts;
+    expect(previousAttempts).toBeDefined();
+    const serialized = JSON.stringify({ report: report.envelope, previousAttempts });
+    const providerValue = code === 'confirms-unknown-step' ? 'missing-action'
+      : code === 'confirms-not-earlier' ? 'click-submit'
+      : code === 'confirms-not-action' ? 'first' : 'click-submit';
+    const violationMessage = code === 'confirms-unknown-step' ? `step id "${providerValue}" in confirms array does not match any step in the plan`
+      : code === 'confirms-not-earlier' ? `step id "${providerValue}" refers to a step that is not earlier in plan order`
+      : code === 'confirms-not-action' ? `step id "${providerValue}" refers to a step that is not a valid action or capture step`
+      : `step id "${providerValue}" is repeated in the confirms array`;
+    expect(serialized).not.toContain(violationMessage);
+    expect(serialized).not.toContain(providerValue);
+  });
+
+  it('TEST-A6b maps a present but non-public confirms-unsorted param to schema-mismatch', async () => {
+    const data = { steps: [click], ambiguities: [] } as unknown as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data, raw: JSON.stringify(data) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+    const rawIssue = { code: 'custom' as const, path: ['steps', 0, 'confirms', 0], message: 'provider prose must stay private', params: { confirmsCode: 'confirms-unsorted' } };
+    expect(rawIssue.params.confirmsCode).toBe('confirms-unsorted');
+    const originalSafeParse = PlanDocument.safeParse.bind(PlanDocument);
+    const parse = vi.spyOn(PlanDocument, 'safeParse').mockImplementation((candidate) => {
+      if (typeof candidate === 'object' && candidate !== null && 'steps' in candidate) {
+        return { success: false, error: new z.ZodError([rawIssue]) } as ReturnType<typeof PlanDocument.safeParse>;
+      }
+      return originalSafeParse(candidate);
+    });
+    try {
+      const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 1 });
+      expect(execute).toHaveBeenCalledOnce();
+      expect(outcome.results[0]?.error?.details?.issues).toEqual([{ code: 'schema-mismatch', path: rawIssue.path }]);
+      expect(JSON.stringify(outcome)).not.toContain(rawIssue.message);
+    } finally {
+      parse.mockRestore();
+    }
+  });
 });
 
 const secretNamingMocks = vi.hoisted(() => ({
@@ -3573,7 +3727,8 @@ describe('generate v5 element intent and confirmation contracts', () => {
     ['intent attribution', { ...QUOTED_INTENT, citation: 'not in the prompt' }, 'intent-citation-mismatch'],
     ['quote attribution', { ...QUOTED_INTENT, quote: { ...QUOTED_INTENT.quote, text: 'Not Password' } }, 'quote-text-mismatch'],
     ['quote-less element assert', undefined, 'schema-mismatch'],
-    ['invalid confirms reference', QUOTED_INTENT, 'schema-mismatch'],
+    // An invalid confirms reference is attributed to its closed-set report code rather than schema-mismatch.
+    ['invalid confirms reference', QUOTED_INTENT, 'confirms-unknown-step'],
   ] as const)('TEST-G2 retries %s and writes the corrected plan', async (kind, intent, code) => {
     const badStep = kind === 'quote-less element assert'
       ? { id: 'assert-password', kind: 'assert', check: 'element-visible', target: 'web', intent: { ...QUOTED_INTENT, quote: undefined } }
@@ -3595,7 +3750,7 @@ describe('generate v5 element intent and confirmation contracts', () => {
     expect(execute).toHaveBeenCalledTimes(2);
     expect((execute.mock.calls as unknown as Array<[{ readonly context: unknown }]>)[1]?.[0].context).toMatchObject({
       previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [
-        expect.objectContaining({ code, path: expect.any(Array), ...(code === 'schema-mismatch' ? {} : { stepId: 'click-password' }) }),
+        expect.objectContaining({ code, path: expect.any(Array), ...(code === 'confirms-unknown-step' || code === 'schema-mismatch' ? {} : { stepId: 'click-password' }) }),
       ] }],
     });
     expect(await scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).toBe(true);

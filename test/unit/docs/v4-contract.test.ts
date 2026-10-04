@@ -142,7 +142,7 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     expect(changelog).toContain(expected.versions.report);
     const compatibility = reference('compatibility');
     const versionRow = compatibility.split('\n').find((value) => value.startsWith('| `0.7.0` |'));
-    expect(versionRow).toMatch(/^\| `0\.7\.0` \| `5` \| `3` \|[^\n]*\| `3\.8` \|$/);
+    expect(versionRow).toMatch(/^\| `0\.7\.0` \| `5` \| `3` \|[^\n]*\| `3\.9` \|$/);
   });
 
   it('keeps --target only on generate and explains config target semantics', () => {

@@ -18,7 +18,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | targets と steps を含む、現在の完成した `PlanDocument`。 | 利用可能 |
 | grounding（履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | 廃止された契約の利用者のために保持される、凍結済みの Grounding v2 スナップショット。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.8"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.9"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
 各スキーマの `$id` はその公開パス URL と一致します。バイト単位で同一のスキーマファイルが、ドキュメントサイトと npm の `schemas/` エクスポートに公開されています。
 
@@ -31,7 +31,7 @@ ambercast は、これらのメタデータと、ドキュメントサイトお�
 | `plan.schema.json` | Plan の `schemaVersion` が 5 であり、provenance source、targets、steps を含む現在の完成した `PlanDocument`。 | JSON Schema 2020-12 として変換された Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | Grounding の `schemaVersion` が 3 であり、`planDigest` およびステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 として変換された Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須であり、それ以外に宣言される設定は任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 として変換された Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report の `schemaVersion` 3.8 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report の `schemaVersion` 3.9 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行します。これによりスキーマディレクトリが再帰的に作成され、上記のちょうど 4 つのファイルが書き出されます。
 
@@ -47,6 +47,6 @@ Plan の重複するステップ ID は、JSON Schema 2020-12 では配列項目
 
 ## レポートスキーマ {#report-schema}
 
-`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.8、必須のステップ Target 識別情報、および実行された run と完了した heal の結果に含まれるセッション一覧を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
+`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.9、必須のステップ Target 識別情報、および実行された run と完了した heal の結果に含まれるセッション一覧を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#key-table), [レポート](/ambercast/ja/reference/reports/#envelope), [適合性](/ambercast/ja/spec/conformance/), [計画ドキュメント](/ambercast/ja/spec/plan-document/), [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)

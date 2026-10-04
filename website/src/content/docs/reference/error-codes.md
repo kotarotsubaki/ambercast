@@ -32,4 +32,15 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | UNEXPECTED_CRASH | environment | run/case | 3 | uncategorized crash |
 | INTERRUPTED | environment | run only | 3 | batch cancellation |
 
+### AI response issue codes {#ai-response-issue-codes}
+
+The following `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` retry and report issues when a generated `confirms` reference fails validation. `confirms-unsorted` remains internal and does not appear in retry feedback.
+
+| code | condition |
+| --- | --- |
+| `confirms-unknown-step` | referenced step ID is unknown |
+| `confirms-not-earlier` | referenced step is the same or later step |
+| `confirms-not-action` | referenced step is not an eligible action or capture |
+| `confirms-duplicate` | referenced step ID is repeated |
+
 A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.

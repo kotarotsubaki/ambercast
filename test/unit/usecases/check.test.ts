@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { DEFAULT_RAW_CONFIG } from '#config/defaults.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
@@ -129,6 +130,19 @@ function createScenario(overrides: Partial<CheckDeps> = {}) {
 }
 
 describe('check', () => {
+  it('TEST-V1 keeps a fixed v5 plan fixture fresh after the report-only version change', async () => {
+    const { storage, layout, deps } = createScenario({ discoverTestFiles: createDiscovery(['issue-518-v5.test.md']) });
+    const testPath = `${TEST_DIR}/issue-518-v5.test.md`;
+    const prompt = readFileSync(new URL('../../fixtures/issue-518-v5.test.md', import.meta.url), 'utf8');
+    const planText = readFileSync(new URL('../../fixtures/issue-518-v5.ambercast.plan.json', import.meta.url), 'utf8');
+    const plan = JSON.parse(planText) as PlanDocument;
+    await storage.writeText(testPath, prompt);
+    await storage.writeText(layout.planPathFor(testPath), planText);
+    await writeGrounding(storage, layout, testPath, plan);
+    const result = await check(deps, OPTIONS);
+    expect(result.results).toEqual([expect.objectContaining({ id: testPath, status: 'fresh' })]);
+  });
+
   it('TEST-C1 reports retired v4 plans and invalid committed element intents as stale with exit 4', async () => {
     const { storage, layout, deps } = createScenario();
     const retiredPath = `${TEST_DIR}/retired-v4.test.md`;

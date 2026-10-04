@@ -217,8 +217,8 @@ describe('TEST-R11 report and event vocabulary', () => {
   const stepEvents = (events: ReturnType<typeof createRecordingEventSink>) =>
     events.emitted().filter((event): event is Extract<RunEvent, { type: 'step-result' }> => event.type === 'step-result');
 
-  it('accepts report 3.8 bindings and all four new unresolved reasons', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
+  it('accepts report 3.9 bindings and all four new unresolved reasons', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
     expect(StepResult.parse({
       id: 'click-submit', type: 'action', target: 'web', status: 'passed',
       binding: { provenance: 'grounding', confirmed: true },

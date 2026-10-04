@@ -16,7 +16,7 @@
   "schemaVersions": {
     "plan": 5,
     "grounding": 3,
-    "report": "3.8"
+    "report": "3.9"
   },
   "fingerprintAlgorithm": "a11y-neighborhood-v2",
   "exitCodes": [

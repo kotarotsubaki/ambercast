@@ -4,6 +4,7 @@
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| report 3.8 → 3.9 adds four confirmation issue codes to `AiResponseIssueCode`. | repo:src/report/schema.ts:57 | Report consumers MUST accept the current `3.9` contract, including `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate` on `AiResponseIssueCode`. This additive report change requires no Plan or grounding regeneration. [repo:src/report/schema.ts:57] |
 | Deadline-bearing polling (the five `run.ts` loops: first-binding stage 1 plus the four assert loops, including the `text-visible` / `url-matches` browser-check path) always takes one more observation after the wait that reaches the deadline, and that observation is judged as the final result even if the real timer fires after the deadline. Element-assert `expected` text omits the role segment when no `roleHint` is present. | repo:src/usecases/run.ts | No Plan, grounding, or report regeneration is required. A test relying on the previous stale pre-deadline sample (or the double-space `expected` text without a role hint) must update its expectation. |
 | Plan v4 → v5 adds source-backed `intent`/`confirms` fields to element-bearing steps and Target-scoped `locale`; Grounding v2 → v3 replaces bare fingerprint evidence with `{locator, fingerprint, intentDigest, provenance}`; report 3.7 → 3.8 adds heal Stage 1 `binding` diagnostics and reason vocabulary. | repo:src/core/ir/schema.ts, repo:src/report/schema.ts | Regenerate v4 plans; v5 is the accepted Plan format. v2 grounding companions are also retired and must be regenerated alongside their plan. |
 | TP3 unifies the executor kind vocabulary in a total registry and removes TP2's unreachable `executor-unregistered` reason. Element step grounding misses without `--resolve` now consistently report `GROUNDING_UNRESOLVED` (exit 4 instead of exit 3, with a code instead of no code). Plan v4, grounding v2, and the config schema are unchanged; report 3.7 only narrows the browser launch reason enum. | repo:src/core/executor/kinds.ts, repo:src/adapters/browser/registry.ts, repo:src/usecases/run.ts, repo:src/report/schema.ts | Report consumers should remove `executor-unregistered` and accept `GROUNDING_UNRESOLVED` for element steps. No Plan or grounding regeneration is required. |
@@ -25,7 +26,7 @@
 
 ## Compatibility policy {#compatibility-policy}
 
-Artifact version acceptance MUST follow [[spec/overview#compatibility]], not release-number intuition. A schema-version change MAY require regeneration in a minor release because plans are derived artifacts. [repo:src/core/ir/schema.ts:45] 
+Artifact version acceptance MUST follow [[spec/overview#compatibility]], not release-number intuition. A schema-version change MAY require regeneration in a minor release because plans are derived artifacts. [repo:src/core/ir/schema.ts:45]
 
 ## Rationale {#rationale}
 

@@ -9,7 +9,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.8` |
+| `schemaVersion` | リテラル `3.9` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -109,7 +109,7 @@ action と capture のステップでは、ローカル検証後に `binding: { 
 
 | コード | 任意の `details` 形状 |
 | --- | --- |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任意の instruction-coverage または element-intent issue code、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected"、または "secret-conflicting-target-names"（後者2つは常に stepId を伴う）; path: Array<string または非負整数>; stepId?: StepId }>, attempts?: ... }` |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任意の instruction-coverage・element-intent・confirms issue code（`confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`）、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected"、または "secret-conflicting-target-names"（後者2つは常に stepId を伴う）; path: Array<string または非負整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token、または embedded-secret-reference; path: 空白以外の文字列; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
 | `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", または "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 空白以外の文字列, reason: 空白以外の文字列 }> }` |
@@ -137,19 +137,19 @@ action と capture のステップでは、ローカル検証後に `binding: { 
 現行スキーマ版に固定されるのは書き込み側のみです。viewer は 3.x のレポートをすべて寛容に読み取ります。
 
 ```json
-{"schemaVersion":"3.8","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.9","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.8","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.9","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.8","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.9","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.8","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.9","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}

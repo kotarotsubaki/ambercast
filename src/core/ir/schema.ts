@@ -1500,7 +1500,8 @@ export const PlanDocument = z.strictObject({
   }
 
   for (const issue of validateConfirms(plan.steps)) {
-    ctx.addIssue({ code: 'custom', message: issue.message, path: [...issue.path] });
+    // Carry the closed-set cause in params.confirmsCode so generation can report and retry a specific violation instead of schema-mismatch.
+    ctx.addIssue({ code: 'custom', message: issue.message, path: [...issue.path], params: { confirmsCode: issue.code } });
   }
 });
 

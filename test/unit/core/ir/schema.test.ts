@@ -994,6 +994,37 @@ describe('TraceAction, TraceAssert, TraceEntry, and TraceRecord', () => {
 });
 
 describe('PlanDocument', () => {
+  it.each([
+    ['confirms-unknown-step', [
+      { id: 'check', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['missing'] },
+    ], ['steps', 0, 'confirms', 0]],
+    ['confirms-not-earlier', [
+      { id: 'check', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['later'] },
+      { id: 'later', kind: 'action', action: 'click', intent: INTENT },
+    ], ['steps', 0, 'confirms', 0]],
+    ['confirms-not-action', [
+      { id: 'visit', kind: 'action', action: 'navigate', url: 'https://example.test' },
+      { id: 'check', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['visit'] },
+    ], ['steps', 1, 'confirms', 0]],
+    ['confirms-duplicate', [
+      { id: 'click', kind: 'action', action: 'click', intent: INTENT },
+      { id: 'check', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['click', 'click'] },
+    ], ['steps', 1, 'confirms', 1]],
+  ] as const)('attributes %s on its Zod custom issue', (code, steps, path) => {
+    const result = PlanDocument.safeParse(plan([...steps]));
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toContainEqual(expect.objectContaining({ code: 'custom', path, params: { confirmsCode: code } }));
+  });
+
+  it('does not attribute an unused-target violation as a confirms issue', () => {
+    const result = PlanDocument.safeParse(plan([], { app: TARGET_DEFINITION }));
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toEqual([expect.objectContaining({ code: 'custom', path: ['targets', 'app'] })]);
+    expect('params' in result.error.issues[0]! ? result.error.issues[0].params?.confirmsCode : undefined).toBeUndefined();
+  });
+
   it('accepts a plan combining action, assert, capture, and AI steps', () => {
     expectAccepted(PlanDocument, plan([
       { id: 'open-home', kind: 'action', target: 'app', action: 'navigate', url: 'https://example.test' },

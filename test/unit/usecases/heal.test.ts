@@ -4707,6 +4707,75 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason: 'obligation-mismatch' }]));
   });
 
+  it.each([
+    ['one click', ['click-submit'], ['visit', 'click-submit']],
+    ['two clicks in reverse provider order', ['click-submit', 'click-after'], ['click-after', 'visit', 'click-submit']],
+  ] as const)('TEST-A8 accepts Stage 2 confirms with %s and retains original action order', async (_name, originalConfirms, confirms) => {
+    const secondClick = Step.parse({ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: committedIntent(AFTER_SUBMIT) });
+    let launch = 0;
+    const scenario = await createScenario({
+      steps: [
+        CONFIRMED_SUBMIT_STEPS[0]!,
+        ...(originalConfirms.length === 2 ? [secondClick] : []),
+        Step.parse({ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: [...originalConfirms] }),
+        Step.parse({ id: 'visit', kind: 'action', target: 'web', action: 'navigate', url: 'https://example.test' }),
+      ],
+      grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT), ...(originalConfirms.length === 2 ? { 'click-after': groundingEntry(AFTER_SUBMIT, FINGERPRINT) } : {}) },
+      sessionEntries: liveEntries(SUBMIT, AFTER_SUBMIT),
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => {
+        const entries = liveEntries(SUBMIT, AFTER_SUBMIT);
+        return createFakeBrowserSession(entries, {
+          baseUrl: TARGETS.web.baseUrl, currentUrl: TARGETS.web.baseUrl, snapshot: healSnapshot(entries),
+          assertOutcome: launch++ >= 3 ? { passed: true } : { passed: false, message: 'Dashboard is absent.' },
+        });
+      })),
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
+        : { data: { steps: [{ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: [...confirms] }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'repair-me', outcome: 'accepted' },
+    ]));
+    await expect(result.commits.get(OPTIONS.files[0]!)?.commit()).resolves.toEqual({ outcome: 'committed' });
+    const accepted = PlanDocument.parse(JSON.parse(await scenario.storage.readText(PLAN)));
+    expect(accepted.steps.find((step) => step.id === 'repair-me')).toHaveProperty('confirms', originalConfirms);
+  });
+
+  it('TEST-A9 maps a surviving unknown Stage 2 confirms reference to obligation-mismatch', async () => {
+    const scenario = await createScenario({
+      steps: [CONFIRMED_SUBMIT_STEPS[0]!, Step.parse({ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] })],
+      grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) },
+      sessionEntries: liveEntries(SUBMIT),
+      assertOutcome: { passed: false, message: 'Dashboard is absent.' },
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
+        : { data: { steps: [{ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit', 'unknown-action'] }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason: 'obligation-mismatch' },
+    ]));
+  });
+
+  it('TEST-A8 rejects a new known click confirmation as obligation-mismatch', async () => {
+    const secondClick = Step.parse({ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: committedIntent(AFTER_SUBMIT) });
+    const scenario = await createScenario({
+      steps: [CONFIRMED_SUBMIT_STEPS[0]!, secondClick,
+        Step.parse({ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] })],
+      grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT), 'click-after': groundingEntry(AFTER_SUBMIT, FINGERPRINT) },
+      sessionEntries: liveEntries(SUBMIT, AFTER_SUBMIT),
+      assertOutcome: { passed: false, message: 'Dashboard is absent.' },
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+        ? elementBindingProposal(request)
+        : { data: { steps: [{ id: 'repair-me', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit', 'click-after'] }], ambiguities: [] }, raw: '{}' } }),
+    });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason: 'obligation-mismatch' },
+    ]));
+  });
+
   it('TEST-H5 rejects invalid replacement intent with intent-invalid', async () => {
     const scenario = await createScenario({
       grounding: {},

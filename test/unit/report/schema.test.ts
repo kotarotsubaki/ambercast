@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
+import { GROUNDING_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, SecretName as CoreSecretName, SecretRef as CoreSecretRef, StepId as CoreStepId } from '#core/ir/schema.js';
+import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { PLAN_PRODUCER_SEMANTIC_REVISIONS, planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
+import { readFileSync } from 'node:fs';
+import { computeInputsDigest } from '#core/ir/digest.js';
+import { normalizeTestMd } from '#core/ir/normalize.js';
 import {
   AiResponseIssue,
   AiResponseIssueCode,
@@ -126,7 +131,7 @@ const CASE_FS_IO_ERROR = {
   caseId: 'login-succeeds',
 };
 
-describe('TEST-20 report schema 3.8', () => {
+describe('TEST-20 report schema 3.9', () => {
   const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
   const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
   const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
@@ -150,10 +155,31 @@ describe('TEST-20 report schema 3.8', () => {
     expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
   });
 
-  it('pins the shared report version to 3.8', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
-    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.8' }));
+  it('pins the shared report version to 3.9', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.9' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
+  });
+});
+
+describe('TEST-V1 report-only version change', () => {
+  it('keeps the Plan and Grounding schema versions and producer contract unchanged', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+    expect(PLAN_SCHEMA_VERSION).toBe(5);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(3);
+    expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
+    // Pins the producer-input fingerprints so this test fails if either changes; update only with a deliberate plan-producer change.
+    expect(promptTemplateFingerprint()).toBe('41cbe77e7b967242094b421f8b278e1ea6083e0d5ce30bf3c8ba9ebc33ba17d5');
+    expect(planProducerBundleFingerprint()).toBe('58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58');
+    const prompt = readFileSync(new URL('../../fixtures/issue-518-v5.test.md', import.meta.url), 'utf8');
+    const fixture = JSON.parse(readFileSync(new URL('../../fixtures/issue-518-v5.ambercast.plan.json', import.meta.url), 'utf8')) as {
+      source: { inputsDigest: string }; targets: Record<string, { surface: 'web'; baseUrl: string }>;
+    };
+    expect(computeInputsDigest({
+      normalizedTestMd: normalizeTestMd(prompt), schemaVersion: PLAN_SCHEMA_VERSION,
+      generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
+      planProducerBundleFingerprint: planProducerBundleFingerprint(), targetDefinitions: fixture.targets,
+    })).toBe(fixture.source.inputsDigest);
   });
 });
 
@@ -173,7 +199,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.8',
+    schemaVersion: '3.9',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -404,11 +430,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.8', () => {
+  it('requires schema version 3.9', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.8' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.9' });
   });
 });
 
@@ -416,8 +442,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.8', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
+  it('exports schema version 3.9', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -933,7 +959,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.8');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
   });
 
   it.each(generateBranches)(

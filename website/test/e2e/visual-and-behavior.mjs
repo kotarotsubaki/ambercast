@@ -2,14 +2,17 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, readdir } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { once } from 'node:events';
 import { chromium } from 'playwright-core';
 import { plannedPageSlugs, readCapabilityPages } from '../../scripts/lib/capability-pages.mjs';
 import { orderSchemaFilenames } from '../../scripts/lib/published-schemas.mjs';
+import { diagramId } from '../../scripts/lib/mermaid-fences.mjs';
+import { renderDiagrams } from '../../scripts/render-diagrams.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEBSITE_DIRECTORY = resolve(HERE, '../..');
@@ -1712,6 +1715,29 @@ async function assertOverviewDiagrams(browser) {
   }
 }
 
+async function assertDiagramRenderDeterminism() {
+  const root = mkdtempSync(join(tmpdir(), 'ambercast-diagram-'));
+  try {
+    const specRoot = join(root, 'docs/spec');
+    const outDir = join(root, 'public/diagrams');
+    mkdirSync(specRoot, { recursive: true });
+    const body = 'flowchart LR\n  A --> B';
+    writeFileSync(join(specRoot, 'a.md'), '```mermaid alt="diagram"\n' + body + '\n```\n');
+    const id = diagramId(body);
+    const asset = (theme) => join(outDir, `${id}.${theme}.svg`);
+
+    await renderDiagrams({ roots: { specRoot }, outDir });
+    const first = ['light', 'dark'].map((theme) => readFileSync(asset(theme)));
+    rmSync(outDir, { recursive: true, force: true });
+    await renderDiagrams({ roots: { specRoot }, outDir });
+    for (const [index, theme] of ['light', 'dark'].entries()) {
+      assert.deepEqual(readFileSync(asset(theme)), first[index], `Mermaid ${theme} SVG must be byte-identical across two real Chromium renders.`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function captureScreenshots(browser) {
   await mkdir(SCREENSHOT_DIRECTORY, { recursive: true });
 
@@ -1773,6 +1799,7 @@ async function main() {
     await assertMarkdownCodeTokenPalette(browser);
     await assertJsonCodeTokenPalette(browser);
     await assertOverviewDiagrams(browser);
+    await assertDiagramRenderDeterminism();
     await assertCodeFrameVariants(browser);
     await assertCodeBlockScroll(browser);
     await assertDocumentColumnSymmetry(browser);

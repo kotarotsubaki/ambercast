@@ -3253,17 +3253,24 @@ const DISPATCH_TABLE = {
   capture: executeCapture,
 } satisfies Record<Exclude<Step['kind'], 'ai' | 'assert'>, StepExecutor>;
 
+/** SPEC-R9: a grounding binding came from an entry confirmed in an earlier run. */
+function isBindingConfirmed(state: BindingState): boolean {
+  return state.provenance === 'grounding' || state.stage === 'confirmed';
+}
+
 /**
  * SPEC-R9 reports bindings only for steps that passed stage 3; a step stopped
- * before stage 3 has no state and no binding. `confirmed` reflects the current
- * state here, then the case-end backfill accounts for later confirmation.
+ * before stage 3 has no state and no binding. `confirmed` is always true for a
+ * `grounding` binding, whose entry was confirmed in an earlier run; for other
+ * provenances it reflects the current stage here, and the case-end backfill
+ * accounts for later confirmation.
  */
 function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult['binding'] {
   const state = context.bindingStates.get(stepId);
   if (state === undefined) return undefined;
   return {
     provenance: state.provenance,
-    confirmed: state.stage === 'confirmed',
+    confirmed: isBindingConfirmed(state),
     ...(state.quoteWaitMs === undefined ? {} : { quoteWaitMs: state.quoteWaitMs }),
     ...(state.aiProposalMs === undefined ? {} : { aiProposalMs: state.aiProposalMs }),
   };
@@ -3334,7 +3341,9 @@ function promoteConfirmedBindings(
 
 /**
  * SPEC-R5 requires `confirmed` to reflect case-end state, including a later
- * confirming step that changes a binding projected earlier as false.
+ * confirming step that changes a binding projected earlier as false; a
+ * `grounding` binding stays true (SPEC-R9) even though its stage remains `acted`
+ * after a failed operation.
  */
 function backfillConfirmedBindings(
   context: DispatchContext | undefined,
@@ -3343,7 +3352,8 @@ function backfillConfirmedBindings(
   if (context === undefined) return [...steps];
   return steps.map((entry) => {
     if (entry.binding === undefined) return entry;
-    const confirmed = context.bindingStates.get(entry.id as StepId)?.stage === 'confirmed';
+    const state = context.bindingStates.get(entry.id as StepId);
+    const confirmed = state !== undefined && isBindingConfirmed(state);
     return confirmed === entry.binding.confirmed ? entry : { ...entry, binding: { ...entry.binding, confirmed } };
   });
 }

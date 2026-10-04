@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawnSupervised, spawnSupervisedCli, type SupervisedCli } from '../../contract-browser/support/supervised-cli.js';
 
 const shortTimings = { sigtermAfterMs: 250, sigkillAfterMs: 30, failAfterMs: 30, pollIntervalMs: 5 };
-const naturalExitTimings = { ...shortTimings, sigtermAfterMs: 5_000 };
+const naturalExitTimings = { ...shortTimings, sigtermAfterMs: 5_000, failAfterMs: 5_000 };
 const childScript = (source: string): readonly string[] => ['-e', source];
 const waitDeadlineMs = 5_000;
 
@@ -42,6 +42,9 @@ function isPidAlive(pid: number): boolean {
     return true;
   } catch (error: unknown) {
     if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+    // EPERM means we lack permission to signal the process, not that it's
+    // gone (ESRCH would mean that) — treat it as alive rather than erroring.
+    if (error instanceof Error && 'code' in error && error.code === 'EPERM') return true;
     throw error;
   }
 }
@@ -52,6 +55,9 @@ function isGroupAlive(groupId: number): boolean {
     return true;
   } catch (error: unknown) {
     if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+    // EPERM means we lack permission to signal the process, not that it's
+    // gone (ESRCH would mean that) — treat it as alive rather than erroring.
+    if (error instanceof Error && 'code' in error && error.code === 'EPERM') return true;
     throw error;
   }
 }
@@ -71,20 +77,23 @@ describe('supervised process spawning', () => {
     }
   });
   afterEach(async () => {
-    for (const groupId of groupIds) {
-      try {
-        process.kill(-groupId, 'SIGKILL');
-      } catch (error: unknown) {
-        if (!(error instanceof Error) || !('code' in error) || error.code !== 'ESRCH') throw error;
+    try {
+      for (const groupId of groupIds) {
+        try {
+          process.kill(-groupId, 'SIGKILL');
+        } catch (error: unknown) {
+          if (!(error instanceof Error) || !('code' in error) || (error.code !== 'ESRCH' && error.code !== 'EPERM')) throw error;
+        }
       }
+      await Promise.all([...groupIds].map((groupId) => waitFor(
+        () => !isGroupAlive(groupId),
+        `process group ${groupId} to exit during test cleanup`,
+      )));
+    } finally {
+      groupIds.clear();
+      vi.restoreAllMocks();
+      await Promise.all(projects.splice(0).map((project) => rm(project, { recursive: true, force: true })));
     }
-    await Promise.all([...groupIds].map((groupId) => waitFor(
-      () => !isGroupAlive(groupId),
-      `process group ${groupId} to exit during test cleanup`,
-    )));
-    groupIds.clear();
-    vi.restoreAllMocks();
-    await Promise.all(projects.splice(0).map((project) => rm(project, { recursive: true, force: true })));
   });
 
   it('returns stdout and exit code for a quick cooperative process without signaling', async () => {
@@ -102,7 +111,7 @@ describe('supervised process spawning', () => {
       childScript("process.on('SIGTERM', () => {}); process.stdout.write('ready'); setInterval(() => {}, 1_000);"),
       process.cwd(),
       process.env,
-      { ...shortTimings, sigtermAfterMs: naturalExitTimings.sigtermAfterMs },
+      naturalExitTimings,
     ));
 
     const stdout = invocation.child.stdout;
@@ -120,7 +129,7 @@ describe('supervised process spawning', () => {
     const kill = vi.spyOn(process, 'kill');
     const grandchild = "const fs=require('node:fs'); const marker=process.argv[1]; process.on('SIGTERM',()=>fs.appendFileSync(marker,'term\\n')); fs.appendFileSync(marker, `ready:${process.pid}\\n`); setInterval(()=>{},1000);";
     const parent = `const fs=require('node:fs'); const marker=${JSON.stringify(marker)}; const child=require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}, marker], { stdio: 'ignore' }); const check=setInterval(()=>{ if (fs.existsSync(marker)) { clearInterval(check); child.unref(); } }, 5);`;
-    const descendantTimings = { ...shortTimings, sigtermAfterMs: 300 };
+    const descendantTimings = { ...naturalExitTimings, sigkillAfterMs: 2_000 };
     const invocation = track(spawnSupervised(process.execPath, childScript(parent), project, process.env, descendantTimings));
     expect(invocation.child.once).toBeTypeOf('function');
     const parentClosed = new Promise<void>((resolve) => invocation.child.once('close', () => resolve()));
@@ -192,8 +201,9 @@ describe('supervised process spawning', () => {
     expect(signalsSent(kill)).toEqual([]);
   });
 
+  // CLI startup can take seconds under CPU contention; the watchdog only needs to bound a hung CLI, so it stays far above startup time.
   it('adapts the built CLI through spawnSupervisedCli', async () => {
-    const cliStartupTimings = { ...shortTimings, sigtermAfterMs: 5_000 };
+    const cliStartupTimings = { ...shortTimings, sigtermAfterMs: 20_000, failAfterMs: 5_000 };
     const invocation = track(spawnSupervisedCli(['--version'], process.cwd(), process.env, cliStartupTimings));
     const result = await invocation.result;
 

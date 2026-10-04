@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "a403f5b63d96d4d4a462925438e4961a324360af08a7b3aecc344ddd53ba990d"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "id": "visit-web",
+      "kind": "action",
+      "target": "web",
+      "url": "/"
+    }
+  ],
+  "targets": {
+    "web": {
+      "baseUrl": "https://example.test",
+      "surface": "web"
+    }
+  }
+}

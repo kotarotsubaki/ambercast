@@ -12,7 +12,7 @@ Ambercast defines artifact-format compatibility and regeneration boundaries acro
 | `0.1.0` | `2` | `1` (not yet confirmed) | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
-| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
 
 In version 0.2.0, the provider request contract changed without incrementing the Plan schema version. That change updated `producerBundleFingerprint` and altered every prompt's `inputsDigest`, making 0.1.0 plans stale (see [Changelog](/ambercast/reference/changelog/#release-020)).
 

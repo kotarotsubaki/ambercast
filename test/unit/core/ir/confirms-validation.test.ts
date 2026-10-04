@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { validateConfirms } from '#core/ir/confirms-validation.js';
-import { Step } from '#core/ir/schema.js';
+import { dropNavigateConfirms, validateConfirms } from '#core/ir/confirms-validation.js';
+import { PlanDocument, Step } from '#core/ir/schema.js';
 
 const intent = { description: 'Submit', sourceSpan: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 2 } } as const;
 
@@ -16,6 +16,10 @@ function assertion(id: string, confirms: string[], target = 'app'): Step {
 
 function issue(code: string, stepIndex: number, entryIndex: number) {
   return expect.objectContaining({ code, path: ['steps', stepIndex, 'confirms', entryIndex] });
+}
+
+function projectNavigateConfirms(steps: Step[], navigateIds: ReadonlySet<string>): Step[] {
+  return dropNavigateConfirms(steps as unknown as { id: string; confirms?: readonly string[] }[], navigateIds) as unknown as Step[];
 }
 
 describe('validateConfirms (TEST-I4)', () => {
@@ -76,5 +80,49 @@ describe('validateConfirms (TEST-I4)', () => {
   it('accepts an earlier capture step', () => {
     const capture: Step = { id: 'capture', target: 'app', kind: 'capture', intent, variable: 'saved' };
     expect(validateConfirms([capture, assertion('check', ['capture'])])).toEqual([]);
+  });
+});
+
+describe('navigate confirmation projection (TEST-A1–A4, TEST-A6a)', () => {
+  it('removes the confirms property when its only reference is navigation', () => {
+    const steps = [action('visit', 'navigate'), assertion('check', ['visit'])];
+    const projected = projectNavigateConfirms(steps, new Set(['visit']));
+    expect(projected[1]).toEqual({ id: 'check', target: 'app', kind: 'assert', check: 'text-visible', text: 'Done' });
+    expect(projected[1]).not.toHaveProperty('confirms');
+    expect(steps[1]).toHaveProperty('confirms', ['visit']);
+  });
+
+  it.each([['visit', 'click'], ['click', 'visit']])('keeps only the action reference from mixed confirms %j, %j', (...confirms) => {
+    const projected = projectNavigateConfirms(
+      [action('visit', 'navigate'), action('click'), assertion('check', confirms)],
+      new Set(['visit']),
+    );
+    expect(projected[2]).toHaveProperty('confirms', ['click']);
+    expect(validateConfirms(projected)).toEqual([]);
+  });
+
+  it('removes duplicate navigation references before duplicate validation', () => {
+    const projected = projectNavigateConfirms([action('visit', 'navigate'), assertion('check', ['visit', 'visit'])], new Set(['visit']));
+    expect(projected[1]).not.toHaveProperty('confirms');
+    expect(validateConfirms(projected)).toEqual([]);
+  });
+
+  it('removes forward navigation references before earlier-step validation', () => {
+    const projected = projectNavigateConfirms([assertion('check', ['visit']), action('visit', 'navigate')], new Set(['visit']));
+    expect(projected[0]).not.toHaveProperty('confirms');
+    expect(validateConfirms(projected)).toEqual([]);
+  });
+
+  it('TEST-A6a carries confirms-unsorted on the raw Zod issue', () => {
+    const result = PlanDocument.safeParse({
+      schemaVersion: 5,
+      source: { inputsDigest: 'a'.repeat(64) },
+      targets: { app: { surface: 'web', baseUrl: 'https://example.test' } },
+      steps: [action('first'), action('second'), assertion('check', ['second', 'first'])],
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toEqual([expect.objectContaining({ code: 'custom', path: ['steps', 2, 'confirms', 1] })]);
+    expect(result.error.issues[0]).toMatchObject({ params: { confirmsCode: 'confirms-unsorted' } });
   });
 });

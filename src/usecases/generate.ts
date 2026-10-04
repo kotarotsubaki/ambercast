@@ -25,6 +25,7 @@ import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
+import { dropNavigateConfirms } from '#core/ir/confirms-validation.js';
 import { computePlanDigest } from '#core/ir/digest.js';
 import { normalizeName } from '#core/ir/fingerprint.js';
 import { secretNameFor } from '#core/ir/secret-ref.js';
@@ -53,7 +54,7 @@ import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink } from '#ports/system.js';
 import { REPORT_ERROR_DETAILS } from '#report/error-mapping.js';
 import { z } from 'zod';
-import { AiResponseIssue } from '#report/schema.js';
+import { AiResponseIssue, CONFIRMS_ISSUE_CODES } from '#report/schema.js';
 import type { AiResponseIssueCode, AiResponseIssuePath, ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
@@ -1254,8 +1255,13 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           } catch (error) {
             return outcomeForError(fileFailure(error, 'The generated secret uses could not be normalized.'));
           }
-          const stepIndex = new Map<StepId, number>(normalizedSteps.map((step, index) => [step.id, index]));
-          const orderedSteps = normalizedSteps.map((step) => 'confirms' in step && step.confirms !== undefined
+          // Strip confirms references to navigation actions in this response before
+          // sorting: navigation has no locator that a later repair can re-ground.
+          // Derive the navigation ID set from these same normalized steps.
+          const navigateIds = new Set(normalizedSteps.filter((step) => step.kind === 'action' && step.action === 'navigate').map((step) => step.id));
+          const projectedSteps = dropNavigateConfirms(normalizedSteps, navigateIds);
+          const stepIndex = new Map<StepId, number>(projectedSteps.map((step, index) => [step.id, index]));
+          const orderedSteps = projectedSteps.map((step) => 'confirms' in step && step.confirms !== undefined
             ? { ...step, confirms: [...step.confirms].sort((left, right) =>
               (stepIndex.get(left) ?? Infinity) - (stepIndex.get(right) ?? Infinity)) }
             : step);
@@ -1285,12 +1291,17 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           // for dynamic target namespaces after assembly.
           const parsedPlan = PlanDocument.safeParse(candidate);
           if (!parsedPlan.success) {
+            // SPEC-A3 exposes only the four public confirms codes. The preceding
+            // sort makes confirms-unsorted unreachable from provider input, and
+            // absent or non-public codes retain the schema-mismatch fallback.
             return outcomeForError(new AiResponseInvalidError(
               'The AI provider response could not form a valid plan.',
               {
                 raw: response.raw,
                 issues: parsedPlan.error.issues.map((issue) => ({
-                  code: 'schema-mismatch',
+                  code: issue.code === 'custom' && typeof issue.params?.confirmsCode === 'string' && CONFIRMS_ISSUE_CODES.some((code) => code === issue.params?.confirmsCode)
+                    ? issue.params.confirmsCode as (typeof CONFIRMS_ISSUE_CODES)[number]
+                    : 'schema-mismatch',
                   path: redactDynamicPathSegments(candidate, issue.path),
                 })),
               },

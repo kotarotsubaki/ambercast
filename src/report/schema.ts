@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ConfirmsValidationIssueCode } from '#core/ir/confirms-validation.js';
 
 /*
  * Defines the versioned structured-report contract shared by CLI JSON and MCP
@@ -50,11 +51,10 @@ const UiCapability = z.enum([
 /**
  * Version shared by every structured report envelope.
  *
- * V5 binding evidence and generation warnings advance the shared report
- * contract to 3.8 rather than allowing command branches to choose versions
- * separately.
+ * Confirmation issue codes extend the shared report contract to 3.9 so retry
+ * feedback and every command envelope use the same versioned vocabulary.
  */
-export const REPORT_SCHEMA_VERSION = '3.8' as const;
+export const REPORT_SCHEMA_VERSION = '3.9' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -148,10 +148,27 @@ export const ELEMENT_INTENT_ISSUE_CODES = [
   'quote-outside-intent', 'quote-whitespace-only',
 ] as const;
 
+/**
+ * Reportable confirmation failures share their vocabulary with core validation.
+ *
+ * The Exclude check deliberately leaves `confirms-unsorted` internal: generation
+ * sorts provider confirmations before plan validation, so that condition cannot
+ * appear in retry feedback. The compile-time check ensures each listed code
+ * is a legal validation code other than `confirms-unsorted`; it does not check
+ * that the list is exhaustive or import a core runtime value into reports.
+ */
+export const CONFIRMS_ISSUE_CODES = [
+  'confirms-unknown-step',
+  'confirms-not-earlier',
+  'confirms-not-action',
+  'confirms-duplicate',
+] as const satisfies readonly Exclude<ConfirmsValidationIssueCode, 'confirms-unsorted'>[];
+
 /** Keeps provider-validation causes machine-readable without serializing prose diagnostics. */
 export const AiResponseIssueCode = z.enum([
   ...INSTRUCTION_COVERAGE_ISSUE_CODES,
   ...ELEMENT_INTENT_ISSUE_CODES,
+  ...CONFIRMS_ISSUE_CODES,
   'invalid-json',
   'schema-mismatch',
   'secret-allowed-name-not-projected',

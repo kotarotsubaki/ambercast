@@ -40,8 +40,8 @@ function report(input: { readonly outcome?: SettledHealOutcome; readonly error?:
 }
 
 describe('buildHealReport', () => {
-  it('emits the shared 3.8 schema version', () => {
-    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.8');
+  it('emits the shared 3.9 schema version', () => {
+    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.9');
   });
 
   it('serializes a completed healed candidate without exposing internal progress indices, for a case with no Stage 3 activity', () => {

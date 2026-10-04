@@ -9,7 +9,7 @@ description: "每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严�
 
 ### 确认引用 {#confirmation-references}
 
-断言或 `ai` 步骤可包含非空的 `confirms` 数组，列出此前的 `click`、`press`、`fill`、`fill-secret` 或 `capture` 步骤；当当前步骤通过时，它将确认这些步骤的 grounding。未知 ID 报告 `confirms-unknown-step`，引用自身或后续步骤报告 `confirms-not-earlier`，引用不符合条件的步骤报告 `confirms-not-action`，重复 ID 报告 `confirms-duplicate`，未按 Plan 顺序升序排列则报告 `confirms-unsorted`；参见 [符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation)。不检查 Target 标识是否相同。
+断言或 `ai` 步骤可包含非空的 `confirms` 数组，列出此前的 `click`、`press`、`fill`、`fill-secret` 或 `capture` 步骤；当当前步骤通过时，它将确认这些步骤的 grounding。未知 ID 报告 `confirms-unknown-step`，引用自身或后续步骤报告 `confirms-not-earlier`，引用不符合条件的步骤报告 `confirms-not-action`，重复 ID 报告 `confirms-duplicate`，未按 Plan 顺序升序排列则报告 `confirms-unsorted`；参见 [符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation)。`generate` 和 `heal` 在验证前移除 `confirms` 中指向 `navigate` 步骤的引用。不检查 Target 标识是否相同。
 
 ### `action` / `click` {#action-click}
 

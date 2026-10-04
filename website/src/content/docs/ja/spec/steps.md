@@ -9,7 +9,7 @@ description: "コミットされたすべてのステップは、`kind` によ�
 
 ### 確認参照 {#confirmation-references}
 
-アサーションまたは `ai` ステップは、成功時にそのグラウンディングを確認する、先行する `click`、`press`、`fill`、`fill-secret`、または `capture` ステップの ID を、空でない任意の `confirms` 配列に指定できる。未知の ID は `confirms-unknown-step`、同じ位置または後続のステップは `confirms-not-earlier`、対象外のステップは `confirms-not-action`、重複 ID は `confirms-duplicate`、Plan の順序に対して昇順でない ID は `confirms-unsorted` として報告される。ターゲットの同一性は検査しない。
+アサーションまたは `ai` ステップは、成功時にそのグラウンディングを確認する、先行する `click`、`press`、`fill`、`fill-secret`、または `capture` ステップの ID を、空でない任意の `confirms` 配列に指定できる。未知の ID は `confirms-unknown-step`、同じ位置または後続のステップは `confirms-not-earlier`、対象外のステップは `confirms-not-action`、重複 ID は `confirms-duplicate`、Plan の順序に対して昇順でない ID は `confirms-unsorted` として報告される。`generate` と `heal` は検証前に `navigate` ステップを指す `confirms` 参照を取り除く。ターゲットの同一性は検査しない。
 
 ### `action` / `click` {#action-click}
 

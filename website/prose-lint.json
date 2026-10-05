@@ -1,0 +1,26 @@
+{
+  "pages": [],
+  "limits": {
+    "h3Max": 5,
+    "calloutMax": 2,
+    "sentence": {
+      "en": { "warn": 20, "error": 30 },
+      "ja": { "warn": 60, "error": 80 },
+      "zh-cn": { "warn": 50, "error": 70 }
+    },
+    "paragraphSentencesMax": 3,
+    "passiveRatioWarn": 0.3,
+    "words": {
+      "tutorials": 600,
+      "how-to": 900,
+      "explanation": 1000,
+      "agents": 900
+    }
+  },
+  "bannedTerms": ["RawConfig"],
+  "requiredAnchors": {
+    "tutorials": ["prerequisites", "steps", "verification", "next-steps"],
+    "how-to": ["prerequisites", "steps", "verification", "related"]
+  },
+  "severity": {}
+}

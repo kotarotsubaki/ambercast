@@ -15,7 +15,7 @@
     "postbuild": "node scripts/build-llms.mjs",
     "preview": "astro preview",
     "precheck": "npm run sync",
-    "check": "node scripts/check-parity.mjs && node scripts/check-reference.mjs && node scripts/check-claims.mjs"
+    "check": "node scripts/check-parity.mjs && node scripts/check-reference.mjs && node scripts/check-claims.mjs && node scripts/check-prose.mjs"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "7.3.0",
@@ -24,5 +24,12 @@
     "astro": "7.2.10",
     "github-slugger": "2.0.0",
     "js-yaml": "^4.3.2"
+  },
+  "devDependencies": {
+    "@textlint-ja/textlint-rule-preset-ai-writing": "1.7.0",
+    "textlint": "15.8.0",
+    "textlint-plugin-mdx": "1.1.0",
+    "textlint-rule-preset-ja-technical-writing": "12.0.2",
+    "zhlint": "0.8.2"
   }
 }

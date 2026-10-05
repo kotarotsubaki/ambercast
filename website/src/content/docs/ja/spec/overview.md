@@ -13,7 +13,7 @@ description: "本仕様は、ambercast 0.7.0 が受け付けるアーティフ�
 
 ## 依存関係モデル {#dependency-model}
 
-```mermaid
+```mermaid alt="正規化されたプロンプトからinputsDigest、PlanDocument、planDigest、GroundingDocumentを経てリプレイに至るフローチャート"
 flowchart LR
   P[normalized prompt] --> I[inputsDigest]
   I --> D[PlanDocument]

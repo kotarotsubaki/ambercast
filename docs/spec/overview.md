@@ -10,7 +10,7 @@ The words **MUST**, **SHOULD**, and **MAY** are to be interpreted as RFC 2119 re
 
 ## Dependency model {#dependency-model}
 
-```mermaid
+```mermaid alt="Flowchart from normalized prompt through inputsDigest, PlanDocument, planDigest, and GroundingDocument to replay"
 flowchart LR
   P[normalized prompt] --> I[inputsDigest]
   I --> D[PlanDocument]

@@ -2,14 +2,17 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, readdir } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { once } from 'node:events';
 import { chromium } from 'playwright-core';
 import { plannedPageSlugs, readCapabilityPages } from '../../scripts/lib/capability-pages.mjs';
 import { orderSchemaFilenames } from '../../scripts/lib/published-schemas.mjs';
+import { diagramId } from '../../scripts/lib/mermaid-fences.mjs';
+import { renderDiagrams } from '../../scripts/render-diagrams.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEBSITE_DIRECTORY = resolve(HERE, '../..');
@@ -1196,14 +1199,25 @@ async function assertHeaderV13(browser) {
 }
 
 /**
- * The dark/light palette table is hoisted because all three independent checks need the same
- * approved colors. Sharing this table keeps the page-specific checks aligned without making any
- * one of them own the palette.
+ * Keep the retired monochrome colors as a regression guard for each code block.
  */
 const CODE_TOKEN_THEMES = {
-  dark: { allowed: [[226, 217, 204], [118, 107, 96], [250, 246, 240], [241, 235, 226], [158, 145, 132]], keyword: [250, 246, 240], string: [241, 235, 226], punctuation: [158, 145, 132], background: [16, 12, 9] },
-  light: { allowed: [[59, 51, 44], [158, 145, 132], [24, 19, 16], [39, 33, 28], [118, 107, 96]], keyword: [24, 19, 16], string: [39, 33, 28], punctuation: [118, 107, 96], background: [241, 235, 226] },
+  dark: { retired: [[226, 217, 204], [118, 107, 96], [250, 246, 240], [241, 235, 226], [158, 145, 132]], background: [16, 12, 9] },
+  light: { retired: [[59, 51, 44], [158, 145, 132], [24, 19, 16], [39, 33, 28], [118, 107, 96]], background: [241, 235, 226] },
 };
+
+async function assertCodeBlockTokenColors(page, language, colorScheme, expected, minColors = 3) {
+  const blocks = await page.$$eval(`.expressive-code pre[data-language="${language}"]`, (pres) => pres.map((pre) => [...pre.querySelectorAll('span')].map((span) => ({ text: span.textContent, color: getComputedStyle(span).color }))));
+  assert.ok(blocks.length > 0, `${colorScheme} ${language} page must contain code blocks.`);
+  const retired = new Set(expected.retired.map((color) => color.join(',')));
+  for (const [index, tokens] of blocks.entries()) {
+    assert.ok(tokens.length > 0, `${colorScheme} ${language} block ${index} must contain token spans.`);
+    const colors = new Set(tokens.map((token) => rgbChannels(token.color).join(',')));
+    assert.ok(colors.size >= minColors, `${colorScheme} ${language} block ${index} must contain at least ${minColors} token colors.`);
+    assert.ok([...colors].some((color) => !retired.has(color)), `${colorScheme} ${language} block ${index} must not use only the retired monochrome palette.`);
+  }
+  return blocks.flat();
+}
 
 /**
  * A fixed theme set instead of screenshot scenarios prevents a missing scenario from turning
@@ -1213,19 +1227,18 @@ const CODE_TOKEN_THEMES = {
  * so retaining it would add no independent coverage.
  */
 async function assertBashCodeTokenPalette(browser) {
+  for (const retiredFile of ['src/styles/code-themes.ts', 'test/code-themes.test.ts']) {
+    assert.equal(existsSync(resolve(WEBSITE_DIRECTORY, retiredFile)), false, `${retiredFile} must be removed.`);
+  }
   for (const [colorScheme, expected] of Object.entries(CODE_TOKEN_THEMES)) {
     const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
     try {
       await page.goto(pageUrl('/how-to/choose-ai-provider/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
-      const tokens = await page.$$eval('.expressive-code pre[data-language="bash"] span', (spans) => spans.map((span) => ({ text: span.textContent, color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) })));
-      assert.ok(tokens.length > 0, `${colorScheme} provider guide must contain highlighted bash spans.`);
-      for (const token of tokens) assert.ok(expected.allowed.some((color) => color.join(',') === rgbChannels(token.color).join(',')), `${colorScheme} token ${JSON.stringify(token.text)} must use the approved palette.`);
+      const tokens = await assertCodeBlockTokenColors(page, 'bash', colorScheme, expected);
       const npxTokens = tokens.filter((token) => token.text?.trim() === 'npx');
       assert.ok(npxTokens.length > 0, `${colorScheme} provider guide bash block must render npx tokens.`);
-      for (const token of npxTokens) { assert.deepEqual(rgbChannels(token.color), expected.keyword); assert.ok(token.weight >= 700); }
       const stringTokens = tokens.filter((token) => ['ambercast', 'generate', '--ai', 'codex'].includes(token.text?.trim()));
       assert.ok(stringTokens.length > 0, `${colorScheme} provider guide bash block must render string tokens.`);
-      for (const token of stringTokens) { assert.deepEqual(rgbChannels(token.color), expected.string); assert.ok(token.weight < 700); }
     } finally { await context.close(); }
   }
 }
@@ -1240,26 +1253,23 @@ async function assertMarkdownCodeTokenPalette(browser) {
     const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
     try {
       await page.goto(pageUrl('/tutorials/quick-start/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
-      const tokens = await page.$$eval('.expressive-code pre[data-language="markdown"] span', (spans) => spans.map((span) => ({ text: span.textContent, color: getComputedStyle(span).color, weight: Number(getComputedStyle(span).fontWeight) })));
-      assert.ok(tokens.length > 0, `${colorScheme} quick-start page must contain highlighted markdown spans.`);
-      for (const token of tokens) assert.ok(expected.allowed.some((color) => color.join(',') === rgbChannels(token.color).join(',')), `${colorScheme} token ${JSON.stringify(token.text)} must use the approved palette.`);
-      const hashTokens = tokens.filter((token) => token.text?.trim() === '#');
+      // SPEC-10: The quick-start.md fence structurally has only two Shiki token categories.
+      const tokens = await assertCodeBlockTokenColors(page, 'markdown', colorScheme, expected, 2);
+      const hashTokens = tokens.filter((token) => token.text?.includes('#'));
       assert.ok(hashTokens.length > 0, `${colorScheme} quick-start markdown block must render hash tokens.`);
-      for (const token of hashTokens) { assert.deepEqual(rgbChannels(token.color), expected.punctuation); assert.ok(token.weight < 700); }
     } finally { await context.close(); }
   }
 }
 
 /**
- * Relocation preserves the existing classification contract rather than introducing a new one.
- * Offset-based mapping relates leaf spans to their containing quoted strings, distinguishing
- * string content from delimiters when syntax highlighting splits them across spans.
+ * JSON keeps key, value, and punctuation presence checks without pinning theme colors.
  */
 async function assertJsonCodeTokenPalette(browser) {
   for (const [colorScheme, expected] of Object.entries(CODE_TOKEN_THEMES)) {
     const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
     try {
       await page.goto(pageUrl('/spec/plan-document/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
+      await assertCodeBlockTokenColors(page, 'json', colorScheme, expected);
       const json = await page.$$eval('.expressive-code pre[data-language="json"]', (pres) => pres.map((pre) => ({ text: pre.textContent, background: getComputedStyle(pre).backgroundColor })));
       const jsonBlock = json.find((block) => block.text.includes('"') && block.text.includes(':')); assert.ok(jsonBlock, 'The plan-document page must include a JSON code block.');
       const jsonTokens = await page.evaluate(() => {
@@ -1294,9 +1304,6 @@ async function assertJsonCodeTokenPalette(browser) {
       assert.ok(jsonTokens.keys.length > 0, 'The JSON block must expose key string spans.');
       assert.ok(jsonTokens.values.length > 0, 'The JSON block must expose value string spans.');
       assert.ok(jsonTokens.punctuation.length > 0, 'The JSON block must expose punctuation spans.');
-      for (const token of jsonTokens.keys) { assert.deepEqual(rgbChannels(token.color), expected.keyword); assert.ok(token.weight >= 700); }
-      for (const token of jsonTokens.values) assert.deepEqual(rgbChannels(token.color), expected.string);
-      for (const token of jsonTokens.punctuation) { assert.deepEqual(rgbChannels(token.color), expected.punctuation); assert.ok(token.weight < 700); }
       for (const block of json) assert.deepEqual(rgbChannels(block.background), expected.background);
     } finally { await context.close(); }
   }
@@ -1309,16 +1316,58 @@ async function assertJsonCodeTokenPalette(browser) {
  * preserving the same non-persistent DOM contract as the frame variants.
  */
 async function assertDocumentationSurfaces(browser) {
+  {
+    const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } });
+    const page = await context.newPage();
+    try {
+      await page.goto(pageUrl('/ja/philosophy/'), { waitUntil: 'networkidle' });
+      const geometry = await page.evaluate(() => {
+        const article = document.querySelector('.sl-markdown-content');
+        const wrapper = article?.querySelector('.sl-heading-wrapper.level-h2');
+        const heading = wrapper?.querySelector(':scope > h2');
+        if (!article || !wrapper || !heading) throw new Error('The philosophy article needs a wrapped h2.');
+        const previous = wrapper.previousElementSibling;
+        if (!previous) throw new Error('The wrapped h2 needs a preceding element.');
+        const syntheticOl = document.createElement('ol');
+        syntheticOl.className = 'sl-steps';
+        const li = document.createElement('li');
+        const clone = wrapper.cloneNode(true);
+        li.append(clone);
+        syntheticOl.append(li);
+        article.append(syntheticOl);
+        try {
+          const style = getComputedStyle(wrapper);
+          const headingStyle = getComputedStyle(heading);
+          const stepsStyle = getComputedStyle(clone);
+          return {
+            borderStyle: style.borderTopStyle, margin: style.marginTop,
+            size: headingStyle.fontSize, weight: headingStyle.fontWeight,
+            gap: wrapper.getBoundingClientRect().top - previous.getBoundingClientRect().bottom,
+            stepsBorderStyle: stepsStyle.borderTopStyle, stepsMargin: stepsStyle.marginTop,
+            bulletSize: getComputedStyle(syntheticOl).getPropertyValue('--bullet-size').trim(),
+          };
+        } finally { syntheticOl.remove(); }
+      });
+      assert.equal(geometry.borderStyle, 'none');
+      assert.equal(geometry.margin, '48px');
+      assert.equal(geometry.size, '28px');
+      assert.equal(geometry.weight, '600');
+      assertWithinTolerance(geometry.gap, 48, 2, 'Philosophy h2 preceding gap');
+      assert.equal(geometry.stepsBorderStyle, 'none');
+      assert.equal(geometry.stepsMargin, '0px');
+      assert.equal(geometry.bulletSize, '1.75rem');
+    } finally { await context.close(); }
+  }
   for (const scenario of SCREENSHOTS.filter((entry) => entry.path.endsWith('/tutorials/quick-start/'))) {
     const { path, colorScheme, viewport } = scenario;
     const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage();
     try {
       await page.goto(pageUrl(path), { waitUntil: 'networkidle' }); await waitForFonts(page);
       if (viewport.width === 390) { await openDocumentationMenu(page); assert.equal(await page.locator('.sidebar-pane').isVisible(), true, `${scenario.name} must open the documentation drawer.`); }
-      const values = await page.evaluate(() => { const probe = document.createElement('i'); probe.style.color = 'var(--sl-color-gray-3)'; document.body.append(probe); const gray3 = getComputedStyle(probe).color; probe.style.color = 'var(--sl-color-hairline)'; const hairline = getComputedStyle(probe).color; probe.remove(); const labels = [...document.querySelectorAll('.ac-sidebar summary .large')].map((element) => { const style = getComputedStyle(element); return { text: element.textContent, size: style.fontSize, weight: style.fontWeight, family: style.fontFamily, spacing: parseFloat(style.letterSpacing), transform: style.textTransform, color: style.color }; }); const headings = [...document.querySelectorAll('.sl-heading-wrapper.level-h2')].map((element) => { const style = getComputedStyle(element); const h2 = element.querySelector(':scope > h2'); const h2Style = h2 && getComputedStyle(h2); return { width: element.getBoundingClientRect().width, articleWidth: element.closest('.sl-markdown-content')?.getBoundingClientRect().width, borderWidth: style.borderTopWidth, borderStyle: style.borderTopStyle, borderColor: style.borderTopColor, padding: style.paddingTop, margin: style.marginTop, h2: h2Style && { border: h2Style.borderTopWidth, padding: h2Style.paddingTop, margin: h2Style.marginTop } }; }); return { gray3, hairline, labels, headings }; });
+      const values = await page.evaluate(() => { const probe = document.createElement('i'); probe.style.color = 'var(--sl-color-gray-3)'; document.body.append(probe); const gray3 = getComputedStyle(probe).color; probe.remove(); const labels = [...document.querySelectorAll('.ac-sidebar summary .large')].map((element) => { const style = getComputedStyle(element); return { text: element.textContent, size: style.fontSize, weight: style.fontWeight, family: style.fontFamily, spacing: parseFloat(style.letterSpacing), transform: style.textTransform, color: style.color }; }); const headings = [...document.querySelectorAll('.sl-heading-wrapper.level-h2')].map((element) => { const style = getComputedStyle(element); const h2 = element.querySelector(':scope > h2'); const h2Style = h2 && getComputedStyle(h2); return { width: element.getBoundingClientRect().width, articleWidth: element.closest('.sl-markdown-content')?.getBoundingClientRect().width, borderStyle: style.borderTopStyle, margin: style.marginTop, h2: h2Style && { size: h2Style.fontSize, weight: h2Style.fontWeight, border: h2Style.borderTopWidth, padding: h2Style.paddingTop, margin: h2Style.marginTop } }; }); return { gray3, labels, headings }; });
       assert.ok(values.labels.length >= 2); for (const label of values.labels) { assert.equal(label.size, '11px'); assert.equal(label.weight, '500'); assert.match(label.family, /mono/i); assertWithinTolerance(label.spacing, 1.32, 0.05, 'Sidebar label letter spacing'); assert.equal(label.transform, 'uppercase'); assert.deepEqual(rgbChannels(label.color), rgbChannels(values.gray3)); }
       assert.deepEqual(values.labels.map((label) => label.text), ['START HERE', 'TUTORIALS', 'HOW-TO GUIDES', 'REFERENCE', 'CLI', 'PLAN SPECIFICATION', 'EXPLANATION', 'FOR AI AGENTS']);
-      if (!path.startsWith('/zh-cn/')) { assert.ok(values.headings.length > 0); for (const heading of values.headings) { assert.equal(heading.borderWidth, '1px'); assert.equal(heading.borderStyle, 'solid'); assert.deepEqual(rgbChannels(heading.borderColor), rgbChannels(values.hairline)); assert.equal(heading.padding, '28px'); assert.equal(heading.margin, '40px'); assertWithinTolerance(heading.width, heading.articleWidth, 1, 'Heading wrapper width'); assert.deepEqual(heading.h2, { border: '0px', padding: '0px', margin: '0px' }); } const fallback = await page.evaluate(() => { const article = document.querySelector('.sl-markdown-content'); const source = article?.querySelector('h2'); if (!article || !source) throw new Error('A fallback heading requires a markdown article h2.'); const clone = source.cloneNode(true); article.append(clone); const style = getComputedStyle(clone); const result = { border: style.borderTopWidth, style: style.borderTopStyle, color: style.borderTopColor, padding: style.paddingTop, margin: style.marginTop }; clone.remove(); return result; }); assert.deepEqual({ border: fallback.border, style: fallback.style, padding: fallback.padding, margin: fallback.margin }, { border: '1px', style: 'solid', padding: '28px', margin: '40px' }); assert.deepEqual(rgbChannels(fallback.color), rgbChannels(values.hairline)); }
+      if (!path.startsWith('/zh-cn/')) { assert.ok(values.headings.length > 0); for (const heading of values.headings) { assert.equal(heading.borderStyle, 'none'); assert.equal(heading.margin, '48px'); assertWithinTolerance(heading.width, heading.articleWidth, 1, 'Heading wrapper width'); assert.deepEqual(heading.h2, { size: '28px', weight: '600', border: '0px', padding: '0px', margin: '0px' }); } const fallback = await page.evaluate(() => { const article = document.querySelector('.sl-markdown-content'); const source = article?.querySelector('h2'); if (!article || !source) throw new Error('A fallback heading requires a markdown article h2.'); const clone = source.cloneNode(true); article.append(clone); const style = getComputedStyle(clone); const result = { style: style.borderTopStyle, margin: style.marginTop, size: style.fontSize, weight: style.fontWeight }; clone.remove(); return result; }); assert.deepEqual(fallback, { style: 'none', margin: '48px', size: '28px', weight: '600' }); }
     } finally { await context.close(); }
   }
   for (const scenario of SCREENSHOTS.filter((entry) => entry.path.endsWith('/reference/cli/overview/'))) { const { path, colorScheme, viewport } = scenario; const context = await browser.newContext({ colorScheme, viewport }); const page = await context.newPage(); try { await page.goto(pageUrl(path), { waitUntil: 'networkidle' }); const table = await page.evaluate(() => { const probe = (property) => { const element = document.createElement('i'); element.style.color = `var(${property})`; document.body.append(element); const color = getComputedStyle(element).color; element.remove(); return color; }; const padding = (style) => ({ top: style.paddingTop, right: style.paddingRight, bottom: style.paddingBottom, left: style.paddingLeft }); return [...document.querySelectorAll('.sl-markdown-content table')].map((entry) => ({ fontSize: getComputedStyle(entry).fontSize, gray3: probe('--sl-color-gray-3'), gray4: probe('--sl-color-gray-4'), hairline: probe('--sl-color-hairline'), white: probe('--sl-color-white'), headers: [...entry.querySelectorAll('th')].map((cell) => { const style = getComputedStyle(cell); return { size: style.fontSize, weight: style.fontWeight, family: style.fontFamily, spacing: parseFloat(style.letterSpacing), transform: style.textTransform, padding: padding(style), borderWidth: style.borderBottomWidth, borderStyle: style.borderBottomStyle, borderColor: style.borderBottomColor, first: cell.matches(':first-child'), last: cell.matches(':last-child'), color: style.color }; }), cells: [...entry.querySelectorAll('td')].map((cell) => { const style = getComputedStyle(cell); const codes = [...cell.querySelectorAll('code')].map((code) => ({ color: getComputedStyle(code).color, whiteSpace: getComputedStyle(code).whiteSpace })); return { padding: padding(style), lineHeight: style.lineHeight, verticalAlign: style.verticalAlign, borderWidth: style.borderBottomWidth, borderStyle: style.borderBottomStyle, borderColor: style.borderBottomColor, first: cell.matches(':first-child'), last: cell.matches(':last-child'), color: style.color, codes }; }) })); }); assert.ok(table.length > 0); for (const entry of table) { assert.equal(entry.fontSize, '13px'); for (const header of entry.headers) { assert.equal(header.size, '11px'); assert.equal(header.weight, '500'); assert.match(header.family, /mono/i); assertWithinTolerance(header.spacing, 1.32, 0.05, 'Table heading letter spacing'); assert.equal(header.transform, 'uppercase'); assert.deepEqual(header.padding, { top: '9.6px', right: header.last ? '0px' : '12px', bottom: '9.6px', left: header.first ? '0px' : '12px' }); assert.equal(header.borderWidth, '1px'); assert.equal(header.borderStyle, 'solid'); assert.deepEqual(rgbChannels(header.borderColor), rgbChannels(entry.gray4)); assert.deepEqual(rgbChannels(header.color), rgbChannels(entry.gray3)); } for (const cell of entry.cells) { assert.deepEqual(cell.padding, { top: '11.2px', right: cell.last ? '0px' : '12px', bottom: '11.2px', left: cell.first ? '0px' : '12px' }); assert.equal(cell.lineHeight, '19.5px'); assert.equal(cell.verticalAlign, 'top'); assert.equal(cell.borderWidth, '1px'); assert.equal(cell.borderStyle, 'solid'); assert.deepEqual(rgbChannels(cell.borderColor), rgbChannels(entry.hairline)); if (cell.first) { assert.deepEqual(rgbChannels(cell.color), rgbChannels(entry.white)); for (const code of cell.codes) assert.deepEqual(rgbChannels(code.color), rgbChannels(entry.white)); } for (const code of cell.codes) assert.equal(code.whiteSpace, 'nowrap'); } } } finally { await context.close(); } }
@@ -1630,6 +1679,65 @@ async function assertIssue298MachineReadableResourceLinks(browser) {
   }
 }
 
+async function assertOverviewDiagrams(browser) {
+  const paths = ['/spec/overview/', '/ja/spec/overview/', '/zh-cn/spec/overview/'];
+  for (const [localeIndex, path] of paths.entries()) {
+    for (const colorScheme of ['dark', 'light']) {
+      const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } });
+      const page = await context.newPage();
+      try {
+        await page.goto(pageUrl(path), { waitUntil: 'networkidle' });
+        await waitForFonts(page);
+        const diagram = await page.evaluate(() => {
+          const figures = [...document.querySelectorAll('figure.ac-diagram')];
+          const figure = figures[0];
+          const images = figure ? [...figure.querySelectorAll('img')] : [];
+          const light = figure?.querySelector('img.ac-diagram-light');
+          const dark = figure?.querySelector('img.ac-diagram-dark');
+          return {
+            figures: figures.length, images: images.length,
+            mermaidCodeBlocks: document.querySelectorAll('pre[data-language="mermaid"]').length,
+            lightDisplay: light && getComputedStyle(light).display,
+            darkDisplay: dark && getComputedStyle(dark).display,
+          };
+        });
+        assert.equal(diagram.figures, 1, `${path} must contain one diagram figure.`);
+        assert.equal(diagram.images, 2, `${path} must contain two diagram images.`);
+        assert.equal(diagram.mermaidCodeBlocks, 0, `${path} must not render Mermaid as code.`);
+        assert.equal(diagram.lightDisplay === 'none', colorScheme === 'dark', `${path} light image visibility must follow ${colorScheme}.`);
+        assert.equal(diagram.darkDisplay === 'none', colorScheme === 'light', `${path} dark image visibility must follow ${colorScheme}.`);
+        if (localeIndex === 0) {
+          await mkdir(SCREENSHOT_DIRECTORY, { recursive: true });
+          await page.screenshot({ path: resolve(SCREENSHOT_DIRECTORY, `spec-overview-diagram-${colorScheme}.png`), fullPage: true });
+        }
+      } finally { await context.close(); }
+    }
+  }
+}
+
+async function assertDiagramRenderDeterminism() {
+  const root = mkdtempSync(join(tmpdir(), 'ambercast-diagram-'));
+  try {
+    const specRoot = join(root, 'docs/spec');
+    const outDir = join(root, 'public/diagrams');
+    mkdirSync(specRoot, { recursive: true });
+    const body = 'flowchart LR\n  A --> B';
+    writeFileSync(join(specRoot, 'a.md'), '```mermaid alt="diagram"\n' + body + '\n```\n');
+    const id = diagramId(body);
+    const asset = (theme) => join(outDir, `${id}.${theme}.svg`);
+
+    await renderDiagrams({ roots: { specRoot }, outDir });
+    const first = ['light', 'dark'].map((theme) => readFileSync(asset(theme)));
+    rmSync(outDir, { recursive: true, force: true });
+    await renderDiagrams({ roots: { specRoot }, outDir });
+    for (const [index, theme] of ['light', 'dark'].entries()) {
+      assert.deepEqual(readFileSync(asset(theme)), first[index], `Mermaid ${theme} SVG must be byte-identical across two real Chromium renders.`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function captureScreenshots(browser) {
   await mkdir(SCREENSHOT_DIRECTORY, { recursive: true });
 
@@ -1690,6 +1798,8 @@ async function main() {
     await assertBashCodeTokenPalette(browser);
     await assertMarkdownCodeTokenPalette(browser);
     await assertJsonCodeTokenPalette(browser);
+    await assertOverviewDiagrams(browser);
+    await assertDiagramRenderDeterminism();
     await assertCodeFrameVariants(browser);
     await assertCodeBlockScroll(browser);
     await assertDocumentColumnSymmetry(browser);

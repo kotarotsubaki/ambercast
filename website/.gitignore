@@ -7,6 +7,7 @@ dist
 # hooks); ja/zh-cn translations are committed separately by
 # migrate-spec-translations.mjs, so only the root copy is derived output here.
 src/content/docs/spec/*.md
+src/content/docs/preview-blocks.mdx
 
 # sync-generated.mjs copies root build artifacts here at sync time; they are published output,
 # not website source, and are regenerated from the repository's root dist/ directory.

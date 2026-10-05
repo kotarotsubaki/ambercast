@@ -1,11 +1,12 @@
 import starlight from '@astrojs/starlight';
-import { ExpressiveCodeTheme } from '@astrojs/starlight/expressive-code';
+import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers';
+import { pluginCollapsibleSections } from '@expressive-code/plugin-collapsible-sections';
 import mdx from '@astrojs/mdx';
 import { defineConfig } from 'astro/config';
 import remarkHeadingId from './scripts/lib/remark-heading-id.mjs';
+import { remarkDiagrams } from './scripts/lib/remark-diagrams.mjs';
 import { sidebar } from './src/sidebar.mjs';
 import { siteDescriptions } from './src/data/site-descriptions.mjs';
-import { codeThemes } from './src/styles/code-themes';
 
 const site = 'https://kotarotsubaki.github.io';
 const base = '/ambercast';
@@ -19,7 +20,7 @@ export default defineConfig({
     // The local plugin preserves explicit heading anchors while avoiding the upstream
     // remark-custom-heading-id package; entering this pipeline at all still requires
     // @astrojs/markdown-remark as a dependency, independent of which plugin runs here.
-    remarkPlugins: [remarkHeadingId],
+    remarkPlugins: [remarkHeadingId, () => remarkDiagrams({ base })],
   },
   integrations: [
     starlight({
@@ -53,13 +54,12 @@ export default defineConfig({
         Pagination: './src/components/Pagination.astro',
         Footer: './src/components/Footer.astro',
       },
-      // The monochrome pair owns token colors while Starlight keeps its UI surfaces in sync
-      // with site tokens. Contrast normalization stays disabled because it would mutate the approved
-      // low-emphasis token colors instead of preserving the explicit theme table.
+      // Bundled themes own token colors while Starlight keeps its UI surfaces in sync
+      // with site tokens. Contrast normalization preserves their token colors.
       expressiveCode: {
-        // Starlight forwards custom values unchanged, while Expressive Code operates on theme
-        // instances. Convert the dependency-free definitions only where that dependency exists.
-        themes: codeThemes.map((theme) => new ExpressiveCodeTheme(theme)),
+        themes: ['vesper', 'min-light'],
+        plugins: [pluginLineNumbers(), pluginCollapsibleSections()],
+        defaultProps: { showLineNumbers: false },
         useStarlightUiThemeColors: true,
         minSyntaxHighlightingColorContrast: 0,
         // Starlight's UI-color pass precedes this callback. It restores

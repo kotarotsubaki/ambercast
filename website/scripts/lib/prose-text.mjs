@@ -113,7 +113,7 @@ export function extractTextBlocks(tree, originalLines, frontmatterLineOffset, is
 
     for (let i = startIndex; i < children.length; i++) {
       const node = children[i];
-      if (node.type !== 'paragraph') return -1;
+      if (node.type !== 'paragraph') continue;
       const lastChild = node.children?.at(-1);
       if (lastChild?.type === 'text' && lastChild.value.split('\n').at(-1) === ':::') {
         return i;

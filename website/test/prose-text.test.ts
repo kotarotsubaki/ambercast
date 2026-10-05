@@ -38,14 +38,9 @@ describe('parseProseTree', () => {
     const mdx = types(parseProseTree(body, { isMdx: true }) as Node);
     expect(mdx).toContain('mdxJsxFlowElement');
     expect(mdx).toContain('mdxFlowExpression');
-    try {
-      const md = types(parseProseTree(body, { isMdx: false }) as Node);
-      expect(md).not.toContain('mdxJsxFlowElement');
-      expect(md).not.toContain('mdxFlowExpression');
-    } catch (error) {
-      if (error instanceof Error && error.message === 'not implemented') throw error;
-      expect(error).toBeInstanceOf(Error);
-    }
+    const md = types(parseProseTree(body, { isMdx: false }) as Node);
+    expect(md).not.toContain('mdxJsxFlowElement');
+    expect(md).not.toContain('mdxFlowExpression');
   });
   it.each([
     ['heading', '# Heading\n', 'heading'],
@@ -104,6 +99,21 @@ describe('extractTextBlocks', () => {
     expect(result.calloutCount).toBe(1);
     expect(result.textBlocks.map((b) => b.joinedText)).toContain(content);
     expect(result.textBlocks.map((b) => b.joinedText).join('\n')).not.toContain(':::');
+  });
+  it('recognizes an aside whose body contains a list', () => {
+    const result = extract(':::note\n- item one\n- item two\n\n:::');
+    expect(result.calloutCount).toBe(1);
+    for (const block of result.textBlocks) {
+      expect(block.joinedText).not.toContain(':::');
+    }
+  });
+
+  it('recognizes an aside whose body contains a fenced code block', () => {
+    const result = extract(':::tip\n```\ncode\n```\n:::');
+    expect(result.calloutCount).toBe(1);
+    for (const block of result.textBlocks) {
+      expect(block.joinedText).not.toContain(':::');
+    }
   });
   it('reparses multiple paragraphs inside an aside', () => {
     const result = extract(':::note\nFirst paragraph.\n\nSecond paragraph.\n:::');

@@ -6500,6 +6500,41 @@ describe('run agentic wrapper state machine', () => {
     expect(report.envelope.errors[0]).toMatchObject({ code: 'AGENTIC_STEP_FAILED' });
     expect(JSON.stringify(report.envelope)).not.toContain(secretValue);
   });
+  /*
+   * A captured run value can enter the expected text of a failed assertion,
+   * where error-detail redaction must replace the materialized value. Checking
+   * the browser observation first ensures a broken template expansion cannot
+   * make the report appear safe without exercising that redaction.
+   */
+  it('TEST-B11b redacts a captured run value from failed assertion details', async () => {
+    const capturedValue = 'RUN-SENTINEL-VALUE';
+    const session = createFakeBrowserSession(liveEntries([EMAIL]), {
+      captureValues: new Map([[elementRefKey(EMAIL), { text: capturedValue, value: '' }]]),
+      assertOutcome: { passed: false, message: 'Welcome was not visible.' },
+    });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      expect(request.allowedRunRefs).toContain('token');
+      await request.controller.evaluateAssert({ type: 'assert', check: 'text-visible', text: 'Welcome {{run.token}}' });
+      return { outcome: 'failure' };
+    } });
+    const base = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(base.recordingStorage.storage);
+    await seedFreshArtifacts(base.recordingStorage.storage, testPath, [
+      { id: 'capture-token', kind: 'capture', target: EMAIL, intent: EMAIL_INTENT, variable: 'token' },
+      aiStep(),
+    ], elementGrounding(['capture-token'], {}, FINGERPRINT, { 'capture-token': EMAIL_CAPTURE_DIGEST }));
+    const outcome = await run(base.deps, DEFAULT_OPTIONS);
+    expect(session.operations()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'evaluate-assert', check: expect.objectContaining({ text: `Welcome ${capturedValue}` }) }),
+    ]));
+    const report = buildRunReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+    expect(report.envelope.errors[0]).toMatchObject({ code: 'AGENTIC_STEP_FAILED' });
+    expect(report.envelope.errors[0]).toMatchObject({ details: { lastFailedAssertion: { expected: 'Text "Welcome {{run.token}}" is visible.' } } });
+    expect(JSON.stringify(report.envelope)).not.toContain(capturedValue);
+  });
   it('TEST-B5 returns target rejection before evaluation and without a polling wait', async () => {
     const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));

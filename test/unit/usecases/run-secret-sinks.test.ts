@@ -4,6 +4,9 @@ import { dirname } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createCodexCliExecutor } from '#adapters/ai/codex-cli/index.js';
+import { createClaudeCodeCliExecutor } from '#adapters/ai/claude-code-cli/index.js';
+import { createStderrProgressSink } from '#adapters/system/stderr-progress-sink.js';
+import { createMcpProgressSink } from '#adapters/mcp/progress-sink.js';
 import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
@@ -37,6 +40,7 @@ import { generate, type GenerateDeps, type GenerateOptions } from '#usecases/gen
 import { run, type RunDeps, type RunOptions } from '#usecases/run.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { buildRunReport } from '#usecases/run-report.js';
+import { finalizeReportEnvelope, isEmergencyFinalizedEnvelope } from '#usecases/report-finalization.js';
 import { baseUrlSecretPolicy } from '../../doubles/base-url-secret-policy.js';
 import { boundTarget } from '../../doubles/bound-target.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
@@ -327,6 +331,93 @@ afterEach(() => {
 });
 
 describe('run secret sinks', () => {
+  /*
+   * A real agentic child can attach raw stderr to an unclassified failure
+   * after a preceding fill resolves the secret. The event boundary redacts
+   * that value before DEBUG stderr rendering; the report, persisted files,
+   * and MCP notifications must also remain free of both raw diagnostic
+   * needles. Recursive storage membership and non-empty MCP delivery ensure
+   * these negative checks exercise actual sinks in both DEBUG states.
+   */
+  it('TEST-B14b keeps failing Claude child stderr out of reports, storage, and MCP in both DEBUG states', async () => {
+    const marker = 'CHILD-STDERR-MARKER';
+    const secretValue = 'SINK_SECRET_VALUE';
+    for (const debug of ['1', '0']) {
+      vi.stubEnv('AMBERCAST_DEBUG', debug);
+      const childResult = { outcome: 'exited' as const, exitCode: 1, stdout: '', stderr: `${marker} ${secretValue}` };
+      const runner = createFakeCommandRunner([async (call) => {
+        call.options?.onChildSettled?.(childResult);
+        return childResult;
+      }]);
+      const executor = createClaudeCodeCliExecutor({ run: runner.run });
+      const session = createFakeBrowserSession(liveEntries([PASSWORD]));
+      const scenario = createRunScenario(session, executor, new Map([[SECRET_REF, secretValue]]));
+      const { deps } = scenario;
+      const stderrChunks: string[] = [];
+      const stderr = { write(chunk: string) { stderrChunks.push(chunk); return true; } } as unknown as NodeJS.WritableStream;
+      const stderrSink = createStderrProgressSink({ command: 'run', stderr, projectRoot: TEST_DIR, isCI: false, clock: deps.clock });
+      const send = vi.fn(async (_message: string) => undefined);
+      const mcpSink = createMcpProgressSink({ command: 'run', sessionRoot: TEST_DIR, send });
+      const originalEvents = deps.events;
+      const emittedEvents: unknown[] = [];
+      const wiredDeps: RunDeps = { ...deps, runId: `${deps.runId.slice(0, -1)}${debug}`, events: {
+        emit(event) { emittedEvents.push(event); originalEvents.emit(event); stderrSink.emit(event); mcpSink.emit(event); },
+      } };
+      const testPath = await writePrompt(wiredDeps.storage);
+      await seedFreshArtifacts(wiredDeps.storage, testPath, [
+        { id: 'fill-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_INTENT, secretRef: SECRET_REF },
+        aiStep(),
+      ], elementGrounding(['fill-secret']));
+      const outcome = await run(wiredDeps, RUN_OPTIONS);
+      const rejectionEvent = emittedEvents.find((event) =>
+        typeof event === 'object' && event !== null && 'type' in event && event.type === 'unclassified-rejection');
+      expect(rejectionEvent).toMatchObject({
+        childProcess: { exitCode: 1, stderrTail: expect.stringContaining(marker) },
+      });
+      expect((rejectionEvent as { childProcess: { stderrTail: string } }).childProcess.stderrTail).not.toContain(secretValue);
+      await mcpSink.flush();
+      stderrSink.close();
+      const report = buildRunReport({ startedAt: '2026-08-10T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome });
+      const finalized = finalizeReportEnvelope({ ...report.envelope, reportPersistence: 'persisted' as const }, TEST_DIR);
+      expect(isEmergencyFinalizedEnvelope(finalized)).toBe(false);
+      await wiredDeps.storage.writeText(wiredDeps.layout.runReportPathFor(wiredDeps.runId), JSON.stringify(finalized));
+      expect(JSON.stringify(report)).not.toContain(marker);
+      expect(JSON.stringify(report)).not.toContain(secretValue);
+      const paths = new Set<string>();
+      const walk = async (directory: string): Promise<void> => {
+        for (const name of await wiredDeps.storage.listFiles(directory)) paths.add(`${directory}/${name}`);
+        for (const name of await wiredDeps.storage.listDirectories(directory)) await walk(`${directory}/${name}`);
+      };
+      await walk(TEST_DIR);
+      await walk(RUNS_DIR);
+      expect(paths.size).toBeGreaterThan(0);
+      expect(paths).toContain(wiredDeps.layout.planPathFor(testPath));
+      expect(paths).toContain(wiredDeps.layout.groundingPathFor(testPath));
+      expect(paths).toContain(wiredDeps.layout.runReportPathFor(wiredDeps.runId));
+      expect([...paths].some((path) => path.startsWith(wiredDeps.layout.runsDirFor(testPath, wiredDeps.runId)))).toBe(true);
+      for (const path of paths) {
+        const bytes = await wiredDeps.storage.readBinary(path);
+        const persisted = Buffer.from(bytes);
+        expect(persisted.includes(Buffer.from(marker, 'utf8'))).toBe(false);
+        expect(persisted.includes(Buffer.from(secretValue, 'utf8'))).toBe(false);
+      }
+      expect(send).toHaveBeenCalled();
+      for (const call of send.mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(marker);
+        expect(JSON.stringify(call)).not.toContain(secretValue);
+      }
+      expect(runner.calls.length).toBeGreaterThan(0);
+      if (debug === '1') {
+        expect(stderrChunks.join('')).toContain('child process: exit 1');
+        expect(stderrChunks.join('')).toContain(marker);
+        expect(stderrChunks.join('')).not.toContain(secretValue);
+      } else {
+        expect(childResult.exitCode).toBe(1);
+        expect(stderrChunks.join('')).not.toContain(marker);
+        expect(stderrChunks.join('')).not.toContain(secretValue);
+      }
+    }
+  });
   it('keeps AMBERCAST_SECRET_DUMMY out of the prompt envelope at the real Codex adapter boundary', async () => {
     const runner = createFakeCommandRunner([async (call) => {
       const { outputPath } = commandPaths(call.args);

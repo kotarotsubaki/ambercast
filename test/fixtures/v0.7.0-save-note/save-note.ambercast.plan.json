@@ -1,0 +1,89 @@
+{
+  "generatorMeta": {
+    "planProducerBundle": {
+      "components": {
+        "elementIntentPolicyRevision": 1,
+        "generatedPlanResponseLocalContract": "c3b0803042679df2a781b608d02c1223c683034655ba2344fcd4db3ff36de5cc",
+        "generatedPlanResponseSchema": "e97bade36e3f6973f1f3d1c7956dcf599a14df5f5a85759af0d75ae208434e4a",
+        "generatorPromptTemplate": "23b3861307aea9284e3b5747a443f7555057003d08cf9adbc707c970d75fabe8",
+        "generatorSecretPolicyRevision": 5,
+        "generatorTaskInstruction": "2b50a77eacaa46fbd5a4dc447444628c40d020fbe4975e66d3bdb302ee755b41",
+        "instructionCoveragePolicyRevision": 3
+      },
+      "fingerprint": "58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58"
+    }
+  },
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "d71c0eecd8d7d2006a6ed5928882d1e15a9f7f84821ddb96c8eea7b96969518e"
+  },
+  "steps": [
+    {
+      "action": "fill",
+      "id": "fill-title",
+      "intent": {
+        "description": "Title field",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 33,
+            "endLine": 3,
+            "startColumn": 28,
+            "startLine": 3
+          },
+          "text": "Title"
+        },
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 34,
+          "endLine": 3,
+          "startColumn": 27,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "web",
+      "value": "Groceries"
+    },
+    {
+      "action": "click",
+      "id": "click-save",
+      "intent": {
+        "description": "Save button",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 60,
+            "endLine": 3,
+            "startColumn": 56,
+            "startLine": 3
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 61,
+          "endLine": 3,
+          "startColumn": 55,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "web"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "click-save"
+      ],
+      "id": "assert-note-saved",
+      "kind": "assert",
+      "target": "web",
+      "text": "Note saved"
+    }
+  ],
+  "targets": {
+    "web": {
+      "baseUrl": "https://example.test",
+      "surface": "web"
+    }
+  }
+}

@@ -813,6 +813,11 @@ describe('heal state-machine contract', () => {
     expect(resolves).toEqual([false, true, true]);
   });
 
+  /*
+   * A declared executor failure already produces a classified replay error.
+   * Recording the call count before each replay proves the final replay ran,
+   * while observing its error checks classification without forging it.
+   */
   it('TEST-B12 keeps a declared failure out of heal errors after a Stage-applied final replay', async () => {
     let attempts = 0;
     const executor = createFakeAiExecutor({
@@ -837,29 +842,33 @@ describe('heal state-machine contract', () => {
       }),
     });
     const scenario = await createScenario({ steps: [AI_STEP], grounding: {}, aiExecutor: executor });
-    let classifiedFinalReplays = 0;
+    const callsBeforeReplays: number[] = [];
+    const finalReplayErrors: unknown[] = [];
+    replayRunObserver.beforeRun = () => { callsBeforeReplays.push(attempts); };
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
-      if (options.resolve !== true) return;
-      const replay = outcome.results[0] as { error?: AgenticStepFailedError; result: { status: string } } | undefined;
-      if (replay?.result.status !== 'error') return;
-      replay.error = new AgenticStepFailedError('The AI-directed interaction did not complete successfully.', {
-        stepId: 'recorded-ai', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0,
-      });
-      classifiedFinalReplays += 1;
+      if (options.resolve === true) finalReplayErrors.push(outcome.results[0]?.error);
     };
     const result = await heal(scenario.deps, OPTIONS);
     expect(attempts).toBe(3);
-    expect(classifiedFinalReplays).toBeGreaterThan(0);
+    expect(callsBeforeReplays.at(-1)).toBeLessThan(attempts);
+    expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.errors).toEqual([]);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 }]));
     expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
     expect(result.outcome.results[0]?.stage3Error).toBeUndefined();
-    expect(buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+    const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
-    }).exitCode).toBe(1);
+    });
+    expect(report.exitCode).toBe(1);
+    expect(report.envelope.errors).toEqual([]);
   });
 
+  /*
+   * Secret-set rejection must retain the executor's classified failure without
+   * exposing it as a heal error. Read-only replay observations establish that
+   * the final invocation and its error are real, rather than injected by a test.
+   */
   it('TEST-B12 omits the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
     let declarations = 0;
     const executor = createFakeAiExecutor({
@@ -872,25 +881,25 @@ describe('heal state-machine contract', () => {
       steps: [AI_STEP, Step.parse({ id: 'retained', kind: 'action', target: 'web', action: 'fill-secret', intent: committedIntent(PASSWORD), secretRef: '{{secrets.password}}' })],
       grounding: {}, aiExecutor: executor,
     });
-    let classified = 0;
+    const callsBeforeReplays: number[] = [];
+    const finalReplayErrors: unknown[] = [];
+    replayRunObserver.beforeRun = () => { callsBeforeReplays.push(declarations); };
     replayRunObserver.afterRun = (_deps, _storage, options, outcome) => {
-      if (options.resolve !== true || outcome.results[0]?.result.status !== 'error') return;
-      (outcome.results[0] as { error?: AgenticStepFailedError }).error = new AgenticStepFailedError(
-        'The AI-directed interaction did not complete successfully.',
-        { stepId: 'recorded-ai', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
-      );
-      classified += 1;
+      if (options.resolve === true) finalReplayErrors.push(outcome.results[0]?.error);
     };
     const result = await heal({ ...scenario.deps, config: { ...scenario.deps.config, secrets: { allow: ['other', 'password'] } } }, OPTIONS);
     expect(declarations).toBeGreaterThan(0);
-    expect(classified).toBeGreaterThan(0);
+    expect(callsBeforeReplays.at(-1)).toBeLessThan(declarations);
+    expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'secret-set-rejected' }]));
     expect(result.outcome.errors).toEqual([]);
     expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
-    expect(buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+    const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
-    }).exitCode).toBe(1);
+    });
+    expect(report.exitCode).toBe(1);
+    expect(report.envelope.errors).toEqual([]);
   });
 
   it('aborts at the initial live measurement when its replay carries an integrity violation', async () => {

@@ -174,7 +174,7 @@ describe('check', () => {
     grounding.planDigest = `${grounding.planDigest.slice(0, -1)}${last === '0' ? '1' : '0'}`;
     await storage.writeText(layout.groundingPathFor(testPath), JSON.stringify(grounding));
     const changed = await check(deps, OPTIONS);
-    expect(changed.results).toEqual([expect.objectContaining({ id: testPath, status: expect.not.stringMatching(/^fresh$/) })]);
+    expect(changed.results).toEqual([expect.objectContaining({ id: testPath, status: 'stale-grounding' })]);
     const plan: unknown = JSON.parse(planText);
     if (typeof plan !== 'object' || plan === null || !('generatorMeta' in plan)) throw new Error('Missing generatorMeta');
     const meta = plan.generatorMeta;

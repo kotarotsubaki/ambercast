@@ -112,5 +112,8 @@ Implementation tasks run in a **linked worktree per issue** by default; working 
 - `node scripts/verify-pack.mjs` — authoritative, automated check that the
   packed tarball contains `dist/`, `bin/ambercast.js`, `skills/ambercast/SKILL.md`, and that the bin file
   is executable; run this instead of eyeballing `npm pack --dry-run` output
+- `node scripts/pack-install.mjs pack [--out-dir <dir>] [--allow-dirty]` — build and
+  pack this checkout into a commit-keyed archive and manifest for downstream checks
+- `node scripts/pack-install.mjs install <project-dir> [--manifest <path>] [--out-dir <dir>] [--pm npm|pnpm]` — install a packed archive into another project and verify its version and lockfile integrity
 
 Keep this file updated as the implementation grows.

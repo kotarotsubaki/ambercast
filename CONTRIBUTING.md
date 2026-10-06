@@ -19,6 +19,32 @@ Requires Node.js >= 22.14.
 
   Run `npm run dev` in `website/` for a local preview.
 
+## Testing an unpublished build in another project
+
+Run `node scripts/pack-install.mjs pack` from this checkout, then run the printed
+`node scripts/pack-install.mjs install <project-dir> --manifest <path>` command
+from this checkout, with `<project-dir>` pointing to the downstream project.
+By default, packs live under `~/.cache/ambercast-pack`.
+Old commit keys are never deleted automatically; remove them manually when no
+longer needed. The pack command refuses changes in shipped files unless you pass
+`--allow-dirty`. It rebuilds this repository's `dist/`, so never run pack
+concurrently with `npm test` or another pack run.
+
+Each `manifest.json` records `schemaVersion` (manifest format), `name` and
+`version` (packed package identity), `sha` (checkout commit), `dirty` and
+`dirtyPaths` (whether shipped inputs changed and which paths), `tarball`
+(absolute local archive path), and `integrity` (archive content hash). Install
+checks the archive and installed package against this manifest. It changes the
+target project's `package.json` and lockfile, including on failure; do not
+commit those changes.
+
+Use this flow to try an unpublished upstream build in the dogfood downstream
+project. Do not commit a development build's generated `plan` or `grounding`
+there. For a release check, pack the release commit and install it into the
+mid-layer verification target before the release PR, then verify that target
+again against the published version after publication. The mid-layer procedure
+is tracked in issue #544.
+
 ## How to contribute
 
 1. **Open an issue first** describing the problem or proposal.

@@ -213,6 +213,15 @@ describe('pack-install integration (real git + npm/pnpm fixture)', () => {
     fails(run(f, ['pack', '--out-dir', f.out], { script, cwd: plain }), 'pack-install: not a git checkout');
   }, 60000);
 
+  it('TEST-B3: install discovery from a non-git script directory fails with not a git checkout', async () => {
+    const f = await fixture();
+    const plain = join(f.root, 'plain');
+    await mkdir(join(plain, 'scripts'), { recursive: true });
+    const script = join(plain, 'scripts/pack-install.mjs');
+    await copyFile(source, script);
+    fails(run(f, ['install', f.consumer, '--out-dir', f.out], { script, cwd: plain }), 'pack-install: not a git checkout');
+  }, 60000);
+
   it('TEST-B4: npm install verifies dependency, lockfile and executable; discovery and repetition work', async () => {
     const f = await fixture();
     succeeds(pack(f));

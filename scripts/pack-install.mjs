@@ -566,11 +566,16 @@ async function installCommand(projectDir, flags) {
   if (flags.manifest) {
     manifestPath = resolve(flags.manifest);
   } else {
+    if (!existsSync(join(repoRoot, '.git'))) {
+      process.stderr.write('pack-install: not a git checkout\n');
+      return 1;
+    }
     try {
       sha = execFileSync('git', ['rev-parse', 'HEAD'], {
         cwd: repoRoot,
         encoding: 'utf8',
       }).trim();
+      if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('invalid HEAD');
     } catch {
       process.stderr.write('pack-install: not a git checkout\n');
       return 1;

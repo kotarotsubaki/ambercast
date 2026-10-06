@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/kotarotsubaki/ambercast/compare/v0.7.0...v0.8.0) (2026-10-06)
+
+
+### Features
+
+* **docs:** refresh code themes, add Mermaid diagrams and Steps headings ([#528](https://github.com/kotarotsubaki/ambercast/issues/528)) ([af67a41](https://github.com/kotarotsubaki/ambercast/commit/af67a412ba5992510cadcdee03f6b7229d61831b))
+* **website:** add opt-in prose lint for docs rewrite ([#509](https://github.com/kotarotsubaki/ambercast/issues/509)) ([e1b8875](https://github.com/kotarotsubaki/ambercast/commit/e1b8875117e707cbaf445993a97bf47e941610d4))
+
+
+### Bug Fixes
+
+* **generate:** check provider step IDs for secret literals before building diagnostics ([#520](https://github.com/kotarotsubaki/ambercast/issues/520)) ([5bc0dbd](https://github.com/kotarotsubaki/ambercast/commit/5bc0dbd215bc0037033fa0c0173b67f55e2923aa))
+* **generate:** drop navigate confirms references and report violations by code ([#523](https://github.com/kotarotsubaki/ambercast/issues/523)) ([9e7be29](https://github.com/kotarotsubaki/ambercast/commit/9e7be29aa9755a95a8b00bc986e3bf4d51521013))
+* **run:** always report confirmed: true for a binding from a confirmed grounding entry ([#522](https://github.com/kotarotsubaki/ambercast/issues/522)) ([2b28262](https://github.com/kotarotsubaki/ambercast/commit/2b28262c4cedcc3647896aa9117167f7c704133f))
+* **runner:** classify agentic step failures and poll AI-directed asserts to deadline ([#533](https://github.com/kotarotsubaki/ambercast/issues/533)) ([9a5e589](https://github.com/kotarotsubaki/ambercast/commit/9a5e5890458f43e7c90fc1ba89fb222cc9100734))
+
 ## [0.7.0](https://github.com/kotarotsubaki/ambercast/compare/v0.6.0...v0.7.0) (2026-10-02)
 
 

@@ -206,7 +206,8 @@ export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V
       continue;
     }
 
-    if (new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
+    const dateObj = new Date(`${date}T00:00:00Z`);
+    if (Number.isNaN(dateObj.getTime()) || dateObj.toISOString().slice(0, 10) !== date) {
       allProblems.push(`line ${lineNum}: 'date' is not a valid calendar date`);
       continue;
     }

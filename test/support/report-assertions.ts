@@ -105,9 +105,6 @@ export function assertDiagnosable(report: unknown): void {
 		}
 	}
 
-	// Track results that have matching case errors
-	const resultsWithCaseErrors = new Set<string>();
-
 	// Inspect errors in index order (already in order from schema validation)
 	// Check for blank messages and generic fallback messages without details
 	for (const [i, error] of parsed.errors.entries()) {
@@ -118,9 +115,6 @@ export function assertDiagnosable(report: unknown): void {
 		// ② Generic fallback without details is a violation
 		else if (GENERIC_FALLBACK_MESSAGES.includes(error.message) && ('details' in error ? error.details : undefined) === undefined) {
 			violations.push(`errors[${i}]: generic fallback message without details (code: ${error.code})`);
-		}
-		if (error.scope === 'case') {
-			resultsWithCaseErrors.add('caseId' in error ? error.caseId : '');
 		}
 	}
 
@@ -336,6 +330,7 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
 	for (let i = 0; i < pool.length; i++) {
 		for (let j = 0; j < pool.length; j++) {
 			if (i === j) continue;
+			if (i < labels.length && j < labels.length) continue;
 			if (pool[i]!.includes(pool[j]!)) {
 				throw new Error('assertNoSecretDisclosure: invalid input: a label contains a secret value');
 			}

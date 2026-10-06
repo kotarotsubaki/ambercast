@@ -90,6 +90,7 @@ describe('loadCorpus (TEST-A10, SPEC-A8)', () => {
     [13, row('a', { source: '#01' }) + '\n' + row('valid'), /source/i],
     [14, row('a', { date: '2026-1-06' }) + '\n' + row('valid'), /date/i],
     [15, row('a', { date: '2026-02-30' }) + '\n' + row('valid'), /date/i],
+    [15, row('a', { date: '2026-13-45' }) + '\n' + row('valid'), /valid calendar date/i],
     [16, row('a') + '\n' + row('a'), /duplicates value of line 1/],
   ] as const)('%i: reports the first row violation and continues', (_number, content, reason) => {
     const location = _number === 16 ? 'line 2' : 'line 1';

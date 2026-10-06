@@ -12,6 +12,8 @@ import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js'
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import type { JsonValueT, PlanDocument } from '#core/ir/schema.js';
 import { ReportEnvelope } from '#report/schema.js';
+import { createFsStorage } from '../../src/adapters/storage/fs-storage.js';
+import { assertDiagnosable, assertNoSecretDisclosure, collectStorageArtifacts } from '../support/report-assertions.js';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -294,6 +296,18 @@ describe('bin/ambercast.js (e2e)', () => {
       reportPersistence: 'persisted',
       errors: [expect.objectContaining({ scope: 'case', code: 'MISSING_PLAN' })],
     });
+  });
+
+  it('checks missing-plan CLI diagnostics and persisted artifact disclosure', async () => {
+    const project = await fixtureProject();
+    const result = await runCli(['run', '--json'], project);
+
+    expect(result.exitCode).toBe(4);
+    expect(assertDiagnosable(JSON.parse(result.stdout))).toBeUndefined();
+    const artifacts = await collectStorageArtifacts(createFsStorage(), [join(project, 'tests', '.runs')]);
+    expect(artifacts.some(({ path }) => path.endsWith('/report.json'))).toBe(true);
+    expect(assertNoSecretDisclosure({ secrets: { absent: 'value-that-cannot-occur-in-this-fixture' }, report: result.stdout, artifacts })).toBeUndefined();
+    expect(() => assertNoSecretDisclosure({ secrets: { code: 'MISSING_PLAN' }, report: result.stdout, artifacts })).toThrow(/report\.json/);
   });
 
   it('reports a stale run plan through the built CLI with exit 4', async () => {

@@ -1,0 +1,43 @@
+---
+title: 実行するテストを選ぶ
+description: パス指定・パターンフィルタ・設定ファイルによる除外で、実行するテストプロンプトを選ぶ4つの方法。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+## 前提条件 \{#prerequisites}
+
+既定のディスカバリーは `**/*.test.md` に一致し、runs・plans・グラウンディングのコンパニオンファイルは無視する。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ### ファイルを直接指定する \{#direct-path}
+
+   `npx ambercast run tests/ambercast/sign-in.test.md --list` を実行する。位置引数はリテラルのプロンプトパスとして扱われ、`--list` はリプレイを実行せずに結果を返す。
+
+2. ### 正規表現で絞り込む \{#grep-filter}
+
+   `npx ambercast run --grep 'sign-in' --list` を実行する。パーサーはディスカバリーのフィルタリング用正規表現を構築する。
+
+3. ### 設定ファイルで除外する \{#config-ignore}
+
+   有効な設定ファイルに `"testMatch":["**/*.test.md"],"testIgnore":["**/.runs/**"]` と書く。一致する `testIgnore` があれば、そのパスが `testMatch` に一致していても除外される。
+
+4. ### ハイフンで始まるパスを渡す \{#literal-dash-path}
+
+   `npx ambercast run --list -- --literal.test.md` のように、`--` の後ろにリテラルパスを置く。`--list` のようなフラグは `--` より前に置く。`--` より後ろの引数はすべてリテラルの位置パスとして扱われるため、末尾に置いた `--list` はファイル名として処理される。
+
+</Steps>
+
+## 確認 \{#verification}
+
+選択したパスが報告されたとき、`--list` の終了コードは `0` になる。一致するファイルが0件の場合は、意図したときだけ `--allow-empty` で解決する。
+
+## 関連情報 \{#related}
+
+<LinkCard title="ディスカバリーパターン" href="/ambercast/ja/reference/discovery-patterns/" description="testMatch・testIgnoreの一致規則を確認する。" />
+<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="runコマンドの全フラグを確認する。" />
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generateコマンドを確認する。" />
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="testMatch・testIgnoreの設定方法を確認する。" />

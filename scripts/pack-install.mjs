@@ -409,23 +409,24 @@ async function packCommand(flags) {
   }
 
   // SPEC-B2 ②: Check for dirty paths
-  let statusOutput;
-  try {
-    statusOutput = execFileSync('git', [
-      'status',
-      '--porcelain=v1',
-      '-z',
-      '--untracked-files=all',
-      '--',
-      ...TARBALL_SOURCE_PATHS,
-    ], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
-  } catch (error) {
-    process.stderr.write(`pack-install: git status failed (${error.status ?? 'unknown'})\n`);
+  const statusResult = spawnSync('git', [
+    'status',
+    '--porcelain=v1',
+    '-z',
+    '--untracked-files=all',
+    '--',
+    ...TARBALL_SOURCE_PATHS,
+  ], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  const statusFailure = processFailure(statusResult);
+  if (statusFailure !== null) {
+    if (statusResult.stderr) process.stderr.write(statusResult.stderr);
+    process.stderr.write(`pack-install: git status failed (${statusFailure})\n`);
     return 1;
   }
+  const statusOutput = statusResult.stdout;
 
   const dirtyPaths = [];
   if (statusOutput) {
@@ -676,13 +677,6 @@ async function installCommand(projectDir, flags) {
     }
   }
 
-  try {
-    execFileSync('which', [pm], { encoding: 'utf8' });
-  } catch {
-    process.stderr.write(`pack-install: ${pm} not found on PATH\n`);
-    return 1;
-  }
-
   const installResult = spawnSync(pm, pm === 'npm'
     ? ['install', '--save-dev', '--no-audit', '--no-fund', resolvedTarball]
     : ['add', '--save-dev', resolvedTarball], {
@@ -690,6 +684,10 @@ async function installCommand(projectDir, flags) {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  if (installResult.error?.code === 'ENOENT') {
+    process.stderr.write(`pack-install: ${pm} not found on PATH\n`);
+    return 1;
+  }
   forwardOutput(installResult);
   const installFailure = processFailure(installResult);
   if (installFailure !== null) {

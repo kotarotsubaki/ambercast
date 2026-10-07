@@ -29,6 +29,14 @@ function violation<T>(assertion: (value: T) => void, value: T): string {
   throw new Error('expected a contract violation');
 }
 
+async function rejection(action: () => Promise<unknown>): Promise<Error> {
+  try { await action(); } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    return error as Error;
+  }
+  throw new Error('expected a contract rejection');
+}
+
 const temporaryDirectories: string[] = [];
 afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 
@@ -166,7 +174,7 @@ describe('report assertions', () => {
     expect(reportMessage).not.toContain(token);
     const binary = violation(assertNoSecretDisclosure, { secrets: { credential: token }, artifacts: [{ path: 'binary.dat', bytes: Buffer.concat([Buffer.from([0xff]), bytes(token), Buffer.from([0xfe])]) }] });
     expect(binary).toContain('binary.dat');
-    expect(binary).toContain('offset 1');
+    expect(binary).toBe('assertNoSecretDisclosure: 1 violation(s)\n- secret "credential" found in "binary.dat" at byte 1');
     const escapedSecret = '"\\\n';
     expect(violation(assertNoSecretDisclosure, { secrets: { escaped: escapedSecret }, artifacts: [{ path: 'report.json', bytes: bytes(JSON.stringify({ secret: escapedSecret })) }] })).toContain('report.json');
     expect(violation(assertNoSecretDisclosure, { secrets: { credential: token }, report: `stdout ${token}` })).toContain('report');
@@ -175,7 +183,7 @@ describe('report assertions', () => {
     const mixedSecret = '\n';
     const escaped = JSON.stringify(mixedSecret).slice(1, -1);
     const mixed = Buffer.from('x'.repeat(10) + escaped + 'x'.repeat(40 - 10 - escaped.length) + mixedSecret);
-    expect(violation(assertNoSecretDisclosure, { secrets: { newline: mixedSecret }, artifacts: [{ path: 'mixed', bytes: mixed }] })).toContain('offset 10');
+    expect(violation(assertNoSecretDisclosure, { secrets: { newline: mixedSecret }, artifacts: [{ path: 'mixed', bytes: mixed }] })).toBe('assertNoSecretDisclosure: 1 violation(s)\n- secret "newline" found in "mixed" at byte 10');
     const pathMessage = violation(assertNoSecretDisclosure, { secrets: { credential: token }, artifacts: [{ path: `file-${token}`, bytes: bytes(token) }] });
     expect(pathMessage).toContain('path of artifacts[0]');
     expect(pathMessage).toContain('artifacts[0]');
@@ -200,7 +208,6 @@ describe('report assertions', () => {
       { secrets: { label: 'opaque-token-123' }, artifacts: [] },
       { secrets: { label: 'opaque-token-123' }, report: (() => { const value: { self?: unknown } = {}; value.self = value; return value; })() },
       { secrets: { 'opaque-token-123': 'opaque-token-123' }, report: 'safe' },
-      { secrets: { shorter: 'token-123', longer: 'opaque-token-123' }, report: 'safe' },
       { secrets: { x: 'short', labelThatContains_short: 'other' }, report: 'safe' },
     ];
     for (const input of invalid) {
@@ -233,7 +240,9 @@ describe('report assertions', () => {
     expect(await collectStorageArtifacts(storage, ['.runs', '.runs/r1', 'case.ambercast.plan.json', 'case.ambercast.plan.json', 'case.ambercast.grounding.json'])).toEqual(collected);
     for (const roots of [[], ['missing'], ['empty']]) {
       if (roots[0] === 'empty') await storage.ensureDir('empty');
-      await expect(collectStorageArtifacts(storage, roots)).rejects.toThrow();
+      expect((await rejection(() => collectStorageArtifacts(storage, roots))).message).toBe(roots.length === 0
+        ? 'collectStorageArtifacts: invalid input: no roots'
+        : `collectStorageArtifacts: root ${JSON.stringify(roots[0])} contained no files`);
     }
     await storage.writeBinary('unicode-\uE000', Buffer.from('bmp'));
     await storage.writeBinary('unicode-\u{10000}', Buffer.from('astral'));
@@ -261,4 +270,105 @@ describe('report assertions', () => {
     const broken = { ...storage, readBinary: async (path: string) => { if (path === 'second') throw new Error('read exploded'); return storage.readBinary(path); } };
     await expect(collectStorageArtifacts(broken, ['first', 'second'])).rejects.toThrow(/collectStorageArtifacts: cannot read.*second.*read exploded/);
   });
+
+  it('TEST-FA2 renders ordered report, artifact content, and path findings exactly', () => {
+    const message = violation(assertNoSecretDisclosure, {
+      secrets: { tok: 'S3CR3T' }, report: 'xS3CR3T', artifacts: [
+        { path: 'a.txt', bytes: new Uint8Array(Buffer.from('S3CR3T')) },
+        { path: 'dir/S3CR3T.png', bytes: Buffer.from('zzS3CR3T') },
+      ],
+    });
+    expect(message).toBe('assertNoSecretDisclosure: 4 violation(s)\n- secret "tok" found in report at byte 1\n- secret "tok" found in "a.txt" at byte 0\n- secret "tok" found in artifacts[1] at byte 2\n- secret "tok" found in path of artifacts[1]');
+  });
+
+  it('TEST-FA2 keeps control characters in labels and safe paths on one physical finding line', () => {
+    const message = violation(assertNoSecretDisclosure, { secrets: { 'a\nb': 'S3CR3T' }, artifacts: [{ path: 'x\ny.txt', bytes: Buffer.from('S3CR3T') }] });
+    expect(message).toBe('assertNoSecretDisclosure: 1 violation(s)\n- secret "a\\nb" found in "x\\ny.txt" at byte 0');
+    expect(message.split('\n')).toHaveLength(2);
+    expect(message).not.toContain('S3CR3T');
+  });
+
+  it.each([
+    ['label is a substring of its own value', { token: 'my-token-1' }],
+    ['labels overlap', { ab: 'one', abc: 'two' }],
+    ['values overlap', { shorter: 'token-123', longer: 'opaque-token-123' }],
+  ])('TEST-FA3 accepts %s', (_name, secrets) => {
+    expect(assertNoSecretDisclosure({ secrets, report: 'safe' })).toBeUndefined();
+  });
+
+  it.each([
+    ['own value inside label', { 'my-token-1-label': 'my-token-1' }, 'a label contains a secret value'],
+    ['other value inside label', { a: 'secret', 'x-secret': 'other' }, 'a label contains a secret value'],
+    ['empty value before overlap', { 'x-secret': '', a: 'secret' }, 'secret value is empty'],
+  ])('TEST-FA3 rejects %s', (_name, secrets, reason) => {
+    expect(violation(assertNoSecretDisclosure, { secrets, report: 'safe' })).toBe(`assertNoSecretDisclosure: invalid input: ${reason}`);
+  });
+
+  it('TEST-FA4 quotes a result id containing a newline', () => {
+    const report = envelope('run', [{ ...passed, id: 'a\nb', aiCalls: 1 }]);
+    expect(violation(assertZeroAiCalls, report)).toBe('assertZeroAiCalls: 1 violation(s)\n- "a\\nb": aiCalls is 1, expected 0');
+  });
+
+  it.each(['run', 'check'] as const)('TEST-FA5 reports both empty-results violations for %s', (command) => {
+    expect(violation(assertZeroAiCalls, envelope(command, []))).toBe('assertZeroAiCalls: 2 violation(s)\n- report: empty results array - cannot demonstrate zero AI usage\n- report: no row carries aiCalls field - cannot demonstrate zero AI usage');
+  });
+
+  it('TEST-FA6 names an empty root list exactly', async () => {
+    expect((await rejection(() => collectStorageArtifacts(createInMemoryStorage(), []))).message).toBe('collectStorageArtifacts: invalid input: no roots');
+  });
+
+  it.each([
+    ['undefined input', undefined, 'input must be an object'],
+    ['null input', null, 'input must be an object'],
+    ['primitive input', 'x', 'input must be an object'],
+    ['array input', [], 'input must be an object'],
+    ['null artifacts', { secrets: { safe: 'token' }, artifacts: null }, 'artifacts must be an array'],
+    ['string artifacts', { secrets: { safe: 'token' }, artifacts: 'x' }, 'artifacts must be an array'],
+    ['null artifact', { secrets: { safe: 'token' }, artifacts: [null] }, 'artifacts[0] is malformed'],
+    ['numeric artifact', { secrets: { safe: 'token' }, artifacts: [1] }, 'artifacts[0] is malformed'],
+    ['numeric path', { secrets: { safe: 'token' }, artifacts: [{ path: 1, bytes: new Uint8Array() }] }, 'artifacts[0] is malformed'],
+    ['array artifact', { secrets: { safe: 'token' }, artifacts: [[]] }, 'artifacts[0] is malformed'],
+    ['secrets before artifacts', { secrets: {}, artifacts: 'x' }, 'secrets is empty'],
+  ])('TEST-FA7 validates disclosure %s', (_name, input, reason) => {
+    try { assertNoSecretDisclosure(input as never); throw new Error('accepted invalid input'); }
+    catch (error) {
+      expect(error).not.toBeInstanceOf(TypeError);
+      expect((error as Error).message).toBe(`assertNoSecretDisclosure: invalid input: ${reason}`);
+    }
+  });
+
+  it.each([
+    ['undefined storage', undefined, ['a'], 'storage is not a StorageAdapter'],
+    ['array storage', [], ['a'], 'storage is not a StorageAdapter'],
+    ['null storage', null, ['a'], 'storage is not a StorageAdapter'],
+    ['empty object storage', {}, ['a'], 'storage is not a StorageAdapter'],
+    ['string roots', createInMemoryStorage(), 'a', 'roots must be an array'],
+  ])('TEST-FA7 validates collector %s', async (_name, storage, roots, reason) => {
+    const error = await rejection(() => collectStorageArtifacts(storage as never, roots as never));
+    expect(error).not.toBeInstanceOf(TypeError);
+    expect(error.message).toBe(`collectStorageArtifacts: invalid input: ${reason}`);
+  });
+
+  it.each(['exists', 'listFiles', 'listDirectories', 'readBinary'] as const)('TEST-FA8 wraps %s failures once', async (method) => {
+    const base = createInMemoryStorage();
+    await base.writeBinary('root/child/file', Buffer.from('ok'));
+    const path = method === 'listDirectories' ? 'root/child' : method === 'readBinary' ? 'root/child/file' : 'root';
+    const broken = { ...base, [method]: async (candidate: string) => {
+      if (candidate === path) throw new Error('boom');
+      return base[method](candidate);
+    } };
+    const error = await rejection(() => collectStorageArtifacts(broken as never, ['root']));
+    expect(error.message).toBe(`collectStorageArtifacts: cannot read ${JSON.stringify(path)}: boom`);
+    expect(error.message.match(/cannot read/g)).toHaveLength(1);
+  });
+
+  it('TEST-FA8 stringifies a non-Error readBinary rejection', async () => {
+    const base = createInMemoryStorage();
+    await base.writeBinary('file', Buffer.from('ok'));
+    const broken = { ...base, readBinary: async () => { throw 'boom'; } };
+    const error = await rejection(() => collectStorageArtifacts(broken, ['file']));
+    expect(error.message).toBe('collectStorageArtifacts: cannot read "file": boom');
+    expect(error.message.match(/cannot read/g)).toHaveLength(1);
+  });
+
 });

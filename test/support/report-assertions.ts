@@ -191,9 +191,12 @@ export function assertDiagnosable(report: unknown): void {
  * @throws An error prefixed with this function's name for invalid input or violations.
  * @remarks
  * Parse the envelope the same way {@link assertDiagnosable} does. An empty result
- * array is itself a report-level violation, located at the report rather than any
- * row, because a command report with nothing replayed cannot demonstrate zero AI
- * usage. Every executed run result — passed, failed, or error — must explicitly
+ * array yields both `report: empty results array - cannot demonstrate zero AI usage`
+ * and `report: no row carries aiCalls field - cannot demonstrate zero AI usage`, in
+ * that order. A command report with nothing replayed cannot demonstrate zero AI
+ * usage, and reporting both failures preserves this module's rule to report every
+ * violation rather than stopping at the first one. Every executed run result —
+ * passed, failed, or error — must explicitly
  * carry an `aiCalls` field equal to zero; an absent field counts as a violation on
  * these rows rather than as silently compliant. Listed or skipped run results, and
  * every row from a non-run command, may omit the field, but whichever value they do
@@ -202,6 +205,9 @@ export function assertDiagnosable(report: unknown): void {
  * or `--list`-only report) cannot vacuously satisfy this assertion. Violations
  * accumulate through the same shared error format as the other assertions in this
  * module.
+ * Render a violating result id with `JSON.stringify` before embedding it in
+ * a violation; a raw id containing a control character such as a newline would
+ * incorrectly split one violation across multiple physical lines.
  */
 export function assertZeroAiCalls(report: unknown): void {
 	// Parse envelope and collect schema violations
@@ -224,7 +230,6 @@ export function assertZeroAiCalls(report: unknown): void {
 	// An empty result array is a report-level violation
 	if (parsed.results.length === 0) {
 		violations.push('report: empty results array - cannot demonstrate zero AI usage');
-		throwIfViolations('assertZeroAiCalls', violations);
 	}
 
 	// Track if any result has aiCalls field
@@ -246,11 +251,11 @@ export function assertZeroAiCalls(report: unknown): void {
 				if ('aiCalls' in runResult) {
 					hasAiCallsField = true;
 					if (runResult.aiCalls !== 0) {
-						violations.push(`${caseId}: aiCalls is ${runResult.aiCalls}, expected 0`);
+						violations.push(`${JSON.stringify(caseId)}: aiCalls is ${runResult.aiCalls}, expected 0`);
 					}
 				} else {
 					// Absent field counts as violation for executed run results
-					violations.push(`${caseId}: missing aiCalls field`);
+					violations.push(`${JSON.stringify(caseId)}: missing aiCalls field`);
 				}
 			} else {
 				// Listed or skipped run results may omit the field
@@ -258,7 +263,7 @@ export function assertZeroAiCalls(report: unknown): void {
 				if ('aiCalls' in runResult) {
 					hasAiCallsField = true;
 					if (runResult.aiCalls !== 0) {
-						violations.push(`${caseId}: aiCalls is ${runResult.aiCalls}, expected 0`);
+						violations.push(`${JSON.stringify(caseId)}: aiCalls is ${runResult.aiCalls}, expected 0`);
 					}
 				}
 			}
@@ -267,7 +272,7 @@ export function assertZeroAiCalls(report: unknown): void {
 			if ('aiCalls' in result) {
 				hasAiCallsField = true;
 				if ((result as { aiCalls?: number }).aiCalls !== 0) {
-					violations.push(`${caseId}: aiCalls is ${(result as { aiCalls?: number }).aiCalls}, expected 0`);
+					violations.push(`${JSON.stringify(caseId)}: aiCalls is ${(result as { aiCalls?: number }).aiCalls}, expected 0`);
 				}
 			}
 		}
@@ -290,14 +295,16 @@ export function assertZeroAiCalls(report: unknown): void {
  *   an `artifacts` entry whose shape does not match {@link ScannedArtifact}; otherwise
  *   throws the aggregated disclosure violations.
  * @remarks
- * Validate the call shape before scanning anything, because a scan performed on an
- * ambiguous input could itself under-report: reject an empty `secrets` map, any empty
- * secret value, and any substring overlap between distinct labels or values, since
- * that overlap would make a later finding's label ambiguous. Reject the call when
- * there is no `report` and no `artifacts`, and when `artifacts` holds an entry whose
- * `path` is not a string or whose `bytes` is not a `Uint8Array`. None of these
- * rejection messages repeat the offending label or value, since the whole point of
- * this function is to avoid echoing secrets.
+ * Validate in this order before scanning: `input` is a non-array object;
+ * `secrets` is a nonempty map of nonempty string values with no label containing
+ * any secret value, including its own; optional `artifacts` is an array; each
+ * artifact is a non-array object with a string `path` and `Uint8Array` `bytes`;
+ * and at least one report or artifact is available to scan. Checking enclosing
+ * shapes before accessing their members avoids a raw `TypeError` on malformed input.
+ * Reject only label-contains-value overlap: label-label and value-value overlaps
+ * do not make a finding's label unsafe, and rejecting them would wrongly exclude
+ * ordinary pairs such as label `token` with value `my-token-1`. Rejection messages
+ * do not repeat offending labels or values.
  *
  * Scan a string `report` exactly as given. Scan any other `report` by serializing it
  * to JSON first, rejecting a value that throws during serialization (for example a
@@ -309,9 +316,20 @@ export function assertZeroAiCalls(report: unknown): void {
  * at that artifact's index rather than at its path string, specifically so the path
  * text — which would itself disclose the secret — never has to appear in a violation
  * message; that artifact's content is still scanned and reported independently, even
- * when the path finding and a content finding share the same secret.
+ * when the path finding and a content finding share the same secret. A content
+ * finding is `secret <JSON.stringify(label)> found in <location> at byte <offset>`:
+ * location is `report`, `JSON.stringify(path)` for a safe artifact path, or
+ * `artifacts[<i>]` when that path contains a secret value. A path finding is
+ * `secret <JSON.stringify(label)> found in path of artifacts[<i>]`. Emit findings
+ * in secret enumeration order, then report before artifacts in array order, with
+ * content before path within one artifact. Quoting labels and safe paths keeps
+ * embedded control characters from splitting one finding across physical lines.
  */
 export function assertNoSecretDisclosure(input: { secrets: Record<string, string>; report?: unknown; artifacts?: readonly ScannedArtifact[] }): void {
+	if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+		throw new Error('assertNoSecretDisclosure: invalid input: input must be an object');
+	}
+
 	const { secrets, report, artifacts } = input;
 
 	if (!secrets || typeof secrets !== 'object' || Array.isArray(secrets) || Object.keys(secrets).length === 0) {
@@ -326,13 +344,28 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
 
 	const labels = Object.keys(secrets);
 	const values = Object.values(secrets);
-	const pool = [...labels, ...values];
-	for (let i = 0; i < pool.length; i++) {
-		for (let j = 0; j < pool.length; j++) {
-			if (i === j) continue;
-			if (i < labels.length && j < labels.length) continue;
-			if (pool[i]!.includes(pool[j]!)) {
+	for (const label of labels) {
+		for (const value of values) {
+			if (label.includes(value)) {
 				throw new Error('assertNoSecretDisclosure: invalid input: a label contains a secret value');
+			}
+		}
+	}
+
+	if (artifacts !== undefined && !Array.isArray(artifacts)) {
+		throw new Error('assertNoSecretDisclosure: invalid input: artifacts must be an array');
+	}
+
+	if (artifacts !== undefined) {
+		for (const [i, artifact] of artifacts.entries()) {
+			if (artifact === null || typeof artifact !== 'object' || Array.isArray(artifact)) {
+				throw new Error(`assertNoSecretDisclosure: invalid input: artifacts[${i}] is malformed`);
+			}
+			if (typeof artifact.path !== 'string') {
+				throw new Error(`assertNoSecretDisclosure: invalid input: artifacts[${i}] is malformed`);
+			}
+			if (!(artifact.bytes instanceof Uint8Array)) {
+				throw new Error(`assertNoSecretDisclosure: invalid input: artifacts[${i}] is malformed`);
 			}
 		}
 	}
@@ -341,18 +374,7 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
 		throw new Error('assertNoSecretDisclosure: invalid input: no scan target provided');
 	}
 
-	if (artifacts !== undefined) {
-		for (const artifact of artifacts) {
-			if (typeof artifact.path !== 'string') {
-				throw new Error('assertNoSecretDisclosure: invalid input: artifact path is not a string');
-			}
-			if (!(artifact.bytes instanceof Uint8Array)) {
-				throw new Error('assertNoSecretDisclosure: invalid input: artifact bytes is not a Uint8Array');
-			}
-		}
-	}
-
-	const targets: { text: string | Buffer; locationName: string; isArtifact?: boolean; artifactIndex?: number; pathContainsSecret?: boolean }[] = [];
+	const targets: { text: string | Buffer; locationName: string; isArtifact?: boolean; artifactIndex?: number; artifactPath?: string; pathContainsAnySecret: boolean }[] = [];
 
 	if (report !== undefined) {
 		let reportText: string;
@@ -369,34 +391,30 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
 				throw new Error('assertNoSecretDisclosure: invalid input: report could not be serialized');
 			}
 		}
-		targets.push({ text: reportText, locationName: 'report' });
+		targets.push({ text: reportText, locationName: 'report', pathContainsAnySecret: false });
 	}
-
-	const artifactPathContainsSecret = (artifact: { path: string; bytes: Uint8Array }): boolean => {
-		const pathBuffer = Buffer.from(artifact.path, 'utf8');
-		for (const value of Object.values(secrets)) {
-			const valueBuffer = Buffer.from(value, 'utf8');
-			if (pathBuffer.indexOf(valueBuffer) >= 0) {
-				return true;
-			}
-			const jsonStringValue = JSON.stringify(value);
-			const jsonEscapedValue = jsonStringValue.slice(1, -1);
-			if (jsonEscapedValue !== value) {
-				const jsonEscapedBuffer = Buffer.from(jsonEscapedValue, 'utf8');
-				if (pathBuffer.indexOf(jsonEscapedBuffer) >= 0) {
-					return true;
-				}
-			}
-		}
-		return false;
-	};
 
 	if (artifacts !== undefined) {
 		for (const [i, artifact] of artifacts.entries()) {
-			// An indexed location keeps a disclosed secret in the path out of the error message.
-			const pathContainsSecret = artifactPathContainsSecret(artifact);
-			const locationName = pathContainsSecret ? `artifacts[${i}]` : artifact.path;
-			targets.push({ text: Buffer.from(artifact.bytes), locationName, isArtifact: true, artifactIndex: i, pathContainsSecret });
+			const pathBuffer = Buffer.from(artifact.path, 'utf8');
+			let pathContainsAnySecret = false;
+			for (const value of Object.values(secrets)) {
+				const valueBuffer = Buffer.from(value, 'utf8');
+				if (pathBuffer.indexOf(valueBuffer) >= 0) {
+					pathContainsAnySecret = true;
+					break;
+				}
+				const jsonStringValue = JSON.stringify(value);
+				const jsonEscapedValue = jsonStringValue.slice(1, -1);
+				if (jsonEscapedValue !== value) {
+					const jsonEscapedBuffer = Buffer.from(jsonEscapedValue, 'utf8');
+					if (pathBuffer.indexOf(jsonEscapedBuffer) >= 0) {
+						pathContainsAnySecret = true;
+						break;
+					}
+				}
+			}
+			targets.push({ text: Buffer.from(artifact.bytes), locationName: pathContainsAnySecret ? `artifacts[${i}]` : JSON.stringify(artifact.path), isArtifact: true, artifactIndex: i, artifactPath: artifact.path, pathContainsAnySecret });
 		}
 	}
 
@@ -404,18 +422,15 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
 
 	for (const [label, value] of Object.entries(secrets)) {
 		const valueBuffer = Buffer.from(value, 'utf8');
+		const jsonStringValue = JSON.stringify(value);
+		const jsonEscapedValue = jsonStringValue.slice(1, -1);
+		const jsonEscapedBuffer = Buffer.from(jsonEscapedValue, 'utf8');
 
 		for (const target of targets) {
 			const text = target.text;
-
 			const targetBuffer = Buffer.isBuffer(text) ? text : Buffer.from(text, 'utf8');
 
 			const rawOffset = targetBuffer.indexOf(valueBuffer);
-
-			const jsonStringValue = JSON.stringify(value);
-			const jsonEscapedValue = jsonStringValue.slice(1, -1);
-			const jsonEscapedBuffer = Buffer.from(jsonEscapedValue, 'utf8');
-
 			let jsonOffset = -1;
 			if (jsonEscapedValue !== value) {
 				jsonOffset = targetBuffer.indexOf(jsonEscapedBuffer);
@@ -431,23 +446,23 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
 			}
 
 			if (offset >= 0) {
-				if (target.isArtifact && target.artifactIndex !== undefined) {
-					violations.push(`secret ${label} found in ${target.locationName} at offset ${offset}`);
+				let location: string;
+				if (!target.isArtifact) {
+					location = 'report';
+				} else if (target.pathContainsAnySecret) {
+					location = `artifacts[${target.artifactIndex!}]`;
 				} else {
-					violations.push(`secret ${label} found in ${target.locationName} at offset ${offset}`);
+					location = target.locationName; // already JSON-stringified path
 				}
+				violations.push(`secret ${JSON.stringify(label)} found in ${location} at byte ${offset}`);
 			}
 
-			if (target.isArtifact && target.artifactIndex !== undefined) {
-				const artifact = artifacts![target.artifactIndex]!;
-				const pathBuffer = Buffer.from(artifact.path, 'utf8');
+			if (target.isArtifact && target.artifactIndex !== undefined && target.artifactPath !== undefined) {
+				const pathBuffer = Buffer.from(target.artifactPath, 'utf8');
 				if (pathBuffer.indexOf(valueBuffer) >= 0) {
-					violations.push(`secret ${label} found in path of artifacts[${target.artifactIndex}]`);
-				}
-				else if (jsonEscapedValue !== value) {
-					if (pathBuffer.indexOf(jsonEscapedBuffer) >= 0) {
-						violations.push(`secret ${label} found in path of artifacts[${target.artifactIndex}]`);
-					}
+					violations.push(`secret ${JSON.stringify(label)} found in path of artifacts[${target.artifactIndex}]`);
+				} else if (jsonEscapedValue !== value && pathBuffer.indexOf(jsonEscapedBuffer) >= 0) {
+					violations.push(`secret ${JSON.stringify(label)} found in path of artifacts[${target.artifactIndex}]`);
 				}
 			}
 		}
@@ -464,11 +479,21 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
  * @param roots - Opaque file or directory roots to inspect; at least one is required.
  * @returns Every distinct collected artifact, ordered by JavaScript's default string
  *   sort (UTF-16 code unit order) over the path.
- * @throws An invalid-input error for an empty `roots` array, for a `roots` entry that
- *   is not a string, or when a root yields no files at all; a read failure during
- *   collection rejects immediately as `cannot read <path, JSON-stringified>: <the
- *   original failure's message>`, never a partial result.
+ * @throws An invalid-input error — `storage is not a StorageAdapter`, `roots must be an
+ *   array`, `no roots`, or `a root is not a string` — for the corresponding malformed
+ *   call; also throws `root <JSON.stringify(root)> contained no files` when a root
+ *   yields no files. An adapter read failure rejects immediately as
+ *   `collectStorageArtifacts: cannot read <JSON.stringify(path)>: <message>`, never
+ *   a partial result.
  * @remarks
+ * Validate the storage shape and required methods before checking that roots is
+ * an array, then nonempty, then composed of strings. This order gives a named
+ * invalid-input error instead of a raw `TypeError` on malformed calls.
+ * Wrap each adapter call to `exists`, `listFiles`, `listDirectories`, or `readBinary`
+ * at the path passed to that call. Use an `Error`'s message or `String(value)` for a
+ * thrown non-Error value. Let recursive `collectFromDir` calls propagate their
+ * already-wrapped failure without wrapping the recursive call itself, avoiding a
+ * doubled `cannot read` prefix.
  * Treat each root as a single file when the adapter reports it as an existing file;
  * otherwise descend into it through the adapter's listing methods, recursing into
  * every subdirectory they report. Include files named with the adapter's
@@ -481,9 +506,22 @@ export function assertNoSecretDisclosure(input: { secrets: Record<string, string
  * contains two entries for the same path, even when roots overlap or repeat.
  */
 export async function collectStorageArtifacts(storage: import('#ports/storage.js').StorageAdapter, roots: readonly string[]): Promise<ScannedArtifact[]> {
+	// Validate input: storage must be a non-array object with required methods
+	if (storage === null || typeof storage !== 'object' || Array.isArray(storage)) {
+		throw new Error('collectStorageArtifacts: invalid input: storage is not a StorageAdapter');
+	}
+	if (typeof storage.exists !== 'function' || typeof storage.readBinary !== 'function' || typeof storage.listFiles !== 'function' || typeof storage.listDirectories !== 'function') {
+		throw new Error('collectStorageArtifacts: invalid input: storage is not a StorageAdapter');
+	}
+
+	// Validate input: roots must be an array
+	if (!Array.isArray(roots)) {
+		throw new Error('collectStorageArtifacts: invalid input: roots must be an array');
+	}
+
 	// Validate input: roots must not be empty
 	if (roots.length === 0) {
-		throw new Error('collectStorageArtifacts: invalid input: roots is empty');
+		throw new Error('collectStorageArtifacts: invalid input: no roots');
 	}
 
 	// Validate input: all roots must be strings
@@ -501,7 +539,13 @@ export async function collectStorageArtifacts(storage: import('#ports/storage.js
 		const rootArtifacts = new Map<string, Uint8Array>();
 
 		// Check if root is a file (exists) or directory
-		const isFile = await storage.exists(root);
+		let isFile: boolean;
+		try {
+			isFile = await storage.exists(root);
+		} catch (e) {
+			const originalMessage = e instanceof Error ? e.message : String(e);
+			throw new Error(`collectStorageArtifacts: cannot read ${JSON.stringify(root)}: ${originalMessage}`);
+		}
 
 		if (isFile) {
 			// Treat as a single file
@@ -516,7 +560,13 @@ export async function collectStorageArtifacts(storage: import('#ports/storage.js
 			// Recursively descend into directory
 			const collectFromDir = async (dir: string) => {
 				// List files in current directory
-				const files = await storage.listFiles(dir);
+				let files: readonly string[];
+				try {
+					files = await storage.listFiles(dir);
+				} catch (e) {
+					const originalMessage = e instanceof Error ? e.message : String(e);
+					throw new Error(`collectStorageArtifacts: cannot read ${JSON.stringify(dir)}: ${originalMessage}`);
+				}
 				for (const name of files) {
 					const path = dir === '' ? name : `${dir}/${name}`;
 					try {
@@ -529,19 +579,20 @@ export async function collectStorageArtifacts(storage: import('#ports/storage.js
 				}
 
 				// Recurse into subdirectories
-				const directories = await storage.listDirectories(dir);
+				let directories: readonly string[];
+				try {
+					directories = await storage.listDirectories(dir);
+				} catch (e) {
+					const originalMessage = e instanceof Error ? e.message : String(e);
+					throw new Error(`collectStorageArtifacts: cannot read ${JSON.stringify(dir)}: ${originalMessage}`);
+				}
 				for (const name of directories) {
 					const path = dir === '' ? name : `${dir}/${name}`;
 					await collectFromDir(path);
 				}
 			};
 
-			try {
-				await collectFromDir(root);
-			} catch (e) {
-				// Re-throw read errors with proper prefix
-				throw e;
-			}
+			await collectFromDir(root);
 		}
 
 		// Check if this root yielded any files

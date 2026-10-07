@@ -203,7 +203,19 @@ export function extractTextBlocks(tree, originalLines, frontmatterLineOffset, is
 
     const segments = [];
     let joinedText = '';
+    // Chinese punctuation checks need a parallel view because omitting inline code
+    // can make valid prose appear to have a gap before punctuation. Replacing each
+    // code span with ASCII code preserves that context without changing joinedText,
+    // which the other locale rules and measurements still consume.
+    // The same processChild traversal appends ordinary text and inline code nested
+    // in links or mdxJsxTextElements, removing newlines without adding spaces as joinedText does.
+    let zhlintText = '';
     const lineMap = [];
+    // Text segments cannot locate a paragraph that begins with inline code and
+    // soft-wraps before its first text node. The paragraph node's own position
+    // will anchor zhlint findings to the actual start, including that case.
+    // Its line will be node.position.start.line + lineOffset, not a text node's line.
+    const startLine = node.position?.start?.line !== undefined ? node.position.start.line + lineOffset : null;
 
     // Soft wraps retain separate source lines so findings can name the original line.
     let currentLine = null;
@@ -236,12 +248,17 @@ export function extractTextBlocks(tree, originalLines, frontmatterLineOffset, is
               segmentOffset = joinedText.length;
             }
             currentSegmentText += textLine;
+            // zhlintText receives the same text as joinedText (same value, same joining rules)
+            zhlintText += textLine;
             if (i < textLines.length - 1) {
               addSegment();
               currentSegmentText = '';
             }
           }
         }
+      } else if (child.type === 'inlineCode') {
+        // For zhlint, replace inline code with ASCII 'code'. joinedText stays unchanged.
+        zhlintText += 'code';
       } else if (child.type === 'link') {
         // Link destinations are syntax, while link labels contribute prose.
         if (child.children) {
@@ -269,7 +286,7 @@ export function extractTextBlocks(tree, originalLines, frontmatterLineOffset, is
     }
     addSegment();
 
-    return joinedText.trim() ? { segments, joinedText, lineMap } : null;
+    return joinedText.trim() ? { segments, joinedText, zhlintText, lineMap, startLine } : null;
   }
 
   if (tree.children) {

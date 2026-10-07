@@ -10,7 +10,7 @@ const REPORT_METADATA = {
 } as const;
 
 const reportEnvelopeFields = {
-  schemaVersion: '3.9',
+  schemaVersion: '3.10',
   startedAt: '2026-09-08T12:34:56Z',
   durationMs: 1,
   summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
@@ -204,6 +204,21 @@ const reportDocuments = [
     },
     false,
   ],
+  ...([
+    ['CASE_ABORTED', 'environment', { reason: 'run-value-missing', stepId: 'step-a' }, true],
+    ['CASE_ABORTED', 'environment', { reason: 'unknown', stepId: 'step-a' }, false],
+    ['PROMPT_AMBIGUOUS', 'usage', { ambiguities: 2 }, true],
+    ['PROMPT_AMBIGUOUS', 'usage', { ambiguities: 0 }, false],
+  ] as const).map(([code, kind, details, valid]) => [
+    `TEST-5 ${code} details ${valid ? 'valid' : 'invalid'}`,
+    {
+      ...reportEnvelopeFields,
+      command: 'generate',
+      results: [],
+      errors: [{ scope: 'case', caseId: 'case-a', code, kind, message: 'diagnostic', details }],
+    },
+    valid,
+  ] as const),
   [
     'a generate report with a run-shaped result',
     {

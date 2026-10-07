@@ -24,6 +24,7 @@ import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-e
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { dropNavigateConfirms } from '#core/ir/confirms-validation.js';
 import { computePlanDigest } from '#core/ir/digest.js';
@@ -1351,9 +1352,12 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           ];
 
           if (response.data.ambiguities.length > 0) {
-            return { kind: 'terminal', error: new (class extends AmbercastError {
-              readonly kind = 'assertion-failed' as const;
-            })('The generated plan has unresolved target ambiguities.') };
+            // Unresolved choices produce a caller-correctable case error
+            // whose count is safe to report without provider-written prose.
+            return { kind: 'terminal', error: new PromptAmbiguousError(
+              'The generated plan has unresolved target ambiguities.',
+              response.data.ambiguities.length,
+            ) };
           }
           if (options.dryRun) {
             return {

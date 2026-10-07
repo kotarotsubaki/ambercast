@@ -37,10 +37,12 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'fs-io-error', reportCode: 'FS_IO_ERROR', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'unexpected-crash', reportCode: 'UNEXPECTED_CRASH', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'interrupted', reportCode: 'INTERRUPTED', exitCode: 3, reportKind: 'environment' },
+  { errorKind: 'case-aborted', reportCode: 'CASE_ABORTED', exitCode: 3, reportKind: 'environment' },
+  { errorKind: 'prompt-ambiguous', reportCode: 'PROMPT_AMBIGUOUS', exitCode: 2, reportKind: 'usage' },
 ] as const satisfies readonly ErrorCodeCorrespondence[];
 
 const LEGACY_ERROR_CODES_WITHOUT_KIND = ['SECRET_GRANT_UNATTRIBUTABLE'] as const;
-const CASE_SCOPE_ONLY_CODES = ['SECRET_ENV_VAR_COLLISION', 'SECRET_CONSENT_REQUIRED', 'SECRET_SYNTAX_REJECTED', 'GROUNDING_UNRESOLVED', 'EXECUTOR_UNSUPPORTED'] as const;
+const CASE_SCOPE_ONLY_CODES = ['SECRET_ENV_VAR_COLLISION', 'SECRET_CONSENT_REQUIRED', 'SECRET_SYNTAX_REJECTED', 'GROUNDING_UNRESOLVED', 'EXECUTOR_UNSUPPORTED', 'CASE_ABORTED', 'PROMPT_AMBIGUOUS'] as const;
 
 const REPORTABLE_ERROR_KINDS = [
   'config-invalid',
@@ -63,6 +65,8 @@ const REPORTABLE_ERROR_KINDS = [
   'fs-io-error',
   'unexpected-crash',
   'interrupted',
+  'case-aborted',
+  'prompt-ambiguous',
 ] as const;
 
 function expectAccepted(schema: SchemaUnderTest, value: unknown): void {
@@ -144,12 +148,21 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     }).success).toBe(false);
   });
 
-  it.each(CASE_SCOPE_ONLY_CODES)('accepts %s only as a case-scoped usage error', (code) => {
+  it.each(CASE_SCOPE_ONLY_CODES.filter((code) => code !== 'CASE_ABORTED' && code !== 'PROMPT_AMBIGUOUS'))('accepts %s only as a case-scoped usage error', (code) => {
     expectAccepted(ReportError, {
       scope: 'case', kind: 'usage', code, message: 'The test case encountered a secret-policy error.', caseId: 'case-a',
     });
     expect(ReportError.safeParse({
       scope: 'run', kind: 'usage', code, message: 'The command encountered a secret-policy error.',
     }).success).toBe(false);
+  });
+
+  it.each([
+    { code: 'CASE_ABORTED', kind: 'environment', details: { reason: 'run-value-missing', stepId: 'step-a' } },
+    { code: 'PROMPT_AMBIGUOUS', kind: 'usage', details: { ambiguities: 2 } },
+  ] as const)('accepts $code only as a case-scoped $kind error with validated details', ({ code, kind, details }) => {
+    const base = { kind, code, message: 'The case needs attention.', details };
+    expectAccepted(ReportError, { ...base, scope: 'case', caseId: 'case-a' });
+    expect(ReportError.safeParse({ ...base, scope: 'run' }).success).toBe(false);
   });
 });

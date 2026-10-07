@@ -131,7 +131,7 @@ const CASE_FS_IO_ERROR = {
   caseId: 'login-succeeds',
 };
 
-describe('TEST-20 report schema 3.9', () => {
+describe('TEST-20 report schema 3.10', () => {
   const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
   const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
   const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
@@ -155,16 +155,17 @@ describe('TEST-20 report schema 3.9', () => {
     expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
   });
 
-  it('pins the shared report version to 3.9', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
-    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.9' }));
+  it('pins the shared report version to 3.10', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.10' }));
+    expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.9' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
   });
 });
 
 describe('TEST-V1 report-only version change', () => {
   it('keeps the Plan and Grounding schema versions and producer contract unchanged', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
     expect(GROUNDING_SCHEMA_VERSION).toBe(3);
     expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
@@ -199,7 +200,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.9',
+    schemaVersion: '3.10',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -430,11 +431,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.9', () => {
+  it('requires schema version 3.10', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.9' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.10' });
   });
 });
 
@@ -442,8 +443,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.9', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+  it('exports schema version 3.10', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -615,6 +616,41 @@ describe('valid nested schema fixtures', () => {
 });
 
 describe('SPEC-K5 report error details', () => {
+  it('TEST-5 accepts only strict case-scoped CASE_ABORTED details with all eight reasons', () => {
+    const reasons = [
+      'run-reference-invalid', 'run-value-missing', 'secret-fill-incomplete',
+      'agentic-no-terminal-evidence', 'agentic-coverage-inexact',
+      'agentic-proof-invalid', 'grounding-secret-contaminated',
+      'grounding-snapshot-invalid',
+    ];
+    for (const reason of reasons) {
+      const error = {
+        scope: 'case', kind: 'environment', code: 'CASE_ABORTED', caseId: 'case-a',
+        message: 'case aborted', details: { reason, stepId: 'step-a' },
+      };
+      expectAccepted(ReportError, error);
+      expectRejected(ReportError, { ...error, scope: 'run' });
+      expectRejected(ReportError, { ...error, details: { reason, stepId: 'step-a', extra: true } });
+    }
+    expectRejected(ReportError, {
+      scope: 'case', kind: 'environment', code: 'CASE_ABORTED', caseId: 'case-a',
+      message: 'case aborted', details: { reason: 'unknown', stepId: 'step-a' },
+    });
+  });
+
+  it('TEST-5 accepts only positive integer PROMPT_AMBIGUOUS counts at case scope', () => {
+    const error = {
+      scope: 'case', kind: 'usage', code: 'PROMPT_AMBIGUOUS', caseId: 'case-a',
+      message: 'prompt ambiguous', details: { ambiguities: 2 },
+    };
+    expectAccepted(ReportError, error);
+    expectRejected(ReportError, { ...error, scope: 'run' });
+    for (const ambiguities of [0, -1, 1.5, '2']) {
+      expectRejected(ReportError, { ...error, details: { ambiguities } });
+    }
+    expectRejected(ReportError, { ...error, details: { ambiguities: 2, extra: true } });
+  });
+
   const detailsByCode = {
     AI_RESPONSE_INVALID: { issues: [{ code: 'invalid-json', path: [] }], attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }] },
     SECRET_LITERAL_REJECTED: { detector: 'credential-prefix-sk', path: 'generatorMeta.token', attempts: [] },
@@ -959,7 +995,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
   });
 
   it.each(generateBranches)(

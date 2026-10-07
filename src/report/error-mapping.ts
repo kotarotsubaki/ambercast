@@ -1,13 +1,15 @@
-import type { AmbercastError, ErrorKind } from '#core/errors/types.js';
+import type { AmbercastError, ReportableErrorKind } from '#core/errors/types.js';
 import {
   AgenticStepFailedDetails,
   AiExecutorUnavailableDetails,
   AiResponseInvalidDetails,
   BrowserLaunchFailedDetails,
+  CaseAbortedDetails,
   CauseName,
   ExecutorUnsupportedDetails,
   GroundingUnresolvedDetails,
   PromptPathInvalidDetails,
+  PromptAmbiguousDetails,
   SecretConsentRequiredDetails,
   SecretEnvVarCollisionDetails,
   SecretLiteralRejectedDetails,
@@ -66,8 +68,12 @@ export function projectCauseName(cause: unknown): CauseName {
  * direction, secret syntax, consent, and environment-key collision failures
  * are case-only: their evidence describes one selected prompt and must never
  * be promoted to a run-wide error. An agentic step failure is likewise
- * case-only because its counters describe one selected step.
+ * case-only because its counters describe one selected step. The new abort
+ * and ambiguity kinds stay case-only because their evidence belongs
+ * to a selected step or prompt rather than the entire command.
  */
+// The total reportable-kind table makes omitted mappings a type error;
+// scope checks reject combinations the schema forbids.
 export const REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
   'secret-unresolved': { kind: 'usage', code: 'SECRET_UNRESOLVED' },
@@ -97,11 +103,13 @@ export const REPORT_ERROR_DETAILS = {
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
   'unexpected-crash': { kind: 'environment', code: 'UNEXPECTED_CRASH' },
   interrupted: { kind: 'environment', code: 'INTERRUPTED' },
-} as const satisfies Partial<Record<ErrorKind, {
+  'case-aborted': { kind: 'environment', code: 'CASE_ABORTED' },
+  'prompt-ambiguous': { kind: 'usage', code: 'PROMPT_AMBIGUOUS' },
+} as const satisfies Record<ReportableErrorKind, {
   readonly kind: 'usage' | 'environment';
   readonly code: ReportErrorCode;
   readonly hint?: string;
-}>>;
+}>;
 
 /**
  * Selects the CLI hint text for a grounding-unresolved failure reason.
@@ -173,113 +181,143 @@ export function groundingUnresolvedHint(reason: 'missing' | 'recoverable-miss' |
  * otherwise omits `AmbercastError.details`, so preserving validated storage
  * evidence here is required rather than optional metadata.
  */
+/**
+ * Projects report details for an allowed error kind and scope.
+ * Throws for assertion-failed, no-tests-found, port-unavailable, or a
+ * schema-forbidden kind/scope pair, matching reportError's precondition.
+ * Returns issues only when allowed details fail schema validation; otherwise
+ * returns optional details and hint.
+ */
+export function projectReportErrorDetails(
+  error: AmbercastError,
+  location: { readonly scope: 'run' } | { readonly scope: 'case'; readonly caseId: string; readonly engine?: string },
+): { ok: true; details?: unknown; hint?: string } | { ok: false; issues: readonly string[] } {
+  const mapping = REPORT_ERROR_DETAILS[error.kind as ReportableErrorKind];
+  if (mapping === undefined) throw new Error(`Error kind ${error.kind} cannot be serialized as a report error.`);
+  if ((error.kind === 'interrupted' || error.kind === 'prompt-path-invalid') && location.scope === 'case') {
+    throw new Error(`Error kind ${error.kind} cannot be serialized at case scope.`);
+  }
+  if ((error.kind === 'secret-env-var-collision' || error.kind === 'secret-consent-required' ||
+    error.kind === 'secret-syntax-rejected' || error.kind === 'agentic-step-failed' ||
+    error.kind === 'case-aborted' || error.kind === 'prompt-ambiguous') && location.scope === 'run') {
+    throw new Error(`Error kind ${error.kind} cannot be serialized at run scope.`);
+  }
+
+  const sourceDetails = error.details;
+  let parsed: { success: boolean; data?: unknown; error?: { issues: readonly { path: PropertyKey[]; message: string }[] } } | undefined;
+  let fsIoDetails: { partiallyWritten: ('plan' | 'grounding')[] } | undefined;
+  let groundingHint: string | undefined;
+  const reportableKind = error.kind as ReportableErrorKind;
+  switch (reportableKind) {
+    case 'ai-response-invalid':
+      if (readRecordField(sourceDetails, 'issues') !== undefined) parsed = AiResponseInvalidDetails.safeParse({
+        issues: readRecordField(sourceDetails, 'issues'),
+        ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
+      });
+      break;
+    case 'agentic-step-failed':
+      parsed = AgenticStepFailedDetails.safeParse({
+        stepId: readRecordField(sourceDetails, 'stepId'), actions: readRecordField(sourceDetails, 'actions'),
+        assertions: readRecordField(sourceDetails, 'assertions'), passedAssertions: readRecordField(sourceDetails, 'passedAssertions'),
+        failedAssertions: readRecordField(sourceDetails, 'failedAssertions'), targetRejections: readRecordField(sourceDetails, 'targetRejections'),
+        ...(readRecordField(sourceDetails, 'lastFailedAssertion') === undefined ? {} : { lastFailedAssertion: readRecordField(sourceDetails, 'lastFailedAssertion') }),
+      });
+      break;
+    case 'secret-literal-rejected':
+      parsed = SecretLiteralRejectedDetails.safeParse({ detector: readRecordField(sourceDetails, 'detector'), path: readRecordField(sourceDetails, 'path'),
+        ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }) });
+      break;
+    case 'prompt-path-invalid':
+      parsed = PromptPathInvalidDetails.safeParse({ path: readRecordField(sourceDetails, 'path'), reason: readRecordField(sourceDetails, 'reason') });
+      break;
+    case 'secret-env-var-collision':
+      parsed = SecretEnvVarCollisionDetails.safeParse({ envVar: readRecordField(sourceDetails, 'envVar'), refs: readRecordField(sourceDetails, 'refs') });
+      break;
+    case 'secret-consent-required':
+      parsed = SecretConsentRequiredDetails.safeParse({ reason: readRecordField(sourceDetails, 'reason'), secrets: readRecordField(sourceDetails, 'secrets') });
+      break;
+    case 'secret-syntax-rejected':
+      parsed = SecretSyntaxRejectedDetails.safeParse({ occurrences: readRecordField(sourceDetails, 'occurrences') });
+      break;
+    case 'grounding-unresolved': {
+      const candidate = GroundingUnresolvedDetails.safeParse({ stepId: readRecordField(sourceDetails, 'stepId'), reason: readRecordField(sourceDetails, 'reason') });
+      parsed = candidate;
+      if (candidate.success) groundingHint = groundingUnresolvedHint(candidate.data.reason);
+      break;
+    }
+    case 'ai-executor-unavailable':
+      if (readRecordField(sourceDetails, 'attempts') !== undefined) parsed = AiExecutorUnavailableDetails.safeParse({ attempts: readRecordField(sourceDetails, 'attempts') });
+      break;
+    case 'unexpected-crash':
+      parsed = UnexpectedCrashDetails.safeParse({ cause: { name: projectCauseName(error.cause) } });
+      break;
+    case 'executor-unsupported':
+      parsed = ExecutorUnsupportedDetails.safeParse({
+        target: readRecordField(sourceDetails, 'target'), executor: readRecordField(sourceDetails, 'executor'),
+        reason: readRecordField(sourceDetails, 'reason'), missing: readRecordField(sourceDetails, 'missing'),
+        ...(readRecordField(sourceDetails, 'surface') === undefined ? {} : { surface: readRecordField(sourceDetails, 'surface') }),
+      });
+      break;
+    case 'browser-launch-failed':
+      if (location.scope === 'case' && location.engine !== undefined) {
+        const candidate = BrowserLaunchFailedDetails.safeParse({ reason: readRecordField(sourceDetails, 'reason'), engine: readRecordField(sourceDetails, 'engine') });
+        parsed = candidate.success && candidate.data.engine === location.engine
+          ? candidate : BrowserLaunchFailedDetails.safeParse({ reason: 'launch-failed', engine: location.engine });
+      }
+      break;
+    case 'fs-io-error': {
+      const partiallyWritten = readRecordField(sourceDetails, 'partiallyWritten');
+      if (location.scope === 'case' && Array.isArray(partiallyWritten) &&
+        partiallyWritten.every((artifact): artifact is 'plan' | 'grounding' => artifact === 'plan' || artifact === 'grounding')) {
+        fsIoDetails = { partiallyWritten: [...partiallyWritten] };
+      }
+      break;
+    }
+    case 'case-aborted':
+      parsed = CaseAbortedDetails.safeParse({ reason: readRecordField(sourceDetails, 'reason'), stepId: readRecordField(sourceDetails, 'stepId') });
+      break;
+    case 'prompt-ambiguous':
+      parsed = PromptAmbiguousDetails.safeParse({ ambiguities: readRecordField(sourceDetails, 'ambiguities') });
+      break;
+    case 'config-invalid': case 'secret-unresolved': case 'target-unresolved': case 'missing-plan':
+    case 'stale-ir': case 'integrity-violation': case 'interrupted':
+      break;
+    default:
+      assertNever(reportableKind);
+  }
+  if (parsed && !parsed.success) {
+    return { ok: false, issues: parsed.error!.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`) };
+  }
+  const tableHint = 'hint' in mapping ? mapping.hint : undefined;
+  const instanceHint = readRecordField(sourceDetails, 'hint');
+  const hint = error.kind === 'grounding-unresolved' && parsed?.success
+    ? groundingHint
+    : tableHint ?? (typeof instanceHint === 'string' ? instanceHint : undefined);
+  return { ok: true, ...(parsed?.success ? { details: parsed.data } : fsIoDetails ? { details: fsIoDetails } : {}),
+    ...(hint === undefined ? {} : { hint }) };
+}
+
+function assertNever(value: never): never {
+  throw new Error('Unreachable error kind: ' + String(value));
+}
+
 export function reportError(error: AmbercastError, location: { readonly scope: 'run' }): ReportError;
 export function reportError(error: AmbercastError, location: { readonly scope: 'case'; readonly caseId: string; readonly engine?: string }): ReportError;
 export function reportError(
   error: AmbercastError,
   location: { readonly scope: 'run' } | { readonly scope: 'case'; readonly caseId: string; readonly engine?: string },
 ): ReportError {
-  const details = REPORT_ERROR_DETAILS[error.kind as keyof typeof REPORT_ERROR_DETAILS];
-  if (details === undefined) {
-    throw new Error(`Error kind ${error.kind} cannot be serialized as a report error.`);
-  }
-  if (error.kind === 'interrupted' && location.scope === 'case') {
-    throw new Error('Error kind interrupted cannot be serialized at case scope.');
-  }
-  if (error.kind === 'prompt-path-invalid' && location.scope === 'case') {
-    throw new Error('Error kind prompt-path-invalid cannot be serialized at case scope.');
-  }
-  if ((error.kind === 'secret-env-var-collision' || error.kind === 'secret-consent-required' || error.kind === 'secret-syntax-rejected') && location.scope === 'run') {
-    throw new Error(`Error kind ${error.kind} cannot be serialized at run scope.`);
-  }
-  if (error.kind === 'agentic-step-failed' && location.scope === 'run') {
-    throw new Error('Error kind agentic-step-failed cannot be serialized at run scope.');
-  }
-
-  const sourceDetails = error.details;
-  const browserLaunchDetails = error.kind === 'browser-launch-failed'
-    && location.scope === 'case'
-    && location.engine !== undefined
-    ? (() => {
-      const candidate = BrowserLaunchFailedDetails.safeParse({
-        reason: readRecordField(sourceDetails, 'reason'),
-        engine: readRecordField(sourceDetails, 'engine'),
-      });
-      return candidate.success && candidate.data.engine === location.engine
-        ? candidate
-        : BrowserLaunchFailedDetails.safeParse({ reason: 'launch-failed', engine: location.engine });
-    })()
-    : undefined;
-  const detailsByCode = error.kind === 'ai-response-invalid' && readRecordField(sourceDetails, 'issues') !== undefined
-    ? AiResponseInvalidDetails.safeParse({
-      issues: readRecordField(sourceDetails, 'issues'),
-      ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
-    })
-    : error.kind === 'agentic-step-failed'
-      ? AgenticStepFailedDetails.safeParse({
-        stepId: readRecordField(sourceDetails, 'stepId'),
-        actions: readRecordField(sourceDetails, 'actions'),
-        assertions: readRecordField(sourceDetails, 'assertions'),
-        passedAssertions: readRecordField(sourceDetails, 'passedAssertions'),
-        failedAssertions: readRecordField(sourceDetails, 'failedAssertions'),
-        targetRejections: readRecordField(sourceDetails, 'targetRejections'),
-        ...(readRecordField(sourceDetails, 'lastFailedAssertion') === undefined ? {} : { lastFailedAssertion: readRecordField(sourceDetails, 'lastFailedAssertion') }),
-      })
-    : error.kind === 'secret-literal-rejected'
-      ? SecretLiteralRejectedDetails.safeParse({
-        detector: readRecordField(sourceDetails, 'detector'),
-        path: readRecordField(sourceDetails, 'path'),
-        ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
-      })
-      : error.kind === 'prompt-path-invalid'
-        ? PromptPathInvalidDetails.safeParse({
-          path: readRecordField(sourceDetails, 'path'),
-          reason: readRecordField(sourceDetails, 'reason'),
-        })
-      : error.kind === 'secret-env-var-collision'
-        ? SecretEnvVarCollisionDetails.safeParse({ envVar: readRecordField(sourceDetails, 'envVar'), refs: readRecordField(sourceDetails, 'refs') })
-        : error.kind === 'secret-consent-required'
-          ? SecretConsentRequiredDetails.safeParse({ reason: readRecordField(sourceDetails, 'reason'), secrets: readRecordField(sourceDetails, 'secrets') })
-          : error.kind === 'secret-syntax-rejected'
-            ? SecretSyntaxRejectedDetails.safeParse({ occurrences: readRecordField(sourceDetails, 'occurrences') })
-              : error.kind === 'grounding-unresolved'
-                ? GroundingUnresolvedDetails.safeParse({
-                  stepId: readRecordField(sourceDetails, 'stepId'),
-                  reason: readRecordField(sourceDetails, 'reason'),
-                })
-        : error.kind === 'ai-executor-unavailable' && readRecordField(sourceDetails, 'attempts') !== undefined
-          ? AiExecutorUnavailableDetails.safeParse({
-            ...(readRecordField(sourceDetails, 'attempts') === undefined ? {} : { attempts: readRecordField(sourceDetails, 'attempts') }),
-          })
-          : error.kind === 'unexpected-crash'
-            ? UnexpectedCrashDetails.safeParse({ cause: { name: projectCauseName(error.cause) } })
-            : error.kind === 'executor-unsupported'
-              ? ExecutorUnsupportedDetails.safeParse({
-                target: readRecordField(sourceDetails, 'target'),
-                executor: readRecordField(sourceDetails, 'executor'),
-                reason: readRecordField(sourceDetails, 'reason'),
-                missing: readRecordField(sourceDetails, 'missing'),
-                ...(readRecordField(sourceDetails, 'surface') === undefined ? {} : { surface: readRecordField(sourceDetails, 'surface') }),
-              })
-            : error.kind === 'browser-launch-failed'
-              ? browserLaunchDetails
-            : undefined;
-  const tableHint = 'hint' in details ? details.hint : undefined;
-  const instanceHint = readRecordField(error.details, 'hint');
-  const hint = error.kind === 'grounding-unresolved' && detailsByCode?.success
-    ? groundingUnresolvedHint((detailsByCode.data as ReturnType<typeof GroundingUnresolvedDetails.parse>).reason)
-    : tableHint ?? (typeof instanceHint === 'string' ? instanceHint : undefined);
-  const hintField = hint === undefined ? {} : { hint };
-  const diagnosticDetails = detailsByCode?.success ? { details: detailsByCode.data } : {};
-
-  const partiallyWritten = readRecordField(error.details, 'partiallyWritten');
-  const fsIoDetails = error.kind === 'fs-io-error'
-    && Array.isArray(partiallyWritten)
-    && partiallyWritten.every((artifact): artifact is 'plan' | 'grounding' => artifact === 'plan' || artifact === 'grounding')
-    ? { details: { partiallyWritten: [...partiallyWritten] } }
-    : {};
-
+  const projected = projectReportErrorDetails(error, location);
+  const details = REPORT_ERROR_DETAILS[error.kind as ReportableErrorKind];
+  if (details === undefined) throw new Error(`Error kind ${error.kind} cannot be serialized as a report error.`);
+  const fields = projected.ok
+    ? { ...(projected.details === undefined ? {} : { details: projected.details }), ...(projected.hint === undefined ? {} : { hint: projected.hint }) }
+    : (() => {
+      const instanceHint = readRecordField(error.details, 'hint');
+      const hint = 'hint' in details ? details.hint : typeof instanceHint === 'string' ? instanceHint : undefined;
+      return hint === undefined ? {} : { hint };
+    })();
   return (location.scope === 'run'
-    ? { scope: location.scope, ...details, message: error.message, ...hintField, ...diagnosticDetails }
-    : { scope: location.scope, ...details, caseId: location.caseId, message: error.message, ...hintField, ...diagnosticDetails, ...fsIoDetails }) as ReportError;
+    ? { scope: location.scope, ...details, message: error.message, ...fields }
+    : { scope: location.scope, ...details, caseId: location.caseId, message: error.message, ...fields }) as ReportError;
 }

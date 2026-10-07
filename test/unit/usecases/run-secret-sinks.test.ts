@@ -599,7 +599,18 @@ describe('run secret sinks', () => {
 
     const outcome = await run(deps, RUN_OPTIONS);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({
+      message: 'The AI-directed interaction was rejected by a browser target it could not resolve (ambercast_perform: secret-contaminated).',
+      kind: 'agentic-step-failed',
+      details: {
+        stepId: 'recorded-ai',
+        actions: 0,
+        assertions: 0,
+        passedAssertions: 0,
+        failedAssertions: 0,
+        targetRejections: 1,
+      },
+    });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],

@@ -54,6 +54,7 @@ const EXPECTED_REPORT_ERROR_CODES = [
   'SECRET_SYNTAX_REJECTED',
   'GROUNDING_UNRESOLVED',
   'EXECUTOR_UNSUPPORTED',
+  'PROMPT_AMBIGUOUS',
   'BROWSER_LAUNCH_FAILED',
   'AI_EXECUTOR_UNAVAILABLE',
   'AI_RESPONSE_INVALID',
@@ -61,6 +62,7 @@ const EXPECTED_REPORT_ERROR_CODES = [
   'FS_IO_ERROR',
   'UNEXPECTED_CRASH',
   'INTERRUPTED',
+  'CASE_ABORTED',
 ] as const;
 
 function captureGeneratedArtifactWrites(): CapturedWrite[] {
@@ -102,7 +104,7 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
           planned: ['review', 'baseline', 'restore'],
-          schemaVersions: { plan: 5, grounding: 3, report: '3.9' },
+          schemaVersions: { plan: 5, grounding: 3, report: '3.10' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
@@ -165,7 +167,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
       planned: ['review', 'baseline', 'restore'],
-      schemaVersions: { plan: 5, grounding: 3, report: '3.9' },
+      schemaVersions: { plan: 5, grounding: 3, report: '3.10' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,

@@ -55,8 +55,12 @@ export const VIEW_COPY = {
       rawJson: 'Raw JSON',
     },
     runErrors: {
+      // The detail page uses fixed labels for report hints and projected
+      // details while report-derived content remains escaped by the renderer.
       headingPrefix: 'Errors (',
     },
+    errorHint: 'Hint',
+    errorDetails: 'Details',
     emptyCases: 'No cases were executed',
     case: {
       aiCallsSuffix: ' AI calls',

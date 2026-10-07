@@ -33,6 +33,7 @@ vi.mock('#adapters/http/local-report-server.js', () => ({ startLocalReportServer
 vi.mock('#runtime/mcp-command.js', () => ({ runMcpCommand }));
 
 import { ERROR_DETAILS_KEY_ORDER, main, renderHumanReport, REPORT_PERSISTENCE_FAILED_WARNING } from '../../src/cli/main.js';
+import { ERROR_DETAILS_KEY_ORDER as SHARED_ERROR_DETAILS_KEY_ORDER } from '../../src/core/report-format/error-details.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
 
 // SPEC-9: the captured v3 fixture still lists target selection for replay commands.
@@ -55,7 +56,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.9' as const,
+  schemaVersion: '3.10' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -65,7 +66,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.9' as const,
+  schemaVersion: '3.10' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -76,7 +77,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.9' as const,
+  schemaVersion: '3.10' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -101,7 +102,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.9' as const,
+  schemaVersion: '3.10' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -270,7 +271,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.9', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.10', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -291,7 +292,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.9', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.10', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -1133,6 +1134,28 @@ describe('main()', () => {
   });
 
   describe('renderHumanReport', () => {
+    it('TEST-7 preserves the human error-details output captured before shared projection', () => {
+      const errors = [
+        { code: 'EXECUTOR_UNSUPPORTED', kind: 'usage', details: { surface: 'browser', missing: ['click'], reason: 'unsupported-action', executor: 'playwright', target: 'local' } },
+        { code: 'BROWSER_LAUNCH_FAILED', kind: 'environment', details: { engine: 'chromium', reason: 'executable-missing' }, hint: 'Install Chromium, then retry.' },
+        { code: 'PROMPT_PATH_INVALID', kind: 'usage', details: { reason: 'no-name', path: 'unsafe\u001bname.test.md' } },
+        { code: 'AI_RESPONSE_INVALID', kind: 'environment', details: { attempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }], issues: [{ code: 'invalid-json', path: ['dynamic\u007f\u0080'] }, { code: 'missing-field', path: ['steps', 0] }] } },
+        { code: 'AGENTIC_STEP_FAILED', kind: 'environment', details: { targetRejections: 1, failedAssertions: 2, passedAssertions: 1, assertions: 3, actions: 1, stepId: 'recorded-ai', lastFailedAssertion: { check: 'text-visible', expected: 'Text "X" is visible.' } } },
+        { code: 'SECRET_LITERAL_REJECTED', kind: 'usage', details: { attempts: [], path: 'generatorMeta.key', detector: 'credential-prefix-sk' } },
+        { code: 'SECRET_ENV_VAR_COLLISION', kind: 'usage', details: { refs: ['{{secrets.API_TOKEN}}', '{{secrets.api_token}}'], envVar: 'AMBERCAST_SECRET_API_TOKEN' } },
+        { code: 'SECRET_CONSENT_REQUIRED', kind: 'usage', details: { secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }], reason: 'consent-required' } },
+        { code: 'SECRET_SYNTAX_REJECTED', kind: 'usage', details: { occurrences: [{ kind: 'reference', line: 2, column: 8 }] } },
+        { code: 'AI_EXECUTOR_UNAVAILABLE', kind: 'environment', details: { attempts: [] } },
+        { code: 'UNEXPECTED_CRASH', kind: 'environment', details: { cause: { name: 'AbortError' } } },
+        { code: 'FS_IO_ERROR', kind: 'environment', details: { partiallyWritten: ['plan', 'grounding'] } },
+        { code: 'GROUNDING_UNRESOLVED', kind: 'usage', details: { reason: 'missing-target', stepId: 'step-a' } },
+      ].map((error) => ({ scope: 'case', caseId: 'example', message: 'representative error', ...error }));
+      const golden = readFileSync(new URL('../fixtures/cli/error-details.golden.txt', import.meta.url), 'utf8');
+
+      expect(errors.map((error) => error.code)).toEqual(Object.keys(ERROR_DETAILS_KEY_ORDER).slice(0, 13));
+      expect(renderHumanReport({ ...RUN_ENVELOPE, errors } as never, false)).toBe(golden);
+    });
+
     it('TEST-B13 renders AGENTIC_STEP_FAILED fields in schema order, including nested assertion detail', () => {
       expect(ERROR_DETAILS_KEY_ORDER.AGENTIC_STEP_FAILED).toEqual([
         'stepId', 'actions', 'assertions', 'passedAssertions', 'failedAssertions', 'targetRejections', 'lastFailedAssertion',
@@ -1266,7 +1289,7 @@ describe('main()', () => {
 
       walkSchema(z.toJSONSchema(ReportError));
 
-      expect(detailsCodes).toEqual(new Set(Object.keys(ERROR_DETAILS_KEY_ORDER)));
+      expect(detailsCodes).toEqual(new Set(Object.keys(SHARED_ERROR_DETAILS_KEY_ORDER)));
     });
 
     it('renders a case-scope error with an escaped case ID and hint only', () => {

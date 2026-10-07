@@ -41,6 +41,25 @@ const temporaryDirectories: string[] = [];
 afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
 
 describe('report assertions', () => {
+  it('TEST-13 exempts an interrupted run error row from both case-evidence rules', () => {
+    const interrupted = { scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'Run interrupted.' };
+    const abortRow = {
+      ...passed, status: 'error', explanation: 'Run interrupted.',
+      steps: [{ ...step, status: 'error', kind: 'environment' }],
+    };
+    const withInterruption = envelope('run', [abortRow], [interrupted]);
+    expect(assertDiagnosable(withInterruption)).toBeUndefined();
+    const withoutInterruption = violation(assertDiagnosable, envelope('run', [abortRow]));
+    expect(withoutInterruption).toContain('case-a');
+    expect(withoutInterruption).toContain('errored run result lacks matching case error');
+    expect(withoutInterruption).toContain('error-status or failed-environment step but lacks matching case error');
+    expect(withoutInterruption).toMatch(/1 violation/);
+    const failedRow = { ...abortRow, status: 'failed' };
+    const failedMessage = violation(assertDiagnosable, envelope('run', [failedRow], [interrupted]));
+    expect(failedMessage).toContain('case-a');
+    expect(failedMessage).toContain('failed run result lacks matching case error');
+    expect(failedMessage).toContain('error-status or failed-environment step but lacks matching case error');
+  });
   it('TEST-A1 validates schema issues, aggregates ordered violations, and preserves input', () => {
     for (const assertion of [assertDiagnosable, assertZeroAiCalls]) {
       for (const raw of [null, {}, { ...envelope('run', [passed]), schemaVersion: 'wrong' }]) {

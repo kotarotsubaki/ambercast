@@ -16,7 +16,7 @@
   "schemaVersions": {
     "plan": 5,
     "grounding": 3,
-    "report": "3.9"
+    "report": "3.10"
   },
   "fingerprintAlgorithm": "a11y-neighborhood-v2",
   "exitCodes": [
@@ -42,12 +42,14 @@
     "SECRET_SYNTAX_REJECTED",
     "GROUNDING_UNRESOLVED",
     "EXECUTOR_UNSUPPORTED",
+    "PROMPT_AMBIGUOUS",
     "BROWSER_LAUNCH_FAILED",
     "AI_EXECUTOR_UNAVAILABLE",
     "AI_RESPONSE_INVALID",
     "AGENTIC_STEP_FAILED",
     "FS_IO_ERROR",
     "UNEXPECTED_CRASH",
-    "INTERRUPTED"
+    "INTERRUPTED",
+    "CASE_ABORTED"
   ]
 }

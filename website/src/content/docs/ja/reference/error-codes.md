@@ -14,6 +14,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | SECRET_UNRESOLVED | usage | run/case | 2 | unresolved secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | target cannot resolve |
 | EXECUTOR_UNSUPPORTED | usage | case | 2 | executor が Plan に必要な能力または surface を備えていない |
+| PROMPT_AMBIGUOUS | usage | case | 2 | 生成された応答に未解決の Target の曖昧さがある |
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
@@ -27,6 +28,7 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |
 | AGENTIC_STEP_FAILED | environment | case | 3 | AI による操作が失敗と宣言された |
+| CASE_ABORTED | environment | case | 3 | 呼び出し側で修正可能な理由または環境上の理由により、case がステップ途中で中断された |
 | FS_IO_ERROR | environment | run/case | 3 | filesystem operation fails |
 | UNEXPECTED_CRASH | environment | run/case | 3 | uncategorized crash |
 | INTERRUPTED | environment | run only | 3 | batch cancellation |
@@ -44,6 +46,6 @@ ambercastが定義する安定したエラーコードの語彙リファレン�
 | `confirms-not-action` | 参照先が対象のアクションまたは capture ではない |
 | `confirms-duplicate` | ステップ ID が重複 |
 
-caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`AGENTIC_STEP_FAILED` の details には step ID、完了したツール呼び出しのカウンター、任意の最後の失敗した assertion が入ります。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
+caseスコープの `FS_IO_ERROR` には、`plan` や `grounding`（またはその両方）を含む `details.partiallyWritten` が含まれる場合があります。存在する場合、`AI_RESPONSE_INVALID` の details には正規化済み issue と任意の再試行履歴、`SECRET_LITERAL_REJECTED` の details には検出器・パス・任意の再試行履歴、`SECRET_ENV_VAR_COLLISION` の details には衝突した `envVar` と衝突した secret 参照の一覧、`SECRET_CONSENT_REQUIRED` の details には理由（`consent-required`・`declined`・`not-interactive` のいずれか）と、未解決の secret ごとの名前・step id・env var・理由、`SECRET_SYNTAX_REJECTED` の details にはレガシー構文の出現箇所の一覧（行・列、grant 行か参照かの種別）、`AI_EXECUTOR_UNAVAILABLE` の details には任意の再試行履歴、`BROWSER_LAUNCH_FAILED` の details には閉じた remediation 理由（`executable-missing`・`launch-failed` のいずれか）と解決済みエンジン名が入ります（固定の remediation hint はレポート直下の `hint` フィールドであり、details には含まれません）。`AGENTIC_STEP_FAILED` の details には step ID、完了したツール呼び出しのカウンター、任意の最後の失敗した assertion が入ります。`UNEXPECTED_CRASH` の details には許可リスト内の cause 名が入ります。`CASE_ABORTED` の details には閉じた中断理由と step ID、`PROMPT_AMBIGUOUS` の details には未解決の曖昧さの件数が入ります。コード別の完全な契約は [レポート](/ambercast/ja/reference/reports/#errors) を参照してください。
 
 レポートの構造については [レポート](/ambercast/ja/reference/reports/#errors)、終了コードの一覧については [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、トラブルシューティングの手順については [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/) を参照してください。

@@ -105,6 +105,11 @@ export function assertDiagnosable(report: unknown): void {
 		}
 	}
 
+	// Check for run-scope INTERRUPTED error (SPEC-14 exemption)
+	const hasRunScopeInterrupted = parsed.errors.some(
+		error => error.scope === 'run' && error.code === 'INTERRUPTED'
+	);
+
 	// Inspect errors in index order (already in order from schema validation)
 	// Check for blank messages and generic fallback messages without details
 	for (const [i, error] of parsed.errors.entries()) {
@@ -140,8 +145,11 @@ export function assertDiagnosable(report: unknown): void {
 		if (parsed.command === 'run' && 'status' in result && result.status !== 'listed' && result.status !== 'skipped') {
 			const runResult = result as RunResult;
 
+			// Check if this is a status:'error' row (for SPEC-14 exemption)
+			const isErrorRow = 'status' in result && result.status === 'error';
+
 			// A run result classified as errored needs a matching case error
-			if (isErrored && !caseErrorsByCaseId.has(caseId)) {
+			if (isErrored && !caseErrorsByCaseId.has(caseId) && !(hasRunScopeInterrupted && isErrorRow)) {
 				reasons.push('errored run result lacks matching case error');
 			}
 
@@ -149,7 +157,7 @@ export function assertDiagnosable(report: unknown): void {
 				const hasIndependentlyFailingStep = runResult.steps.some(
 					step => step.status === 'error' || (step.status === 'failed' && step.kind === 'environment')
 				);
-				if (hasIndependentlyFailingStep && !caseErrorsByCaseId.has(caseId)) {
+				if (hasIndependentlyFailingStep && !caseErrorsByCaseId.has(caseId) && !(isErrored && hasRunScopeInterrupted)) {
 					reasons.push('result has an error-status or failed-environment step but lacks matching case error');
 				}
 			}

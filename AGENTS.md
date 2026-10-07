@@ -41,6 +41,8 @@ Test cases are written as natural-language Markdown prompts; the prompt is the s
 
 ## Testing conventions
 
+When a run-scope `INTERRUPTED` error is present, `assertDiagnosable` exempts interrupted error-status rows from case-error evidence while retaining all other diagnosability checks.
+
 - Judge a report with the three shared helpers in `test/support/report-assertions.ts` (`assertDiagnosable`, `assertZeroAiCalls`, `assertNoSecretDisclosure`) rather than ad-hoc per-test checks. A unit test passes a builder's `.envelope`; a CLI or MCP test passes `JSON.parse(stdout)`. Collect `.runs/`, the plan, and the grounding cache for a disclosure check with `collectStorageArtifacts`, never a manual directory walk. `assertZeroAiCalls` applies only to replay (`run`); it does not apply to `generate`, `heal`, `check`, or `review`.
 - Keep a table-driven corpus under `test/fixtures/corpus/<topic>/<name>.jsonl`: JSONL, one JSON object per line, in the fixed key set `value`, `expected`, `note`, `source`, `date`. Load it with `loadCorpus` from `test/support/corpus.ts` and drive cases with `it.each(loadCorpus(new URL('../../fixtures/corpus/<topic>/<name>.jsonl', import.meta.url), schemas))('line $line: $note', (entry) => { ... })`.
 - When dogfooding surfaces a false positive, a false negative, or another misclassification in a helper or in production reporting, add the reproducing value to the corpus in the same pull request that fixes it, with `source` naming the issue and `date` set to that day.

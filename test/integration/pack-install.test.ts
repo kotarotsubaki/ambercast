@@ -369,6 +369,17 @@ describe('pack-install integration (real git + npm/pnpm fixture)', () => {
     expect(readFileSync(fileURLToPath(new URL('../../scripts/pack-install.mjs', import.meta.url)), 'utf8')).not.toMatch(/['"]which['"]/);
   }, 60000);
 
+  it('TEST-FB2: pnpm absent is detected even with other tools reachable', async () => {
+    const f = await fixture();
+    succeeds(pack(f));
+    const realWhich = execFileSync('which', ['which'], { encoding: 'utf8' }).trim();
+    const bin = join(f.root, 'limited-path');
+    await mkdir(bin);
+    await symlink(realWhich, join(bin, 'which'));
+    const result = run(f, ['install', f.consumer, '--manifest', manifestPath(f), '--pm', 'pnpm'], { env: { ...f.env, PATH: bin } });
+    fails(result, 'pack-install: pnpm not found on PATH');
+  }, 60000);
+
   it.each([
     ['schemaVersion', (m: Record<string, unknown>) => { m.schemaVersion = 2; }],
     ['name', (m: Record<string, unknown>) => { m.name = ''; }],

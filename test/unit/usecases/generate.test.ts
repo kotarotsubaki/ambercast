@@ -30,6 +30,7 @@ import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collisio
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError } from '#core/errors/types.js';
 import type { AiExecuteRequest, AiExecuteResult } from '#ports/ai.js';
@@ -48,6 +49,7 @@ import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
 
 const envVarNameMocks = vi.hoisted(() => ({
   assertNoEnvVarCollision: vi.fn(),
@@ -1970,6 +1972,7 @@ describe('generate', () => {
       'provider rejection',
       new AiExecutorUnavailableError('provider unavailable'),
       'ai-executor-unavailable',
+      'AI_EXECUTOR_UNAVAILABLE',
       2,
       [{ attempt: 1, code: 'AI_EXECUTOR_UNAVAILABLE' }],
     ],
@@ -1977,10 +1980,11 @@ describe('generate', () => {
       'invalid response rejection',
       new AiResponseInvalidError('invalid response'),
       'ai-response-invalid',
+      'AI_RESPONSE_INVALID',
       3,
       [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' }],
     ],
-  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, expectedAiCalls, expectedAttempts) => {
+  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, code, expectedAiCalls, expectedAttempts) => {
     const execute = vi.fn(async (request: AiExecuteRequest<unknown>) => {
       if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd).includes('first')) {
         throw error;
@@ -2012,6 +2016,17 @@ describe('generate', () => {
       ],
     });
     expect(outcome.results[0]?.error).toMatchObject({ details: { attempts: expectedAttempts } });
+    const { envelope, exitCode } = buildGenerateReport({ outcome, options: DEFAULT_OPTIONS, startedAt: '2026-10-07T00:00:00Z', durationMs: 1 });
+    expect(exitCode).toBe(3);
+    expect(envelope.errors).toEqual([{
+      scope: 'case', caseId: `${TEST_DIR}/first.test.md`, kind: 'environment', code,
+      message: error.message,
+      details: code === 'AI_RESPONSE_INVALID'
+        ? { issues: [], attempts: expectedAttempts }
+        : { attempts: expectedAttempts },
+    }]);
+    expect(envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 1, skipped: 0 });
+    assertDiagnosable(envelope);
     expect(execute).toHaveBeenCalledTimes(expectedAiCalls);
     expect(aiCallEvents(events.emitted())).toHaveLength(expectedAiCalls);
     expect(aiEvents(events.emitted())).toHaveLength(expectedAiCalls * 2);
@@ -2340,18 +2355,42 @@ describe('generate', () => {
     expect(recordingStorage.writes).toEqual([expect.objectContaining({ path: groundingPath })]);
   });
 
-  it('rejects provider ambiguities before generated or previewed plans are written (SPEC-12)', async () => {
+  it.each([
+    ['generated', { ...DEFAULT_OPTIONS, strict: true }],
+    ['dry-run', { ...DEFAULT_OPTIONS, dryRun: true, strict: false }],
+  ] as const)('TEST-4 classifies provider ambiguities in %s mode without writing plans or disclosing prose', async (_mode, options) => {
+    const ambiguities = ['Unclear target Alpha', 'Unclear target Beta'];
+    const execute = vi.fn(async () => ({ data: { steps: [], ambiguities }, raw: '{...}' }));
     const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: { steps: [], ambiguities: ['unclear target'] }, raw: '{...}' }) }),
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
     });
-    await writePrompt(recordingStorage.storage);
+    const file = await writePrompt(recordingStorage.storage);
+    recordingStorage.reset();
 
-    await expect(generate(deps, { ...DEFAULT_OPTIONS, strict: true })).resolves.toMatchObject({
-      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
+    const outcome = await generate(deps, options);
+    const error = outcome.results[0]?.error;
+    expect(execute).toHaveBeenCalledOnce();
+    expect(outcome.results).toMatchObject([{ file, status: 'failed' }]);
+    expect(error).toBeInstanceOf(PromptAmbiguousError);
+    expect(error).toMatchObject({
+      kind: 'prompt-ambiguous',
+      message: 'The generated plan has unresolved target ambiguities.',
+      details: { ambiguities: 2 },
+      exitCode: 2,
     });
-    await expect(generate(deps, { ...DEFAULT_OPTIONS, dryRun: true, strict: false, force: true })).resolves.toMatchObject({
-      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
-    });
+    expect(recordingStorage.writes).toEqual([]);
+    await expect(deps.storage.exists(deps.layout.planPathFor(file))).resolves.toBe(false);
+    await expect(deps.storage.exists(deps.layout.groundingPathFor(file))).resolves.toBe(false);
+
+    const { envelope, exitCode } = buildGenerateReport({ outcome, options, startedAt: '2026-10-07T00:00:00Z', durationMs: 1 });
+    expect(exitCode).toBe(2);
+    expect(envelope.errors).toEqual([{
+      scope: 'case', caseId: file, kind: 'usage', code: 'PROMPT_AMBIGUOUS',
+      message: error?.message, details: { ambiguities: 2 },
+    }]);
+    expect(envelope.summary).toEqual({ total: 1, passed: 0, failed: 0, errored: 1, skipped: 0 });
+    expect(JSON.stringify(envelope)).not.toContain('Unclear target');
+    assertDiagnosable(envelope);
   });
 
   it.each([

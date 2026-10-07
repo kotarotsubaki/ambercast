@@ -1050,7 +1050,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.9 |
+| `schemaVersion` | literal 3.10 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -1144,11 +1144,12 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these thirteen codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these fifteen codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
 
 | Code | Optional `details` shape |
 | --- | --- |
 | `AGENTIC_STEP_FAILED` | Case scope only: `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible", "element-visible", "text-equals", "url-matches", or "element-count"; expected: string } }`; counters describe completed tool calls. |
+| `CASE_ABORTED` | Case scope only: `{ reason: ReportCaseAbortReason, stepId: string }`; `reason` is one of eight defined values. |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: any instruction-coverage, element-intent, or confirms issue code (`confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, `confirms-duplicate`), "text-equals-self-quote", "invalid-json", "schema-mismatch", "secret-allowed-name-not-projected", or "secret-conflicting-target-names" (the last two always carry stepId); path: Array<string or non-negative integer>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk, credential-prefix-ghp, credential-prefix-aws-access-key, high-entropy-token, or embedded-secret-reference; path: non-whitespace string; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
@@ -1156,6 +1157,7 @@ Report errors are strict objects scoped to either the overall command run or a s
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" or "reference" }> }` |
 | `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" or "launch-failed"; engine: non-whitespace string }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" or "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
+| `PROMPT_AMBIGUOUS` | Case scope only: `{ ambiguities: integer at least 1 }`. |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
 | `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
@@ -1176,16 +1178,16 @@ The `reportPersistence` property tracks the write outcome:
 Only the writer is pinned to the current schema version; the viewer reads any 3.x report leniently.
 
 ```json
-{"schemaVersion":"3.9","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.10","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.9","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.10","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.9","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.10","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.9","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.10","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}
@@ -1212,6 +1214,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | SECRET_UNRESOLVED | usage | run/case | 2 | unresolved secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | target cannot resolve |
 | EXECUTOR_UNSUPPORTED | usage | case | 2 | executor lacks a capability or surface the plan needs |
+| PROMPT_AMBIGUOUS | usage | case | 2 | generated response has unresolved target ambiguities |
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
@@ -1225,6 +1228,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | provider unavailable |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | provider response invalid |
 | AGENTIC_STEP_FAILED | environment | case | 3 | AI-directed interaction declared failure |
+| CASE_ABORTED | environment | case | 3 | case aborted mid-step for a caller-correctable or environmental reason |
 | FS_IO_ERROR | environment | run/case | 3 | filesystem operation fails |
 | UNEXPECTED_CRASH | environment | run/case | 3 | uncategorized crash |
 | INTERRUPTED | environment | run only | 3 | batch cancellation |
@@ -1240,7 +1244,7 @@ The following `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` r
 | `confirms-not-action` | referenced step is not an eligible action or capture |
 | `confirms-duplicate` | referenced step ID is repeated |
 
-A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `AGENTIC_STEP_FAILED` details contain the step ID, completed tool-call counters, and an optional last failed assertion; `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
+A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `AGENTIC_STEP_FAILED` details contain the step ID, completed tool-call counters, and an optional last failed assertion; `CASE_ABORTED` details contain the closed abort reason and step ID; `PROMPT_AMBIGUOUS` details contain the count of unresolved ambiguities; `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
 
 ---
 
@@ -1375,7 +1379,7 @@ Ambercast publishes these metadata and byte-identical files to the site and npm.
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed current `PlanDocument`, including targets and steps. | available |
 | grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v2 snapshot retained for consumers of the retired contract. | available |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.9"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.10"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
 Each `$id` equals its public-path URL; byte-identical schema files are published to the site and the npm `schemas/` export.
 
@@ -1388,7 +1392,7 @@ The current Astro configuration sets `site` to the `https://kotarotsubaki.github
 | `plan.schema.json` | A completed current `PlanDocument` with Plan `schemaVersion` 5, provenance source, targets, and steps. | Zod `PlanDocument` converted as JSON Schema 2020-12. | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 3, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.9. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.10. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 Running `npm run build` compiles the package and then runs `node dist/schema-gen.js`, which creates the schema directory recursively and writes exactly the four files above.
 
@@ -1406,7 +1410,7 @@ Validating only the generated Plan JSON Schema does not establish duplicate-step
 
 ## Report schema {#report-schema}
 
-`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.9, required step Target identity, and the session inventory on executed run and completed heal results. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
+`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.10, required step Target identity, and the session inventory on executed run and completed heal results. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
 
 ---
 
@@ -1661,7 +1665,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `.runs` | `.runs` is the final segment of the default `runsDir`, not an independently resolved root. | configuration / [File layout](/ambercast/reference/file-layout/#run-artifacts) | companion artifacts |
 | `.test.md` | `.test.md` is the exact suffix required for a discovered prompt path to receive layout mappings. | layout resolver; [Prompt file format](/ambercast/reference/prompt-format/#file-identity) | arbitrary Markdown |
 | `0.1.0` | `0.1.0` names the 2026-09-03 release in the repository changelog. | [Changelog](/ambercast/reference/changelog/#release-010) | artifact schema version |
-| `0.7.0` | `0.7.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.9` |
+| `0.7.0` | `0.7.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` is the fixed process-exit precedence from strongest to weakest. | exit selector; [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) | numeric order |
 | `@ambercast-secret` | `@ambercast-secret` is rejected legacy prompt syntax and must be removed before regenerating a Plan v3 artifact. | prompt parser; [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants) | secret reference |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` supplies the environment provider override. | config environment; [Environment variables](/ambercast/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -2307,7 +2311,7 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Plan `schemaVersion` | `5` | [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.7.0/src/core/ir/schema.ts#L62) |
 | Grounding `schemaVersion` | `3` | [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.7.0/src/core/ir/schema.ts#L73) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:258](https://github.com/kotarotsubaki/ambercast/blob/v0.7.0/src/core/ir/schema.ts#L258) |
-| Report `schemaVersion` | `3.9` | [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.7.0/src/report/schema.ts#L57) |
+| Report `schemaVersion` | `3.10` | [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.7.0/src/report/schema.ts#L57) |
 
 ## Reading order {#reading-order}
 
@@ -3051,6 +3055,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| report 3.9 → 3.10 adds `CASE_ABORTED` (environment, case-scope, exit 3, `{reason, stepId}` details) and `PROMPT_AMBIGUOUS` (usage, case-scope, exit 2, `{ambiguities}` details). Every `run` CaseAbort, agentic target-rejection, and unclassified-exception row now carries a matching case error instead of none; `heal` surfaces its Stage 3 and final-replay failures as case errors for every kind (not only agentic). A generate or heal Stage 3 ambiguous-prompt failure becomes `PROMPT_AMBIGUOUS` (exit 2) instead of an uncoded crash (exit 3). | repo:src/report/schema.ts, repo:src/usecases/run.ts, repo:src/usecases/heal-report.ts, repo:src/usecases/generate.ts | Report consumers MUST accept the current `3.10` contract, including `CASE_ABORTED` and `PROMPT_AMBIGUOUS` with their case-scoped details. This additive report change requires no Plan or grounding regeneration. `heal` reports more `errors` per case and more rows as `errored` in `summary`; a test asserting empty `errors` for these rows must account for the new case errors. A test relying on the prior uncoded exit-3 crash for an ambiguous prompt must expect exit 2 and a result row instead. [repo:src/report/schema.ts] |
 | report 3.8 → 3.9 adds four confirmation issue codes to `AiResponseIssueCode` and `AGENTIC_STEP_FAILED` to case-scoped environment errors. In the same release, AI-directed assert and trace replay pass/fail judgment adopt deadline-bearing polling. | [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.7.0/src/report/schema.ts#L57), repo:src/usecases/run.ts | Report consumers MUST accept the current `3.9` contract, including `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate` on `AiResponseIssueCode`, plus `AGENTIC_STEP_FAILED` with its case-scoped details. This additive report change requires no Plan or grounding regeneration. Tests relying on a single failed observation from AI-directed assert or trace replay must account for polling through the deadline. [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.7.0/src/report/schema.ts#L57) |
 | Deadline-bearing polling (the eight `run.ts` call sites: first-binding stage 1, the four plan assert loops (including the `text-visible` / `url-matches` browser-check path), the AI-directed assert tool, and the two trace replay pass/fail judgments (events and verification)) always takes one more observation after the wait that reaches the deadline, and that observation is judged as the final result even if the real timer fires after the deadline. Element-assert `expected` text omits the role segment when no `roleHint` is present. | repo:src/usecases/run.ts | No Plan, grounding, or report regeneration is required. A test relying on the previous stale pre-deadline sample (or the double-space `expected` text without a role hint) must update its expectation. |
 | Plan v4 → v5 adds source-backed `intent`/`confirms` fields to element-bearing steps and Target-scoped `locale`; Grounding v2 → v3 replaces bare fingerprint evidence with `{locator, fingerprint, intentDigest, provenance}`; report 3.7 → 3.8 adds heal Stage 1 `binding` diagnostics and reason vocabulary. | repo:src/core/ir/schema.ts, repo:src/report/schema.ts | Regenerate v4 plans; v5 is the accepted Plan format. v2 grounding companions are also retired and must be regenerated alongside their plan. |

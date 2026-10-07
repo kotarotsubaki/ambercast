@@ -86,7 +86,7 @@ describe('TEST-11: unresolved generation Target ambiguities', () => {
   it.each([false, true])('fails without writing a Plan when strict is %s', async (strict) => {
     const { storage, layout, deps } = await scenario({ steps: [stepB], ambiguities: ['Target for visit-b is unclear'] });
     const outcome = await generate(deps, { ...options, strict });
-    expect(outcome.results).toMatchObject([{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }]);
+    expect(outcome.results).toMatchObject([{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', kind: 'prompt-ambiguous', details: { ambiguities: 1 } } }]);
     expect(await storage.exists(layout.planPathFor(file))).toBe(false);
   });
 
@@ -96,7 +96,7 @@ describe('TEST-11: unresolved generation Target ambiguities', () => {
     const previousBytes = 'existing plan bytes\n';
     await storage.writeText(planPath, previousBytes);
     const outcome = await generate(deps, { ...options, force: true });
-    expect(outcome.results).toMatchObject([{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }]);
+    expect(outcome.results).toMatchObject([{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', kind: 'prompt-ambiguous', details: { ambiguities: 1 } } }]);
     expect(await storage.readText(planPath)).toBe(previousBytes);
   });
 

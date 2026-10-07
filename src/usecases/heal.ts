@@ -1,5 +1,4 @@
 import type { AmbercastError } from '#core/errors/types.js';
-import { AgenticStepFailedError } from '#core/errors/agentic-step-failed-error.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import type { FsIoError } from '#core/errors/fs-io-error.js';
 import { reportError } from '#report/error-mapping.js';
@@ -1268,9 +1267,9 @@ function caseOutcome(
     finalFirstFailureIndex: measurement.firstFailureIndex,
     stopReason,
     stage3Error,
-    // SPEC-B3 preserves the prior unclassified CaseAbort's exit code and errors array;
-    // exposing this classification as a heal diagnostic would change both.
-    finalReplayError: measurement.replay.error instanceof AgenticStepFailedError ? undefined : measurement.replay.error,
+    // Final replay failures remain available for case reporting; exit-code
+    // selection separately preserves the existing heal status policy.
+    finalReplayError: measurement.replay.error,
     repairTrace,
   };
 }
@@ -1521,9 +1520,9 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
                 stopReason,
                 stage3Error: undefined,
                 stage3Rejection: full.stage3Rejection,
-                // SPEC-B3 preserves the prior unclassified CaseAbort's exit code and errors array;
-                // exposing this classification as a heal diagnostic would change both.
-                finalReplayError: bestMeasurement.replay.error instanceof AgenticStepFailedError ? undefined : bestMeasurement.replay.error,
+                // Final replay failures remain available for case reporting; exit-code
+                // selection separately preserves the existing heal status policy.
+                finalReplayError: bestMeasurement.replay.error,
                 repairTrace: [...repairTrace, { stage: 'stage3' as const, outcome: 'secret-set-rejected' as const }],
               };
               return { interrupted: false, outcome, commit: undefined };

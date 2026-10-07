@@ -7,6 +7,7 @@ import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
+import { CaseAbortedError, type CaseAbortReason } from '#core/errors/case-aborted-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AgenticTargetRejection } from '#core/errors/agentic-target-rejection.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
@@ -21,6 +22,7 @@ import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-e
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { ERROR_EXIT_CODES } from '#core/errors/exit-codes.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
@@ -74,6 +76,7 @@ import {
 } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
+import { assertDiagnosable, assertNoSecretDisclosure, collectStorageArtifacts } from '../../support/report-assertions.js';
 
 const groundingModeAccesses = vi.hoisted(() => ({ accesses: [] as string[] }));
 const requestConstructionFailure = vi.hoisted(() => ({ enabled: false }));
@@ -217,8 +220,8 @@ describe('TEST-R11 report and event vocabulary', () => {
   const stepEvents = (events: ReturnType<typeof createRecordingEventSink>) =>
     events.emitted().filter((event): event is Extract<RunEvent, { type: 'step-result' }> => event.type === 'step-result');
 
-  it('accepts report 3.9 bindings and all four new unresolved reasons', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+  it('accepts report 3.10 bindings and all four new unresolved reasons', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
     expect(StepResult.parse({
       id: 'click-submit', type: 'action', target: 'web', status: 'passed',
       binding: { provenance: 'grounding', confirmed: true },
@@ -659,7 +662,9 @@ describe('classifyBrowserLaunchFailure', () => {
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error', explanation, steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'agentic-step-failed', exitCode: 3, details: {
+      stepId: 'recorded-ai', targetRejections: 0,
+    } });
   });
 
   it.each([
@@ -1072,10 +1077,14 @@ function expectStopgapOutcome(
   outcome: Awaited<ReturnType<typeof run>>,
   abortingStepId: string,
   skippedStepId: string,
+  reason: CaseAbortReason,
   completedStepId?: string,
 ): void {
   expect(outcome.results).toHaveLength(1);
-  expect(outcome.results[0]?.error).toBeUndefined();
+  expect(outcome.results[0]?.error).toBeInstanceOf(CaseAbortedError);
+  expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', exitCode: 3, details: {
+    reason, stepId: abortingStepId,
+  } });
   expect(outcome.results[0]?.result).toMatchObject({
     status: 'error',
     steps: [
@@ -1084,6 +1093,19 @@ function expectStopgapOutcome(
       { id: skippedStepId, status: 'skipped' },
     ],
   });
+  const report = buildRunReport({
+    startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+    options: { allowEmpty: false, list: false }, outcome,
+  });
+  expect(report.exitCode).toBe(3);
+  expect(report.envelope.errors).toEqual([{
+    scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+    caseId: outcome.results[0]!.result.id,
+    message: outcome.results[0]!.result.explanation,
+    details: { reason, stepId: abortingStepId },
+  }]);
+  expect(report.envelope.errors[0]).not.toHaveProperty('hint');
+  assertDiagnosable(report.envelope);
 }
 
 async function runFailureEvidenceScenario(
@@ -1628,7 +1650,8 @@ describe('run', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expectStopgapOutcome(outcome, 'fill-reference', 'after-reference', 'before-reference');
+    expectStopgapOutcome(outcome, 'fill-reference', 'after-reference',
+      value.includes('profile') ? 'run-reference-invalid' : 'run-value-missing', 'before-reference');
     expect(resolveGrounded).not.toHaveBeenCalled();
     expect(closed).toHaveBeenCalledTimes(1);
   });
@@ -2976,6 +2999,28 @@ describe('run', () => {
       await checkNoGroundingOrAi(f);
     });
 
+    it.each(['', '   '] as const)('TEST-8 explains a text-equals failure with empty observed text %j', async (rawText) => {
+      const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit'])], rawText);
+      const captureValue = vi.spyOn(f.session, 'captureValue');
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      const result = outcome.results[0]?.result;
+
+      expect(captureValue).toHaveBeenCalled();
+      expect(await captureValue.mock.results[0]?.value).toBe(rawText);
+      expect(result).toMatchObject({
+        status: 'failed', explanation: 'The element text was empty.',
+        steps: [{ id: 'assert-submit', status: 'failed', actual: 'The element text was empty.' }],
+      });
+      expect(outcome.results[0]?.error).toBeUndefined();
+      const report = buildRunReport({
+        startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+        options: { allowEmpty: false, list: false }, outcome,
+      });
+      expect(report.envelope.errors).toEqual([]);
+      assertDiagnosable(report.envelope);
+      await checkNoGroundingOrAi(f);
+    });
+
     it.each([false, true])('fails ambiguous text-equals with resolve=%s', async (resolve) => {
       const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit', 'Submit'])]);
       const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve });
@@ -3158,7 +3203,7 @@ describe('run', () => {
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the unclassified case-abort stopgap for an unclassified browser-session error and closes the session', async () => {
+  it('classifies an unclassified browser-session error and closes the session', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(liveEntries([SUBMIT]), {
       onPerform(action) {
@@ -3181,7 +3226,23 @@ describe('run', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expectStopgapOutcome(outcome, 'click-submit', 'after-browser-error', 'before-browser-error');
+    expect(outcome.results[0]?.error).toBeInstanceOf(UnexpectedCrashError);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [
+      { id: 'before-browser-error', status: 'passed' },
+      { id: 'click-submit', status: 'error', kind: 'environment' },
+      { id: 'after-browser-error', status: 'skipped' },
+    ] });
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id, details: { cause: { name: 'Error' } },
+    })]);
+    assertDiagnosable(report.envelope);
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
@@ -4045,12 +4106,22 @@ describe('run agentic fallback pipeline', () => {
     const planAfter = await recordingStorage.storage.readText(planPath);
     const groundingAfter = await recordingStorage.storage.readText(groundingPath);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', exitCode: 3, details: {
+      reason: 'secret-fill-incomplete', stepId: 'recorded-ai',
+    } });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       explanation: 'The replayed secret fill did not complete.',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+      caseId: outcome.results[0]!.result.id,
+      message: 'The replayed secret fill did not complete.',
+      details: { reason: 'secret-fill-incomplete', stepId: 'recorded-ai' },
+    }]);
+    assertDiagnosable(report.envelope);
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(executeAgentic).not.toHaveBeenCalled();
     expect(executor.agenticRequests).toEqual([]);
@@ -4558,6 +4629,7 @@ describe('run agentic fallback pipeline', () => {
     expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
   });
 
+  // SPEC-2 covers MCP and pipeline origins here because the usecase wrap treats their rejections alike (TEST-6a).
   it.each([
     ['an action', 'ambercast_perform', async (request: AiAgenticRequest) => {
       await request.controller.perform({ type: 'click', element: SUBMIT });
@@ -4571,6 +4643,8 @@ describe('run agentic fallback pipeline', () => {
       });
     }],
   ] as const)('reports a fresh agentic compute-bind miss for %s as a target rejection', async (_description, tool, script) => {
+    // Count rejections caught across the fake executor boundary; the pipeline increments independently before throwing each one.
+    let observedRejections = 0;
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded').mockResolvedValue({
       kind: 'miss',
@@ -4578,7 +4652,12 @@ describe('run agentic fallback pipeline', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await script(request);
+        try {
+          await script(request);
+        } catch (error) {
+          if (error instanceof AgenticTargetRejection) observedRejections += 1;
+          throw error;
+        }
         return { outcome: 'success' };
       },
     });
@@ -4591,7 +4670,9 @@ describe('run agentic fallback pipeline', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'agentic-step-failed', exitCode: 3, details: {
+      stepId: 'recorded-ai', targetRejections: observedRejections,
+    } });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       explanation: `The AI-directed interaction was rejected by a browser target it could not resolve (${tool}: element-not-found).`,
@@ -4604,6 +4685,151 @@ describe('run agentic fallback pipeline', () => {
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(resolveGrounded).toHaveBeenCalledWith(SUBMIT, expect.objectContaining({ mode: 'compute' }));
     expect(session.operations().filter((operation) => operation.type === 'perform' || operation.type === 'evaluate-assert')).toEqual([]);
+    expect(observedRejections).toBeGreaterThan(0);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED',
+      caseId: outcome.results[0]!.result.id,
+      message: outcome.results[0]!.result.explanation,
+      details: expect.objectContaining({ stepId: 'recorded-ai', targetRejections: observedRejections }),
+    })]);
+    assertDiagnosable(report.envelope);
+  });
+
+  // SPEC-2 covers MCP and pipeline origins here because the usecase wrap does not distinguish them (TEST-6a).
+  it('TEST-2 reports the pipeline rejection count when the browser target budget is exhausted', async () => {
+    let observedRejections = 0;
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+    vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason: 'element-not-found' });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          await request.controller.perform({ type: 'click', element: SUBMIT });
+        } catch (error) {
+          if (!(error instanceof AgenticTargetRejection)) throw error;
+          observedRejections += 1;
+          if (attempt === 3) throw new AgenticTargetRejection(error.tool, error.reason, true);
+        }
+      }
+      throw new Error('The fixture expected four browser target rejections.');
+    } });
+    const { deps, recordingStorage } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    // The shipped executor serializes tool calls; concurrent MCP latch accounting is outside this test's contract.
+    expect(observedRejections).toBeGreaterThan(3);
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      explanation: 'The AI-directed interaction exhausted its browser target budget: ambercast_perform was rejected (element-not-found) after 3 recoverable rejections.',
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED',
+      caseId: outcome.results[0]!.result.id,
+      message: outcome.results[0]!.result.explanation,
+      details: expect.objectContaining({ stepId: 'recorded-ai', targetRejections: observedRejections }),
+    })]);
+    assertDiagnosable(report.envelope);
+  });
+
+  it('TEST-3 reports an unclassified TypeError from the AI executor as a case crash', async () => {
+    const executor = createFakeAiExecutor({ async executeAgentic() { throw new TypeError('provider failed'); } });
+    const { deps, events, recordingStorage } = createScenario({ resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      explanation: 'The browser session could not complete this case and no deterministic fallback is available (TypeError).',
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id,
+      details: { cause: { name: 'TypeError' } },
+    })]);
+    expect(events.emitted().filter((event) => event.type === 'unclassified-rejection')).toEqual([
+      expect.objectContaining({ name: 'TypeError', stepId: 'recorded-ai' }),
+    ]);
+    assertDiagnosable(report.envelope);
+  });
+
+  it.each(['browser Error', 'AI thrown value'] as const)('TEST-3 does not disclose a secret-bearing %s across crash surfaces', async (variant) => {
+    const secretRef = '{{secrets.AMBERCAST_SECRET_DUMMY_CRASH}}';
+    const secretValue = 'AMBERCAST_SECRET_DUMMY_CRASH_VALUE';
+    const thrown = variant === 'browser Error'
+      ? Object.assign(new Error(`Private browser failure ${secretValue}`), { name: secretValue })
+      : { name: secretValue, message: `Private provider failure ${secretValue}` };
+    const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
+      onPerform(action) {
+        if (variant === 'browser Error' && action.type === 'navigate') throw thrown;
+      },
+    });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+      throw thrown;
+    } });
+    const { deps, events, recordingStorage } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      resolveAiExecutor: async () => executor,
+      secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    const steps: TestStep[] = variant === 'browser Error'
+      ? [
+        { id: 'fill-crash-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
+        { id: 'throw-crash', kind: 'action', action: 'navigate', url: '/dashboard' },
+      ]
+      : [aiStep('recorded-ai', [secretRef])];
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps,
+      variant === 'browser Error'
+        ? elementGrounding(['fill-crash-secret'], {}, FINGERPRINT, intentDigestsFor(steps))
+        : {});
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'unexpected-crash',
+    });
+    expect((outcome.results[0]?.error as { cause?: unknown })?.cause).toBe(thrown);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      details: { cause: { name: 'Error' } },
+    })]);
+    assertDiagnosable(report.envelope);
+    const rejection = events.emitted().filter((event) => event.type === 'unclassified-rejection');
+    expect(rejection).toEqual([expect.objectContaining({ name: 'Error' })]);
+    const artifacts = await collectStorageArtifacts(recordingStorage.storage, [
+      deps.layout.runsDirFor(testPath, deps.runId),
+      deps.layout.planPathFor(testPath),
+      deps.layout.groundingPathFor(testPath),
+    ]);
+    assertNoSecretDisclosure({ secrets: { crash: secretValue }, report: report.envelope,
+      artifacts: [...artifacts, { path: 'events.json', bytes: new TextEncoder().encode(JSON.stringify(events.emitted())) }] });
+    assertNoSecretDisclosure({ secrets: { outcome: secretValue }, report: outcome });
   });
 
   it('stops a cancelled trace replay before resolving an agentic fallback', async () => {
@@ -5252,6 +5478,21 @@ describe('run path-B element recovery', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    expect(report.exitCode).toBe(3);
+    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(report.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+      caseId: outcome.results[0]!.result.id,
+      message: outcome.results[0]!.result.explanation,
+      details: { reason: 'grounding-snapshot-invalid', stepId: 'click-submit' },
+    }]);
+    assertDiagnosable(report.envelope);
+
     expect(JSON.parse(outcome.results[0]?.result.steps.at(-1)?.observed?.accessibilitySnapshot ?? 'null')).toEqual(classificationTree);
   });
 
@@ -5414,7 +5655,7 @@ describe('run path-B element recovery', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expectStopgapOutcome(outcome, 'click-submit', 'after-click', 'fill-password-secret');
+    expectStopgapOutcome(outcome, 'click-submit', 'after-click', 'grounding-secret-contaminated', 'fill-password-secret');
     expect(outcome.results[0]?.result.explanation).toBe(
       'The supplied locator\'s accessibility evidence contains a resolved secret value and cannot be fingerprinted or cached. Add an aria-label that does not echo the secret value to the affected element.',
     );
@@ -6553,6 +6794,9 @@ describe('run agentic wrapper state machine', () => {
     expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(0);
     expect(clock.sleepCalls).toEqual([]);
     expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation: 'The AI-directed interaction completed without terminal verification evidence.' });
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+      reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+    } });
   });
 
   it('TEST-B5 includes four seconds of binding in the five-second evaluation deadline', async () => {
@@ -6789,7 +7033,7 @@ describe('run agentic wrapper state machine', () => {
       await request.controller.perform({ type: 'navigate', url: '/dashboard' });
     }],
     ['zero observations', async () => undefined],
-  ] as const)('rejects a nominal agentic success with %s instead of writing grounding', async (_description, script) => {
+  ] as const)('rejects a nominal agentic success with %s instead of writing grounding', async (description, script) => {
     const session = createFakeBrowserSession(new Map());
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
@@ -6807,13 +7051,89 @@ describe('run agentic wrapper state machine', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    if (description === 'a perform after an earlier passed assertion') {
+      expect(outcome.results[0]?.error).toMatchObject({
+        kind: 'agentic-step-failed', exitCode: 3,
+        details: expect.objectContaining({ stepId: 'recorded-ai', targetRejections: 1 }),
+      });
+      expect(outcome.results[0]?.result).toMatchObject({
+        status: 'error',
+        explanation: 'The AI-directed interaction was rejected by a browser target it could not resolve (ambercast_perform: element-not-found).',
+        steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
+      });
+    } else {
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', exitCode: 3, details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
+    }
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    if (description === 'a perform after an earlier passed assertion') {
+      expect(report.envelope.errors).toEqual([{
+        scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED',
+        caseId: outcome.results[0]!.result.id,
+        message: outcome.results[0]!.result.explanation,
+        details: {
+          actions: 1, assertions: 1, failedAssertions: 0, passedAssertions: 1,
+          stepId: 'recorded-ai', targetRejections: 1,
+        },
+      }]);
+    } else {
+      expect(report.envelope.errors).toEqual([{
+        scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+        caseId: outcome.results[0]!.result.id,
+        message: outcome.results[0]!.result.explanation,
+        details: { reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai' },
+      }]);
+    }
+    assertDiagnosable(report.envelope);
     expect(recordingStorage.writes).toEqual([]);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({});
+  });
+
+  it.each([
+    ['agentic-coverage-inexact', async (request: InstructionCoveredAiAgenticRequest) => {
+      await request.controller.evaluateAssert(passingText('Dashboard'), 'unlisted-criterion');
+    }, 'The AI-directed interaction did not provide exact terminal criterion coverage.'],
+    ['agentic-proof-invalid', async (request: InstructionCoveredAiAgenticRequest) => {
+      await request.controller.evaluateAssert(passingText('Dashboard'));
+      await request.controller.perform({ type: 'navigate', url: '/dashboard' });
+      await request.controller.evaluateAssert(passingText('Dashboard'), 'dashboard-reached');
+    }, 'The AI-directed interaction produced invalid terminal verification proof.'],
+  ] as const)('TEST-1 reports %s for an agentic terminal contract failure', async (reason, script, explanation) => {
+    const session = createFakeBrowserSession(new Map());
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await script(request);
+      return { outcome: 'success' };
+    } });
+    const { deps, recordingStorage } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+      caseId: outcome.results[0]!.result.id, message: explanation,
+      details: { reason, stepId: 'recorded-ai' },
+    }]);
+    assertDiagnosable(report.envelope);
   });
 
   describe('TEST-12 rejection barrier', () => {
@@ -6854,6 +7174,9 @@ describe('run agentic wrapper state machine', () => {
         { before: (request) => request.controller.evaluateAssert(passingText('Dashboard')).then(() => undefined) },
       );
       expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
       expect((await readGrounding(storage, testPath)).entries).toEqual({});
     });
 
@@ -6863,6 +7186,9 @@ describe('run agentic wrapper state machine', () => {
         { fallback: true, assertOutcomes: [{ passed: false, message: 'Cached trace missed.' }] },
       );
       expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
       expect((await readGrounding(storage, testPath)).entries).toEqual(aiGrounding(legacyTrace([], [passingText('Cached trace')])));
     });
 
@@ -6872,6 +7198,9 @@ describe('run agentic wrapper state machine', () => {
         { assertOutcomes: [{ passed: false, message: 'Not yet visible.' }] },
       );
       expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
     });
 
     it('d: clears the barrier only after a new tagged passing assertion and records its trace', async () => {
@@ -7274,7 +7603,7 @@ describe('run deterministic redaction boundary', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
       onPerform(action) {
         if (action.type === 'navigate') {
-          throw new Error(`Plain browser error exposed ${secretValue}.`);
+          throw Object.assign(new Error(`Plain browser error exposed ${secretValue}.`), { name: secretValue });
         }
       },
     });
@@ -7298,8 +7627,28 @@ describe('run deterministic redaction boundary', () => {
         explanation: 'The browser session could not complete this case and no deterministic fallback is available (Error).',
       },
     });
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toBeInstanceOf(UnexpectedCrashError);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
     expect(outcome.results[0]?.result.explanation).not.toContain(secretValue);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id,
+      details: { cause: { name: 'Error' } },
+    })]);
+    assertDiagnosable(report.envelope);
+    const artifacts = await collectStorageArtifacts(recordingStorage.storage, [
+      deps.layout.runsDirFor(testPath, deps.runId),
+      deps.layout.planPathFor(testPath),
+      deps.layout.groundingPathFor(testPath),
+    ]);
+    const eventArtifact = { path: 'events.json', bytes: new TextEncoder().encode(JSON.stringify(events.emitted())) };
+    assertNoSecretDisclosure({ secrets: { browserError: secretValue }, report: report.envelope, artifacts: [...artifacts, eventArtifact] });
+    assertNoSecretDisclosure({ secrets: { caseOutcome: secretValue }, report: outcome });
     const rejection = events.emitted().find((event) => event.type === 'unclassified-rejection');
     expect(rejection).toMatchObject({
       type: 'unclassified-rejection', file: `${TEST_DIR}/login.test.md`, stepId: 'throw-generic-error',
@@ -7337,6 +7686,17 @@ describe('run deterministic redaction boundary', () => {
     expect(events.emitted()).toContainEqual(expect.objectContaining({
       type: 'unclassified-rejection', stepId: 'throw-derived-generic-error', name: projectedName, message,
     }));
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id,
+      details: { cause: { name: projectedName } },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   it('retains rotating path-A and first-pipeline secret values for a second independent AI pipeline', async () => {
@@ -7982,7 +8342,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       explanation: 'The browser session could not complete this case and no deterministic fallback is available (Error).',
@@ -8254,6 +8614,34 @@ describe('run failure evidence', () => {
       expected,
       actual: 'intent' in step ? 'matched 0' : 'The browser reported a mismatch.',
     });
+  });
+
+  it('TEST-8 explains a text-visible failure when the browser gives no diagnostic', async () => {
+    const session = createFakeBrowserSession(new Map(), {
+      assertOutcome: { passed: false, message: '' },
+    });
+    const evaluateAssert = vi.spyOn(session, 'evaluateAssert');
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard', timeoutMs: 0 },
+    ]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(evaluateAssert).toHaveBeenCalled();
+    expect(await evaluateAssert.mock.results[0]?.value).toEqual({ passed: false, message: '' });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'failed', explanation: 'The browser returned no diagnostic.',
+      steps: [{ id: 'assert-dashboard', status: 'failed', actual: 'The browser returned no diagnostic.' }],
+    });
+    expect(outcome.results[0]?.error).toBeUndefined();
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.envelope.errors).toEqual([]);
+    assertDiagnosable(report.envelope);
   });
 
   it('restores a captured run reference in an expected assertion description exactly once', async () => {
@@ -8802,6 +9190,7 @@ describe('run failure evidence', () => {
     const step = outcome.results[0]?.result.steps[0];
 
     expect(outcome.results[0]?.result.explanation).toBe('The browser session could not complete this case and no deterministic fallback is available (Error).');
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
     expect(step).toMatchObject({ id: 'open-dashboard', status: 'error', kind: 'environment', screenshot: expect.any(String), observed: expect.any(Object) });
     expect(step).not.toHaveProperty('expected');
     expect(step).not.toHaveProperty('actual');

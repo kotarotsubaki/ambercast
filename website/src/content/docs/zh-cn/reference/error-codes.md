@@ -14,6 +14,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | SECRET_UNRESOLVED | usage | run/case | 2 | 未解析的 secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | 目标无法解析 |
 | EXECUTOR_UNSUPPORTED | usage | case | 2 | executor 缺少 Plan 所需的能力或 surface |
+| PROMPT_AMBIGUOUS | usage | case | 2 | 生成的响应仍有未解决的 Target 歧义 |
 | MISSING_PLAN | usage | run/case | 4 | 缺失 plan |
 | STALE_PLAN | usage | run/case | 4 | plan 已过期（`stale`） |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | 制品完整性校验失败 |
@@ -27,6 +28,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | 提供商不可用 |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | 提供商响应无效 |
 | AGENTIC_STEP_FAILED | environment | case | 3 | AI 引导的交互声明失败 |
+| CASE_ABORTED | environment | case | 3 | case 因调用方可纠正或环境方面的原因在步骤中途终止 |
 | FS_IO_ERROR | environment | run/case | 3 | 文件系统操作失败 |
 | UNEXPECTED_CRASH | environment | run/case | 3 | 未分类的崩溃 |
 | INTERRUPTED | environment | 仅限 run | 3 | 批处理取消 |
@@ -44,7 +46,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | `confirms-not-action` | 引用的步骤不是符合条件的操作或 capture |
 | `confirms-duplicate` | 步骤 ID 重复 |
 
-在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_ENV_VAR_COLLISION` 的 details 包含发生冲突的 `envVar` 以及冲突的 secret 引用列表；`SECRET_CONSENT_REQUIRED` 的 details 包含原因（`consent-required`、`declined` 或 `not-interactive`）以及每个未解决 secret 的名称、step id、env var 和原因；`SECRET_SYNTAX_REJECTED` 的 details 包含旧版语法出现位置的列表（行号、列号，以及是 grant 行还是引用）；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`AGENTIC_STEP_FAILED` 的 details 包含 step ID、已完成工具调用的计数，以及可选的最后一次失败断言；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
+在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_ENV_VAR_COLLISION` 的 details 包含发生冲突的 `envVar` 以及冲突的 secret 引用列表；`SECRET_CONSENT_REQUIRED` 的 details 包含原因（`consent-required`、`declined` 或 `not-interactive`）以及每个未解决 secret 的名称、step id、env var 和原因；`SECRET_SYNTAX_REJECTED` 的 details 包含旧版语法出现位置的列表（行号、列号，以及是 grant 行还是引用）；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`AGENTIC_STEP_FAILED` 的 details 包含 step ID、已完成工具调用的计数，以及可选的最后一次失败断言；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。`CASE_ABORTED` 的 details 包含封闭枚举的终止原因和 step ID；`PROMPT_AMBIGUOUS` 的 details 包含未解决歧义的数量。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
 
 ## 相关链接
 

@@ -141,14 +141,26 @@ export function buildHealReport(input: HealReportInput): HealReportOutput {
     ...outcome.listed.map(({ file }): HealResult => ({ id: file, file, status: 'listed' })),
     ...outcome.skipped.map(({ file }): HealResult => ({ id: file, file, status: 'skipped' })),
   ];
+  // Stage 3 and final replay errors follow existing case errors in row
+  // order; kinds unsupported at case scope are skipped without deduplication.
   const errors = outcome.errors.map(({ file, error }) => reportError(error, { scope: 'case', caseId: file }));
+  for (const { file, stage3Error, finalReplayError } of outcome.results) {
+    if (stage3Error !== undefined && stage3Error.kind !== 'interrupted' && stage3Error.kind !== 'prompt-path-invalid') {
+      errors.push(reportError(stage3Error, { scope: 'case', caseId: file }));
+    }
+    if (finalReplayError !== undefined && finalReplayError.kind !== 'interrupted' && finalReplayError.kind !== 'prompt-path-invalid') {
+      errors.push(reportError(finalReplayError, { scope: 'case', caseId: file }));
+    }
+  }
   if (outcome.interrupted) errors.push(reportError(new InterruptedError(), { scope: 'run' }));
+  // Final replay errors with agentic-step-failed, case-aborted, or unexpected-crash
+  // kinds enter the report without contributing to heal's exit-code candidates.
   const candidates: ExitCode[] = [
     ...outcome.errors.map(({ error }) => error.exitCode),
     ...outcome.results.flatMap(({ repairOutcome, application, stage3Error, finalReplayError }) => [
       ...(repairOutcome === 'partially-healed' || repairOutcome === 'unresolved' || application === 'declined' ? [1 as ExitCode] : []),
       ...(stage3Error === undefined ? [] : [stage3Error.exitCode]),
-      ...(finalReplayError === undefined ? [] : [finalReplayError.exitCode]),
+      ...(finalReplayError === undefined || ['agentic-step-failed', 'case-aborted', 'unexpected-crash'].includes(finalReplayError.kind) ? [] : [finalReplayError.exitCode]),
     ]),
     ...(outcome.noTestsFound && !input.options.allowEmpty && !input.options.list ? [5 as ExitCode] : []),
     ...(outcome.interrupted ? [3 as ExitCode] : []),

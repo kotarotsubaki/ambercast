@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
+import { CaseAbortedError } from '#core/errors/case-aborted-error.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
@@ -13,6 +14,7 @@ import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import type { AmbercastError } from '#core/errors/types.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
+import { reportError } from '#report/error-mapping.js';
 import type { ExecutedRunResult } from '#report/schema.js';
 import { buildRunReport, type RunReportInput } from '#usecases/run-report.js';
 import type { RunCaseOutcome, RunOutcome } from '#usecases/run.js';
@@ -89,9 +91,9 @@ const PRIORITY_PAIRS = [
     caseOutcome('error', 'usage.test.md', new TargetUnresolvedError('target is unavailable')),
     caseOutcome('error', 'environment.test.md', new BrowserLaunchFailedError('browser did not launch')),
   ], 2],
-  ['usage error over a case-abort stopgap', [
+  ['usage error over a case abort', [
     caseOutcome('error', 'usage.test.md', new SecretLiteralRejectedError('literal secret is forbidden')),
-    caseOutcome('error', 'stopgap.test.md'),
+    caseOutcome('error', 'aborted.test.md', new CaseAbortedError('case aborted', 'run-value-missing', 'fill-value')),
   ], 2],
   ['usage error over a failed assertion', [
     caseOutcome('error', 'usage.test.md', new ConfigInvalidError('configuration is invalid')),
@@ -101,29 +103,33 @@ const PRIORITY_PAIRS = [
     caseOutcome('error', 'artifact.test.md', new StaleIrError('plan is stale')),
     caseOutcome('error', 'environment.test.md', new FsIoError('filesystem failed')),
   ], 3],
-  ['a case-abort stopgap over an exit-4 artifact error', [
+  ['a case abort over an exit-4 artifact error', [
     caseOutcome('error', 'artifact.test.md', new IntegrityViolationError('plan integrity failed')),
-    caseOutcome('error', 'stopgap.test.md'),
+    caseOutcome('error', 'aborted.test.md', new CaseAbortedError('case aborted', 'run-value-missing', 'fill-value')),
   ], 3],
   ['an exit-4 artifact error over a failed assertion', [
     caseOutcome('error', 'artifact.test.md', new MissingPlanError('plan is missing')),
     caseOutcome('failed', 'assertion.test.md'),
   ], 4],
-  ['an environment error and a case-abort stopgap in the same exit-3 bucket', [
+  ['an environment error and a case abort in the same exit-3 bucket', [
     caseOutcome('error', 'environment.test.md', new AiResponseInvalidError('AI response is invalid')),
-    caseOutcome('error', 'stopgap.test.md'),
+    caseOutcome('error', 'aborted.test.md', new CaseAbortedError('case aborted', 'run-value-missing', 'fill-value')),
   ], 3],
   ['an environment error over a failed assertion', [
     caseOutcome('error', 'environment.test.md', new AiExecutorUnavailableError('AI executor is unavailable')),
     caseOutcome('failed', 'assertion.test.md'),
   ], 3],
-  ['a case-abort stopgap over a failed assertion', [
-    caseOutcome('error', 'stopgap.test.md'),
+  ['a case abort over a failed assertion', [
+    caseOutcome('error', 'aborted.test.md', new CaseAbortedError('case aborted', 'run-value-missing', 'fill-value')),
     caseOutcome('failed', 'assertion.test.md'),
   ], 3],
 ] as const;
 
 describe('buildRunReport', () => {
+  it('rejects a case-only abort at run scope', () => {
+    expect(() => reportError(new CaseAbortedError('case aborted', 'run-value-missing', 'fill'), { scope: 'run' })).toThrow();
+  });
+
   it.each(REPORTABLE_CASE_ERROR_MAPPINGS)(
     'serializes a case-scoped %s error',
     (_errorKind, error, code, kind, exitCode) => {
@@ -208,37 +214,42 @@ describe('buildRunReport', () => {
     },
   );
 
-  it('selects exit 3 for a batch containing only case-abort stopgaps with no errors entries', () => {
+  it('selects exit 3 and reports each classified case abort in a batch', () => {
     const output = report({
       outcome: {
         noTestsFound: false,
         results: [
-          caseOutcome('error', 'grounding-miss.test.md'),
-          caseOutcome('error', 'unsupported-reference.test.md'),
-          caseOutcome('error', 'browser-session-stopgap.test.md'),
+          caseOutcome('error', 'grounding-miss.test.md', new CaseAbortedError('grounding missed', 'grounding-snapshot-invalid', 'click')),
+          caseOutcome('error', 'unsupported-reference.test.md', new CaseAbortedError('reference missing', 'run-value-missing', 'fill')),
+          caseOutcome('error', 'browser-session-error.test.md', new UnexpectedCrashError('session failed', undefined, { cause: new Error('detached') })),
         ],
         listed: [],
       },
     });
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.errors).toEqual([]);
+    expect(output.envelope.errors).toEqual([
+      expect.objectContaining({ scope: 'case', code: 'CASE_ABORTED', caseId: 'grounding-miss.test.md', details: { reason: 'grounding-snapshot-invalid', stepId: 'click' } }),
+      expect.objectContaining({ scope: 'case', code: 'CASE_ABORTED', caseId: 'unsupported-reference.test.md', details: { reason: 'run-value-missing', stepId: 'fill' } }),
+      expect.objectContaining({ scope: 'case', code: 'UNEXPECTED_CRASH', caseId: 'browser-session-error.test.md', details: { cause: { name: 'Error' } } }),
+    ]);
     expect(output.envelope.results.map((result) => result.status)).toEqual(['error', 'error', 'error']);
   });
 
-  it('selects exit 3 when a case-abort stopgap and failed assertion coexist', () => {
+  it('selects exit 3 when a classified case abort and failed assertion coexist', () => {
     const output = report({
       outcome: {
         noTestsFound: false,
         results: [
           caseOutcome('failed', 'assertion.test.md'),
-          caseOutcome('error', 'stopgap.test.md'),
+          caseOutcome('error', 'aborted.test.md', new CaseAbortedError('case aborted', 'run-value-missing', 'fill-value')),
         ],
         listed: [],
       },
     });
 
     expect(output.exitCode).toBe(3);
+    expect(output.envelope.errors).toEqual([expect.objectContaining({ code: 'CASE_ABORTED', caseId: 'aborted.test.md' })]);
   });
 
   it('short-circuits a top-level classified error with its own exit code and a run-scoped error', () => {
@@ -390,7 +401,7 @@ describe('buildRunReport v3 interruption accounting', () => {
     } } as unknown as Omit<RunReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(2);
-    expect(output.envelope.schemaVersion).toBe('3.9');
+    expect(output.envelope.schemaVersion).toBe('3.10');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 0, failed: 0, errored: 1, skipped: 1 });
     expect(output.envelope.results).toContainEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));

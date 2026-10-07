@@ -73,7 +73,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `.runs` | `.runs` is the final segment of the default `runsDir`, not an independently resolved root. | configuration / [File layout](/ambercast/reference/file-layout/#run-artifacts) | companion artifacts |
 | `.test.md` | `.test.md` is the exact suffix required for a discovered prompt path to receive layout mappings. | layout resolver; [Prompt file format](/ambercast/reference/prompt-format/#file-identity) | arbitrary Markdown |
 | `0.1.0` | `0.1.0` names the 2026-09-03 release in the repository changelog. | [Changelog](/ambercast/reference/changelog/#release-010) | artifact schema version |
-| `0.7.0` | `0.7.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.9` |
+| `0.7.0` | `0.7.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` is the fixed process-exit precedence from strongest to weakest. | exit selector; [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) | numeric order |
 | `@ambercast-secret` | `@ambercast-secret` is rejected legacy prompt syntax and must be removed before regenerating a Plan v3 artifact. | prompt parser; [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants) | secret reference |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` supplies the environment provider override. | config environment; [Environment variables](/ambercast/reference/environment-variables/#configuration) | CLI `--ai` |

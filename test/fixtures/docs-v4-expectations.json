@@ -1,5 +1,5 @@
 {
-  "versions": { "plan": "5", "grounding": "3", "report": "3.9" },
+  "versions": { "plan": "5", "grounding": "3", "report": "3.10" },
   "elementSteps": ["click", "press", "fill", "fill-secret", "element-visible", "text-equals", "element-count", "capture"],
   "assertChecks": ["text-visible", "element-visible", "text-equals", "url-matches", "element-count"],
   "cliWithoutTarget": ["run", "check", "heal"]

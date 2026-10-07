@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVED_NOTE, REPORT_SCHEMA_VERSION, ReportEnvelope } from '../../report/schema.js';
+import { ERROR_DETAILS_KEY_ORDER } from '../../core/report-format/error-details.js';
 import { VIEW_COPY } from '../../core/viewer/copy.js';
 import type { RunListing } from '../../runtime/view-command.js';
 import { escapeHtml, renderError, renderRunDetail, renderRunList } from './render.js';
@@ -228,7 +229,7 @@ describe('renderRunDetail', () => {
     const html = renderRunDetail(readable({
       errors: [
         { scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'Run stopped' },
-        { scope: 'case', kind: 'usage', code: 'MISSING_PLAN', caseId: 'case-id', message: 'Plan absent' },
+        { scope: 'case', kind: 'environment', code: 'CASE_ABORTED', caseId: 'case-id', message: 'Case aborted', details: { reason: 'run-reference-invalid', stepId: 'step-a' } },
       ],
       results: [executed()],
     }));
@@ -240,8 +241,62 @@ describe('renderRunDetail', () => {
     expect(html.indexOf(`${VIEW_COPY.detail.runErrors.headingPrefix}2)`)).toBeLessThan(html.indexOf('case.test.md'));
     expect(html).toContain('INTERRUPTED · run');
     expect(html).toContain('Run stopped');
-    expect(html).toContain('MISSING_PLAN · case · case-id');
-    expect(html).toContain('Plan absent');
+    expect(html).toContain('CASE_ABORTED · case · case-id');
+    expect(html).toContain('Case aborted');
+  });
+
+  it('TEST-7 renders hint and details as labeled, ordered error evidence', () => {
+    const agenticDetails = {
+      targetRejections: 1, failedAssertions: 1, passedAssertions: 0,
+      assertions: 1, actions: 2, stepId: 'agentic-step',
+    };
+    const issue = { code: 'invalid-json' as const, path: ['response', 0] };
+    const html = renderRunDetail(readable({ errors: [
+      { scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED', caseId: 'agentic', message: 'Agentic failure', hint: 'Check the target.', details: agenticDetails },
+      { scope: 'case', kind: 'environment', code: 'CASE_ABORTED', caseId: 'aborted', message: 'Case stopped', details: { stepId: 'abort-step', reason: 'run-value-missing' } },
+      { scope: 'run', kind: 'environment', code: 'AI_RESPONSE_INVALID', message: 'Invalid response', details: { issues: [issue] } },
+    ] }));
+    expect(html).toContain('>Hint<');
+    expect(html).toContain('>Details<');
+    expect(html).toContain('Check the target.');
+    const orderedAgentic = ERROR_DETAILS_KEY_ORDER.AGENTIC_STEP_FAILED!;
+    expect(orderedAgentic).toEqual(['stepId', 'actions', 'assertions', 'passedAssertions', 'failedAssertions', 'targetRejections', 'lastFailedAssertion']);
+    const agenticItems = orderedAgentic.slice(0, -1).map((key) => `<li>${key}: ${agenticDetails[key as keyof typeof agenticDetails]}</li>`);
+    for (let index = 0; index < agenticItems.length; index++) {
+      expect(html).toContain(agenticItems[index]);
+      if (index > 0) expect(html.indexOf(agenticItems[index]!)).toBeGreaterThan(html.indexOf(agenticItems[index - 1]!));
+    }
+    expect(html).toContain('<li>reason: run-value-missing</li>');
+    expect(html).toContain('<li>stepId: abort-step</li>');
+    expect(html.indexOf('<li>reason: run-value-missing</li>')).toBeLessThan(html.indexOf('<li>stepId: abort-step</li>'));
+    expect(html).toContain('<li>issues: invalid-json @ [&quot;response&quot;,0]</li>');
+  });
+
+  it('TEST-7 projects known details from older reports and omits empty projections', () => {
+    const old = readable({ schemaVersion: '3.6', errors: [
+      { scope: 'run', kind: 'environment', code: 'AI_RESPONSE_INVALID', message: 'Old response', details: { issues: [{ code: 'invalid-json', path: [] }] } },
+    ] });
+    expect(renderRunDetail(old)).toContain('<li>issues: invalid-json @ []</li>');
+    for (const error of [
+      { scope: 'run', kind: 'environment', code: 'AI_RESPONSE_INVALID', message: 'String details', details: 'opaque' },
+      { scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'No mapping', details: { cause: 'ignored' } },
+      { scope: 'run', kind: 'environment', code: 'UNKNOWN_OLD_CODE', message: 'Unknown code', details: { cause: 'ignored' } },
+    ]) {
+      const html = renderRunDetail(readable({ schemaVersion: '3.6', errors: [error as never] }));
+      expect(html).not.toContain('>Details<');
+    }
+  });
+
+  it('TEST-7 escapes report-controlled hint and detail values', () => {
+    const attack = '<script>alert(1)</script>&"';
+    const html = renderRunDetail(readable({ errors: [
+      { scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED', caseId: 'case-id', message: 'Failure', hint: attack, details: {
+        stepId: attack, actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0,
+      } },
+    ] }));
+    expect(html).toContain(`&lt;script&gt;alert(1)&lt;/script&gt;&amp;&quot;`);
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<li>stepId: <script>');
   });
 
   it('shows empty results and each unreadable reason', () => {
@@ -392,7 +447,9 @@ describe('deterministic rendering', () => {
       { kind: 'no-report', runId: 'missing-run' },
       { kind: 'unreadable', runId: 'unreadable-run', reason: 'invalid-json' },
     ])
-      + renderRunDetail(readable({ results: [executed(),
+      + renderRunDetail(readable({ errors: [
+        { scope: 'case', kind: 'environment', code: 'CASE_ABORTED', caseId: 'case-id', message: 'Case aborted', hint: 'Check the run value.', details: { reason: 'run-value-missing', stepId: 'step-a' } },
+      ], results: [executed(),
         { id: 'listed', file: 'listed.test.md', status: 'listed' },
         { id: 'skipped', file: 'skipped.test.md', status: 'skipped' },
       ] }));
@@ -403,6 +460,8 @@ describe('deterministic rendering', () => {
       VIEW_COPY.list.runLinks.openRun,
       VIEW_COPY.detail.header.rawJson,
       VIEW_COPY.detail.caseAuxiliary.explanation,
+      'Hint',
+      'Details',
       ...Object.values(VIEW_COPY.detail.stepTable),
     ];
     const renderedText = [...html.matchAll(/>([^<>]+)</g)].map((match) => match[1]?.trim());

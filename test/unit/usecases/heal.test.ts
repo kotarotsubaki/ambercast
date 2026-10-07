@@ -56,6 +56,7 @@ import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession, elementRefKey, type FakeBrowserSessionEntry } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
 
 const aiExecutorUnavailableObserver = vi.hoisted(() => ({ messages: [] as string[] }));
 
@@ -818,7 +819,7 @@ describe('heal state-machine contract', () => {
    * Recording the call count before each replay proves the final replay ran,
    * while observing its error checks classification without forging it.
    */
-  it('TEST-B12 keeps a declared failure out of heal errors after a Stage-applied final replay', async () => {
+  it('reports a declared failure from the Stage-applied final replay without changing heal exit one', async () => {
     let attempts = 0;
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
@@ -854,22 +855,27 @@ describe('heal state-machine contract', () => {
     expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.errors).toEqual([]);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 }]));
-    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(result.outcome.results[0]?.finalReplayError).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.results[0]?.stage3Error).toBeUndefined();
     const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
     });
     expect(report.exitCode).toBe(1);
-    expect(report.envelope.errors).toEqual([]);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'AGENTIC_STEP_FAILED',
+      details: { stepId: AI_STEP.id, actions: 0, assertions: 0,
+        passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   /*
-   * Secret-set rejection must retain the executor's classified failure without
-   * exposing it as a heal error. Read-only replay observations establish that
+   * Secret-set rejection must retain the executor's classified failure.
+   * Read-only replay observations establish that
    * the final invocation and its error are real, rather than injected by a test.
    */
-  it('TEST-B12 omits the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
+  it('reports the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
     let declarations = 0;
     const executor = createFakeAiExecutor({
       async executeAgentic() { declarations += 1; return { outcome: 'failure' }; },
@@ -893,13 +899,18 @@ describe('heal state-machine contract', () => {
     expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'secret-set-rejected' }]));
     expect(result.outcome.errors).toEqual([]);
-    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(result.outcome.results[0]?.finalReplayError).toBeInstanceOf(AgenticStepFailedError);
     const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
     });
     expect(report.exitCode).toBe(1);
-    expect(report.envelope.errors).toEqual([]);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'AGENTIC_STEP_FAILED',
+      details: { stepId: AI_STEP.id, actions: 0, assertions: 0,
+        passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   it('aborts at the initial live measurement when its replay carries an integrity violation', async () => {

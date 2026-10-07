@@ -10,6 +10,7 @@ import {
 } from '#core/errors/agentic-target-rejection.js';
 import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
+import { CaseAbortedError, type CaseAbortReason } from '#core/errors/case-aborted-error.js';
 import { ExecutorUnsupportedError } from '#core/errors/executor-unsupported-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
@@ -18,6 +19,7 @@ import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType } from '#core/errors/types.js';
 import { projectCauseName } from '#report/error-mapping.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
@@ -452,15 +454,18 @@ async function pollUntilDeadline<T>(
 }
 
 /**
- * Marks an abort that has no reportable error kind while retaining a useful
- * case-level explanation.
+ * A mid-step abort carries a closed reason so its failed case can produce
+ * a coded error without relying on message text for classification.
  */
-class CaseAbort extends Error {}
+class CaseAbort extends Error {
+  constructor(message: string, readonly reason: CaseAbortReason) { super(message); }
+}
+/** Exact terminal coverage failures retain their distinct abort reason. */
 class AgenticCoverageAbort extends CaseAbort {}
 /**
  * Carries the raw accessibility tree captured when classification aborts
  * resolution so failure evidence can retain the exact observation that caused
- * the abort.
+ * the abort; its report reason remains closed even when the tree varies.
  *
  * @remarks
  * Redaction occurs once downstream in `captureObservedEvidence`, matching the
@@ -468,8 +473,8 @@ class AgenticCoverageAbort extends CaseAbort {}
  * redaction point that could drift from the report boundary.
  */
 class GroundingClassificationAbort extends CaseAbort {
-  constructor(message: string, readonly accessibilityTree: JsonValueT) {
-    super(message);
+  constructor(message: string, reason: CaseAbortReason, readonly accessibilityTree: JsonValueT) {
+    super(message, reason);
   }
 }
 class TraceProviderExposureIntegrityError extends IntegrityViolationError {}
@@ -817,12 +822,13 @@ function materializeText(value: string, runState: RunState): string {
   return value.replace(RUN_REFERENCE_PATTERN, (_reference, path: string) => {
     const segments = path.split('.');
     if (segments.length !== 1) {
-      throw new CaseAbort('A captured run value must use exactly one name segment.');
+      // Invalid capture names will carry their own reason so a failed case remains diagnosable.
+      throw new CaseAbort('A captured run value must use exactly one name segment.', 'run-reference-invalid');
     }
 
     const valueForReference = runState.get(segments[0] as RunVariableName);
     if (valueForReference === undefined) {
-      throw new CaseAbort('The plan references a run value that no earlier capture produced.');
+      throw new CaseAbort('The plan references a run value that no earlier capture produced.', 'run-value-missing');
     }
 
     return valueForReference.value;
@@ -1440,7 +1446,8 @@ export async function replayCoveredTraceWithoutAi(
         throw error;
       }
 
-      throw new CaseAbort('The replayed secret fill did not complete.');
+      // A replayed secret fill that does not finish will be classified without exposing its value.
+      throw new CaseAbort('The replayed secret fill did not complete.', 'secret-fill-incomplete');
     }
   }
 
@@ -2459,17 +2466,15 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
    * produces the unified case-abort result.
    */
   finalize(outcome: 'success' | 'failure'): DispatchOutcome {
+    // The explicit failure and target-rejection paths share one counter
+    // projection so each reports completed pipeline activity consistently.
     if (outcome === 'failure') {
-      throw new AgenticStepFailedError('The AI-directed interaction did not complete successfully.', {
-        stepId: this.step.id, actions: this.#actions, assertions: this.#assertions,
-        passedAssertions: this.#passedAssertions, failedAssertions: this.#failedAssertions,
-        targetRejections: this.#targetRejections,
-        ...(this.#lastFailedAssertion === undefined ? {} : { lastFailedAssertion: this.#lastFailedAssertion }),
-      });
+      throw new AgenticStepFailedError('The AI-directed interaction did not complete successfully.', this.#failureDetails());
     }
 
     if (this.#rejectionBarrier) {
-      throw new CaseAbort('The AI-directed interaction completed without terminal verification evidence.');
+      // A pending rejection barrier will remain an abort until fresh passing evidence clears it.
+      throw new CaseAbort('The AI-directed interaction completed without terminal verification evidence.', 'agentic-no-terminal-evidence');
     }
 
     if (this.#trailingPassedAssertRun >= 1) {
@@ -2495,7 +2500,8 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
         verificationCoverage[criterionId] = index;
       }
       if (!validTags || Object.keys(verificationCoverage).length !== successIds.size) {
-        throw new AgenticCoverageAbort('The AI-directed interaction did not provide exact terminal criterion coverage.');
+        // Coverage mismatches will retain a distinct closed reason for case reporting.
+        throw new AgenticCoverageAbort('The AI-directed interaction did not provide exact terminal criterion coverage.', 'agentic-coverage-inexact');
       }
       const parsed = TraceRecord.safeParse({ events, verification, verificationCoverage });
       if (!parsed.success) {
@@ -2521,7 +2527,8 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
         runValues: { values: runStateValues(this.context.runState) },
       });
       if (!classified.success || classified.data.kind !== 'covered') {
-        throw new AgenticCoverageAbort('The AI-directed interaction produced invalid terminal verification proof.');
+        // Proof rejected after pre-scan will be distinct from an incomplete coverage set.
+        throw new AgenticCoverageAbort('The AI-directed interaction produced invalid terminal verification proof.', 'agentic-proof-invalid');
       }
       this.context.updateGroundingEntry(this.step.id, { kind: 'ai', trace: classified.data.trace });
       return { kind: 'passed', via: 'ai-resolve' };
@@ -2534,7 +2541,32 @@ class AgenticRunPipeline implements InstructionCoverageAiActionController {
       return { kind: 'passed', via: 'ai-resolve' };
     }
 
-    throw new CaseAbort('The AI-directed interaction completed without terminal verification evidence.');
+    // A completed interaction without terminal sensing will produce case-level abort evidence.
+    throw new CaseAbort('The AI-directed interaction completed without terminal verification evidence.', 'agentic-no-terminal-evidence');
+  }
+
+  #failureDetails(): {
+    stepId: StepId;
+    actions: number;
+    assertions: number;
+    passedAssertions: number;
+    failedAssertions: number;
+    targetRejections: number;
+    lastFailedAssertion?: { check: AssertCheck['check']; expected: string };
+  } {
+    return {
+      stepId: this.step.id, actions: this.#actions, assertions: this.#assertions,
+      passedAssertions: this.#passedAssertions, failedAssertions: this.#failedAssertions,
+      targetRejections: this.#targetRejections,
+      ...(this.#lastFailedAssertion === undefined ? {} : { lastFailedAssertion: this.#lastFailedAssertion }),
+    };
+  }
+
+  targetRejectionFailure(error: AgenticTargetRejection): AgenticStepFailedError {
+    const explanation = error.exhausted
+      ? `The AI-directed interaction exhausted its browser target budget: ${error.tool} was rejected (${error.reason}) after ${AGENTIC_TARGET_REJECTION_LIMIT} recoverable rejections.`
+      : `The AI-directed interaction was rejected by a browser target it could not resolve (${error.tool}: ${error.reason}).`;
+    return new AgenticStepFailedError(explanation, this.#failureDetails());
   }
 }
 
@@ -2568,7 +2600,15 @@ async function executeAgentic(
     ...(priorTrace === undefined ? {} : { priorTrace }),
     signal: deadline.signal,
   };
-  const result = await callAiExecutor(context, step.id, deadline, () => executor.executeAgentic(request));
+  // Target rejections from this boundary become classified agentic failures
+  // using the pipeline's own counters; deadline and provider failures keep their kinds.
+  let result: Awaited<ReturnType<typeof executor.executeAgentic>>;
+  try {
+    result = await callAiExecutor(context, step.id, deadline, () => executor.executeAgentic(request));
+  } catch (error) {
+    if (error instanceof AgenticTargetRejection) throw pipeline.targetRejectionFailure(error);
+    throw error;
+  }
 
   return pipeline.finalize(result.outcome);
 }
@@ -2748,6 +2788,7 @@ export function buildRedactedAiProposalContext(
   redactor: typeof redactJsonStrings = redactJsonStrings,
 ): unknown {
   const redacted = redactor(value, resolvedSecrets, runState);
+  // Contaminated grounding will report a reason, never the resolved secret.
   if (jsonContainsResolvedSecret(redacted, resolvedSecrets)) throw groundingAbort('secret-contaminated');
   return redacted;
 }
@@ -2798,6 +2839,7 @@ async function groundedTarget(
   });
   // A matching observation records a valid capture before completing, so this
   // all-invalid path receives the last non-matching observation's raw capture.
+  // An unusable snapshot will retain observed evidence without widening the reason vocabulary.
   if (lastValidCapture === undefined) throw groundingClassificationAbort('snapshot-invalid', result.capture.tree ?? null);
   const quoteWaitMs = Math.max(0, Math.round(context.clock.monotonicMs() - quoteStartedMs));
   let candidate = quotedCandidate;
@@ -2807,6 +2849,7 @@ async function groundedTarget(
     const excerpt = extractSpan(context.normalizedTestMd, intent.sourceSpan);
     if (excerpt === undefined) throw new IntegrityViolationError('The validated element intent source span could not be re-extracted.');
     const proposalContext = buildRedactedAiProposalContext({ description: intent.description, ...(intent.quote === undefined ? {} : { quote: intent.quote.text }), ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }), excerpt, accessibilityTree: lastValidCapture.tree }, context.resolvedSecrets, runStateValues(context.runState));
+    // Proposal context is checked before provider use; the report will carry only the closed reason.
     if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
     const executor = await context.resolveAiExecutor();
     const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
@@ -2820,6 +2863,7 @@ async function groundedTarget(
   }
   const locator: AccessibilityElementRef = { strategy: 'accessibility', role: candidate!.role, name: candidate!.name };
   const fingerprint = computeAccessibilityFingerprint(lastValidCapture.tree, locator, context.resolvedSecrets.values());
+  // Classification failures will preserve the observation for redacted evidence capture.
   if (fingerprint.kind === 'snapshot-invalid' || fingerprint.kind === 'secret-contaminated') throw groundingClassificationAbort(fingerprint.kind, lastValidCapture.tree);
   if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected' });
   context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
@@ -2879,8 +2923,11 @@ function unresolvedMessage(reason: 'missing' | GroundingMissReason): string {
   }
 }
 
-function groundingAbort(reason: GroundingMissReason): CaseAbort {
-  return new CaseAbort(groundingAbortMessage(reason));
+function groundingAbort(reason: 'secret-contaminated' | 'snapshot-invalid'): CaseAbort {
+  // Only these grounding reasons become case aborts, keeping the report's reason set finite.
+  const abortReason: CaseAbortReason = reason === 'secret-contaminated'
+    ? 'grounding-secret-contaminated' : 'grounding-snapshot-invalid';
+  return new CaseAbort(groundingAbortMessage(reason), abortReason);
 }
 
 /**
@@ -2889,10 +2936,13 @@ function groundingAbort(reason: GroundingMissReason): CaseAbort {
  * report shows the exact evidence that caused the abort.
  */
 function groundingClassificationAbort(
-  reason: GroundingMissReason,
+  reason: 'secret-contaminated' | 'snapshot-invalid',
   accessibilityTree: JsonValueT,
 ): GroundingClassificationAbort {
-  return new GroundingClassificationAbort(groundingAbortMessage(reason), accessibilityTree);
+  // The narrowed reason travels with the snapshot to the case catch boundary.
+  const abortReason: CaseAbortReason = reason === 'secret-contaminated'
+    ? 'grounding-secret-contaminated' : 'grounding-snapshot-invalid';
+  return new GroundingClassificationAbort(groundingAbortMessage(reason), abortReason, accessibilityTree);
 }
 
 /**
@@ -4219,7 +4269,14 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           [outcome.expected, outcome.actual],
         );
         const expected = templateMaterializedValues(outcome.expected, resolvedSecrets, runStateValues(runState));
-        const actual = templateMaterializedValues(outcome.actual, resolvedSecrets, runStateValues(runState));
+        const templatedActual = templateMaterializedValues(outcome.actual, resolvedSecrets, runStateValues(runState));
+        // An empty observed value receives a stable explanatory fallback after
+        // templating, so a failed assertion remains diagnosable without a case error.
+        const actual = templatedActual.trim() === ''
+          ? (originalStep.kind === 'assert' && originalStep.check === 'text-equals'
+            ? 'The element text was empty.'
+            : 'The browser returned no diagnostic.')
+          : templatedActual;
         result = {
           ...identity,
           status: 'failed',
@@ -4308,14 +4365,13 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         runStateValues(runState ?? new Map()),
       ) as AmbercastErrorType;
       result = resultForAbort(identity, planSteps, completed, currentStep, context, classifiedError.message, evidence);
-    } else if (classificationError instanceof CaseAbort) {
-      result = resultForAbort(identity, planSteps, completed, currentStep, context, classificationError.message, evidence);
-    } else if (classificationError instanceof AgenticTargetRejection) {
-      const explanation = classificationError.exhausted
-        ? `The AI-directed interaction exhausted its browser target budget: ${classificationError.tool} was rejected (${classificationError.reason}) after ${AGENTIC_TARGET_REJECTION_LIMIT} recoverable rejections.`
-        : `The AI-directed interaction was rejected by a browser target it could not resolve (${classificationError.tool}: ${classificationError.reason}).`;
-      result = resultForAbort(identity, planSteps, completed, currentStep, context, explanation, evidence);
+    } else if (classificationError instanceof CaseAbort && currentStep !== undefined) {
+      // The abort's closed reason and current step become a classified case error.
+      classifiedError = new CaseAbortedError(classificationError.message, classificationError.reason, currentStep.id);
+      result = resultForAbort(identity, planSteps, completed, currentStep, context, classifiedError.message, evidence);
     } else {
+      // Unknown failures, including a CaseAbort outside a step or a leaked
+      // AgenticTargetRejection, become safe crash errors with a projected cause name.
       const name = projectCauseName(classificationError);
       deps.events.emit(buildUnclassifiedRejectionEvent(
         file,
@@ -4325,6 +4381,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
         runStateValues(runState ?? new Map()),
       ));
       const explanation = `The browser session could not complete this case and no deterministic fallback is available (${name}).`;
+      classifiedError = new UnexpectedCrashError(explanation, undefined, { cause: classificationError });
       result = resultForAbort(identity, planSteps, completed, currentStep, context, explanation, evidence);
     }
   } finally {

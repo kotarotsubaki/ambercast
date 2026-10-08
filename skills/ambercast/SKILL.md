@@ -126,8 +126,8 @@ Take the exit code from the process exit status. It is not inside the JSON envel
 | Exit | Meaning | What to do next |
 | --- | --- | --- |
 | 0 | Success | Continue. |
-| 1 | The command's own outcome is negative: a replayed expectation did not hold (run), an ambiguity under `--strict` (generate), or a repair that stayed unresolved, was only partially healed, or was declined (heal) | Apply the triage rules below. |
-| 2 | Usage or configuration error: bad flags, invalid config, an unresolved secret or target | If stdout has no JSON, the flags were rejected before parsing; read the usage text on stderr and fix the command. If there is JSON, follow `errors[].code` and fix the config or the environment variables. |
+| 1 | The command's own outcome is negative: a replayed expectation did not hold (run), or a repair stayed unresolved, was only partially healed, or was declined (heal) | Apply the triage rules below. |
+| 2 | Usage or configuration error: bad flags, invalid config, an unresolved secret or target; also an ambiguous prompt reported as `PROMPT_AMBIGUOUS`, regardless of `--strict` (generate, heal) | If stdout has no JSON, the flags were rejected before parsing; read the usage text on stderr and fix the command. If there is JSON, follow `errors[].code` and fix the config or the environment variables. |
 | 3 | Environment error: browser launch failed, AI provider unavailable, file I/O failure, interrupted | Start the app, install Chromium, or authenticate the provider CLI, then retry. |
 | 4 | The plan or grounding cannot be trusted: missing, stale, or no longer matching the prompt | Inspect `errors[].code`: for `MISSING_PLAN`, `STALE_PLAN`, or `INTEGRITY_VIOLATION`, run `npx ambercast generate <name>.test.md` for that prompt. For `GROUNDING_UNRESOLVED`, run `ambercast run --resolve <name>.test.md` to allow AI resolution for grounding misses. Running the test again does not help. |
 | 5 | The selection matched zero prompts | Check the path, `testDir`, `testMatch`, and `testIgnore`. Exclusions win over inclusions. |

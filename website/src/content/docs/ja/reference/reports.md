@@ -110,7 +110,7 @@ action と capture のステップでは、ローカル検証後に `binding: { 
 | コード | 任意の `details` 形状 |
 | --- | --- |
 | `AGENTIC_STEP_FAILED` | case スコープのみ: `{ stepId: 空白以外の文字列, actions: 非負整数, assertions: 非負整数, passedAssertions: 非負整数, failedAssertions: 非負整数, targetRejections: 非負整数, lastFailedAssertion?: { check: "text-visible"・"element-visible"・"text-equals"・"url-matches"・"element-count" のいずれか; expected: 文字列 } }`。カウンターは完了したツール呼び出しを表します。 |
-| `CASE_ABORTED` | case スコープのみ: `{ reason: ReportCaseAbortReason, stepId: 文字列 }`。`reason` は定義済みの8値のいずれかです。 |
+| `CASE_ABORTED` | case スコープのみ: `{ reason: "run-reference-invalid"、"run-value-missing"、"secret-fill-incomplete"、"agentic-no-terminal-evidence"、"agentic-coverage-inexact"、"agentic-proof-invalid"、"grounding-secret-contaminated" または "grounding-snapshot-invalid"; stepId: 文字列 }`。`reason` は定義済みの8値のいずれかです。 |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任意の instruction-coverage・element-intent・confirms issue code（`confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`）、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected"、または "secret-conflicting-target-names"（後者2つは常に stepId を伴う）; path: Array<string または非負整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token、または embedded-secret-reference; path: 空白以外の文字列; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |

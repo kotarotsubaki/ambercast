@@ -124,6 +124,123 @@ async function withCaller(
   }, compilerOptions);
 }
 
+type EligibilityExpectation = {
+  readonly scannerReports: boolean;
+  readonly arityDiagnostic: boolean;
+};
+
+async function withProgramAllowingDiagnostics(
+  files: Readonly<Record<string, string>>,
+  assertion: (program: ts.Program, names: Readonly<Record<string, string>>) => void,
+): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), 'ambercast-function-value-reference-eligibility-'));
+  const names = Object.fromEntries(Object.keys(files).map((path) => [path, join(root, path)]));
+  try {
+    await Promise.all(Object.entries(files).map(async ([path, text]) => {
+      const fileName = names[path];
+      if (fileName === undefined) throw new Error(`Missing synthetic name for ${path}.`);
+      await mkdir(dirname(fileName), { recursive: true });
+      await writeFile(fileName, text);
+    }));
+    const program = ts.createProgram({
+      rootNames: Object.values(names),
+      options: {
+        module: ts.ModuleKind.NodeNext,
+        moduleResolution: ts.ModuleResolutionKind.NodeNext,
+        noEmit: true,
+        strict: true,
+        target: ts.ScriptTarget.ES2023,
+      },
+    });
+    assertion(program, names);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+async function withEligibilityFixture(
+  preamble: readonly string[],
+  expectation: EligibilityExpectation,
+): Promise<void> {
+  const sharedPrefix = [
+    "import { target } from './target.js';",
+    'type TargetShape = { x: [typeof target] };',
+    'type Unrelated = { x: [string] };',
+    ...preamble,
+  ];
+
+  // Part 1 — the scanner oracle, isolated to a for-of-only caller with no
+  // other statement. An explicit bare `items[Symbol.iterator]()` call in
+  // this same file would itself be flagged as an aggregate escape by this
+  // scanner's own unrelated SA-1 guarantee (a discarded value whose type
+  // structurally contains the target slot through `Iterator<TargetShape,
+  // ...>`), independently of which overload resolves — polluting every
+  // row's expected unsafeReferences regardless of eligibility. The explicit
+  // zero-argument call therefore lives only in the separate program built
+  // in Part 2, which this scan is never run against.
+  const forOfSource = [
+    ...sharedPrefix,
+    'declare const sink: { alias: unknown };',
+    'for ({ x: [sink.alias] } of items) {}',
+  ].join('\n');
+  const forLineNumber = forOfSource.split('\n').length;
+  await withProgramAllowingDiagnostics({ 'src/target.ts': targetSource, 'src/caller.ts': forOfSource }, (program, names) => {
+    const targetFileName = names['src/target.ts'];
+    const callerFileName = names['src/caller.ts'];
+    if (targetFileName === undefined || callerFileName === undefined) throw new Error('Missing synthetic module.');
+    const declaration = canonicalDeclaration(program, targetFileName);
+    const scan = scanFunctionValueReferences(
+      program,
+      declaration,
+      (symbol) => symbol.declarations?.includes(declaration) ?? false,
+    );
+    expectScan(scan, callerFileName, forOfSource, [], expectation.scannerReports ? [[forLineNumber, 'sink.alias']] : []);
+  });
+
+  // Part 2 — the independent compiler oracle: an explicit zero-argument
+  // call against the same overloaded member, in its own program with no
+  // for-of loop and no scanner invocation, so its diagnostics cannot be
+  // conflated with the scanner's aggregate-escape detection from Part 1.
+  const probeSource = [
+    ...sharedPrefix,
+    'items[Symbol.iterator]();',
+  ].join('\n');
+  await withProgramAllowingDiagnostics({ 'src/target.ts': targetSource, 'src/probe.ts': probeSource }, (program, names) => {
+    const probeFileName = names['src/probe.ts'];
+    if (probeFileName === undefined) throw new Error('Missing synthetic probe module.');
+    const probeSourceFile = sourceFile(program, probeFileName);
+    const callStatement = probeSourceFile.statements.find(
+      (statement): statement is ts.ExpressionStatement => (
+        ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression)
+      ),
+    );
+    if (callStatement === undefined) throw new Error('Missing explicit zero-argument call statement.');
+    const callExpression = callStatement.expression as ts.CallExpression;
+    const checker = program.getTypeChecker();
+    const diagnostics = [
+      ...program.getSyntacticDiagnostics(probeSourceFile),
+      ...program.getSemanticDiagnostics(probeSourceFile),
+    ];
+    const callStart = callExpression.getStart(probeSourceFile);
+    const callEnd = callExpression.getEnd();
+    const hasArityDiagnostic = diagnostics.some((diagnostic) => (
+      (diagnostic.code === 2554 || diagnostic.code === 2555)
+      && diagnostic.start !== undefined
+      && diagnostic.length !== undefined
+      && diagnostic.start >= callStart
+      && diagnostic.start + diagnostic.length <= callEnd
+    ));
+    expect(hasArityDiagnostic).toBe(expectation.arityDiagnostic);
+
+    if (!expectation.arityDiagnostic) {
+      const resolvedSignature = checker.getResolvedSignature(callExpression);
+      const memberType = checker.getTypeAtLocation(callExpression.expression);
+      const overloadSignatures = checker.getSignaturesOfType(memberType, ts.SignatureKind.Call);
+      expect(resolvedSignature?.declaration).toBe(overloadSignatures[1]?.declaration);
+    }
+  });
+}
+
 describe('scanFunctionValueReferences()', () => {
   test.each([
     ['a direct exact callee', ["import { target } from './target.js';", 'target();'].join('\n'), [[2, 'target()']], []],
@@ -641,6 +758,36 @@ describe('scanFunctionValueReferences()', () => {
       ].join('\n'),
       [[6, 'sink.alias']],
     ],
+    [
+      'a required-argument overload declared before its zero-argument overload',
+      [
+        "import { target } from './target.js';",
+        'type TargetShape = { x: [typeof target] };',
+        'type Unrelated = { x: [string] };',
+        'interface Source {',
+        '  [Symbol.iterator](value: string): Iterator<Unrelated>;',
+        '  [Symbol.iterator](): Iterator<TargetShape, string>;',
+        '}',
+        'declare const sink: { alias: unknown };',
+        'declare const items: Source;',
+        'for ({ x: [sink.alias] } of items) {}',
+      ].join('\n'),
+      [[10, 'sink.alias']],
+    ],
+    [
+      'a non-overloaded method with a default parameter',
+      [
+        "import { target } from './target.js';",
+        'type TargetShape = { x: [typeof target] };',
+        'class Custom {',
+        "  [Symbol.iterator](value: string = 'x'): Iterator<TargetShape, string> { throw new Error(); }",
+        '}',
+        'declare const sink: { alias: unknown };',
+        'declare const iterable: Custom;',
+        'for ({ x: [sink.alias] } of iterable) {}',
+      ].join('\n'),
+      [[8, 'sink.alias']],
+    ],
   ] as const)('reports a for-of assignment head from %s', async (_name, source, unsafeReferences) => {
     await withCaller(source, (scan, names) => {
       expectScan(scan, names['src/caller.ts'] ?? '', source, [], unsafeReferences);
@@ -851,6 +998,24 @@ describe('scanFunctionValueReferences()', () => {
       ].join('\n'),
       [[12, 'sink.alias']],
     ],
+    [
+      'a required-argument overload declared before its zero-argument overload',
+      [
+        "import { target } from './target.js';",
+        'type TargetShape = { x: [typeof target] };',
+        'type Unrelated = { x: [string] };',
+        'interface Source {',
+        '  [Symbol.asyncIterator](value: string): AsyncIterator<Unrelated>;',
+        '  [Symbol.asyncIterator](): AsyncIterator<TargetShape, string>;',
+        '}',
+        'declare const sink: { alias: unknown };',
+        'declare const items: Source;',
+        'async function run(): Promise<void> {',
+        '  for await ({ x: [sink.alias] } of items) {}',
+        '}',
+      ].join('\n'),
+      [[11, 'sink.alias']],
+    ],
   ] as const)('reports a for-await-of assignment head from %s', async (_name, source, unsafeReferences) => {
     await withCaller(source, (scan, names) => {
       expectScan(scan, names['src/caller.ts'] ?? '', source, [], unsafeReferences);
@@ -933,7 +1098,7 @@ describe('scanFunctionValueReferences()', () => {
         'for ({ x: [sink.alias] } of items) {}',
       ].join('\n'),
     ],
-  ] as const)('keeps a for-of assignment head from reporting for %s', async (_name, source) => {
+  ] as const)('keeps an iteration assignment head from reporting for %s', async (_name, source) => {
     await withCaller(source, (scan, names) => {
       expectScan(scan, names['src/caller.ts'] ?? '', source, [], []);
     });
@@ -965,6 +1130,168 @@ describe('scanFunctionValueReferences()', () => {
       expectScan(scan, names['src/caller.ts'] ?? '', source, [], unsafeReferences);
     });
   });
+
+  test('selects a this-parameter-only signature for a for-of assignment head', async () => {
+    const source = [
+      "import { target } from './target.js';",
+      'type TargetShape = { x: [typeof target] };',
+      'interface Source {',
+      '  [Symbol.iterator](this: Source): Iterator<TargetShape, string>;',
+      '}',
+      'declare const sink: { alias: unknown };',
+      'declare const items: Source;',
+      'for ({ x: [sink.alias] } of items) {}',
+    ].join('\n');
+    await withCaller(source, (scan, names) => {
+      expectScan(scan, names['src/caller.ts'] ?? '', source, [], [[8, 'sink.alias']]);
+    });
+  });
+
+  test('selects a generic-type-parameter-only signature for a for-of assignment head', async () => {
+    const source = [
+      "import { target } from './target.js';",
+      'type TargetShape = { x: [typeof target] };',
+      'interface Source {',
+      '  [Symbol.iterator]<T>(): Iterator<TargetShape, string>;',
+      '}',
+      'declare const sink: { alias: unknown };',
+      'declare const items: Source;',
+      'for ({ x: [sink.alias] } of items) {}',
+    ].join('\n');
+    await withCaller(source, (scan, names) => {
+      expectScan(scan, names['src/caller.ts'] ?? '', source, [], [[8, 'sink.alias']]);
+    });
+  });
+
+  test('keeps a for-of assignment head from reporting when a this-parameter signature also requires an ordinary argument', async () => {
+    const source = [
+      "import { target } from './target.js';",
+      'type TargetShape = { x: [typeof target] };',
+      'interface Source {',
+      '  [Symbol.iterator](this: Source, value: string): Iterator<TargetShape, string>;',
+      '}',
+      'declare const sink: { alias: unknown };',
+      'declare const items: Source;',
+      'for ({ x: [sink.alias] } of items) {}',
+    ].join('\n');
+    await withProgramAllowingDiagnostics({ 'src/target.ts': targetSource, 'src/caller.ts': source }, (program, names) => {
+      const targetFileName = names['src/target.ts'];
+      const callerFileName = names['src/caller.ts'];
+      if (targetFileName === undefined || callerFileName === undefined) throw new Error('Missing synthetic module.');
+      const declaration = canonicalDeclaration(program, targetFileName);
+      const scan = scanFunctionValueReferences(
+        program,
+        declaration,
+        (symbol) => symbol.declarations?.includes(declaration) ?? false,
+      );
+      expectScan(scan, callerFileName, source, [], []);
+    });
+  });
+  describe('iteratorMemberElementType zero-argument overload eligibility', () => {
+  test.each([
+    [
+      'an ordinary required parameter',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](c: string): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: false, arityDiagnostic: true },
+    ],
+    [
+      'an optional parameter',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](c?: string): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: true, arityDiagnostic: false },
+    ],
+    [
+      'an empty tuple rest',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](...rest: []): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: true, arityDiagnostic: false },
+    ],
+    [
+      'an optional-element tuple rest',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](...rest: [string?]): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: true, arityDiagnostic: false },
+    ],
+    [
+      'a rest-tail tuple with a required leading element',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](...rest: [string, ...number[]]): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: false, arityDiagnostic: true },
+    ],
+    [
+      'a required non-rest tuple-shaped rest',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](...rest: [string, number]): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: false, arityDiagnostic: true },
+    ],
+    [
+      'a non-tuple array rest',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](...rest: string[]): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: true, arityDiagnostic: false },
+    ],
+    [
+      'a non-tuple array rest instantiated with a concrete type argument',
+      [
+        'interface GenericSource<T> {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator](...rest: T[]): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: GenericSource<string>;',
+      ],
+      { scannerReports: true, arityDiagnostic: false },
+    ],
+    [
+      'an unresolved generic rest',
+      [
+        'interface Source {',
+        '  [Symbol.iterator](a: string, b: number): Iterator<Unrelated>;',
+        '  [Symbol.iterator]<T extends unknown[]>(...rest: T): Iterator<TargetShape, string>;',
+        '}',
+        'declare const items: Source;',
+      ],
+      { scannerReports: false, arityDiagnostic: false },
+    ],
+  ] as const)('resolves eligibility for %s', async (_name, preamble, expectation) => {
+    await withEligibilityFixture(preamble, expectation);
+  });
+});
 
   test('propagates a computed property name through the nested array-object fallback', async () => {
     const source = [

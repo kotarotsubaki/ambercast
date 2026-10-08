@@ -24,33 +24,59 @@ ambercastは次の既定値を使う。
 
 設定ファイルは作成せず、次の内容で`tests/ambercast/find-page.test.md`を正確に作成する。末尾の`.test.md`はコンパニオンパス解決の対象になる。
 
-`npx ambercast init`を使うと、同じファイルと最小限の`ambercast.config.json`を一度に生成できる。本チュートリアルは既定値の動作を確認するため、設定ファイルなしの経路を進む。
-
 ```markdown
 # Find a page
 
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
+:::tip
+`npx ambercast init`を使うと、同じファイルと最小限の`ambercast.config.json`を一度に生成できる。本チュートリアルは既定値の動作を確認するため、設定ファイルなしの経路を進む。
+
+:::
+
 <Steps>
 
 1. ## アプリを起動してプランを生成する \{#generate}
 
-   人またはオペレーターが`http://localhost:3000`でアプリケーションを起動して確認した後、`npx ambercast generate tests/ambercast/find-page.test.md`を実行する。
+   人またはオペレーターが`http://localhost:3000`でアプリケーションを起動して確認する。
 
-   生成が成功すると終了コード`0`で終わり、結果ステータスは`generated`になる。生成されたプロンプトの隣に、planとgroundingの2つの派生ファイルが書き出される。セットアッププロンプト（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使うエージェントは、サーバーが既に起動していると想定し、依頼が無い限り自分では起動しない。
+   ```bash
+   npx ambercast generate tests/ambercast/find-page.test.md
+   ```
+
+   成功すると次の状態になる。
+
+   - 終了コード`0`、結果ステータス`generated`
+   - 生成されたプロンプトの隣に、planとgroundingの2つの派生ファイルが書き出される
+
+   セットアッププロンプト（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使うエージェントは、サーバーが既に起動していると想定する。依頼が無い限り自分では起動しない。
 
 2. ## リプレイを実行する \{#run}
 
-   `npx ambercast run --resolve tests/ambercast/find-page.test.md`を実行する。
+   ```bash
+   npx ambercast run --resolve tests/ambercast/find-page.test.md
+   ```
 
-   リプレイが成功すると終了コード`0`で終わる。`run`は設定したrunsディレクトリの下に、呼び出しごとの`report.json`を作成する。
+   成功すると次の状態になる。
+
+   - 終了コード`0`
+   - 設定したrunsディレクトリの下に、呼び出しごとの`report.json`を作成する
 
 3. ## 変更内容を確認してコミットする \{#review-commit}
 
-   `git status --short`を実行し、追跡済みの変更ファイルはすべて`git diff -- <path>`でレビューする。未追跡のprompt・plan・groundingの各パスは、内容全体を確認するか`git diff --no-index /dev/null <path>`を実行する。レビュー後、人が3つのファイルをコミットする。
+   ```bash
+   git status --short
+   ```
 
+   追跡済みの変更ファイルはすべて`git diff -- <path>`でレビューする。未追跡のprompt・plan・groundingの各パスは、内容全体を確認するか`git diff --no-index /dev/null <path>`を実行する。
+
+   レビュー後、人が3つのファイルをコミットする。
+
+   :::caution
    エージェントは変更の全体を提示し、会話内で明示的な依頼があったときだけコミットする。CLIフラグや`--yes`はその依頼の代わりにならない（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）。
+
+   :::
 
 </Steps>
 
@@ -63,8 +89,6 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 ## 次のステップ \{#next-steps}
 
-<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="testDirやtargetなど、既定値を上書きする設定キーを確認する。" />
-<LinkCard title="ファイルレイアウト" href="/ambercast/ja/reference/file-layout/" description="prompt・plan・groundingの配置とランタイム生成物の構成を確認する。" />
-<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generateコマンドの全フラグを確認する。" />
-<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="runコマンドの全フラグを確認する。" />
-<LinkCard title="効果的なプロンプトを書く" href="/ambercast/ja/how-to/write-effective-prompts/" description="テストプロンプトの書き方のコツを確認する。" />
+次は、プロンプトの書き方を学ぶ。
+
+<LinkCard title="効果的なプロンプトを書く" href="/ambercast/ja/how-to/write-effective-prompts/" description="レビューしやすく焦点の定まったテストプロンプトを書くコツを確認する。" />

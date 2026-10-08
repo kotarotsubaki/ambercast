@@ -22,6 +22,8 @@ description: ambercast run コマンドのフラグ、リプレイパス、明�
 | --json | boolean | JSONエンベロープ形式で出力 | false |
 | --no-color | boolean | ANSIエスケープシーケンスを無効化 | false |
 
+`--resolve`・`--ai`の挙動は[不足しているグラウンディングを解決する](#resolve)、`--update-cache`は[グラウンディングの書き戻し](#grounding-write-back)、`--stale=regenerate`の拒否タイミングは次節で詳しく扱う。
+
 <a id="replay-paths"></a>
 
 ## リプレイ {#replay}
@@ -44,7 +46,7 @@ description: ambercast run コマンドのフラグ、リプレイパス、明�
 
 ## グラウンディングの書き戻し {#grounding-write-back}
 
-`run` は、解決された書き戻しゲートが許可した場合にのみ変更後のグラウンディングを書き込む。ローカル環境と CI 環境の全条件は [設定](/ambercast/ja/reference/configuration/#grounding) を参照する。
+`run` は、解決された書き戻しゲートが許可した場合にのみ変更後のグラウンディングを書き込む。`--update-cache` はこのゲートへの明示的な入力の1つであり、CI環境では`ci.updateGroundingCache`との組み合わせで、ローカル環境では`localWriteBack`の設定と組み合わせて判定される。ローカル環境と CI 環境の全条件は [設定](/ambercast/ja/reference/configuration/#grounding) を参照する。
 
 ## レポートと終了コード {#report-and-exits}
 

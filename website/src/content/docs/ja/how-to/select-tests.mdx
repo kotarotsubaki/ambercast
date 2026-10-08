@@ -19,11 +19,11 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 2. ### 正規表現で絞り込む \{#grep-filter}
 
-   `npx ambercast run --grep 'sign-in' --list` を実行する。パーサーはディスカバリーのフィルタリング用正規表現を構築する。
+   `npx ambercast run --grep 'sign-in' --list` を実行する。パーサーはディスカバリーのフィルタリング用正規表現を構築する。`--grep`以外の[runの全フラグ](/ambercast/ja/reference/cli/run/#flags)も合わせて確認できる。
 
 3. ### 設定ファイルで除外する \{#config-ignore}
 
-   有効な設定ファイルに `"testMatch":["**/*.test.md"],"testIgnore":["**/.runs/**"]` と書く。一致する `testIgnore` があれば、そのパスが `testMatch` に一致していても除外される。
+   有効な設定ファイルに `"testMatch":["**/*.test.md"],"testIgnore":["**/.runs/**"]` と書く。一致する `testIgnore` があれば、そのパスが `testMatch` に一致していても除外される。`testMatch`・`testIgnore`の一致規則は[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/)、設定ファイルの書き方全般は[設定](/ambercast/ja/reference/configuration/)を参照する。
 
 4. ### ハイフンで始まるパスを渡す \{#literal-dash-path}
 
@@ -37,7 +37,4 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ## 関連情報 \{#related}
 
-<LinkCard title="ディスカバリーパターン" href="/ambercast/ja/reference/discovery-patterns/" description="testMatch・testIgnoreの一致規則を確認する。" />
-<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="runコマンドの全フラグを確認する。" />
-<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generateコマンドを確認する。" />
-<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="testMatch・testIgnoreの設定方法を確認する。" />
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="同じ選択規則で動くgenerateコマンドを確認する。" />

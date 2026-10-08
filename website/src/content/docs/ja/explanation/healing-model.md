@@ -23,11 +23,10 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 ```mermaid alt="ベースラインリプレイが失敗すると段階1のgrounding修復を試み、frontierが前進しなければ段階2のsingle-step/tail修復へ進む。失敗が残り期限前なら段階3のplan全体修復に至る。書き込みは確認の後だけ行われる。"
 flowchart LR
-  B[baseline replay] -->|fails| S1[stage 1]
+  B[baseline] -->|fails| S1[stage 1]
   S1 -->|not advanced| S2[stage 2]
   S2 -->|still failing| S3[stage 3]
-  S3 --> O[overlay]
-  O -->|confirmed| C[commit]
+  S3 -->|confirmed| C[commit]
 ```
 
 - 段階1: テストが最初に失敗したステップだけを見て、ページ上の要素を探し直す。軽い再スキャンで見つかることもあれば、AIに新しい位置を推測させることもある

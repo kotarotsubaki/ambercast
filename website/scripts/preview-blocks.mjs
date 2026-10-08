@@ -2,7 +2,7 @@
  * Manage the temporary blocks page used by the local preview server.
  */
 import { spawn } from 'node:child_process';
-import { access, readFile, writeFile, unlink } from 'node:fs/promises';
+import { access, open, readFile, unlink } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /**
@@ -200,7 +200,7 @@ async function stopDaemon(spawnFn, cwd) {
 /**
  * Start a blocks preview and own the background dev server for its lifetime.
  *
- * @param {{ spawnFn?: Function, sourcePath?: string, destPath?: string, unlinkFn?: Function }} options - Optional process spawner, source and destination paths, and copy remover for controlled tests.
+ * @param {{ spawnFn?: Function, sourcePath?: string, destPath?: string, unlinkFn?: Function, openFn?: Function }} options - Optional process spawner, source and destination paths, copy remover, and exclusive-file-opener for controlled tests.
  * @returns {Promise<void>} Resolves only via `process.exit`; it never returns normally.
  * @remarks Ownership of the background dev server is established only by
  * Astro's own explicit new-server report plus an immediate status
@@ -215,7 +215,10 @@ async function stopDaemon(spawnFn, cwd) {
  * a signal arriving while the copy is in flight must still be honored
  * once the sequence reaches a point that checks for one, instead of
  * falling through to Node's default handling, which would abort with a
- * half-finished or orphaned copy and nothing cleaned up. Once a pid is
+ * half-finished or orphaned copy and nothing cleaned up. The copy itself
+ * is an exclusive create followed by a separate write and close, so a
+ * failure after a successful create (unlike a failed create, which never
+ * touches the filesystem) still triggers cleanup. Once a pid is
  * owned, deletion is attempted regardless of whether a stop was
  * warranted or why an attempted stop did not succeed -- the only clean
  * (0) exit is a successful stop (when one was warranted) followed by a
@@ -224,11 +227,12 @@ async function stopDaemon(spawnFn, cwd) {
  * SIGINT/SIGTERM handling, which would otherwise abort cleanup before the
  * page is removed.
  */
-export async function previewBlocks({ spawnFn, sourcePath, destPath, unlinkFn } = {}) {
+export async function previewBlocks({ spawnFn, sourcePath, destPath, unlinkFn, openFn } = {}) {
   sourcePath ??= fileURLToPath(new URL('../../.agents/skills/docs-writing/references/blocks.mdx', import.meta.url));
   destPath ??= fileURLToPath(new URL('../src/content/docs/preview-blocks.mdx', import.meta.url));
   spawnFn ??= spawn;
   unlinkFn ??= unlink;
+  openFn ??= open;
   const cwd = fileURLToPath(new URL('..', import.meta.url));
 
   if (await pathExists(destPath)) process.exit(1);
@@ -263,9 +267,18 @@ export async function previewBlocks({ spawnFn, sourcePath, destPath, unlinkFn } 
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
 
+  let handle;
   try {
-    await writeFile(destPath, await readFile(sourcePath), { flag: 'wx' });
+    handle = await openFn(destPath, 'wx');
   } catch {
+    process.exit(1);
+  }
+  try {
+    await handle.writeFile(await readFile(sourcePath));
+    await handle.close();
+  } catch {
+    await handle.close().catch(() => {});
+    await deleteCopy();
     process.exit(1);
   }
 

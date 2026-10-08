@@ -81,6 +81,26 @@ const [scriptJson, sourcePath, destPath, markersPath] = process.argv.slice(2);
 const { steps, signals } = JSON.parse(scriptJson);
 const mark = (name) => appendFileSync(markersPath, name + '\\n');
 process.on('exit', (code) => mark('process-exit:' + code));
+const openFailure = ${JSON.stringify((script as any).openFailure ?? null)};
+const openFn = openFailure
+  ? async (path, flag) => {
+      const fsp = await import('node:fs/promises');
+      const real = await fsp.open(path, flag);
+      mark('open-ok');
+      return {
+        writeFile: async (data) => {
+          if (openFailure === 'write') { mark('write-fail'); throw new Error('injected write failure'); }
+          await real.writeFile(data);
+          mark('write-ok');
+        },
+        close: async () => {
+          if (openFailure === 'close') { mark('close-fail'); await real.close().catch(() => {}); throw new Error('injected close failure'); }
+          await real.close();
+          mark('close-ok');
+        },
+      };
+    }
+  : undefined;
 let callIndex = 0;
 const spawnFn = (cmd, args) => {
   const i = callIndex++;
@@ -117,7 +137,7 @@ const unlinkFn = async (path) => {
   await unlink(path);
 };
 globalThis.__unlinkFails = ${JSON.stringify(Boolean((script as any).unlinkFails))};
-try { await previewBlocks({ spawnFn, sourcePath, destPath, unlinkFn }); }
+try { await previewBlocks({ spawnFn, sourcePath, destPath, unlinkFn, openFn }); }
 catch (error) { mark('error:' + error.message); process.exitCode = 1; }
 `,
   );
@@ -172,6 +192,32 @@ describe('previewBlocks precondition', () => {
   it('exits 1 with no copy when the status output contains both a no-server and a running line at once', () => {
     const { result, markers, destPath } = runPreview({ steps: [{ output: CONFLICTING_STATUS, exitCode: 0 }] });
     expect(result.status).toBe(1);
+    expect(markers.filter((m) => m.startsWith('spawn:'))).toEqual(['spawn:npx astro dev status']);
+    expect(existsSync(destPath)).toBe(false);
+  });
+
+  it('deletes the copy and exits 1 when the write after a successful exclusive create fails', () => {
+    const { result, markers, destPath } = runPreview({
+      steps: [{ output: NO_SERVER, exitCode: 0 }],
+      openFailure: 'write',
+    } as Script & { openFailure: 'write' | 'close' });
+    expect(result.status).toBe(1);
+    expect(markers).toContain('open-ok');
+    expect(markers).toContain('write-fail');
+    expect(markers).toContain('unlink');
+    expect(markers.filter((m) => m.startsWith('spawn:'))).toEqual(['spawn:npx astro dev status']);
+    expect(existsSync(destPath)).toBe(false);
+  });
+
+  it('deletes the copy and exits 1 when closing after a successful write fails', () => {
+    const { result, markers, destPath } = runPreview({
+      steps: [{ output: NO_SERVER, exitCode: 0 }],
+      openFailure: 'close',
+    } as Script & { openFailure: 'write' | 'close' });
+    expect(result.status).toBe(1);
+    expect(markers).toContain('write-ok');
+    expect(markers).toContain('close-fail');
+    expect(markers).toContain('unlink');
     expect(markers.filter((m) => m.startsWith('spawn:'))).toEqual(['spawn:npx astro dev status']);
     expect(existsSync(destPath)).toBe(false);
   });

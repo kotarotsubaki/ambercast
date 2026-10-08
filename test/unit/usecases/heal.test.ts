@@ -3021,6 +3021,42 @@ describe('heal state-machine contract', () => {
     expect(result.outcome.results[0]?.stage3Error).toBeInstanceOf(error);
   });
 
+  it('reports two Stage 3 ambiguities without a crash or artifact commit', async () => {
+    const scenario = await createScenario({
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
+        data: request.prompt.startsWith('Repair the requested')
+          ? { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }
+          : { steps: [], ambiguities: ['Unclear target Alpha', 'Unclear target Beta'] },
+        raw: '{}',
+      }) }),
+    });
+    const planBefore = await scenario.storage.readText(PLAN);
+    const groundingBefore = await scenario.storage.readText(GROUNDING);
+    const result = await heal(scenario.deps, OPTIONS);
+    const row = result.outcome.results[0];
+    expect(row).toBeDefined();
+    const report = buildHealReport({
+      startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false },
+      outcome: { ...result.outcome, results: result.outcome.results.map((entry) => ({ ...entry, application: 'no-artifact-change' as const })) },
+    });
+    expect(report.envelope.errors).toContainEqual(expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'PROMPT_AMBIGUOUS', details: { ambiguities: 2 },
+    }));
+    expect(report.exitCode).toBe(2);
+    expect(report.envelope.errors).not.toContainEqual(expect.objectContaining({
+      code: 'UNEXPECTED_CRASH', message: 'Healing failed for this case.',
+    }));
+    expect(row?.repairTrace).toContainEqual(expect.objectContaining({
+      stage: 'stage3', outcome: 'failed', code: 'PROMPT_AMBIGUOUS',
+    }));
+    expect(result.commits.size).toBe(0);
+    expect(await scenario.storage.readText(PLAN)).toBe(planBefore);
+    expect(await scenario.storage.readText(GROUNDING)).toBe(groundingBefore);
+    expect(scenario.textWrites).not.toHaveBeenCalled();
+  });
+
   it('reports an empty plan as no-changes-needed without treating it as a pre-launch failure', async () => {
     // SPEC-2 rejects unused target definitions, including an empty plan with a retained target.
     const scenario = await createScenario({ steps: [], grounding: {}, targets: {} });

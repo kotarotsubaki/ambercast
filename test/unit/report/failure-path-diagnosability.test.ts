@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AmbercastError, type ErrorKind, type ReportableErrorKind } from '#core/errors/types.js';
+import { ERROR_EXIT_CODES } from '#core/errors/exit-codes.js';
 import { CaseAbortedError, type CaseAbortReason } from '#core/errors/case-aborted-error.js';
 import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { REPORT_ERROR_DETAILS, projectReportErrorDetails, reportError } from '#report/error-mapping.js';
@@ -18,14 +19,9 @@ class ClassifiedError extends AmbercastError {
   }
 }
 
-const REPORTABLE_KIND_ORACLE = [
-  'config-invalid', 'secret-unresolved', 'target-unresolved', 'prompt-path-invalid',
-  'secret-literal-rejected', 'secret-env-var-collision', 'secret-consent-required',
-  'secret-syntax-rejected', 'missing-plan', 'stale-ir', 'integrity-violation',
-  'grounding-unresolved', 'browser-launch-failed', 'executor-unsupported',
-  'ai-executor-unavailable', 'agentic-step-failed', 'ai-response-invalid',
-  'fs-io-error', 'unexpected-crash', 'interrupted', 'case-aborted', 'prompt-ambiguous',
-] as const satisfies readonly ReportableErrorKind[];
+const REPORTABLE_KIND_ORACLE = Object.keys(ERROR_EXIT_CODES).filter(
+  (kind): kind is ReportableErrorKind => kind !== 'assertion-failed' && kind !== 'no-tests-found' && kind !== 'port-unavailable',
+);
 
 function representativeError(kind: ReportableErrorKind): AmbercastError {
   if (kind === 'case-aborted') return new CaseAbortedError('Case stopped at step-a.', 'run-value-missing', 'step-a');

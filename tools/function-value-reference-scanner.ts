@@ -400,8 +400,10 @@ export function scanFunctionValueReferences(
       : propertyType(resultType, 'value');
   };
   /**
-   * Derives an iterator member's yielded type from the member's own call
-   * signature. Nominal iterator references retain their first type argument;
+   * Derives an iterator member's yielded type from the member's own
+   * zero-argument-eligible call signature (see
+   * `isZeroArgumentEligibleSignature` below). Nominal iterator references
+   * retain their first type argument;
    * structural and non-generic results fall back to `next().value`. Combining
    * those paths would widen ordinary `Iterator<T, ...>` and `Iterable<T>` to
    * `any` through their default `TReturn`. A custom generic iterator whose
@@ -409,10 +411,49 @@ export function scanFunctionValueReferences(
    * boundary because recovering that mapping would reimplement generic
    * instantiation.
    */
+  /**
+   * Decides whether a declared overload of `[Symbol.iterator]` or
+   * `[Symbol.asyncIterator]` is the one for-of/for-await-of actually calls,
+   * since that call always passes zero arguments regardless of how many
+   * overloads a member declares or in what order. The checker's own
+   * call-signature list preserves declaration order but carries no "this is
+   * the one a zero-argument call resolves to" flag, so selecting the first
+   * declared overload unconditionally would silently miss the real
+   * zero-argument overload's yield type whenever a required-argument
+   * overload is declared first (#283). Only
+   * public `ts.Signature`/`ts.TypeChecker` members are read —
+   * `getParameters()`, `isTupleType`, `isArrayType`, and
+   * `TupleTypeReference.target.minLength` — because arity bookkeeping such as
+   * `minArgumentCount` is internal-only and would tie this scanner to one
+   * compiler version. A parameter does not block eligibility when it is
+   * optional, defaulted, a rest parameter over a tuple whose `minLength` is
+   * zero, or a rest parameter over a non-tuple array (including one
+   * instantiated with a concrete type argument); an unresolved generic rest
+   * is excluded conservatively rather than guessed eligible — even though
+   * TypeScript itself permits a bare zero-argument call against one — because
+   * there is no public signal here to distinguish a safely zero-length
+   * generic rest from one that is not. `thisParameter` and any
+   * `typeParameters` never appear in `getParameters()`, so neither blocks
+   * eligibility on its own.
+   */
+  const isZeroArgumentEligibleSignature = (signature: ts.Signature): boolean => (
+    signature.getParameters().every((parameter) => {
+      const declaration = parameter.valueDeclaration;
+      if (declaration === undefined || !ts.isParameter(declaration)) return false;
+      if (declaration.questionToken !== undefined || declaration.initializer !== undefined) return true;
+      if (declaration.dotDotDotToken === undefined) return false;
+      const restType = checker.getTypeOfSymbolAtLocation(parameter, declaration);
+      if (checker.isTupleType(restType)) {
+        return (restType as ts.TupleTypeReference).target.minLength === 0;
+      }
+      return checker.isArrayType(restType);
+    })
+  );
   const iteratorMemberElementType = (iteratorProperty: ts.Symbol | undefined): ts.Type | undefined => {
     if (iteratorProperty === undefined) return undefined;
     const iteratorMethodType = checker.getTypeOfSymbolAtLocation(iteratorProperty, canonicalDeclaration);
-    const signature = checker.getSignaturesOfType(iteratorMethodType, ts.SignatureKind.Call)[0];
+    const signature = checker.getSignaturesOfType(iteratorMethodType, ts.SignatureKind.Call)
+      .find(isZeroArgumentEligibleSignature);
     if (signature === undefined) return undefined;
     const iteratorReturnType = checker.getReturnTypeOfSignature(signature);
     const isTypeReference = Boolean(iteratorReturnType.flags & ts.TypeFlags.Object)
@@ -423,6 +464,17 @@ export function scanFunctionValueReferences(
     if (typeArgument !== undefined) return typeArgument;
     const nextMethodType = propertyType(iteratorReturnType, 'next');
     if (nextMethodType === undefined) return undefined;
+    // Deliberately not run through isZeroArgumentEligibleSignature: the
+    // standard library's own next() declaration (lib.es2015.iterable.d.ts)
+    // types its rest parameter as a union of two tuples
+    // (`...[value]: [] | [TNext]`) rather than a single resolvable tuple or
+    // array, so isTupleType/isArrayType would reject that union and
+    // incorrectly make this signature look ineligible. #283's overload-order
+    // blind spot is specific to the well-known-symbol members above
+    // (whose overloads this module does read via public declaration-order
+    // call signatures); a user-defined structural next() reached through
+    // those members has no rest parameter in the existing corpus and is
+    // unaffected either way.
     const nextSignature = checker.getSignaturesOfType(nextMethodType, ts.SignatureKind.Call)[0];
     if (nextSignature === undefined) return undefined;
     const iterationResultType = checker.getReturnTypeOfSignature(nextSignature);

@@ -189,18 +189,32 @@ type PrepareInstructionCoveredStepsResult =
   | { readonly success: true; readonly data: InstructionAttributedSteps }
   | { readonly success: false; readonly issues: readonly ((InstructionCoverageIssue | ElementIntentIssue | TextEqualsSelfQuoteIssue) & { readonly stepId: string })[] };
 
+/**
+ * This module's own closed set of self-quote issue codes (currently one
+ * member), proven a subset of `AiResponseIssueCode` by an independent
+ * reverse tripwire further below. Deriving this type *from* the report
+ * vocabulary with `Extract<AiResponseIssueCode, '...'>` instead would make
+ * that proof vacuous for the same reason `SecretNamingIssueCode` in
+ * secret-naming.ts documents: a type derived from the report vocabulary is
+ * trivially a subset of itself even after the literal is removed from that
+ * vocabulary (#492).
+ */
+export type TextEqualsSelfQuoteIssueCode = 'text-equals-self-quote';
+
 /** Retryable refusal when one assertion uses its target quote as its expected value. */
 type TextEqualsSelfQuoteIssue = {
-  readonly code: Extract<AiResponseIssueCode, 'text-equals-self-quote'>;
+  readonly code: TextEqualsSelfQuoteIssueCode;
   readonly path: readonly (string | number)[];
   readonly message: string;
 };
 
-// Fails to compile if 'text-equals-self-quote' is ever removed from or renamed
-// away in the report vocabulary, since Extract would then resolve to never and
-// no value could satisfy TextEqualsSelfQuoteIssue['code'].
-const _selfQuoteCodeKnownToReport: TextEqualsSelfQuoteIssue['code'] = 'text-equals-self-quote';
-void _selfQuoteCodeKnownToReport;
+// Fails to compile if TextEqualsSelfQuoteIssueCode ever gains a member the
+// report vocabulary does not know about. This check starts from this
+// module's own union rather than from AiResponseIssueCode — see
+// TextEqualsSelfQuoteIssueCode's own doc comment above for why that
+// direction matters (#492).
+const _selfQuoteCodeReverseTripwire: Record<Exclude<TextEqualsSelfQuoteIssueCode, AiResponseIssueCode>, never> = {};
+void _selfQuoteCodeReverseTripwire;
 
 /** Non-fatal report warning for an action with no confirming step. */
 type ActionUnconfirmedWarning = { readonly kind: 'action-unconfirmed'; readonly stepId: StepId };

@@ -474,6 +474,27 @@ describe('checkReference', () => {
 });
 
 describe('error family counts', () => {
+  it('does not let a fenced code example with the correct count mask a stale documented count', async () => {
+    const docWithFencedExample = [
+      '## Next action by report error {#next-action-by-report-error}',
+      '',
+      'Example rendering:',
+      '',
+      '```text',
+      'The report schema defines two usage codes and three environment codes, structurally separated by kind in the report schema.',
+      '```',
+      '',
+      'The report schema defines five usage codes and three environment codes, structurally separated by kind in the report schema.',
+      '',
+    ].join('\n');
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { 'agents/operating-contract.md': docWithFencedExample },
+    }));
+    expect(violations.filter((v) => v.check === 'error-family-counts')).toEqual([
+      { check: 'error-family-counts', page: 'agents/operating-contract', rule: 'usage-count', expected: '2', actual: '5' },
+    ]);
+  });
+
   it('reports a usage-count mismatch on the English page', async () => {
     const violations = await checkFixture(createReferenceFixture({
       docs: { 'agents/operating-contract.md': operatingContractDocs['agents/operating-contract.md'].replace('two usage codes', 'five usage codes') },

@@ -491,7 +491,7 @@ async function checkErrorFamilyCounts(docsRoot, errorFamilies) {
   ];
   const violations = [];
   for (const [page, pattern, parse] of pages) {
-    const match = pattern.exec(await readFile(join(docsRoot, `${page}.md`), 'utf8'));
+    const match = pattern.exec(maskCodeRegions(await readFile(join(docsRoot, `${page}.md`), 'utf8')));
     const counts = match && [parse(match[1]), parse(match[2])];
     for (const [index, family] of ['usage', 'environment'].entries()) {
       const expected = String(errorFamilies[family].length);

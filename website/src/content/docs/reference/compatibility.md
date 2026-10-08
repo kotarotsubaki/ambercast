@@ -14,6 +14,7 @@ Ambercast defines artifact-format compatibility and regeneration boundaries acro
 | `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
 | `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
 | `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 
 Rows list 0.1.0, 0.2.0, each release that changed the Plan or Grounding schema version, and every release from 0.8.0 on.
 

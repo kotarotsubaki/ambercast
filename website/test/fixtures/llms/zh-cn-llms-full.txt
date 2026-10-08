@@ -1432,6 +1432,7 @@ ambercast 在不同版本之间定义了明确的产物格式兼容性与重新�
 | `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
 | `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
 | `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 
 表中列出 0.1.0、0.2.0、每个变更 Plan 或 Grounding Schema 版本的发布版本，以及从 0.8.0 起的所有发布版本。
 
@@ -1660,7 +1661,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生工件 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 工件 Schema 版本 |
-| `0.8.0` | `0.8.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.9` |
+| `0.9.0` | `0.9.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
 | `@ambercast-secret` | `@ambercast-secret` 是被拒绝的旧式 Prompt 语法，必须在重新生成 Plan v3 工件前移除。 | Prompt 解析器；[迁移机密授权](/ambercast/zh-cn/how-to/upgrade/#migrate-secret-grants) | 密钥引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -2277,7 +2278,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.8.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本规范描述了 ambercast 0.9.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## 规范性用语 {#normative-language}
 

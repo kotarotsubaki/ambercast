@@ -1,11 +1,11 @@
 ---
 title: "Ambercast 计划规范"
-description: "本规范描述了 ambercast 0.8.0 接受的工件。"
+description: "本规范描述了 ambercast 0.9.0 接受的工件。"
 ---
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.8.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本规范描述了 ambercast 0.9.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## 规范性用语 {#normative-language}
 

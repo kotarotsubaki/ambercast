@@ -1452,6 +1452,7 @@ ambercast が生成する Plan や Grounding などのアーティファクト�
 | `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
 | `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
 | `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 
 表には 0.1.0、0.2.0、Plan または Grounding のスキーマバージョンが変更された各リリース、および 0.8.0 以降のすべてのリリースを記載します。
 
@@ -1696,7 +1697,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `.runs` | `.runs` はデフォルトの `runsDir` の最終セグメントであり、独立して解決されるルートではありません。 | 設定 / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | コンパニオンアーティファクト |
 | `.test.md` | `.test.md` は、検出されたプロンプトパスがレイアウトマッピングを受け取るために必要な正確なサフィックスです。 | レイアウト解決ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity) | 任意のMarkdown |
 | `0.1.0` | `0.1.0` はリポジトリのチェンジログに記載されている2026-09-03のリリースを示します。 | [変更履歴](/ambercast/ja/reference/changelog/#release-010) | アーティファクトのスキーマバージョン |
-| `0.8.0` | `0.8.0` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.9` |
+| `0.9.0` | `0.9.0` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` は、最も強い優先度から最も弱い優先度への固定されたプロセス終了コードの優先順位です。 | 終了コードセレクター; [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) | 数値順 |
 | `@ambercast-secret` | `@ambercast-secret` は拒否されるレガシープロンプト構文であり、Plan v3 アーティファクトを再生成する前に除去する必要があります。 | プロンプトパーサー; [シークレットグラントの移行](/ambercast/ja/how-to/upgrade/#migrate-secret-grants) | シークレット参照 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` は、環境変数によるプロバイダーのオーバーライドを指定します。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -2322,7 +2323,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.8.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 3 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 3 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## 規範的文言 {#normative-language}
 

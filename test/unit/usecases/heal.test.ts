@@ -1692,7 +1692,7 @@ describe('heal state-machine contract', () => {
     }
   });
 
-  it('skips Stage 1 for an AI step with a current covered trace', async () => {
+  it('TEST-H4 skips Stage 1 for an AI step with a current covered trace, recording trace-current', async () => {
     const scenario = await createScenario({
       steps: [Step.parse({
         id: 'recorded-ai', kind: 'ai', target: 'web', instruction: 'Verify the dashboard.',
@@ -1712,9 +1712,10 @@ describe('heal state-machine contract', () => {
       aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) }),
     });
 
-    await heal(scenario.deps, OPTIONS);
+    const result = await heal(scenario.deps, OPTIONS);
 
     expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(3);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'recorded-ai', outcome: 'not-eligible', reason: 'trace-current' }]));
   });
 
   it('keeps none-classified navigate failures out of Stage 1 even with an element entry', async () => {

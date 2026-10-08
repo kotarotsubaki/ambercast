@@ -340,6 +340,45 @@ describe('TEST-R11 report and event vocabulary', () => {
     expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'ai-proposed', confirmed });
   });
 
+  it.each([
+    ['passed', true],
+    ['failed', false],
+  ] as const)('TEST-7 promotes an action binding only after an ai step listed as its confirmer %s via trace replay', async (_label, confirmed) => {
+    const confirmingAiStep = { ...aiStep('confirm-via-ai'), instructionCoverage: [{ id: 'dashboard-reached', kind: 'success' as const, sourceSpan: intent.sourceSpan }], confirms: ['click-submit'] } as TestStep;
+    const f = await fixture({
+      steps: [click, confirmingAiStep],
+      entries: { 'confirm-via-ai': { kind: 'ai', trace: coveredTrace([], [passingText('Cached dashboard')]) } },
+    });
+    if (_label === 'failed') vi.spyOn(f.session, 'evaluateAssert').mockResolvedValue({ passed: false, message: 'Dashboard not shown' });
+
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ id: 'click-submit', status: 'passed', binding: { provenance: 'quoted-match', confirmed } });
+  });
+
+  it('keeps a navigate step\'s binding state independent of another case\'s confirmed action sharing its step id', async () => {
+    // ponytail: bindingStates is a runCase-local const (run.ts ~4212). On the
+    // ordinary success path, an element-binding step re-executes groundedTarget
+    // and overwrites its own entry, masking a hypothetical cross-case leak.
+    // Navigate never touches bindingStates, making such a leak observable here.
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], FINGERPRINT));
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const firstPath = await writePrompt(recordingStorage.storage, 'first.test.md');
+    const secondPath = await writePrompt(recordingStorage.storage, 'second.test.md');
+    const clickStep: TestStep = { id: 'shared-id', kind: 'action', action: 'click', target: 'web', intent: SUBMIT_INTENT };
+    await seedFreshArtifacts(recordingStorage.storage, firstPath, [clickStep], {
+      'shared-id': { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest: computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT }), provenance: 'quoted-match' },
+    });
+    const navigateStep: TestStep = { id: 'shared-id', kind: 'action', action: 'navigate', target: 'web', url: '/next' };
+    await seedFreshArtifacts(recordingStorage.storage, secondPath, [navigateStep], {});
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, files: [firstPath, secondPath] });
+
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ id: 'shared-id', status: 'passed', binding: { provenance: 'grounding', confirmed: true } });
+    expect(outcome.results[1]?.result.steps[0]).toMatchObject({ id: 'shared-id', status: 'passed' });
+    expect(outcome.results[1]?.result.steps[0]).not.toHaveProperty('binding');
+  });
+
   it('measures stage-1 quote wait with an integer fake-clock duration and no AI timing', async () => {
     const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
     const f = await fixture({ clock, samples: [capture([]), capture(['Submit'])] });
@@ -2194,6 +2233,52 @@ describe('run', () => {
         proposalContext, resolvedSecrets, new Map(), (value) => value,
       )).toThrowError(expect.objectContaining({ reason: 'grounding-secret-contaminated' }));
       expect(executor.structuredRequests).toHaveLength(0);
+    });
+
+    it('TEST-R4 aborts before provider dispatch through run() when a redacted reference collides with a second resolved secret', async () => {
+      // Redaction replaces a resolved secret's value with its own reference,
+      // which contains the secret's name. A second, independently resolved
+      // secret whose value equals that name makes the post-redaction detector
+      // fire with the production redactor and detector unmodified.
+      const leakedValue = 'ALPHA_TOKEN';
+      const passwordRef = '{{secrets.password}}';
+      const otherRef = '{{secrets.other}}';
+      const emailFillSecretDigest = computeIntentDigest({ stepKind: 'action', operation: 'fill-secret', intent: EMAIL_INTENT });
+      const session = createFakeBrowserSession(liveEntries([PASSWORD, EMAIL], FINGERPRINT));
+      const leakedTree = {
+        role: 'root', name: '', children: [
+          { role: 'button', name: 'Submit', children: [] },
+          { role: 'form', name: `Sign in ${leakedValue}`, children: [] },
+        ],
+      };
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: leakedTree, rawYaml: 'stable', scalarValues: [] });
+      const executor = scriptedAi({ outcome: 'none' });
+      const resolveAiExecutor = vi.fn(async () => executor);
+      const { deps, recordingStorage } = createScenario({
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+        resolveAiExecutor,
+        secrets: createFakeSecretsProvider(new Map([[passwordRef, leakedValue], [otherRef, 'password']])),
+      });
+      const steps: TestStep[] = [
+        { id: 'fill-password-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_INTENT, secretRef: passwordRef },
+        { id: 'fill-other-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: EMAIL_INTENT, secretRef: otherRef },
+        { id: 'click-submit', kind: 'action', action: 'click', target: 'web', intent: SUBMIT_INTENT },
+      ];
+      const testPath = await writePrompt(recordingStorage.storage);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, steps, {
+        'fill-password-secret': { kind: 'element', locator: PASSWORD, fingerprint: FINGERPRINT, intentDigest: PASSWORD_FILL_SECRET_DIGEST, provenance: 'quoted-match' },
+        'fill-other-secret': { kind: 'element', locator: EMAIL, fingerprint: FINGERPRINT, intentDigest: emailFillSecretDigest, provenance: 'quoted-match' },
+      });
+
+      const outcome = await run(deps, DEFAULT_OPTIONS);
+
+      expect(resolveAiExecutor).not.toHaveBeenCalled();
+      expect(executor.structuredRequests).toEqual([]);
+      expect(outcome.results[0]?.result.aiCalls).toBe(0);
+      expect(outcome.results[0]?.error).toMatchObject({
+        kind: 'case-aborted', exitCode: 3, details: { reason: 'grounding-secret-contaminated', stepId: 'click-submit' },
+      });
+      expect(outcome.results[0]?.result.explanation).not.toContain(leakedValue);
     });
 
     it('TEST-R3 accepts a quoted candidate rendered before the deadline without AI and records its wait', async () => {

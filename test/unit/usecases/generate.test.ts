@@ -3711,6 +3711,29 @@ describe('generate v5 element intent and confirmation contracts', () => {
     ] }]);
   });
 
+  it.each([
+    ['generated', false],
+    ['would-generate', true],
+  ] as const)('TEST-G4 orders secret warnings before an unconfirmed action warning on a %s row', async (status, dryRun) => {
+    const data = {
+      steps: [
+        { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT },
+        { id: 'fill-account', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...generatedNamedIntent('Account'), quote: undefined }, secret: { nameHint: 'password' } },
+        { id: 'press-key', kind: 'action', action: 'press', target: 'web', intent: GENERATED_PASSWORD_INTENT, key: 'Enter' },
+        { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Dashboard', confirms: ['press-key'] },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data, raw: JSON.stringify(data) }) }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    const outcome = await generate(withSecretConfig(scenario.deps, ['password']), { ...DEFAULT_OPTIONS, dryRun });
+    expect(outcome.results).toMatchObject([{ status, warnings: [
+      { kind: 'secret-name-reused-across-targets', name: 'password', stepIds: ['fill-password', 'fill-account'] },
+      { kind: 'action-unconfirmed', stepId: 'fill-password' },
+      { kind: 'action-unconfirmed', stepId: 'fill-account' },
+    ] }]);
+  });
+
   it('TEST-G6 regenerates a v4 plan with v2 grounding and suppresses old-target warning on force', async () => {
     const scenario = createScenario();
     const file = await writePrompt(scenario.recordingStorage.storage);

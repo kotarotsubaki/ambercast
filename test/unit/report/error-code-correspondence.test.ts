@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ERROR_EXIT_CODES, type ErrorExitCode } from '../../../src/core/errors/exit-codes.js';
 import type { ErrorKind } from '../../../src/core/errors/types.js';
+import { REPORT_ERROR_DETAILS } from '../../../src/report/error-mapping.js';
 import { ReportError, ReportErrorCode } from '../../../src/report/schema.js';
 
 interface SchemaUnderTest {
@@ -78,11 +79,19 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     expect((ERROR_EXIT_CODES as Record<string, ErrorExitCode>)[errorKind]).toBe(exitCode);
   });
 
-  it('keeps assertion-failed and no-tests-found out of the correspondence table', () => {
+  it('keeps assertion-failed, no-tests-found, and port-unavailable out of the correspondence table', () => {
     const mappedKinds = ERROR_CODE_CORRESPONDENCE.map(({ errorKind }) => errorKind);
 
     expect(mappedKinds).not.toContain('assertion-failed');
     expect(mappedKinds).not.toContain('no-tests-found');
+    expect(mappedKinds).not.toContain('port-unavailable');
+  });
+
+  it('maps exactly the reportable ErrorKinds from the exit-code table', () => {
+    const excludedKinds = new Set(['assertion-failed', 'no-tests-found', 'port-unavailable']);
+    const reportableKinds = Object.keys(ERROR_EXIT_CODES).filter((kind) => !excludedKinds.has(kind));
+
+    expect(new Set(Object.keys(REPORT_ERROR_DETAILS))).toStrictEqual(new Set(reportableKinds));
   });
 
   it('covers every ReportErrorCode and reportable ErrorKind exactly once', () => {

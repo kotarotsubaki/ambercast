@@ -43,7 +43,9 @@ project. Do not commit a development build's generated `plan` or `grounding`
 there. For a release check, pack the release commit and install it into the
 mid-layer verification target before the release PR, then verify that target
 again against the published version after publication. The mid-layer procedure
-is tracked in issue #544.
+is tracked in issue #544. Before merging the release PR, also follow the
+compatibility-table/glossary/spec-overview update procedure in AGENTS.md's
+Branching & releases section.
 
 ## How to contribute
 

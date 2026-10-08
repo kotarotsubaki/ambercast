@@ -1,11 +1,11 @@
 ---
 title: "Ambercast Plan 仕様"
-description: "本仕様は、ambercast 0.7.0 が受け付けるアーティファクトについて記述する。"
+description: "本仕様は、ambercast 0.8.0 が受け付けるアーティファクトについて記述する。"
 ---
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.7.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 3 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本仕様は、ambercast 0.8.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 3 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## 規範的文言 {#normative-language}
 
@@ -31,7 +31,7 @@ flowchart LR
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
 | Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
-| Report `schemaVersion` | `3.10` | repo:src/report/schema.ts:57 |
+| Report `schemaVersion` | `3.10` | repo:src/report/schema.ts:58 |
 
 ## 読解順序 {#reading-order}
 

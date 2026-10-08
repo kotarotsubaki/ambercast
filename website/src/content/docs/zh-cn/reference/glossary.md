@@ -3,7 +3,7 @@ title: 术语表
 description: ambercast 全站术语的权威规范性定义以及翻译人员必须保留的字面量词元索引。
 ---
 
-本参考页是 ambercast 全站术语的单一权威来源，同时作为翻译过程中必须严格保留的字面量词元（literal tokens）索引。此处的每项定义均具备规范性，且由单句界定，不冗余展开完整的字段、标志位、状态或错误表格；请遵循各条目对应的归属链接以查阅完整契约。处于规划阶段（在 0.3.1 中未实现）的词元不具备 0.3.1 运行时语义，不得将其呈现为当前可用状态。
+本参考页是 ambercast 全站术语的单一权威来源，同时作为翻译过程中必须严格保留的字面量词元（literal tokens）索引。此处的每项定义均具备规范性，且由单句界定，不冗余展开完整的字段、标志位、状态或错误表格；请遵循各条目对应的归属链接以查阅完整契约。处于规划阶段（在当前版本中未实现）的词元不具备当前版本的运行时语义，不得将其呈现为当前可用状态。
 
 ## 工件术语 {#artifact-terms}
 
@@ -42,6 +42,8 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 
 ## 翻译不可变词元注册表 {#translation-invariant-registry}
 
+第四列中的报告版本是对应发布版本的发布提交中记录的 `REPORT_SCHEMA_VERSION`。
+
 | 不可变词元 | 规范性说明 | 归属 | 避免混淆的概念 |
 | --- | --- | --- | --- |
 | `$id` | `$id` 是为每个生成的 Schema 公开发布的 JSON Schema 标识符。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#publication-metadata) | 配置中的 `$schema` |
@@ -51,7 +53,7 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `--allow-empty` | `--allow-empty` 使得解析该选项的命令在选择集为空时仍被允许执行。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` 解除 view 的非交互式拒绝；若终端已经处于交互式，则为空操作。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#interactive-gate) | 已实现的 `--headed` |
 | `--resolve` | `--resolve` 会在 grounding 缺失时显式允许 run 使用实时 AI 解析；未传入时，run 会拒绝该未命中。 | `ambercast run`；[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags) | 离线测试发现 |
-| `--clear` | `--clear` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 baseline 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | 当前命令执行的文件删除 |
+| `--clear` | `--clear` 处于规划阶段（在当前版本中未实现），没有被当前 baseline 解析器接受的语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | 当前命令执行的文件删除 |
 | `--config` | `--config` 是命令局部选项，仅由 generate 和 check 命令解析。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` 指定 `ambercast init` 生成文件所在的目标目录。 | `ambercast init`；[ambercast init](/ambercast/zh-cn/reference/cli/init/#flags) | 配置 `testDir` |
 | `--dry-run` | `--dry-run` 会阻止 generate 与 heal 命令写入工件。 | generate/heal；[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags) | `--list` |
@@ -59,16 +61,16 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `--host` | `--host` 选择 view 的绑定地址；必须是具体 IP 或 `localhost`，不允许通配地址。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#host-binding) | 目标的 `baseUrl` |
 | `--json` | `--json` 在除 `init` 与 `view` 之外的已实现命令返回后选择序列化的结构化报告输出。 | CLI 渲染器；[报告](/ambercast/zh-cn/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` 由 `generate`、`run`、`check`、`heal` 解析；各命令页面拥有各自的列表结果语义。`init` 与 `view` 均不接受该选项。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
-| `--no-reset` | `--no-reset` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 run 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | `--force` |
+| `--no-reset` | `--no-reset` 处于规划阶段（在当前版本中未实现），没有被当前 run 解析器接受的语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` 将 view 固定为单一的严格端口，而非自动递增尝试候选端口。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#port-selection) | 配置 `viewer.port` |
 | `--yes` | `--yes` 授权 heal 在无需交互式确认的情况下直接完成结算，并跳过 init 的确认提示；两者都不能替代用户自身的审查。 | `ambercast heal`；[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)；[ambercast init](/ambercast/zh-cn/reference/cli/init/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` 是确切的相邻 Grounding 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Plan 后缀 |
 | `.ambercast.plan.json` | `.ambercast.plan.json` 是确切的相邻 Plan 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Grounding 后缀 |
-| `.baseline` | `.baseline` 处于规划阶段（在 0.3.1 中未实现），没有 0.3.1 布局解析器会推导该路径。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-storage-and-freshness) | 已实现的 `.runs` |
+| `.baseline` | `.baseline` 处于规划阶段（在当前版本中未实现），当前布局解析器不会推导该路径。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-storage-and-freshness) | 已实现的 `.runs` |
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生工件 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 工件 Schema 版本 |
-| `0.7.0` | `0.7.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.10` |
+| `0.8.0` | `0.8.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.9` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
 | `@ambercast-secret` | `@ambercast-secret` 是被拒绝的旧式 Prompt 语法，必须在重新生成 Plan v3 工件前移除。 | Prompt 解析器；[迁移机密授权](/ambercast/zh-cn/how-to/upgrade/#migrate-secret-grants) | 密钥引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -86,14 +88,14 @@ description: ambercast 全站术语的权威规范性定义以及翻译人员必
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` 是由 `SECRET_REF_SOURCE` 构建的锚定全值正则表达式。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 未锚定的片段 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` 是唯一被接受的元素指纹算法字面量。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | Plan Schema 版本 2 |
 | `ambercast` | `ambercast` 是软件包二进制文件名称和 CLI 程序。 | package / CLI 概览 | 某个工件 Schema |
-| `ambercast baseline` | `ambercast baseline` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
+| `ambercast baseline` | `ambercast baseline` 处于规划阶段（在当前版本中未实现），会被当前解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
 | `ambercast check` | `ambercast check` 是已实现的只读新鲜度检查命令。 | [ambercast check](/ambercast/zh-cn/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` 是已实现的 Plan 生成命令。 | [ambercast generate](/ambercast/zh-cn/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` 是已实现且受守卫保护的工件修复命令。 | [ambercast heal](/ambercast/zh-cn/reference/cli/heal/) | 运行时回退 |
 | `ambercast init` | `ambercast init` 已实现，会写入四个文件。 | [ambercast init](/ambercast/zh-cn/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` 启动已实现的 stdio MCP 服务器。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | MCP 工具名 |
-| `ambercast restore` | `ambercast restore` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
-| `ambercast review` | `ambercast review` 处于规划阶段（在 0.3.1 中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
+| `ambercast restore` | `ambercast restore` 处于规划阶段（在当前版本中未实现），会被当前解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
+| `ambercast review` | `ambercast review` 处于规划阶段（在当前版本中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
 | `ambercast run` | `ambercast run` 是已实现的确定性重放命令。 | [ambercast run](/ambercast/zh-cn/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` 是已实现的只读本地结果查看器。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` 是已实现的只读 MCP 新鲜度检查工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |

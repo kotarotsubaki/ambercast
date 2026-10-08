@@ -145,7 +145,7 @@ export function buildHealReport(input: HealReportInput): HealReportOutput {
   // order; kinds unsupported at case scope are skipped without deduplication.
   const errors = outcome.errors.map(({ file, error }) => reportError(error, { scope: 'case', caseId: file }));
   for (const { file, stage3Error, finalReplayError } of outcome.results) {
-    // This exclusion is unreachable from a normal `heal()` result: only the report builder creates stage-3 interrupted errors and `heal()` rejects invalid prompt paths before Stage 3, while direct injection will throw once the exclusion is removed.
+    // This exclusion is unreachable from a normal `heal()` result because `heal()` passes every Stage 3 failure through case-scope `reportError` before storing `stage3Error`, which throws for these kinds; a direct caller injecting either kind will throw here once the exclusion is removed.
     if (stage3Error !== undefined && stage3Error.kind !== 'interrupted' && stage3Error.kind !== 'prompt-path-invalid') {
       errors.push(reportError(stage3Error, { scope: 'case', caseId: file }));
     }

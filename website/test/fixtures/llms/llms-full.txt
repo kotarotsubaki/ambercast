@@ -3463,7 +3463,7 @@ Links: [Exit codes](/ambercast/reference/exit-codes/#priority)
 
 ## Next action by report error {#next-action-by-report-error}
 
-The report schema defines eight usage codes and six environment codes, structurally separated by kind in the report schema. When an execution is interrupted, `INTERRUPTED` is run-scoped, while skipped result rows represent affected cases. Map each error family to its non-destructive first action:
+The report schema defines fifteen usage codes and eight environment codes, structurally separated by kind in the report schema. When an execution is interrupted, `INTERRUPTED` is run-scoped, while skipped result rows represent affected cases. Map each error family to its non-destructive first action:
 
 | Error family | Next safe action |
 | --- | --- |

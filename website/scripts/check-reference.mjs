@@ -10,14 +10,15 @@ import { plannedPageSlugs, readCapabilityPages } from './lib/capability-pages.mj
  * that the site publishes.
  *
  * The checker reads public CLI, configuration-schema, and capabilities artifacts plus the private
- * defaults artifact. It compares CLI flags, the command matrix, configuration keys/defaults, and
- * code vocabularies. Markdown parsing excludes code regions, preserves protected pipes, and
+ * defaults and error-family artifacts. It compares CLI flags, the command matrix,
+ * configuration keys/defaults, code vocabularies, and localized error-family counts.
+ * Markdown parsing excludes code regions, preserves protected pipes, and
  * normalizes aliases; violations are stable `{ check, page, rule, expected, actual }` records.
  *
  * @typedef {{ check: string, page: string, rule: string, expected: string, actual: string }} Violation
  * @typedef {{ name: string, alias: string | null }} FlagIdentifier
  * @typedef {{ lines: string[], startLine: number }} MarkdownTable
- * @typedef {{ docsRoot?: string, publicRoot?: string, configDefaultsPath?: string, capabilityPagesPath?: string }} CheckReferenceOptions
+ * @typedef {{ docsRoot?: string, publicRoot?: string, configDefaultsPath?: string, capabilityPagesPath?: string, errorFamiliesPath?: string }} CheckReferenceOptions
  */
 
 /**
@@ -35,13 +36,15 @@ export async function checkReference(options = {}) {
   const docsRoot = options.docsRoot ?? resolve(websiteRoot, 'src/content/docs');
   const publicRoot = options.publicRoot ?? resolve(websiteRoot, 'public');
   const configDefaultsPath = options.configDefaultsPath ?? resolve(websiteRoot, '../dist/manifest/config-defaults.json');
+  const errorFamiliesPath = options.errorFamiliesPath ?? resolve(websiteRoot, '../dist/manifest/report-error-families.json');
   const capabilityPagesPath = resolve(websiteRoot, options.capabilityPagesPath ?? 'src/data/capability-pages.json');
   const mapping = await readCapabilityPages(capabilityPagesPath);
-  const [cliManifest, configSchema, capabilities, configDefaults] = await Promise.all([
+  const [cliManifest, configSchema, capabilities, configDefaults, errorFamilies] = await Promise.all([
     readGeneratedJson(join(publicRoot, 'manifest/cli.json')),
     readGeneratedJson(join(publicRoot, 'schemas/config.schema.json')),
     readGeneratedJson(join(publicRoot, 'capabilities.json')),
     readGeneratedJson(configDefaultsPath),
+    readGeneratedJson(errorFamiliesPath),
   ]);
   const violations = (await Promise.all([
     checkCliFlagTables(docsRoot, cliManifest),
@@ -49,6 +52,7 @@ export async function checkReference(options = {}) {
     checkConfigurationReference(docsRoot, configSchema, configDefaults),
     checkCodeVocabularies(docsRoot, capabilities),
     checkPlannedPages(docsRoot, capabilities, mapping),
+    checkErrorFamilyCounts(docsRoot, errorFamilies),
   ])).flat();
   return violations.sort(compareViolations);
 }
@@ -453,6 +457,47 @@ async function checkCodeVocabularies(docsRoot, capabilities) {
   ]) {
     const table = anchoredTable(await readFile(join(docsRoot, `${page}.md`), 'utf8'), anchor);
     addSetViolation(violations, 'code-vocabularies', page, rule, new Set(expected), new Set((table?.lines.slice(2) ?? []).map(firstCellIdentifier).filter(Boolean)));
+  }
+  return violations;
+}
+
+/**
+ * Parses only the number forms used by the fixed, localized count sentences, so
+ * unsupported numerals cannot be silently interpreted by a general parser.
+ * Manifest lengths are `expected`; documented counts are `actual`. A missing
+ * sentence and an unparseable captured numeral both leave the documented count
+ * unknown and therefore report `actual: 'sentence-not-found'`.
+ *
+ * @param {string} docsRoot Root directory containing the site reference Markdown pages.
+ * @param {{ usage: string[], environment: string[] }} errorFamilies Parsed private error-family manifest.
+ * @returns {Promise<Violation[]>} Count mismatches or missing-sentence violations.
+ */
+async function checkErrorFamilyCounts(docsRoot, errorFamilies) {
+  const english = Object.fromEntries('one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty'.split(' ').map((word, index) => [word, index + 1]));
+  const chineseDigits = '零一二三四五六七八九';
+  const parseChinese = (text) => {
+    if (/^[零一二三四五六七八九]$/.test(text)) return chineseDigits.indexOf(text);
+    if (text === '十') return 10;
+    const teens = /^十([一二三四五六七八九])$/.exec(text);
+    if (teens) return 10 + chineseDigits.indexOf(teens[1]);
+    const tens = /^([一二三四五六七八九])十([一二三四五六七八九])?$/.exec(text);
+    if (tens) return chineseDigits.indexOf(tens[1]) * 10 + (tens[2] ? chineseDigits.indexOf(tens[2]) : 0);
+    return undefined;
+  };
+  const pages = [
+    ['agents/operating-contract', /The report schema defines (\w+) usage codes and (\w+) environment codes/, (text) => english[text.toLowerCase()]],
+    ['ja/agents/operating-contract', /レポートスキーマは、(\d+)[個つ]の使用方法コードと(\d+)[個つ]の環境コードを定義/, Number],
+    ['zh-cn/agents/operating-contract', /报告 schema 定义了([一二三四五六七八九十零]+)种用法代码与([一二三四五六七八九十零]+)种环境代码/, parseChinese],
+  ];
+  const violations = [];
+  for (const [page, pattern, parse] of pages) {
+    const match = pattern.exec(await readFile(join(docsRoot, `${page}.md`), 'utf8'));
+    const counts = match && [parse(match[1]), parse(match[2])];
+    for (const [index, family] of ['usage', 'environment'].entries()) {
+      const expected = String(errorFamilies[family].length);
+      const actual = counts && counts.every((count) => count !== undefined) ? String(counts[index]) : 'sentence-not-found';
+      if (actual !== expected) violations.push({ check: 'error-family-counts', page, rule: `${family}-count`, expected, actual });
+    }
   }
   return violations;
 }

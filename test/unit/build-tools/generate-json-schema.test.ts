@@ -6,7 +6,7 @@ import { getConfigJsonSchema } from '../../../src/core/config/json-schema.js';
 import { getGroundingJsonSchema, getPlanJsonSchema } from '../../../src/core/ir/json-schema.js';
 import { getReportJsonSchema } from '../../../src/report/json-schema.js';
 import { PLANNED_CAPABILITIES } from '../../../src/core/cli/capabilities.js';
-import { ReportErrorCode } from '../../../src/report/schema.js';
+import { ENVIRONMENT_REPORT_ERROR_CODES, ReportErrorCode, USAGE_REPORT_ERROR_CODES } from '../../../src/report/schema.js';
 
 interface CapturedWrite {
   path: string;
@@ -111,6 +111,10 @@ describe('writeGeneratedArtifacts', () => {
         }),
       },
       {
+        path: join('/dist-output', 'manifest', 'report-error-families.json'),
+        content: JSON.stringify({ usage: USAGE_REPORT_ERROR_CODES, environment: ENVIRONMENT_REPORT_ERROR_CODES }),
+      },
+      {
         path: join('/dist-output', 'manifest', 'config-defaults.json'),
         content: JSON.stringify({
           testDir: 'tests/ambercast',
@@ -142,6 +146,17 @@ describe('writeGeneratedArtifacts', () => {
 
   it('produces byte-identical writes when generation is repeated', () => {
     expect(captureGeneratedArtifactWrites()).toEqual(captureGeneratedArtifactWrites());
+  });
+
+  it('honors an explicit errorFamilies override instead of the schema-derived default', () => {
+    const writes: CapturedWrite[] = [];
+    writeGeneratedArtifacts({
+      outDir: '/dist-output',
+      writeFile: (path, content) => { writes.push({ path, content }); },
+      errorFamilies: { usage: ['ONE'], environment: ['TWO', 'THREE'] },
+    });
+    const manifest = artifactContent(writes, 'manifest/report-error-families.json');
+    expect(manifest).toBe(JSON.stringify({ usage: ['ONE'], environment: ['TWO', 'THREE'] }));
   });
 
   it('writes the CLI manifest with fixture-equivalent data and compact bytes', () => {

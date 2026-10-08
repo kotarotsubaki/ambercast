@@ -1149,7 +1149,7 @@ Report errors are strict objects scoped to either the overall command run or a s
 | Code | Optional `details` shape |
 | --- | --- |
 | `AGENTIC_STEP_FAILED` | Case scope only: `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible", "element-visible", "text-equals", "url-matches", or "element-count"; expected: string } }`; counters describe completed tool calls. |
-| `CASE_ABORTED` | Case scope only: `{ reason: ReportCaseAbortReason, stepId: string }`; `reason` is one of eight defined values. |
+| `CASE_ABORTED` | Case scope only: `{ reason: "run-reference-invalid", "run-value-missing", "secret-fill-incomplete", "agentic-no-terminal-evidence", "agentic-coverage-inexact", "agentic-proof-invalid", "grounding-secret-contaminated", or "grounding-snapshot-invalid"; stepId: string }`; `reason` is one of eight defined values. |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: any instruction-coverage, element-intent, or confirms issue code (`confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, `confirms-duplicate`), "text-equals-self-quote", "invalid-json", "schema-mismatch", "secret-allowed-name-not-projected", or "secret-conflicting-target-names" (the last two always carry stepId); path: Array<string or non-negative integer>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk, credential-prefix-ghp, credential-prefix-aws-access-key, high-entropy-token, or embedded-secret-reference; path: non-whitespace string; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
@@ -1423,13 +1423,10 @@ Ambercast defines artifact-format compatibility and regeneration boundaries acro
 
 | package version | Plan `schemaVersion` | Grounding `schemaVersion` | element fingerprint tag | report `schemaVersion` |
 | --- | --- | --- | --- | --- |
-| `0.1.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
+| `0.1.0` | `2` | `1` (not yet confirmed) | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
-| `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
-| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
-| `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
-
-Rows list 0.1.0, 0.2.0, each release that changed the Plan or Grounding schema version, and every release from 0.8.0 on.
+| `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
 
 In version 0.2.0, the provider request contract changed without incrementing the Plan schema version. That change updated `producerBundleFingerprint` and altered every prompt's `inputsDigest`, making 0.1.0 plans stale (see [Changelog](/ambercast/reference/changelog/#release-020)).
 
@@ -1458,15 +1455,15 @@ Source: https://kotarotsubaki.github.io/ambercast/reference/changelog/
 
 This reference tracks user-visible product behavior and public-contract changes across ambercast releases, ordering breaking changes before fixes.
 
-## Release 0.5.0 {#release-050}
+## Release 0.4.0 {#release-040}
 
-Release date: 2026-09-15.
+Release date: 2026-09-14.
 
 | Class | User-visible entry |
 | --- | --- |
 | BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model; Plan v2 is not migrated in place. |
 
-Version 0.5.0 has one declared breaking change.
+Version 0.4.0 has one declared breaking change.
 
 ## Release 0.2.0 {#release-020}
 
@@ -1598,7 +1595,7 @@ See also [Trust and security](/ambercast/explanation/trust-and-security/) and [C
 # Glossary
 Source: https://kotarotsubaki.github.io/ambercast/reference/glossary/
 
-This page is the single owner of site-wide terminology and the index of literal tokens that translators must preserve. Every definition here is normative and kept to a single sentence; follow each linked owner contract for complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
+This page is the single owner of site-wide terminology and the index of literal tokens that translators must preserve. Every definition here is normative and kept to a single sentence; follow each linked owner contract for complete field, flag, status, or error tables. Planned-only tokens have no 0.3.1 runtime semantics and are not available in current releases.
 
 ## Artifact terms {#artifact-terms}
 
@@ -1640,7 +1637,7 @@ The following command- and report-bound definitions govern execution, target res
 
 ## Translation invariant registry {#translation-invariant-registry}
 
-The following registry is the exhaustive inventory of literal tokens that must be preserved verbatim by translators across reference documentation. The report version in the fourth column is the `REPORT_SCHEMA_VERSION` recorded in that release's release commit.
+The following registry is the exhaustive inventory of literal tokens that must be preserved verbatim by translators across reference documentation:
 
 | invariant | normative sentence | owner | not to be confused with |
 | --- | --- | --- | --- |
@@ -1651,7 +1648,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--allow-empty` | `--allow-empty` makes an empty selection permissible for commands that parse it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` lifts view's non-interactive refusal; it is a no-op when the terminal is already interactive. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#interactive-gate) | implemented `--headed` |
 | `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
-| `--clear` | `--clear` is planned-only and has no accepted current baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
+| `--clear` | `--clear` is planned-only and has no accepted 0.3.1 baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
 | `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` names the directory `ambercast init` scaffolds into. | `ambercast init`; [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
 | `--dry-run` | `--dry-run` withholds artifact writes for generate and heal. | generate/heal; [ambercast generate](/ambercast/reference/cli/generate/#flags) | `--list` |
@@ -1659,16 +1656,16 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--host` | `--host` selects view's bind address; a concrete IP or `localhost`, never a wildcard. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#host-binding) | target `baseUrl` |
 | `--json` | `--json` selects serialized structured-report output after an implemented command other than `init` or `view` returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` is parsed by `generate`, `run`, `check`, and `heal`; each command page owns its listing result semantics. Neither `init` nor `view` accepts it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
-| `--no-reset` | `--no-reset` is planned-only and has no accepted current run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
+| `--no-reset` | `--no-reset` is planned-only and has no accepted 0.3.1 run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` fixes view to a single strict port instead of auto-incrementing through candidates. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#port-selection) | config `viewer.port` |
 | `--yes` | `--yes` authorizes heal settlement without an interactive confirmation, and skips init's confirmation prompt; neither substitutes for the user's own review. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` is the exact adjacent Grounding companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Plan suffix |
 | `.ambercast.plan.json` | `.ambercast.plan.json` is the exact adjacent Plan companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Grounding suffix |
-| `.baseline` | `.baseline` is planned-only and no current layout resolver derives it. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-storage-and-freshness) | implemented `.runs` |
+| `.baseline` | `.baseline` is planned-only and no 0.3.1 layout resolver derives it. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-storage-and-freshness) | implemented `.runs` |
 | `.runs` | `.runs` is the final segment of the default `runsDir`, not an independently resolved root. | configuration / [File layout](/ambercast/reference/file-layout/#run-artifacts) | companion artifacts |
 | `.test.md` | `.test.md` is the exact suffix required for a discovered prompt path to receive layout mappings. | layout resolver; [Prompt file format](/ambercast/reference/prompt-format/#file-identity) | arbitrary Markdown |
 | `0.1.0` | `0.1.0` names the 2026-09-03 release in the repository changelog. | [Changelog](/ambercast/reference/changelog/#release-010) | artifact schema version |
-| `0.8.0` | `0.8.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.9` |
+| `0.7.0` | `0.7.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` is the fixed process-exit precedence from strongest to weakest. | exit selector; [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) | numeric order |
 | `@ambercast-secret` | `@ambercast-secret` is rejected legacy prompt syntax and must be removed before regenerating a Plan v3 artifact. | prompt parser; [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants) | secret reference |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` supplies the environment provider override. | config environment; [Environment variables](/ambercast/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -1686,13 +1683,13 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` is the whole-value anchored regular expression built from `SECRET_REF_SOURCE`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | unanchored fragment |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` is the only accepted element-fingerprint algorithm literal. | `Fingerprint`; [Element fingerprint](/ambercast/spec/fingerprint/) | Plan schema version 2 |
 | `ambercast` | `ambercast` is the package binary name and CLI program. | package / CLI overview | an artifact schema |
-| `ambercast baseline` | `ambercast baseline` is planned-only and rejected by the current parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
+| `ambercast baseline` | `ambercast baseline` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast check` | `ambercast check` is the implemented read-only freshness command. | [ambercast check](/ambercast/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
 | `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` starts the implemented stdio MCP server. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | MCP tool name |
-| `ambercast restore` | `ambercast restore` is planned-only and rejected by the current parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
+| `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
 | `ambercast run` | `ambercast run` is the implemented deterministic replay command. | [ambercast run](/ambercast/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` is the implemented read-only local results viewer. | [ambercast view](/ambercast/reference/cli/view/) | `ambercast run` |
@@ -1741,10 +1738,10 @@ Annotations list readOnly / destructive / idempotent / openWorld, in that order.
 
 | Tool | CLI equivalent | Annotations | `isError: true` | Negative result with `isError: false` |
 | --- | --- | --- | --- | --- |
-| `ambercast_generate` | generate | false / false / true (weak) / false | Exit 2 or 3 | Exit 1 (strict ambiguity), exit 5 |
+| `ambercast_generate` | generate | false / false / true (weak) / false | Exit 2 (including `PROMPT_AMBIGUOUS`) or 3 | Exit 5 |
 | `ambercast_run` | run | false / false / false / true | Exit 2, 3, or 4 (MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED) | Exit 1 (assertion red), exit 5 |
 | `ambercast_check` | check | true / false / true / false | Exit 2 or 3 | Exit 4 (stale is a normal result in results[].status), exit 5 |
-| `ambercast_heal` | heal | false / true / false / true | Exit 2 (including CI refusal), 3, or 4; `HEAL_APPLY_TOKEN_INVALID`; `HEAL_APPLY_FAILED` | Exit 1 (unresolved or declined), exit 5 |
+| `ambercast_heal` | heal | false / true / false / true | Exit 2 (including CI refusal and `PROMPT_AMBIGUOUS`), 3, or 4; `HEAL_APPLY_TOKEN_INVALID`; `HEAL_APPLY_FAILED` | Exit 1 (unresolved or declined), exit 5 |
 | `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`; `JOB_FAILED` for a failed job; completed/cancelled jobs with a result use their source tool's mapping | Nonterminal record, job list, queued-cancel record |
 | `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
 
@@ -2288,7 +2285,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/overview/
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.8.0. The implementation accepts Plan schema version 5 and Grounding schema version 3. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/core/ir/schema.ts#L73)
+This specification describes the artifacts accepted by ambercast 0.7.0. The implementation accepts Plan schema version 5 and Grounding schema version 3. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/core/ir/schema.ts#L73)
 
 ## Normative language {#normative-language}
 
@@ -2314,7 +2311,7 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Plan `schemaVersion` | `5` | [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/core/ir/schema.ts#L62) |
 | Grounding `schemaVersion` | `3` | [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/core/ir/schema.ts#L73) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:258](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/core/ir/schema.ts#L258) |
-| Report `schemaVersion` | `3.10` | [src/report/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/report/schema.ts#L58) |
+| Report `schemaVersion` | `3.10` | [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.8.0/src/report/schema.ts#L57) |
 
 ## Reading order {#reading-order}
 
@@ -3376,7 +3373,7 @@ Links: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/amber
 
 ## Version policy {#version-policy}
 
-The published package version is listed in the [Compatibility table](/ambercast/reference/compatibility/#compatibility-table). The product policy is CLI-only through 0.x and ships 1.0.0 together with the cloud version. This pre-1.0 phase concentrates on stabilizing the standalone CLI tools before pairing them with the cloud release.
+The published package version is 0.3.1. The product policy is CLI-only through 0.x and ships 1.0.0 together with the cloud version. This pre-1.0 phase concentrates on stabilizing the standalone CLI tools before pairing them with the cloud release.
 
 Links: [Changelog](/ambercast/reference/changelog/), [Philosophy](/ambercast/philosophy/)
 

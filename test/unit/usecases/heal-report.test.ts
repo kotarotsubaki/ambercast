@@ -157,9 +157,13 @@ describe('buildHealReport', () => {
     assertDiagnosable(output.envelope);
   });
 
-  it('omits replay kinds that the case scope cannot report', () => {
+  it('throws when a Stage 3 interruption reaches the case report builder', () => {
+    expect(() => report({ outcome: outcome({ results: [healed('unresolved', new InterruptedError())] }) })).toThrow();
+  });
+
+  it('omits a final replay prompt-path-invalid error from case errors', () => {
     const output = report({ outcome: outcome({ results: [{
-      ...healed('unresolved'), stage3Error: new InterruptedError(),
+      ...healed('unresolved'),
       finalReplayError: new PromptPathInvalidError('invalid prompt', { path: 'login.test.md', reason: 'not-test-md' }),
     }] }) });
 

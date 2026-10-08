@@ -25,3 +25,7 @@ error FS_IO_ERROR [example]: representative error
   details: partiallyWritten=["plan","grounding"]
 error GROUNDING_UNRESOLVED [example]: representative error
   details: stepId=step-a; reason=missing-target
+error CASE_ABORTED [example]: representative error
+  details: reason=run-value-missing; stepId=step-2
+error PROMPT_AMBIGUOUS [example]: representative error
+  details: ambiguities=2

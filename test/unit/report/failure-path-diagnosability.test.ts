@@ -435,7 +435,9 @@ describe('failure-path report projection', () => {
       expect(projectReportErrorDetails(error!, { scope: 'case', caseId: result.caseId! })).toMatchObject({ ok: true });
     }
     if (id === 'run/assertion-failed') {
+      expect(typeof result.steps?.[0]?.expected).toBe('string');
       expect(result.steps?.[0]?.expected?.trim()).not.toBe('');
+      expect(typeof result.steps?.[0]?.actual).toBe('string');
       expect(result.steps?.[0]?.actual?.trim()).not.toBe('');
     }
     if (id === 'run/blank-actual/text-equals') expect(result.steps?.[0]?.actual).toBe('The element text was empty.');

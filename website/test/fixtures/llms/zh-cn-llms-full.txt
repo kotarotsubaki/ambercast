@@ -3380,7 +3380,7 @@ CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`�
 
 ## 版本策略 {#version-policy}
 
-目前已发布的软件包版本列于[兼容性表](/ambercast/zh-cn/reference/compatibility/#compatibility-table)。关于工具演进的产品策略是：在整个 0.x 阶段仅保持 CLI 形式，并在迈向 1.0.0 时与云端版本一同交付。
+[兼容性表](/ambercast/zh-cn/reference/compatibility/#compatibility-table)列出了目前已发布的软件包版本。关于工具演进的产品策略是：在整个 0.x 阶段仅保持 CLI 形式，并在迈向 1.0.0 时与云端版本一同交付。
 
 相关链接：[变更日志](/ambercast/zh-cn/reference/changelog/)、[设计哲学](/ambercast/zh-cn/philosophy/)
 

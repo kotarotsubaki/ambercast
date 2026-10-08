@@ -4,6 +4,7 @@
 
 import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { join, resolve, posix } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { collectMermaidFences, diagramId, extractFenceBody, matchMermaidFenceOpen, parseAlt } from './lib/mermaid-fences.mjs';
 import { splitFencedCodeRegions } from './lib/wikilinks.mjs';
 
@@ -95,7 +96,7 @@ export async function checkDiagrams({ docsRoot, specRoot, skillRoot, publicDiagr
 }
 
 // The CLI participates in the final documentation check step.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const cwd = process.cwd();
   try {
     const findings = await checkDiagrams({

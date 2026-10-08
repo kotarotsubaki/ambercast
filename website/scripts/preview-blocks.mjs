@@ -2,150 +2,316 @@
  * Manage the temporary blocks page used by the local preview server.
  */
 import { spawn } from 'node:child_process';
-import { readFile, writeFile, unlink } from 'node:fs/promises';
+import { access, readFile, writeFile, unlink } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /**
- * Start a blocks preview and manage its temporary page for the child lifetime.
+ * Normalize Astro CLI output into plain multi-line text.
+ *
+ * @param {string} output - Captured stdout/stderr text from `runCaptured`.
+ * @returns {string} The same content with every JSON-wrapped line replaced
+ * by its own `message` field (restoring Astro's embedded `\n` sequences as
+ * real newlines), and every other line left unchanged.
+ * @remarks Astro's own non-interactive output (confirmed empirically: the
+ * same piped-stdio mode this module always uses) is a single real line of
+ * `{"message":"...","label":"SKIP_FORMAT","level":"info"}` JSON, whose
+ * `message` carries Astro's multi-line report as escaped `\n` characters --
+ * two literal bytes, not a real newline, until something decodes the line.
+ * Both parsers below need Astro's real multi-line structure to anchor
+ * per-line regexes against; this is the one place that structure gets
+ * restored, so a line that happens to be plain text (an interactively
+ * attached terminal's own human-formatted shape) passes through unchanged
+ * rather than being misread as malformed JSON.
+ */
+function unwrapAstroOutput(output) {
+  return output
+    .split('\n')
+    .map((line) => {
+      if (!line.trim()) return line;
+      try {
+        const parsed = JSON.parse(line);
+        if (typeof parsed?.message === 'string') return parsed.message;
+      } catch {
+        // Not a JSON line (the human-formatted, TTY-attached shape) -- keep it as is.
+      }
+      return line;
+    })
+    .join('\n');
+}
+
+/**
+ * Spawn an Astro CLI subcommand and resolve once its output is complete.
+ *
+ * @param {Function} spawnFn - Process spawner (overridable for tests).
+ * @param {string} cwd - The website package directory.
+ * @param {string} cmd - The executable to run (`npm` or `npx`).
+ * @param {string[]} args - Arguments for `cmd`.
+ * @returns {Promise<{ code: number | null, signal: NodeJS.Signals | null, output: string }>}
+ * Resolves once the child's stdio streams finish closing; rejects on a
+ * synchronous spawn throw or an `'error'` event.
+ * @remarks Every caller below (the precondition status check, the starter,
+ * the post-start status check, the pre-stop status recheck) needs to read
+ * what Astro itself reported, not just whether the process exited cleanly,
+ * so output is captured rather than inherited. It is also mirrored to the
+ * real `process.stdout`/`stderr` as it arrives, so a human running `npm run
+ * preview:blocks` interactively still sees Astro's own banners live.
+ * Resolution waits for `'close'`, not `'exit'`: Node fires `'exit'` as soon
+ * as the process terminates, which can race ahead of the pipe finishing
+ * delivery of buffered output, while `'close'` is guaranteed to fire only
+ * after the stdio streams themselves have finished -- the same `(code,
+ * signal)` pair is available on both events, so switching costs nothing.
+ * A synchronous spawn throw and an `'error'` event are both failures with
+ * no output to read, so both reject instead of resolving with an empty
+ * result -- one failure shape callers can branch on, instead of two.
+ */
+function runCaptured(spawnFn, cwd, cmd, args) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawnFn(cmd, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    let output = '';
+    child.stdout?.on('data', (chunk) => {
+      output += chunk;
+      process.stdout.write(chunk);
+    });
+    child.stderr?.on('data', (chunk) => {
+      output += chunk;
+      process.stderr.write(chunk);
+    });
+    child.once('close', (code, signal) => resolve({ code, signal, output }));
+    child.once('error', (error) => reject(error));
+  });
+}
+
+/**
+ * Interpret an `astro dev status` result.
+ *
+ * @param {{ code: number | null, signal: NodeJS.Signals | null, output: string }} result - A `runCaptured` result for the `astro dev status` subcommand.
+ * @returns {{ ok: boolean, running: boolean, pid: number | null }} `ok` is
+ * `false` for a nonzero or signalled exit, or for normalized output
+ * matching neither recognized shape exactly once; `running`/`pid` only
+ * carry meaning when `ok` is `true`.
+ * @remarks Astro reports exactly one of two line shapes (confirmed
+ * interactively against the installed Astro 7.2.10, after
+ * `unwrapAstroOutput` restores its real line structure): a line reading
+ * exactly `"No dev server is running."`, or a line starting
+ * `"Dev server running at <url> (pid <N>"` with arbitrary trailing fields
+ * (e.g. `", uptime 11s, background)"`) before its closing paren. Both
+ * regexes anchor to the whole line (`^...$`, multiline), and this function
+ * requires exactly one match of exactly one of the two shapes -- a buffer
+ * with neither, or with both (a contradiction that should never happen but
+ * must never be silently resolved by guessing), is `ok: false`. Every
+ * caller below (the startup precondition, the post-start pid confirmation,
+ * and the pre-stop pid recheck) depends on this distinction never being
+ * guessed.
+ */
+function parseStatus(result) {
+  if (result.code !== 0 || result.signal) return { ok: false, running: false, pid: null };
+  const text = unwrapAstroOutput(result.output);
+  const noServerLines = text.match(/^No dev server is running\.?$/gm) ?? [];
+  const runningLines = text.match(/^Dev server running at \S+ \(pid (\d+)[^)]*\)$/gm) ?? [];
+  if (noServerLines.length === 1 && runningLines.length === 0) {
+    return { ok: true, running: false, pid: null };
+  }
+  if (runningLines.length === 1 && noServerLines.length === 0) {
+    const match = /\(pid (\d+)/.exec(runningLines[0]);
+    return { ok: true, running: true, pid: Number(match[1]) };
+  }
+  return { ok: false, running: false, pid: null };
+}
+
+/**
+ * Interpret `npm run dev -- --background`'s own start report.
+ *
+ * @param {{ code: number | null, signal: NodeJS.Signals | null, output: string }} result - A `runCaptured` result for the starter.
+ * @returns {{ freshStart: boolean, pid: number | null }} `freshStart` is
+ * `true` only for Astro's own new-server report, matched exactly once with
+ * no conflicting "already running" line present; `pid` only carries
+ * meaning together with it.
+ * @remarks Confirmed interactively against the installed Astro 7.2.10,
+ * after `unwrapAstroOutput` restores its real line structure: exiting 0,
+ * Astro's first report line reads exactly either
+ * `"Dev server running at <url> (pid <N>)"` for a server this invocation
+ * actually started, or `"Dev server already running at <url> (pid <N>)"`
+ * when one was already up before this invocation ran -- both anchored to
+ * the whole line, so neither can be confused with the status command's own
+ * differently-shaped running report (which this function never receives).
+ * `freshStart` requires exactly one fresh-start line and zero
+ * already-running lines; adopting a daemon this invocation did not start
+ * would let a later stop command shut down a server someone else is using.
+ * A nonzero exit or a signalled exit is never a fresh start, regardless of
+ * what its output happens to contain.
+ */
+function parseStarterOutput(result) {
+  if (result.code !== 0 || result.signal) return { freshStart: false, pid: null };
+  const text = unwrapAstroOutput(result.output);
+  const freshLines = text.match(/^Dev server running at \S+ \(pid (\d+)\)$/gm) ?? [];
+  const alreadyLines = text.match(/^Dev server already running at \S+ \(pid (\d+)\)$/gm) ?? [];
+  if (freshLines.length === 1 && alreadyLines.length === 0) {
+    const match = /\(pid (\d+)\)$/.exec(freshLines[0]);
+    return { freshStart: true, pid: Number(match[1]) };
+  }
+  return { freshStart: false, pid: null };
+}
+
+/**
+ * Check whether a path exists.
+ *
+ * @param {string} path - The path to check.
+ * @returns {Promise<boolean>} `true` if `access` succeeds, `false` otherwise.
+ */
+async function pathExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stop Astro's background dev server and wait for that to finish.
+ *
+ * @param {Function} spawnFn - Process spawner (overridable for tests).
+ * @param {string} cwd - The website package directory.
+ * @returns {Promise<boolean>} `true` only for a clean, signal-less, code-0
+ * exit of `astro dev stop`; `false` for a spawn throw, an `'error'` event,
+ * a nonzero exit, or a signal-only exit.
+ * @remarks `astro dev stop` is the only interface back to the detached
+ * daemon started under `npm run dev -- --background`; there is no handle on
+ * that process from here. The wait has no timeout, matching this module's
+ * existing precedent elsewhere of waiting unboundedly on a child's exit
+ * after signaling it -- a stop command that never exits leaves the wrapper
+ * and the temporary page in place rather than guessing at an outcome.
+ */
+async function stopDaemon(spawnFn, cwd) {
+  try {
+    const result = await runCaptured(spawnFn, cwd, 'npx', ['astro', 'dev', 'stop']);
+    return result.code === 0 && !result.signal;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start a blocks preview and own the background dev server for its lifetime.
  *
  * @param {{ spawnFn?: Function, sourcePath?: string, destPath?: string, unlinkFn?: Function }} options - Optional process spawner, source and destination paths, and copy remover for controlled tests.
- * @returns {Promise<void>} Resolves after the preview lifecycle completes.
- * @remarks The authored `.agents/skills/docs-writing/references/blocks.mdx`
- * is copied to the gitignored `website/src/content/docs/preview-blocks.mdx`
- * page for this preview alone. Exclusive creation writes that copy in one
- * filesystem operation. If it fails with `EEXIST`, the existing page remains
- * untouched and no child starts. Astro 7's dev server always detaches into a
- * persistent background daemon (managed by its own `stop`/`status`/`logs`
- * subcommands) once it has confirmed startup, regardless of flags; the
- * `npm run dev` child therefore exits with code 0 almost immediately even
- * though the actual dev server keeps running under a different, untracked
- * PID. Treating that natural code-0 exit as "the user ended the preview"
- * deleted the temporary page and returned control within a fraction of a
- * second of starting, before anyone could view it, while orphaning the
- * detached daemon. A code-0, signal-less child exit is therefore read as
- * "Astro finished daemonizing" and the preview keeps running: cleanup now
- * waits for this process's own SIGINT/SIGTERM, which is the user's actual
- * request to end the preview, and only then asks Astro to stop its daemon
- * before removing the page. If the child is still starting up when that
- * signal arrives, it is killed directly as a best-effort fallback, and the
- * daemon is asked to stop only once that kill's own exit is observed — a
- * daemon spawned concurrently with the kill cannot be waited for from here,
- * but at least the wrapper never races its own two child processes. The
- * stop command's wait has no timeout, matching this file's existing,
- * previously-reviewed precedent of waiting unboundedly on a child's exit
- * after signaling it; a stop command that never exits leaves the wrapper
- * and the temporary page in place rather than guessing at an outcome.
- * `process.on` (not `once`) plus an idempotency guard keep a second Ctrl-C
- * during the stop sequence from falling through to Node's default SIGINT
- * handling, which would otherwise abort cleanup and leave the page
- * undeleted. A stop command that fails (throws, errors, or exits nonzero)
- * does not block cleanup — the page is still removed, since the user asked
- * to end the preview regardless — but is reported as a nonzero exit so the
- * failure is visible rather than silently swallowed. Numeric child exit
- * codes are preserved for a genuine failure exit; a signal-only exit or
- * failed deletion exits nonzero.
+ * @returns {Promise<void>} Resolves only via `process.exit`; it never returns normally.
+ * @remarks Ownership of the background dev server is established only by
+ * Astro's own explicit new-server report plus an immediate status
+ * confirmation of the same pid -- never inferred from an exit code alone.
+ * The starter is never killed under any circumstance (confirmed
+ * interactively: `astro dev --background` always exits promptly once it
+ * has confirmed the daemon actually started, so there is no long-running
+ * foreground child to wait out or kill); a signal arriving before that is
+ * only recorded for later, never acted on immediately.
+ *
+ * Signal handlers are registered before the page is copied, not after:
+ * a signal arriving while the copy is in flight must still be honored
+ * once the sequence reaches a point that checks for one, instead of
+ * falling through to Node's default handling, which would abort with a
+ * half-finished or orphaned copy and nothing cleaned up. Once a pid is
+ * owned, deletion is attempted regardless of whether a stop was
+ * warranted or why an attempted stop did not succeed -- the only clean
+ * (0) exit is a successful stop (when one was warranted) followed by a
+ * successful deletion. The `handled` idempotency guard keeps a second
+ * signal during the stop sequence from falling through to Node's default
+ * SIGINT/SIGTERM handling, which would otherwise abort cleanup before the
+ * page is removed.
  */
 export async function previewBlocks({ spawnFn, sourcePath, destPath, unlinkFn } = {}) {
   sourcePath ??= fileURLToPath(new URL('../../.agents/skills/docs-writing/references/blocks.mdx', import.meta.url));
   destPath ??= fileURLToPath(new URL('../src/content/docs/preview-blocks.mdx', import.meta.url));
   spawnFn ??= spawn;
   unlinkFn ??= unlink;
+  const cwd = fileURLToPath(new URL('..', import.meta.url));
+
+  if (await pathExists(destPath)) process.exit(1);
+
+  let precheck;
+  try {
+    precheck = parseStatus(await runCaptured(spawnFn, cwd, 'npx', ['astro', 'dev', 'status']));
+  } catch {
+    process.exit(1);
+  }
+  if (!precheck.ok || precheck.running) process.exit(1);
+
+  const deleteCopy = async () => {
+    try {
+      await unlinkFn(destPath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  let handled = false;
+  let resolveSignal;
+  const signalPromise = new Promise((resolve) => {
+    resolveSignal = resolve;
+  });
+  const onSignal = () => {
+    if (handled) return;
+    handled = true;
+    resolveSignal();
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 
   try {
     await writeFile(destPath, await readFile(sourcePath), { flag: 'wx' });
-  } catch (error) {
-    if (error.code === 'EEXIST') process.exit(1);
-    throw error;
-  }
-
-  const cwd = fileURLToPath(new URL('..', import.meta.url));
-  let child;
-  try {
-    child = spawnFn('npm', ['run', 'dev'], { cwd, stdio: 'inherit' });
-  } catch (error) {
-    try {
-      await unlinkFn(destPath);
-    } catch {
-      process.exit(1);
-    }
+  } catch {
     process.exit(1);
   }
 
+  let starterResult;
+  try {
+    starterResult = await runCaptured(spawnFn, cwd, 'npm', ['run', 'dev', '--', '--background']);
+  } catch {
+    await deleteCopy();
+    process.exit(1);
+  }
+
+  const { freshStart, pid } = parseStarterOutput(starterResult);
+  if (!freshStart) {
+    await deleteCopy();
+    process.exit(1);
+  }
+
+  let afterStart;
+  try {
+    afterStart = parseStatus(await runCaptured(spawnFn, cwd, 'npx', ['astro', 'dev', 'status']));
+  } catch {
+    afterStart = { ok: false, running: false, pid: null };
+  }
+  if (!afterStart.ok || !afterStart.running || afterStart.pid !== pid) {
+    await deleteCopy();
+    process.exit(1);
+  }
+
+  const ownedPid = pid;
   const keepAlive = setInterval(() => {}, 1000);
-
-  let childSettled = false;
-  const childOutcome = new Promise((resolve) => {
-    child.once('exit', (code, signal) => {
-      childSettled = true;
-      resolve({ kind: 'exit', code, signal });
-    });
-    child.once('error', (error) => {
-      childSettled = true;
-      resolve({ kind: 'error', error });
-    });
-  });
-
-  let signalHandled = false;
-  const wrapperSignal = new Promise((resolve) => {
-    const onSignal = (signal) => {
-      if (signalHandled) return;
-      signalHandled = true;
-      if (!childSettled) child.kill(signal);
-      resolve(signal);
-    };
-    process.on('SIGINT', () => onSignal('SIGINT'));
-    process.on('SIGTERM', () => onSignal('SIGTERM'));
-  });
-
-  const first = await Promise.race([childOutcome, wrapperSignal]);
-
-  let exitCode;
-  if (typeof first === 'string') {
-    if (!childSettled) await childOutcome;
-    exitCode = (await stopDaemon(spawnFn, cwd)) ? 0 : 1;
-  } else if (first.kind === 'error') {
-    exitCode = first.error.code ?? 1;
-  } else if (first.code === 0 && !first.signal) {
-    await wrapperSignal;
-    exitCode = (await stopDaemon(spawnFn, cwd)) ? 0 : 1;
-  } else {
-    exitCode = first.code === null && first.signal ? 1 : first.code;
-  }
-
+  await signalPromise;
   clearInterval(keepAlive);
-  try {
-    await unlinkFn(destPath);
-  } catch {
-    process.exit(1);
-  }
-  process.exit(exitCode ?? 0);
-}
 
-/**
- * Ask Astro's background dev server to stop and wait for that to finish.
- *
- * @param {Function} spawnFn - Process spawner (overridable for tests).
- * @param {string} cwd - The website package directory.
- * @returns {Promise<boolean>} Resolves `true` only if the stop command ran
- * and exited with code 0 and no signal; `false` for a synchronous spawn
- * failure, an `'error'` event, a nonzero exit, or a signal-only exit.
- * @remarks `astro dev stop` is the only interface back to the detached
- * daemon started under `npm run dev`; there is no handle on that process
- * from here. It exits 0 even when no daemon is running (confirmed against
- * the installed Astro version), so a 0 exit here is read as "the daemon is
- * not left running," not merely "something was running and got stopped."
- */
-async function stopDaemon(spawnFn, cwd) {
-  let stopChild;
+  let recheck;
   try {
-    stopChild = spawnFn('npx', ['astro', 'dev', 'stop'], { cwd, stdio: 'inherit' });
+    recheck = parseStatus(await runCaptured(spawnFn, cwd, 'npx', ['astro', 'dev', 'status']));
   } catch {
-    return false;
+    recheck = { ok: false, running: false, pid: null };
   }
-  return new Promise((resolve) => {
-    stopChild.once('exit', (code, signal) => resolve(code === 0 && !signal));
-    stopChild.once('error', () => resolve(false));
-  });
+
+  let stopped = false;
+  if (recheck.ok && recheck.running && recheck.pid === ownedPid) {
+    stopped = await stopDaemon(spawnFn, cwd);
+  }
+  const deleted = await deleteCopy();
+  process.exit(stopped && deleted ? 0 : 1);
 }
 
 // The CLI owns the preview lifecycle and its cleanup.

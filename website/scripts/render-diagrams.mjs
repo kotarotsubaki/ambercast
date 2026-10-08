@@ -94,21 +94,27 @@ async function createRenderer() {
  * Only after every rename succeeds are orphan SVGs for IDs absent from the
  * current fence set deleted. If orphan cleanup partly fails, deleted files
  * stay deleted, remaining failures are reported to stderr, and rendering
- * still exits successfully (status 0).
+ * still exits successfully (status 0). A renderer rejection is rethrown
+ * naming the failing fence's own source file and diagram id, since the
+ * renderer itself only reports which body failed, not where it came from
+ * in the documentation source tree.
  */
 export async function renderDiagrams({ roots, outDir, renderer }) {
   await validateAlt(roots);
   const fences = await collectMermaidFences(roots);
-  const unique = new Map(fences.map(({ id, body }) => [id, body]));
+  const unique = new Map();
+  for (const { id, body, file } of fences) {
+    if (!unique.has(id)) unique.set(id, { body, file });
+  }
   await mkdir(outDir, { recursive: true });
   const missing = [];
-  for (const [id, body] of unique) {
+  for (const [id, { body, file }] of unique) {
     const targets = ['light', 'dark'].map((theme) => join(outDir, `${id}.${theme}.svg`));
     const present = await Promise.all(targets.map(async (target) => {
       try { await access(target); return true; }
       catch (error) { if (error.code === 'ENOENT') return false; throw error; }
     }));
-    if (!present.every(Boolean)) missing.push({ id, body, targets, present });
+    if (!present.every(Boolean)) missing.push({ id, body, file, targets, present });
   }
 
   const pending = [];
@@ -119,8 +125,13 @@ export async function renderDiagrams({ roots, outDir, renderer }) {
       realRenderer = await createRenderer();
       renderer = realRenderer.render;
     }
-    for (const { id, body, targets, present } of missing) {
-      const variants = await renderer(id, body);
+    for (const { id, body, file, targets, present } of missing) {
+      let variants;
+      try {
+        variants = await renderer(id, body);
+      } catch (error) {
+        throw new Error(`Mermaid render failed for ${file} (diagram ${id}): ${error.message}`, { cause: error });
+      }
       for (const [index, theme] of ['light', 'dark'].entries()) {
         if (typeof variants?.[theme] !== 'string') throw new Error(`Missing ${theme} SVG for ${id}`);
         if (present[index]) continue;
@@ -152,7 +163,7 @@ export async function renderDiagrams({ roots, outDir, renderer }) {
 }
 
 // The CLI uses the same batch contract as programmatic callers.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const cwd = process.cwd();
   renderDiagrams({
     roots: {

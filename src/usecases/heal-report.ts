@@ -146,7 +146,7 @@ export function buildHealReport(input: HealReportInput): HealReportOutput {
   const errors = outcome.errors.map(({ file, error }) => reportError(error, { scope: 'case', caseId: file }));
   for (const { file, stage3Error, finalReplayError } of outcome.results) {
     // This exclusion is unreachable from a normal `heal()` result because `heal()` passes every Stage 3 failure through case-scope `reportError` before storing `stage3Error`, which throws for these kinds; a direct caller injecting either kind will throw here once the exclusion is removed.
-    if (stage3Error !== undefined && stage3Error.kind !== 'interrupted' && stage3Error.kind !== 'prompt-path-invalid') {
+    if (stage3Error !== undefined) {
       errors.push(reportError(stage3Error, { scope: 'case', caseId: file }));
     }
     if (finalReplayError !== undefined && finalReplayError.kind !== 'interrupted' && finalReplayError.kind !== 'prompt-path-invalid') {

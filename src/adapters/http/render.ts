@@ -166,8 +166,8 @@ export function renderRunDetail(listing: RunListing): string {
   // projection, escaping each report-derived value at this HTML boundary.
   const errors = report.errors.length ? `<section><h2>${copy.runErrors.headingPrefix}${report.errors.length})</h2><ul>${report.errors.map((error) => {
     const detailEntries = errorDetailEntries(error.code, error.details);
-    const hint = error.hint === undefined ? '' : `<p><strong>${copy.errorHint}</strong> ${escapeHtml(error.hint)}</p>`;
-    const details = detailEntries.length ? `<p><strong>${copy.errorDetails}</strong></p><ul>${detailEntries.map(([key, value]) => `<li>${escapeHtml(key)}: ${escapeHtml(value)}</li>`).join('')}</ul>` : '';
+    const hint = error.hint === undefined ? '' : `<p><span>${copy.errorHint}</span> ${escapeHtml(error.hint)}</p>`;
+    const details = detailEntries.length ? `<p><span>${copy.errorDetails}</span></p><ul>${detailEntries.map(([key, value]) => `<li>${escapeHtml(key)}: ${escapeHtml(value)}</li>`).join('')}</ul>` : '';
     return `<li>${escapeHtml(error.code)} · ${error.scope === 'run' ? 'run' : `case · ${escapeHtml(error.caseId)}`} ${escapeHtml(error.message)}${hint}${details}</li>`;
   }).join('')}</ul></section>` : '';
   const cases = report.results.length ? report.results.map((result) => {

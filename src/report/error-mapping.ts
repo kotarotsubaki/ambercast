@@ -311,7 +311,7 @@ export function reportError(
   const details = REPORT_ERROR_DETAILS[error.kind as ReportableErrorKind];
   if (details === undefined) throw new Error(`Error kind ${error.kind} cannot be serialized as a report error.`);
   const fields = projected.ok
-    ? { ...(projected.details === undefined ? {} : { details: projected.details }), ...(projected.hint === undefined ? {} : { hint: projected.hint }) }
+    ? { ...(projected.hint === undefined ? {} : { hint: projected.hint }), ...(projected.details === undefined ? {} : { details: projected.details }) }
     : (() => {
       const instanceHint = readRecordField(error.details, 'hint');
       const hint = 'hint' in details ? details.hint : typeof instanceHint === 'string' ? instanceHint : undefined;

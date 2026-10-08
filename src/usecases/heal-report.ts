@@ -141,11 +141,14 @@ export function buildHealReport(input: HealReportInput): HealReportOutput {
     ...outcome.listed.map(({ file }): HealResult => ({ id: file, file, status: 'listed' })),
     ...outcome.skipped.map(({ file }): HealResult => ({ id: file, file, status: 'skipped' })),
   ];
-  // Stage 3 and final replay errors follow existing case errors in row
-  // order; kinds unsupported at case scope are skipped without deduplication.
+  // Stage 3 and final replay errors follow existing case errors in row order.
+  // Only final replay errors of kinds unsupported at case scope are skipped, without deduplication.
   const errors = outcome.errors.map(({ file, error }) => reportError(error, { scope: 'case', caseId: file }));
   for (const { file, stage3Error, finalReplayError } of outcome.results) {
-    if (stage3Error !== undefined && stage3Error.kind !== 'interrupted' && stage3Error.kind !== 'prompt-path-invalid') {
+    // A normal `heal()` result cannot carry a Stage 3 `interrupted` or `prompt-path-invalid` error here:
+    // `heal()` routes every Stage 3 failure through case-scope `reportError` before storing it, which throws for those kinds.
+    // Only a direct non-`heal()` caller can inject either kind into `buildHealReport`, and `reportError` below then throws.
+    if (stage3Error !== undefined) {
       errors.push(reportError(stage3Error, { scope: 'case', caseId: file }));
     }
     if (finalReplayError !== undefined && finalReplayError.kind !== 'interrupted' && finalReplayError.kind !== 'prompt-path-invalid') {

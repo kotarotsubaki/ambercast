@@ -11,10 +11,10 @@ MCP 服务器依次提供六个工具：`ambercast_generate`、`ambercast_run`�
 
 | 工具 | 对应 CLI | 注解 | `isError: true` | `isError: false` 的否定结果 |
 | --- | --- | --- | --- | --- |
-| `ambercast_generate` | generate | false / false / true（弱）/ false | 退出码 2、3 | 退出码 1（strict 歧义）、5 |
+| `ambercast_generate` | generate | false / false / true（弱）/ false | 退出码 2（含 `PROMPT_AMBIGUOUS`）、3 | 退出码 5 |
 | `ambercast_run` | run | false / false / false / true | 退出码 2、3、4（MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED） | 退出码 1（断言失败）、5 |
 | `ambercast_check` | check | true / false / true / false | 退出码 2、3 | 退出码 4（stale 是 results[].status 中的正常结果）、5 |
-| `ambercast_heal` | heal | false / true / false / true | 退出码 2（含 CI 拒绝）、3、4；`HEAL_APPLY_TOKEN_INVALID`；`HEAL_APPLY_FAILED` | 退出码 1（未解决或拒绝）、5 |
+| `ambercast_heal` | heal | false / true / false / true | 退出码 2（含 CI 拒绝和 `PROMPT_AMBIGUOUS`）、3、4；`HEAL_APPLY_TOKEN_INVALID`；`HEAL_APPLY_FAILED` | 退出码 1（未解决或拒绝）、5 |
 | `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`；failed 时的 `JOB_FAILED`；有结果的 completed/cancelled 按原工具映射 | 未终结 record、列表、排队取消的 record |
 | `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
 

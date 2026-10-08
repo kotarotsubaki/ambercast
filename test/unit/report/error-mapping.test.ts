@@ -13,6 +13,7 @@ import { ReportError } from '#report/schema.js';
 import { CAUSE_NAMES } from './cause-name-fixtures.js';
 import { CaseAbortedError, type CaseAbortReason } from '#core/errors/case-aborted-error.js';
 import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { CaseAbortedDetails, PromptAmbiguousDetails } from '#report/schema.js';
 
 const BROWSER_LAUNCH_FAILED_HINT = 'Install Chromium by running `npx playwright install chromium`, then retry.';
@@ -61,6 +62,19 @@ class ClassifiedError extends AmbercastError {
 describe('REPORT_ERROR_DETAILS', () => {
   it('exports the complete stable ErrorKind-to-report-kind-and-code mapping', () => {
     expect(errorMapping.REPORT_ERROR_DETAILS).toEqual(EXPECTED_REPORT_ERROR_DETAILS);
+  });
+
+  it('places a supplied hint before projected details in report errors', () => {
+    const error = new SecretConsentRequiredError('Secret consent is required.', {
+      reason: 'consent-required',
+      secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }],
+      hint: 'Allow the secret before retrying.',
+    });
+    const keys = Object.keys(errorMapping.reportError(error, { scope: 'case', caseId: 'case-a' }));
+
+    expect(keys).toContain('hint');
+    expect(keys).toContain('details');
+    expect(keys.indexOf('hint')).toBeLessThan(keys.indexOf('details'));
   });
 });
 

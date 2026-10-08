@@ -71,7 +71,7 @@ function reportTimestamp(date: Date): string {
 export interface GenerateCommandInput {
   /** Literal prompt paths, or an empty list for configured discovery. */
   readonly files: readonly string[];
-  /** Whether ambiguities select strict outcome policy. */
+  /** Retains the strict flag for the separate ambiguity exit-1 policy; ambiguous prompts fail with exit 2 before it applies. */
   readonly strict: boolean;
   /** Whether fresh plans regenerate. */
   readonly force: boolean;

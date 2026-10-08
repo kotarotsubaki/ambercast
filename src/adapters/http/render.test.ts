@@ -256,8 +256,8 @@ describe('renderRunDetail', () => {
       { scope: 'case', kind: 'environment', code: 'CASE_ABORTED', caseId: 'aborted', message: 'Case stopped', details: { stepId: 'abort-step', reason: 'run-value-missing' } },
       { scope: 'run', kind: 'environment', code: 'AI_RESPONSE_INVALID', message: 'Invalid response', details: { issues: [issue] } },
     ] }));
-    expect(html).toContain('>Hint<');
-    expect(html).toContain('>Details<');
+    expect(html).toContain('<span>Hint</span>');
+    expect(html).toContain('<span>Details</span>');
     expect(html).toContain('Check the target.');
     const orderedAgentic = ERROR_DETAILS_KEY_ORDER.AGENTIC_STEP_FAILED!;
     expect(orderedAgentic).toEqual(['stepId', 'actions', 'assertions', 'passedAssertions', 'failedAssertions', 'targetRejections', 'lastFailedAssertion']);
@@ -283,7 +283,7 @@ describe('renderRunDetail', () => {
       { scope: 'run', kind: 'environment', code: 'UNKNOWN_OLD_CODE', message: 'Unknown code', details: { cause: 'ignored' } },
     ]) {
       const html = renderRunDetail(readable({ schemaVersion: '3.6', errors: [error as never] }));
-      expect(html).not.toContain('>Details<');
+      expect(html).not.toContain('<span>Details</span>');
     }
   });
 

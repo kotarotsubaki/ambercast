@@ -1149,10 +1149,12 @@ describe('main()', () => {
         { code: 'UNEXPECTED_CRASH', kind: 'environment', details: { cause: { name: 'AbortError' } } },
         { code: 'FS_IO_ERROR', kind: 'environment', details: { partiallyWritten: ['plan', 'grounding'] } },
         { code: 'GROUNDING_UNRESOLVED', kind: 'usage', details: { reason: 'missing-target', stepId: 'step-a' } },
+        { code: 'CASE_ABORTED', kind: 'environment', details: { stepId: 'step-2', reason: 'run-value-missing' } },
+        { code: 'PROMPT_AMBIGUOUS', kind: 'usage', details: { ambiguities: 2 } },
       ].map((error) => ({ scope: 'case', caseId: 'example', message: 'representative error', ...error }));
       const golden = readFileSync(new URL('../fixtures/cli/error-details.golden.txt', import.meta.url), 'utf8');
 
-      expect(errors.map((error) => error.code)).toEqual(Object.keys(ERROR_DETAILS_KEY_ORDER).slice(0, 13));
+      expect(errors.map((error) => error.code)).toEqual(Object.keys(ERROR_DETAILS_KEY_ORDER));
       expect(renderHumanReport({ ...RUN_ENVELOPE, errors } as never, false)).toBe(golden);
     });
 

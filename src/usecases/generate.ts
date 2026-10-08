@@ -646,7 +646,7 @@ type PreparedCandidate = {
   readonly uses: readonly GenerateSecretOutcome[];
   /** Non-fatal naming diagnostics retained through reporting. */
   readonly warnings: readonly GenerateWarning[];
-  /** Provider ambiguities retained for later strict-exit evaluation. */
+  /** Provider ambiguities retained so ambiguous prompts report `PROMPT_AMBIGUOUS` (exit 2) regardless of strict mode. */
   readonly ambiguities: readonly JsonValueT[];
   /** Whether the final plan required generation or was already fresh. */
   readonly origin: 'generated' | 'fresh';

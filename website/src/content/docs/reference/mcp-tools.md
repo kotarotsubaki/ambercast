@@ -11,10 +11,10 @@ Annotations list readOnly / destructive / idempotent / openWorld, in that order.
 
 | Tool | CLI equivalent | Annotations | `isError: true` | Negative result with `isError: false` |
 | --- | --- | --- | --- | --- |
-| `ambercast_generate` | generate | false / false / true (weak) / false | Exit 2 or 3 | Exit 1 (strict ambiguity), exit 5 |
+| `ambercast_generate` | generate | false / false / true (weak) / false | Exit 2 (including `PROMPT_AMBIGUOUS`) or 3 | Exit 5 |
 | `ambercast_run` | run | false / false / false / true | Exit 2, 3, or 4 (MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED) | Exit 1 (assertion red), exit 5 |
 | `ambercast_check` | check | true / false / true / false | Exit 2 or 3 | Exit 4 (stale is a normal result in results[].status), exit 5 |
-| `ambercast_heal` | heal | false / true / false / true | Exit 2 (including CI refusal), 3, or 4; `HEAL_APPLY_TOKEN_INVALID`; `HEAL_APPLY_FAILED` | Exit 1 (unresolved or declined), exit 5 |
+| `ambercast_heal` | heal | false / true / false / true | Exit 2 (including CI refusal and `PROMPT_AMBIGUOUS`), 3, or 4; `HEAL_APPLY_TOKEN_INVALID`; `HEAL_APPLY_FAILED` | Exit 1 (unresolved or declined), exit 5 |
 | `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`; `JOB_FAILED` for a failed job; completed/cancelled jobs with a result use their source tool's mapping | Nonterminal record, job list, queued-cancel record |
 | `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
 

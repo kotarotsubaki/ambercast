@@ -1,11 +1,11 @@
 ---
 title: 5分で動かす最初のテスト
-description: プロンプトの作成から生成・リプレイ・確認まで、最初の生成テストを5分で動かすチュートリアル。
+description: プロジェクトの初期化から生成・リプレイ・確認まで、最初の生成テストを5分で動かすチュートリアル。
 ---
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-設定ファイルを作らない構成のまま、`npx ambercast generate` と `npx ambercast run` だけで最初のテストを動かす。
+`npx ambercast init` でプロジェクトを初期化し、`npx ambercast generate` と `npx ambercast run` で最初のテストを動かす。
 
 ## 前提条件 \{#prerequisites}
 
@@ -18,28 +18,38 @@ ambercastは次の既定値を使う。
 - 既定の`testDir`は`tests/ambercast`
 - 既定ターゲットは`web-user`、対象は`http://localhost:3000`、Chromiumを使用
 
-設定ファイルを置く場合の`$schema`要件は[設定](/ambercast/ja/reference/configuration/#structure)を参照する。このチュートリアルでは設定ファイルを作らない。
-
 ## 手順 \{#steps}
-
-設定ファイルは作成せず、次の内容で`tests/ambercast/find-page.test.md`を正確に作成する。末尾の`.test.md`はコンパニオンパス解決の対象になる。
-
-```markdown
-# Find a page
-
-When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
-```
-
-:::tip
-`npx ambercast init`を使うと、同じファイルと最小限の`ambercast.config.json`を一度に生成できる。本チュートリアルは既定値の動作を確認するため、設定ファイルなしの経路を進む。
-
-:::
 
 <Steps>
 
-1. ## アプリを起動してプランを生成する \{#generate}
+1. ## プロジェクトを初期化する \{#init}
 
-   人またはオペレーターが`http://localhost:3000`でアプリケーションを起動して確認する。
+   ```bash
+   npx ambercast init
+   ```
+
+   確認プロンプトで承認すると、次のファイルが作成される。
+
+   - `ambercast.config.json`（既定の`testDir`・`target`を書き込んだ設定ファイル）
+   - `tests/ambercast/find-page.test.md`（サンプルのテストプロンプト）
+   - `.gitignore`への追記、`AGENTS.md`への追記
+
+   作成されるサンプルプロンプトの内容は次のとおり。
+
+   ```markdown
+   # Find a page
+
+   When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
+   ```
+
+   :::caution
+   `init`はURLを尋ねない。既定の`ambercast.config.json`は`http://localhost:3000`を対象にする。アプリが別のURLで動く場合は、先に`targets.web-user.baseUrl`を書き換える。
+
+   :::
+
+2. ## アプリを起動してプランを生成する \{#generate}
+
+   人またはオペレーターが、設定した`baseUrl`でアプリケーションを起動して確認する。
 
    ```bash
    npx ambercast generate tests/ambercast/find-page.test.md
@@ -52,7 +62,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
    セットアッププロンプト（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使うエージェントは、サーバーが既に起動していると想定する。依頼が無い限り自分では起動しない。
 
-2. ## リプレイを実行する \{#run}
+3. ## リプレイを実行する \{#run}
 
    ```bash
    npx ambercast run --resolve tests/ambercast/find-page.test.md
@@ -63,7 +73,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    - 終了コード`0`
    - 設定したrunsディレクトリの下に、呼び出しごとの`report.json`を作成する
 
-3. ## 変更内容を確認してコミットする \{#review-commit}
+4. ## 変更内容を確認してコミットする \{#review-commit}
 
    ```bash
    git status --short
@@ -71,12 +81,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
    追跡済みの変更ファイルはすべて`git diff -- <path>`でレビューする。未追跡のprompt・plan・groundingの各パスは、内容全体を確認するか`git diff --no-index /dev/null <path>`を実行する。
 
-   レビュー後、人が3つのファイルをコミットする。
-
-   :::caution
-   エージェントは変更の全体を提示し、会話内で明示的な依頼があったときだけコミットする。CLIフラグや`--yes`はその依頼の代わりにならない（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）。
-
-   :::
+   レビュー後、人が3つのファイルをコミットする。初期化で作成された`ambercast.config.json`等も、通常どおり別途レビューしてコミットする。
 
 </Steps>
 

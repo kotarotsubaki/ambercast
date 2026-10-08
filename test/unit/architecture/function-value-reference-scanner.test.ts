@@ -236,7 +236,11 @@ async function withEligibilityFixture(
       const resolvedSignature = checker.getResolvedSignature(callExpression);
       const memberType = checker.getTypeAtLocation(callExpression.expression);
       const overloadSignatures = checker.getSignaturesOfType(memberType, ts.SignatureKind.Call);
-      expect(resolvedSignature?.declaration).toBe(overloadSignatures[1]?.declaration);
+      const targetBearingSignature = overloadSignatures.find((signature) => (
+        checker.typeToString(checker.getReturnTypeOfSignature(signature)).includes('TargetShape')
+      ));
+      if (targetBearingSignature === undefined) throw new Error('Missing target-bearing overload signature.');
+      expect(resolvedSignature?.declaration).toBe(targetBearingSignature.declaration);
     }
   });
 }

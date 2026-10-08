@@ -9,10 +9,13 @@ Ambercast defines artifact-format compatibility and regeneration boundaries acro
 
 | package version | Plan `schemaVersion` | Grounding `schemaVersion` | element fingerprint tag | report `schemaVersion` |
 | --- | --- | --- | --- | --- |
-| `0.1.0` | `2` | `1` (not yet confirmed) | `a11y-neighborhood-v2` | `3.0` |
+| `0.1.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
-| `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
-| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
+| `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+
+Rows list 0.1.0, 0.2.0, each release that changed the Plan or Grounding schema version, and every release from 0.8.0 on.
 
 In version 0.2.0, the provider request contract changed without incrementing the Plan schema version. That change updated `producerBundleFingerprint` and altered every prompt's `inputsDigest`, making 0.1.0 plans stale (see [Changelog](/ambercast/reference/changelog/#release-020)).
 

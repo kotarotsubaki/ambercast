@@ -55,7 +55,7 @@
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/mcp/): MCP サーバーの起動、転送、終了処理、クライアント登録のリファレンス。
 
 ## PLAN SPECIFICATION
-- [Ambercast Plan 仕様](https://kotarotsubaki.github.io/ambercast/ja/spec/overview/): 本仕様は、ambercast 0.7.0 が受け付けるアーティファクトについて記述する。
+- [Ambercast Plan 仕様](https://kotarotsubaki.github.io/ambercast/ja/spec/overview/): 本仕様は、ambercast 0.8.0 が受け付けるアーティファクトについて記述する。
 - [計画ドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/plan-document/): `PlanDocument` は厳格なオブジェクトである。
 - [ステップ](https://kotarotsubaki.github.io/ambercast/ja/spec/steps/): コミットされたすべてのステップは、`kind` によって判別される `Step` の厳格なブランチであり、すべてのブランチは `id: StepId` を持つ。
 - [値型](https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/): 他のすべての章は、それらの形状を再記述するのではなく、これらの定義を使用しなければならない（MUST）。

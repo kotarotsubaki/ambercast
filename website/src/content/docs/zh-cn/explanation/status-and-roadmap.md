@@ -1,6 +1,6 @@
 ---
 title: 状态与路线图
-description: 明确 ambercast 0.3.1 的功能边界与后续设计规划。
+description: 明确 ambercast 当前版本的功能边界与后续设计规划。
 ---
 
 理解 ambercast 的当前边界，有助于区分已实现的工程事实与后续的设计规划。在当前阶段，ambercast 确立了明确的命令行能力范围，同时定义了计划（plans）在版本演进中的生命周期要求。
@@ -23,6 +23,6 @@ CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`�
 
 ## 版本策略 {#version-policy}
 
-目前已发布的软件包版本为 0.3.1。关于工具演进的产品策略是：在整个 0.x 阶段仅保持 CLI 形式，并在迈向 1.0.0 时与云端版本一同交付。
+目前已发布的软件包版本列于[兼容性表](/ambercast/zh-cn/reference/compatibility/#compatibility-table)。关于工具演进的产品策略是：在整个 0.x 阶段仅保持 CLI 形式，并在迈向 1.0.0 时与云端版本一同交付。
 
 相关链接：[变更日志](/ambercast/zh-cn/reference/changelog/)、[设计哲学](/ambercast/zh-cn/philosophy/)

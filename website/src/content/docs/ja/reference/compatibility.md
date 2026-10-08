@@ -11,10 +11,13 @@ ambercast が生成する Plan や Grounding などのアーティファクト�
 
 | パッケージバージョン | Plan `schemaVersion` | Grounding `schemaVersion` | 要素フィンガープリントタグ | レポート `schemaVersion` |
 | --- | --- | --- | --- | --- |
-| `0.1.0` | `2` | `1`（未確認） | `a11y-neighborhood-v2` | `3.0` |
+| `0.1.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
-| `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
-| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
+| `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+
+表には 0.1.0、0.2.0、Plan または Grounding のスキーマバージョンが変更された各リリース、および 0.8.0 以降のすべてのリリースを記載します。
 
 バージョン 0.2.0 では、Plan のスキーマバージョンを変更することなくプロバイダのリクエスト規約が変更されました。この変更により `producerBundleFingerprint` およびすべてのプロンプトの `inputsDigest` が変化するため、0.1.0 で生成された Plan は stale（陳腐化）として扱われます。
 

@@ -9,14 +9,14 @@ sidebar:
 ---
 
 :::caution
-`ambercast baseline` 与 `ambercast restore` 属于规划中的功能，在 0.3.1 版本中尚未实现。本文档描述的是预期设计行为，而非当前的实现行为。
+`ambercast baseline` 与 `ambercast restore` 属于规划中的功能，在当前版本中尚未实现。本文档描述的是预期设计行为，而非当前的实现行为。
 :::
 
 本文档记录 `ambercast baseline` 与 `ambercast restore` 规划的外部数据库边界、存储规范、新鲜度检验规则以及未决设计事项。
 
 ## 状态 {#status}
 
-`ambercast baseline` 与 `ambercast restore` 在 0.3.1 版本中尚未实现，也不是可用的 CLI 命令。两者规划的数据库边界由数据库重置设计所定义。可用命令参见 CLI 概览。
+`ambercast baseline` 与 `ambercast restore` 在当前版本中尚未实现，也不是可用的 CLI 命令。两者规划的数据库边界由数据库重置设计所定义。可用命令参见 CLI 概览。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
 

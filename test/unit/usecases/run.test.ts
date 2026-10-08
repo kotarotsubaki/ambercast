@@ -2190,6 +2190,9 @@ describe('run', () => {
       expect(() => buildRedactedAiProposalContext(
         proposalContext, resolvedSecrets, new Map(), (value) => value,
       )).toThrowError(/contains a resolved secret value/);
+      expect(() => buildRedactedAiProposalContext(
+        proposalContext, resolvedSecrets, new Map(), (value) => value,
+      )).toThrowError(expect.objectContaining({ reason: 'grounding-secret-contaminated' }));
       expect(executor.structuredRequests).toHaveLength(0);
     });
 
@@ -8371,6 +8374,34 @@ describe('run failure evidence', () => {
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'failed', explanation: 'The browser returned no diagnostic.',
       steps: [{ id: 'assert-dashboard', status: 'failed', actual: 'The browser returned no diagnostic.' }],
+    });
+    expect(outcome.results[0]?.error).toBeUndefined();
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.envelope.errors).toEqual([]);
+    assertDiagnosable(report.envelope);
+  });
+
+  it('TEST-8 explains a url-matches failure when the browser gives no diagnostic', async () => {
+    const session = createFakeBrowserSession(new Map(), {
+      assertOutcome: { passed: false, message: '' },
+    });
+    const evaluateAssert = vi.spyOn(session, 'evaluateAssert');
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'assert-dashboard-url', kind: 'assert', check: 'url-matches', pattern: '/dashboard/.*', timeoutMs: 0 },
+    ]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(evaluateAssert).toHaveBeenCalled();
+    expect(await evaluateAssert.mock.results[0]?.value).toEqual({ passed: false, message: '' });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'failed', explanation: 'The browser returned no diagnostic.',
+      steps: [{ id: 'assert-dashboard-url', status: 'failed', actual: 'The browser returned no diagnostic.' }],
     });
     expect(outcome.results[0]?.error).toBeUndefined();
     const report = buildRunReport({

@@ -21,13 +21,17 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 ヒーリングはまず、AIを使わない通常のリプレイでテストを再実行し、本当に失敗するかどうかを確かめる。ここで失敗が再現しなかった場合、それ以上の修復は行わない。失敗が再現したときだけ、次の3段階に進む。
 
-```mermaid alt="ベースラインリプレイが失敗すると段階1のgrounding修復を試み、frontierが前進しなければ段階2のsingle-step/tail修復へ進む。失敗が残り期限前なら段階3のplan全体修復に至る。書き込みは確認の後だけ行われる。"
-flowchart TD
-  B[baseline replay] -->|fails| S1[stage 1]
-  S1 -->|not advanced| S2[stage 2]
-  S2 -->|still failing| S3[stage 3]
-  S3 -->|confirmed| C[commit]
-```
+<div style="display:flex;flex-direction:column;align-items:center;margin:1.25rem 0;font-size:0.9rem;">
+<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">baseline replay</div>
+<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ fails</div>
+<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">stage 1</div>
+<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ not advanced</div>
+<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">stage 2</div>
+<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ still failing</div>
+<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">stage 3</div>
+<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ confirmed</div>
+<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">commit</div>
+</div>
 
 - 段階1: テストが最初に失敗したステップだけを見て、ページ上の要素を探し直す。軽い再スキャンで見つかることもあれば、AIに新しい位置を推測させることもある
 - 段階2: 段階1で解決しなかった場合だけ、その失敗ステップとその後ろの数ステップをまとめてAIに作り直させる

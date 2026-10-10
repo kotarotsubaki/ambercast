@@ -31,7 +31,7 @@ Three `.mdx` escapes apply anywhere a page uses `.mdx`, all demonstrated in `blo
 
 ## Diagrams
 
-A diagram is written as a fenced Mermaid block carrying its own `alt` attribute, describing what the diagram shows for a reader who cannot see it. Running `npm run diagrams` from `website/` is the only supported way to produce the committed light and dark SVG pair for that fence; editing or adding an SVG by hand leaves it stale, and `check-diagrams.mjs` (wired into `npm run check`) catches that staleness, an orphaned SVG with no matching fence, and a fence missing its `alt` attribute.
+A diagram is written as a fenced Mermaid block carrying its own `alt` attribute, describing what the diagram shows for a reader who cannot see it, and `alt="…"` is the only metadata token allowed after `mermaid`. Running `npm run diagrams` from `website/` is the only supported way to produce the committed light and dark SVG pair for that fence; editing or adding an SVG by hand leaves it stale, with no built-in way to detect that by content. `check-diagrams.mjs` (wired into `npm run check`) checks only that both theme SVGs exist for every fence, that no SVG under `public/diagrams` is an orphan (no matching fence), and that `alt` is present, nonempty, and the fence's only metadata -- it never compares SVG content.
 
 ## Terminology
 

@@ -11,10 +11,10 @@ MCP サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`�
 
 | ツール | 対応 CLI | アノテーション | `isError: true` | `isError: false` の負の結果 |
 | --- | --- | --- | --- | --- |
-| `ambercast_generate` | generate | false / false / true（弱）/ false | exit 2・3 | exit 1（strict 曖昧）、exit 5 |
+| `ambercast_generate` | generate | false / false / true（弱）/ false | exit 2（`PROMPT_AMBIGUOUS` 含む）・3 | exit 5 |
 | `ambercast_run` | run | false / false / false / true | exit 2・3・4（MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED） | exit 1（assertion red）、exit 5 |
 | `ambercast_check` | check | true / false / true / false | exit 2・3 | exit 4（stale は results[].status の正常成果）、exit 5 |
-| `ambercast_heal` | heal | false / true / false / true | exit 2（CI 拒否含む）・3・4、`HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED` | exit 1（未解決・拒否）、exit 5 |
+| `ambercast_heal` | heal | false / true / false / true | exit 2（CI 拒否と `PROMPT_AMBIGUOUS` を含む）・3・4、`HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED` | exit 1（未解決・拒否）、exit 5 |
 | `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`、failed 時の `JOB_FAILED`、結果のある completed/cancelled は元ツールの写像 | 非終端 record・一覧・queued cancel record |
 | `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
 

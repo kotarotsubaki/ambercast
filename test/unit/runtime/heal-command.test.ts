@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
+import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
@@ -12,6 +13,7 @@ import { prepareHeal, runHealCommand, type HealCommandInput, type HealCommandOut
 import type { HealBatchResult, HealCaseCommit, HealCaseOutcome, HealCommitOutcome, HealDeps, HealOutcome } from '#usecases/heal.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
 
 const mocks = vi.hoisted(() => ({
   createFsStorage: vi.fn(), createSystemClock: vi.fn(), createProcessEnvironmentInfo: vi.fn(),
@@ -60,13 +62,13 @@ function input(overrides: Partial<HealCommandInput> = {}): HealCommandInput {
   return { files: [], dryRun: false, yes: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides };
 }
 function report(exitCode: HealCommandOutput['exitCode']): HealCommandOutput {
-  return { exitCode, envelope: { schemaVersion: '3.9', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
+  return { exitCode, envelope: { schemaVersion: '3.10', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1, summary: { total: 0, passed: 0, failed: 0, errored: 0, skipped: 0 }, errors: [], results: [] } } as unknown as HealCommandOutput;
 }
 function reportWithExecutionEvidence(root: string): HealCommandOutput {
   return {
     exitCode: 1,
     envelope: {
-      schemaVersion: '3.9', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
+      schemaVersion: '3.10', command: 'heal', startedAt: '2026-08-25T00:00:00Z', durationMs: 1,
       summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 },
       errors: [{
         scope: 'case', kind: 'environment', code: 'FS_IO_ERROR',
@@ -313,6 +315,26 @@ describe('runHealCommand', () => {
         results: [expect.objectContaining({ stage3Error, application: 'no-artifact-change', stopReason: 'settled' })],
       }),
     }));
+  });
+
+  it('publishes Stage 3 and final replay failures as case errors from the settled command', async () => {
+    const stage3Error = new AiResponseInvalidError('invalid generation', { issues: [{ code: 'invalid-json', path: [] }] });
+    const finalReplayError = new MissingPlanError('plan missing');
+    const healingOutcome = outcome({ results: [caseResult('replay.test.md', {
+      repairOutcome: 'unresolved', stage3Error, finalReplayError,
+    })] });
+    configure({ result: batch({ outcome: healingOutcome, commits: new Map() }) });
+    await useActualBuildHealReport();
+
+    const output = await runHealCommand(input({ yes: true }));
+
+    expect(output.exitCode).toBe(3);
+    expect(output.envelope.errors).toEqual([
+      expect.objectContaining({ scope: 'case', caseId: 'tests/replay.test.md', code: 'AI_RESPONSE_INVALID', details: { issues: [{ code: 'invalid-json', path: [] }] } }),
+      expect.objectContaining({ scope: 'case', caseId: 'tests/replay.test.md', code: 'MISSING_PLAN' }),
+    ]);
+    expect(output.envelope.summary.errored).toBe(1);
+    assertDiagnosable(output.envelope);
   });
 
   it.each([['ordinary dry run', false], ['--dry-run --yes no-op', true]] as const)('never prompts or commits during %s', async (_name, yes) => {

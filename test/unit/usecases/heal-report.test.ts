@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
+import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
+import { AgenticStepFailedError } from '#core/errors/agentic-step-failed-error.js';
+import { CaseAbortedError } from '#core/errors/case-aborted-error.js';
 import { FsIoError } from '#core/errors/fs-io-error.js';
+import { GroundingUnresolvedError } from '#core/errors/grounding-unresolved-error.js';
+import { InterruptedError } from '#core/errors/interrupted-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import type { AmbercastError } from '#core/errors/types.js';
 import {
   buildHealReport,
@@ -11,6 +17,7 @@ import {
   type SettledHealOutcome,
 } from '#usecases/heal-report.js';
 import type { HealCaseOutcome } from '#usecases/heal.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
 
 const BASE = {
   startedAt: '2026-08-25T00:00:00Z',
@@ -40,8 +47,8 @@ function report(input: { readonly outcome?: SettledHealOutcome; readonly error?:
 }
 
 describe('buildHealReport', () => {
-  it('emits the shared 3.9 schema version', () => {
-    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.9');
+  it('emits the shared 3.10 schema version', () => {
+    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.10');
   });
 
   it('serializes a completed healed candidate without exposing internal progress indices, for a case with no Stage 3 activity', () => {
@@ -89,6 +96,79 @@ describe('buildHealReport', () => {
     const output = report({ outcome: outcome({ results: [{ ...healed('unresolved'), stage3Error: new AiExecutorUnavailableError('offline'), finalReplayError: new FsIoError('evidence failed') }] }) });
 
     expect(output.exitCode).toBe(3);
+    expect(output.envelope.errors).toEqual([
+      expect.objectContaining({ scope: 'case', caseId: 'login.test.md', code: 'AI_EXECUTOR_UNAVAILABLE' }),
+      expect.objectContaining({ scope: 'case', caseId: 'login.test.md', code: 'FS_IO_ERROR' }),
+    ]);
+    assertDiagnosable(output.envelope);
+  });
+
+  it('appends Stage 3 then final-replay errors per row after preflight errors and before run interruption', () => {
+    const first = { ...healed('unresolved'), stage3Error: new AiResponseInvalidError('invalid generation', { issues: [{ code: 'invalid-json', path: [] }] }), finalReplayError: new GroundingUnresolvedError('missing grounding', { stepId: 'submit', reason: 'missing' }) };
+    const second = { ...healed('unresolved'), id: 'second.test.md', file: 'second.test.md', stage3Error: new FsIoError('write failed'), finalReplayError: new FsIoError('read failed') };
+    const output = report({ outcome: outcome({
+      results: [first, second],
+      errors: [{ file: 'preflight.test.md', error: new MissingPlanError('missing plan') }],
+      interrupted: true,
+    }) });
+
+    expect(output.envelope.errors.map(({ scope, code }) => ({ scope, code }))).toEqual([
+      { scope: 'case', code: 'MISSING_PLAN' },
+      { scope: 'case', code: 'AI_RESPONSE_INVALID' },
+      { scope: 'case', code: 'GROUNDING_UNRESOLVED' },
+      { scope: 'case', code: 'FS_IO_ERROR' },
+      { scope: 'case', code: 'FS_IO_ERROR' },
+      { scope: 'run', code: 'INTERRUPTED' },
+    ]);
+    expect(output.envelope.errors.slice(1, 3)).toEqual([
+      expect.objectContaining({ caseId: first.id, code: 'AI_RESPONSE_INVALID', details: { issues: [{ code: 'invalid-json', path: [] }] } }),
+      expect.objectContaining({ caseId: first.id, code: 'GROUNDING_UNRESOLVED', details: { stepId: 'submit', reason: 'missing' } }),
+    ]);
+    expect(output.envelope.errors.slice(3, 5)).toEqual([
+      expect.objectContaining({ caseId: second.id }),
+      expect.objectContaining({ caseId: second.id }),
+    ]);
+    assertDiagnosable(output.envelope);
+  });
+
+  it('keeps a final replay grounding failure and selects exit four over unresolved exit one', () => {
+    const output = report({ outcome: outcome({ results: [{
+      ...healed('unresolved'),
+      finalReplayError: new GroundingUnresolvedError('missing grounding', { stepId: 'submit', reason: 'missing' }),
+    }] }) });
+
+    expect(output.exitCode).toBe(4);
+    expect(output.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', caseId: 'login.test.md', code: 'GROUNDING_UNRESOLVED',
+      details: { stepId: 'submit', reason: 'missing' },
+    })]);
+    assertDiagnosable(output.envelope);
+  });
+
+  it.each([
+    ['agentic failure', new AgenticStepFailedError('agent failed', { stepId: 'submit', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0 }), 'AGENTIC_STEP_FAILED', { stepId: 'submit', actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0 }],
+    ['case abort', new CaseAbortedError('case aborted', 'run-value-missing', 'submit'), 'CASE_ABORTED', { reason: 'run-value-missing', stepId: 'submit' }],
+    ['unexpected crash', new UnexpectedCrashError('case crashed', undefined, { cause: new TypeError('bad value') }), 'UNEXPECTED_CRASH', { cause: { name: 'TypeError' } }],
+  ] as const)('reports final replay %s without promoting its exit three above unresolved exit one', (_name, finalReplayError, code, details) => {
+    const output = report({ outcome: outcome({ results: [{ ...healed('unresolved'), finalReplayError }] }) });
+
+    expect(output.exitCode).toBe(1);
+    expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'case', caseId: 'login.test.md', code, details })]);
+    assertDiagnosable(output.envelope);
+  });
+
+  it('throws when a Stage 3 interruption reaches the case report builder', () => {
+    expect(() => report({ outcome: outcome({ results: [healed('unresolved', new InterruptedError())] }) })).toThrow();
+  });
+
+  it('omits a final replay prompt-path-invalid error from case errors', () => {
+    const output = report({ outcome: outcome({ results: [{
+      ...healed('unresolved'),
+      finalReplayError: new PromptPathInvalidError('invalid prompt', { path: 'login.test.md', reason: 'not-test-md' }),
+    }] }) });
+
+    expect(output.envelope.errors).toEqual([]);
+    assertDiagnosable(output.envelope);
   });
 
   it('maps preflight failures into case-scoped report errors rather than repair results', () => {

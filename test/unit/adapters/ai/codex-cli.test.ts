@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createCodexCliExecutor } from '#adapters/ai/codex-cli/index.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
-import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
+import { ElementBindingProposalResponse, GeneratedPlanResponseRequest } from '#core/ir/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import type { BuildInvocation } from '#adapters/ai/agentic/agentic-executor.js';
@@ -93,6 +93,15 @@ registerAiExecutorTransportContract({
 });
 
 describe('createCodexCliExecutor', () => {
+  it('rejects an unwrapped element proposal from the provider', async () => {
+    const runner = createFakeCommandRunner([async (call) => {
+      await writeFile(commandPaths(call.args).outputPath, '{"outcome":"found","role":"button","name":"Submit"}');
+      return { outcome: 'exited', stdout: '', stderr: '', exitCode: 0 };
+    }]);
+    const executor = createCodexCliExecutor({ run: runner.run });
+    await expect(executor.execute({ prompt: 'Resolve the element.', responseSchema: typedJsonSchema(ElementBindingProposalResponse) }))
+      .rejects.toMatchObject({ kind: 'ai-response-invalid', details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
+  });
   it('writes the exact schema, uses the complete file-path protocol, and cleans up after success', async () => {
     let schemaPath = '';
     let outputPath = '';

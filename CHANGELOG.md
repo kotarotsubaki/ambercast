@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.0](https://github.com/kotarotsubaki/ambercast/compare/v0.8.0...v0.9.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **report:** The report schema moves to 3.10 and adds the case-scoped error codes CASE_ABORTED (with reason and stepId) and PROMPT_AMBIGUOUS (with ambiguities). A generate or heal failure caused by an ambiguous prompt now exits 2 with PROMPT_AMBIGUOUS instead of exiting 3 with a run-scoped UNEXPECTED_CRASH. Run rows that used to end without an error code now carry CASE_ABORTED, AGENTIC_STEP_FAILED or a case-scoped UNEXPECTED_CRASH. heal reports Stage 3 and final-replay failures as case errors, so those rows count as errored in the summary (exit codes are unchanged). `ambercast view` now shows error hints and details.
+
+### Features
+
+* **report:** enforce that every failure path yields a coded, diagnosable error ([c4c268e](https://github.com/kotarotsubaki/ambercast/commit/c4c268ea5d7d8b9ccd83bd28ee67e8786de6b17d))
+
+
+### Bug Fixes
+
+* **scripts:** pack-install failure reasons, pm detection without which, and stronger test oracles ([#565](https://github.com/kotarotsubaki/ambercast/issues/565)) ([c451c41](https://github.com/kotarotsubaki/ambercast/commit/c451c412187a00e6866b84204a3a01d2035208b3))
+* **test:** align report-assertion and corpus messages and secret validation with the [#547](https://github.com/kotarotsubaki/ambercast/issues/547) spec ([#566](https://github.com/kotarotsubaki/ambercast/issues/566)) ([59a1af5](https://github.com/kotarotsubaki/ambercast/commit/59a1af579b499dfee4531e91e3fd987903b36992))
+* **website:** fix diagram CLI fail-open, preview-blocks daemon tracking, and legacy redirects ([#577](https://github.com/kotarotsubaki/ambercast/issues/577)) ([f6340d3](https://github.com/kotarotsubaki/ambercast/commit/f6340d35f50982f8c3a4ba5c7311a060c17bd741))
+
 ## [0.8.0](https://github.com/kotarotsubaki/ambercast/compare/v0.7.0...v0.8.0) (2026-10-06)
 
 

@@ -1,0 +1,31 @@
+error EXECUTOR_UNSUPPORTED [example]: representative error
+  details: target=local; executor=playwright; reason=unsupported-action; missing=["click"]; surface=browser
+error BROWSER_LAUNCH_FAILED [example]: representative error
+  hint: Install Chromium, then retry.
+  details: reason=executable-missing; engine=chromium
+error PROMPT_PATH_INVALID [example]: representative error
+  details: path=unsafe\u001bname.test.md; reason=no-name
+error AI_RESPONSE_INVALID [example]: representative error
+  details: issues=invalid-json @ ["dynamic\u007f\u0080"]; missing-field @ ["steps",0]; attempts=[{"attempt":1,"code":"AI_RESPONSE_INVALID"}]
+error AGENTIC_STEP_FAILED [example]: representative error
+  details: stepId=recorded-ai; actions=1; assertions=3; passedAssertions=1; failedAssertions=2; targetRejections=1; lastFailedAssertion={"check":"text-visible","expected":"Text \"X\" is visible."}
+error SECRET_LITERAL_REJECTED [example]: representative error
+  details: detector=credential-prefix-sk; path=generatorMeta.key; attempts=[]
+error SECRET_ENV_VAR_COLLISION [example]: representative error
+  details: envVar=AMBERCAST_SECRET_API_TOKEN; refs=["{{secrets.API_TOKEN}}","{{secrets.api_token}}"]
+error SECRET_CONSENT_REQUIRED [example]: representative error
+  details: reason=consent-required; secrets=[{"name":"API_TOKEN","stepId":"step-a","envVar":"AMBERCAST_SECRET_API_TOKEN","reason":"required"}]
+error SECRET_SYNTAX_REJECTED [example]: representative error
+  details: occurrences=[{"kind":"reference","line":2,"column":8}]
+error AI_EXECUTOR_UNAVAILABLE [example]: representative error
+  details: attempts=[]
+error UNEXPECTED_CRASH [example]: representative error
+  details: cause={"name":"AbortError"}
+error FS_IO_ERROR [example]: representative error
+  details: partiallyWritten=["plan","grounding"]
+error GROUNDING_UNRESOLVED [example]: representative error
+  details: stepId=step-a; reason=missing-target
+error CASE_ABORTED [example]: representative error
+  details: reason=run-value-missing; stepId=step-2
+error PROMPT_AMBIGUOUS [example]: representative error
+  details: ambiguities=2

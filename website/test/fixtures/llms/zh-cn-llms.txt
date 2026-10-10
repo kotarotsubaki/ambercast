@@ -55,7 +55,7 @@
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/mcp/): MCP 服务器的启动、传输、关闭和客户端注册参考。
 
 ## PLAN SPECIFICATION
-- [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.7.0 接受的工件。
+- [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.9.0 接受的工件。
 - [计划文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/plan-document/): `PlanDocument` 是一个严格对象。
 - [步骤](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/steps/): 每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严格分支；每个分支都具有 `id: StepId`。
 - [值类型](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/): 所有其他章节必须（MUST）使用这些定义，而不是重新陈述其形态。
@@ -74,7 +74,7 @@
 - [信任与安全](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/trust-and-security/): 阐释 ambercast 的信任边界与故障安全设计考量。
 - [CI 中的确定性](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/): 解释 CI 行为背后的信任边界。
 - [ambercast 的设计模型对比](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/comparison/): 对比 ambercast 与代码生成、录制测试及直接驱动型 Agent 的核心设计模型。
-- [状态与路线图](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-roadmap/): 明确 ambercast 0.3.1 的功能边界与后续设计规划。
+- [状态与路线图](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-roadmap/): 明确 ambercast 当前版本的功能边界与后续设计规划。
 
 ## FOR AI AGENTS
 - [在 AI Agent 中使用 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/overview/): 为 AI Agent 提供修改测试资产前的操作阅读顺序、副作用范围与有界运行循环指引。

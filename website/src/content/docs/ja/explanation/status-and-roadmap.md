@@ -28,7 +28,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 ## バージョン方針 {#version-policy}
 
-現在公開されているパッケージバージョンは 0.3.1 です。
+現在公開されているパッケージバージョンは[互換性テーブル](/ambercast/ja/reference/compatibility/#compatibility-table)に記載しています。
 
 プロダクトの方針として、0.x の間はCLIのみを提供し、クラウド版とともに 1.0.0 をリリースします。
 

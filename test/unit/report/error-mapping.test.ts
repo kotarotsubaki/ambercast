@@ -11,6 +11,10 @@ import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { assertNoLiteralSecrets } from '#usecases/generator-secret-policy.js';
 import { ReportError } from '#report/schema.js';
 import { CAUSE_NAMES } from './cause-name-fixtures.js';
+import { CaseAbortedError, type CaseAbortReason } from '#core/errors/case-aborted-error.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
+import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
+import { CaseAbortedDetails, PromptAmbiguousDetails } from '#report/schema.js';
 
 const BROWSER_LAUNCH_FAILED_HINT = 'Install Chromium by running `npx playwright install chromium`, then retry.';
 
@@ -35,6 +39,8 @@ const EXPECTED_REPORT_ERROR_DETAILS = {
   'fs-io-error': { kind: 'environment', code: 'FS_IO_ERROR' },
   'unexpected-crash': { kind: 'environment', code: 'UNEXPECTED_CRASH' },
   'interrupted': { kind: 'environment', code: 'INTERRUPTED' },
+  'case-aborted': { kind: 'environment', code: 'CASE_ABORTED' },
+  'prompt-ambiguous': { kind: 'usage', code: 'PROMPT_AMBIGUOUS' },
 } as const;
 
 type ReportableErrorKind = keyof typeof EXPECTED_REPORT_ERROR_DETAILS;
@@ -56,6 +62,107 @@ class ClassifiedError extends AmbercastError {
 describe('REPORT_ERROR_DETAILS', () => {
   it('exports the complete stable ErrorKind-to-report-kind-and-code mapping', () => {
     expect(errorMapping.REPORT_ERROR_DETAILS).toEqual(EXPECTED_REPORT_ERROR_DETAILS);
+  });
+
+  it('places a supplied hint before projected details in report errors', () => {
+    const error = new SecretConsentRequiredError('Secret consent is required.', {
+      reason: 'consent-required',
+      secrets: [{ name: 'API_TOKEN', stepId: 'step-a', envVar: 'AMBERCAST_SECRET_API_TOKEN', reason: 'required' }],
+      hint: 'Allow the secret before retrying.',
+    });
+    const keys = Object.keys(errorMapping.reportError(error, { scope: 'case', caseId: 'case-a' }));
+
+    expect(keys).toContain('hint');
+    expect(keys).toContain('details');
+    expect(keys.indexOf('hint')).toBeLessThan(keys.indexOf('details'));
+  });
+});
+
+const CASE_ABORT_REASONS = [
+  'run-reference-invalid', 'run-value-missing', 'secret-fill-incomplete',
+  'agentic-no-terminal-evidence', 'agentic-coverage-inexact', 'agentic-proof-invalid',
+  'grounding-secret-contaminated', 'grounding-snapshot-invalid',
+] as const satisfies readonly CaseAbortReason[];
+// This independent oracle detects matching omissions in core and schema.
+const OWNER_APPROVED_REASONS = [
+  'run-reference-invalid', 'run-value-missing', 'secret-fill-incomplete',
+  'agentic-no-terminal-evidence', 'agentic-coverage-inexact', 'agentic-proof-invalid',
+  'grounding-secret-contaminated', 'grounding-snapshot-invalid',
+] as const;
+
+describe('issue 540 diagnostic projection', () => {
+  it('keeps the three independently maintained abort-reason sets equal', () => {
+    const schemaReasons = CaseAbortedDetails.shape.reason.options;
+    expect(new Set(CASE_ABORT_REASONS)).toEqual(new Set(schemaReasons));
+    expect(new Set(schemaReasons)).toEqual(new Set(OWNER_APPROVED_REASONS));
+    expect(new Set(CASE_ABORT_REASONS)).toEqual(new Set(OWNER_APPROVED_REASONS));
+  });
+
+  it.each(CASE_ABORT_REASONS)('reports a case abort with reason %s and its step', (reason) => {
+    const error = new CaseAbortedError('case stopped', reason, 'step-a');
+    const location = { scope: 'case' as const, caseId: 'case-a' };
+    const projected = errorMapping.projectReportErrorDetails(error, location);
+    expect(projected).toEqual({ ok: true, details: { reason, stepId: 'step-a' } });
+    expect(errorMapping.reportError(error, location)).toEqual({
+      scope: 'case', caseId: 'case-a', kind: 'environment', code: 'CASE_ABORTED',
+      message: 'case stopped', details: { reason, stepId: 'step-a' },
+    });
+    expect(() => errorMapping.reportError(error, { scope: 'run' })).toThrow();
+    expect(() => errorMapping.projectReportErrorDetails(error, { scope: 'run' })).toThrow();
+  });
+
+  it('reports prompt ambiguity at case scope and rejects a zero count', () => {
+    const location = { scope: 'case' as const, caseId: 'case-a' };
+    const error = new PromptAmbiguousError('ambiguous prompt', 2);
+    expect(errorMapping.projectReportErrorDetails(error, location)).toEqual({ ok: true, details: { ambiguities: 2 } });
+    expect(errorMapping.reportError(error, location)).toEqual({
+      scope: 'case', caseId: 'case-a', kind: 'usage', code: 'PROMPT_AMBIGUOUS',
+      message: error.message, details: { ambiguities: 2 },
+    });
+    expect(PromptAmbiguousDetails.safeParse({ ambiguities: 0 }).success).toBe(false);
+    const broken = new PromptAmbiguousError('ambiguous prompt', 0);
+    const projection = errorMapping.projectReportErrorDetails(broken, location);
+    expect(projection.ok).toBe(false);
+    if (!projection.ok) expect(projection.issues.length).toBeGreaterThan(0);
+    expect(errorMapping.reportError(broken, location)).not.toHaveProperty('details');
+    expect(() => errorMapping.reportError(error, { scope: 'run' })).toThrow();
+    expect(() => errorMapping.projectReportErrorDetails(error, { scope: 'run' })).toThrow();
+  });
+
+  it.each([
+    new ClassifiedError('agentic-step-failed', 'bad step', { actions: 0, assertions: 0, passedAssertions: 0, failedAssertions: 0, targetRejections: 0 }),
+    new CaseAbortedError('bad reason', 'unknown' as CaseAbortReason, 'step-a'),
+  ])('exposes invalid details to tests while production reporting omits them', (error) => {
+    const location = { scope: 'case' as const, caseId: 'case-a' };
+    const projection = errorMapping.projectReportErrorDetails(error, location);
+    expect(projection.ok).toBe(false);
+    if (!projection.ok) expect(projection.issues.length).toBeGreaterThan(0);
+    expect(errorMapping.reportError(error, location)).not.toHaveProperty('details');
+  });
+
+  it.each(['assertion-failed', 'no-tests-found', 'port-unavailable'] as const)('rejects non-reportable kind %s', (kind) => {
+    expect(() => errorMapping.projectReportErrorDetails(new ClassifiedError(kind, 'not reportable'), { scope: 'run' })).toThrow();
+  });
+
+  it('returns an allowed error without optional diagnostics when none are available', () => {
+    const error = new ClassifiedError('config-invalid', 'Configuration failed.');
+    expect(errorMapping.projectReportErrorDetails(error, { scope: 'run' })).toEqual({ ok: true });
+  });
+
+  it('returns the allowed hint separately from details', () => {
+    const error = new ClassifiedError('config-invalid', 'Configuration failed.', { hint: 'Check configuration.' });
+    expect(errorMapping.projectReportErrorDetails(error, { scope: 'run' })).toEqual({ ok: true, hint: 'Check configuration.' });
+  });
+
+  it.each([
+    ['interrupted', { scope: 'case' as const, caseId: 'case-a' }],
+    ['prompt-path-invalid', { scope: 'case' as const, caseId: 'case-a' }],
+    ['agentic-step-failed', { scope: 'run' as const }],
+    ['secret-env-var-collision', { scope: 'run' as const }],
+    ['secret-consent-required', { scope: 'run' as const }],
+    ['secret-syntax-rejected', { scope: 'run' as const }],
+  ] as const)('throws for schema-forbidden %s scope before attempting detail projection', (kind, location) => {
+    expect(() => errorMapping.projectReportErrorDetails(new ClassifiedError(kind, 'not allowed'), location)).toThrow();
   });
 });
 

@@ -3,7 +3,7 @@ title: 用語集
 description: ambercast全体で使用される用語の規範的定義と、翻訳時に保持すべき不変トークンのレジストリを提供します。
 ---
 
-ambercast全体で使用される用語の規範的な定義と、ドキュメントの翻訳や各種実装において正確に保持すべき不変トークン（リテラルトークン）の一覧です。各定義は1文の規範的記述として定義されています。フィールド、フラグ、ステータス、エラーコードの詳細な仕様については、各所有ドキュメントのリンク先を参照してください。なお、計画中と記載されたトークンには0.3.1におけるランタイムセマンティクスは存在せず、現時点で利用可能な機能としては提供されません。
+ambercast全体で使用される用語の規範的な定義と、ドキュメントの翻訳や各種実装において正確に保持すべき不変トークン（リテラルトークン）の一覧です。各定義は1文の規範的記述として定義されています。フィールド、フラグ、ステータス、エラーコードの詳細な仕様については、各所有ドキュメントのリンク先を参照してください。なお、計画中と記載されたトークンには現行版でのランタイムセマンティクスは存在せず、現時点で利用可能な機能としては提供されません。
 
 ## アーティファクトに関する用語 {#artifact-terms}
 
@@ -45,7 +45,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 
 ## 翻訳不変レジストリ {#translation-invariant-registry}
 
-ドキュメント全体において翻訳せず保持すべきトークンの網羅的一覧です。
+ドキュメント全体において翻訳せず保持すべきトークンの網羅的一覧です。第4列のレポートバージョンは、そのリリースのコミットに記録された `REPORT_SCHEMA_VERSION` です。
 
 | 不変トークン | 規範的定義 | 所有者 | 混同しやすい概念 |
 | --- | --- | --- | --- |
@@ -56,7 +56,7 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `--allow-empty` | `--allow-empty` は、このフラグを解析するコマンドにおいて空の選択を許容します。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` は view の非対話拒否を解除します。既に対話端末である場合は no-op です。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#interactive-gate) | 実装済みの `--headed` |
 | `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可します。指定しない場合、run はミスを拒絶します。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
-| `--clear` | `--clear` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1ベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
+| `--clear` | `--clear` は計画中（現行版では未実装）であり、現行版で受け入れられるベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
 | `--config` | `--config` はコマンドローカルのフラグであり、generateとcheckでのみ解析されます。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` は `ambercast init` が scaffold 先とするディレクトリを指定します。 | `ambercast init`; [ambercast init](/ambercast/ja/reference/cli/init/#flags) | 設定の `testDir` |
 | `--dry-run` | `--dry-run` は、generateおよびhealにおいてアーティファクトの書き込みを保留します。 | generate/heal; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | `--list` |
@@ -64,16 +64,16 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `--host` | `--host` は view のバインドアドレスを選択します。具体的な IP または `localhost` のみで、ワイルドカードは不可です。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#host-binding) | ターゲットの `baseUrl` |
 | `--json` | `--json` は、`init` と `view` を除く実装済みコマンドの実行完了後にシリアライズされた構造化レポート出力を選択します。 | CLIレンダラー; [レポート](/ambercast/ja/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` は `generate`、`run`、`check`、`heal` で解析されます。一覧表示の結果セマンティクスは各コマンドのドキュメントが所有します。`init` と `view` はどちらも受け付けません。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
-| `--no-reset` | `--no-reset` は計画中（0.3.1では未実装）であり、受け入れられる0.3.1 runパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | `--force` |
+| `--no-reset` | `--no-reset` は計画中（現行版では未実装）であり、現行版で受け入れられる run パーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` は view を候補自動増分ではなく単一の厳格なポートに固定します。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#port-selection) | 設定の `viewer.port` |
 | `--yes` | `--yes` は、対話的な確認なしでhealの適用を承認し、initの確認プロンプトを省略します。いずれも利用者自身のレビューの代わりにはなりません。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | generateの `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` は、隣接するGroundingコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Planのサフィックス |
 | `.ambercast.plan.json` | `.ambercast.plan.json` は、隣接するPlanコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Groundingのサフィックス |
-| `.baseline` | `.baseline` は計画中（0.3.1では未実装）であり、0.3.1のレイアウト解決ツールが導出することはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-storage-and-freshness) | 実装済みの `.runs` |
+| `.baseline` | `.baseline` は計画中（現行版では未実装）であり、現行版のレイアウト解決ツールが導出することはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-storage-and-freshness) | 実装済みの `.runs` |
 | `.runs` | `.runs` はデフォルトの `runsDir` の最終セグメントであり、独立して解決されるルートではありません。 | 設定 / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | コンパニオンアーティファクト |
 | `.test.md` | `.test.md` は、検出されたプロンプトパスがレイアウトマッピングを受け取るために必要な正確なサフィックスです。 | レイアウト解決ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity) | 任意のMarkdown |
 | `0.1.0` | `0.1.0` はリポジトリのチェンジログに記載されている2026-09-03のリリースを示します。 | [変更履歴](/ambercast/ja/reference/changelog/#release-010) | アーティファクトのスキーマバージョン |
-| `0.7.0` | `0.7.0` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.9` |
+| `0.9.0` | `0.9.0` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` は、最も強い優先度から最も弱い優先度への固定されたプロセス終了コードの優先順位です。 | 終了コードセレクター; [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) | 数値順 |
 | `@ambercast-secret` | `@ambercast-secret` は拒否されるレガシープロンプト構文であり、Plan v3 アーティファクトを再生成する前に除去する必要があります。 | プロンプトパーサー; [シークレットグラントの移行](/ambercast/ja/how-to/upgrade/#migrate-secret-grants) | シークレット参照 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` は、環境変数によるプロバイダーのオーバーライドを指定します。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -91,14 +91,14 @@ ambercast全体で使用される用語の規範的な定義と、ドキュメ�
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` は、`SECRET_REF_SOURCE` から構築される完全一致用の固定正規表現です。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | アンカーなしの断片 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` は、唯一受け入れられる要素フィンガープリントのアルゴリズムリテラルです。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | Planスキーマバージョン2 |
 | `ambercast` | `ambercast` はパッケージバイナリ名でありCLIプログラムです。 | パッケージ / CLI概要 | アーティファクトスキーマ |
-| `ambercast baseline` | `ambercast baseline` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
+| `ambercast baseline` | `ambercast baseline` は計画中（現行版では未実装）であり、現行版のパーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
 | `ambercast check` | `ambercast check` は実装済みの読み取り専用鮮度確認コマンドです。 | [ambercast check](/ambercast/ja/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` は実装済みのPlan生成コマンドです。 | [ambercast generate](/ambercast/ja/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` は実装済みの保護されたアーティファクト修復コマンドです。 | [ambercast heal](/ambercast/ja/reference/cli/heal/) | runフォールバック |
 | `ambercast init` | `ambercast init` は実装済みで、4つのファイルを書き込みます。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` は実装済みの stdio MCP サーバーを起動します。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | MCPツール名 |
-| `ambercast restore` | `ambercast restore` は計画中（0.3.1では未実装）であり、0.3.1パーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
-| `ambercast review` | `ambercast review` は計画中（0.3.1では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
+| `ambercast restore` | `ambercast restore` は計画中（現行版では未実装）であり、現行版のパーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
+| `ambercast review` | `ambercast review` は計画中（現行版では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
 | `ambercast run` | `ambercast run` は実装済みの決定論的リプレイコマンドです。 | [ambercast run](/ambercast/ja/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` は実装済みの読み取り専用ローカル結果ビューアです。 | [ambercast view](/ambercast/ja/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` は実装済みの読み取り専用 MCP 鮮度確認ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |

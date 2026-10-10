@@ -13,11 +13,10 @@ import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
-import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
-import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
@@ -33,29 +32,27 @@ import {
   Step,
   type Fingerprint,
 } from '#core/ir/schema.js';
-import { createLayoutResolver } from '#core/layout/resolve.js';
 import { reportError } from '#report/error-mapping.js';
 import { RepairTraceEntry } from '#report/schema.js';
-import type { AssertOutcome, BrowserSession } from '#ports/browser.js';
+import type { BrowserSession } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { EventSink, RunEvent, StageTwoRejectionReason } from '#ports/system.js';
 import {
   heal,
   type HealCommitOutcome,
   type HealDeps,
-  type HealOptions,
 } from '#usecases/heal.js';
 import type { GenerateDeps } from '#usecases/generate.js';
 import { PlanNavigationResolutionError, type RunOutcome } from '#usecases/run.js';
 import { buildHealReport } from '#usecases/heal-report.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
-import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession, elementRefKey, type FakeBrowserSessionEntry } from '../../doubles/fake-browser-session.js';
-import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
+import { createScenario, healAccessibilityTree, healSnapshot, groundingEntry, committedIntent, TEST_DIR, PROMPT, TARGETS, RESOLVED_TARGETS, FINGERPRINT, SUBMIT, PASSWORD, REPAIRED_PASSWORD, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT, FIXTURE_SPAN, OPTIONS, type HealScenario } from '../../support/heal-scenario.js';
 
 const aiExecutorUnavailableObserver = vi.hoisted(() => ({ messages: [] as string[] }));
 
@@ -156,34 +153,9 @@ afterEach(() => {
 
 const PLAN = '/workspace/tests/login.ambercast.plan.json';
 const GROUNDING = '/workspace/tests/login.ambercast.grounding.json';
-const TEST_DIR = '/workspace/tests';
-const RUNS_DIR = '/workspace/tests/.runs';
-const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
-const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 } } as const;
-const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) };
-const SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Submit' };
-const REPAIRED_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Continue' };
-const AFTER_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Open dashboard' };
-const REPAIRED_AFTER_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Continue to dashboard' };
-const PASSWORD = { strategy: 'accessibility' as const, role: 'textbox', name: 'Password' };
-const REPAIRED_PASSWORD = { strategy: 'accessibility' as const, role: 'textbox', name: 'Continue password' };
 const GENERATED_INSTRUCTION_TEXT_FIELD = 'cita' + 'tion';
-const FIXTURE_SPAN = { startLine: 3, startColumn: 8, endLine: 3, endColumn: 14 } as const;
-function committedIntent(ref: ElementRef) {
-  return { description: ref.name, roleHint: ref.role, sourceSpan: FIXTURE_SPAN };
-}
 function generatedIntent(ref: ElementRef) {
   return { description: ref.name, roleHint: ref.role, startAnchor: 'L3', startColumn: 8, endAnchor: 'L3', endColumn: 14, citation: 'submit' };
-}
-function groundingEntry(ref: ElementRef, fingerprint: Fingerprint, intentRef: ElementRef = ref) {
-  return {
-    kind: 'element' as const,
-    locator: ref,
-    fingerprint,
-    intentDigest: computeIntentDigest({ stepKind: 'action', operation: 'click', intent: committedIntent(intentRef) }),
-    provenance: 'ai-proposed' as const,
-  };
 }
 const AI_STEP = Step.parse({
   id: 'ai-step',
@@ -200,13 +172,6 @@ const CONFIRMED_SUBMIT_STEPS = [
   Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
   Step.parse({ id: 'confirm-submit', kind: 'assert', target: 'web', check: 'text-visible', text: 'Dashboard', confirms: ['click-submit'] }),
 ];
-const OPTIONS: HealOptions = {
-  files: ['/workspace/tests/login.test.md'],
-  dryRun: false,
-  yes: false,
-  list: false,
-};
-
 type Stage2RequestContext = {
   readonly trustedInputs?: {
     readonly frontier?: { readonly index: number; readonly stepId: string };
@@ -240,41 +205,7 @@ function elementBindingProposal(request: { readonly context?: unknown }) {
   const data = matches.length === 1
     ? { outcome: 'found' as const, ...matches[0]! }
     : { outcome: 'none' as const };
-  return { data, raw: JSON.stringify(data) };
-}
-
-/**
- * Mirrors the live accessibility evidence independently from grounded-entry
- * verification. Route-B resolution reads this tree, whereas session entries
- * model the existing-grounding verification path.
- */
-function healAccessibilityTree(entries: ReadonlyMap<string, FakeBrowserSessionEntry>): JsonValueT {
-  const targets = [PASSWORD, REPAIRED_PASSWORD, SUBMIT, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT];
-  return {
-    role: 'root',
-    name: '',
-    children: [{
-      role: 'main',
-      name: 'Application',
-      children: targets
-          .filter((target) => entries.get(elementRefKey(target))?.exists)
-          .map((target) => ({
-            role: 'form',
-            name: `${target.name} control`,
-            children: [{ role: target.role, name: target.name, children: [] }],
-          })),
-    }],
-  };
-}
-
-function healSnapshot(entries: ReadonlyMap<string, FakeBrowserSessionEntry>): {
-  readonly accessibilityTree: JsonValueT;
-  readonly screenshot: Uint8Array;
-} {
-  return {
-    accessibilityTree: healAccessibilityTree(entries),
-    screenshot: new Uint8Array([1, 2, 3]),
-  };
+  return { data: { proposal: data }, raw: JSON.stringify({ proposal: data }) };
 }
 
 function freshFingerprint(
@@ -354,117 +285,6 @@ function withTrackedLegacyReadTrap(storage: StorageAdapter): StorageAdapter {
     async readBinary(path) {
       if (isTrackedArtifact(path)) throw new Error(`Legacy tracked binary read: ${path}`);
       return storage.readBinary(path);
-    },
-  };
-}
-
-function permissiveContainedWrites(base: StorageAdapter): Pick<StorageAdapter, 'writeText' | 'writeBinary' | 'ensureDir'> {
-  return {
-    writeText: base.writeText,
-    writeBinary: base.writeBinary,
-    ensureDir: base.ensureDir,
-  };
-}
-
-interface HealScenario {
-  readonly deps: HealDeps;
-  readonly storage: StorageAdapter;
-  readonly textWrites: ReturnType<typeof vi.fn>;
-  readonly plan: PlanDocument;
-  readonly sessionFactory: ReturnType<typeof vi.fn<() => BrowserSession>>;
-}
-
-async function createScenario(options: {
-  readonly steps?: readonly ReturnType<typeof Step.parse>[];
-  readonly grounding?: GroundingDocument['entries'];
-  readonly sessionEntries?: Map<string, FakeBrowserSessionEntry>;
-  readonly storage?: StorageAdapter;
-  readonly launchFailure?: boolean;
-  readonly prompt?: string;
-  readonly aiExecutor?: ReturnType<typeof createFakeAiExecutor>;
-  readonly secrets?: ReadonlyMap<string, string>;
-  readonly signal?: AbortSignal;
-  readonly uiExecutor?: HealDeps['uiExecutor'];
-  readonly assertOutcome?: AssertOutcome;
-  readonly targets?: PlanDocument['targets'];
-} = {}): Promise<HealScenario> {
-  const base = options.storage ?? createInMemoryStorage();
-  const textWrites = vi.fn<StorageAdapter['writeText']>(base.writeText);
-  const storage: StorageAdapter = { ...base, writeText: textWrites };
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-  const sessionEntries = options.sessionEntries ?? new Map();
-  const sessionFactory = vi.fn<() => BrowserSession>(() => createFakeBrowserSession(sessionEntries, {
-    baseUrl: TARGETS.web.baseUrl,
-    currentUrl: TARGETS.web.baseUrl,
-    snapshot: healSnapshot(sessionEntries),
-    ...(options.assertOutcome === undefined ? {} : { assertOutcome: options.assertOutcome }),
-  }));
-  const plan = PlanDocument.parse({
-    schemaVersion: PLAN_SCHEMA_VERSION,
-    source: {
-      inputsDigest: computeInputsDigest({
-        normalizedTestMd: normalizeTestMd(options.prompt ?? PROMPT),
-        schemaVersion: PLAN_SCHEMA_VERSION,
-        generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
-        planProducerBundleFingerprint: planProducerBundleFingerprint(),
-        targetDefinitions: options.targets ?? TARGETS,
-      }),
-    },
-    targets: options.targets ?? TARGETS,
-    steps: options.steps ?? [Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) })],
-  });
-  const grounding: GroundingDocument = {
-    schemaVersion: GROUNDING_SCHEMA_VERSION,
-    planDigest: computePlanDigest(plan),
-    entries: options.grounding ?? {
-      'click-submit': { ...groundingEntry(SUBMIT, FINGERPRINT) },
-    },
-  };
-
-  await storage.writeText(OPTIONS.files[0]!, options.prompt ?? PROMPT);
-  await storage.writeText(layout.planPathFor(OPTIONS.files[0]!), toCanonicalArtifactText(plan as JsonValueT));
-  await storage.writeText(layout.groundingPathFor(OPTIONS.files[0]!), toCanonicalArtifactText(grounding as JsonValueT));
-  textWrites.mockClear();
-
-  return {
-    storage,
-    textWrites,
-    plan,
-    sessionFactory,
-    deps: {
-      storage,
-      containWrites: () => permissiveContainedWrites(storage),
-      layout,
-      clock: createFixedClock(new Date('2026-08-25T00:00:00.000Z'), 0),
-      runId: '2026-08-25T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      uiExecutor: options.uiExecutor ?? vi.fn<HealDeps['uiExecutor']>(() => options.launchFailure
-        ? {
-          kind: 'playwright', surface: 'web', capabilities: new Set(UI_CAPABILITIES),
-          async launch() { throw new Error('Chromium is unavailable for this fixture.'); },
-        }
-        : createFakeUiExecutor(sessionFactory)),
-      secrets: createFakeSecretsProvider(options.secrets ?? new Map()),
-      resolveAiExecutor: vi.fn(async () => options.aiExecutor ?? createFakeAiExecutor({
-        execute: async () => ({ data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' }),
-      })),
-      allocateCallId: createCallIdAllocator(),
-      events: createRecordingEventSink().sink,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-      discoverTestFiles: vi.fn(async () => ['login.test.md']),
-      isCI: false,
-      configSource: { path: null },
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: ['**/.runs/**'],
-        targets: RESOLVED_TARGETS,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        secrets: { allow: '*' },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-        heal: { caseTimeoutMs: 300_000 },
-      },
     },
   };
 }
@@ -818,7 +638,7 @@ describe('heal state-machine contract', () => {
    * Recording the call count before each replay proves the final replay ran,
    * while observing its error checks classification without forging it.
    */
-  it('TEST-B12 keeps a declared failure out of heal errors after a Stage-applied final replay', async () => {
+  it('reports a declared failure from the Stage-applied final replay without changing heal exit one', async () => {
     let attempts = 0;
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
@@ -854,22 +674,27 @@ describe('heal state-machine contract', () => {
     expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.errors).toEqual([]);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 }]));
-    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(result.outcome.results[0]?.finalReplayError).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.results[0]?.stage3Error).toBeUndefined();
     const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
     });
     expect(report.exitCode).toBe(1);
-    expect(report.envelope.errors).toEqual([]);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'AGENTIC_STEP_FAILED',
+      details: { stepId: AI_STEP.id, actions: 0, assertions: 0,
+        passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   /*
-   * Secret-set rejection must retain the executor's classified failure without
-   * exposing it as a heal error. Read-only replay observations establish that
+   * Secret-set rejection must retain the executor's classified failure.
+   * Read-only replay observations establish that
    * the final invocation and its error are real, rather than injected by a test.
    */
-  it('TEST-B12 omits the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
+  it('reports the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
     let declarations = 0;
     const executor = createFakeAiExecutor({
       async executeAgentic() { declarations += 1; return { outcome: 'failure' }; },
@@ -893,13 +718,18 @@ describe('heal state-machine contract', () => {
     expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'secret-set-rejected' }]));
     expect(result.outcome.errors).toEqual([]);
-    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(result.outcome.results[0]?.finalReplayError).toBeInstanceOf(AgenticStepFailedError);
     const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
     });
     expect(report.exitCode).toBe(1);
-    expect(report.envelope.errors).toEqual([]);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'AGENTIC_STEP_FAILED',
+      details: { stepId: AI_STEP.id, actions: 0, assertions: 0,
+        passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   it('aborts at the initial live measurement when its replay carries an integrity violation', async () => {
@@ -1862,7 +1692,7 @@ describe('heal state-machine contract', () => {
     }
   });
 
-  it('skips Stage 1 for an AI step with a current covered trace', async () => {
+  it('TEST-H4 skips Stage 1 for an AI step with a current covered trace, recording trace-current', async () => {
     const scenario = await createScenario({
       steps: [Step.parse({
         id: 'recorded-ai', kind: 'ai', target: 'web', instruction: 'Verify the dashboard.',
@@ -1882,9 +1712,10 @@ describe('heal state-machine contract', () => {
       aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) }),
     });
 
-    await heal(scenario.deps, OPTIONS);
+    const result = await heal(scenario.deps, OPTIONS);
 
     expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(3);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'recorded-ai', outcome: 'not-eligible', reason: 'trace-current' }]));
   });
 
   it('keeps none-classified navigate failures out of Stage 1 even with an element entry', async () => {
@@ -3189,6 +3020,42 @@ describe('heal state-machine contract', () => {
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved' });
     expect(result.outcome.results[0]?.stage3Error).toBeInstanceOf(error);
+  });
+
+  it('reports two Stage 3 ambiguities without a crash or artifact commit', async () => {
+    const scenario = await createScenario({
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
+        data: request.prompt.startsWith('Repair the requested')
+          ? { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }
+          : { steps: [], ambiguities: ['Unclear target Alpha', 'Unclear target Beta'] },
+        raw: '{}',
+      }) }),
+    });
+    const planBefore = await scenario.storage.readText(PLAN);
+    const groundingBefore = await scenario.storage.readText(GROUNDING);
+    const result = await heal(scenario.deps, OPTIONS);
+    const row = result.outcome.results[0];
+    expect(row).toBeDefined();
+    const report = buildHealReport({
+      startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false },
+      outcome: { ...result.outcome, results: result.outcome.results.map((entry) => ({ ...entry, application: 'no-artifact-change' as const })) },
+    });
+    expect(report.envelope.errors).toContainEqual(expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'PROMPT_AMBIGUOUS', details: { ambiguities: 2 },
+    }));
+    expect(report.exitCode).toBe(2);
+    expect(report.envelope.errors).not.toContainEqual(expect.objectContaining({
+      code: 'UNEXPECTED_CRASH', message: 'Healing failed for this case.',
+    }));
+    expect(row?.repairTrace).toContainEqual(expect.objectContaining({
+      stage: 'stage3', outcome: 'failed', code: 'PROMPT_AMBIGUOUS',
+    }));
+    expect(result.commits.size).toBe(0);
+    expect(await scenario.storage.readText(PLAN)).toBe(planBefore);
+    expect(await scenario.storage.readText(GROUNDING)).toBe(groundingBefore);
+    expect(scenario.textWrites).not.toHaveBeenCalled();
   });
 
   it('reports an empty plan as no-changes-needed without treating it as a pre-launch failure', async () => {
@@ -4735,7 +4602,7 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
     const scenario = await createScenario({
       steps, grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) }, sessionEntries: liveEntries(SUBMIT),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request) && bindings++ === 0
-        ? { data: { outcome: 'none' }, raw: '{}' }
+        ? { data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }
         : elementBindingProposal(request) }),
     });
     const beforePlan = await scenario.storage.readText(PLAN);

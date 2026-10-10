@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { validateAiResponse } from '#adapters/ai/shared/response-validator.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
-import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
+import { ElementBindingProposalResponse, GeneratedPlanResponseRequest } from '#core/ir/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
 import { AiResponseIssue } from '#report/schema.js';
 
@@ -12,6 +12,39 @@ function schema() {
 }
 
 describe('validateAiResponse', () => {
+  it.each([
+    { proposal: { outcome: 'found', role: 'button', name: 'Submit' } },
+    { proposal: { outcome: 'none' } },
+    { proposal: { outcome: 'ambiguous' } },
+  ])('accepts the wrapped $proposal.outcome branch through Zod and AJV', (value) => {
+    expect(ElementBindingProposalResponse.safeParse(value).success).toBe(true);
+    expect(validateAiResponse(JSON.stringify(value), typedJsonSchema(ElementBindingProposalResponse))).toEqual(value);
+  });
+
+  it.each([
+    ['unwrapped old form', { outcome: 'found', role: 'button', name: 'Submit' }],
+    ['missing proposal', { other: true }],
+    ['extra root key', { proposal: { outcome: 'none' }, extra: true }],
+    ['extra found key', { proposal: { outcome: 'found', role: 'button', name: 'Submit', extra: true } }],
+    ['extra none key', { proposal: { outcome: 'none', extra: true } }],
+    ['extra ambiguous key', { proposal: { outcome: 'ambiguous', extra: true } }],
+    ['missing found role', { proposal: { outcome: 'found', name: 'Submit' } }],
+    ['empty found role', { proposal: { outcome: 'found', role: '', name: 'Submit' } }],
+    ['missing found name', { proposal: { outcome: 'found', role: 'button' } }],
+    ['empty found name', { proposal: { outcome: 'found', role: 'button', name: '' } }],
+    ['unknown outcome', { proposal: { outcome: 'unknown' } }],
+    ['null proposal', { proposal: null }],
+    ['empty root', {}],
+  ] as const)('rejects %s through Zod and AJV with schema-mismatch', (_name, value) => {
+    expect(ElementBindingProposalResponse.safeParse(value).success).toBe(false);
+    try {
+      validateAiResponse(JSON.stringify(value), typedJsonSchema(ElementBindingProposalResponse));
+      throw new Error('Expected the wrapped proposal to be rejected.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AiResponseInvalidError);
+      expect(error).toMatchObject({ details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
+    }
+  });
   it('parses and returns data satisfying the requested JSON Schema', () => {
     expect(validateAiResponse('{"ok":true,"count":1}', schema())).toEqual({ ok: true, count: 1 });
   });

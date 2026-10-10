@@ -7,7 +7,6 @@ import {
   promptTemplateFingerprint,
   toAnchoredLines,
 } from '#core/ai/prompt-envelope.js';
-import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import {
   PlanDocument,
   type GeneratedPlanResponse,
@@ -20,7 +19,6 @@ import * as planProducerBundle from '#core/ai/plan-producer-bundle.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
-import { createLayoutResolver } from '#core/layout/resolve.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
@@ -30,12 +28,13 @@ import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collisio
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError } from '#core/errors/types.js';
 import type { AiExecuteRequest, AiExecuteResult } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { generate, projectAllowedNames, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
+import { generate, projectAllowedNames, type GenerateDeps } from '#usecases/generate.js';
 import { buildGenerateReport } from '#usecases/generate-report.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { getReportJsonSchema } from '#report/json-schema.js';
@@ -45,9 +44,10 @@ import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { detectSecretLiteral } from '#usecases/generator-secret-policy.js';
 import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
-import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
+import { createScenario, withSecretConfig, writePrompt, createFreshPlan, seedFreshArtifacts, createRecordingStorage, TEST_DIR, TARGETS, RESOLVED_TARGETS, NAMED_INTENT_LINE, PROMPT, RESPONSE, DEFAULT_OPTIONS } from '../../support/generate-scenario.js';
 
 const envVarNameMocks = vi.hoisted(() => ({
   assertNoEnvVarCollision: vi.fn(),
@@ -241,13 +241,6 @@ afterEach(() => {
   secretNamingMocks.deriveSecretNames.mockImplementation(actualDeriveSecretNames);
 });
 
-const TEST_DIR = '/workspace/tests';
-const RUNS_DIR = '/workspace/tests/.runs';
-const TARGETS = { web: { surface: 'web' as const, baseUrl: 'https://example.test' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
-const NAMED_INTENT_LINE = 'Use "Account", "Token one", "Token two", "Alpha", "Beta", "First", "Second", "Retained", and "Added" fields.';
-const PROMPT = `# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\nPassword "Password"\n${NAMED_INTENT_LINE}\n`;
-const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
 const PASSWORD_TARGET = { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 4, startColumn: 1, endLine: 4, endColumn: 20 }, quote: { text: 'Password', sourceSpan: { startLine: 4, startColumn: 11, endLine: 4, endColumn: 19 } } } as const;
 const PASSWORD_INTENT = PASSWORD_TARGET;
@@ -292,16 +285,6 @@ const coveredResponse = {
   ambiguities: [],
 } as unknown as GeneratedPlanResponse;
 
-const DEFAULT_OPTIONS: GenerateOptions = {
-  files: [],
-  strict: false,
-  force: false,
-  maxAttempts: 2,
-  dryRun: false,
-  allowEmpty: false,
-  list: false,
-};
-
 describe('projectAllowedNames', () => {
   it('deduplicates then applies default UTF-16 order before the 64-name cap', () => {
     const names = ['z', 'a', 'z', 'A', 'a'] as never;
@@ -329,92 +312,6 @@ describe('projectAllowedNames', () => {
     expect(projectAllowedNames('*')).toEqual({ names: [], kept: 0, dropped: 0 });
   });
 });
-
-interface RecordingStorage {
-  readonly storage: StorageAdapter;
-  readonly reads: string[];
-  readonly exists: string[];
-  readonly writes: { readonly path: string; readonly content: string }[];
-  reset(): void;
-}
-
-function createRecordingStorage(
-  fail: { readonly read?: string; readonly write?: string } = {},
-): RecordingStorage {
-  const backing = createInMemoryStorage();
-  const reads: string[] = [];
-  const exists: string[] = [];
-  const writes: { path: string; content: string }[] = [];
-
-  return {
-    reads,
-    exists,
-    writes,
-    storage: {
-      ...backing,
-      async readText(path) {
-        reads.push(path);
-        if (path === fail.read) {
-          throw new Error(`read failed: ${path}`);
-        }
-        return backing.readText(path);
-      },
-      async exists(path) {
-        exists.push(path);
-        return backing.exists(path);
-      },
-      async writeText(path, content) {
-        if (path === fail.write) {
-          throw new Error(`write failed: ${path}`);
-        }
-        writes.push({ path, content });
-        return backing.writeText(path, content);
-      },
-    },
-    reset() {
-      reads.splice(0);
-      exists.splice(0);
-      writes.splice(0);
-    },
-  };
-}
-
-function createScenario(overrides: Partial<GenerateDeps> = {}) {
-  const recordingStorage = createRecordingStorage();
-  const events = createRecordingEventSink();
-  const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({
-    data: RESPONSE,
-    raw: JSON.stringify(RESPONSE),
-  }));
-  const deps: GenerateDeps = {
-    storage: recordingStorage.storage,
-    layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
-    resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
-    events: events.sink,
-    clock: { now: () => new Date(0), monotonicMs: () => 0, sleep: async () => undefined },
-    allocateCallId: createCallIdAllocator(),
-    discoverTestFiles: vi.fn(async () => ['login.test.md']),
-    config: {
-      testDir: TEST_DIR,
-      testMatch: ['**/*.test.md'],
-      testIgnore: ['**/.runs/**'],
-      targets: RESOLVED_TARGETS,
-      defaultTarget: 'web',
-      ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
-    },
-    ...overrides,
-  };
-
-  return { deps, events, execute, recordingStorage };
-}
-
-function withSecretConfig(deps: GenerateDeps, allow: readonly string[] | '*'): GenerateDeps {
-  return {
-    ...deps,
-    config: { ...deps.config, secrets: { allow }, projectRoot: '/workspace' } as unknown as GenerateDeps['config'],
-    configSource: { path: '/workspace/ambercast.config.json' },
-  } as unknown as GenerateDeps;
-}
 
 function sequenceClock(readings: readonly number[]): Clock {
   let index = 0;
@@ -480,58 +377,6 @@ function sequentialTimeoutConfig(timeoutMsValues: readonly number[]) {
       return timeoutMs;
     },
   };
-}
-
-async function writePrompt(storage: StorageAdapter, relativePath = 'login.test.md', contents = PROMPT): Promise<string> {
-  const path = `${TEST_DIR}/${relativePath}`;
-  await storage.writeText(path, contents);
-  return path;
-}
-
-async function createFreshPlan(
-  storage: StorageAdapter,
-  testPath: string,
-  steps: readonly Step[] = [],
-  targetDefinitions: PlanDocument['targets'] = TARGETS,
-): Promise<PlanDocument> {
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-  const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
-  const referencedTargetNames = new Set(steps.map((step) => step.target));
-  const planTargets = Object.fromEntries(
-    Object.entries(targetDefinitions).filter(([name]) => referencedTargetNames.has(name)),
-  ) as PlanDocument['targets'];
-  const inputsDigest = computeInputsDigest({
-    normalizedTestMd,
-    schemaVersion: 5,
-    generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
-    planProducerBundleFingerprint: planProducerBundle.planProducerBundleFingerprint(),
-    targetDefinitions: planTargets,
-  });
-  const plan = {
-    schemaVersion: 5,
-    source: { inputsDigest },
-    targets: planTargets,
-    steps: [...steps],
-  } as unknown as PlanDocument;
-
-  await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
-  return plan;
-}
-
-async function seedFreshArtifacts(
-  storage: StorageAdapter,
-  testPath: string,
-  steps: readonly Step[] = [],
-  targetDefinitions: PlanDocument['targets'] = TARGETS,
-): Promise<void> {
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-  const plan = await createFreshPlan(storage, testPath, steps, targetDefinitions);
-  const grounding: GroundingDocument = { schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} };
-
-  await storage.writeText(
-    layout.groundingPathFor(testPath),
-    toCanonicalArtifactText(grounding as unknown as JsonValueT),
-  );
 }
 
 describe('generate', () => {
@@ -1970,6 +1815,7 @@ describe('generate', () => {
       'provider rejection',
       new AiExecutorUnavailableError('provider unavailable'),
       'ai-executor-unavailable',
+      'AI_EXECUTOR_UNAVAILABLE',
       2,
       [{ attempt: 1, code: 'AI_EXECUTOR_UNAVAILABLE' }],
     ],
@@ -1977,10 +1823,11 @@ describe('generate', () => {
       'invalid response rejection',
       new AiResponseInvalidError('invalid response'),
       'ai-response-invalid',
+      'AI_RESPONSE_INVALID',
       3,
       [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' }],
     ],
-  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, expectedAiCalls, expectedAttempts) => {
+  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, code, expectedAiCalls, expectedAttempts) => {
     const execute = vi.fn(async (request: AiExecuteRequest<unknown>) => {
       if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd).includes('first')) {
         throw error;
@@ -2012,6 +1859,17 @@ describe('generate', () => {
       ],
     });
     expect(outcome.results[0]?.error).toMatchObject({ details: { attempts: expectedAttempts } });
+    const { envelope, exitCode } = buildGenerateReport({ outcome, options: DEFAULT_OPTIONS, startedAt: '2026-10-07T00:00:00Z', durationMs: 1 });
+    expect(exitCode).toBe(3);
+    expect(envelope.errors).toEqual([{
+      scope: 'case', caseId: `${TEST_DIR}/first.test.md`, kind: 'environment', code,
+      message: error.message,
+      details: code === 'AI_RESPONSE_INVALID'
+        ? { issues: [], attempts: expectedAttempts }
+        : { attempts: expectedAttempts },
+    }]);
+    expect(envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 1, skipped: 0 });
+    assertDiagnosable(envelope);
     expect(execute).toHaveBeenCalledTimes(expectedAiCalls);
     expect(aiCallEvents(events.emitted())).toHaveLength(expectedAiCalls);
     expect(aiEvents(events.emitted())).toHaveLength(expectedAiCalls * 2);
@@ -2340,18 +2198,42 @@ describe('generate', () => {
     expect(recordingStorage.writes).toEqual([expect.objectContaining({ path: groundingPath })]);
   });
 
-  it('rejects provider ambiguities before generated or previewed plans are written (SPEC-12)', async () => {
+  it.each([
+    ['generated', { ...DEFAULT_OPTIONS, strict: true }],
+    ['dry-run', { ...DEFAULT_OPTIONS, dryRun: true, strict: false }],
+  ] as const)('TEST-4 classifies provider ambiguities in %s mode without writing plans or disclosing prose', async (_mode, options) => {
+    const ambiguities = ['Unclear target Alpha', 'Unclear target Beta'];
+    const execute = vi.fn(async () => ({ data: { steps: [], ambiguities }, raw: '{...}' }));
     const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: { steps: [], ambiguities: ['unclear target'] }, raw: '{...}' }) }),
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
     });
-    await writePrompt(recordingStorage.storage);
+    const file = await writePrompt(recordingStorage.storage);
+    recordingStorage.reset();
 
-    await expect(generate(deps, { ...DEFAULT_OPTIONS, strict: true })).resolves.toMatchObject({
-      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
+    const outcome = await generate(deps, options);
+    const error = outcome.results[0]?.error;
+    expect(execute).toHaveBeenCalledOnce();
+    expect(outcome.results).toMatchObject([{ file, status: 'failed' }]);
+    expect(error).toBeInstanceOf(PromptAmbiguousError);
+    expect(error).toMatchObject({
+      kind: 'prompt-ambiguous',
+      message: 'The generated plan has unresolved target ambiguities.',
+      details: { ambiguities: 2 },
+      exitCode: 2,
     });
-    await expect(generate(deps, { ...DEFAULT_OPTIONS, dryRun: true, strict: false, force: true })).resolves.toMatchObject({
-      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
-    });
+    expect(recordingStorage.writes).toEqual([]);
+    await expect(deps.storage.exists(deps.layout.planPathFor(file))).resolves.toBe(false);
+    await expect(deps.storage.exists(deps.layout.groundingPathFor(file))).resolves.toBe(false);
+
+    const { envelope, exitCode } = buildGenerateReport({ outcome, options, startedAt: '2026-10-07T00:00:00Z', durationMs: 1 });
+    expect(exitCode).toBe(2);
+    expect(envelope.errors).toEqual([{
+      scope: 'case', caseId: file, kind: 'usage', code: 'PROMPT_AMBIGUOUS',
+      message: error?.message, details: { ambiguities: 2 },
+    }]);
+    expect(envelope.summary).toEqual({ total: 1, passed: 0, failed: 0, errored: 1, skipped: 0 });
+    expect(JSON.stringify(envelope)).not.toContain('Unclear target');
+    assertDiagnosable(envelope);
   });
 
   it.each([
@@ -3826,6 +3708,29 @@ describe('generate v5 element intent and confirmation contracts', () => {
       { kind: 'secret-name-reused-across-targets', name: 'password', stepIds: ['first', 'second'] },
       { kind: 'action-unconfirmed', stepId: 'first' },
       { kind: 'action-unconfirmed', stepId: 'second' },
+    ] }]);
+  });
+
+  it.each([
+    ['generated', false],
+    ['would-generate', true],
+  ] as const)('TEST-G4 orders secret warnings before an unconfirmed action warning on a %s row', async (status, dryRun) => {
+    const data = {
+      steps: [
+        { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT },
+        { id: 'fill-account', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...generatedNamedIntent('Account'), quote: undefined }, secret: { nameHint: 'password' } },
+        { id: 'press-key', kind: 'action', action: 'press', target: 'web', intent: GENERATED_PASSWORD_INTENT, key: 'Enter' },
+        { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Dashboard', confirms: ['press-key'] },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data, raw: JSON.stringify(data) }) }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    const outcome = await generate(withSecretConfig(scenario.deps, ['password']), { ...DEFAULT_OPTIONS, dryRun });
+    expect(outcome.results).toMatchObject([{ status, warnings: [
+      { kind: 'secret-name-reused-across-targets', name: 'password', stepIds: ['fill-password', 'fill-account'] },
+      { kind: 'action-unconfirmed', stepId: 'fill-password' },
+      { kind: 'action-unconfirmed', stepId: 'fill-account' },
     ] }]);
   });
 

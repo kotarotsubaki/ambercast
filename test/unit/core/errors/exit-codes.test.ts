@@ -4,8 +4,10 @@ import type { ErrorKind } from '../../../../src/core/errors/types.js';
 
 const ALL_ERROR_KINDS = [
   'assertion-failed',
+  'case-aborted',
   'config-invalid',
   'executor-unsupported',
+  'prompt-ambiguous',
   'secret-unresolved',
   'target-unresolved',
   'prompt-path-invalid',
@@ -42,6 +44,7 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
       return 1;
     case 'config-invalid':
     case 'executor-unsupported':
+    case 'prompt-ambiguous':
     case 'secret-unresolved':
     case 'target-unresolved':
     case 'prompt-path-invalid':
@@ -50,6 +53,7 @@ function exitCodeFor(kind: ErrorKind | 'interrupted'): ErrorExitCode {
     case 'secret-env-var-collision':
     case 'secret-syntax-rejected':
       return 2;
+    case 'case-aborted':
     case 'browser-launch-failed':
     case 'port-unavailable':
     case 'ai-executor-unavailable':

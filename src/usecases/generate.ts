@@ -24,6 +24,7 @@ import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-e
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { dropNavigateConfirms } from '#core/ir/confirms-validation.js';
 import { computePlanDigest } from '#core/ir/digest.js';
@@ -188,18 +189,32 @@ type PrepareInstructionCoveredStepsResult =
   | { readonly success: true; readonly data: InstructionAttributedSteps }
   | { readonly success: false; readonly issues: readonly ((InstructionCoverageIssue | ElementIntentIssue | TextEqualsSelfQuoteIssue) & { readonly stepId: string })[] };
 
+/**
+ * This module's own closed set of self-quote issue codes (currently one
+ * member), proven a subset of `AiResponseIssueCode` by an independent
+ * reverse tripwire further below. Deriving this type *from* the report
+ * vocabulary with `Extract<AiResponseIssueCode, '...'>` instead would make
+ * that proof vacuous for the same reason `SecretNamingIssueCode` in
+ * secret-naming.ts documents: a type derived from the report vocabulary is
+ * trivially a subset of itself even after the literal is removed from that
+ * vocabulary (#492).
+ */
+export type TextEqualsSelfQuoteIssueCode = 'text-equals-self-quote';
+
 /** Retryable refusal when one assertion uses its target quote as its expected value. */
 type TextEqualsSelfQuoteIssue = {
-  readonly code: Extract<AiResponseIssueCode, 'text-equals-self-quote'>;
+  readonly code: TextEqualsSelfQuoteIssueCode;
   readonly path: readonly (string | number)[];
   readonly message: string;
 };
 
-// Fails to compile if 'text-equals-self-quote' is ever removed from or renamed
-// away in the report vocabulary, since Extract would then resolve to never and
-// no value could satisfy TextEqualsSelfQuoteIssue['code'].
-const _selfQuoteCodeKnownToReport: TextEqualsSelfQuoteIssue['code'] = 'text-equals-self-quote';
-void _selfQuoteCodeKnownToReport;
+// Fails to compile if TextEqualsSelfQuoteIssueCode ever gains a member the
+// report vocabulary does not know about. This check starts from this
+// module's own union rather than from AiResponseIssueCode — see
+// TextEqualsSelfQuoteIssueCode's own doc comment above for why that
+// direction matters (#492).
+const _selfQuoteCodeReverseTripwire: Record<Exclude<TextEqualsSelfQuoteIssueCode, AiResponseIssueCode>, never> = {};
+void _selfQuoteCodeReverseTripwire;
 
 /** Non-fatal report warning for an action with no confirming step. */
 type ActionUnconfirmedWarning = { readonly kind: 'action-unconfirmed'; readonly stepId: StepId };
@@ -645,7 +660,7 @@ type PreparedCandidate = {
   readonly uses: readonly GenerateSecretOutcome[];
   /** Non-fatal naming diagnostics retained through reporting. */
   readonly warnings: readonly GenerateWarning[];
-  /** Provider ambiguities retained for later strict-exit evaluation. */
+  /** Provider ambiguities retained so ambiguous prompts report `PROMPT_AMBIGUOUS` (exit 2) regardless of strict mode. */
   readonly ambiguities: readonly JsonValueT[];
   /** Whether the final plan required generation or was already fresh. */
   readonly origin: 'generated' | 'fresh';
@@ -1351,9 +1366,12 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           ];
 
           if (response.data.ambiguities.length > 0) {
-            return { kind: 'terminal', error: new (class extends AmbercastError {
-              readonly kind = 'assertion-failed' as const;
-            })('The generated plan has unresolved target ambiguities.') };
+            // Unresolved choices produce a caller-correctable case error
+            // whose count is safe to report without provider-written prose.
+            return { kind: 'terminal', error: new PromptAmbiguousError(
+              'The generated plan has unresolved target ambiguities.',
+              response.data.ambiguities.length,
+            ) };
           }
           if (options.dryRun) {
             return {

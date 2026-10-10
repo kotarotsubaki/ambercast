@@ -133,7 +133,8 @@ export interface GenerateReportOutput {
  * completed batch, this builder contributes every applicable
  * code to `selectExitCode()`: failures contribute their classified code or the
  * generic exit-3 fallback when malformed input supplies no classification, and
- * strict ambiguities contribute exit 1. The shared 2, 3, 4, 1, 5, 0 order then
+ * ambiguous prompts fail as `PROMPT_AMBIGUOUS` with exit 2 regardless of strict mode;
+ * the separate strict-ambiguity path contributes exit 1. The shared 2, 3, 4, 1, 5, 0 order then
  * selects the highest-priority condition across the batch, independent of
  * file order.
  *

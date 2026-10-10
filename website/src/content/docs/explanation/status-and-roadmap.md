@@ -21,6 +21,6 @@ Links: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/amber
 
 ## Version policy {#version-policy}
 
-The published package version is 0.3.1. The product policy is CLI-only through 0.x and ships 1.0.0 together with the cloud version. This pre-1.0 phase concentrates on stabilizing the standalone CLI tools before pairing them with the cloud release.
+The [Compatibility table](/ambercast/reference/compatibility/#compatibility-table) lists the published package version. The product policy is CLI-only through 0.x and ships 1.0.0 together with the cloud version. This pre-1.0 phase concentrates on stabilizing the standalone CLI tools before pairing them with the cloud release.
 
 Links: [Changelog](/ambercast/reference/changelog/), [Philosophy](/ambercast/philosophy/)

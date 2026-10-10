@@ -5,15 +5,15 @@ description: User-visible product behavior and public-contract changes across am
 
 This reference tracks user-visible product behavior and public-contract changes across ambercast releases, ordering breaking changes before fixes.
 
-## Release 0.4.0 {#release-040}
+## Release 0.5.0 {#release-050}
 
-Release date: 2026-09-14.
+Release date: 2026-09-15.
 
 | Class | User-visible entry |
 | --- | --- |
 | BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model; Plan v2 is not migrated in place. |
 
-Version 0.4.0 has one declared breaking change.
+Version 0.5.0 has one declared breaking change.
 
 ## Release 0.2.0 {#release-020}
 

@@ -1,11 +1,11 @@
 ---
 title: "Ambercast 计划规范"
-description: "本规范描述了 ambercast 0.7.0 接受的工件。"
+description: "本规范描述了 ambercast 0.9.0 接受的工件。"
 ---
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.7.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本规范描述了 ambercast 0.9.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## 规范性用语 {#normative-language}
 
@@ -31,7 +31,7 @@ flowchart LR
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
 | Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
 | 指纹算法 | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
-| Report `schemaVersion` | `3.9` | repo:src/report/schema.ts:57 |
+| Report `schemaVersion` | `3.10` | repo:src/report/schema.ts:58 |
 
 ## 阅读顺序 {#reading-order}
 

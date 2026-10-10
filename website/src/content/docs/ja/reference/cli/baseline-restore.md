@@ -9,14 +9,14 @@ sidebar:
 ---
 
 :::caution
-`ambercast baseline` および `ambercast restore` は計画中の機能であり、バージョン 0.3.1 には実装されていません。本ドキュメントには現在の動作ではなく、計画されている設計上の動作を記載しています。
+`ambercast baseline` および `ambercast restore` は計画中の機能であり、現行版には実装されていません。本ドキュメントには現在の動作ではなく、計画されている設計上の動作を記載しています。
 :::
 
 `ambercast baseline` および `ambercast restore` は、データベースのキャプチャと復元を担う計画中のコマンドです。計画されているデータベース境界は DB リセット設計によって定義されています。
 
 ## ステータス {#status}
 
-`ambercast baseline` および `ambercast restore` はバージョン 0.3.1 には実装されておらず、利用可能な CLI コマンドではありません。両コマンドの計画されているデータベース境界は、DB リセット設計によって定義されています。利用可能なコマンドは CLI の概要を参照してください。
+`ambercast baseline` および `ambercast restore` は現行版には実装されておらず、利用可能な CLI コマンドではありません。両コマンドの計画されているデータベース境界は、DB リセット設計によって定義されています。利用可能なコマンドは CLI の概要を参照してください。
 
 リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface), [設定](/ambercast/ja/reference/configuration/#key-table)
 

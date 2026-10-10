@@ -1,9 +1,20 @@
+# Dependabot owns PR metadata here: the labels:/assignees: below set this repo's
+# triage labels and assignee for every Dependabot PR (version and security
+# updates); pr-label.yml skips Dependabot and never sets them itself. Dependabot
+# may still add further labels of its own (e.g. semver-level) on top of these.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    labels:
+      - dependencies
+      - github_actions
+      - "type: chore"
+      - "area: infra"
+    assignees:
+      - kotarotsubaki
     groups:
       github-actions:
         patterns: ["*"]
@@ -21,6 +32,13 @@ updates:
       # Revisit when that floor reaches 22.18 (#516).
       - dependency-name: "tsdown"
         versions: [">=0.22.0"]
+    labels:
+      - dependencies
+      - javascript
+      - "type: chore"
+      - "area: infra"
+    assignees:
+      - kotarotsubaki
     groups:
       development:
         dependency-type: development
@@ -30,6 +48,13 @@ updates:
     directory: /website
     schedule:
       interval: weekly
+    labels:
+      - dependencies
+      - javascript
+      - "type: chore"
+      - "area: infra"
+    assignees:
+      - kotarotsubaki
     groups:
       website:
         patterns: ["*"]

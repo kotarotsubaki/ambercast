@@ -54,6 +54,7 @@ export const ERROR_EXIT_CODES = {
   'ai-executor-unavailable': 3,
   'ai-response-invalid': 3,
   'agentic-step-failed': 3,
+  'case-aborted': 3,
   'executor-unsupported': 2,
   'fs-io-error': 3,
   'unexpected-crash': 3,
@@ -62,4 +63,5 @@ export const ERROR_EXIT_CODES = {
   // so process-status selection remains exhaustive.
   'no-tests-found': 5,
   'port-unavailable': 3,
+  'prompt-ambiguous': 2,
 } as const satisfies Record<ErrorKind, ErrorExitCode>;

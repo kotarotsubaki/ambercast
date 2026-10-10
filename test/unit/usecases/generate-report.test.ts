@@ -4,11 +4,13 @@ import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.j
 import { FsIoError } from '#core/errors/fs-io-error.js';
 import { MissingPlanError } from '#core/errors/missing-plan-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import type { AmbercastError } from '#core/errors/types.js';
 import { buildGenerateReport, type GenerateReportInput } from '#usecases/generate-report.js';
 import type { GenerateOutcome } from '#usecases/generate.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
 
 const BASE = {
   startedAt: '2026-08-08T00:00:00Z',
@@ -150,6 +152,22 @@ describe('buildGenerateReport', () => {
       });
     },
   );
+
+  it('TEST-4 projects a prompt ambiguity count as a diagnosable case error', () => {
+    const error = new PromptAmbiguousError('The generated plan has unresolved target ambiguities.', 2);
+    const output = report({ outcome: {
+      noTestsFound: false,
+      results: [{ file: 'ambiguous.test.md', status: 'failed', error }],
+    } });
+
+    expect(output.exitCode).toBe(2);
+    expect(output.envelope.errors).toEqual([{
+      scope: 'case', caseId: 'ambiguous.test.md', kind: 'usage', code: 'PROMPT_AMBIGUOUS',
+      message: error.message, details: { ambiguities: 2 },
+    }]);
+    expect(output.envelope.summary).toEqual({ total: 1, passed: 0, failed: 0, errored: 1, skipped: 0 });
+    assertDiagnosable(output.envelope);
+  });
 
   it('serializes a top-level classified error as one run-scoped error with no results', () => {
     const output = report({ error: new TargetUnresolvedError('target missing') });
@@ -370,7 +388,7 @@ describe('buildGenerateReport v3 interruption accounting', () => {
     } } as unknown as Omit<GenerateReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.9');
+    expect(output.envelope.schemaVersion).toBe('3.10');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toEqual([expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' })]);
     expect(output.envelope.results[1]).toEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });

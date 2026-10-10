@@ -6,7 +6,7 @@ import { getConfigJsonSchema } from '../../../src/core/config/json-schema.js';
 import { getGroundingJsonSchema, getPlanJsonSchema } from '../../../src/core/ir/json-schema.js';
 import { getReportJsonSchema } from '../../../src/report/json-schema.js';
 import { PLANNED_CAPABILITIES } from '../../../src/core/cli/capabilities.js';
-import { ReportErrorCode } from '../../../src/report/schema.js';
+import { ENVIRONMENT_REPORT_ERROR_CODES, ReportErrorCode, USAGE_REPORT_ERROR_CODES } from '../../../src/report/schema.js';
 
 interface CapturedWrite {
   path: string;
@@ -54,6 +54,7 @@ const EXPECTED_REPORT_ERROR_CODES = [
   'SECRET_SYNTAX_REJECTED',
   'GROUNDING_UNRESOLVED',
   'EXECUTOR_UNSUPPORTED',
+  'PROMPT_AMBIGUOUS',
   'BROWSER_LAUNCH_FAILED',
   'AI_EXECUTOR_UNAVAILABLE',
   'AI_RESPONSE_INVALID',
@@ -61,6 +62,7 @@ const EXPECTED_REPORT_ERROR_CODES = [
   'FS_IO_ERROR',
   'UNEXPECTED_CRASH',
   'INTERRUPTED',
+  'CASE_ABORTED',
 ] as const;
 
 function captureGeneratedArtifactWrites(): CapturedWrite[] {
@@ -102,11 +104,15 @@ describe('writeGeneratedArtifacts', () => {
         content: JSON.stringify({
           commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
           planned: ['review', 'baseline', 'restore'],
-          schemaVersions: { plan: 5, grounding: 3, report: '3.9' },
+          schemaVersions: { plan: 5, grounding: 3, report: '3.10' },
           fingerprintAlgorithm: 'a11y-neighborhood-v2',
           exitCodes: [0, 1, 2, 3, 4, 5],
           errorCodes: ReportErrorCode.options,
         }),
+      },
+      {
+        path: join('/dist-output', 'manifest', 'report-error-families.json'),
+        content: JSON.stringify({ usage: USAGE_REPORT_ERROR_CODES, environment: ENVIRONMENT_REPORT_ERROR_CODES }),
       },
       {
         path: join('/dist-output', 'manifest', 'config-defaults.json'),
@@ -142,6 +148,17 @@ describe('writeGeneratedArtifacts', () => {
     expect(captureGeneratedArtifactWrites()).toEqual(captureGeneratedArtifactWrites());
   });
 
+  it('honors an explicit errorFamilies override instead of the schema-derived default', () => {
+    const writes: CapturedWrite[] = [];
+    writeGeneratedArtifacts({
+      outDir: '/dist-output',
+      writeFile: (path, content) => { writes.push({ path, content }); },
+      errorFamilies: { usage: ['ONE'], environment: ['TWO', 'THREE'] },
+    });
+    const manifest = artifactContent(writes, 'manifest/report-error-families.json');
+    expect(manifest).toBe(JSON.stringify({ usage: ['ONE'], environment: ['TWO', 'THREE'] }));
+  });
+
   it('writes the CLI manifest with fixture-equivalent data and compact bytes', () => {
     const cliText = artifactContent(captureGeneratedArtifactWrites(), 'manifest/cli.json');
     const cliManifest = JSON.parse(cliText);
@@ -165,7 +182,7 @@ describe('writeGeneratedArtifacts', () => {
     expect(capabilities).toStrictEqual({
       commands: ['init', 'generate', 'run', 'check', 'heal', 'view', 'mcp'],
       planned: ['review', 'baseline', 'restore'],
-      schemaVersions: { plan: 5, grounding: 3, report: '3.9' },
+      schemaVersions: { plan: 5, grounding: 3, report: '3.10' },
       fingerprintAlgorithm: 'a11y-neighborhood-v2',
       exitCodes: [0, 1, 2, 3, 4, 5],
       errorCodes: ReportErrorCode.options,

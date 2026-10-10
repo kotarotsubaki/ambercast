@@ -135,13 +135,13 @@ describe('Plan v4 and grounding v2 contract', () => {
     const legacy = JSON.parse(readFileSync(new URL('../../../fixtures/ir/golden/plan.golden.artifact.json', import.meta.url), 'utf8'));
     expect(frozen.$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json');
     expect(new Ajv2020({ strict: true }).compile(frozen)(legacy)).toBe(true);
-    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
   });
 
-  it('emits the current build schemas with Plan v4, grounding v2, and report 3.7', () => {
+  it('emits the current build schemas with Plan v4, grounding v2, and report 3.10', () => {
     const readBuilt = (name: string) => JSON.parse(readFileSync(new URL(`../../../../dist/schema/${name}.schema.json`, import.meta.url), 'utf8'));
     expect(readBuilt('plan').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json');
     expect(readBuilt('grounding').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json');
-    expect(readBuilt('report').oneOf.every((variant: { properties: { schemaVersion: { const: string } } }) => variant.properties.schemaVersion.const === '3.9')).toBe(true);
+    expect(readBuilt('report').oneOf.every((variant: { properties: { schemaVersion: { const: string } } }) => variant.properties.schemaVersion.const === '3.10')).toBe(true);
   });
 });

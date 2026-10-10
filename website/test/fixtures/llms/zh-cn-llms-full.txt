@@ -1122,7 +1122,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.9` |
+| `schemaVersion` | 字面量 `3.10` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -1216,11 +1216,12 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十三个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十五个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
 | `AGENTIC_STEP_FAILED` | 仅限 case 作用域：`{ stepId: 非空白字符串, actions: 非负整数, assertions: 非负整数, passedAssertions: 非负整数, failedAssertions: 非负整数, targetRejections: 非负整数, lastFailedAssertion?: { check: "text-visible"、"element-visible"、"text-equals"、"url-matches" 或 "element-count"; expected: 字符串 } }`；计数描述已完成的工具调用。 |
+| `CASE_ABORTED` | 仅限 case 作用域：`{ reason: "run-reference-invalid"、"run-value-missing"、"secret-fill-incomplete"、"agentic-no-terminal-evidence"、"agentic-coverage-inexact"、"agentic-proof-invalid"、"grounding-secret-contaminated" 或 "grounding-snapshot-invalid"; stepId: string }`；`reason` 为八个预定义值之一。 |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任一 instruction-coverage、element-intent 或 confirms issue code（`confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`）、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected" 或 "secret-conflicting-target-names"（后两者始终带有 stepId）; path: Array<string 或非负整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token 或 embedded-secret-reference; path: 非空白字符串; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 非空白字符串, refs: SecretRef[] }` |
@@ -1228,6 +1229,7 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正整数, column: 正整数, kind: "grant-line" 或 "reference" }> }` |
 | `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" 或 "launch-failed"; engine: 非空白字符串 }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: 非空白字符串, executor: 非空白字符串, reason: "surface-mismatch" 或 "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 非空白字符串 } }` |
+| `PROMPT_AMBIGUOUS` | 仅限 case 作用域：`{ ambiguities: 大于或等于 1 的整数 }`。 |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
@@ -1248,16 +1250,16 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 只有写入方会固定使用当前的 schema 版本；查看器会宽松地读取任意 3.x 版本的报告。
 
 ```json
-{"schemaVersion":"3.9","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.10","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.9","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.10","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.9","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.10","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.9","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.10","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}
@@ -1282,6 +1284,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | SECRET_UNRESOLVED | usage | run/case | 2 | 未解析的 secret |
 | TARGET_UNRESOLVED | usage | run/case | 2 | 目标无法解析 |
 | EXECUTOR_UNSUPPORTED | usage | case | 2 | executor 缺少 Plan 所需的能力或 surface |
+| PROMPT_AMBIGUOUS | usage | case | 2 | 生成的响应仍有未解决的 Target 歧义 |
 | MISSING_PLAN | usage | run/case | 4 | 缺失 plan |
 | STALE_PLAN | usage | run/case | 4 | plan 已过期（`stale`） |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | 制品完整性校验失败 |
@@ -1295,6 +1298,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | 提供商不可用 |
 | AI_RESPONSE_INVALID | environment | run/case | 3 | 提供商响应无效 |
 | AGENTIC_STEP_FAILED | environment | case | 3 | AI 引导的交互声明失败 |
+| CASE_ABORTED | environment | case | 3 | case 因调用方可纠正或环境方面的原因在步骤中途终止 |
 | FS_IO_ERROR | environment | run/case | 3 | 文件系统操作失败 |
 | UNEXPECTED_CRASH | environment | run/case | 3 | 未分类的崩溃 |
 | INTERRUPTED | environment | 仅限 run | 3 | 批处理取消 |
@@ -1312,7 +1316,7 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 | `confirms-not-action` | 引用的步骤不是符合条件的操作或 capture |
 | `confirms-duplicate` | 步骤 ID 重复 |
 
-在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_ENV_VAR_COLLISION` 的 details 包含发生冲突的 `envVar` 以及冲突的 secret 引用列表；`SECRET_CONSENT_REQUIRED` 的 details 包含原因（`consent-required`、`declined` 或 `not-interactive`）以及每个未解决 secret 的名称、step id、env var 和原因；`SECRET_SYNTAX_REJECTED` 的 details 包含旧版语法出现位置的列表（行号、列号，以及是 grant 行还是引用）；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`AGENTIC_STEP_FAILED` 的 details 包含 step ID、已完成工具调用的计数，以及可选的最后一次失败断言；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
+在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_ENV_VAR_COLLISION` 的 details 包含发生冲突的 `envVar` 以及冲突的 secret 引用列表；`SECRET_CONSENT_REQUIRED` 的 details 包含原因（`consent-required`、`declined` 或 `not-interactive`）以及每个未解决 secret 的名称、step id、env var 和原因；`SECRET_SYNTAX_REJECTED` 的 details 包含旧版语法出现位置的列表（行号、列号，以及是 grant 行还是引用）；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`AGENTIC_STEP_FAILED` 的 details 包含 step ID、已完成工具调用的计数，以及可选的最后一次失败断言；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。`CASE_ABORTED` 的 details 包含封闭枚举的终止原因和 step ID；`PROMPT_AMBIGUOUS` 的 details 包含未解决歧义的数量。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
 
 ## 相关链接
 
@@ -1457,7 +1461,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 当前完整的 `PlanDocument`，包含目标（targets）与步骤（steps）。 | 可用 |
 | grounding（历史快照） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | 为已废弃契约的使用者保留的冻结 Grounding v2 快照。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.9"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.10"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
 
 - 每个 `$id` 均与其公开路径 URL 完全一致；内容完全一致（byte-identical）的 Schema 文件已发布至文档站点以及 npm 的 `schemas/` 导出。
 - 当前 Astro 配置将 `site` 设定为主机 `https://kotarotsubaki.github.io`，基路径为 `/ambercast`；上述发布 URL 均基于该主机。
@@ -1469,7 +1473,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | `plan.schema.json` | 包含 Plan `schemaVersion` 5、来源出处（provenance source）、目标（targets）与步骤（steps）的当前完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 包含 Grounding `schemaVersion` 3、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | 当前存在的配置文档，其 `$schema` 为必填项，其余声明的设置项均为可选项。 | Zod `RawConfig` 转换为 JSON Schema 2020-12。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | 包含 Report `schemaVersion` 3.9 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | 包含 Report `schemaVersion` 3.10 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 - 执行 `npm run build` 会先编译软件包，随后运行 `node dist/schema-gen.js`；该命令会以递归方式创建 Schema 目录，并精确写入上述四个文件。
 - 已校验的生成文件通过 `$schema` 声明了 JSON Schema draft 2020-12，并且包含发布元数据中所示的 `$id`。
@@ -1482,7 +1486,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.9、必需的步骤 Target 标识，以及已执行的 run 和已完成的 heal 结果中的会话清单的结构化报告外层信封（envelope）及其命令专属结果。
+`report.schema.json` 与其他 Schema 一同生成，并作为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json` 导出。它验证包含 Report `schemaVersion` 3.10、必需的步骤 Target 标识，以及已执行的 run 和已完成的 heal 结果中的会话清单的结构化报告外层信封（envelope）及其命令专属结果。
 
 ## 相关链接
 
@@ -1503,10 +1507,14 @@ ambercast 在不同版本之间定义了明确的产物格式兼容性与重新�
 
 | package 版本 | Plan `schemaVersion` | Grounding `schemaVersion` | element fingerprint tag | report `schemaVersion` |
 | --- | --- | --- | --- | --- |
-| `0.1.0` | `2` | `1`（尚未确认） | `a11y-neighborhood-v2` | `3.0` |
+| `0.1.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
-| `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
-| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
+| `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
+
+表中列出 0.1.0、0.2.0、每个变更 Plan 或 Grounding Schema 版本的发布版本，以及从 0.8.0 起的所有发布版本。
 
 0.2.0 版本变更了 provider 请求契约，但并未递增 Plan 的 `schemaVersion`。该变更改变了 `producerBundleFingerprint` 以及每个提示词的 `inputsDigest`，导致 0.1.0 版本的 Plan 变为陈旧状态（stale）。
 
@@ -1540,9 +1548,9 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/changelog/
 
 ambercast 是面向 prompt 原生的端到端测试 CLI 工具，由 AI 将自然语言测试 prompt 一次性编译为类似 lockfile 的确定性 Plan；在 Chromium 中命中 Grounding 时无需任何 AI 调用即可重放，并在 UI 发生漂移时通过自愈流程进行修复。本参考页面记录 ambercast 各版本中用户可见的产品行为与公共契约变更，并严格按照破坏性变更（BREAKING）优先的顺序编排。有关升级的具体步骤请参阅 [在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)，兼容性规则与详细对照请参阅 [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) 及 [兼容性](/ambercast/zh-cn/reference/compatibility/#regeneration-boundary)，变更记录规范请参阅 [规范变更日志](/ambercast/zh-cn/spec/changelog/)。
 
-## 0.4.0 版本 {#release-040}
+## 0.5.0 版本 {#release-050}
 
-发布日期：2026-09-14。
+发布日期：2026-09-15。
 
 | 类别 | 用户可见变更 |
 | --- | --- |
@@ -1666,7 +1674,7 @@ ambercast 不承诺为较旧的 pre-1.0 版本提供修复。
 # 术语表
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 
-本参考页是 ambercast 全站术语的单一权威来源，同时作为翻译过程中必须严格保留的字面量词元（literal tokens）索引。此处的每项定义均具备规范性，且由单句界定，不冗余展开完整的字段、标志位、状态或错误表格；请遵循各条目对应的归属链接以查阅完整契约。处于规划阶段（在 0.3.1 中未实现）的词元不具备 0.3.1 运行时语义，不得将其呈现为当前可用状态。
+本参考页是 ambercast 全站术语的单一权威来源，同时作为翻译过程中必须严格保留的字面量词元（literal tokens）索引。此处的每项定义均具备规范性，且由单句界定，不冗余展开完整的字段、标志位、状态或错误表格；请遵循各条目对应的归属链接以查阅完整契约。处于规划阶段（在当前版本中未实现）的词元不具备当前版本的运行时语义，不得将其呈现为当前可用状态。
 
 ## 工件术语 {#artifact-terms}
 
@@ -1705,6 +1713,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 
 ## 翻译不可变词元注册表 {#translation-invariant-registry}
 
+第四列中的报告版本是对应发布版本的发布提交中记录的 `REPORT_SCHEMA_VERSION`。
+
 | 不可变词元 | 规范性说明 | 归属 | 避免混淆的概念 |
 | --- | --- | --- | --- |
 | `$id` | `$id` 是为每个生成的 Schema 公开发布的 JSON Schema 标识符。 | [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#publication-metadata) | 配置中的 `$schema` |
@@ -1714,7 +1724,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `--allow-empty` | `--allow-empty` 使得解析该选项的命令在选择集为空时仍被允许执行。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` 解除 view 的非交互式拒绝；若终端已经处于交互式，则为空操作。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#interactive-gate) | 已实现的 `--headed` |
 | `--resolve` | `--resolve` 会在 grounding 缺失时显式允许 run 使用实时 AI 解析；未传入时，run 会拒绝该未命中。 | `ambercast run`；[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags) | 离线测试发现 |
-| `--clear` | `--clear` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 baseline 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | 当前命令执行的文件删除 |
+| `--clear` | `--clear` 处于规划阶段（在当前版本中未实现），没有被当前 baseline 解析器接受的语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | 当前命令执行的文件删除 |
 | `--config` | `--config` 是命令局部选项，仅由 generate 和 check 命令解析。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` 指定 `ambercast init` 生成文件所在的目标目录。 | `ambercast init`；[ambercast init](/ambercast/zh-cn/reference/cli/init/#flags) | 配置 `testDir` |
 | `--dry-run` | `--dry-run` 会阻止 generate 与 heal 命令写入工件。 | generate/heal；[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags) | `--list` |
@@ -1722,16 +1732,16 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `--host` | `--host` 选择 view 的绑定地址；必须是具体 IP 或 `localhost`，不允许通配地址。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#host-binding) | 目标的 `baseUrl` |
 | `--json` | `--json` 在除 `init` 与 `view` 之外的已实现命令返回后选择序列化的结构化报告输出。 | CLI 渲染器；[报告](/ambercast/zh-cn/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` 由 `generate`、`run`、`check`、`heal` 解析；各命令页面拥有各自的列表结果语义。`init` 与 `view` 均不接受该选项。 | CLI 解析器；[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
-| `--no-reset` | `--no-reset` 处于规划阶段（在 0.3.1 中未实现），没有被接受的 0.3.1 run 解析器语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | `--force` |
+| `--no-reset` | `--no-reset` 处于规划阶段（在当前版本中未实现），没有被当前 run 解析器接受的语义。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` 将 view 固定为单一的严格端口，而非自动递增尝试候选端口。 | `ambercast view`；[ambercast view](/ambercast/zh-cn/reference/cli/view/#port-selection) | 配置 `viewer.port` |
 | `--yes` | `--yes` 授权 heal 在无需交互式确认的情况下直接完成结算，并跳过 init 的确认提示；两者都不能替代用户自身的审查。 | `ambercast heal`；[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)；[ambercast init](/ambercast/zh-cn/reference/cli/init/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` 是确切的相邻 Grounding 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Plan 后缀 |
 | `.ambercast.plan.json` | `.ambercast.plan.json` 是确切的相邻 Plan 伴生文件后缀。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | Grounding 后缀 |
-| `.baseline` | `.baseline` 处于规划阶段（在 0.3.1 中未实现），没有 0.3.1 布局解析器会推导该路径。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-storage-and-freshness) | 已实现的 `.runs` |
+| `.baseline` | `.baseline` 处于规划阶段（在当前版本中未实现），当前布局解析器不会推导该路径。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#planned-storage-and-freshness) | 已实现的 `.runs` |
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生工件 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 工件 Schema 版本 |
-| `0.7.0` | `0.7.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.9` |
+| `0.9.0` | `0.9.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
 | `@ambercast-secret` | `@ambercast-secret` 是被拒绝的旧式 Prompt 语法，必须在重新生成 Plan v3 工件前移除。 | Prompt 解析器；[迁移机密授权](/ambercast/zh-cn/how-to/upgrade/#migrate-secret-grants) | 密钥引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -1749,14 +1759,14 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` 是由 `SECRET_REF_SOURCE` 构建的锚定全值正则表达式。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 未锚定的片段 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` 是唯一被接受的元素指纹算法字面量。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | Plan Schema 版本 2 |
 | `ambercast` | `ambercast` 是软件包二进制文件名称和 CLI 程序。 | package / CLI 概览 | 某个工件 Schema |
-| `ambercast baseline` | `ambercast baseline` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
+| `ambercast baseline` | `ambercast baseline` 处于规划阶段（在当前版本中未实现），会被当前解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
 | `ambercast check` | `ambercast check` 是已实现的只读新鲜度检查命令。 | [ambercast check](/ambercast/zh-cn/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` 是已实现的 Plan 生成命令。 | [ambercast generate](/ambercast/zh-cn/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` 是已实现且受守卫保护的工件修复命令。 | [ambercast heal](/ambercast/zh-cn/reference/cli/heal/) | 运行时回退 |
 | `ambercast init` | `ambercast init` 已实现，会写入四个文件。 | [ambercast init](/ambercast/zh-cn/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` 启动已实现的 stdio MCP 服务器。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | MCP 工具名 |
-| `ambercast restore` | `ambercast restore` 处于规划阶段（在 0.3.1 中未实现），会被 0.3.1 解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
-| `ambercast review` | `ambercast review` 处于规划阶段（在 0.3.1 中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
+| `ambercast restore` | `ambercast restore` 处于规划阶段（在当前版本中未实现），会被当前解析器拒绝。 | [ambercast baseline 与 restore](/ambercast/zh-cn/reference/cli/baseline-restore/#status) | 已实现的命令 |
+| `ambercast review` | `ambercast review` 处于规划阶段（在当前版本中未实现），即使运行时报告 Schema 中包含 review 分支也是如此。 | [ambercast review](/ambercast/zh-cn/reference/cli/review/#status) | Schema 可用性 |
 | `ambercast run` | `ambercast run` 是已实现的确定性重放命令。 | [ambercast run](/ambercast/zh-cn/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` 是已实现的只读本地结果查看器。 | [ambercast view](/ambercast/zh-cn/reference/cli/view/) | `ambercast run` |
 | `ambercast_check` | `ambercast_check` 是已实现的只读 MCP 新鲜度检查工具。 | [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
@@ -1804,10 +1814,10 @@ MCP 服务器依次提供六个工具：`ambercast_generate`、`ambercast_run`�
 
 | 工具 | 对应 CLI | 注解 | `isError: true` | `isError: false` 的否定结果 |
 | --- | --- | --- | --- | --- |
-| `ambercast_generate` | generate | false / false / true（弱）/ false | 退出码 2、3 | 退出码 1（strict 歧义）、5 |
+| `ambercast_generate` | generate | false / false / true（弱）/ false | 退出码 2（含 `PROMPT_AMBIGUOUS`）、3 | 退出码 5 |
 | `ambercast_run` | run | false / false / false / true | 退出码 2、3、4（MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED） | 退出码 1（断言失败）、5 |
 | `ambercast_check` | check | true / false / true / false | 退出码 2、3 | 退出码 4（stale 是 results[].status 中的正常结果）、5 |
-| `ambercast_heal` | heal | false / true / false / true | 退出码 2（含 CI 拒绝）、3、4；`HEAL_APPLY_TOKEN_INVALID`；`HEAL_APPLY_FAILED` | 退出码 1（未解决或拒绝）、5 |
+| `ambercast_heal` | heal | false / true / false / true | 退出码 2（含 CI 拒绝和 `PROMPT_AMBIGUOUS`）、3、4；`HEAL_APPLY_TOKEN_INVALID`；`HEAL_APPLY_FAILED` | 退出码 1（未解决或拒绝）、5 |
 | `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`；failed 时的 `JOB_FAILED`；有结果的 completed/cancelled 按原工具映射 | 未终结 record、列表、排队取消的 record |
 | `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
 
@@ -2349,7 +2359,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.7.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本规范描述了 ambercast 0.9.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
 
 ## 规范性用语 {#normative-language}
 
@@ -2375,7 +2385,7 @@ flowchart LR
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
 | Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
 | 指纹算法 | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
-| Report `schemaVersion` | `3.9` | repo:src/report/schema.ts:57 |
+| Report `schemaVersion` | `3.10` | repo:src/report/schema.ts:58 |
 
 ## 阅读顺序 {#reading-order}
 
@@ -3087,7 +3097,7 @@ Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其
 | CON-21 | 跨 AI 边界的捕获值 | 不带 `verificationCoverage` 的旧版存储 trace 在任何非固定词汇表值中均不得包含（MUST NOT）非空的当前用例捕获值（未解析的 `{{run.name}}` 占位符除外）；该检查采用子字符串匹配。全新的 agentic 导航 URL、填充值和断言文本/模式均不得完全等于（MUST NOT）捕获值。这些值必须改用（MUST）授权的 `RunRef` 插值；违规将在存储 trace 到达浏览器/提供方回退之前，或全新输入到达浏览器/持久化之前失败。 | 完整性失败 | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
 | CON-22 | 全新 agentic 操作/断言具体化机密 | 在具体化之前，每个全新的 agentic 操作和断言都必须根据（MUST）在该用例中观察到的每个非空已解析机密，对非固定词汇表的值进行扫描。仅有的封闭词汇表排除项为 `type`、`check`、`target.strategy`、`key` 和 `secretRef`。对任何非空机密都禁止完全相等；当机密至少为 3 个 UTF-16 代码单元时，禁止子字符串匹配。匹配项在浏览器执行、日志追加、Grounding 更新或持久化之前构成完整性失败。 | 完整性失败 | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
 | CON-23 | 位置参数／发现的 prompt 路径选择 | 所选 prompt 路径必须（MUST）解析到 `testDir` 内，具有精确的 `.test.md` 后缀及非空名称组成部分；此检查必须在任何逐文件工作开始前对整个选择仅执行一次，且不得（MUST NOT）应用于 `--list`。 | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/prompt-path-eligibility.ts#L25) |
-| CON-24 | 已提交和已生成的元素意图 | 归因和已提交意图的重新验证必须分别检查意图与引用的来源跨度，拒绝只有空白的摘录，按适用情况验证提供方引文或已提交引用文本，要求成对的外围引号，并要求引用位于意图范围内（包括接触边界）。已提交意图的重新验证不比较引文。 | `anchor-invalid`、`intent-span-invalid`、`intent-span-whitespace-only`、`intent-citation-mismatch`、`quote-span-invalid`、`quote-text-mismatch`、`quote-unpaired`、`quote-outside-intent`、`quote-whitespace-only` | repo:src/usecases/element-intent-policy.ts:61,84 |
+| CON-24 | 已提交和已生成的元素意图 | 归因和已提交意图的重新验证必须分别检查意图与引用的来源跨度，拒绝只有空白的摘录，按适用情况验证提供方引文或已提交引用文本，要求成对的外围引号，并要求引用位于意图范围内（包括接触边界）。已提交意图的重新验证不比较引文。生成（Generation）还必须拒绝期望文本与其目标意图引用相同的 `text-equals` 断言，因为这样两个引用都无法支持对方的角色。 | `anchor-invalid`、`intent-span-invalid`、`intent-span-whitespace-only`、`intent-citation-mismatch`、`quote-span-invalid`、`quote-text-mismatch`、`quote-unpaired`、`quote-outside-intent`、`quote-whitespace-only`、`text-equals-self-quote` | repo:src/usecases/element-intent-policy.ts:61,84; repo:src/usecases/generate.ts:222 |
 | CON-25 | Plan 的 `confirms` 字段 | 每个 ID 必须指向同一 Plan 中更早的 click、press、fill、fill-secret 或 capture 步骤，只能出现一次，并按 Plan 顺序升序排列；`generate` 和 `heal` 在验证前移除 `confirms` 中指向 `navigate` 步骤的引用。不检查 Target 标识是否相同。 | `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`、`confirms-unsorted` | repo:src/core/ir/confirms-validation.ts:35 |
 
 CON-23 在文件选择期间、所有其他 CON 项目之前适用。CON-01 至 CON-06、CON-09、CON-10 以及 CON-24 适用于 Plan 持久化之前；CON-01、CON-07、CON-08、CON-24 和 CON-25 适用于已提交的 Plan；CON-11 至 CON-22 适用于 Grounding/重放验证。Grounding/重放验证在浏览器操作接收具体化值之前，检查 trace 机密标记、已解析机密、凭据字面量和捕获值边界，以及动态 `RunRef` 授权。[src/usecases/instruction-coverage-policy.ts:379](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L379) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
@@ -3113,6 +3123,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| report 3.9 → 3.10：新增 `CASE_ABORTED`（environment、case 作用域、退出码 3、`{reason, stepId}` details）和 `PROMPT_AMBIGUOUS`（usage、case 作用域、退出码 2、`{ambiguities}` details）。每个 `run` CaseAbort、agentic 目标拒绝和未分类异常结果行现在都携带对应的 case 错误，而不是没有错误；`heal` 将 Stage 3 和最终回放的失败作为 case 错误报告，涵盖所有 kind，而非仅限 agentic。generate 或 heal 的 Stage 3 因提示词歧义而失败时，会产生 `PROMPT_AMBIGUOUS`（退出码 2），而不是无错误代码的崩溃（退出码 3）。 | repo:src/report/schema.ts, repo:src/usecases/run.ts, repo:src/usecases/heal-report.ts, repo:src/usecases/generate.ts | Report 消费者必须（MUST）接受当前的 `3.10` 契约，包括携带 case 作用域 details 的 `CASE_ABORTED` 和 `PROMPT_AMBIGUOUS`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。`heal` 报告中每个 case 的 `errors` 会增多，`summary` 中标记为 `errored` 的结果行也会增多；断言这些结果行的 `errors` 为空的测试必须考虑新的 case 错误。依赖提示词歧义时旧有无错误代码的退出码 3 崩溃的测试，必须改为期待退出码 2 和一条结果行。[repo:src/report/schema.ts] |
 | report 3.8 → 3.9：为 `AiResponseIssueCode` 新增四个确认引用 issue code，并为 case 范围的 environment 错误新增 `AGENTIC_STEP_FAILED`。同一版本中，AI 引导的断言工具和追踪重放的合格/不合格判定采用了带截止时间的轮询。 | repo:src/report/schema.ts:57, repo:src/usecases/run.ts | Report 消费者必须（MUST）接受当前的 `3.9` 契约，包括 `AiResponseIssueCode` 中的 `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action` 和 `confirms-duplicate`，以及携带 case 范围 details 的 `AGENTIC_STEP_FAILED`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。依赖 AI 引导的断言工具或追踪重放单次不合格观测的测试，需要考虑截止时间前的轮询。[repo:src/report/schema.ts:57] |
 | 带截止时间的轮询（`run.ts` 中的八个站点：首次绑定阶段 1、四个 plan assert 循环（包括 `text-visible` / `url-matches` 的浏览器检查路径）、AI 引导的断言工具，以及追踪重放的两个合格/不合格判定（事件与验证））在到达截止时间的等待之后，总会再进行一次观测，并将该次观测判定为最终结果（即使真实计时器在截止时间之后才触发）。元素 assert 的 `expected` 文字在没有 `roleHint` 时不包含角色部分。 | repo:src/usecases/run.ts | 无需重新生成 Plan、grounding 或 report。依赖截止前陈旧样本（或无 roleHint 时含双空格的 `expected` 文字）的测试需要更新期望值。 |
 | Plan v4 → v5 为涉及元素的步骤新增有来源依据的 `intent`／`confirms` 字段及限定于 Target 的 `locale`；Grounding v2 → v3 将单独的指纹证据替换为 `{locator, fingerprint, intentDigest, provenance}`；report 3.7 → 3.8 新增 heal Stage 1 的 `binding` 诊断和原因词汇。 | repo:src/core/ir/schema.ts, repo:src/report/schema.ts | 重新生成 v4 Plan；v5 是接受的 Plan 格式。v2 grounding 伴生文档也已废弃，必须随对应 Plan 一起重新生成。 |
@@ -3515,7 +3526,7 @@ CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`�
 
 ## 版本策略 {#version-policy}
 
-目前已发布的软件包版本为 0.3.1。关于工具演进的产品策略是：在整个 0.x 阶段仅保持 CLI 形式，并在迈向 1.0.0 时与云端版本一同交付。
+[兼容性表](/ambercast/zh-cn/reference/compatibility/#compatibility-table)列出了目前已发布的软件包版本。关于工具演进的产品策略是：在整个 0.x 阶段仅保持 CLI 形式，并在迈向 1.0.0 时与云端版本一同交付。
 
 相关链接：[变更日志](/ambercast/zh-cn/reference/changelog/)、[设计哲学](/ambercast/zh-cn/philosophy/)
 
@@ -3600,7 +3611,7 @@ ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`
 
 ## 按报告错误分类的后续动作 {#next-action-by-report-error}
 
-报告 schema 定义了十三种用法代码与六种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
+报告 schema 定义了十五种用法代码与八种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
 
 | 错误类别 | 下一步安全动作 |
 | --- | --- |

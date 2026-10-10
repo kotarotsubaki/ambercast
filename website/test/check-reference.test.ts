@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFile as mockedReadFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { writeGeneratedArtifacts } from '../../src/build-tools/generate-json-schema.js';
+import { ENVIRONMENT_REPORT_ERROR_CODES, USAGE_REPORT_ERROR_CODES } from '../../src/report/schema.js';
 import { checkReference } from '../scripts/check-reference.mjs';
 import { createDocsFixture, runEntryPoint } from './cli-fixture.ts';
 import capabilityPagesMapping from '../src/data/capability-pages.json';
@@ -20,6 +23,7 @@ type FixtureOptions = {
   configSchema?: object;
   defaults?: Record<string, unknown>;
   capabilities?: object;
+  errorFamilies?: object;
   capabilityPages?: object;
   omit?: string[];
   omitDocs?: string[];
@@ -66,6 +70,32 @@ const capabilities = {
   exitCodes: [0, 1],
   errorCodes: ['CONFIG_INVALID', 'FS_IO_ERROR'],
   planned: ['review', 'baseline', 'restore'],
+};
+
+const errorFamilies = {
+  usage: ['USAGE_CODE_ONE', 'USAGE_CODE_TWO'],
+  environment: ['ENVIRONMENT_CODE_ONE', 'ENVIRONMENT_CODE_TWO', 'ENVIRONMENT_CODE_THREE'],
+};
+
+const operatingContractDocs = {
+  'agents/operating-contract.md': [
+    '## Next action by report error {#next-action-by-report-error}',
+    '',
+    'The report schema defines two usage codes and three environment codes, structurally separated by kind in the report schema.',
+    '',
+  ].join('\n'),
+  'ja/agents/operating-contract.md': [
+    '## Next action by report error {#next-action-by-report-error}',
+    '',
+    'レポートスキーマは、2個の使用方法コードと3つの環境コードを定義しています。',
+    '',
+  ].join('\n'),
+  'zh-cn/agents/operating-contract.md': [
+    '## Next action by report error {#next-action-by-report-error}',
+    '',
+    '报告 schema 定义了二种用法代码与三种环境代码。',
+    '',
+  ].join('\n'),
 };
 
 const plannedDocs = Object.fromEntries([
@@ -131,13 +161,14 @@ const referenceDocs = {
 };
 
 function createReferenceFixture(options: FixtureOptions = {}) {
-  const docs: Record<string, string> = { ...referenceDocs, ...plannedDocs, ...options.docs };
+  const docs: Record<string, string> = { ...referenceDocs, ...plannedDocs, ...operatingContractDocs, ...options.docs };
   for (const path of options.omitDocs ?? []) delete docs[path];
   const generated = {
     'website/public/manifest/cli.json': JSON.stringify(options.cliManifest ?? cliManifest),
     'website/public/schemas/config.schema.json': JSON.stringify(options.configSchema ?? configSchema),
     'website/public/capabilities.json': JSON.stringify(options.capabilities ?? capabilities),
     'dist/manifest/config-defaults.json': JSON.stringify(options.defaults ?? defaults),
+    'dist/manifest/report-error-families.json': JSON.stringify(options.errorFamilies ?? errorFamilies),
     'website/src/data/capability-pages.json': JSON.stringify(options.capabilityPages ?? capabilityPagesMapping),
   };
   for (const path of options.omit ?? []) delete generated[path as keyof typeof generated];
@@ -155,6 +186,7 @@ function checkFixture(fixture: ReturnType<typeof createDocsFixture>) {
     docsRoot: join(fixture.website, 'src/content/docs'),
     publicRoot: join(fixture.website, 'public'),
     configDefaultsPath: join(fixture.root, 'dist/manifest/config-defaults.json'),
+    errorFamiliesPath: join(fixture.root, 'dist/manifest/report-error-families.json'),
     capabilityPagesPath: join(fixture.website, 'src/data/capability-pages.json'),
   }) as Promise<Violation[]>;
 }
@@ -438,6 +470,170 @@ describe('checkReference', () => {
 
     expect(violations.length).toBeGreaterThanOrEqual(3);
     expect(violations).toEqual([...violations].sort((left, right) => left.check.localeCompare(right.check) || left.page.localeCompare(right.page) || left.rule.localeCompare(right.rule)));
+  });
+});
+
+describe('error family counts', () => {
+  it('does not let a fenced code example with the correct count mask a stale documented count', async () => {
+    const docWithFencedExample = [
+      '## Next action by report error {#next-action-by-report-error}',
+      '',
+      'Example rendering:',
+      '',
+      '```text',
+      'The report schema defines two usage codes and three environment codes, structurally separated by kind in the report schema.',
+      '```',
+      '',
+      'The report schema defines five usage codes and three environment codes, structurally separated by kind in the report schema.',
+      '',
+    ].join('\n');
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { 'agents/operating-contract.md': docWithFencedExample },
+    }));
+    expect(violations.filter((v) => v.check === 'error-family-counts')).toEqual([
+      { check: 'error-family-counts', page: 'agents/operating-contract', rule: 'usage-count', expected: '2', actual: '5' },
+    ]);
+  });
+
+  it('reports a usage-count mismatch on the English page', async () => {
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { 'agents/operating-contract.md': operatingContractDocs['agents/operating-contract.md'].replace('two usage codes', 'five usage codes') },
+    }));
+    expect(violations.filter((v) => v.check === 'error-family-counts')).toEqual([
+      { check: 'error-family-counts', page: 'agents/operating-contract', rule: 'usage-count', expected: '2', actual: '5' },
+    ]);
+  });
+
+  it('reports an environment-count mismatch on the Japanese page', async () => {
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { 'ja/agents/operating-contract.md': operatingContractDocs['ja/agents/operating-contract.md'].replace('3つの環境コード', '7つの環境コード') },
+    }));
+    expect(violations.filter((v) => v.check === 'error-family-counts')).toEqual([
+      { check: 'error-family-counts', page: 'ja/agents/operating-contract', rule: 'environment-count', expected: '3', actual: '7' },
+    ]);
+  });
+
+  it('parses twenty in the English usage count', async () => {
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { 'agents/operating-contract.md': operatingContractDocs['agents/operating-contract.md'].replace('two usage codes', 'twenty usage codes') },
+    }));
+    expect(violations.filter((v) => v.check === 'error-family-counts')).toEqual([
+      { check: 'error-family-counts', page: 'agents/operating-contract', rule: 'usage-count', expected: '2', actual: '20' },
+    ]);
+  });
+
+  it.each([
+    ['十', '10'],
+    ['九十九', '99'],
+  ])('parses %s in the Simplified Chinese usage count', async (numeral, actual) => {
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { 'zh-cn/agents/operating-contract.md': operatingContractDocs['zh-cn/agents/operating-contract.md'].replace('二种用法代码', `${numeral}种用法代码`) },
+    }));
+    expect(violations.filter((v) => v.check === 'error-family-counts')).toEqual([
+      { check: 'error-family-counts', page: 'zh-cn/agents/operating-contract', rule: 'usage-count', expected: '2', actual },
+    ]);
+  });
+
+  it.each(['十十', '十零', '二十零'])('reports sentence-not-found for both counts when the captured Chinese numeral %s cannot be parsed', async (numeral) => {
+    const page = 'zh-cn/agents/operating-contract';
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { [`${page}.md`]: operatingContractDocs['zh-cn/agents/operating-contract.md'].replace('二种用法代码', `${numeral}种用法代码`) },
+    }));
+    expect(violations.filter((v) => v.check === 'error-family-counts' && v.page === page)).toEqual([
+      { check: 'error-family-counts', page, rule: 'environment-count', expected: '3', actual: 'sentence-not-found' },
+      { check: 'error-family-counts', page, rule: 'usage-count', expected: '2', actual: 'sentence-not-found' },
+    ]);
+  });
+
+  it.each([
+    ['agents/operating-contract'],
+    ['ja/agents/operating-contract'],
+    ['zh-cn/agents/operating-contract'],
+  ])('reports sentence-not-found for both counts when %s is missing its sentence', async (page) => {
+    const violations = await checkFixture(createReferenceFixture({
+      docs: { [`${page}.md`]: '## Next action by report error {#next-action-by-report-error}\n\nNo count sentence here.\n' },
+    }));
+    const pageViolations = violations.filter((v) => v.check === 'error-family-counts' && v.page === page);
+    expect(pageViolations).toEqual([
+      { check: 'error-family-counts', page, rule: 'environment-count', expected: '3', actual: 'sentence-not-found' },
+      { check: 'error-family-counts', page, rule: 'usage-count', expected: '2', actual: 'sentence-not-found' },
+    ]);
+  });
+
+  it('TEST-374-01: flags a schema-array/documentation count mismatch across all three locales with a non-zero exit', () => {
+    const tmpOutDir = mkdtempSync(join(tmpdir(), 'ambercast-error-families-'));
+    mkdirSync(join(tmpOutDir, 'schema'), { recursive: true });
+    mkdirSync(join(tmpOutDir, 'manifest'), { recursive: true });
+    try {
+      writeGeneratedArtifacts({
+        outDir: tmpOutDir,
+        writeFile: writeFileSync,
+        errorFamilies: {
+          usage: [...USAGE_REPORT_ERROR_CODES, 'INVENTED_USAGE_CODE'],
+          environment: ENVIRONMENT_REPORT_ERROR_CODES,
+        },
+      });
+      const mutatedManifest = readFileSync(join(tmpOutDir, 'manifest', 'report-error-families.json'), 'utf8');
+
+      const fixture = createReferenceFixture({
+        errorFamilies: JSON.parse(mutatedManifest),
+        docs: {
+          'agents/operating-contract.md': [
+            '## Next action by report error {#next-action-by-report-error}',
+            '',
+            'The report schema defines fifteen usage codes and eight environment codes, structurally separated by kind in the report schema.',
+            '',
+          ].join('\n'),
+          'ja/agents/operating-contract.md': [
+            '## Next action by report error {#next-action-by-report-error}',
+            '',
+            'レポートスキーマは、15個の使用方法コードと8つの環境コードを定義しています。',
+            '',
+          ].join('\n'),
+          'zh-cn/agents/operating-contract.md': [
+            '## Next action by report error {#next-action-by-report-error}',
+            '',
+            '报告 schema 定义了十五种用法代码与八种环境代码。',
+            '',
+          ].join('\n'),
+        },
+      });
+
+      const result = runEntryPoint(new URL('../scripts/check-reference.mjs', import.meta.url), fixture.website);
+
+      expect(result.status).not.toBe(0);
+      const violations = result.stdout.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+      const usageViolations = violations.filter((v: Violation) => v.check === 'error-family-counts' && v.rule === 'usage-count');
+      expect(usageViolations).toHaveLength(3);
+      expect(usageViolations.map((v: Violation) => v.page).sort()).toEqual([
+        'agents/operating-contract',
+        'ja/agents/operating-contract',
+        'zh-cn/agents/operating-contract',
+      ]);
+      for (const violation of usageViolations) {
+        expect(violation).toMatchObject({ expected: '16', actual: '15' });
+      }
+      expect(violations.filter((v: Violation) => v.check === 'error-family-counts' && v.rule === 'environment-count')).toEqual([]);
+    } finally {
+      rmSync(tmpOutDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a missing report error families artifact without mutating documentation pages', async () => {
+    const fixture = createReferenceFixture({ omit: ['dist/manifest/report-error-families.json'] });
+    const page = 'website/src/content/docs/agents/operating-contract.md';
+    const before = fixture.read(page);
+
+    await expect(checkFixture(fixture)).rejects.toThrow();
+    expect(fixture.read(page)).toBe(before);
+    expect(existsSync(join(fixture.root, page))).toBe(true);
+  });
+
+  it('rejects invalid JSON in the report error families artifact', async () => {
+    const fixture = createReferenceFixture();
+    writeFileSync(join(fixture.root, 'dist/manifest/report-error-families.json'), 'not valid json');
+
+    await expect(checkFixture(fixture)).rejects.toThrow();
   });
 });
 

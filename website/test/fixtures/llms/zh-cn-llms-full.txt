@@ -3360,7 +3360,7 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 
 可以设置两种上限，防止自愈无限期尝试下去。
 
-- `heal.maxStepRepairs`：单次自愈尝试修复 step 的次数上限，取正整数；省略时不设上限。
+- `heal.maxStepRepairs`：限制 STAGE 1、STAGE 2 修复中调用 AI 的次数，在调用发生时计数。STAGE 3 仍会调用 AI，但不计入该上限。取正整数；省略时不设上限。
 - `heal.caseTimeoutMs`：整次自愈可用时长的上限，单位毫秒，在首次回放开始前就已确定。超过该期限后不再开始新的修复，但不会强制中止已在进行的工作，也不会废弃已生成的修复。
 
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/#heal)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#limits)
@@ -3372,7 +3372,7 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 这样一来，写入发生之前就能确认哪个文件会如何改变。
 
 :::caution
-加上 `--dry-run` 后不会请求确认，只展示结果，也不会写入任何文件。`--yes` 只是省略 CLI 的确认提示，本身并不代表用户已批准改动。
+加上 `--dry-run` 后不会请求确认，也不会提交执行计划或定位缓存的改动，但回放尝试本身仍可能在 runs 目录下写入证据。`--yes` 只是预先批准 CLI 的确认提示，本身并不代表用户已审查并批准改动。
 
 通过 agent 执行且既没有 `--yes` 也无法交互式确认时，ambercast 会直接以错误停止，不会静默写入。
 

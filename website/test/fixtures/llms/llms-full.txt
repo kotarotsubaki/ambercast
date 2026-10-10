@@ -3349,7 +3349,7 @@ Related: [ambercast heal](/ambercast/reference/cli/heal/#repair-model), [Steps](
 
 You can set two kinds of limits so healing doesn't keep trying forever.
 
-- `heal.maxStepRepairs`: the limit on how many step repairs a single healing run attempts. Set it as a positive integer; omit it and there is no limit.
+- `heal.maxStepRepairs`: the limit on AI dispatches during stage 1 and stage 2 repair, charged at dispatch time. Stage 3 still calls AI but doesn't count against this limit. Set it as a positive integer; omit it and there is no limit.
 - `heal.caseTimeoutMs`: the time limit, in milliseconds, for the whole healing run. ambercast fixes this deadline before the first replay starts. Past the deadline, it starts no new repair, but it doesn't force-stop work already in progress or discard a repair already produced.
 
 Related: [Configuration](/ambercast/reference/configuration/#heal), [ambercast heal](/ambercast/reference/cli/heal/#limits)
@@ -3361,7 +3361,7 @@ Finding a repair doesn't change any project file yet. Healing holds each candida
 This lets you see exactly which file changes, and how, before the write happens.
 
 :::caution
-Passing `--dry-run` skips the confirmation prompt and shows you the result only — it writes no file. `--yes` only skips the CLI's confirmation message; it doesn't by itself mean you approved the change.
+Passing `--dry-run` skips the confirmation prompt and never commits a Plan or Grounding change, but a replay attempt can still write evidence under the runs directory. `--yes` pre-authorizes the CLI's confirmation prompt only; it isn't your own review and approval of the change.
 
 When an agent runs ambercast without `--yes` and without a way to confirm interactively, ambercast stops with an error instead of writing silently.
 

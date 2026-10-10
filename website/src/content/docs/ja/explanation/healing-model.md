@@ -21,21 +21,65 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 ヒーリングはまず、AIを使わない通常のリプレイでテストを再実行し、本当に失敗するかどうかを確かめる。ここで失敗が再現しなかった場合、それ以上の修復は行わない。失敗が再現したときだけ、次の3段階に進む。
 
-<div style="display:flex;flex-direction:column;align-items:center;margin:1.25rem 0;font-size:0.9rem;">
-<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">baseline replay</div>
-<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ fails</div>
-<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">stage 1</div>
-<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ not advanced</div>
-<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">stage 2</div>
-<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ still failing</div>
-<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">stage 3</div>
-<div style="color:var(--sl-color-gray-3);font-size:0.75rem;padding:0.15rem 0;">↓ confirmed</div>
-<div style="background:var(--sl-color-gray-6);border:1px solid var(--sl-color-hairline);border-radius:8px;padding:0.5rem 1rem;">commit</div>
-</div>
+<div class="heal-stages">
+<style>
+.heal-stages {
+  --ground: #FAF6F0; --surface: #FFFDFA; --line: #E2D9CC; --text: #27211C; --muted: #766B60;
+  --amber: #A65C1F; --amber-soft: #FCF5EB; --verdigris: #2E7D5B; --verdigris-soft: rgba(46, 125, 91, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .heal-stages {
+    --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+    --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+  }
+}
+:root[data-theme="dark"] .heal-stages {
+  --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+  --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+}
+.heal-stages { margin: 1.5rem 0; }
+.heal-stages figure { margin: 0 auto; max-width: 560px; display: grid; }
+.heal-stages .node { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); display: grid; gap: 8px; }
+.heal-stages .node.stage { border-color: var(--amber); }
+.heal-stages .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.heal-stages .num { font: 600 11.5px/1 ui-monospace, "JetBrains Mono", monospace; letter-spacing: .08em; color: var(--muted); }
+.heal-stages .stage .num { color: var(--amber); }
+.heal-stages h3 { margin: 0; font: 700 16px/1.35 system-ui, "Noto Sans JP", sans-serif; letter-spacing: -.01em; color: var(--text); }
+.heal-stages p { margin: 0; color: var(--text); }
+.heal-stages .chip { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 ui-monospace, monospace; letter-spacing: .04em; padding: 5px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.heal-stages .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.heal-stages .chip.ai { color: var(--amber); background: var(--amber-soft); }
+.heal-stages .chip.replay { color: var(--verdigris); background: var(--verdigris-soft); }
+.heal-stages .scope { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.heal-stages .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.heal-stages .fill { height: 100%; background: var(--amber); }
+.heal-stages .scope span { font: 500 11px/1.3 ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
+.heal-stages .aside { font-size: 13px; color: var(--muted); }
+.heal-stages .link { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 10px; padding-left: 18px; min-height: 56px; }
+.heal-stages .link svg { width: 28px; height: 44px; color: var(--muted); }
+.heal-stages .link.up svg { color: var(--amber); }
+.heal-stages .link span { font-size: 13px; color: var(--muted); }
+.heal-stages .link b { color: var(--text); font-weight: 700; }
+@media (max-width: 420px) { .heal-stages .scope { grid-template-columns: 1fr; gap: 6px; } }
+</style>
+<figure aria-label="heal の3段階エスカレーション。基準の再生で失敗したら段階1、段階1で失敗した地点が進まなければ段階2、失敗が残り期限前なら段階3へ進む">
 
-- 段階1: テストが最初に失敗したステップだけを見て、ページ上の要素を探し直す。軽い再スキャンで見つかることもあれば、AIに新しい位置を推測させることもある
-- 段階2: 段階1で解決しなかった場合だけ、その失敗ステップとその後ろの数ステップをまとめてAIに作り直させる
-- 段階3: それでも失敗が残り、かつ後述の制限時間内であれば、テスト全体の実行手順をAIに最初から作り直させる
+<div class="node"><div class="top"><span class="num">BASELINE</span><span class="chip replay">AIを呼ばない</span></div><h3>基準をフェイルクローズで再生する</h3><p class="aside">失敗が無ければ修復せずに終わる</p></div>
+
+<div class="link" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>失敗があれば</b>、解決を有効にして計測し直す</span></div>
+
+<div class="node stage"><div class="top"><span class="num">STAGE 1</span><span class="chip ai">AIを呼びうる</span></div><h3>グラウンディングを直す</h3><div class="scope"><div class="track"><div class="fill" style="width:22%"></div></div><span>最初に失敗した地点</span></div><p>失敗した地点の要素をつかみ直す。地点が先へ進めば、要素の再グラウンディングかAIによる再追跡として記録する。</p></div>
+
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>失敗した地点が進まなかったら</b></span></div>
+
+<div class="node stage"><div class="top"><span class="num">STAGE 2</span><span class="chip ai">AIを呼びうる</span></div><h3>1 stepか以降を直す</h3><div class="scope"><div class="track"><div class="fill" style="width:55%"></div></div><span>単一stepまたはtail</span></div><p>失敗したstepを1つ、またはそこから後ろ（tail）をまとめて直す。</p></div>
+
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>失敗が残り、期限前なら</b></span></div>
+
+<div class="node stage"><div class="top"><span class="num">STAGE 3</span><span class="chip ai">AIを呼びうる</span></div><h3>計画全体を作り直す</h3><div class="scope"><div class="track"><div class="fill" style="width:100%"></div></div><span>計画全体</span></div><p>AI executorを解決して生成を呼び、計画をまるごと作り直す。</p></div>
+
+</figure>
+</div>
 
 軽い対応から重い対応へと順に試すのは、無駄なAI呼び出しとコストを避けるためである。
 

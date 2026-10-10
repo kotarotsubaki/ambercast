@@ -61,6 +61,8 @@
     "test:agent-hooks": "python3 -m unittest discover -s .claude/hooks -p 'test_*.py' && python3 -m unittest discover -s .codex/hooks -p 'test_*.py'",
     "test:contract:ai": "vitest run --config vitest.config.contract-ai.ts",
     "test:contract:browser": "npm run build && vitest run --config vitest.config.contract-browser.ts",
+    "verify:memos": "node scripts/verify-memos.mjs",
+    "test:verification:memos": "vitest run --config vitest.config.verification.ts",
     "pretest": "npm run build",
     "test": "vitest run"
   },

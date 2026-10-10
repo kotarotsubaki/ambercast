@@ -126,5 +126,7 @@ Implementation tasks run in a **linked worktree per issue** by default; working 
 - `node scripts/pack-install.mjs pack [--out-dir <dir>] [--allow-dirty]` — build and
   pack this checkout into a commit-keyed archive and manifest for downstream checks
 - `node scripts/pack-install.mjs install <project-dir> [--manifest <path>] [--out-dir <dir>] [--pm npm|pnpm]` — install a packed archive into another project and verify its version and lockfile integrity
+- `npm run verify:memos` — run the local one-command Memos middle-layer verification harness (Docker required; see issue #549)
+- `npm run test:verification:memos` — run the opt-in verification test suite (`test/verification/**`), excluded from `npm test`
 
 Keep this file updated as the implementation grows.

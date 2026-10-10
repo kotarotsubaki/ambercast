@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/ambercast/dist/schema/config.schema.json",
+  "testDir": "tests/ambercast",
+  "targets": {
+    "memos": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "en-US"
+    }
+  },
+  "defaultTarget": "memos",
+  "secrets": {
+    "allow": []
+  }
+}

@@ -78,3 +78,49 @@ describe('assertNoLiteralSecrets', () => {
   it('does not exempt a token-shaped high-entropy value under an array root', () => { const token = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea'; expectLiteralSecretRejected([token] as unknown as PlanDocument, token, 'high-entropy-token', '[0]'); });
   it('rejects an embedded secret-reference marker in an object key without exposing the key', () => { const rejectedKey = 'note {{secrets.X}}'; const document = plan([]); document.generatorMeta = { [rejectedKey]: 'value' }; expectLiteralSecretRejected(document, rejectedKey, 'embedded-secret-reference', 'generatorMeta[redacted-key]'); });
 });
+
+describe('generator secret policy readable-slug ID exemption (#543)', () => {
+  const slug = 'verify-uploaded-xlsx-backup-json-download-works';
+
+  it.each([
+    ['steps[0].id', { steps: [{ id: slug }] }],
+    ['steps[0].confirms[0]', { steps: [{ id: 'a-b', confirms: [slug] }] }],
+    ['steps[0].instructionCoverage[0].id', { steps: [{ id: 'a-b', instructionCoverage: [{ id: slug }] }] }],
+  ] as const)('accepts a readable slug at %s', (_path, document) => { expect(() => assertNoLiteralSecrets(document as unknown as PlanDocument)).not.toThrow(); });
+
+  it.each([
+    ['verify-xlsx-2-backup-json-download-works', 'accept'],
+    ['step-42-verify-xlsx-json-pdf-download', 'accept'],
+    ['review-v2-7-export-json-and-pdf-bundle', 'accept'],
+    ['export-2026-quarterly-xlsx-bundle-jpg-pdf-zip', 'high-entropy-token'],
+    ['setup-2fa-totp-qr-scan-and-verify-backup-json', 'high-entropy-token'],
+    ['pdf-xlsx-json-zip-jpg-abcde12-export', 'high-entropy-token'],
+    ['qwertyuiopasdfghjklzxcvbnm-12-34-567', 'high-entropy-token'],
+    ['verifyuploadedxlsxbackupjsondownloadworks', 'high-entropy-token'],
+    ['a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0', 'high-entropy-token'],
+    ['verify-xlsx-123-backup-json-download-works', 'accept'],
+    ['verify-xlsx-1234-backup-json-download-works', 'high-entropy-token'],
+    ['review-docx123-export-json-and-pdf-bundle-zip', 'accept'],
+    ['review-docx1234-export-json-and-pdf-bundle-zip', 'high-entropy-token'],
+    ['quick-zipbundleexportofjpgandpdffilesnow', 'accept'],
+  ] as const)('applies readable-slug boundaries to %s', (text, expected) => { const document = { steps: [{ id: text }] } as unknown as PlanDocument; if (expected === 'accept') expect(() => assertNoLiteralSecrets(document)).not.toThrow(); else expectLiteralSecretRejected(document, text, 'high-entropy-token', 'steps[0].id'); });
+
+  it.each([
+    ['generatorMeta.id', { generatorMeta: { id: slug } }],
+    ['generatorMeta.steps[0].id', { generatorMeta: { steps: [{ id: slug }] } }],
+    ['steps[0].value', { steps: [{ id: 'a-b', value: slug }] }],
+    ['steps[0].instructionCoverage[0].text', { steps: [{ id: 'a-b', instructionCoverage: [{ text: slug }] }] }],
+    ['steps[0].foo.id', { steps: [{ id: 'a-b', foo: { id: slug } }] }],
+    ['[0].id', [{ id: slug }]],
+    ['[0]', [slug]],
+  ] as const)('rejects a readable slug outside contract ID fields at %s', (path, document) => { expectLiteralSecretRejected(document as unknown as PlanDocument, slug, 'high-entropy-token', path); });
+
+  it('rejects a readable slug used as an object key', () => { const document = { generatorMeta: { [slug]: 'value' } } as unknown as PlanDocument; expectLiteralSecretRejected(document, slug, 'high-entropy-token', 'generatorMeta[redacted-key]'); });
+
+  it.each([
+    ['sk-verify-uploaded-xlsx-backup-json-download', 'credential-prefix-sk'],
+    ['note-{{secrets.X}}', 'embedded-secret-reference'],
+  ] as const)('keeps %s detection at a contract ID field', (text, detector) => { expectLiteralSecretRejected({ steps: [{ id: text }] } as unknown as PlanDocument, text, detector, 'steps[0].id'); });
+
+  it('continues to detect a readable slug without path context', () => { expect(detectSecretLiteral(slug)).toBe('high-entropy-token'); });
+});

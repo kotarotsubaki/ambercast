@@ -81,7 +81,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
           runId: '2026-09-24T000000Z-550e8400-e29b-41d4-a716-446655440000',
           uiExecutor: createUiExecutorResolver({ headed: false, factories: { playwright: factorySpy } }),
           secrets: createFakeSecretsProvider(new Map()),
-          resolveAiExecutor: async () => createFakeAiExecutor({ execute: () => ({ data: { outcome: 'found', role: harness.element.role, name: harness.element.name }, raw: JSON.stringify({ outcome: 'found', role: harness.element.role, name: harness.element.name }) }) }),
+          resolveAiExecutor: async () => createFakeAiExecutor({ execute: () => ({ data: { proposal: { outcome: 'found', role: harness.element.role, name: harness.element.name } }, raw: JSON.stringify({ proposal: { outcome: 'found', role: harness.element.role, name: harness.element.name } }) }) }),
           events: events.sink, discoverTestFiles: async () => [file], isCI: false,
           config, allocateCallId: createCallIdAllocator(),
         };

@@ -205,7 +205,7 @@ function elementBindingProposal(request: { readonly context?: unknown }) {
   const data = matches.length === 1
     ? { outcome: 'found' as const, ...matches[0]! }
     : { outcome: 'none' as const };
-  return { data, raw: JSON.stringify(data) };
+  return { data: { proposal: data }, raw: JSON.stringify({ proposal: data }) };
 }
 
 function freshFingerprint(
@@ -4602,7 +4602,7 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
     const scenario = await createScenario({
       steps, grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) }, sessionEntries: liveEntries(SUBMIT),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request) && bindings++ === 0
-        ? { data: { outcome: 'none' }, raw: '{}' }
+        ? { data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }
         : elementBindingProposal(request) }),
     });
     const beforePlan = await scenario.storage.readText(PLAN);

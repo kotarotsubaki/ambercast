@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createClaudeCodeCliExecutor } from '#adapters/ai/claude-code-cli/index.js';
 import { createSpawnCommandRunner } from '#adapters/ai/shared/command-runner.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
+import { ElementBindingProposalResponse } from '#core/ir/schema.js';
 
 let available = false;
 
@@ -27,5 +28,14 @@ describe('claude-code-cli smoke contract', () => {
       prompt: 'Respond with {"ok": true}.',
       responseSchema: typedJsonSchema(z.object({ ok: z.boolean() })),
     })).resolves.toMatchObject({ data: { ok: true } });
+  });
+
+  it('accepts the wrapped element binding schema through the live provider', async (context) => {
+    if (!available) context.skip('The Claude CLI is unavailable for the opt-in live smoke check.');
+    const executor = createClaudeCodeCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
+    await expect(executor.execute({
+      prompt: 'Return exactly {"proposal":{"outcome":"none"}}.',
+      responseSchema: typedJsonSchema(ElementBindingProposalResponse),
+    })).resolves.toMatchObject({ data: { proposal: { outcome: 'none' } } });
   });
 });

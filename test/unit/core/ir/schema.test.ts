@@ -1,6 +1,8 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
+import { typedJsonSchema } from '../../../../src/core/ai/typed-json-schema.js';
+import { FinalOutcome } from '../../../../src/adapters/ai/agentic/final-outcome.js';
 import { toCanonicalArtifactText } from '../../../../src/core/ir/canonical-json.js';
 import {
   AccessibilityElementRef,
@@ -12,6 +14,7 @@ import {
   ClickAction,
   ElementCountCheck,
   ElementBindingProposal,
+  ElementBindingProposalResponse,
   ElementGroundingEntryV3,
   ElementIntent,
   ElementRef,
@@ -27,6 +30,7 @@ import {
   GeneratedAiStepSecretUse,
   GeneratedFillSecretAction,
   GeneratedPlanResponse,
+  GeneratedPlanResponseRequest,
   GeneratedStep,
   HexSha256,
   InterpolatableText,
@@ -302,6 +306,41 @@ describe('TEST-I8 initial binding schemas', () => {
     expectRejected(ElementBindingProposal, { ...found, name: '' });
     expectRejected(ElementBindingProposal, { outcome: 'unknown' });
     expectRejected(ElementBindingProposal, {});
+  });
+});
+
+describe('element binding provider schema', () => {
+  it('has one strict root object containing three strict anyOf proposal branches and no oneOf', () => {
+    const schema = typedJsonSchema(ElementBindingProposalResponse) as Record<string, unknown>;
+    expect(schema).toMatchObject({ type: 'object', additionalProperties: false, required: ['proposal'] });
+    const proposal = (schema.properties as Record<string, unknown>).proposal as Record<string, unknown>;
+    expect(proposal.anyOf).toHaveLength(3);
+    const branches = proposal.anyOf as Record<string, unknown>[];
+    expect(branches.map((branch) => ((branch.properties as Record<string, unknown>).outcome as Record<string, unknown>).const))
+      .toEqual(expect.arrayContaining(['found', 'none', 'ambiguous']));
+    expect(JSON.stringify(schema)).not.toContain('"oneOf"');
+
+    const visit = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (value === null || typeof value !== 'object') return;
+      const node = value as Record<string, unknown>;
+      if (node.type === 'object') {
+        expect(node.additionalProperties).toBe(false);
+        const keys = Object.keys(node.properties as Record<string, unknown>);
+        expect(node.required).toEqual(expect.arrayContaining(keys));
+      }
+      Object.values(node).forEach(visit);
+    };
+    visit(schema);
+  });
+
+  it('keeps all four provider response schemas rooted at an object', () => {
+    for (const response of [GeneratedPlanResponseRequest, GeneratedPlanResponse, ElementBindingProposalResponse, FinalOutcome]) {
+      expect(typedJsonSchema(response)).toHaveProperty('type', 'object');
+    }
   });
 });
 

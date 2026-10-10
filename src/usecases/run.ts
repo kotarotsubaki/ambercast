@@ -50,7 +50,7 @@ import {
 import {
   GROUNDING_SCHEMA_VERSION,
   PLAN_SCHEMA_VERSION,
-  ElementBindingProposal,
+  ElementBindingProposalResponse,
   GroundingDocument,
   PlanDocument,
   TraceAction,
@@ -2740,14 +2740,16 @@ async function executeAiStep(
  *    accessibilityTree }`, where `excerpt` is re-extracted source-span text.
  *    Redact it with `redactJsonStrings`, then check immediately before send
  *    with `jsonContainsResolvedSecret`; a match aborts as the existing
- *    `secret-contaminated` CaseAbort (exit 3). The `ElementBindingProposal`
- *    response is discriminated by `outcome`: `none` throws
+ *    `secret-contaminated` CaseAbort (exit 3). The
+ *    `ElementBindingProposalResponse` carries one `ElementBindingProposal`
+ *    under `proposal`, discriminated by `outcome`: `none` throws
  *    `GroundingUnresolvedError` reason `no-candidate`, and `ambiguous` uses
  *    reason `ambiguous`. Never ask again. Provider failures and `aiTimeoutMs`
  *    timeouts retain the current AI error classification via `callAiExecutor`.
- *    This proposal replaces the old `{ confirmed: boolean }` call and uses
- *    the same AI dispatch path, `ai-call` / `ai-result` events, and heal AI
- *    dispatch accounting.
+ *    The request and its response share the same `ElementBindingProposalResponse`
+ *    wrapper, so the proposal is unwrapped once validation succeeds, before the
+ *    local-matching checks below. It uses the same AI dispatch path, `ai-call` /
+ *    `ai-result` events, and heal AI dispatch accounting as other AI steps.
  * 3. Verify locally against the selected stage-1 snapshot, or the original
  *    unredacted source snapshot for stage 2. Accept an AI proposal only when
  *    `matchQuotedCandidates(tree, { text: name, roleHint: role })` returns
@@ -2853,10 +2855,10 @@ async function groundedTarget(
     if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
     const executor = await context.resolveAiExecutor();
     const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
-    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ElementBindingProposal), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
+    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome. Put it under the "proposal" key.'), responseSchema: typedJsonSchema(ElementBindingProposalResponse), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
     const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request), (durationMs) => { aiProposalMs = durationMs; });
-    if (result.data.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
-    const matches = matchQuotedCandidates(lastValidCapture.tree as AccessibilityNode, { text: result.data.name, roleHint: result.data.role });
+    if (result.data.proposal.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.proposal.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
+    const matches = matchQuotedCandidates(lastValidCapture.tree as AccessibilityNode, { text: result.data.proposal.name, roleHint: result.data.proposal.role });
     if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected' });
     candidate = matches[0];
     provenance = 'ai-proposed';

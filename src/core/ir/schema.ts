@@ -413,14 +413,36 @@ export const GeneratedQuotedElementIntent = GeneratedElementIntent.safeExtend({
 /** The parsed provider proposal with a required quote. */
 export type GeneratedQuotedElementIntent = z.infer<typeof GeneratedQuotedElementIntent>;
 
-/** A strict first-binding answer, including explicit no-match and ambiguity. */
-export const ElementBindingProposal = z.discriminatedUnion('outcome', [
+/**
+ * A strict first-binding answer, including explicit no-match and ambiguity.
+ * Wrap it in `ElementBindingProposalResponse` before sending it to a provider.
+ *
+ * @remarks
+ * Built with `z.union` rather than `z.discriminatedUnion` because it emits
+ * JSON Schema `anyOf` under the required object root instead of a nested
+ * `oneOf`, which Codex's strict JSON Schema validation rejects.
+ */
+export const ElementBindingProposal = z.union([
   z.strictObject({ outcome: z.literal('found'), role: z.string().min(1), name: z.string().min(1) }),
   z.strictObject({ outcome: z.literal('none') }),
   z.strictObject({ outcome: z.literal('ambiguous') }),
 ]);
 /** The parsed first-binding proposal. */
 export type ElementBindingProposal = z.infer<typeof ElementBindingProposal>;
+
+/**
+ * The provider-facing element-binding response: one proposal under an object
+ * root that both providers accept (#583).
+ *
+ * @remarks
+ * Kept separate from {@link ElementBindingProposal} because this wrapper
+ * exists only to satisfy providers' required object-root schema shape and is
+ * unwrapped immediately after validation; callers work with the inner
+ * three-outcome value.
+ */
+export const ElementBindingProposalResponse = z.strictObject({ proposal: ElementBindingProposal });
+/** The parsed provider-facing element-binding response. */
+export type ElementBindingProposalResponse = z.infer<typeof ElementBindingProposalResponse>;
 
 /**
  * A committed instruction criterion with locally derived source provenance.

@@ -38,7 +38,7 @@ const NO_SECRETS_LITERAL_PATTERN = /^(?![\s\S]*\{\{secrets\.)[\s\S]*$/;
 const HTTP_URL_PATTERN = /^https?:\/\/[^\s/?#]\S*$/;
 // Character classes admit only scheme://host[:port], including ports 1–65535, so path/query/fragment/wildcard/userinfo need no `.refine()`; IPv6 literals are deliberately out of scope here while `baseUrl` keeps its separate, more permissive HTTP_URL_PATTERN.
 const SECRET_SINK_ORIGIN_PATTERN = /^https?:\/\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/;
-const STEP_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+export const STEP_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const RUN_VARIABLE_NAME_PATTERN = /^[a-z][a-zA-Z0-9]*$/;
 const RUN_REF_PATTERN = /^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/;
 

@@ -4837,6 +4837,47 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason }]));
   });
 
+  it('does not reject a readable-slug step id as Stage 2 literal-secret', async () => {
+    const stepId = 'verify-uploaded-xlsx-backup-json-download-works';
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({
+        data: { steps: [{ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: '/dashboard' }], ambiguities: [] },
+        raw: '{}',
+      }) }),
+    });
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'verify-uploaded-xlsx-backup-json-download-works', outcome: 'accepted' },
+    ]));
+    expect(result.outcome.results[0]?.repairTrace).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: 'stage2', outcome: 'rejected', reason: 'literal-secret' }),
+    ]));
+  });
+
+  it('still rejects a credential-prefixed value as Stage 2 literal-secret for a readable-slug step id', async () => {
+    const stepId = 'verify-uploaded-xlsx-backup-json-download-works';
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({
+        data: { steps: [{ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: 'sk-abcdefghijklmnopqrstuvwxyz0123456789' }], ambiguities: [] },
+        raw: '{}',
+      }) }),
+    });
+    const planBefore = await scenario.storage.readBinary(PLAN);
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: 'stage2', stepId, outcome: 'rejected', reason: 'literal-secret' }),
+    ]));
+    expect(await scenario.storage.readBinary(PLAN)).toEqual(planBefore);
+  });
+
   it('records an accepted Stage 2 repair before proceeding', async () => {
     const scenario = await createScenario({
       sessionEntries: new Map([[elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT)]),

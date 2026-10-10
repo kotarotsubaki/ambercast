@@ -437,6 +437,27 @@ describe('generate', () => {
     },
   );
 
+  it('generates a plan with a readable-slug step id in one provider call', async () => {
+    const stepId = 'verify-uploaded-xlsx-backup-json-download-works';
+    const response = {
+      ...coveredResponse,
+      steps: [{ ...coveredResponse.steps[0], id: stepId }],
+    } as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    recordingStorage.reset();
+
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.status).toBe('generated');
+    expect(execute).toHaveBeenCalledTimes(1);
+    const planText = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
+    expect(JSON.parse(planText)).toMatchObject({ steps: [{ id: stepId }] });
+  });
+
   it.each([
     ['missing success intent', [], ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT], 'intent-id-missing'],
     ['unknown success intent', [{ criterionId: 'unknown', assertion: { type: 'assert', check: 'text-visible', text: 'Dashboard' } }], ['verificationIntent', 0, 'criterionId'], 'intent-id-unknown'],

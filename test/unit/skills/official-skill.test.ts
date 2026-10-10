@@ -5,7 +5,7 @@
  */
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,11 @@ import { CLI_MANIFEST, renderUsage } from '../../../src/core/cli/manifest.js';
 const ROOT = new URL('../../../', import.meta.url);
 const skillPath = new URL('../../../skills/ambercast/SKILL.md', import.meta.url);
 const skillText = readFileSync(skillPath, 'utf8');
+
+function hasExactlyOneMarkdownSource(basePath: string): boolean {
+  // A route with both source formats is ambiguous even when either file exists.
+  return Number(existsSync(`${basePath}.md`)) + Number(existsSync(`${basePath}.mdx`)) === 1;
+}
 
 const DESCRIPTION = 'Write and run ambercast prompt-only E2E tests for a web app. Author <name>.test.md prompts, drive generate / run / check / heal through the ambercast CLI, read the --json report and process exit code, and choose the next safe action. Use when the user asks for an E2E or browser test, mentions ambercast or a .test.md file, or wants an end-to-end check of a web app change.';
 const COMPATIBILITY = 'Requires the ambercast CLI (npx ambercast), Node.js 22.14 or newer, a Chromium binary installed with playwright-core, and an authenticated claude or codex CLI for the AI calls.';
@@ -414,17 +419,37 @@ describe('official ambercast skill', () => {
     expect(urls).toStrictEqual(URLS);
     for (const url of urls.slice(0, -1)) {
       const path = new URL(url).pathname.replace(/^\/ambercast\//, '').replace(/\/$/, '');
-      expect(existsSync(new URL(`../../../website/src/content/docs/${path}.md`, import.meta.url))).toBe(true);
+      expect(hasExactlyOneMarkdownSource(fileURLToPath(new URL(`../../../website/src/content/docs/${path}`, import.meta.url)))).toBe(true);
     }
   });
 
-  // The 8th URL targets the configuration reference page, whose same slug maps
-  // directly to its content file, so the ordinary existence check verifies it.
+  // The 8th URL uses the same exclusive source rule as the other public routes.
   it('SPEC-12 links to the blocked configuration reference page', () => {
     const url = URLS.at(-1)!;
     const path = new URL(url).pathname.replace(/^\/ambercast\//, '').replace(/\/$/, '');
 
-    expect(existsSync(new URL(`../../../website/src/content/docs/${path}.md`, import.meta.url))).toBe(true);
+    expect(hasExactlyOneMarkdownSource(fileURLToPath(new URL(`../../../website/src/content/docs/${path}`, import.meta.url)))).toBe(true);
+  });
+
+  it.each([{ extensions: [] }, { extensions: ['md', 'mdx'] }] as const)('rejects $extensions documentation source extensions', ({ extensions }) => {
+    const directory = mkdtempSync(join(tmpdir(), 'ambercast-doc-source-'));
+    try {
+      const basePath = join(directory, 'quick-start');
+      for (const extension of extensions) writeFileSync(`${basePath}.${extension}`, 'content');
+      expect(hasExactlyOneMarkdownSource(basePath)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  it.each(['md', 'mdx'])('accepts a single .%s documentation source', (extension) => {
+    const directory = mkdtempSync(join(tmpdir(), 'ambercast-doc-source-'));
+    try {
+      const basePath = join(directory, 'quick-start');
+      writeFileSync(`${basePath}.${extension}`, 'content');
+      expect(hasExactlyOneMarkdownSource(basePath)).toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('SPEC-13 gives every README one adjacent, four-row official-skill section', () => {

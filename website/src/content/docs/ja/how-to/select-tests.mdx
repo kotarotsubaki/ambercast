@@ -1,0 +1,63 @@
+---
+title: 実行するテストを選ぶ
+description: パス指定・パターンフィルタ・設定ファイルによる除外で、実行するテストプロンプトを選ぶ4つの方法。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+パス指定・パターンフィルタ・設定ファイルによる除外のいずれかで、実行するテストプロンプトを選ぶ。
+
+## 前提条件 \{#prerequisites}
+
+既定のディスカバリーは `**/*.test.md` に一致し、runs・計画（plan）・グラウンディング（grounding）のコンパニオンファイルは無視する。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## ファイルを直接指定する \{#direct-path}
+
+   ```bash
+   npx ambercast run tests/ambercast/sign-in.test.md --list
+   ```
+
+   位置引数はリテラルのプロンプトパスとして扱われ、`--list` は再生（replay）を実行せずに結果を返す。
+
+2. ## 正規表現で絞り込む \{#grep-filter}
+
+   ```bash
+   npx ambercast run --grep 'sign-in' --list
+   ```
+
+   パーサーはディスカバリーのフィルタリング用正規表現を構築する。`--grep`以外の[runの全フラグ](/ambercast/ja/reference/cli/run/#flags)も合わせて確認できる。
+
+3. ## 設定ファイルで除外する \{#config-ignore}
+
+   有効な設定ファイルに次のキーを書く。
+
+   ```json
+   {
+     "testMatch": ["**/*.test.md"],
+     "testIgnore": ["**/.runs/**"]
+   }
+   ```
+
+   一致する`testIgnore`があれば、そのパスが`testMatch`に一致していても除外される。`testMatch`・`testIgnore`の一致規則は[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/)、設定ファイルの書き方全般は[設定](/ambercast/ja/reference/configuration/)を参照する。
+
+4. ## ハイフンで始まるパスを渡す \{#literal-dash-path}
+
+   ```bash
+   npx ambercast run --list -- --literal.test.md
+   ```
+
+   `--`の後ろにリテラルパスを置く。`--list`のようなフラグは`--`より前に置く。`--`より後ろの引数はすべてリテラルの位置パスとして扱われるため、末尾に置いた`--list`はファイル名として処理される。
+
+</Steps>
+
+## 確認 \{#verification}
+
+選択したパスが報告されたとき、`--list` の終了コードは `0` になる。一致するファイルが0件の場合は、意図したときだけ `--allow-empty` で解決する。
+
+## 関連情報 \{#related}
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="同じ選択規則で動くgenerateコマンドを確認する。" />

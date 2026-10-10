@@ -2,6 +2,30 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+/**
+ * Optional accessible-element proposal emitted by the fake Codex CLI.
+ * @remarks Omitting proposal preserves the exact existing payload bytes:
+ * {"proposal":{"outcome":"found","role":"button","name":"Submit"}}.
+ * This keeps zero-argument callers compatible while allowing contract tests to
+ * select an accessible element whose name differs from the default Submit action.
+ */
+export interface CodexSentinelOptions {
+  /**
+   * Element the sentinel reports as found.
+   * @remarks Before creating any directory or file, creation checks required keys
+   * and JavaScript types, then checks values: role must match /^[a-z]+$/ and name
+   * must remain non-empty after trimming. This order reports cheap, specific
+   * structural failures first and leaves no filesystem litter on invalid input,
+   * preserving the sentinel's setup-rollback contract.
+   */
+  readonly proposal?: {
+    /** Lowercase alphabetic accessible role reported by the fake CLI. */
+    readonly role: string;
+    /** Accessible name whose trimmed value must be non-empty. */
+    readonly name: string;
+  };
+}
+
 /** A per-test executable replacement for the explicit Codex provider. */
 export interface CodexSentinel {
   /** Directory containing the executable that must be prepended to the CLI child's PATH. */
@@ -20,7 +44,21 @@ export interface CodexSentinel {
  * setup failure. Setup rolls back its directory on every partial failure,
  * because callers receive a cleanup handle only after this function resolves.
  */
-export async function createCodexSentinel(): Promise<CodexSentinel> {
+export async function createCodexSentinel(options: CodexSentinelOptions = {}): Promise<CodexSentinel> {
+  // Validate options before any filesystem operations
+  if (options === null || options.proposal !== undefined) {
+    const proposal = options.proposal;
+    if (proposal === undefined || typeof proposal !== 'object' || proposal === null || typeof proposal.role !== 'string' || typeof proposal.name !== 'string') {
+      throw new TypeError('options.proposal must be an object with string role and name properties');
+    }
+    if (!/^[a-z]+$/.test(proposal.role) || proposal.name.trim().length === 0) {
+      throw new RangeError('options.proposal.role must match /^[a-z]+$/ and options.proposal.name must be non-empty after trimming');
+    }
+  }
+
+  const role = options.proposal?.role ?? 'button';
+  const name = (options.proposal?.name ?? 'Submit').trim();
+
   let directory: string | undefined;
 
   try {
@@ -48,7 +86,7 @@ if (argv[0] === 'exec') {
     process.stderr.write('codex sentinel requires exactly one -o <output-path> argument\\n');
     process.exit(1);
   }
-  writeFileSync(outputPath, '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}');
+  writeFileSync(outputPath, '{"proposal":{"outcome":"found","role":' + ${JSON.stringify(JSON.stringify(role))} + ',"name":' + ${JSON.stringify(JSON.stringify(name))} + '}}');
   process.exit(0);
 }
 

@@ -218,7 +218,7 @@ ambercast uses these defaults:
 
 Running `npx ambercast init` and approving it creates these files:
 
-- `ambercast.config.json`, a config file with the default `testDir` and `target` written in
+- `ambercast.config.json`, a config file with the default `testDir` and `target` written in. See [Configuration](/ambercast/reference/configuration/#file-selection) for the file's requirements.
 - `tests/ambercast/find-page.test.md`, a sample test prompt
 - an appended line in `.gitignore`, and an appended section in `AGENTS.md`
 
@@ -554,6 +554,8 @@ Run `npx ambercast generate --list` only to confirm prompt selection; this comma
 Source: https://kotarotsubaki.github.io/ambercast/how-to/select-tests/
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Choose which test prompts run by path, pattern filter, or config exclusion.
 
 ## Prerequisites \{#prerequisites}
 
@@ -3254,7 +3256,7 @@ Source: https://kotarotsubaki.github.io/ambercast/explanation/healing-model/
 
 When you change your app's UI, a previously passing test can suddenly fail. A moved element or a changed button label is a typical cause.
 
-ambercast's healing feature investigates the cause of a failure automatically and tries to repair the test. It never runs unbounded. A repair attempt has a limit, and writing to a file always waits for your confirmation first.
+ambercast's healing feature investigates the cause of a failure automatically and tries to repair the test. It never runs unbounded: every run has a time budget, and writing to a file always waits for your confirmation first.
 
 ## Safe precondition {#safe-precondition}
 

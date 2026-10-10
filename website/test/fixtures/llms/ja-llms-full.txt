@@ -218,7 +218,7 @@ ambercastは次の既定値を使う。
 
 `npx ambercast init` を実行して承認すると、次のファイルが作成される。
 
-- `ambercast.config.json`（既定の`testDir`・`target`を書き込んだ設定ファイル）
+- `ambercast.config.json`（既定の`testDir`・`target`を書き込んだ設定ファイル。ファイルの要件は[設定](/ambercast/ja/reference/configuration/#file-selection)を参照）
 - `tests/ambercast/find-page.test.md`（サンプルのテストプロンプト）
 - `.gitignore`への追記、`AGENTS.md`への追記
 
@@ -558,6 +558,8 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/select-tests/
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
 
+パス指定・パターンフィルタ・設定ファイルによる除外のいずれかで、実行するテストプロンプトを選ぶ。
+
 ## 前提条件 \{#prerequisites}
 
 既定のディスカバリーは `**/*.test.md` に一致し、runs・計画（plan）・グラウンディング（grounding）のコンパニオンファイルは無視する。
@@ -566,7 +568,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 <Steps>
 
-1. ### ファイルを直接指定する \{#direct-path}
+1. ## ファイルを直接指定する \{#direct-path}
 
    ```bash
    npx ambercast run tests/ambercast/sign-in.test.md --list
@@ -574,7 +576,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
    位置引数はリテラルのプロンプトパスとして扱われ、`--list` は再生（replay）を実行せずに結果を返す。
 
-2. ### 正規表現で絞り込む \{#grep-filter}
+2. ## 正規表現で絞り込む \{#grep-filter}
 
    ```bash
    npx ambercast run --grep 'sign-in' --list
@@ -582,7 +584,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
    パーサーはディスカバリーのフィルタリング用正規表現を構築する。`--grep`以外の[runの全フラグ](/ambercast/ja/reference/cli/run/#flags)も合わせて確認できる。
 
-3. ### 設定ファイルで除外する \{#config-ignore}
+3. ## 設定ファイルで除外する \{#config-ignore}
 
    有効な設定ファイルに次のキーを書く。
 
@@ -595,7 +597,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
    一致する`testIgnore`があれば、そのパスが`testMatch`に一致していても除外される。`testMatch`・`testIgnore`の一致規則は[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/)、設定ファイルの書き方全般は[設定](/ambercast/ja/reference/configuration/)を参照する。
 
-4. ### ハイフンで始まるパスを渡す \{#literal-dash-path}
+4. ## ハイフンで始まるパスを渡す \{#literal-dash-path}
 
    ```bash
    npx ambercast run --list -- --literal.test.md
@@ -3320,7 +3322,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/healing-model/
 
 アプリのUIを変更すると、それまで通っていたテストが突然失敗する。ボタンの文言や要素の場所の変化が典型的な原因だ。
 
-ambercastのヒーリング機能は、こうした失敗の原因を自動で調べ、テストを直そうとする。ただし無制限には動かない。試行回数には上限があり、ファイルへの書き込みは必ず人の確認を経てから行われる。
+ambercastのヒーリング機能は、こうした失敗の原因を自動で調べ、テストを直そうとする。ただし無制限には動かない。1回の実行には必ず時間の上限があり、ファイルへの書き込みは必ず人の確認を経てから行われる。
 
 ## 安全な前提条件 {#safe-precondition}
 

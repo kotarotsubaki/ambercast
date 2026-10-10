@@ -218,7 +218,7 @@ ambercast 使用以下默认值。
 
 运行 `npx ambercast init` 并确认后，会创建以下文件。
 
-- `ambercast.config.json`：写入默认 `testDir` 和 `target` 的配置文件
+- `ambercast.config.json`：写入默认 `testDir` 和 `target` 的配置文件，文件要求见[配置](/ambercast/zh-cn/reference/configuration/#file-selection)
 - `tests/ambercast/find-page.test.md`：示例测试 prompt
 - 在 `.gitignore` 中追加一行，在 `AGENTS.md` 中追加一节
 
@@ -562,6 +562,8 @@ npx ambercast generate --ai codex
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+按路径、模式过滤或配置排除，选择要运行的测试 prompt。
 
 ## 前提条件 \{#prerequisites}
 
@@ -3263,7 +3265,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/healing-mode
 
 修改应用的 UI 后，原本通过的测试可能突然失败。按钮文案或元素位置变化是常见原因。
 
-ambercast 的自愈功能会自动排查失败原因并尝试修复测试，但不会无限制运行。单次修复的尝试次数有上限，写入文件前必须经过人工确认。
+ambercast 的自愈功能会自动排查失败原因并尝试修复测试，但不会无限制运行：每次运行都有时间上限，写入文件前必须经过人工确认。
 
 ## 安全前提 {#safe-precondition}
 

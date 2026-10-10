@@ -5,7 +5,7 @@ description: Explains how far ambercast repairs a test automatically when a UI c
 
 When you change your app's UI, a previously passing test can suddenly fail. A moved element or a changed button label is a typical cause.
 
-ambercast's healing feature investigates the cause of a failure automatically and tries to repair the test. It never runs unbounded. A repair attempt has a limit, and writing to a file always waits for your confirmation first.
+ambercast's healing feature investigates the cause of a failure automatically and tries to repair the test. It never runs unbounded: every run has a time budget, and writing to a file always waits for your confirmation first.
 
 ## Safe precondition {#safe-precondition}
 

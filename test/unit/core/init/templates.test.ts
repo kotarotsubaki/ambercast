@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { classifyConfig } from '../../../../src/core/init/plan.js';
 import { RawConfig } from '../../../../src/core/config/schema.js';
@@ -44,6 +47,14 @@ const expectedAgentsBlock = `<!-- ambercast:begin -->
 <!-- ambercast:end -->
 `;
 
+function readQuickStart(directory: string): string {
+  const candidates = ['md', 'mdx'].map((extension) => join(directory, `quick-start.${extension}`));
+  const present = candidates.filter(existsSync);
+  // The public route must resolve to exactly one source document.
+  if (present.length !== 1) throw new Error(`Expected one quick-start source, found ${present.length}`);
+  return readFileSync(present[0]!, 'utf8');
+}
+
 describe('init scaffold templates', () => {
   it('keeps the config literal byte-for-byte, including its ordered keys and final LF', () => {
     expect(CONFIG_TEMPLATE).toBe(expectedConfig);
@@ -66,14 +77,29 @@ describe('init scaffold templates', () => {
   });
 
   it('keeps the sample prompt byte-identical to quick-start step 1', () => {
-    const quickStart = readFileSync(
-      new URL('../../../../website/src/content/docs/tutorials/quick-start.md', import.meta.url),
-      'utf8',
-    );
+    const quickStart = readQuickStart(fileURLToPath(new URL('../../../../website/src/content/docs/tutorials/', import.meta.url)));
     const fence = /^```markdown\n([\s\S]*?)\n```$/m.exec(quickStart);
 
     expect(fence).not.toBeNull();
     expect(`${fence?.[1]}\n`).toBe(SAMPLE_TEMPLATE);
+  });
+  it.each([{ extensions: [] }, { extensions: ['md', 'mdx'] }] as const)('rejects $extensions quick-start source extensions', ({ extensions }) => {
+    const directory = mkdtempSync(join(tmpdir(), 'ambercast-quick-start-'));
+    try {
+      for (const extension of extensions) writeFileSync(join(directory, `quick-start.${extension}`), 'content');
+      expect(() => readQuickStart(directory)).toThrow(`Expected one quick-start source, found ${extensions.length}`);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  it('reads an MDX-only quick-start source', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ambercast-quick-start-'));
+    try {
+      writeFileSync(join(directory, 'quick-start.mdx'), 'MDX source');
+      expect(readQuickStart(directory)).toBe('MDX source');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('keeps the gitignore append unit byte-for-byte', () => {

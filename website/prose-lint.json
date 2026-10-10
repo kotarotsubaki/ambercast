@@ -1,5 +1,5 @@
 {
-  "pages": [],
+  "pages": ["explanation/healing-model", "how-to/select-tests", "reference/cli/run", "tutorials/quick-start"],
   "limits": {
     "h3Max": 5,
     "calloutMax": 2,

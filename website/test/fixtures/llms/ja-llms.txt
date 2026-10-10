@@ -8,7 +8,7 @@
 - [どう動くか](https://kotarotsubaki.github.io/ambercast/ja/how-it-works/): login.test.md を例に、generate・run・heal の 3 コマンドと 3 ファイルで生成から修復までを追う。
 
 ## TUTORIALS
-- [5分で動かす最初のテスト](https://kotarotsubaki.github.io/ambercast/ja/tutorials/quick-start/): ambercast で最初のテストプロンプトを作成し、生成から実行までを5分でガイドします。
+- [5分で動かす最初のテスト](https://kotarotsubaki.github.io/ambercast/ja/tutorials/quick-start/): プロジェクトの初期化から生成・再生・確認まで、最初の生成テストを5分で動かすチュートリアル。
 - [最初の plan と grounding の読み込み](https://kotarotsubaki.github.io/ambercast/ja/tutorials/review-your-first-plan/): テストプロンプトから解決される plan と grounding のファイル配置を確認し、freshness を検証します。
 - [UI変更後にテストを修復する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/repair-your-first-drift/): UI変更によって失敗したテストに対し、ターゲットのhealReplayIsolationを設定して安全に修復する手順を学びます。
 - [GitHub Actions で ambercast を実行する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/github-actions/): GitHub Actions の CI ワークフローで ambercast を実行するための、移植性の高い標準的な手順を解説します。
@@ -18,7 +18,7 @@
 - [シークレットの管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/): 生成されたシークレット名を安全に承認し、その値を環境変数から解決する方法を説明します。
 - [ターゲットの設定](https://kotarotsubaki.github.io/ambercast/ja/how-to/configure-targets/): ambercastの設定ファイルでターゲット環境、自己修復のリプレイ分離、およびシークレット送信先オリジンを構成します。
 - [AIプロバイダーの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/choose-ai-provider/): ambercast.config.json、環境変数、または --ai オプションを使用してAIプロバイダーを選択・指定する手順を説明します。
-- [実行するテストの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/select-tests/): 実行対象とするテストプロンプトを選択・フィルタリングするための手順です。
+- [実行するテストを選ぶ](https://kotarotsubaki.github.io/ambercast/ja/how-to/select-tests/): パス指定・パターンフィルタ・設定ファイルによる除外で、実行するテストプロンプトを選ぶ4つの方法。
 - [グラウンディングのライトバック制御](https://kotarotsubaki.github.io/ambercast/ja/how-to/control-grounding-writeback/): ローカル環境やCI環境において、テスト実行後に変更されたグラウンディングキャッシュを書き戻す動作を制御する手順を説明します。
 - [生成された差分のレビュー](https://kotarotsubaki.github.io/ambercast/ja/how-to/review-generated-diffs/): 生成された差分を実践的な順序でレビューし、整合性を検証する手順を説明します。
 - [Gitでの成果物の管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/): ambercast の成果物をリポジトリポリシーや実行ディレクトリの設定に合わせて Git でバージョン管理する手順を説明します。
@@ -47,7 +47,7 @@
 ### CLI
 - [CLIの概要](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/): ambercast CLI のパーサー全体の仕様、コマンド体系、および自動探索の既定動作を解説します。
 - [ambercast generate](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/): ambercast generate コマンドのフラグ仕様および成果物生成に関するリファレンスです。
-- [ambercast run](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/): ambercast run コマンドのフラグ仕様、リプレイパス、明示的な AI 解決、および実行時の書き込み動作について説明します。
+- [ambercast run](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/): ambercast run コマンドのフラグ、再生パス、明示的な AI 解決、グラウンディングの書き戻し、レポートの永続化を解説する。
 - [ambercast check](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/): CLIにおけるアーティファクトの検査ステータスと検証結果の仕様を解説します。
 - [ambercast heal](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/): ambercast heal コマンドのフラグ、修復モデル、制限事項、認可境界、および副作用に関するリファレンス。
 - [ambercast init](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/init/): ambercast init が設定ファイル、サンプルプロンプト、およびリポジトリ向けのガイダンスを作成するためのコマンドラインリファレンスです。
@@ -70,7 +70,7 @@
 ## EXPLANATION
 - [プランのライフサイクルと鮮度](https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/): アーティファクトがリプレイ可能かどうかを判断するための来歴と鮮度判定の仕組みを解説します。
 - [リプレイとグラウンディング](https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grounding/): リプレイの実行パスと、キャッシュされたグラウンディングが提供する安全性境界の仕組みを解説します。
-- [ヒーリングモデル](https://kotarotsubaki.github.io/ambercast/ja/explanation/healing-model/): 制限付きのエスカレーションと人間による制御に基づく自己修復モデルの仕組みを解説します。
+- [ヒーリングモデル](https://kotarotsubaki.github.io/ambercast/ja/explanation/healing-model/): UIが変わってテストが失敗したとき、ambercastがどこまで自動で直し、どこから人の判断に委ねるかを説明する。
 - [トラストとセキュリティ](https://kotarotsubaki.github.io/ambercast/ja/explanation/trust-and-security/): ambercastにおける信頼境界とフェイルクローズな設計選択について説明します。
 - [CIにおける決定性](https://kotarotsubaki.github.io/ambercast/ja/explanation/determinism-in-ci/): CI環境における動作の背後にある信頼境界について解説します。
 - [ambercastの比較](https://kotarotsubaki.github.io/ambercast/ja/explanation/comparison/): コード生成、Record & Replay、自律型エージェントとの設計モデルの違いと、ambercastが導出されたプランを採用する理由を解説します。

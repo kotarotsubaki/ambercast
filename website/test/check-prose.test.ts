@@ -171,6 +171,53 @@ describe('TEST-7 thresholds', () => {
 describe('TEST-8/9 tool merge', () => {
   for (const [name, severity, expected] of [['default', undefined, 'error'], ['warning', 'warning', 'warning'], ['off', 'off', null]] as const) it(`textlint ${name}`, async () => { const f = fixture(['reference/x'], { [path('reference/x', 'ja')]: '# X\n\nFirst.\n\nMixed register.\n' }, (c) => { if (severity) c.severity['no-mix-dearu-desumasu'] = severity; }); const r = runners(); r.textlint.mockResolvedValue([{ ruleId: 'no-mix-dearu-desumasu', line: 5, message: 'mixed register', severity: 2 }]); const v = only((await checkProse(input(f, r))).violations, 'textlint:no-mix-dearu-desumasu'); expect(v).toHaveLength(expected ? 1 : 0); if (expected) expect(v[0]).toMatchObject({ line: 5, expected: '', actual: 'mixed register', severity: expected }); });
   it('merges zhlint at paragraph start', async () => { const f = fixture(['reference/x'], { [path('reference/x', 'zh-cn')]: '# X\n\n中文English。\n' }); const r = runners(); r.zhlint.mockResolvedValue([{ message: 'spacing' }]); expect(only((await checkProse(input(f, r))).violations, 'zhlint')).toEqual([expect.objectContaining({ line: 3, expected: '', actual: 'spacing', severity: 'error' })]); });
+  it.each([
+    ['multiple inline codes', '运行 `x` 后使用 `y`。', '运行 code 后使用 code。', 3],
+    ['punctuation after inline code', '运行 `x`。', '运行 code。', 3],
+    ['soft wrap', '运行 `x`\n后查看结果。', '运行 code后查看结果。', 3],
+    ['nested link code', '运行 [命令 `x`](https://example.com) 后查看。', '运行 命令 code 后查看。', 3],
+    ['nested MDX element code', '运行 <em>命令 `x`</em> 后查看。', '运行 命令 code 后查看。', 3],
+    ['inline code starts paragraph', '`x`\n中文English。', 'code中文English。', 3],
+  ] as const)('passes %s replacement to zhlint and attributes its finding to paragraph start', async (_name, paragraph, expected, line) => {
+    const ext = _name === 'nested MDX element code' ? 'mdx' : 'md';
+    const f = fixture(['reference/x'], { [path('reference/x', 'zh-cn', ext)]: `# X\n\n${paragraph}\n` });
+    const r = runners(); r.zhlint.mockResolvedValue([{ message: 'spacing' }]);
+    const violations = (await checkProse(input(f, r))).violations;
+    expect(r.zhlint.mock.calls[0][0]).toBe(expected);
+    expect(only(violations, 'zhlint')).toEqual([expect.objectContaining({ line, actual: 'spacing' })]);
+  });
+  it('accepts inline code spacing with real zhlint', async () => {
+    const f = fixture(['reference/x'], { [path('reference/x', 'zh-cn')]: '# X\n\n运行 `ambercast run`。\n\n使用 `--resolve` 选项。\n' });
+    expect(only((await checkProse(input(f, realRunners()))).violations, 'zhlint')).toEqual([]);
+  });
+  it('keeps zh-cn sentence and page length measurements based on joined text', async () => {
+    const prose = `${'文'.repeat(50)}。`;
+    const withCode = `${'文'.repeat(50)}\`x\`。`;
+    const baseline = await scan('reference/x', prose, 'zh-cn');
+    const changed = await scan('reference/x', withCode, 'zh-cn');
+    expect(only(changed, 'sentence-length')).toEqual(only(baseline, 'sentence-length'));
+    expect(only(changed, 'sentence-length')).toEqual([expect.objectContaining({ actual: '51', severity: 'warning' })]);
+
+    const page = '文'.repeat(1201);
+    const baselinePage = await scan('tutorials/x', page, 'zh-cn', (c) => { c.requiredAnchors = {}; });
+    const changedPage = await scan('tutorials/x', `${page}\`x\``, 'zh-cn', (c) => { c.requiredAnchors = {}; });
+    expect(only(changedPage, 'page-length')).toEqual(only(baselinePage, 'page-length'));
+    expect(only(changedPage, 'page-length')).toEqual([expect.objectContaining({ actual: '1201', severity: 'warning' })]);
+  });
+  it('keeps ja real textlint findings when a zh-cn page with inline code is present', async () => {
+    const ja = '# X\n\nこれはテストです。\n\nこれは正しい。\n';
+    const jaPath = path('reference/x', 'ja');
+    const baseline = fixture(['reference/x'], { [jaPath]: ja });
+    const combined = fixture(['reference/x'], {
+      [jaPath]: ja,
+      [path('reference/x', 'zh-cn')]: '# X\n\n运行 `x` 后查看。\n',
+    });
+    const jaTextlint = (violations: any[]) => violations.filter((v) => v.locale === 'ja' && v.rule.startsWith('textlint:'));
+    const before = jaTextlint((await checkProse(input(baseline, realRunners()))).violations);
+    const after = jaTextlint((await checkProse(input(combined, realRunners()))).violations);
+    expect(before).toContainEqual(expect.objectContaining({ rule: expect.stringMatching(/^textlint:.*no-mix-dearu-desumasu/) }));
+    expect(after).toEqual(before);
+  });
   for (const ext of ['md', 'mdx']) it(`ja .${ext} fixture with mixed register → real textlint reports no-mix-dearu-desumasu`, async () => {
     const f = fixture(['reference/x'], { [path('reference/x', 'ja', ext)]: '# X\n\nこれはテストです。\n\nこれは正しい。\n' });
     const violations = (await checkProse(input(f, realRunners()))).violations;

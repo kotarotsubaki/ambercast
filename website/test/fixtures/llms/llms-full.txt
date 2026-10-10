@@ -199,26 +199,30 @@ Intent, once written, stays put. The plan is rebuilt only when it needs to be. T
 # Your first test in 5 minutes
 Source: https://kotarotsubaki.github.io/ambercast/tutorials/quick-start/
 
-This tutorial guides you through creating and running your first generated test with ambercast. By relying on built-in defaults—including a target application running at `http://localhost:3000` and tests placed in `tests/ambercast`—you can generate and replay an end-to-end test without creating a configuration file.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Initialize a project with `npx ambercast init`, then run your first test with `npx ambercast generate` and `npx ambercast run`.
 
-Before generating and running tests, verify that your environment meets the walkthrough-wide requirements:
+## Prerequisites \{#prerequisites}
 
-- **Node.js**: Version 22.14 or later.
-- **AI Provider**: An installed, authenticated Claude Code or Codex CLI. The first `generate` directly requires Node.js and an installed, authenticated provider. If no provider is available for generation, ambercast outputs the environment error code `AI_EXECUTOR_UNAVAILABLE`.
-- **Browser Driver**: A Chromium binary. The walkthrough includes `run`, which configures a browser driver. Generation itself does not configure a browser driver, so Chromium is required by `run`, not by generation.
+- Node.js 22.14 or later is required.
+- An authenticated Claude Code or Codex CLI is required. The first `generate` directly requires Node.js and an authenticated provider. See [Error codes](/ambercast/reference/error-codes/#code-vocabulary) for the error code when no provider is available.
+- `run` requires a Chromium binary. Generation itself does not configure a browser driver.
 
-ambercast applies default settings for your workspace:
+ambercast uses these defaults:
 
 - The default `testDir` is `tests/ambercast`.
-- The default target is `web-user` at `http://localhost:3000` using Chromium.
+- The default target is `web-user`, at `http://localhost:3000`, using Chromium.
 
-If a configuration file exists, `$schema` is required; no-file configuration is handled outside `RawConfig`. For this tutorial, you do not need to create a configuration file.
+## Steps \{#steps}
 
-## Steps {#steps}
+Running `npx ambercast init` and approving it creates these files:
 
-1. Do not create a configuration file. Create exactly `tests/ambercast/find-page.test.md`:
+- `ambercast.config.json`, a config file with the default `testDir` and `target` written in. See [Configuration](/ambercast/reference/configuration/#file-selection) for the file's requirements.
+- `tests/ambercast/find-page.test.md`, a sample test prompt
+- an appended line in `.gitignore`, and an appended section in `AGENTS.md`
+
+The sample prompt it creates reads as follows.
 
 ```markdown
 # Find a page
@@ -226,32 +230,69 @@ If a configuration file exists, `$schema` is required; no-file configuration is 
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
-Alternatively, `npx ambercast init` scaffolds this same file together with a minimal `ambercast.config.json` and an AGENTS.md section; this tutorial stays on the no-config path so you can see the defaults at work.
+:::caution
+`init` never asks for a URL. The scaffolded `ambercast.config.json` always targets `http://localhost:3000`. If your app runs elsewhere, edit `targets.web-user.baseUrl` first.
 
-Its terminal `.test.md` suffix is eligible for companion-path resolution.
+:::
 
-2. Have a human or operator start and confirm the application at `http://localhost:3000`, then run `npx ambercast generate tests/ambercast/find-page.test.md`.
+<Steps>
 
-Successful generation exits `0` with result status `generated`. Its report field is `planFile`, while generation writes both derived companions beside the named prompt. When an agent uses the setup prompt ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)), it assumes the server is already running and does not start it without a request.
+1. ## Initialize the project \{#init}
 
-3. Run `npx ambercast run --resolve tests/ambercast/find-page.test.md`.
+   ```bash
+   npx ambercast init
+   ```
 
-On a passed replay, the process exits with code `0`. In addition, `run` creates a per-invocation `report.json` below the configured runs directory.
+2. ## Start the app and generate a plan \{#generate}
 
-4. Run `git status --short` first. Review every changed tracked file with `git diff -- <path>`; for every untracked prompt, plan, or grounding path shown there, inspect its full contents or run `git diff --no-index /dev/null <path>`. Then have a human commit the reviewed three files.
+   Have a human or operator start and confirm the application at the configured `baseUrl`.
 
-An agent presents the complete change set and commits only after an explicit request in the conversation; neither a CLI flag nor `--yes` is that approval ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)).
+   ```bash
+   npx ambercast generate tests/ambercast/find-page.test.md
+   ```
 
-### Scope note
+   Success leaves you with:
 
-The no-argument forms `npx ambercast generate` and `npx ambercast run` discover every test matching the configured test directory, match, and ignore rules. Use either form only in a separately approved all-discovered-tests operation; this tutorial's commands intentionally name one `.test.md`.
+   - exit code `0`, result status `generated`
+   - two derived files, plan and grounding, written beside the generated prompt
 
-## Completion state {#completion-state}
+   An agent using the setup prompt ([Agent setup](/ambercast/agents/setup-prompt/#copy-paste-prompt)) assumes the server is already running and does not start it without a request.
 
-- The resolver maps the prompt to `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
-- `npx ambercast run --resolve tests/ambercast/find-page.test.md` exited `0` and reports `passed` for the case.
+3. ## Replay the test \{#run}
 
-Links: [Configuration](/ambercast/reference/configuration/), [File layout](/ambercast/reference/file-layout/), [ambercast generate](/ambercast/reference/cli/generate/), [ambercast run](/ambercast/reference/cli/run/), [Write effective prompts](/ambercast/how-to/write-effective-prompts/).
+   ```bash
+   npx ambercast run --resolve tests/ambercast/find-page.test.md
+   ```
+
+   Success leaves you with:
+
+   - exit code `0`
+   - a per-invocation `report.json` written under the configured runs directory
+
+4. ## Review and commit the changes \{#review-commit}
+
+   ```bash
+   git status --short
+   ```
+
+   Review every tracked, changed file with `git diff -- <path>`. For an untracked prompt, plan, or grounding path, inspect its full contents or run `git diff --no-index /dev/null <path>`.
+
+   After review, a human commits the three files. Also review and commit the files `init` created, such as `ambercast.config.json`, separately, the same way you commit any other change.
+
+</Steps>
+
+The no-argument forms of `npx ambercast generate` and `npx ambercast run` target every test matching your configured test directory, match rules, and ignore rules. This tutorial's commands intentionally name one `.test.md`; use the no-argument forms only in a separately approved all-tests operation.
+
+## Verification \{#verification}
+
+- Confirm the resolver created `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
+- Confirm `npx ambercast run --resolve tests/ambercast/find-page.test.md` exits `0` and reports `passed` for the case.
+
+## Next steps \{#next-steps}
+
+Next, learn how to write prompts.
+
+<LinkCard title="Write effective prompts" href="/ambercast/how-to/write-effective-prompts/" description="Learn to write test prompts that are easy to review and stay focused." />
 
 ---
 
@@ -512,33 +553,64 @@ Run `npx ambercast generate --list` only to confirm prompt selection; this comma
 # Select which tests run
 Source: https://kotarotsubaki.github.io/ambercast/how-to/select-tests/
 
-Use these selection recipes to choose which test prompts run.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Choose which test prompts run by path, pattern filter, or config exclusion.
 
-- Default discovery matches `**/*.test.md` and ignores runs, plans, and grounding companions.
+## Prerequisites \{#prerequisites}
 
-## Steps {#steps}
+Default discovery matches `**/*.test.md` and ignores runs, plans, and grounding companion files.
 
-1. Run `npx ambercast run tests/ambercast/sign-in.test.md --list`.
-   A positional is a literal prompt path and `--list` returns without replay.
+## Steps \{#steps}
 
-2. Run `npx ambercast run --grep 'sign-in' --list`.
-   The parser builds a regular expression for discovery filtering.
+<Steps>
 
-3. Put `"testMatch":["**/*.test.md"],"testIgnore":["**/.runs/**"]` in a valid config.
-   A matching ignore excludes a path even when it matches `testMatch`.
+1. ## Name a file directly \{#direct-path}
 
-4. Run `npx ambercast run --list -- --literal.test.md` for a literal path beginning with `--`.
-   Flags such as `--list` must precede the separator; everything after `--` is a literal positional path, so a trailing `--list` would be treated as a file name.
+   ```bash
+   npx ambercast run tests/ambercast/sign-in.test.md --list
+   ```
 
-## Verification {#verification}
+   A positional argument is a literal prompt path. `--list` returns results without replaying.
 
-- Expect exit `0` for `--list` when selected paths are reported; resolve zero matches with `--allow-empty` only when intentional.
+2. ## Filter with a regular expression \{#grep-filter}
 
-## Related {#related}
+   ```bash
+   npx ambercast run --grep 'sign-in' --list
+   ```
 
-Links: [Discovery patterns](/ambercast/reference/discovery-patterns/), [ambercast run](/ambercast/reference/cli/run/), [ambercast generate](/ambercast/reference/cli/generate/), [Configuration](/ambercast/reference/configuration/).
+   The parser builds a discovery-filtering regular expression. See [every `run` flag](/ambercast/reference/cli/run/#flags) beyond `--grep`.
+
+3. ## Exclude paths in your config \{#config-ignore}
+
+   Add these keys to a valid config file.
+
+   ```json
+   {
+     "testMatch": ["**/*.test.md"],
+     "testIgnore": ["**/.runs/**"]
+   }
+   ```
+
+   A matching `testIgnore` excludes a path even when it also matches `testMatch`. See [discovery patterns](/ambercast/reference/discovery-patterns/) for the matching rules, and [Configuration](/ambercast/reference/configuration/) for how to write the file.
+
+4. ## Pass a path that starts with a hyphen \{#literal-dash-path}
+
+   ```bash
+   npx ambercast run --list -- --literal.test.md
+   ```
+
+   Put the literal path after `--`. Put flags like `--list` before `--`: every argument after `--` is a literal positional path, so a trailing `--list` there is treated as a filename.
+
+</Steps>
+
+## Verification \{#verification}
+
+`--list` exits `0` when it reports the selected paths. Resolve a zero-match result with `--allow-empty` only when you intend it.
+
+## Related \{#related}
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate command, which uses the same selection rules." />
 
 ---
 
@@ -1946,7 +2018,7 @@ Process-code values and their priority are owned by [Exit codes](/ambercast/refe
 # ambercast run
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/run/
 
-`ambercast run` executes test prompts against target environments, managing deterministic replay and run writes. Replay makes zero AI calls by default: a grounding miss fails closed as `grounding-unresolved` with exit code 4 and a hint to use `--resolve`. Pass `--resolve` to opt into live AI resolution for misses.
+`ambercast run` executes test prompts against target environments. It manages deterministic replay and run writes. Replay makes zero AI calls by default: a grounding miss fails closed as `grounding-unresolved` with exit code 4 and a hint to use `--resolve`. Pass `--resolve` to opt into live AI resolution for misses.
 
 ## Flags {#flags}
 
@@ -1964,6 +2036,8 @@ Source: https://kotarotsubaki.github.io/ambercast/reference/cli/run/
 | --json | boolean | JSON envelope | false |
 | --no-color | boolean | disable ANSI | false |
 
+See [Resolve missing grounding](#resolve) for `--resolve` and `--ai`, [Grounding write-back](#grounding-write-back) for `--update-cache`, and the next section for when `--stale=regenerate` is rejected.
+
 <a id="replay-paths"></a>
 
 ## Replay {#replay}
@@ -1978,7 +2052,7 @@ The runtime rejects `--stale=regenerate` before configuration or file I/O. Durin
 
 ## AI calls {#ai-calls}
 
-A provider resolver is passed to the run use case, so grounded replay can proceed without an available provider; a cache miss can use it only when `--resolve` is passed.
+`run` always has access to a provider resolver, but grounded replay proceeds without calling it even when no provider is available. A cache miss can call the resolver only when you pass `--resolve`.
 
 ## Resolve missing grounding {#resolve}
 
@@ -1986,7 +2060,7 @@ A provider resolver is passed to the run use case, so grounded replay can procee
 
 ## Grounding write-back {#grounding-write-back}
 
-`run` writes changed grounding only when the resolved write-back gate permits it; see [Configuration](/ambercast/reference/configuration/#grounding) for every local and CI condition.
+`run` writes changed grounding only when the resolved write-back gate permits it. `--update-cache` is one explicit input to that gate: it combines with `ci.updateGroundingCache` in CI, and with the `localWriteBack` setting locally. See [Configuration](/ambercast/reference/configuration/#grounding) for every local and CI condition.
 
 ## Report and exits {#report-and-exits}
 
@@ -3189,51 +3263,111 @@ Links: [Healing model](/ambercast/explanation/healing-model/#three-stages), [Hea
 # Healing model
 Source: https://kotarotsubaki.github.io/ambercast/explanation/healing-model/
 
-Healing in ambercast operates through bounded escalation and explicit human control. Before repair work starts, healing evaluates target isolation and environment settings to determine whether an attempt is permitted to run.
+When you change your app's UI, a previously passing test can suddenly fail. A moved element or a changed button label is a typical cause.
 
-## A safe precondition {#safe-precondition}
+ambercast's healing feature investigates the cause of a failure automatically and tries to repair the test. It never runs unbounded: every run has a time budget, and writing to a file always waits for your confirmation first.
 
-A selected target must resolve with `healReplayIsolation: "idempotent"`; healing against a non-idempotent target is rejected before browser or provider work starts. The configuration boundary permits `idempotent` or `stateful`, but loading supplies the conservative `stateful` default.
+## Safe precondition {#safe-precondition}
 
-In automated test runs, a real heal attempt is refused in CI unless `ci.heal` is enabled. List mode bypasses that refusal because it has no primary effect.
+Healing accesses your running app and tries different fixes to find one that works. If the app doesn't reset to the same state no matter how many times you access it, repeated attempts risk piling up data or corrupting the app's state.
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [Configuration](/ambercast/reference/configuration/#targets), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#heal-refusal)
+ambercast therefore refuses to heal unless your config declares the target with `healReplayIsolation: "idempotent"` — safe to replay repeatedly. It stops before it opens a browser or calls an AI provider. Omit the declaration, and it defaults to the safer `stateful` value — state changes on each replay — where healing still refuses to run.
+
+In CI, nobody watches the result as it happens, so healing doesn't run unless you enable the `ci.heal` setting. The mode that only lists what it could fix makes no real change to your app, so it runs without that restriction.
+
+Related: [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [Configuration](/ambercast/reference/configuration/#targets), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#heal-refusal)
 
 ## Three-stage escalation {#three-stages}
 
-When responding to test drift, healing moves in order from cached evidence to broader regeneration. Healing first measures a fail-closed replay baseline, then attempts a resolution-enabled measurement only when that baseline has a failure.
+Healing first replays the test the normal way, without calling an AI provider, to confirm the failure actually reproduces. If it doesn't reproduce, healing stops there and makes no repair. Only a reproduced failure moves on to the three stages below.
 
-When that baseline fails, repair escalates across three stages:
+<div class="heal-stages">
+<style>
+.heal-stages {
+  --ground: #FAF6F0; --surface: #FFFDFA; --line: #E2D9CC; --text: #27211C; --muted: #766B60;
+  --amber: #A65C1F; --amber-soft: #FCF5EB; --verdigris: #2E7D5B; --verdigris-soft: rgba(46, 125, 91, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .heal-stages {
+    --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+    --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+  }
+}
+:root[data-theme="dark"] .heal-stages {
+  --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+  --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+}
+.heal-stages { margin: 1.5rem 0; }
+.heal-stages figure { margin: 0 auto; max-width: 560px; display: grid; }
+.heal-stages .node { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); display: grid; gap: 8px; }
+.heal-stages .node.stage { border-color: var(--amber); }
+.heal-stages .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.heal-stages .num { font: 600 11.5px/1 ui-monospace, "JetBrains Mono", monospace; letter-spacing: .08em; color: var(--muted); }
+.heal-stages .stage .num { color: var(--amber); }
+.heal-stages h3 { margin: 0; font: 700 16px/1.35 system-ui, "Noto Sans JP", sans-serif; letter-spacing: -.01em; color: var(--text); }
+.heal-stages p { margin: 0; color: var(--text); }
+.heal-stages .chip { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 ui-monospace, monospace; letter-spacing: .04em; padding: 5px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.heal-stages .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.heal-stages .chip.ai { color: var(--amber); background: var(--amber-soft); }
+.heal-stages .chip.replay { color: var(--verdigris); background: var(--verdigris-soft); }
+.heal-stages .scope { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.heal-stages .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.heal-stages .fill { height: 100%; background: var(--amber); }
+.heal-stages .scope span { font: 500 11px/1.3 ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
+.heal-stages .aside { font-size: 13px; color: var(--muted); }
+.heal-stages .link { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 10px; padding-left: 18px; min-height: 56px; }
+.heal-stages .link svg { width: 28px; height: 44px; color: var(--muted); }
+.heal-stages .link.up svg { color: var(--amber); }
+.heal-stages .link span { font-size: 13px; color: var(--muted); }
+.heal-stages .link b { color: var(--text); font-weight: 700; }
+@media (max-width: 420px) { .heal-stages .scope { grid-template-columns: 1fr; gap: 6px; } }
+</style>
+<figure aria-label="heal's three-stage escalation. A failure at the baseline replay moves to stage 1; if stage 1's failure point doesn't advance, move to stage 2; if a failure remains before the deadline, move to stage 3.">
 
-Stage 1 attempts grounding repair at the first failing frontier; advancing the frontier records either element regrounding or AI retracing.
+<div class="node"><div class="top"><span class="num">BASELINE</span><span class="chip replay">No AI calls</span></div><h3>Replay the baseline fail-closed</h3><p class="aside">No failure means healing ends without a repair</p></div>
 
-Stage 2 attempts a structured single-step/tail repair only if Stage 1 did not advance the failure frontier.
+<div class="link" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>On a failure</b>, re-measure with resolution enabled</span></div>
 
-Stage 3 attempts full-plan repair only when a failure remains and the case did not stop at its deadline.
+<div class="node stage"><div class="top"><span class="num">STAGE 1</span><span class="chip ai">May call AI</span></div><h3>Fix the grounding</h3><div class="scope"><div class="track"><div class="fill" style="width:22%"></div></div><span>the first failed point</span></div><p>Healing re-locates the element at the failed point. If the point advances, it logs the fix as either re-grounding the element or an AI re-trace.</p></div>
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#repair-model), [Steps](/ambercast/spec/steps/), [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff)
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>If the failed point doesn't advance</b></span></div>
 
-## Budgets bound incremental repair {#repair-budgets}
+<div class="node stage"><div class="top"><span class="num">STAGE 2</span><span class="chip ai">May call AI</span></div><h3>Fix one step or the rest</h3><div class="scope"><div class="track"><div class="fill" style="width:55%"></div></div><span>a single step or the tail</span></div><p>Healing fixes the one failed step, or that step and every step after it together.</p></div>
 
-Explicit budgets restrict the scope of repair attempts so work remains bounded.
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>If a failure remains before the deadline</b></span></div>
 
-The configuration key `heal.maxStepRepairs` is an optional positive integer configuration value. When a healing case runs, it creates its dispatch budget with `maxStepRepairs` or `Infinity` when the value is unset.
+<div class="node stage"><div class="top"><span class="num">STAGE 3</span><span class="chip ai">May call AI</span></div><h3>Rebuild the whole plan</h3><div class="scope"><div class="track"><div class="fill" style="width:100%"></div></div><span>the whole plan</span></div><p>Healing resolves an AI executor, calls generate, and rebuilds the whole plan.</p></div>
 
-Time limits run concurrently with dispatch limits. The setting `heal.caseTimeoutMs` is a positive integer and establishes a case-wide admission deadline before the baseline replay. The timeout prevents new repair phases or dispatches from starting; it does not interrupt in-flight work or invalidate an already-produced commit.
+</figure>
+</div>
 
-Links: [Configuration](/ambercast/reference/configuration/#heal), [ambercast heal](/ambercast/reference/cli/heal/#limits)
+Healing tries the lightest fix first and escalates only when needed, to avoid unnecessary AI calls and cost.
 
-## Confirmation separates measurement from writes {#confirmation-and-writes}
+Related: [ambercast heal](/ambercast/reference/cli/heal/#repair-model), [Steps](/ambercast/spec/steps/), [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff)
 
-Proposed repairs remain reviewable because ambercast separates measurement from writes. Each case accumulates candidate artifacts in a private overlay; the returned commit capability is the only route to real artifact writes.
+## Budgets that limit repair count and time {#repair-budgets}
 
-Confirmation happens after measurement but before the first commit, so the prompt can describe pending files and repair kinds without a write preceding consent.
+You can set two kinds of limits so healing doesn't keep trying forever.
 
-Command-line flags define how this boundary operates across interactive and automated environments:
+- `heal.maxStepRepairs`: the limit on AI dispatches during stage 1 and stage 2 repair, charged at dispatch time. Stage 3 still calls AI but doesn't count against this limit. Set it as a positive integer; omit it and there is no limit.
+- `heal.caseTimeoutMs`: the time limit, in milliseconds, for the whole healing run. ambercast fixes this deadline before the first replay starts. Past the deadline, it starts no new repair, but it doesn't force-stop work already in progress or discard a repair already produced.
 
-`--dry-run` never prompts or commits; `--yes` is pre-authorization for the confirmation boundary, not a substitute for an agent's user authorization. Without `--yes`, a non-interactive caller receives a configuration error instead of an implicit write.
+Related: [Configuration](/ambercast/reference/configuration/#heal), [ambercast heal](/ambercast/reference/cli/heal/#limits)
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#confirmation), [Operating contract](/ambercast/agents/operating-contract/#command-contract), [Review generated diffs](/ambercast/how-to/review-generated-diffs/)
+## Always confirm before writing {#confirmation-and-writes}
+
+Finding a repair doesn't change any project file yet. Healing holds each candidate repair in a temporary location, and only writes it to the real file after you review and approve it.
+
+This lets you see exactly which file changes, and how, before the write happens.
+
+:::caution
+Passing `--dry-run` skips the confirmation prompt and never commits a Plan or Grounding change, but a replay attempt can still write evidence under the runs directory. `--yes` pre-authorizes the CLI's confirmation prompt only; it isn't your own review and approval of the change.
+
+When an agent runs ambercast without `--yes` and without a way to confirm interactively, ambercast stops with an error instead of writing silently.
+
+:::
+
+Related: [ambercast heal](/ambercast/reference/cli/heal/#confirmation), [Operating contract](/ambercast/agents/operating-contract/#command-contract), [Review generated diffs](/ambercast/how-to/review-generated-diffs/)
 
 ---
 

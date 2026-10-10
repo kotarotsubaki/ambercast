@@ -308,6 +308,9 @@ function healCandidate() {
 }
 
 function healStage2OrStage3(request: { readonly context?: unknown }, stage3: unknown) {
+  if (request.context !== null && typeof request.context === 'object' && 'accessibilityTree' in request.context) {
+    return { data: { proposal: { outcome: 'ambiguous' } }, raw: '{"proposal":{"outcome":"ambiguous"}}' };
+  }
   const frontier = (request.context as { trustedInputs?: { frontier?: unknown } } | undefined)?.trustedInputs?.frontier;
   return { data: frontier === undefined ? stage3 : { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'navigate', url: '/ignored' }], ambiguities: [] }, raw: '{}' };
 }

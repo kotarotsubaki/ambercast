@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
+import { validateAiResponse } from '#adapters/ai/shared/response-validator.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
@@ -36,6 +38,9 @@ import {
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import {
   GroundingDocument,
+  ElementBindingProposalResponse,
+  GROUNDING_SCHEMA_VERSION,
+  PLAN_SCHEMA_VERSION,
   type ElementRef,
   type Fingerprint,
   type JsonValueT,
@@ -228,6 +233,12 @@ describe('TEST-R11 report and event vocabulary', () => {
     }
   });
 
+  it('keeps plan, grounding, and report schema versions unchanged', () => {
+    expect(PLAN_SCHEMA_VERSION).toBe(5);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(3);
+    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
+  });
+
   it.each(['no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed'] as const)(
     'recommends quoting UI text or heal for %s without a --resolve retry', (reason) => {
       const error = new GroundingUnresolvedError('No trusted candidate.', {
@@ -297,7 +308,7 @@ describe('TEST-R11 report and event vocabulary', () => {
   });
 
   it('omits binding when stage 2 returns no candidate before stage 3', async () => {
-    const executor = createFakeAiExecutor({ execute: async () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }) });
+    const executor = createFakeAiExecutor({ execute: async () => ({ data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }) });
     const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }], samples: [capture([])], executor, resolveTimeoutMs: 0 });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
     expect(outcome.results[0]?.error).toMatchObject({ details: { reason: 'no-candidate' } });
@@ -333,7 +344,7 @@ describe('TEST-R11 report and event vocabulary', () => {
     ['failed', [capture(['Submit']), capture([])], false],
   ] as const)('TEST-7 keeps ai-proposed confirmation %s after a later confirmer', async (_label, samples, confirmed) => {
     const executor = createFakeAiExecutor({ execute: async () => ({
-      data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}',
+      data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}',
     }) });
     const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }, confirm] as readonly TestStep[], samples, executor, resolveTimeoutMs: 0 });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
@@ -392,7 +403,7 @@ describe('TEST-R11 report and event vocabulary', () => {
     const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
     const executor = createFakeAiExecutor({ execute: async () => {
       await clock.sleep(17);
-      return { data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' };
+      return { data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' };
     } });
     const f = await fixture({ clock, executor, steps: [{ ...click, intent: unquotedIntent }], resolveTimeoutMs: 0 });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
@@ -408,7 +419,7 @@ describe('TEST-R11 report and event vocabulary', () => {
 
   it('emits ai-proposed for a stage-2 element candidate', async () => {
     const executor = createFakeAiExecutor({ execute: async () => ({
-      data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}',
+      data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}',
     }) });
     const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }], executor, resolveTimeoutMs: 0 });
     await run(f.deps, DEFAULT_OPTIONS);
@@ -1771,7 +1782,7 @@ describe('run', () => {
         config: { ...createScenario().deps.config, targets: wideTargets },
         discoverTestFiles: vi.fn(async () => ['wide.test.md']),
         resolveAiExecutor: async () => createFakeAiExecutor({
-          execute: async () => ({ data: { outcome: 'found', role: 'textbox', name: 'Password' }, raw: '{"outcome":"found","role":"textbox","name":"Password"}' }),
+          execute: async () => ({ data: { proposal: { outcome: 'found', role: 'textbox', name: 'Password' } }, raw: '{"proposal":{"outcome":"found","role":"textbox","name":"Password"}}' }),
         }),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
@@ -2156,7 +2167,7 @@ describe('run', () => {
       return result.fingerprint;
     };
     const scriptedAi = (proposal: { outcome: 'found'; role: string; name: string } | { outcome: 'none' } | { outcome: 'ambiguous' }) =>
-      createFakeAiExecutor({ execute: async () => ({ data: proposal, raw: JSON.stringify(proposal) }) });
+      createFakeAiExecutor({ execute: async () => ({ data: { proposal }, raw: JSON.stringify({ proposal }) }) });
     async function scenario(
       session: ReturnType<typeof createFakeBrowserSession>,
       intent: typeof SUBMIT_INTENT | typeof SUBMIT_QUOTED_INTENT,
@@ -2197,6 +2208,67 @@ describe('run', () => {
         kind: 'grounding-unresolved', exitCode: 4, details: { stepId: 'click-submit', reason },
       });
       expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+    });
+
+    it('sends the wrapped response schema and prompt, then persists a confirmed found binding', async () => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: 'found', role: 'button', name: 'Submit' }), { timeoutMs: 0, confirms: true });
+
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect(result.executor.structuredRequests[0]?.responseSchema).toEqual(typedJsonSchema(ElementBindingProposalResponse));
+      expect(result.executor.structuredRequests[0]?.prompt).toContain('Put it under the "proposal" key.');
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+      expect((await readGrounding(result.recordingStorage.storage, result.testPath)).entries['click-submit'])
+        .toMatchObject({ kind: 'element', provenance: 'ai-proposed' });
+    });
+
+    it('rejects an old-form provider response without binding, grounding, or report operations', async () => {
+      const executor = createFakeAiExecutor({ execute: () => {
+        validateAiResponse('{"outcome":"found","role":"button","name":"Submit"}', typedJsonSchema(ElementBindingProposalResponse));
+        throw new Error('The old proposal must fail validation.');
+      } });
+      const session = createFakeBrowserSession(new Map());
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
+      const result = await scenario(session, SUBMIT_INTENT, executor, { timeoutMs: 0 });
+
+      expect(executor.structuredRequests).toHaveLength(1);
+      expect(result.outcome.results[0]?.error).toMatchObject({ kind: 'ai-response-invalid', exitCode: 3, details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'error' });
+      expect(result.outcome.results[0]?.result.steps[0]).not.toHaveProperty('binding');
+      expect((await readGrounding(result.recordingStorage.storage, result.testPath)).entries['click-submit']).toBeUndefined();
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+      expect(reportError(result.outcome.results[0]!.error!, { scope: 'case', caseId: 'login' })).toMatchObject({ code: 'AI_RESPONSE_INVALID' });
+    });
+
+    it('keeps a confirmed first binding when a later provider proposal is rejected', async () => {
+      let calls = 0;
+      const executor = createFakeAiExecutor({ execute: async () => {
+        if (++calls === 1) return { data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' };
+        validateAiResponse('{"outcome":"none"}', typedJsonSchema(ElementBindingProposalResponse));
+        throw new Error('The second old proposal must fail validation.');
+      } });
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
+      const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+      const testPath = await writePrompt(recordingStorage.storage);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [
+        { id: 'click-first', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+        { id: 'confirm-first', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['click-first'] },
+        { id: 'click-second', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+      ]);
+      const outcome = await run({ ...deps, config: { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } }, DEFAULT_OPTIONS);
+
+      expect(executor.structuredRequests).toHaveLength(2);
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed', confirmed: true } });
+      expect(outcome.results[0]?.result.steps[2]).toMatchObject({ status: 'error' });
+      expect(outcome.results[0]?.result.steps[2]).not.toHaveProperty('binding');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'ai-response-invalid', exitCode: 3, details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
+      const grounding = await readGrounding(recordingStorage.storage, testPath);
+      expect(grounding.entries['click-first']).toMatchObject({ kind: 'element', provenance: 'ai-proposed' });
+      expect(grounding.entries['click-second']).toBeUndefined();
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
+      expect(reportError(outcome.results[0]!.error!, { scope: 'case', caseId: 'login' })).toMatchObject({ code: 'AI_RESPONSE_INVALID' });
     });
 
     it('TEST-R4 retains the existing AI error classification for a proposal timeout', async () => {
@@ -4731,7 +4803,7 @@ describe('run agentic fallback pipeline', () => {
 describe('run path-B element recovery', () => {
   const clickDigest = computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT });
   const storedClick = (fingerprint: Fingerprint = FINGERPRINT) => elementGrounding(['click-submit'], {}, fingerprint, { 'click-submit': clickDigest });
-  const foundSubmit = () => ({ data: { outcome: 'found' as const, role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' });
+  const foundSubmit = () => ({ data: { proposal: { outcome: 'found' as const, role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' });
 
   it('keeps a fingerprint hit deterministic and never resolves an AI executor', async () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
@@ -4927,9 +4999,11 @@ describe('run path-B element recovery', () => {
     });
     expect(requestContext.excerpt).toContain('submit valid credentials');
     const responseSchema = executor.structuredRequests[0]?.responseSchema as unknown as {
-      readonly oneOf: readonly { readonly additionalProperties: boolean; readonly properties: Readonly<Record<string, { readonly type: string }>>; readonly required: readonly string[] }[];
+      readonly type: string;
+      readonly properties: { readonly proposal: { readonly anyOf: readonly unknown[] } };
     };
-    expect(responseSchema.oneOf).toContainEqual(expect.objectContaining({
+    expect(responseSchema.type).toBe('object');
+    expect(responseSchema.properties.proposal.anyOf).toContainEqual(expect.objectContaining({
       additionalProperties: false,
       properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string', minLength: 1 }, name: { type: 'string', minLength: 1 } },
       required: ['outcome', 'role', 'name'],
@@ -5084,7 +5158,7 @@ describe('run path-B element recovery', () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), {
       snapshot: { accessibilityTree, screenshot: new Uint8Array() },
     });
-    const executor = createFakeAiExecutor({ execute: () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }) });
+    const executor = createFakeAiExecutor({ execute: () => ({ data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }) });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
@@ -5133,7 +5207,7 @@ describe('run path-B element recovery', () => {
     expect(locallyComputedFingerprint).toMatchObject({ algorithm: 'a11y-neighborhood-v2' });
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: pathBSnapshot() });
     const executor = createFakeAiExecutor({
-      execute: () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }),
+      execute: () => ({ data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }),
     });
     const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
@@ -5919,7 +5993,7 @@ describe('run AI call timeout composition', () => {
           const data = proposal++ === 0
             ? { outcome: 'found' as const, role: 'textbox', name: 'Email' }
             : { outcome: 'found' as const, role: 'button', name: 'Submit' };
-          return { data, raw: JSON.stringify(data) };
+          return { data: { proposal: data }, raw: JSON.stringify({ proposal: data }) };
         },
       });
       const snapshot = pathBSnapshot();
@@ -8227,7 +8301,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
         await evaluateTerminalAssert(request, { type: 'assert', check: 'text-visible', text: '{{run.name}}' });
         return { outcome: 'success' };
       },
-      execute: () => ({ data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' }),
+      execute: () => ({ data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' }),
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createClaudeCodeCliExecutor } from '#adapters/ai/claude-code-cli/index.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
-import { GeneratedPlanResponseRequest } from '#core/ir/schema.js';
+import { ElementBindingProposalResponse, GeneratedPlanResponseRequest } from '#core/ir/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { AiResponseIssue } from '#report/schema.js';
@@ -58,6 +58,13 @@ registerAiExecutorTransportContract({
 });
 
 describe('createClaudeCodeCliExecutor', () => {
+  it('rejects an unwrapped element proposal from the provider', async () => {
+    const raw = '{"outcome":"found","role":"button","name":"Submit"}';
+    const runner = createFakeCommandRunner([{ outcome: 'exited', stdout: JSON.stringify({ result: raw }), stderr: '', exitCode: 0 }]);
+    const executor = createClaudeCodeCliExecutor({ run: runner.run });
+    await expect(executor.execute({ prompt: 'Resolve the element.', responseSchema: typedJsonSchema(ElementBindingProposalResponse) }))
+      .rejects.toMatchObject({ kind: 'ai-response-invalid', details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
+  });
   it('pipes the structured envelope to claude with its inline JSON Schema protocol', async () => {
     const runner = createFakeCommandRunner([{ outcome: 'exited', stdout: '{"result":"{\\"ok\\":true}"}', stderr: '', exitCode: 0 }]);
     const executor = createClaudeCodeCliExecutor({ run: runner.run });

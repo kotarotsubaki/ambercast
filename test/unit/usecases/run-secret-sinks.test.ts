@@ -869,7 +869,7 @@ describe('run secret sinks', () => {
       const { schemaPath, outputPath } = commandPaths(call.args);
       fingerprintSchemaPath = schemaPath;
       fingerprintSchema = await readFile(schemaPath, 'utf8');
-      await writeFile(outputPath, JSON.stringify({ outcome: 'found', role: 'button', name: 'Submit' }));
+      await writeFile(outputPath, JSON.stringify({ proposal: { outcome: 'found', role: 'button', name: 'Submit' } }));
       return { outcome: 'exited', stdout: '', stderr: '', exitCode: 0 };
     }]);
     const runExecutor = createCodexCliExecutor({ run: runRunner.run });

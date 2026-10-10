@@ -1,4 +1,3 @@
-import { createServer, type Server } from 'node:http';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +13,7 @@ import { ReportEnvelope } from '#report/schema.js';
 import { createCodexSentinel } from './support/codex-sentinel.js';
 import { resolveChromiumAvailability } from './support/chromium-availability.js';
 import { createCleanupRegistry } from './support/cleanup-registry.js';
+import { startFixtureApp } from './support/fixture-app.js';
 import { spawnSupervisedCli } from './support/supervised-cli.js';
 
 const PROMPT = '# Heal confirmation fixture\n\nClick Submit and see Submitted.\n';
@@ -21,36 +21,6 @@ const CONFIRMATION_MESSAGE = 'Healing requires --yes when confirmation cannot be
 
 let chromiumAvailable = false;
 
-async function listen(server: Server): Promise<number> {
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error): void => {
-      server.off('listening', onListening);
-      reject(error);
-    };
-    const onListening = (): void => {
-      server.off('error', onError);
-      resolve();
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.listen(0, '127.0.0.1');
-  });
-  const address = server.address();
-  if (address === null || typeof address === 'string') {
-    throw new Error('The heal confirmation fixture server did not expose a TCP address.');
-  }
-  return address.port;
-}
-
-async function closeServer(server: Server): Promise<void> {
-  if (!server.listening) {
-    return;
-  }
-  server.closeAllConnections();
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => error === undefined ? resolve() : reject(error));
-  });
-}
 
 
 describe('heal confirmation gate through the built CLI', () => {
@@ -73,23 +43,15 @@ describe('heal confirmation gate through the built CLI', () => {
   it('refuses a non-interactive heal after one real re-grounding dispatch without persisting it', async () => {
     const registry = createCleanupRegistry();
     await registry.run(async () => {
-      let pageRequests = 0;
-      const server = createServer((request, response) => {
-        if (request.method === 'GET' && request.url === '/') {
-          pageRequests += 1;
-        }
-        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        response.end('<!doctype html><html lang="en"><body><main><button>Submit</button><p id="result"></p><script>document.querySelector("button").addEventListener("click", () => { document.querySelector("#result").textContent = "Submitted"; });</script></main></body></html>');
-      });
-      registry.deferResource(() => closeServer(server));
-      const port = await listen(server);
+      const app = await startFixtureApp({ registry });
+      app.setPage('/', '<!doctype html><html lang="en"><body><main><button>Submit</button><p id="result"></p><script>document.querySelector("button").addEventListener("click", () => { document.querySelector("#result").textContent = "Submitted"; });</script></main></body></html>');
 
       const project = await mkdtemp(join(tmpdir(), 'ambercast-heal-confirmation-'));
       registry.deferResource(() => rm(project, { recursive: true, force: true }));
       const tests = join(project, 'tests');
       await mkdir(tests);
       const targetDefinitions = {
-        fixture: { surface: 'web', baseUrl: `http://127.0.0.1:${port}` },
+        fixture: { surface: 'web', baseUrl: app.baseUrl },
       } as const satisfies Record<string, TargetDefinition>;
       const intent = { description: 'Submit button', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 'Click Submit.'.length + 1 }, roleHint: 'button' };
       const plan = PlanDocument.parse({
@@ -155,7 +117,7 @@ describe('heal confirmation gate through the built CLI', () => {
       expect(Buffer.compare(beforeGrounding, afterGrounding)).toBe(0);
       expect(invocations.filter((argv) => argv[0] === 'exec')).toHaveLength(1);
       expect(invocations.filter((argv) => argv[0] === '--version')).toHaveLength(0);
-      expect(pageRequests).toBeGreaterThanOrEqual(2);
+      expect(app.requestCount('/')).toBeGreaterThanOrEqual(2);
     });
   }, 90_000);
 });

@@ -46,6 +46,7 @@ Test cases are written as natural-language Markdown prompts; the prompt is the s
 - Keep a table-driven corpus under `test/fixtures/corpus/<topic>/<name>.jsonl`: JSONL, one JSON object per line, in the fixed key set `value`, `expected`, `note`, `source`, `date`. Load it with `loadCorpus` from `test/support/corpus.ts` and drive cases with `it.each(loadCorpus(new URL('../../fixtures/corpus/<topic>/<name>.jsonl', import.meta.url), schemas))('line $line: $note', (entry) => { ... })`.
 - When dogfooding surfaces a false positive, a false negative, or another misclassification in a helper, in production reporting, or in a production classifier such as the generator secret detector, add the reproducing value to the corpus in the same pull request that fixes it, with `source` naming the issue and `date` set to that day.
 - A pull request that adds or changes a generic fallback message in `src/` must update `GENERIC_FALLBACK_MESSAGES` in `test/support/report-assertions.ts` in the same change.
+- Keep provider-output fixtures in `test/fixtures/corpus/provider-output/*.jsonl` and read them with `ProviderFixtureValue`. Replay them into a use case with `replayThroughUseCase` or into an adapter alone with `replayExecute`, and build synthetic faults with `provider-fault-builders.ts`. Scrub secrets from recorded fixtures before commit.
 
 ## Development workflow (enforced)
 

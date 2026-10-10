@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { loadCorpus } from '../../../support/corpus.js';
+import { ProviderFixtureValue } from '../../../support/provider-fixture.js';
+import { replayExecute } from '../../../support/provider-replay.js';
 import { createClaudeCodeCliExecutor } from '#adapters/ai/claude-code-cli/index.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { ElementBindingProposalResponse, GeneratedPlanResponseRequest } from '#core/ir/schema.js';
@@ -12,6 +15,11 @@ import type { BuildInvocation } from '#adapters/ai/agentic/agentic-executor.js';
 import type { AiResolutionSnapshot, InstructionCoveredAiAgenticRequest } from '#ports/ai.js';
 import { registerAiExecutorTransportContract, type AiExecutorTransportScenario } from '../../../contracts/ai-executor-transport.contract.js';
 import { createFakeCommandRunner, createDeferredCommandRun } from '../../../doubles/create-fake-command-runner.js';
+
+const rows = loadCorpus(new URL('../../../fixtures/corpus/provider-output/live-request-schema.jsonl', import.meta.url), {
+  value: ProviderFixtureValue,
+  expected: z.object({ steps: z.array(z.object({ kind: z.string(), verificationIntent: z.array(z.unknown()) })) }),
+});
 
 function schema() {
   return typedJsonSchema(z.object({ ok: z.boolean() }));
@@ -119,42 +127,12 @@ describe('createClaudeCodeCliExecutor', () => {
     expect(responseSchema).toHaveProperty('$schema', 'https://json-schema.org/draft/2020-12/schema');
   });
 
-  it('accepts an AI step with an empty verification intent through the live request schema', async () => {
-    const response = {
-      steps: [{
-        id: 'complete-sign-in',
-        kind: 'ai',
-        target: 'app',
-        instruction: 'Complete the sign-in flow.',
-        instructionCoverage: [{
-          id: 'submit-credentials',
-          kind: 'action',
-          startAnchor: 'L1',
-          startColumn: 1,
-          endAnchor: 'L1',
-          endColumn: 24,
-          citation: 'Submit the credentials.',
-        }],
-        verificationIntent: [],
-      }],
-      ambiguities: [],
-    };
-    const runner = createFakeCommandRunner([{
-      outcome: 'exited',
-      stdout: JSON.stringify({ result: JSON.stringify(response) }),
-      stderr: '',
-      exitCode: 0,
-    }]);
-    const executor = createClaudeCodeCliExecutor({ run: runner.run });
-
-    const result = await executor.execute({
+  it.each(rows.filter(r => r.value.provider === 'claude-code-cli'))('line $line: $note', async ({ value, expected }) => {
+    const result = await replayExecute(value, {
       prompt: 'Generate a plan.',
       responseSchema: typedJsonSchema(GeneratedPlanResponseRequest),
     });
-
-    expect(result.data).toMatchObject({
-      steps: [{ kind: 'ai', verificationIntent: [] }],
-    });
+    expect(result.data).toMatchObject(expected);
   });
 
   it.each([

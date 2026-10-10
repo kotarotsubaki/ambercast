@@ -196,24 +196,33 @@ AI 从失败的那一步开始生成修复方案，并给出要修改内容的�
 
 ---
 
-# 5 分钟完成您的首个测试
+# 5 分钟内完成第一个测试
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/
 
-本教程将引导您在 5 分钟内生成并运行您的第一个 ambercast 测试。您无需预先创建配置文件，使用默认配置即可直接针对本地运行的 Web 应用完成首个测试的生成与回放执行。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+先用 `npx ambercast init` 初始化项目，再用 `npx ambercast generate` 和 `npx ambercast run` 跑通第一个测试。
 
-在开始之前，请确认您的环境满足以下条件：
+## 前提条件 \{#prerequisites}
 
-- **默认目标与目录**：ambercast 的默认测试目录 `testDir` 为 `tests/ambercast`；默认测试目标为 `web-user`，对应地址为 `http://localhost:3000`，并使用 Chromium。
-- **配置文件规则**：如果项目中存在配置文件，则该文件必须包含 `$schema`；无配置文件时的默认配置是在 `RawConfig` 之外进行处理的，因此本教程完全无需配置文件。
-- **运行与环境依赖**：本快速入门包含了 `run` 阶段，该阶段会配置浏览器驱动。整个演练的前提条件包括 Node.js 22.14 或更高版本、Chromium 二进制程序，以及已安装并完成身份验证的 Claude Code 或 Codex CLI。
-- **阶段依赖差异**：首次执行 `generate` 命令时，直接需要的是 Node.js 以及已安装且完成身份验证的提供商；`generate` 本身不会配置浏览器驱动，因此 Chromium 是在随后的 `run` 阶段中才需要的，生成阶段并不要求 Chromium。
-- **错误代码**：若在生成测试时没有可用的提供商，环境错误代码为 `AI_EXECUTOR_UNAVAILABLE`。
+- 需要 Node.js 22.14 或更高版本。
+- 需要已认证的 Claude Code 或 Codex CLI。首次 `generate` 直接需要 Node.js 和已认证的提供商；没有可用提供商时的错误代码见[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary)。
+- `run` 需要 Chromium 二进制程序。生成阶段本身不配置浏览器驱动。
 
-## 操作步骤 {#steps}
+ambercast 使用以下默认值。
 
-1. 不要创建配置文件。精确创建文件 `tests/ambercast/find-page.test.md`：
+- 默认 `testDir` 为 `tests/ambercast`。
+- 默认目标为 `web-user`，地址为 `http://localhost:3000`，使用 Chromium。
+
+## 操作步骤 \{#steps}
+
+运行 `npx ambercast init` 并确认后，会创建以下文件。
+
+- `ambercast.config.json`：写入默认 `testDir` 和 `target` 的配置文件
+- `tests/ambercast/find-page.test.md`：示例测试 prompt
+- 在 `.gitignore` 中追加一行，在 `AGENTS.md` 中追加一节
+
+创建的示例 prompt 内容如下。
 
 ```markdown
 # Find a page
@@ -221,36 +230,69 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
-或者，`npx ambercast init` 会生成同一个文件，以及最小的 `ambercast.config.json` 和一个 AGENTS.md 段落；本教程仍采用无配置文件的路径，以便您了解默认值如何生效。
+:::caution
+`init` 不会询问 URL。生成的 `ambercast.config.json` 始终以 `http://localhost:3000` 为目标。如果应用运行在其他地址，先修改 `targets.web-user.baseUrl`。
 
-文件末尾的 `.test.md` 后缀符合伴生文件路径解析的条件。
+:::
 
-2. 请由人工或操作员启动并确认应用程序运行在 `http://localhost:3000`，然后运行：
+<Steps>
 
+1. ## 初始化项目 \{#init}
 
+   ```bash
+   npx ambercast init
+   ```
 
-使用设置提示词的 agent 会假定服务已在运行，未经请求不会自行启动服务。成功生成后命令退出码为 `0`，结果状态为 `generated`。其报告字段为 `planFile`，同时生成阶段会在指定的 prompt 文件旁写入两个派生的伴生文件（参见 [设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)）。
+2. ## 启动应用并生成执行计划 \{#generate}
 
-3. 运行以下命令执行测试：
+   由人工或操作员启动并确认应用运行在配置的 `baseUrl` 上。
 
-`npx ambercast run --resolve tests/ambercast/find-page.test.md`
+   ```bash
+   npx ambercast generate tests/ambercast/find-page.test.md
+   ```
 
+   成功后得到：
 
-回放通过时退出码为 `0`；`run` 会在配置的 runs 目录下为每次调用创建一个 `report.json`。
+   - 退出码 `0`，结果状态为 `generated`
+   - 在生成的 prompt 旁写入执行计划和定位缓存两个派生文件
 
-4. 首先运行 `git status --short`。使用 `git diff -- <path>` 审查每一个被修改的已跟踪文件；对于其中显示的每一个未跟踪的 prompt、plan 或 grounding 路径，检查其完整内容或运行 `git diff --no-index /dev/null <path>`。随后由人工提交审查后的这三个文件。
+   使用设置提示词 ([Agent 设置](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)) 的 agent 会假定服务已在运行，未经请求不会自行启动服务。
 
-Agent 会展示完整的变更集，并且只有在对话中收到明确请求后才会执行提交；任何 CLI 标志或 `--yes` 都不能作为该授权（参见 [设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)）。
+3. ## 重放测试 \{#run}
 
-> [!NOTE]
-> **范围说明**：不带参数的形式 `npx ambercast generate` 与 `npx ambercast run` 会发现所有符合配置的测试目录、匹配规则及忽略规则的测试。请仅在经过单独批准的“执行所有发现的测试”操作中使用这两种无参数形式；本教程中的命令是有意显式指定单个 `.test.md` 文件的。
+   ```bash
+   npx ambercast run --resolve tests/ambercast/find-page.test.md
+   ```
 
-## 完成状态 {#completion-state}
+   成功后得到：
 
-- 解析器将 prompt 映射至 `tests/ambercast/find-page.ambercast.plan.json` 与 `tests/ambercast/find-page.ambercast.grounding.json`。
-- `npx ambercast run --resolve tests/ambercast/find-page.test.md` 退出码为 `0`，并报告该用例状态为 `passed`。
+   - 退出码 `0`
+   - 在配置的 runs 目录下，为本次调用写入一份 `report.json`
 
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/), [文件布局](/ambercast/zh-cn/reference/file-layout/), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/), [ambercast run](/ambercast/zh-cn/reference/cli/run/), [编写高效的 Prompt](/ambercast/zh-cn/how-to/write-effective-prompts/)。
+4. ## 检查并提交改动 \{#review-commit}
+
+   ```bash
+   git status --short
+   ```
+
+   对每个已跟踪的改动文件运行 `git diff -- <path>` 进行检查。对未跟踪的 prompt、执行计划、定位缓存路径，检查其完整内容，或运行 `git diff --no-index /dev/null <path>`。
+
+   检查完成后，由人工提交这三个文件。`init` 创建的 `ambercast.config.json` 等文件也要单独检查并提交，方式与提交其他改动相同。
+
+</Steps>
+
+不带参数的 `npx ambercast generate` 和 `npx ambercast run` 会匹配配置的测试目录、匹配规则、忽略规则下的全部测试。本教程的命令特意指定了单个 `.test.md`；仅在另行获得批准的全量测试操作中使用不带参数的形式。
+
+## 验证 \{#verification}
+
+- 确认解析器创建了 `tests/ambercast/find-page.ambercast.plan.json` 和 `tests/ambercast/find-page.ambercast.grounding.json`。
+- 确认 `npx ambercast run --resolve tests/ambercast/find-page.test.md` 以退出码 `0` 结束，并报告该用例 `passed`。
+
+## 下一步 \{#next-steps}
+
+接下来学习如何编写 prompt。
+
+<LinkCard title="编写有效的 prompt" href="/ambercast/zh-cn/how-to/write-effective-prompts/" description="学习编写易于审阅、聚焦明确的测试 prompt。" />
 
 ---
 
@@ -519,26 +561,62 @@ npx ambercast generate --ai codex
 # 选择要运行的测试
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/
 
-您可以通过指定文件路径、使用匹配模式或自定义配置规则，来选择需要执行的测试用例。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+## 前提条件 \{#prerequisites}
 
-默认的发现机制会匹配 `**/*.test.md`，并忽略 runs、plans 以及 grounding 伴生文件。
+默认发现机制匹配 `**/*.test.md`，并忽略 runs、执行计划以及定位缓存伴生文件。
 
-## 操作步骤 {#steps}
+## 操作步骤 \{#steps}
 
-1. 运行 `npx ambercast run tests/ambercast/sign-in.test.md --list`。位置参数是字面提示词路径，`--list` 会直接返回而不进行回放。
-2. 运行 `npx ambercast run --grep 'sign-in' --list`。解析器会构建一个正则表达式用于用例发现过滤。
-3. 在有效配置中写入 `"testMatch":["**/*.test.md"],"testIgnore":["**/.runs/**"]`。匹配的忽略规则会排除该路径，即便它符合 `testMatch`。
-4. 若字面路径以 `--` 开头，请运行 `npx ambercast run --list -- --literal.test.md`。诸如 `--list` 这样的标志必须置于分隔符之前；`--` 之后的所有内容均为字面位置路径，因此置于末尾的 `--list` 会被当作文件名处理。
+<Steps>
 
-## 验证 {#verification}
+1. ## 直接指定文件 \{#direct-path}
 
-当报告了选中的路径时，`--list` 期望退出码为 `0`；仅在有意为之的情况下，才使用 `--allow-empty` 处理零匹配。
+   ```bash
+   npx ambercast run tests/ambercast/sign-in.test.md --list
+   ```
 
-## 相关链接 {#related}
+   位置参数是字面 prompt 路径。`--list` 不执行回放，直接返回结果。
 
-链接：[发现模式](/ambercast/zh-cn/reference/discovery-patterns/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/)、[ambercast generate](/ambercast/zh-cn/reference/cli/generate/)、[配置](/ambercast/zh-cn/reference/configuration/)。
+2. ## 用正则表达式过滤 \{#grep-filter}
+
+   ```bash
+   npx ambercast run --grep 'sign-in' --list
+   ```
+
+   解析器会构建一个用于发现过滤的正则表达式。`--grep` 之外的 [run 的全部标志](/ambercast/zh-cn/reference/cli/run/#flags)也可在此确认。
+
+3. ## 在配置中排除路径 \{#config-ignore}
+
+   在有效配置中写入以下键。
+
+   ```json
+   {
+     "testMatch": ["**/*.test.md"],
+     "testIgnore": ["**/.runs/**"]
+   }
+   ```
+
+   匹配的 `testIgnore` 会排除某个路径，即使它同时匹配 `testMatch`。`testMatch`、`testIgnore` 的匹配规则见[发现模式](/ambercast/zh-cn/reference/discovery-patterns/)，配置文件的完整写法见[配置](/ambercast/zh-cn/reference/configuration/)。
+
+4. ## 传入以连字符开头的路径 \{#literal-dash-path}
+
+   ```bash
+   npx ambercast run --list -- --literal.test.md
+   ```
+
+   把字面路径放在 `--` 之后。像 `--list` 这样的标志要放在 `--` 之前：`--` 之后的所有参数都会被当作字面位置路径，因此末尾的 `--list` 会被当作文件名处理。
+
+</Steps>
+
+## 验证 \{#verification}
+
+当 `--list` 报告了选中的路径时，退出码为 `0`。仅在有意为之时，才用 `--allow-empty` 处理零匹配的结果。
+
+## 相关链接 \{#related}
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="查看使用相同选择规则的 generate 命令。" />
 
 ---
 
@@ -1932,7 +2010,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/generate/
 # ambercast run
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 
-`ambercast run` 负责测试的回放路径与运行写入。默认不调用 AI：grounding 未命中会以 `grounding-unresolved` 失败关闭（退出码 4），并提示使用 `--resolve`。只有传入 `--resolve` 才会为未命中显式启用实时 AI 解析。
+`ambercast run` 负责测试的回放路径与运行写入。默认不调用 AI：定位缓存未命中会以 `grounding-unresolved` 失败关闭 (退出码 4)，并提示使用 `--resolve`。只有传入 `--resolve` 才会为未命中显式启用实时 AI 解析。
 
 ## 标志 {#flags}
 
@@ -1940,9 +2018,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 | --- | --- | --- | --- |
 | files | path[] | 字面 prompt 路径；缺省时执行发现机制 | discovery |
 | --grep | pattern | 路径的正则表达式过滤器 | omitted |
-| --target | name | 选择目标 | omitted |
 | --headed | boolean | 有头浏览器 | false |
-| --resolve | boolean | 为 grounding 未命中显式启用实时 AI 解析 | false |
+| --resolve | boolean | 为定位缓存未命中显式启用实时 AI 解析 | false |
 | --update-cache | boolean | 请求写入缓存 | false |
 | --stale | fail\|regenerate | stale（已过期）策略解析值 | fail |
 | --ai | claude\|codex | 解析提供商覆盖 | omitted |
@@ -1951,15 +2028,17 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 | --json | boolean | JSON 封套 | false |
 | --no-color | boolean | 禁用 ANSI 颜色 | false |
 
+`--resolve`、`--ai` 的行为见[解析缺失的定位缓存](#resolve)，`--update-cache` 见[定位缓存写回](#grounding-write-back)，`--stale=regenerate` 的拒绝时机见下一节。
+
 <a id="replay-paths"></a>
 
 ## 回放 {#replay}
 
 | 条件 | AI 提供商 | 结果路径 |
 | --- | --- | --- |
-| grounding 命中 | 该次回放无需提供商 | 确定性回放 |
-| grounding 未命中，未传入 `--resolve` | 无 | 以 `grounding-unresolved` 失败关闭（退出码 4） |
-| grounding 未命中，传入 `--resolve` | 解析器；`--ai` 可覆盖 | 实时 AI 解析并可能写回 |
+| 定位缓存命中 | 该次回放无需提供商 | 确定性回放 |
+| 定位缓存未命中，未传入 `--resolve` | 无 | 以 `grounding-unresolved` 失败关闭（退出码 4） |
+| 定位缓存未命中，传入 `--resolve` | 解析器；`--ai` 可覆盖 | 实时 AI 解析并可能写回 |
 
 运行时在加载配置或执行文件 I/O 之前，会直接拒绝 `--stale=regenerate`。
 
@@ -1967,21 +2046,21 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 
 ## AI 调用 {#ai-calls}
 
-提供商解析器会被传递至运行用例，因此具备 grounding 的回放无需可用的提供商即可推进；仅在传入 `--resolve` 时，grounding 未命中才可使用该解析器。
+`run` 始终持有提供商解析器，但具备定位缓存的回放即使没有可用提供商也能推进，并不会调用它。只有传入 `--resolve` 时，定位缓存未命中才会调用该解析器。
 
-## 解析缺失的 grounding {#resolve}
+## 解析缺失的定位缓存 {#resolve}
 
-`--resolve` 会显式启用 AI 解析路径。未传入时，grounding 未命中会失败关闭，而不会分发提供商。
+`--resolve` 会显式启用 AI 解析路径。未传入时，定位缓存未命中会失败关闭，而不会分发提供商。
 
-## Grounding 写回 {#grounding-write-back}
+## 定位缓存写回 {#grounding-write-back}
 
-仅当解析后的写回门禁允许时，`run` 才会写入发生变更的 grounding；有关本地与 CI 环境下的所有判定条件，请参见 [配置](/ambercast/zh-cn/reference/configuration/#grounding)。
+仅当解析后的写回门禁允许时，`run` 才会写入发生变更的定位缓存。`--update-cache` 是该门禁的显式输入之一：在 CI 环境中与 `ci.updateGroundingCache` 组合判定，在本地环境中与 `localWriteBack` 配置组合判定。有关本地与 CI 环境下的所有判定条件，请参见[配置](/ambercast/zh-cn/reference/configuration/#grounding)。
 
 ## 报告与退出状态 {#report-and-exits}
 
-只有 run 会尝试在 `<runsDir>/<runId>/report.json` 执行报告持久化（`reportPersistence`）。写入成功后状态为 `persisted`；写入失败且无可见的部分内容时状态为 `failed`；未尝试写入时状态为 `not-attempted`（包括在得出运行结果之前发生失败的情况）。
+只有 run 会尝试在 `<runsDir>/<runId>/report.json` 执行报告持久化 (`reportPersistence`)。写入成功后状态为 `persisted`；写入失败且无可见的部分内容时状态为 `failed`；未尝试写入时状态为 `not-attempted` (包括在得出运行结果之前发生失败的情况)。
 
-运行结果状态包括 `passed`、`failed`、`error`、`listed` 与 `skipped`；进程退出码的数值及其优先级由 [退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) 确定。
+运行结果状态包括 `passed`、`failed`、`error`、`listed` 与 `skipped`；进程退出码的数值及其优先级由[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)确定。
 
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/#grounding)、[报告](/ambercast/zh-cn/reference/reports/#run-results)、[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)、[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
 
@@ -3182,45 +3261,109 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 # 自愈模型
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/healing-model/
 
-ambercast 的自愈模型围绕受限递进与人工控制展开。在实际修复工作开启之前，系统通过安全前置条件对自愈行为施加约束：选定目标必须具备幂等隔离，且在 CI 环境中需要获得明确权限，从而在浏览器或提供商（provider）启动工作之前确立严格的安全边界。
+修改应用的 UI 后，原本通过的测试可能突然失败。按钮文案或元素位置变化是常见原因。
 
-## 安全的前提条件 {#safe-precondition}
+ambercast 的自愈功能会自动排查失败原因并尝试修复测试，但不会无限制运行。单次修复的尝试次数有上限，写入文件前必须经过人工确认。
 
-自愈在进入实际修复工作之前必须满足严格的约束。所选定的目标必须解析出 `healReplayIsolation: "idempotent"`；若针对非幂等目标执行自愈，在浏览器或提供商的工作开始之前就会被拒绝。在配置边界处，系统允许将其配置为 `idempotent` 或 `stateful`，但加载配置时会提供保守的 `stateful` 默认值。
+## 安全前提 {#safe-precondition}
 
-运行环境同样存在明确的前置控制。在持续集成（CI）环境中，真正的自愈尝试会被拒绝，除非启用了 `ci.heal`。列表模式（list mode）则会绕过该拒绝机制，因为该模式不会产生主要效果。
+自愈会实际访问正在运行的应用，反复尝试找到可行的修复方案。如果目标应用无法在多次访问后恢复到同一状态，反复尝试可能堆积数据或损坏应用状态。
+
+因此，除非配置将目标声明为 `healReplayIsolation: "idempotent"`，ambercast 会拒绝自愈，并在打开浏览器或调用 AI 之前就停止。省略该声明时，默认值是更安全的 `stateful`，这种情况下自愈同样会被拒绝。
+
+CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈不会运行。仅列出可修复项的模式不会对应用做出真实改动，因此不受此限制。
 
 相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)、[配置](/ambercast/zh-cn/reference/configuration/#targets)、[CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#heal-refusal)
 
-## 三阶段递进 {#three-stages}
+## 三段式递进 {#three-stages}
 
-自愈的修复过程遵循从已缓存证据到更大范围重新生成的阶梯式递进顺序。在发起修复之前，自愈首先测量失败关闭的重放基线；只有当该基线出现失败时，系统才会尝试启用解析的测量。
+自愈首先用不调用 AI 的普通回放重新执行测试，确认失败是否真实重现。如果没有重现，自愈到此为止，不做任何修复。只有重现的失败才会进入以下三个阶段。
 
-当确认存在失败后，修复工作按三个阶段逐步升级：
+<div class="heal-stages">
+<style>
+.heal-stages {
+  --ground: #FAF6F0; --surface: #FFFDFA; --line: #E2D9CC; --text: #27211C; --muted: #766B60;
+  --amber: #A65C1F; --amber-soft: #FCF5EB; --verdigris: #2E7D5B; --verdigris-soft: rgba(46, 125, 91, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .heal-stages {
+    --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+    --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+  }
+}
+:root[data-theme="dark"] .heal-stages {
+  --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+  --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+}
+.heal-stages { margin: 1.5rem 0; }
+.heal-stages figure { margin: 0 auto; max-width: 560px; display: grid; }
+.heal-stages .node { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); display: grid; gap: 8px; }
+.heal-stages .node.stage { border-color: var(--amber); }
+.heal-stages .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.heal-stages .num { font: 600 11.5px/1 ui-monospace, "JetBrains Mono", monospace; letter-spacing: .08em; color: var(--muted); }
+.heal-stages .stage .num { color: var(--amber); }
+.heal-stages h3 { margin: 0; font: 700 16px/1.35 system-ui, "Noto Sans JP", sans-serif; letter-spacing: -.01em; color: var(--text); }
+.heal-stages p { margin: 0; color: var(--text); }
+.heal-stages .chip { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 ui-monospace, monospace; letter-spacing: .04em; padding: 5px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.heal-stages .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.heal-stages .chip.ai { color: var(--amber); background: var(--amber-soft); }
+.heal-stages .chip.replay { color: var(--verdigris); background: var(--verdigris-soft); }
+.heal-stages .scope { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.heal-stages .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.heal-stages .fill { height: 100%; background: var(--amber); }
+.heal-stages .scope span { font: 500 11px/1.3 ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
+.heal-stages .aside { font-size: 13px; color: var(--muted); }
+.heal-stages .link { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 10px; padding-left: 18px; min-height: 56px; }
+.heal-stages .link svg { width: 28px; height: 44px; color: var(--muted); }
+.heal-stages .link.up svg { color: var(--amber); }
+.heal-stages .link span { font-size: 13px; color: var(--muted); }
+.heal-stages .link b { color: var(--text); font-weight: 700; }
+@media (max-width: 420px) { .heal-stages .scope { grid-template-columns: 1fr; gap: 6px; } }
+</style>
+<figure aria-label="heal 的三段式递进。基线回放失败则进入阶段 1；阶段 1 的失败点未推进则进入阶段 2；期限前仍有失败则进入阶段 3">
 
-阶段 1 尝试在首个失败边界（failing frontier）执行 grounding 修复；推进该边界会记录元素重新定位（element regrounding）或 AI 重新回溯（AI retracing）。
+<div class="node"><div class="top"><span class="num">BASELINE</span><span class="chip replay">不调用 AI</span></div><h3>按失败关闭的方式回放基线</h3><p class="aside">没有失败则自愈直接结束，不做修复</p></div>
 
-阶段 2 仅在阶段 1 未能推进失败边界时，才尝试结构化的单步或尾部修复（single-step/tail repair）。
+<div class="link" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>出现失败后</b>，启用解析并重新测量</span></div>
 
-阶段 3 仅在仍有失败存在且用例未在其截止期限处停止时，才尝试全计划修复（full-plan repair）。
+<div class="node stage"><div class="top"><span class="num">STAGE 1</span><span class="chip ai">可能调用 AI</span></div><h3>修复定位缓存</h3><div class="scope"><div class="track"><div class="fill" style="width:22%"></div></div><span>最初失败的位置</span></div><p>自愈重新定位失败点的元素。位置推进后，记为重新建立定位缓存或 AI 重新追踪。</p></div>
 
-相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#repair-model)、[步骤](/ambercast/zh-cn/spec/steps/)、[重放与 grounding](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>失败点未推进时</b></span></div>
 
-## 约束增量修复的预算机制 {#repair-budgets}
+<div class="node stage"><div class="top"><span class="num">STAGE 2</span><span class="chip ai">可能调用 AI</span></div><h3>修复单个 step 或其后全部</h3><div class="scope"><div class="track"><div class="fill" style="width:55%"></div></div><span>单个 step 或尾部</span></div><p>自愈修复失败的那个 step，或连同其后的全部 step 一起修复。</p></div>
 
-为了防止增量修复发散，系统引入了具体的预算机制。配置项 `heal.maxStepRepairs` 是一个可选的正整数配置值。自愈用例在创建其调度预算（dispatch budget）时，若该项未设置则使用 `Infinity`，若已设置则采用 `maxStepRepairs` 的配置值。
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>仍有失败且未超期限时</b></span></div>
 
-用例的时间消耗同样受到严格约束。配置项 `heal.caseTimeoutMs` 是一个正整数，并在基线重放开始之前确立用例级别的准入截止时间（case-wide admission deadline）。该超时会阻止新的修复阶段或调度启动；但它不会中断正在进行的工作（in-flight work），也不会使已生成的提交（commit）失效。
+<div class="node stage"><div class="top"><span class="num">STAGE 3</span><span class="chip ai">可能调用 AI</span></div><h3>重建整份执行计划</h3><div class="scope"><div class="track"><div class="fill" style="width:100%"></div></div><span>整份执行计划</span></div><p>自愈解析 AI executor 并调用 generate，重建整份执行计划。</p></div>
+
+</figure>
+</div>
+
+依次尝试从轻量到重量级的修复，是为了避免不必要的 AI 调用与开销。
+
+相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#repair-model)、[步骤](/ambercast/zh-cn/spec/steps/)、[重放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)
+
+## 限制修复次数与时长的预算 {#repair-budgets}
+
+可以设置两种上限，防止自愈无限期尝试下去。
+
+- `heal.maxStepRepairs`：单次自愈尝试修复 step 的次数上限，取正整数；省略时不设上限。
+- `heal.caseTimeoutMs`：整次自愈可用时长的上限，单位毫秒，在首次回放开始前就已确定。超过该期限后不再开始新的修复，但不会强制中止已在进行的工作，也不会废弃已生成的修复。
 
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/#heal)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#limits)
 
-## 确认机制隔离测量与写入 {#confirmation-and-writes}
+## 写入前必须确认 {#confirmation-and-writes}
 
-修复方案的可审查性依赖于测量与写入之间的清晰分离。在自愈过程中，每个用例都会在私有覆盖层（private overlay）中累积候选工件；返回的提交能力（commit capability）是真正写入工件的唯一途径。
+自愈找到修复方案后，项目文件此时仍未发生任何改动。方案会先存入临时位置，只有在用户查看并批准后，才会写入实际文件。
 
-确认环节发生在测量之后、首次提交之前，因此系统提示可以在写入先于许可发生之前，向您展示待处理的文件以及修复类型。
+这样一来，写入发生之前就能确认哪个文件会如何改变。
 
-命令行选项进一步界定了这一确认边界：`--dry-run` 绝不提示确认，也绝不执行提交；`--yes` 是对确认边界的预先授权，但不能替代智能体获取用户授权。在未提供 `--yes` 的情况下，非交互式调用者将收到配置错误，而不会发生隐式写入。
+:::caution
+加上 `--dry-run` 后不会请求确认，只展示结果，也不会写入任何文件。`--yes` 只是省略 CLI 的确认提示，本身并不代表用户已批准改动。
+
+通过 agent 执行且既没有 `--yes` 也无法交互式确认时，ambercast 会直接以错误停止，不会静默写入。
+
+:::
 
 相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#confirmation)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)、[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)
 

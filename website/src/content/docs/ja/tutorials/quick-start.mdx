@@ -1,6 +1,6 @@
 ---
 title: 5分で動かす最初のテスト
-description: プロジェクトの初期化から生成・リプレイ・確認まで、最初の生成テストを5分で動かすチュートリアル。
+description: プロジェクトの初期化から生成・再生・確認まで、最初の生成テストを5分で動かすチュートリアル。
 ---
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
@@ -20,6 +20,25 @@ ambercastは次の既定値を使う。
 
 ## 手順 \{#steps}
 
+`npx ambercast init` を実行して承認すると、次のファイルが作成される。
+
+- `ambercast.config.json`（既定の`testDir`・`target`を書き込んだ設定ファイル）
+- `tests/ambercast/find-page.test.md`（サンプルのテストプロンプト）
+- `.gitignore`への追記、`AGENTS.md`への追記
+
+作成されるサンプルプロンプトの内容は次のとおり。
+
+```markdown
+# Find a page
+
+When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
+```
+
+:::caution
+`init`はURLを尋ねない。既定の`ambercast.config.json`は`http://localhost:3000`を対象にする。アプリが別のURLで動く場合は、先に`targets.web-user.baseUrl`を書き換える。
+
+:::
+
 <Steps>
 
 1. ## プロジェクトを初期化する \{#init}
@@ -28,26 +47,7 @@ ambercastは次の既定値を使う。
    npx ambercast init
    ```
 
-   確認プロンプトで承認すると、次のファイルが作成される。
-
-   - `ambercast.config.json`（既定の`testDir`・`target`を書き込んだ設定ファイル）
-   - `tests/ambercast/find-page.test.md`（サンプルのテストプロンプト）
-   - `.gitignore`への追記、`AGENTS.md`への追記
-
-   作成されるサンプルプロンプトの内容は次のとおり。
-
-   ```markdown
-   # Find a page
-
-   When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
-   ```
-
-   :::caution
-   `init`はURLを尋ねない。既定の`ambercast.config.json`は`http://localhost:3000`を対象にする。アプリが別のURLで動く場合は、先に`targets.web-user.baseUrl`を書き換える。
-
-   :::
-
-2. ## アプリを起動してプランを生成する \{#generate}
+2. ## アプリを起動して計画を生成する \{#generate}
 
    人またはオペレーターが、設定した`baseUrl`でアプリケーションを起動して確認する。
 
@@ -58,11 +58,11 @@ ambercastは次の既定値を使う。
    成功すると次の状態になる。
 
    - 終了コード`0`、結果ステータス`generated`
-   - 生成されたプロンプトの隣に、planとgroundingの2つの派生ファイルが書き出される
+   - 生成されたプロンプトの隣に、計画（plan）とグラウンディング（grounding）の2つの派生ファイルが書き出される
 
    セットアッププロンプト（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使うエージェントは、サーバーが既に起動していると想定する。依頼が無い限り自分では起動しない。
 
-3. ## リプレイを実行する \{#run}
+3. ## 再生を実行する \{#run}
 
    ```bash
    npx ambercast run --resolve tests/ambercast/find-page.test.md
@@ -79,7 +79,7 @@ ambercastは次の既定値を使う。
    git status --short
    ```
 
-   追跡済みの変更ファイルはすべて`git diff -- <path>`でレビューする。未追跡のprompt・plan・groundingの各パスは、内容全体を確認するか`git diff --no-index /dev/null <path>`を実行する。
+   追跡済みの変更ファイルはすべて`git diff -- <path>`でレビューする。未追跡のprompt・計画・グラウンディングの各パスは、内容全体を確認するか`git diff --no-index /dev/null <path>`を実行する。
 
    レビュー後、人が3つのファイルをコミットする。初期化で作成された`ambercast.config.json`等も、通常どおり別途レビューしてコミットする。
 

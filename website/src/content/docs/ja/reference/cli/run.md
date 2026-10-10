@@ -1,9 +1,9 @@
 ---
 title: ambercast run
-description: ambercast run コマンドのフラグ、リプレイパス、明示的な AI 解決、グラウンディングの書き戻し、レポートの永続化を解説する。
+description: ambercast run コマンドのフラグ、再生パス、明示的な AI 解決、グラウンディングの書き戻し、レポートの永続化を解説する。
 ---
 
-`ambercast run` はテストプロンプトをターゲット環境に対して実行し、決定論的なリプレイと実行結果の書き込みを管理する。リプレイは既定で AI を呼び出さない。グラウンディングミスは `grounding-unresolved`（終了コード 4）としてフェイルクローズし、`--resolve` の利用を案内する。ミスをライブ AI で解決するには `--resolve` を渡す。
+`ambercast run` はテストプロンプトをターゲット環境に対して実行し、決定論的な再生（replay）と実行結果の書き込みを管理する。再生は既定で AI を呼び出さない。グラウンディング（grounding）ミスは `grounding-unresolved`（終了コード 4）としてフェイルクローズし、`--resolve` の利用を案内する。ミスをライブ AI で解決するには `--resolve` を渡す。
 
 ## フラグ {#flags}
 
@@ -17,7 +17,7 @@ description: ambercast run コマンドのフラグ、リプレイパス、明�
 | --stale | fail\|regenerate | stale（古くなった状態）ポリシーのパーサー値 | fail |
 | --ai | claude\|codex | 解決プロバイダーのオーバーライド | omitted |
 | --allow-empty | boolean | 空の選択を許可 | false |
-| --list | boolean | リプレイを実行せずに一覧表示 | false |
+| --list | boolean | 再生を実行せずに一覧表示 | false |
 | --json | boolean | JSONエンベロープ形式で出力 | false |
 | --no-color | boolean | ANSIエスケープシーケンスを無効化 | false |
 
@@ -25,11 +25,11 @@ description: ambercast run コマンドのフラグ、リプレイパス、明�
 
 <a id="replay-paths"></a>
 
-## リプレイ {#replay}
+## 再生 {#replay}
 
 | 条件 | AIプロバイダー | 結果パス |
 | --- | --- | --- |
-| グラウンディングヒット | そのリプレイでは使用しない | 決定論的リプレイ |
+| グラウンディングヒット | その再生では使用しない | 決定論的再生 |
 | グラウンディングミス、`--resolve` なし | なし | `grounding-unresolved`（終了コード 4）としてフェイルクローズ |
 | グラウンディングミス、`--resolve` あり | リゾルバー（`--ai` によるオーバーライド） | ライブ AI 解決および書き戻しの可能性 |
 
@@ -37,7 +37,7 @@ description: ambercast run コマンドのフラグ、リプレイパス、明�
 
 ## AI呼び出し {#ai-calls}
 
-プロバイダーの解決機構は run ユースケースに渡されるため、グラウンディング済みのリプレイは利用可能なプロバイダーが無くても進行する。キャッシュミスでその解決機構を使えるのは、`--resolve` を指定した場合だけである。
+プロバイダーの解決機構は run ユースケースに渡されるため、グラウンディング済みの再生は利用可能なプロバイダーが無くても進行する。キャッシュミスでその解決機構を使えるのは、`--resolve` を指定した場合だけである。
 
 ## 不足しているグラウンディングを解決する {#resolve}
 

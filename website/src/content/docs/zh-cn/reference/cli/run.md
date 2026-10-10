@@ -3,7 +3,7 @@ title: ambercast run
 description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与运行写入行为。
 ---
 
-`ambercast run` 负责测试的回放路径与运行写入。默认不调用 AI：grounding 未命中会以 `grounding-unresolved` 失败关闭 (退出码 4)，并提示使用 `--resolve`。只有传入 `--resolve` 才会为未命中显式启用实时 AI 解析。
+`ambercast run` 负责测试的回放路径与运行写入。默认不调用 AI：定位缓存未命中会以 `grounding-unresolved` 失败关闭 (退出码 4)，并提示使用 `--resolve`。只有传入 `--resolve` 才会为未命中显式启用实时 AI 解析。
 
 ## 标志 {#flags}
 
@@ -12,7 +12,7 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 | files | path[] | 字面 prompt 路径；缺省时执行发现机制 | discovery |
 | --grep | pattern | 路径的正则表达式过滤器 | omitted |
 | --headed | boolean | 有头浏览器 | false |
-| --resolve | boolean | 为 grounding 未命中显式启用实时 AI 解析 | false |
+| --resolve | boolean | 为定位缓存未命中显式启用实时 AI 解析 | false |
 | --update-cache | boolean | 请求写入缓存 | false |
 | --stale | fail\|regenerate | stale（已过期）策略解析值 | fail |
 | --ai | claude\|codex | 解析提供商覆盖 | omitted |
@@ -21,7 +21,7 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 | --json | boolean | JSON 封套 | false |
 | --no-color | boolean | 禁用 ANSI 颜色 | false |
 
-`--resolve`、`--ai` 的行为见[解析缺失的 grounding](#resolve)，`--update-cache` 见 [Grounding 写回](#grounding-write-back)，`--stale=regenerate` 的拒绝时机见下一节。
+`--resolve`、`--ai` 的行为见[解析缺失的定位缓存](#resolve)，`--update-cache` 见[定位缓存写回](#grounding-write-back)，`--stale=regenerate` 的拒绝时机见下一节。
 
 <a id="replay-paths"></a>
 
@@ -29,9 +29,9 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 
 | 条件 | AI 提供商 | 结果路径 |
 | --- | --- | --- |
-| grounding 命中 | 该次回放无需提供商 | 确定性回放 |
-| grounding 未命中，未传入 `--resolve` | 无 | 以 `grounding-unresolved` 失败关闭（退出码 4） |
-| grounding 未命中，传入 `--resolve` | 解析器；`--ai` 可覆盖 | 实时 AI 解析并可能写回 |
+| 定位缓存命中 | 该次回放无需提供商 | 确定性回放 |
+| 定位缓存未命中，未传入 `--resolve` | 无 | 以 `grounding-unresolved` 失败关闭（退出码 4） |
+| 定位缓存未命中，传入 `--resolve` | 解析器；`--ai` 可覆盖 | 实时 AI 解析并可能写回 |
 
 运行时在加载配置或执行文件 I/O 之前，会直接拒绝 `--stale=regenerate`。
 
@@ -39,15 +39,15 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 
 ## AI 调用 {#ai-calls}
 
-`run` 始终持有提供商解析器，但具备 grounding 的回放即使没有可用提供商也能推进，并不会调用它。只有传入 `--resolve` 时，grounding 未命中才会调用该解析器。
+`run` 始终持有提供商解析器，但具备定位缓存的回放即使没有可用提供商也能推进，并不会调用它。只有传入 `--resolve` 时，定位缓存未命中才会调用该解析器。
 
-## 解析缺失的 grounding {#resolve}
+## 解析缺失的定位缓存 {#resolve}
 
-`--resolve` 会显式启用 AI 解析路径。未传入时，grounding 未命中会失败关闭，而不会分发提供商。
+`--resolve` 会显式启用 AI 解析路径。未传入时，定位缓存未命中会失败关闭，而不会分发提供商。
 
-## Grounding 写回 {#grounding-write-back}
+## 定位缓存写回 {#grounding-write-back}
 
-仅当解析后的写回门禁允许时，`run` 才会写入发生变更的 grounding。`--update-cache` 是该门禁的显式输入之一：在 CI 环境中与 `ci.updateGroundingCache` 组合判定，在本地环境中与 `localWriteBack` 配置组合判定。有关本地与 CI 环境下的所有判定条件，请参见[配置](/ambercast/zh-cn/reference/configuration/#grounding)。
+仅当解析后的写回门禁允许时，`run` 才会写入发生变更的定位缓存。`--update-cache` 是该门禁的显式输入之一：在 CI 环境中与 `ci.updateGroundingCache` 组合判定，在本地环境中与 `localWriteBack` 配置组合判定。有关本地与 CI 环境下的所有判定条件，请参见[配置](/ambercast/zh-cn/reference/configuration/#grounding)。
 
 ## 报告与退出状态 {#report-and-exits}
 

@@ -19,7 +19,7 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 ## 3段階のエスカレーション {#three-stages}
 
-ヒーリングはまず、AIを使わない通常のリプレイでテストを再実行し、本当に失敗するかどうかを確かめる。ここで失敗が再現しなかった場合、それ以上の修復は行わない。失敗が再現したときだけ、次の3段階に進む。
+ヒーリングはまず、AIを使わない通常の再生（replay）でテストを実行し、本当に失敗するかどうかを確かめる。ここで失敗が再現しなかった場合、それ以上の修復は行わない。失敗が再現したときだけ、次の3段階に進む。
 
 <div class="heal-stages">
 <style>
@@ -83,14 +83,14 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 軽い対応から重い対応へと順に試すのは、無駄なAI呼び出しとコストを避けるためである。
 
-関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#repair-model)、[ステップ](/ambercast/ja/spec/steps/)、[リプレイとグラウンディング](/ambercast/ja/explanation/replay-and-grounding/#drift-handoff)
+関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#repair-model)、[ステップ](/ambercast/ja/spec/steps/)、[再生とグラウンディング](/ambercast/ja/explanation/replay-and-grounding/#drift-handoff)
 
 ## 修復の回数と時間を制限するバジェット {#repair-budgets}
 
 ヒーリングがいつまでも試行を続けないよう、2種類の上限を設定できる。
 
 - `heal.maxStepRepairs`: 1回のヒーリングでステップの修復を試みる回数の上限。正の整数で指定し、省略すると上限なしになる
-- `heal.caseTimeoutMs`: ヒーリング全体にかけてよい時間の上限（ミリ秒）。この期限は最初のリプレイを始める前に決まる。期限を過ぎると新しい修復は始めないが、すでに進行中の作業を強制的に止めたり、できあがった修正を無効にしたりはしない
+- `heal.caseTimeoutMs`: ヒーリング全体にかけてよい時間の上限（ミリ秒）。この期限は最初の再生を始める前に決まる。期限を過ぎると新しい修復は始めないが、すでに進行中の作業を強制的に止めたり、できあがった修正を無効にしたりはしない
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#heal)、[ambercast heal](/ambercast/ja/reference/cli/heal/#limits)
 

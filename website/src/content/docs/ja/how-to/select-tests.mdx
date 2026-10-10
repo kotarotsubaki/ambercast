@@ -7,7 +7,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ## 前提条件 \{#prerequisites}
 
-既定のディスカバリーは `**/*.test.md` に一致し、runs・plans・グラウンディングのコンパニオンファイルは無視する。
+既定のディスカバリーは `**/*.test.md` に一致し、runs・計画（plan）・グラウンディング（grounding）のコンパニオンファイルは無視する。
 
 ## 手順 \{#steps}
 
@@ -19,7 +19,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    npx ambercast run tests/ambercast/sign-in.test.md --list
    ```
 
-   位置引数はリテラルのプロンプトパスとして扱われ、`--list` はリプレイを実行せずに結果を返す。
+   位置引数はリテラルのプロンプトパスとして扱われ、`--list` は再生（replay）を実行せずに結果を返す。
 
 2. ### 正規表現で絞り込む \{#grep-filter}
 

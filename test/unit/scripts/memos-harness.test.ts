@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -622,6 +623,101 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       await observed;
     }
   }, 10_000);
+
+  it.each([false, true])('TEST-64 kills a generate-mode child blocked reading stdin, through a grandchild, on abort (ignore TERM=%s)', async ignoreTerm => {
+    const dir = temporaryRoot();
+    const fifo = join(dir, 'stdin.fifo');
+    execFileSync('mkfifo', [fifo]);
+    const writerFd = fs.openSync(fifo, 'r+');
+    const pidFile = join(dir, 'pid');
+    const grandchildPidFile = join(dir, 'grandchild-pid');
+    const controller = new AbortController();
+    // A backgrounded job gets its own stdin reassigned by the shell's job
+    // control, even non-interactively; `<&0` re-attaches the fifo explicitly.
+    const script = `${ignoreTerm ? 'trap "" TERM; ' : ''}exec < "$1"; echo $$ > "$2"; cat <&0 & echo $! > "$3"; wait`;
+    let pid: number | undefined;
+    let rejected = false;
+    let launchError: unknown;
+    const observed = runProcess('sh', ['-c', script, 'memos-test', fifo, pidFile, grandchildPidFile],
+      { signal: controller.signal, stdio: 'generate', onStderrChunk: () => {} })
+      .catch((error: unknown) => { rejected = true; launchError = error; return undefined; });
+    try {
+      const deadline = Date.now() + 2000;
+      while (!fs.existsSync(pidFile) && !rejected && Date.now() < deadline) await delay(10);
+      if (rejected) throw launchError;
+      expect(fs.existsSync(pidFile)).toBe(true);
+      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      expect(pid).toBeGreaterThan(0);
+      expect(() => process.kill(-pid!, 0)).not.toThrow();
+      while (!fs.existsSync(grandchildPidFile) && !rejected && Date.now() < deadline) await delay(10);
+      if (rejected) throw launchError;
+      expect(fs.existsSync(grandchildPidFile)).toBe(true);
+      const grandchildPid = Number(fs.readFileSync(grandchildPidFile, 'utf8').trim());
+      expect(grandchildPid).toBeGreaterThan(0);
+      expect(() => process.kill(grandchildPid, 0)).not.toThrow();
+      await delay(100);
+      const started = Date.now();
+      controller.abort();
+      const result = await observed;
+      expect(Date.now() - started).toBeLessThan(6000);
+      expect(result?.signal).toBe(ignoreTerm ? 'SIGKILL' : 'SIGTERM');
+      let gone: unknown;
+      try { process.kill(-pid, 0); } catch (error) { gone = error; }
+      expect(gone).toMatchObject({ code: 'ESRCH' });
+    } finally {
+      fs.closeSync(writerFd);
+      controller.abort();
+      if (pid) {
+        try { process.kill(-pid, 'SIGKILL'); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+        }
+      }
+      await observed;
+    }
+  }, 10_000);
+
+  it('TEST-74 generate mode inherits stdin/stderr and forwards only captured stdout to the sink', async () => {
+    const myStdin = fs.fstatSync(0), myStderr = fs.fstatSync(2), myStdout = fs.fstatSync(1);
+    const script = "const fs=require('fs');const r={};for(const fd of [0,1,2]){try{const s=fs.fstatSync(fd);r[fd]=[s.dev,s.ino];}catch{r[fd]=null;}}process.stdout.write(JSON.stringify(r)+'\\n');process.stdout.write('generate output\\n');";
+    const sink: string[] = [];
+    const result = await runProcess(process.execPath, ['-e', script], {
+      stdio: 'generate', onStderrChunk: (chunk: string) => sink.push(chunk),
+    });
+    expect(result.status).toBe(0);
+    const [reportLine] = result.stdout.trim().split('\n');
+    const report = JSON.parse(reportLine!);
+    expect(report['0']).toEqual([myStdin.dev, myStdin.ino]);
+    expect(report['2']).toEqual([myStderr.dev, myStderr.ino]);
+    expect(report['1']).not.toEqual([myStdout.dev, myStdout.ino]);
+    expect(sink.join('')).toBe(result.stdout);
+  });
+
+  it('TEST-74 resolve mode pipes both streams and redacts a password split across chunks', async () => {
+    const myStdout = fs.fstatSync(1), myStderr = fs.fstatSync(2);
+    const password = 'ab'.repeat(16);
+    const script = "const fs=require('fs');const r={};for(const fd of [1,2]){try{const s=fs.fstatSync(fd);r[fd]=[s.dev,s.ino];}catch{r[fd]=null;}}process.stdout.write(JSON.stringify(r)+'\\n');"
+      + `const secret=${JSON.stringify(password)};process.stdout.write('out-before '+secret.slice(0,8));process.stderr.write('err-before '+secret.slice(0,10));`
+      + `setTimeout(()=>{process.stdout.write(secret.slice(8)+' out-after\\n');process.stderr.write(secret.slice(10)+' err-after\\n');},30);`;
+    const sink: string[] = [];
+    const result = await runProcess(process.execPath, ['-e', script], {
+      stdio: 'resolve', password, onStderrChunk: (chunk: string) => sink.push(chunk),
+    });
+    expect(result.status).toBe(0);
+    const [reportLine] = result.stdout.trim().split('\n');
+    const report = JSON.parse(reportLine!);
+    expect(report['1']).not.toEqual([myStdout.dev, myStdout.ino]);
+    expect(report['2']).not.toEqual([myStderr.dev, myStderr.ino]);
+    expect(result.stdout).toContain(password);
+    expect(result.stderr).toContain(password);
+    const forwarded = sink.join('');
+    // stdout and stderr are independent streams forwarded through the same
+    // sink; their chunks can interleave in real time, so this only checks
+    // that each stream's own redaction succeeded, not cross-stream adjacency.
+    expect(forwarded).not.toContain(password);
+    expect(forwarded).toContain('out-before'); expect(forwarded).toContain('out-after');
+    expect(forwarded).toContain('err-before'); expect(forwarded).toContain('err-after');
+    expect(forwarded.match(/\[redacted\]/g)).toHaveLength(2);
+  });
 });
 
 describe('buildChildEnv', () => {

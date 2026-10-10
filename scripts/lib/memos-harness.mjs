@@ -537,9 +537,11 @@ export function defaultIsPidAlive(pid) {
  * @param command - Executable path or name.
  * @param args - Argument vector, never containing the password.
  * @param opts - cwd, env, timeoutMs, signal and stdio policy (`'capture'` by
- *   default, `'inherit-stderr'`, or `'generate'`). When `stdio` is `'generate'`,
- *   `opts` must include `password` (the secret string to redact) and
- *   `onStderrChunk` (a sink writing to the harness's own stderr).
+ *   default, `'inherit-stderr'`, `'generate'`, or `'resolve'`). `'generate'` and
+ *   `'resolve'` additionally require `onStderrChunk` (a sink writing to the
+ *   harness's own stderr); `'resolve'` additionally requires `password` (the
+ *   secret string to redact). `'generate'` runs before any password exists, so
+ *   it forwards its captured stdout verbatim.
  * @returns status, stdout, stderr and signal; nonzero exits remain results for the caller.
  * @throws Propagates process launch failures.
  * @remarks On abort/timeout, send group SIGTERM immediately and poll for ESRCH
@@ -548,18 +550,20 @@ export function defaultIsPidAlive(pid) {
  * and resolve with signal SIGKILL rather than hanging the harness.
  * ponytail: This is a best-effort cleanup bound, not a guarantee that a stuck
  * process group cannot outlive the harness.
- * The generate/resolve streaming path inherits consent stdin but captures both
- * stdout and stderr before forwarding sanitized output to harness stderr. Each
- * stream retains a password.length - 1 byte carry-over buffer across chunks so
+ * `'generate'` inherits stdin and stderr (consent needs a real TTY on both ends
+ * per SPEC-2's 2026-10-11 revision) and only captures/forwards stdout.
+ * `'resolve'` inherits stdin but captures and forwards both stdout and stderr,
+ * each with a password.length - 1 byte carry-over buffer across chunks so
  * matching happens before any potentially split secret is forwarded. Captured
  * report data (redaction 前の生データ) remains available for disclosure judging.
  */
 export async function runProcess(command, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const mode = opts.stdio ?? 'capture';
+    const forwarding = mode === 'generate' || mode === 'resolve';
     const child = spawn(command, args, { cwd: opts.cwd, env: opts.env, detached: true,
-      stdio: mode === 'inherit-stderr' ? ['inherit', 'pipe', 'inherit']
-        : mode === 'generate' ? ['inherit', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
+      stdio: mode === 'inherit-stderr' || mode === 'generate' ? ['inherit', 'pipe', 'inherit']
+        : mode === 'resolve' ? ['inherit', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let status = null;
@@ -571,9 +575,17 @@ export async function runProcess(command, args, opts = {}) {
     function capture(stream, save) {
       if (!stream) return;
       stream.setEncoding('utf8');
+      if (!forwarding || !opts.onStderrChunk) {
+        stream.on('data', chunk => { save(chunk); });
+        return;
+      }
       let carry = '';
       const password = opts.password;
       function forward(final = false) {
+        if (!password) {
+          if (carry) { opts.onStderrChunk(carry); carry = ''; }
+          return;
+        }
         const boundary = final ? carry.length : Math.max(0, carry.length - password.length + 1);
         let cursor = 0;
         let output = '';
@@ -590,15 +602,10 @@ export async function runProcess(command, args, opts = {}) {
         carry = carry.slice(cursor);
         if (output) opts.onStderrChunk(output);
       }
-      stream.on('data', chunk => {
-        save(chunk);
-        if (mode === 'generate') { carry += chunk; forward(); }
-      });
-      if (mode === 'generate') {
-        const flush = () => forward(true);
-        stream.once('end', flush);
-        flushers.push(flush);
-      }
+      stream.on('data', chunk => { save(chunk); carry += chunk; forward(); });
+      const flush = () => forward(true);
+      stream.once('end', flush);
+      flushers.push(flush);
     }
     capture(child.stdout, chunk => { stdout += chunk; });
     capture(child.stderr, chunk => { stderr += chunk; });

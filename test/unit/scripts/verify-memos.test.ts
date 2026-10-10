@@ -71,6 +71,7 @@ function createFakeDeps(overrides: Overrides = {}) {
   const runnerCalls: RunnerCall[] = [], processCalls: ProcessCall[] = [], starts: ContainerSpec[] = [];
   const fetchCalls: { url: string; opts: RequestInit }[] = [], signalCalls: { method: string; name: string; handler: () => void }[] = [];
   const containers = new Set<string>(), handlers = new Map<string, Set<() => void>>();
+  const randomBytesSizes: number[] = [];
   let now = 0, sequence = 0;
   const signals = {
     on(name: string, handler: () => void) { signalCalls.push({ method: 'on', name, handler });
@@ -111,7 +112,7 @@ function createFakeDeps(overrides: Overrides = {}) {
   const deps = {
     runner, tmpRoot, repoRoot, uid: 501, gid: 20,
     stdout: { write(s: string) { stdout.push(String(s)); } }, stderr: { write(s: string) { stderr.push(String(s)); } },
-    randomBytes(size: number) { if (size === 16) return Buffer.from(password, 'hex'); const bytes = Buffer.alloc(size); bytes.writeUInt32BE(++sequence); return bytes; },
+    randomBytes(size: number) { randomBytesSizes.push(size); if (size === 16) { events.push('password-generated'); return Buffer.from(password, 'hex'); } const bytes = Buffer.alloc(size); bytes.writeUInt32BE(++sequence); return bytes; },
     clock: { now: () => now, async sleep(ms: number, signal?: AbortSignal) { signal?.throwIfAborted(); now += ms; } },
     async assertPortFree(...args: unknown[]) { events.push('port'); return overrides.assertPortFree?.(...args as never[]); },
     readPlaywrightVersion(...args: unknown[]) { events.push('version'); return overrides.readPlaywrightVersion ? overrides.readPlaywrightVersion(...args as never[]) : '1.62.1'; },
@@ -134,6 +135,7 @@ function createFakeDeps(overrides: Overrides = {}) {
     tmpRoot, repoRoot, fixture, manifest, successfulProcess,
     out: () => stdout.join(''), err: () => stderr.join(''), calls: (kind: string) => processCalls.filter((c) => c.kind === kind),
     runnerCount: (method: string) => runnerCalls.filter((c) => c.method === method).length,
+    passwordGenerated: () => randomBytesSizes.includes(16),
     roots: () => fs.readdirSync(tmpRoot).filter((name) => name.startsWith('ambercast-verify-memos-')) };
 }
 type Fake = ReturnType<typeof createFakeDeps>;
@@ -607,7 +609,8 @@ describe('main', () => {
       expect(emitted).toBe(true);
       const expectedStage = stage === 'check' || stage === 'generate' ? 'fixture' : stage === 'resolve' ? 'replay' : stage;
       expect(last(f)).toBe(`verify-memos: FAIL stage=${expectedStage} reason=interrupted aiCalls=n/a`);
-      const hasContainer = !['pack', 'install', 'chromium', 'check'].includes(stage);
+      // 2026-10-11 revision: generate now runs before any container exists.
+      const hasContainer = !['pack', 'install', 'chromium', 'check', 'generate'].includes(stage);
       expect(f.runnerCount('removeContainer')).toBe(hasContainer ? 1 : 0);
       expect(f.containers.size).toBe(0); expect(f.roots()).toEqual([]);
       if (hasContainer) expect(f.events).toContain('teardown-finished');
@@ -645,23 +648,25 @@ describe('main', () => {
   });
 
   describe('regenerate', () => {
-    it.each(['generate', 'resolve'])('TEST-70 redacts split secrets from %s streams while preserving judge evidence', async (stage) => {
+    it('TEST-70 redacts split secrets from resolve streams while preserving judge evidence', async () => {
+      // 2026-10-11 revision: generate no longer carries a password (it runs
+      // before one exists), so only resolve's chunk-split redaction is
+      // exercised here; generate's stdio wiring is covered by TEST-57/58/74.
       const raw = `before ${password} after`;
       const resolveReport = JSON.stringify({ ...report, runId: 'resolve-run', errors: [{ code: 'STREAM_SECRET', message: raw }],
         results: [{ status: 'passed', aiCalls: 9 }] });
       let captured: ProcessResult | undefined;
       const f: Fake = createFakeDeps({ runProcess: async (call) => {
-        if (call.kind === stage) {
+        if (call.kind === 'resolve') {
           await f.successfulProcess(call);
-          if (stage === 'resolve') write(join(call.opts.cwd, 'tests/ambercast/.runs/resolve-run/report.json'), resolveReport);
+          write(join(call.opts.cwd, 'tests/ambercast/.runs/resolve-run/report.json'), resolveReport);
           vi.mocked(childProcess.spawn).mockImplementationOnce(() => {
             const child = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; pid: number };
             child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.pid = 12345;
             queueMicrotask(() => {
-              const out = stage === 'resolve' ? resolveReport : raw;
-              const at = out.indexOf(password) + 8;
-              child.stdout.emit('data', Buffer.from(out.slice(0, at)));
-              child.stdout.emit('data', Buffer.from(out.slice(at)));
+              const at = resolveReport.indexOf(password) + 8;
+              child.stdout.emit('data', Buffer.from(resolveReport.slice(0, at)));
+              child.stdout.emit('data', Buffer.from(resolveReport.slice(at)));
               child.stderr.emit('data', Buffer.from(raw.slice(0, 8 + 8)));
               child.stderr.emit('data', Buffer.from(raw.slice(8 + 8)));
               child.emit('exit', 0, null); child.emit('close', 0, null);
@@ -671,19 +676,21 @@ describe('main', () => {
           captured = await runProcess(call.argv[0], call.argv.slice(1), call.opts) as ProcessResult;
           expect(captured.stdout).toContain(password);
           expect(captured.stderr).toContain(password);
-          if (stage === 'generate') write(join(call.opts.cwd, plan), captured.stdout);
           return captured;
         }
         if (call.kind === 'judge') {
           const roots = JSON.parse(call.opts.env.AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS!) as string[];
           expect(roots).toEqual(expect.arrayContaining([join(dirname(f.calls('install')[0]!.opts.cwd), 'project/tests/ambercast/.runs')]));
-          if (stage === 'resolve') expect(fs.readFileSync(join(roots[0]!, 'resolve-run/report.json'), 'utf8')).toContain(password);
-          else expect(fs.readFileSync(roots[1]!, 'utf8')).toContain(password);
+          const savedReport = join(dirname(f.calls('install')[0]!.opts.cwd), 'resolve-report.json');
+          expect(fs.readFileSync(savedReport, 'utf8')).toBe(captured!.stdout);
         }
         return f.successfulProcess(call);
       } });
-      expect(await run(f, ['--regenerate'])).toBe(0);
+      expect(await run(f, ['--regenerate', '--keep'])).toBe(0);
+      const savedReport = join(dirname(f.calls('install')[0]!.opts.cwd), 'resolve-report.json');
+      expect(fs.readFileSync(savedReport, 'utf8')).toBe(captured!.stdout);
       expect(captured).toBeDefined(); expect(f.err()).toContain('before ');
+      expect(f.err()).toContain('[redacted]');
       expect(f.err()).not.toContain(password); expect(f.out()).not.toContain(password);
       expect(f.calls('judge')).toHaveLength(1);
     });
@@ -702,22 +709,31 @@ describe('main', () => {
       expect(last(f)).toContain('exit=1'); expect(last(f)).toContain('secret disclosed');
       expect(f.calls('judge')).toHaveLength(1);
     });
-    it('TEST-57 runs generate, resolve, a full reset, then a normal replay, in order', async () => {
+    it('TEST-57 runs generate before any password or container, then resolve, a full reset, then a normal replay, in order', async () => {
       vi.stubEnv('CI', '1'); vi.stubEnv('GITHUB_ACTIONS', 'true'); vi.stubEnv('AMBERCAST_AI_PROVIDER', 'claude');
+      vi.stubEnv('AMBERCAST_SECRET_OLD', 'stale');
       const f: Fake = createFakeDeps({ runProcess: async (call) => {
         if (call.kind === 'generate') {
-          expect(f.events).toContain('/api/v1/auth/signin');
+          // 2026-10-11 revision: generate runs before any password exists and
+          // before the instance is ever started (SPEC-13), so consent's TTY
+          // check never collides with piped redaction.
+          expect(f.events).not.toContain('startContainer');
+          expect(f.events).not.toContain('/api/v1/auth/signin');
+          expect(f.passwordGenerated()).toBe(false);
           expect(JSON.parse(fs.readFileSync(join(call.opts.cwd, files[0]), 'utf8')).secrets.allow).toEqual([]);
           expect(fs.existsSync(join(call.opts.cwd, prompt))).toBe(true);
           expect(fs.existsSync(join(call.opts.cwd, plan))).toBe(false); expect(fs.existsSync(join(call.opts.cwd, grounding))).toBe(false);
           expect(call.argv).toEqual([join(call.opts.cwd, 'node_modules/.bin/ambercast'), 'generate', prompt, '--ai', 'codex']);
-          expect(call.opts.stdio).toBe('generate'); expect(call.opts.password).toBe(password);
+          expect(call.opts.stdio).toBe('generate'); expect(call.opts.password).toBeUndefined();
           expect(call.opts.onStderrChunk).toBeTypeOf('function');
+          expect(Object.keys(call.opts.env ?? {}).some((key) => key.startsWith('AMBERCAST_SECRET_'))).toBe(false);
         }
         if (call.kind === 'resolve') {
+          expect(f.passwordGenerated()).toBe(true);
           expect(JSON.parse(fs.readFileSync(join(call.opts.cwd, files[0]), 'utf8')).secrets.allow).toEqual(['memos.password']);
           expect(call.argv).toEqual(expect.arrayContaining(['run', '--resolve', '--update-cache', '--json', prompt, '--ai', 'codex']));
           expect(call.opts.env.AMBERCAST_SECRET_MEMOS_PASSWORD).toBe(password);
+          expect(call.opts.stdio).toBe('resolve'); expect(call.opts.password).toBe(password);
           write(join(dirname(call.opts.cwd), 'data/old-instance'), 'must be discarded');
         }
         if (['generate', 'resolve', 'replay'].includes(call.kind)) {
@@ -727,6 +743,30 @@ describe('main', () => {
           expect(fs.readdirSync(join(dirname(call.opts.cwd), 'data'))).toEqual([]);
           expect(call.argv).not.toContain('--resolve'); expect(call.argv).not.toContain('--update-cache');
         }
+        if (call.kind === 'generate' || call.kind === 'resolve') {
+          const text = call.kind === 'resolve' ? JSON.stringify({ ...report, runId: 'resolve-run', results: [{ status: 'passed', aiCalls: 9 }] }) : '';
+          let capturedStdio: unknown, detached: unknown;
+          vi.mocked(childProcess.spawn).mockImplementationOnce((_cmd, _args, options) => {
+            capturedStdio = options?.stdio; detached = options?.detached;
+            const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; pid: number };
+            child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.pid = 12345;
+            queueMicrotask(() => {
+              if (text) child.stdout.emit('data', Buffer.from(text));
+              child.emit('exit', 0, null); child.emit('close', 0, null);
+            });
+            return child as never;
+          });
+          const processed = await runProcess(call.argv[0], call.argv.slice(1), call.opts);
+          expect(capturedStdio).toEqual(call.kind === 'generate' ? ['inherit', 'pipe', 'inherit'] : ['inherit', 'pipe', 'pipe']);
+          expect(detached).toBe(true);
+          if (call.kind === 'generate') {
+            const path = join(call.opts.cwd, files[0]), config = JSON.parse(fs.readFileSync(path, 'utf8'));
+            config.secrets.allow = ['memos.password']; write(path, JSON.stringify(config));
+            write(join(call.opts.cwd, plan), '{"generated":"plan"}\n'); write(join(call.opts.cwd, grounding), '{"generated":"grounding"}\n');
+            call.opts.onStderrChunk?.('generated safely\n');
+          } else write(join(call.opts.cwd, 'tests/ambercast/.runs/resolve-run/report.json'), text);
+          return processed;
+        }
         return f.successfulProcess(call);
       } });
       const configPath = join(f.fixture, files[0]), config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -734,22 +774,34 @@ describe('main', () => {
       expect(await run(f, ['--regenerate', '--ai', 'codex'])).toBe(0);
       expect(f.calls('check')).toEqual([]); expect(f.calls('generate')).toHaveLength(1); expect(f.calls('resolve')).toHaveLength(1);
       expect(f.starts).toHaveLength(2);
-      const firstStart = f.events.indexOf('startContainer'), generate = f.events.indexOf('generate'), resolve = f.events.indexOf('resolve');
+      const generate = f.events.indexOf('generate'), firstStart = f.events.indexOf('startContainer');
+      const passwordGenerated = f.events.indexOf('password-generated');
+      const firstReady = f.events.indexOf('/healthz', firstStart), firstSignin = f.events.indexOf('/api/v1/auth/signin', firstStart);
+      const resolve = f.events.indexOf('resolve');
       const stop = f.events.indexOf('removeContainer'), secondStart = f.events.indexOf('startContainer', firstStart + 1);
       const secondReady = f.events.indexOf('/healthz', secondStart), secondSignin = f.events.indexOf('/api/v1/auth/signin', secondStart);
       const replay = f.events.indexOf('replay'), judge = f.events.indexOf('judge');
-      const indices = [firstStart, generate, resolve, stop, secondStart, secondReady, secondSignin, replay, judge];
+      const indices = [generate, passwordGenerated, firstStart, firstReady, firstSignin, resolve, stop, secondStart, secondReady, secondSignin, replay, judge];
       expect(indices.every((i) => i >= 0)).toBe(true); expect(indices).toEqual([...indices].sort((a, b) => a - b)); expect(new Set(indices).size).toBe(indices.length);
       const signins = f.fetchCalls.filter((c) => c.url.endsWith('/signin'));
       expect(signins).toHaveLength(2);
       for (const call of signins) expect(JSON.parse(String(call.opts.body)).passwordCredentials).toEqual({ username: 'verifier', password });
-      expect(f.err()).toContain('generated safely'); expect(f.err() + f.out()).not.toContain(password);
+      expect(f.err()).toContain('generated safely');
+      expect(f.err().match(/generated safely/g)).toHaveLength(1);
+      expect(f.err() + f.out()).not.toContain(password);
       expect(last(f)).toContain('PASS aiCalls=0');
+      const stages = f.out().trimEnd().split('\n').slice(0, -1).map((line) => line.split(' ')[1]);
+      expect(stages).toEqual([
+        'port', 'pack', 'preflight', 'install', 'chromium', 'fixture', 'fixture',
+        'container', 'ready', 'bootstrap', 'container', 'ready', 'bootstrap',
+        'replay', 'judge', 'fixture', 'teardown',
+      ]);
       expect(f.calls('judge')[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_MODE).toBe('full');
     });
-    it.each(['generate', 'resolve', 'replay', 'judge', 'zero-consent', 'two-consents', 'wildcard-consent'])
+    it.each(['generate-exit1', 'generate-consent-refused', 'generate-eof', 'generate-not-interactive', 'resolve', 'replay', 'judge', 'zero-consent', 'two-consents', 'wildcard-consent'])
     ('TEST-58 leaves the fixture unchanged when any regenerate stage fails', async (stage) => {
       const f: Fake = createFakeDeps({ runProcess: async (call) => {
+        if (call.kind === 'generate' && stage.startsWith('generate-')) return result(stage === 'generate-exit1' ? 1 : 2, '', `${stage} failed`);
         if (call.kind === stage) return result(1, ['resolve', 'replay'].includes(stage) ? reportText : '', `${stage} failed`);
         const successful = await f.successfulProcess(call);
         if (call.kind === 'generate' && stage.includes('consent')) {
@@ -760,9 +812,19 @@ describe('main', () => {
         return successful;
       } });
       const before = snapshot(f.fixture); expect(await run(f, ['--regenerate'])).toBe(1);
-      fail(f, stage === 'generate' || stage.includes('consent') ? 'fixture' : stage === 'resolve' ? 'replay' : stage, stage === 'replay' || stage === 'judge' ? '0' : 'n/a');
+      const blockedBeforeInstance = stage.startsWith('generate-') || stage.includes('consent');
+      fail(f, blockedBeforeInstance ? 'fixture' : stage === 'resolve' ? 'replay' : stage, stage === 'replay' || stage === 'judge' ? '0' : 'n/a');
       expect(snapshot(f.fixture)).toEqual(before); expect(f.roots()).toEqual([]);
-      if (stage.includes('consent')) expect(f.calls('resolve')).toEqual([]);
+      // 2026-10-11 revision: generate/consent failures happen before any
+      // password or container exists; resolve failures happen after exactly
+      // one (pre-resolve) instance start, replay/judge failures after two.
+      expect(f.passwordGenerated()).toBe(!blockedBeforeInstance);
+      expect(f.starts).toHaveLength(blockedBeforeInstance ? 0 : stage === 'resolve' ? 1 : 2);
+      if (blockedBeforeInstance) {
+        expect(f.calls('resolve')).toEqual([]); expect(f.calls('replay')).toEqual([]);
+        expect(f.fetchCalls.some((call) => call.url.endsWith('/auth/signin'))).toBe(false);
+        expect(f.fetchCalls).toHaveLength(0);
+      }
     });
     it.each(['pass', 'second-rename-fails', 'judge-fails', 'judge-throws', 'disclosure-only', 'teardown-fails', 'signal-during-publish', 'signal-after-publish'])
     ('TEST-59 writes back config, plan, grounding atomically and in order after judge passes', async (mode) => {

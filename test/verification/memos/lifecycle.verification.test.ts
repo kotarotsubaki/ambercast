@@ -7,6 +7,7 @@ import {
   BASE_URL, MEMOS_IMAGE, PORT, HarnessError, assertPortFree, bootstrapAdmin,
   createDockerRunner, createExec, createRunRoot, generateAdminPassword,
   runProcess, waitReady,
+// @ts-expect-error The production ESM script is deliberately untyped JavaScript.
 } from '../../../scripts/lib/memos-harness.mjs';
 
 const runner = createDockerRunner(createExec(runProcess));
@@ -68,9 +69,9 @@ describe('lifecycle.verification', () => {
     try {
       await assertPortFree(PORT);
     } catch (error) {
-      if (!(error instanceof HarnessError) || error.stage !== 'port') throw error;
-      console.warn(error.message);
-      skipReason = error.message;
+      if (!(error instanceof HarnessError) || (error as { stage: string }).stage !== 'port') throw error;
+      console.warn((error as Error).message);
+      skipReason = (error as Error).message;
       return;
     }
     if (!(await runner.hasImage(MEMOS_IMAGE))) await runner.pullImage(MEMOS_IMAGE);

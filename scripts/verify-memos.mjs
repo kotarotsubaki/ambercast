@@ -89,10 +89,15 @@ export function parseArgs(argv) {
  * Already published files are not rolled back and their names remain diagnostic evidence.
  *
  * Normal verification copies fixtures without modification and has no AI path.
- * Regeneration clears consent names before generate, validates exactly one name,
- * resolves grounding, resets Memos and replays without resolution. Every judge
- * child gets an explicit mode after parent-environment isolation: full for normal
- * acceptance, disclosure-only solely for a nonzero replay with an available report.
+ * Regeneration clears consent names, then runs generate before any password or
+ * container exists (2026-10-11 revision) so consent's TTY check and redaction
+ * never collide: generate inherits stdin/stderr and forwards only its captured
+ * stdout to the harness sink. Only after generate validates exactly one
+ * consented name does a password get generated and an instance start; resolve
+ * then captures and redacts both of its streams, resets Memos and replays
+ * without resolution. Every judge child gets an explicit mode after
+ * parent-environment isolation: full for normal acceptance, disclosure-only
+ * solely for a nonzero replay with an available report.
  * Only a successfully resolved full judge permits fixture publication under its
  * lock, in config/plan/grounding order via private temporary files and renames.
  * Partial publication names affected files and is recoverable by full regeneration;
@@ -110,7 +115,6 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   }
   const abort = new AbortController();
   const td = createTeardown();
-  const completed = new Set();
   let currentStage = 'preflight', signalStage, sigExit = null, publishing = false;
   let root, password, secretName, manifest, manifestPath, failure, containerRegistered = false;
   let aiCalls = 'n/a';
@@ -130,7 +134,10 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   }]));
   for (const [name, handler] of Object.entries(handlers)) signals.on(name, handler);
 
-  // One boundary assigns failures; repeated reset stages do not duplicate ok lines.
+  // One boundary assigns failures; explicit announce=false suppresses repeated
+  // preflight substeps, while every other call -- including a stage name used
+  // more than once, such as fixture's copy/generate/publish steps or
+  // container/ready/bootstrap's two regenerate cycles -- prints its own ok line.
   async function step(stage, fn, announce = true, cleanup = false) {
     currentStage = stage;
     const start = deps.clock.now();
@@ -138,9 +145,8 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       if (!cleanup) interrupted();
       const value = await fn();
       if (!cleanup) interrupted();
-      if (announce && !options.clean && !completed.has(stage)) {
+      if (announce && !options.clean) {
         out(`verify-memos: ${stage} ok (${Math.max(0, Math.round(deps.clock.now() - start))} ms)\n`);
-        completed.add(stage);
       }
       return value;
     } catch (error) {
@@ -161,7 +167,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
     const result = await deps.runProcess(command, args, {
       cwd, env: buildChildEnv(process.env, secrets), timeoutMs, signal: abort.signal, ...extra,
     });
-    if (extra.stdio !== 'generate') {
+    if (extra.stdio !== 'generate' && extra.stdio !== 'resolve') {
       if (result.stdout) err(result.stdout);
       if (result.stderr) err(result.stderr);
     }
@@ -297,21 +303,26 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           }
         }
       });
-      password = generateAdminPassword(deps.randomBytes);
-      await startInstance();
       if (options.regenerate) {
+        // generate runs before any password or container exists (SPEC-13,
+        // 2026-10-11 revision): consent needs a real stdin/stderr, and no
+        // secret can leak through generate's output at this point.
         await step('fixture', async () => {
           const result = await child(ambercast(), ['generate', PROMPT, ...(options.ai ? ['--ai', options.ai] : [])],
             root.projectDir, TIMEOUTS.generate, {}, {
-              stdio: 'generate', password, onStderrChunk: chunk => err(chunk),
+              stdio: 'generate', onStderrChunk: chunk => err(chunk),
             });
           requireSuccess(result);
           secretName = readConsent();
         });
+      }
+      password = generateAdminPassword(deps.randomBytes);
+      await startInstance();
+      if (options.regenerate) {
         await step('replay', async () => {
           const result = await child(ambercast(), ['run', '--resolve', '--update-cache', '--json', PROMPT,
             ...(options.ai ? ['--ai', options.ai] : [])], root.projectDir, TIMEOUTS.resolve, secrets(), {
-              stdio: 'generate', password, onStderrChunk: chunk => err(chunk),
+              stdio: 'resolve', password, onStderrChunk: chunk => err(chunk),
             });
           requireSuccess(result);
           try { JSON.parse(result.stdout); } catch { throw new Error('non-json stdout'); }

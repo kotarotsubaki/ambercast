@@ -172,7 +172,7 @@ export async function createScenario(options: {
         : createFakeUiExecutor(sessionFactory)),
       secrets: createFakeSecretsProvider(options.secrets ?? new Map()),
       resolveAiExecutor: vi.fn(async () => options.aiExecutor ?? createFakeAiExecutor({
-        execute: async () => ({ data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' }),
+        execute: async () => ({ data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' }),
       })),
       allocateCallId: createCallIdAllocator(),
       events: createRecordingEventSink().sink,

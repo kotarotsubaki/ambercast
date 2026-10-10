@@ -11,7 +11,6 @@ description: ambercast run コマンドのフラグ、リプレイパス、明�
 | --- | --- | --- | --- |
 | files | path[] | リテラルプロンプト。未指定時は検出（discovery）を選択 | discovery |
 | --grep | pattern | 正規表現によるパスフィルター | omitted |
-| --target | name | ターゲットを選択 | omitted |
 | --headed | boolean | ブラウザ画面を表示（headed） | false |
 | --resolve | boolean | グラウンディングミス時のライブ AI 解決を明示的に有効化 | false |
 | --update-cache | boolean | キャッシュの書き込みを要求 | false |

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/kotarotsubaki/ambercast/compare/v0.9.0...v0.9.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **run:** wrap element-binding response in an object root both providers accept ([#586](https://github.com/kotarotsubaki/ambercast/issues/586)) ([fa78bb3](https://github.com/kotarotsubaki/ambercast/commit/fa78bb3d378ad1925173b005fcd98cf3a89005a6))
+
 ## [0.9.0](https://github.com/kotarotsubaki/ambercast/compare/v0.8.0...v0.9.0) (2026-10-08)
 
 

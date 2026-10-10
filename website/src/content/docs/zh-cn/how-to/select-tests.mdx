@@ -1,0 +1,61 @@
+---
+title: 选择要运行的测试
+description: 按路径、模式过滤或配置排除，选择要运行的测试 prompt 的 4 种方法。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+## 前提条件 \{#prerequisites}
+
+默认发现机制匹配 `**/*.test.md`，并忽略 runs、plans 以及 grounding 伴生文件。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 直接指定文件 \{#direct-path}
+
+   ```bash
+   npx ambercast run tests/ambercast/sign-in.test.md --list
+   ```
+
+   位置参数是字面 prompt 路径。`--list` 不执行回放，直接返回结果。
+
+2. ## 用正则表达式过滤 \{#grep-filter}
+
+   ```bash
+   npx ambercast run --grep 'sign-in' --list
+   ```
+
+   解析器会构建一个用于发现过滤的正则表达式。`--grep` 之外的 [run 的全部标志](/ambercast/zh-cn/reference/cli/run/#flags)也可在此确认。
+
+3. ## 在配置中排除路径 \{#config-ignore}
+
+   在有效配置中写入以下键。
+
+   ```json
+   {
+     "testMatch": ["**/*.test.md"],
+     "testIgnore": ["**/.runs/**"]
+   }
+   ```
+
+   匹配的 `testIgnore` 会排除某个路径，即使它同时匹配 `testMatch`。`testMatch`、`testIgnore` 的匹配规则见[发现模式](/ambercast/zh-cn/reference/discovery-patterns/)，配置文件的完整写法见[配置](/ambercast/zh-cn/reference/configuration/)。
+
+4. ## 传入以连字符开头的路径 \{#literal-dash-path}
+
+   ```bash
+   npx ambercast run --list -- --literal.test.md
+   ```
+
+   把字面路径放在 `--` 之后。像 `--list` 这样的标志要放在 `--` 之前：`--` 之后的所有参数都会被当作字面位置路径，因此末尾的 `--list` 会被当作文件名处理。
+
+</Steps>
+
+## 验证 \{#verification}
+
+当 `--list` 报告了选中的路径时，退出码为 `0`。仅在有意为之时，才用 `--allow-empty` 处理零匹配的结果。
+
+## 相关链接 \{#related}
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="查看使用相同选择规则的 generate 命令。" />

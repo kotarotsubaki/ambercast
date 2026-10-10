@@ -1,0 +1,61 @@
+---
+title: Select which tests run
+description: Four ways to choose which test prompts run, by path, pattern filter, or config exclusion.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+## Prerequisites \{#prerequisites}
+
+Default discovery matches `**/*.test.md` and ignores runs, plans, and grounding companion files.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Name a file directly \{#direct-path}
+
+   ```bash
+   npx ambercast run tests/ambercast/sign-in.test.md --list
+   ```
+
+   A positional argument is a literal prompt path. `--list` returns results without replaying.
+
+2. ## Filter with a regular expression \{#grep-filter}
+
+   ```bash
+   npx ambercast run --grep 'sign-in' --list
+   ```
+
+   The parser builds a discovery-filtering regular expression. See [every `run` flag](/ambercast/reference/cli/run/#flags) beyond `--grep`.
+
+3. ## Exclude paths in your config \{#config-ignore}
+
+   Add these keys to a valid config file.
+
+   ```json
+   {
+     "testMatch": ["**/*.test.md"],
+     "testIgnore": ["**/.runs/**"]
+   }
+   ```
+
+   A matching `testIgnore` excludes a path even when it also matches `testMatch`. See [discovery patterns](/ambercast/reference/discovery-patterns/) for the matching rules, and [Configuration](/ambercast/reference/configuration/) for how to write the file.
+
+4. ## Pass a path that starts with a hyphen \{#literal-dash-path}
+
+   ```bash
+   npx ambercast run --list -- --literal.test.md
+   ```
+
+   Put the literal path after `--`. Put flags like `--list` before `--`: every argument after `--` is a literal positional path, so a trailing `--list` there is treated as a filename.
+
+</Steps>
+
+## Verification \{#verification}
+
+`--list` exits `0` when it reports the selected paths. Resolve a zero-match result with `--allow-empty` only when you intend it.
+
+## Related \{#related}
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate command, which uses the same selection rules." />

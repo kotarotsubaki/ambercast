@@ -2,6 +2,9 @@ import { access, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { loadCorpus } from '../../../support/corpus.js';
+import { ProviderFixtureValue } from '../../../support/provider-fixture.js';
+import { replayExecute } from '../../../support/provider-replay.js';
 import { createCodexCliExecutor } from '#adapters/ai/codex-cli/index.js';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
 import { ElementBindingProposalResponse, GeneratedPlanResponseRequest } from '#core/ir/schema.js';
@@ -22,6 +25,11 @@ vi.mock('node:os', async (importOriginal) => ({
 afterEach(() => {
   tmpdir.mockReset();
   tmpdir.mockReturnValue('/tmp');
+});
+
+const rows = loadCorpus(new URL('../../../fixtures/corpus/provider-output/live-request-schema.jsonl', import.meta.url), {
+  value: ProviderFixtureValue,
+  expected: z.object({ steps: z.array(z.object({ kind: z.string(), verificationIntent: z.array(z.unknown()) })) }),
 });
 
 function schema() {
@@ -136,41 +144,12 @@ describe('createCodexCliExecutor', () => {
     await expectTemporaryArtifactsRemoved(schemaPath, outputPath);
   });
 
-  it('accepts an AI step with an empty verification intent through the live request schema', async () => {
-    const response = {
-      steps: [{
-        id: 'complete-sign-in',
-        kind: 'ai',
-        target: 'app',
-        instruction: 'Complete the sign-in flow.',
-        instructionCoverage: [{
-          id: 'submit-credentials',
-          kind: 'action',
-          startAnchor: 'L1',
-          startColumn: 1,
-          endAnchor: 'L1',
-          endColumn: 24,
-          citation: 'Submit the credentials.',
-        }],
-        verificationIntent: [],
-      }],
-      ambiguities: [],
-    };
-    const runner = createFakeCommandRunner([async (call) => {
-      const { outputPath } = commandPaths(call.args);
-      await writeFile(outputPath, JSON.stringify(response));
-      return { outcome: 'exited', stdout: '', stderr: '', exitCode: 0 };
-    }]);
-    const executor = createCodexCliExecutor({ run: runner.run });
-
-    const result = await executor.execute({
+  it.each(rows.filter(r => r.value.provider === 'codex-cli'))('line $line: $note', async ({ value, expected }) => {
+    const result = await replayExecute(value, {
       prompt: 'Generate a plan.',
       responseSchema: typedJsonSchema(GeneratedPlanResponseRequest),
     });
-
-    expect(result.data).toMatchObject({
-      steps: [{ kind: 'ai', verificationIntent: [] }],
-    });
+    expect(result.data).toMatchObject(expected);
   });
 
   it.each([

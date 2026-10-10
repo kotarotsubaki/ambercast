@@ -1,0 +1,99 @@
+---
+title: Your first test in 5 minutes
+description: Initialize a project, then generate, replay, and confirm your first generated test in this tutorial.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Initialize a project with `npx ambercast init`, then run your first test with `npx ambercast generate` and `npx ambercast run`.
+
+## Prerequisites \{#prerequisites}
+
+- Node.js 22.14 or later is required.
+- An authenticated Claude Code or Codex CLI is required. The first `generate` directly requires Node.js and an authenticated provider. See [Error codes](/ambercast/reference/error-codes/#code-vocabulary) for the error code when no provider is available.
+- `run` requires a Chromium binary. Generation itself does not configure a browser driver.
+
+ambercast uses these defaults:
+
+- The default `testDir` is `tests/ambercast`.
+- The default target is `web-user`, at `http://localhost:3000`, using Chromium.
+
+## Steps \{#steps}
+
+Running `npx ambercast init` and approving it creates these files:
+
+- `ambercast.config.json`, a config file with the default `testDir` and `target` written in
+- `tests/ambercast/find-page.test.md`, a sample test prompt
+- an appended line in `.gitignore`, and an appended section in `AGENTS.md`
+
+The sample prompt it creates reads as follows.
+
+```markdown
+# Find a page
+
+When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
+```
+
+:::caution
+`init` never asks for a URL. The scaffolded `ambercast.config.json` always targets `http://localhost:3000`. If your app runs elsewhere, edit `targets.web-user.baseUrl` first.
+
+:::
+
+<Steps>
+
+1. ## Initialize the project \{#init}
+
+   ```bash
+   npx ambercast init
+   ```
+
+2. ## Start the app and generate a plan \{#generate}
+
+   Have a human or operator start and confirm the application at the configured `baseUrl`.
+
+   ```bash
+   npx ambercast generate tests/ambercast/find-page.test.md
+   ```
+
+   Success leaves you with:
+
+   - exit code `0`, result status `generated`
+   - two derived files, plan and grounding, written beside the generated prompt
+
+   An agent using the setup prompt ([Agent setup](/ambercast/agents/setup-prompt/#copy-paste-prompt)) assumes the server is already running and does not start it without a request.
+
+3. ## Replay the test \{#run}
+
+   ```bash
+   npx ambercast run --resolve tests/ambercast/find-page.test.md
+   ```
+
+   Success leaves you with:
+
+   - exit code `0`
+   - a per-invocation `report.json` written under the configured runs directory
+
+4. ## Review and commit the changes \{#review-commit}
+
+   ```bash
+   git status --short
+   ```
+
+   Review every tracked, changed file with `git diff -- <path>`. For an untracked prompt, plan, or grounding path, inspect its full contents or run `git diff --no-index /dev/null <path>`.
+
+   After review, a human commits the three files. Also review and commit the files `init` created, such as `ambercast.config.json`, separately, the same way you commit any other change.
+
+</Steps>
+
+The no-argument forms of `npx ambercast generate` and `npx ambercast run` target every test matching your configured test directory, match rules, and ignore rules. This tutorial's commands intentionally name one `.test.md`; use the no-argument forms only in a separately approved all-tests operation.
+
+## Verification \{#verification}
+
+- Confirm the resolver created `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
+- Confirm `npx ambercast run --resolve tests/ambercast/find-page.test.md` exits `0` and reports `passed` for the case.
+
+## Next steps \{#next-steps}
+
+Next, learn how to write prompts.
+
+<LinkCard title="Write effective prompts" href="/ambercast/how-to/write-effective-prompts/" description="Learn to write test prompts that are easy to review and stay focused." />

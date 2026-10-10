@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HealCaseOutcome, HealOutcome } from '#usecases/heal.js';
 import { z } from 'zod';
 import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
-import { settleDryRunOutcome, replayThroughUseCase, replayExecute, repeatFixture, SETTLE_SLACK_MS } from '../../support/provider-replay.js';
+import { settleDryRunOutcome, replayThroughUseCase, replayExecute, repeatFixture, SETTLE_SLACK_MS, HANG_GUARD_MS } from '../../support/provider-replay.js';
 import { ProviderFixtureValue, type ProviderFixture } from '../../support/provider-fixture.js';
 import { truncatedJson, emptyStdoutExitZero, emptyOutputFile, nonZeroExit, hangUntilTimeout, validResponse } from '../../support/provider-fault-builders.js';
 import { assertDiagnosable, assertNoSecretDisclosure } from '../../support/report-assertions.js';
@@ -48,6 +48,27 @@ function details(error: Awaited<ReturnType<typeof replayThroughUseCase>>['report
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('replayThroughUseCase', () => {
+  it('TEST-23 hang guard scales with aiTimeoutMs in use-case drivers', async () => {
+    vi.useFakeTimers();
+    const aiTimeoutMs = 11000;
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+      expect(ms).toBe(aiTimeoutMs);
+      return deadline.signal;
+    });
+    let settled = false;
+    const outcome = replayThroughUseCase({ useCase: 'generate', fixtures: [hangUntilTimeout('claude-code-cli')], aiTimeoutMs })
+      .then(result => { settled = true; return result; });
+    await vi.advanceTimersByTimeAsync(HANG_GUARD_MS);
+    expect(settled).toBe(false);
+    deadline.abort();
+    await vi.advanceTimersByTimeAsync(0);
+    const result = await outcome;
+    expect(settled).toBe(true);
+    expect(result.calls).toHaveLength(1);
+    expect(result.exitCode).toBe(3);
+    expect(result.report.errors[0]!.message).toBe(timeoutMessage);
+  });
   it('requires exactly two heal calls even when cleanup exempts unconsumed hang fixtures', async () => {
     const runnerSpy = vi.spyOn(fakeRunner, 'createFakeCommandRunner');
     const originalHeal = healUseCase.heal;

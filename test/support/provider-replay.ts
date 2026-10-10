@@ -363,7 +363,9 @@ async function settleUseCase<T>(work: Promise<T>, runner: FixtureCommandRunner, 
 /** Fresh prompt storage makes retries and report identity independent per replay. */
 async function replayGenerate(fixtures: readonly ProviderFixture[], aiTimeoutMs: number, maxAttempts: number): Promise<UseCaseReplayResult> {
   const settleWindowMs = fixtures.length * aiTimeoutMs + SETTLE_SLACK_MS;
-  const runner = createFixtureCommandRunner(fixtures, { deadlineMs: settleWindowMs });
+  // ponytail: capped at the existing 1..60000 hangGuardMs bound (SPEC-4); aiTimeoutMs beyond ~57s can still trip the guard first, widen if that range is ever exercised.
+  const hangGuardMs = Math.min(60000, Math.max(HANG_GUARD_MS, aiTimeoutMs + SETTLE_SLACK_MS));
+  const runner = createFixtureCommandRunner(fixtures, { hangGuardMs, deadlineMs: settleWindowMs });
   const executor = createUseCaseAdapter(fixtures[0]!.provider, runner);
   const { deps } = generateScenario.createScenario({ resolveAiExecutor: async () => executor });
   const timedDeps = { ...deps, config: { ...deps.config, ai: { ...deps.config.ai, timeoutMs: aiTimeoutMs } } };
@@ -377,7 +379,9 @@ async function replayGenerate(fixtures: readonly ProviderFixture[], aiTimeoutMs:
 /** The invalid navigation reproduces the existing Stage-2-triggering scenario. */
 async function replayHeal(fixtures: readonly ProviderFixture[], aiTimeoutMs: number): Promise<UseCaseReplayResult> {
   const settleWindowMs = fixtures.length * aiTimeoutMs + SETTLE_SLACK_MS;
-  const runner = createFixtureCommandRunner(fixtures, { deadlineMs: settleWindowMs });
+  // ponytail: capped at the existing 1..60000 hangGuardMs bound (SPEC-4); aiTimeoutMs beyond ~57s can still trip the guard first, widen if that range is ever exercised.
+  const hangGuardMs = Math.min(60000, Math.max(HANG_GUARD_MS, aiTimeoutMs + SETTLE_SLACK_MS));
+  const runner = createFixtureCommandRunner(fixtures, { hangGuardMs, deadlineMs: settleWindowMs });
   const { deps } = await healScenario.createScenario({ steps: [Step.parse({ id: 'repair-me', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })], grounding: {} });
   const executor = createUseCaseAdapter(fixtures[0]!.provider, runner);
   const timedDeps = { ...deps, resolveAiExecutor: async () => executor,
@@ -395,7 +399,9 @@ async function replayHeal(fixtures: readonly ProviderFixture[], aiTimeoutMs: num
 /** A first binding with live evidence exercises structured AI resolution only. */
 async function replayRun(fixtures: readonly ProviderFixture[], aiTimeoutMs: number): Promise<UseCaseReplayResult> {
   const settleWindowMs = fixtures.length * aiTimeoutMs + SETTLE_SLACK_MS;
-  const runner = createFixtureCommandRunner(fixtures, { deadlineMs: settleWindowMs });
+  // ponytail: capped at the existing 1..60000 hangGuardMs bound (SPEC-4); aiTimeoutMs beyond ~57s can still trip the guard first, widen if that range is ever exercised.
+  const hangGuardMs = Math.min(60000, Math.max(HANG_GUARD_MS, aiTimeoutMs + SETTLE_SLACK_MS));
+  const runner = createFixtureCommandRunner(fixtures, { hangGuardMs, deadlineMs: settleWindowMs });
   const tree = { role: 'root', name: '', children: [{ role: 'button', name: 'Submit', children: [] }] };
   const fingerprint = computeAccessibilityFingerprint(tree, runScenario.SUBMIT, []);
   if (fingerprint.kind !== 'ok') throw new Error('replay: the Submit fixture is not fingerprintable');

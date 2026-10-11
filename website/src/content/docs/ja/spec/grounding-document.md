@@ -9,7 +9,7 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `3` | グラウンディングフォーマットのバージョン。 | repo:src/core/ir/schema.ts:73,1663 |
+| `schemaVersion` | integer | required | literal `4` | グラウンディングフォーマットのバージョン。 | repo:src/core/ir/schema.ts:74,1663 |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | 関連する計画のダイジェスト。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | ID をキーとするキャッシュされたステップグラウンディング。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
 
@@ -17,11 +17,11 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV3` | `kind` | string | required | literal `element` | Element エントリの識別子。 | repo:src/core/ir/schema.ts:1362 |
-|  | `locator` | `AccessibilityElementRef` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | 意図に結び付けられた観測済みロケータ。 | repo:src/core/ir/schema.ts:1363 |
-|  | `fingerprint` | `Fingerprint` | required | [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) | アクセシビリティ近傍のエビデンス。 | repo:src/core/ir/schema.ts:1364 |
-|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | repo:src/core/ir/schema.ts:1365 |
-|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | repo:src/core/ir/schema.ts:1366 |
+| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element エントリの識別子。 | repo:src/core/ir/schema.ts:1442 |
+|  | `locator` | `GroundingElementLocator` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | 意図に結び付けられた観測済みロケータ。 | repo:src/core/ir/schema.ts:1444 |
+|  | `fingerprint` | `Fingerprint` | required | [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) | アクセシビリティ近傍のエビデンス。 | repo:src/core/ir/schema.ts:1445 |
+|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | repo:src/core/ir/schema.ts:1446 |
+|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | repo:src/core/ir/schema.ts:1447 |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114) |
 |  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1116) |
 
@@ -62,7 +62,7 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -79,6 +79,10 @@ description: "`GroundingDocument` は、厳密に1つの Plan ダイジェスト
 要素エントリは、そのバインディングが `confirmed` に達した場合にのみ書き込むか上書きしなければならない（MUST）。これは、少なくとも1つのステップがその要素ステップを自身の空でないコミット済み `confirms` リストに挙げ、該当するすべてのステップが同じケースで成功した状態を指す。確認ステップが `element-visible` アサーションの場合、その成功は候補がちょうど1つ一致した場合にのみ有効な確認根拠となる。複数の候補が一致して成功しても、バインディングは確認されない。`acted` のみに達したバインディングは書き戻し時に破棄され、永続化されない。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
 
 すべての `TraceFillSecret` について、`secretRef` はそれを含む Plan の AI ステップのコミットされた `secrets[].ref` セットに属していなければならない（MUST）。違反は整合性の失敗（integrity failure）であり、エージェント実行にフォールバックしてはならない（MUST NOT）。[src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
+
+グラウンディング v2 と v3 は廃止済みである。`check` は committed ポリシーではスキーマ検証前に `stale-grounding`、uncommitted では `fresh-without-grounding` を返す。`--resolve` なしの `run` は、計画ダイジェストが一致し要素ステップの再束縛が必要な場合、`GROUNDING_UNRESOLVED` の `recoverable-miss` となる。ダイジェストが異なる場合は `missing` となる。
+
+`run --resolve` は空のキャッシュから束縛し直し、既存の書き戻し条件を満たす場合に v4 を保存する。`generate` は変更のない fresh な計画の旧キャッシュを空の v4 に置き換える。`heal` は `FS_IO_ERROR` となるため、先に `ambercast run --resolve --update-cache` で再生成する必要がある。v1 と未知のバージョンは従来どおり、`check` では invalid、`run` ではキャッシュミスとなる。
 
 ## 設計根拠 {#rationale}
 

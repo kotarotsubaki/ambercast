@@ -71,7 +71,7 @@ describe('heal confirmation gate through the built CLI', () => {
         ],
       });
       const grounding = GroundingDocument.parse({
-        schemaVersion: 3,
+        schemaVersion: 4,
         planDigest: computePlanDigest(plan),
         entries: {
           'click-submit': { kind: 'element', locator: { strategy: 'accessibility', role: 'button', name: 'Submit' }, fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: '0'.repeat(64) }, intentDigest: computeIntentDigest({ stepKind: 'action', operation: 'click', intent }), provenance: 'ai-proposed' },

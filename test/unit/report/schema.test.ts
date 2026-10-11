@@ -164,10 +164,10 @@ describe('TEST-20 report schema 3.10', () => {
 });
 
 describe('TEST-V1 report-only version change', () => {
-  it('keeps the Plan and Grounding schema versions and producer contract unchanged', () => {
+  it('pins Plan and Grounding schema versions while preserving the producer contract', () => {
     expect(REPORT_SCHEMA_VERSION).toBe('3.10');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
-    expect(GROUNDING_SCHEMA_VERSION).toBe(3);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
     expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
     // Pins the producer-input fingerprints so this test fails if either changes; update only with a deliberate plan-producer change.
     expect(promptTemplateFingerprint()).toBe('41cbe77e7b967242094b421f8b278e1ea6083e0d5ce30bf3c8ba9ebc33ba17d5');

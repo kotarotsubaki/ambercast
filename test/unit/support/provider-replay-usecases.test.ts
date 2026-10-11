@@ -48,6 +48,20 @@ function details(error: Awaited<ReturnType<typeof replayThroughUseCase>>['report
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('replayThroughUseCase', () => {
+  it.each(providers)('Issue #596 TEST-12 binds an unnamed textbox through %s', async provider => {
+    const result = await replayThroughUseCase({ useCase: 'run', runScreen: 'unnamed-textbox', fixtures: [validResponse(provider, { proposal: { outcome: 'found', role: 'textbox', name: '' } })] });
+    expect(result.calls).toHaveLength(1);
+    expect(result.exitCode).toBe(0);
+    expect(result.report.results[0]).toMatchObject({ status: 'passed', aiCalls: 1, steps: [expect.objectContaining({ binding: expect.objectContaining({ provenance: 'ai-proposed' }) }), expect.objectContaining({ status: 'passed' })] });
+    assertDiagnosable(result.report);
+  });
+  it.each(providers)('Issue #596 TEST-12 rejects omitted proposal name through %s', async provider => {
+    const result = await replayThroughUseCase({ useCase: 'run', runScreen: 'unnamed-textbox', fixtures: [validResponse(provider, { proposal: { outcome: 'found', role: 'textbox' } })] });
+    expect(result.calls).toHaveLength(1);
+    expect(result.exitCode).toBe(3);
+    expect(result.report.errors[0]).toMatchObject({ code: 'AI_RESPONSE_INVALID' });
+    assertDiagnosable(result.report);
+  });
   it('TEST-23 hang guard scales with aiTimeoutMs in use-case drivers', async () => {
     vi.useFakeTimers();
     const aiTimeoutMs = 11000;

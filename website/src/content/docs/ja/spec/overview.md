@@ -5,7 +5,7 @@ description: "本仕様は、ambercast 0.9.0 が受け付けるアーティフ�
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 3 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 4 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:74]
 
 ## 規範的文言 {#normative-language}
 
@@ -29,7 +29,7 @@ flowchart LR
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
-| Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
+| Grounding `schemaVersion` | `4` | repo:src/core/ir/schema.ts:74 |
 | Fingerprint アルゴリズム | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
 | Report `schemaVersion` | `3.10` | repo:src/report/schema.ts:58 |
 

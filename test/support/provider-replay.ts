@@ -283,7 +283,7 @@ export function settleDryRunOutcome(outcome: HealOutcome): SettledHealOutcome {
   }) };
 }
 
-type UseCaseReplayInput = { useCase: 'generate' | 'heal' | 'run'; fixtures: readonly ProviderFixture[]; aiTimeoutMs?: number; maxAttempts?: number };
+type UseCaseReplayInput = { useCase: 'generate' | 'heal' | 'run'; fixtures: readonly ProviderFixture[]; aiTimeoutMs?: number; maxAttempts?: number; runScreen?: 'submit' | 'unnamed-textbox' };
 type UseCaseReplayResult = { report: ReportEnvelope; exitCode: ExitCode; calls: readonly FakeCommandRunCall[] };
 
 /**
@@ -291,6 +291,8 @@ type UseCaseReplayResult = { report: ReportEnvelope; exitCode: ExitCode; calls: 
  * Inputs are checked before scenario startup. Each invocation owns fresh
  * storage and a runner; cleanup failures outrank use-case outcomes on every
  * exit, including expiration of the fixture-count-based settlement window.
+ * The optional runScreen selects an unnamed textbox for grounding-contract
+ * cases while existing callers retain the Submit-button screen.
  * @throws Error for invalid inputs, harness violations, or an unsettled use case.
  */
 export async function replayThroughUseCase(input: UseCaseReplayInput): Promise<UseCaseReplayResult> {
@@ -304,7 +306,7 @@ export async function replayThroughUseCase(input: UseCaseReplayInput): Promise<U
   switch (input.useCase) {
     case 'generate': return replayGenerate(input.fixtures, aiTimeoutMs, maxAttempts);
     case 'heal': return replayHeal(input.fixtures, aiTimeoutMs);
-    case 'run': return replayRun(input.fixtures, aiTimeoutMs);
+    case 'run': return replayRun(input.fixtures, aiTimeoutMs, input.runScreen);
   }
 }
 
@@ -397,16 +399,17 @@ async function replayHeal(fixtures: readonly ProviderFixture[], aiTimeoutMs: num
 }
 
 /** A first binding with live evidence exercises structured AI resolution only. */
-async function replayRun(fixtures: readonly ProviderFixture[], aiTimeoutMs: number): Promise<UseCaseReplayResult> {
+async function replayRun(fixtures: readonly ProviderFixture[], aiTimeoutMs: number, screen: 'submit' | 'unnamed-textbox' = 'submit'): Promise<UseCaseReplayResult> {
   const settleWindowMs = fixtures.length * aiTimeoutMs + SETTLE_SLACK_MS;
   // ponytail: capped at the existing 1..60000 hangGuardMs bound (SPEC-4); aiTimeoutMs beyond ~57s can still trip the guard first, widen if that range is ever exercised.
   const hangGuardMs = Math.min(60000, Math.max(HANG_GUARD_MS, aiTimeoutMs + SETTLE_SLACK_MS));
   const runner = createFixtureCommandRunner(fixtures, { hangGuardMs, deadlineMs: settleWindowMs });
-  const tree = { role: 'root', name: '', children: [{ role: 'button', name: 'Submit', children: [] }] };
-  const fingerprint = computeAccessibilityFingerprint(tree, runScenario.SUBMIT, []);
-  if (fingerprint.kind !== 'ok') throw new Error('replay: the Submit fixture is not fingerprintable');
-  const session = runScenario.createFakeBrowserSession(runScenario.liveEntries([runScenario.SUBMIT], fingerprint.fingerprint));
-  session.accessibilitySnapshot = async () => ({ tree, rawYaml: 'Submit', scalarValues: [] });
+  const element = screen === 'submit' ? runScenario.SUBMIT : { strategy: 'accessibility' as const, role: 'textbox', name: '' };
+  const tree = { role: 'root', name: '', children: [{ role: element.role, name: element.name, children: [] }] };
+  const fingerprint = computeAccessibilityFingerprint(tree, element, []);
+  if (fingerprint.kind !== 'ok') throw new Error('replay: the run fixture is not fingerprintable');
+  const session = runScenario.createFakeBrowserSession(runScenario.liveEntries([element], fingerprint.fingerprint));
+  session.accessibilitySnapshot = async () => ({ tree, rawYaml: screen === 'submit' ? 'Submit' : '- textbox', scalarValues: [] });
   const executor = createUseCaseAdapter(fixtures[0]!.provider, runner);
   const { deps } = runScenario.createScenario({
     resolveAiExecutor: async () => executor,
@@ -419,7 +422,7 @@ async function replayRun(fixtures: readonly ProviderFixture[], aiTimeoutMs: numb
   const testPath = await runScenario.writePrompt(deps.storage);
   await runScenario.seedFreshArtifacts(deps.storage, testPath, [
     { id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: {
-      description: 'Submit button', roleHint: 'button', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 },
+      description: screen === 'submit' ? 'Submit button' : 'Memo editor', roleHint: element.role, sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 },
     } },
     { id: 'confirm-submit', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['click-submit'] },
   ]);

@@ -89,7 +89,7 @@ async function writeGrounding(
   entries: GroundingDocument['entries'] = {},
   planDigest = computePlanDigest(plan),
 ): Promise<void> {
-  const grounding: GroundingDocument = { schemaVersion: 3, planDigest, entries };
+  const grounding: GroundingDocument = { schemaVersion: 4, planDigest, entries };
   await storage.writeText(
     layout.groundingPathFor(testPath),
     toCanonicalArtifactText(grounding as unknown as JsonValueT),
@@ -150,11 +150,11 @@ describe('check', () => {
    * Its original is kept outside this repository. Generation used target web,
    * baseUrl https://example.test, no locale, ai.provider claude, and producer
    * fingerprint prefix 58cb77887f52. Fixed bytes from a released producer
-   * test compatibility beyond a synthesized plan; mutating grounding proves
-   * freshness actually reads it, and the guarded metadata check pins the
+   * test plan compatibility beyond a synthesized plan; a derived v4 grounding
+   * copy proves digest-drift detection after retirement, and metadata pins the
    * producer identity independently of the freshness result.
    */
-  it('TEST-V1b keeps a released save-note artifact fresh and detects grounding drift', async () => {
+  it('TEST-V1b retires released save-note grounding while preserving plan freshness and digest-drift detection', async () => {
     const prompt = readFileSync(new URL('../../fixtures/v0.7.0-save-note/save-note.test.md', import.meta.url), 'utf8');
     const planText = readFileSync(new URL('../../fixtures/v0.7.0-save-note/save-note.ambercast.plan.json', import.meta.url), 'utf8');
     const groundingText = readFileSync(new URL('../../fixtures/v0.7.0-save-note/save-note.ambercast.grounding.json', import.meta.url), 'utf8');
@@ -167,9 +167,13 @@ describe('check', () => {
     await storage.writeText(layout.planPathFor(testPath), planText);
     await storage.writeText(layout.groundingPathFor(testPath), groundingText);
     const result = await check(deps, OPTIONS);
-    expect(result.results).toEqual([expect.objectContaining({ id: testPath, status: 'fresh' })]);
+    expect(result.results).toEqual([expect.objectContaining({ id: testPath, status: 'stale-grounding' })]);
     expect(result.errors).toEqual([]);
-    const grounding = JSON.parse(groundingText) as { planDigest: string };
+    // Only a derived copy changes version; the released fixture remains byte-fixed.
+    const grounding = { ...JSON.parse(groundingText), schemaVersion: 4 } as { schemaVersion: number; planDigest: string };
+    await storage.writeText(layout.groundingPathFor(testPath), JSON.stringify(grounding));
+    const current = await check(deps, OPTIONS);
+    expect(current.results).toEqual([expect.objectContaining({ id: testPath, status: 'fresh' })]);
     const last = grounding.planDigest.slice(-1);
     grounding.planDigest = `${grounding.planDigest.slice(0, -1)}${last === '0' ? '1' : '0'}`;
     await storage.writeText(layout.groundingPathFor(testPath), JSON.stringify(grounding));
@@ -213,7 +217,7 @@ describe('check', () => {
     expect(buildCheckReport({ startedAt: '2026-08-24T00:00:00Z', durationMs: 1, options: OPTIONS, outcome: invalid }).exitCode).toBe(4);
   });
 
-  it('TEST-C2 treats v2 grounding as stale but ignores nonmatching v3 entries', async () => {
+  it.each([2, 3])('TEST-C2 treats retired v%s grounding as stale but ignores nonmatching v4 entries', async (schemaVersion) => {
     const { storage, layout, deps } = createScenario();
     const testPath = `${TEST_DIR}/grounding-version-and-entries.test.md`;
     await storage.writeText(testPath, PROMPT);
@@ -231,15 +235,30 @@ describe('check', () => {
       },
     };
     await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
-      schemaVersion: 2, planDigest: computePlanDigest(plan), entries: {},
+      schemaVersion, planDigest: computePlanDigest(plan), entries: {},
     }));
     const oldVersion = await check(deps, { ...OPTIONS, files: [testPath] });
     expect(oldVersion.results).toEqual([expect.objectContaining({
-      id: testPath, status: 'stale-grounding', reason: expect.stringContaining('does not match the current plan'),
+      id: testPath, status: 'stale-grounding', reason: 'The grounding cache does not match the current plan.',
     })]);
     await writeGrounding(storage, layout, testPath, plan, entries);
     const extraEntries = await check(deps, { ...OPTIONS, files: [testPath] });
     expect(extraEntries.results).toEqual([expect.objectContaining({ id: testPath, status: 'fresh' })]);
+  });
+
+  it.each([2, 3])('TEST-7 collapses retired v%s uncommitted grounding to fresh-without-grounding', async (schemaVersion) => {
+    const { storage, layout, deps } = createScenario({
+      config: createConfig({ grounding: { repositoryPolicy: 'uncommitted', localWriteBack: 'auto' } }),
+    });
+    const testPath = `${TEST_DIR}/retired-uncommitted.test.md`;
+    await storage.writeText(testPath, PROMPT);
+    const plan = await writePlan(storage, layout, testPath);
+    await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
+      schemaVersion, planDigest: computePlanDigest(plan), entries: {},
+    }));
+    const result = await check(deps, { ...OPTIONS, files: [testPath] });
+    expect(result.results).toEqual([expect.objectContaining({ id: testPath, status: 'fresh-without-grounding' })]);
+    expect(result.errors).toEqual([]);
   });
 
   it('TEST-L5 reports a locale-changed plan as stale', async () => {

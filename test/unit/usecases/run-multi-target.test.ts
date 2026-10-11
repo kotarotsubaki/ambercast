@@ -87,7 +87,7 @@ async function scenario(
     intentDigest: computeIntentDigest({ stepKind: step.kind as 'action' | 'capture', operation: (step.kind === 'capture' ? 'capture' : step.action) as 'capture' | 'click' | 'fill' | 'fill-secret', intent: step.intent as ElementIntent }),
     provenance: 'quoted-match',
   }]));
-  const grounding = { schemaVersion: 3, planDigest: computePlanDigest(plan as never), entries };
+  const grounding = { schemaVersion: 4, planDigest: computePlanDigest(plan as never), entries };
   await storage.writeText(FILE, PROMPT);
   await storage.writeText(layout.planPathFor(FILE), toCanonicalArtifactText(plan as JsonValueT));
   const originalGrounding = toCanonicalArtifactText(grounding as JsonValueT);

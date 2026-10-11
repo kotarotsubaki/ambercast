@@ -174,7 +174,7 @@ describe('runCheckCommand', () => {
     await storage.writeText(testPath, prompt);
     await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
     await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: computePlanDigest(plan),
       entries: {},
     }));
@@ -226,7 +226,7 @@ describe('runCheckCommand', () => {
     } as unknown as PlanDocument;
     await storage.writeText(testPath, prompt);
     await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
-    await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({ schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} }));
+    await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({ schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} }));
     mocks.createFsReadStorage.mockReturnValue(storage);
     mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.createFsTestFileDiscovery.mockReturnValue(async () => []);

@@ -1,0 +1,9 @@
+{
+  "document": "grounding",
+  "expected": "invalid",
+  "value": {
+    "schemaVersion": 3,
+    "planDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "entries": {}
+  }
+}

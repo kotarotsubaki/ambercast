@@ -85,13 +85,13 @@ describe('retired Plan preflight', () => {
   it('check reports the Plan schema reason before Target resolution', async () => {
     const { deps } = await scenario();
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText({
-      schemaVersion: 3,
+      schemaVersion: 4,
       source: { inputsDigest: 'a'.repeat(64) },
       targets: { app: { baseUrl: 'https://app.example.test', executor: { kind: 'playwright', browser: 'chromium' } } },
       steps: [{ id: 'visit-app', kind: 'action', action: 'navigate', url: 'https://app.example.test' }],
     }));
     const result = await check({ storage: deps.storage, layout: deps.layout, discoverTestFiles: deps.discoverTestFiles, config: deps.config }, { files: [file], allowEmpty: false, list: false });
-    expect(result.results).toContainEqual(expect.objectContaining({ id: file, status: 'stale', reason: 'The plan does not match the plan schema.' }));
+    expect(result.results).toContainEqual(expect.objectContaining({ id: file, status: 'stale', reason: 'The plan uses retired schema version 4; regenerate it with `ambercast generate`.' }));
   });
 
   it('run and heal classify Plan v4 as stale-ir exit 4 before browser launch', async () => {
@@ -111,7 +111,7 @@ describe('retired Plan preflight', () => {
 });
 
 describe('current Plan and grounding freshness', () => {
-  it('check accepts a v5 Plan with a current v3 grounding cache', async () => {
+  it('check accepts a v5 Plan with a current v4 grounding cache', async () => {
     const { deps } = await scenario();
     const current = {
       ...plan,
@@ -123,7 +123,7 @@ describe('current Plan and grounding freshness', () => {
       }).inputsDigest },
     };
     await deps.storage.writeText(deps.layout.planPathFor(file), toCanonicalArtifactText(current));
-    await deps.storage.writeText(deps.layout.groundingPathFor(file), toCanonicalArtifactText({ schemaVersion: 3, planDigest: computePlanDigest(current as unknown as PlanDocument), entries: {} }));
+    await deps.storage.writeText(deps.layout.groundingPathFor(file), toCanonicalArtifactText({ schemaVersion: 4, planDigest: computePlanDigest(current as unknown as PlanDocument), entries: {} }));
     const result = await check({ storage: deps.storage, layout: deps.layout, discoverTestFiles: deps.discoverTestFiles, config: deps.config }, { files: [file], allowEmpty: false, list: false });
     expect(result.results).toContainEqual(expect.objectContaining({ id: file, status: 'fresh' }));
   });

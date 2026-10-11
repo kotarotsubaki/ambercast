@@ -27,6 +27,7 @@ import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { ERROR_EXIT_CODES } from '#core/errors/exit-codes.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
+import * as canonicalJson from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computeIntentDigest, computePlanDigest, sha256HexOfCanonicalJson } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
@@ -54,7 +55,7 @@ import type { AiAgenticRequest, InstructionCoveredAiAgenticRequest } from '#port
 import type { BrowserSession, GroundedResolution, PerformableAction } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { buildRedactedAiProposalContext, buildUnclassifiedRejectionEvent, classifyBrowserLaunchFailure, jsonContainsResolvedSecret, PlanNavigationResolutionError, run, type RunDeps } from '#usecases/run.js';
+import { buildRedactedAiProposalContext, buildUnclassifiedRejectionEvent, classifyBrowserLaunchFailure, inspectGroundingCoverageSource, jsonContainsResolvedSecret, PlanNavigationResolutionError, run, serializePersistableGrounding, type RunDeps } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { buildRunReport } from '#usecases/run-report.js';
@@ -77,7 +78,7 @@ import {
 } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
-import { assertDiagnosable, assertNoSecretDisclosure, collectStorageArtifacts } from '../../support/report-assertions.js';
+import { assertDiagnosable, assertNoSecretDisclosure, assertZeroAiCalls, collectStorageArtifacts } from '../../support/report-assertions.js';
 import { TEST_DIR, RUNS_DIR, TARGETS, RESOLVED_TARGETS, PROMPT, DEFAULT_INSTRUCTION_COVERAGE, FINGERPRINT, EMAIL, PASSWORD, SUBMIT, DEFAULT_OPTIONS, createFakeBrowserSession, createScenario, elementGrounding, intentDigestsFor, liveEntries, writePrompt, createFreshPlan, seedFreshArtifacts, aiStep, expectStopgapOutcome, type TestStep } from '../../support/run-scenario.js';
 
 const groundingModeAccesses = vi.hoisted(() => ({ accesses: [] as string[] }));
@@ -98,6 +99,210 @@ vi.mock('#core/ai/ai-deadline.js', async (importOriginal) => {
       });
     },
   };
+});
+
+describe('Issue596 grounding v4', () => {
+  const intent = { description: 'Memo editor', roleHint: 'textbox', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 } };
+  const unnamed = { strategy: 'accessibility', role: 'textbox', name: '' } as const;
+  const capture = (nodes: readonly { role: string; name: string }[]) => ({ tree: { role: 'root', name: '', children: nodes.map((node) => ({ ...node, children: [] })) }, rawYaml: JSON.stringify(nodes), scalarValues: [] });
+  async function fixture(options: { nodes?: readonly { role: string; name: string }[]; proposal?: { outcome: 'found'; role: string; name: string }; roleHint?: string | null; quote?: string; existing?: boolean } = {}) {
+    const nodes = options.nodes ?? [{ role: 'textbox', name: 'User' }, unnamed];
+    const locator = { strategy: 'accessibility', ...(nodes.find((node) => node.name === '') ?? nodes[0]!) } as const;
+    const snapshot = capture(nodes);
+    const fingerprint = computeAccessibilityFingerprint(snapshot.tree, locator, []);
+    const session = createFakeBrowserSession(liveEntries([locator], fingerprint.kind === 'ok' ? fingerprint.fingerprint : FINGERPRINT));
+    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(snapshot);
+    const proposal = options.proposal ?? { outcome: 'found', role: 'textbox', name: '' };
+    const executor = createFakeAiExecutor({ execute: async () => ({ data: { proposal }, raw: JSON.stringify({ proposal }) }) });
+    const base = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } };
+    const prompt = options.quote === undefined ? PROMPT : `# Memo\n\nFill "${options.quote}" with text.\n`;
+    const selectedIntent = { description: intent.description, sourceSpan: { ...intent.sourceSpan, endColumn: prompt.split('\n')[2]!.length + 1 }, ...(options.roleHint === null ? {} : { roleHint: options.roleHint ?? 'textbox' }), ...(options.quote === undefined ? {} : { quote: { text: options.quote, sourceSpan: { startLine: 3, startColumn: 7, endLine: 3, endColumn: 7 + options.quote.length } } }) };
+    const testPath = await writePrompt(base.recordingStorage.storage, 'login.test.md', prompt);
+    const plan = await createFreshPlan(base.recordingStorage.storage, testPath, [
+      { id: 'fill-memo', kind: 'action', action: 'fill', value: 'text', intent: selectedIntent },
+      { id: 'confirm-memo', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['fill-memo'] },
+    ]);
+    const groundingPath = deps.layout.groundingPathFor(testPath);
+    const empty: GroundingDocument = { schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} };
+    if (options.existing) await base.recordingStorage.storage.writeText(groundingPath, toCanonicalArtifactText(empty as unknown as JsonValueT));
+    return { ...base, deps, session, executor, plan, testPath, groundingPath, empty };
+  }
+  const actions = (f: Awaited<ReturnType<typeof fixture>>) => f.session.operations().filter((operation) => operation.type === 'perform');
+  const report = (outcome: Awaited<ReturnType<typeof run>>) => buildRunReport({ startedAt: '2026-10-11T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome }).envelope;
+
+  it.each([undefined, 'memo'])('TEST-4 binds an unnamed textbox after quote %s', async (quote) => {
+    const f = await fixture(quote === undefined ? {} : { quote });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect(actions(f)).toHaveLength(1);
+    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['fill-memo']).toMatchObject({ locator: unnamed, provenance: 'ai-proposed' });
+  });
+  it.each([
+    { label: 'duplicate', nodes: [unnamed, unnamed], name: '', roleHint: 'textbox' },
+    { label: 'fabricated name', nodes: [unnamed], name: 'Memo editor', roleHint: 'textbox' },
+    { label: 'role mismatch', nodes: [unnamed], name: '', roleHint: 'button' },
+  ])('TEST-5 rejects $label without an action', async ({ nodes, name, roleHint }) => {
+    const f = await fixture({ nodes, roleHint, proposal: { outcome: 'found', role: 'textbox', name } });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'proposal-rejected' } });
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect(actions(f)).toEqual([]);
+  });
+  it.each([
+    { label: 'whitespace proposal', role: 'textbox', name: ' ', roleHint: 'textbox', quote: undefined },
+    { label: 'generic without hint', role: 'generic', name: '', roleHint: null, quote: undefined },
+  ])('TEST-5 binds $label with the observed name', async ({ role, name, roleHint, quote }) => {
+    const f = await fixture({ nodes: [{ role, name: '' }], roleHint, proposal: { outcome: 'found', role, name }, ...(quote === undefined ? {} : { quote }) });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    expect(outcome.results[0]?.result.steps[0], outcome.results[0]?.error?.message).toMatchObject({ status: 'passed', binding: { provenance: quote === undefined ? 'ai-proposed' : 'quoted-match' } });
+    expect(f.executor.structuredRequests).toHaveLength(quote === undefined ? 1 : 0);
+    expect(actions(f)).toHaveLength(1);
+    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['fill-memo']).toMatchObject({ locator: { strategy: 'accessibility', role, name: '' } });
+  });
+  it('TEST-5 rejects a whitespace quote before binding', async () => {
+    const f = await fixture({ nodes: [unnamed], quote: ' ' });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+    expect(outcome.results[0]?.error?.message).toBe('The generated plan contains invalid element intents or source spans.');
+    expect(f.executor.structuredRequests).toHaveLength(0);
+    expect(actions(f)).toEqual([]);
+  });
+  it.each([2, 3])('TEST-7 retires grounding v%i for matching and mismatching digests', async (schemaVersion) => {
+    for (const matching of [true, false]) {
+      const f = await fixture();
+      await f.recordingStorage.storage.writeText(f.groundingPath, toCanonicalArtifactText({ ...f.empty, schemaVersion, planDigest: matching ? f.empty.planDigest : 'f'.repeat(64) } as unknown as JsonValueT));
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', exitCode: 4, details: { reason: matching ? 'recoverable-miss' : 'missing' } });
+      if (matching) expect(outcome.results[0]?.error?.message).toBe('The grounding cache uses a retired schema and AI resolution is not permitted. Pass --resolve to permit resolution.');
+      expect(actions(f)).toEqual([]);
+      expect(f.executor.structuredRequests).toHaveLength(0);
+    }
+  });
+  it.each([2, 3])('TEST-7 replaces retired grounding v%i when resolve is allowed', async (schemaVersion) => {
+    const f = await fixture();
+    await f.recordingStorage.storage.writeText(f.groundingPath, toCanonicalArtifactText({ ...f.empty, schemaVersion } as unknown as JsonValueT));
+    expect((await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true })).results[0]?.result.status).toBe('passed');
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).schemaVersion).toBe(4);
+  });
+  it('TEST-8 replays exact saved bytes with zero AI calls and persists byte-identically on repeat', async () => {
+    const f = await fixture();
+    expect((await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true })).results[0]?.result.status).toBe('passed');
+    const before = await f.recordingStorage.storage.readText(f.groundingPath);
+    const replay = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(replay.results[0]?.result.steps[0], replay.results[0]?.error?.message).toMatchObject({ status: 'passed', binding: { provenance: 'grounding' } });
+    assertZeroAiCalls(report(replay));
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect((await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true })).results[0]?.result.status).toBe('passed');
+    expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(before);
+  });
+  it('TEST-8 retains strict grounding with a coverage-bearing AI entry', async () => {
+    const f = await fixture();
+    await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    const document = await readGrounding(f.recordingStorage.storage, f.testPath);
+    const text = toCanonicalArtifactText({ ...document, entries: { ...document.entries, 'recorded-ai': { kind: 'ai', trace: coveredTrace([], [passingText('Done')]) } } } as unknown as JsonValueT);
+    expect(inspectGroundingCoverageSource(text, f.empty.planDigest)).toMatchObject({ kind: 'strict-grounding', coverageClaimStepIds: ['recorded-ai'] });
+  });
+  it('TEST-8 rejects ambiguous unnamed replay with no new action', async () => {
+    const f = await fixture();
+    await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    const performed = actions(f).length;
+    vi.mocked(f.session.accessibilitySnapshot).mockResolvedValue(capture([unnamed, unnamed]));
+    vi.spyOn(f.session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason: 'ambiguous-match' });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'recoverable-miss' } });
+    expect(actions(f)).toHaveLength(performed);
+    assertZeroAiCalls(report(outcome));
+  });
+  it('TEST-9 rejects an invalid locator role at serialization', () => {
+    const document = { schemaVersion: 4, planDigest: 'a'.repeat(64), entries: { invalid: { kind: 'element', locator: { ...unnamed, role: '' }, fingerprint: FINGERPRINT, intentDigest: 'b'.repeat(64), provenance: 'ai-proposed' } } } as GroundingDocument;
+    expect(() => serializePersistableGrounding(document)).toThrow(IntegrityViolationError);
+    expect(() => serializePersistableGrounding(document)).toThrow('The grounding cache does not satisfy the grounding schema.');
+  });
+  it('TEST-9 isolates schema failure to persistence and preserves absent storage', async () => {
+    const f = await fixture();
+    const failure = GroundingDocument.safeParse({});
+    const parse = vi.spyOn(GroundingDocument, 'safeParse').mockReturnValue(failure);
+    let outcome: Awaited<ReturnType<typeof run>>;
+    let calls: number;
+    try { outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true }); calls = parse.mock.calls.length; } finally { parse.mockRestore(); }
+    expect(calls).toBe(1);
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation: 'The grounding cache does not satisfy the grounding schema.' });
+    expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+    expect(report(outcome).errors).toContainEqual(expect.objectContaining({ code: 'INTEGRITY_VIOLATION' }));
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([]);
+    expect(await f.recordingStorage.storage.exists(f.groundingPath)).toBe(false);
+  });
+  it('TEST-9 writes exactly the validated serialization output', async () => {
+    const f = await fixture();
+    await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    const text = await f.recordingStorage.storage.readText(f.groundingPath);
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([{ path: f.groundingPath, text: serializePersistableGrounding(JSON.parse(text)) }]);
+  });
+  it('TEST-9 keeps canonicalize failures as FsIoError with existing bytes unchanged', async () => {
+    const f = await fixture({ existing: true });
+    const before = await f.recordingStorage.storage.readText(f.groundingPath);
+    f.recordingStorage.writes.length = 0;
+    const serialize = canonicalJson.toCanonicalArtifactText;
+    let persistenceAttempts = 0;
+    // Target only the populated cache; plan validation and report serialization
+    // must retain their real canonicalization paths.
+    const canonicalize = vi.spyOn(canonicalJson, 'toCanonicalArtifactText').mockImplementation((value) => {
+      const document = value as unknown as GroundingDocument;
+      if (document.schemaVersion === 4 && document.entries?.['fill-memo'] !== undefined) {
+        persistenceAttempts += 1;
+        throw new RangeError('Cannot canonicalize a string with an unpaired surrogate.');
+      }
+      return serialize(value);
+    });
+    let outcome: Awaited<ReturnType<typeof run>>;
+    try { outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true }); } finally { canonicalize.mockRestore(); }
+    expect(persistenceAttempts).toBe(1);
+    expect(actions(f)).toHaveLength(1);
+    expect(outcome.results[0]?.result.steps.find((step) => step.id === 'confirm-memo')).toMatchObject({ status: 'passed' });
+    expect(outcome.results[0]?.result.steps[0], outcome.results[0]?.error?.message).toMatchObject({ status: 'passed' });
+    expect(outcome.results[0]?.error).toBeInstanceOf(FsIoError);
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(IntegrityViolationError);
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([]);
+    expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(before);
+  });
+  it('TEST-9 preserves an existing proposal rejection when canonicalization also fails', async () => {
+    const f = await fixture({ existing: true });
+    await createFreshPlan(f.recordingStorage.storage, f.testPath, [
+      ...f.plan.steps,
+      { id: 'reject-memo', kind: 'action', action: 'fill', value: 'text', intent: { ...intent, roleHint: 'button' } },
+    ]);
+    const before = await f.recordingStorage.storage.readText(f.groundingPath);
+    f.recordingStorage.writes.length = 0;
+    const serialize = canonicalJson.toCanonicalArtifactText;
+    let persistenceAttempts = 0;
+    // A confirmed entry makes the cache dirty before the later rejection,
+    // so this tests error preservation after a real persistence attempt.
+    const canonicalize = vi.spyOn(canonicalJson, 'toCanonicalArtifactText').mockImplementation((value) => {
+      const document = value as unknown as GroundingDocument;
+      if (document.schemaVersion === 4 && document.entries?.['fill-memo'] !== undefined) {
+        persistenceAttempts += 1;
+        throw new RangeError('Cannot canonicalize a string with an unpaired surrogate.');
+      }
+      return serialize(value);
+    });
+    let outcome: Awaited<ReturnType<typeof run>>;
+    try { outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true }); } finally { canonicalize.mockRestore(); }
+    expect(persistenceAttempts).toBe(1);
+    expect(actions(f)).toHaveLength(1);
+    expect(outcome.results[0]?.result.steps.find((step) => step.id === 'confirm-memo')).toMatchObject({ status: 'passed' });
+    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({ details: { reason: 'proposal-rejected' } });
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(IntegrityViolationError);
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(FsIoError);
+    expect(report(outcome).errors).toContainEqual(expect.objectContaining({ code: 'GROUNDING_UNRESOLVED' }));
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([]);
+    expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(before);
+  });
 });
 
 describe('TEST-R10 staleness precedence', () => {
@@ -233,9 +438,9 @@ describe('TEST-R11 report and event vocabulary', () => {
     }
   });
 
-  it('keeps plan, grounding, and report schema versions unchanged', () => {
+  it('advances grounding to v4 while preserving plan and report versions', () => {
     expect(PLAN_SCHEMA_VERSION).toBe(5);
-    expect(GROUNDING_SCHEMA_VERSION).toBe(3);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
     expect(REPORT_SCHEMA_VERSION).toBe('3.10');
   });
 
@@ -2217,7 +2422,7 @@ describe('run', () => {
 
       expect(result.executor.structuredRequests).toHaveLength(1);
       expect(result.executor.structuredRequests[0]?.responseSchema).toEqual(typedJsonSchema(ElementBindingProposalResponse));
-      expect(result.executor.structuredRequests[0]?.prompt).toContain('Put it under the "proposal" key.');
+      expect(result.executor.structuredRequests[0]?.prompt).toContain('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. If that element has no accessible name, return its role with an empty name (""). Return one ElementBindingProposal outcome. Put it under the "proposal" key.');
       expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
       expect((await readGrounding(result.recordingStorage.storage, result.testPath)).entries['click-submit'])
         .toMatchObject({ kind: 'element', provenance: 'ai-proposed' });
@@ -5005,7 +5210,7 @@ describe('run path-B element recovery', () => {
     expect(responseSchema.type).toBe('object');
     expect(responseSchema.properties.proposal.anyOf).toContainEqual(expect.objectContaining({
       additionalProperties: false,
-      properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string', minLength: 1 }, name: { type: 'string', minLength: 1 } },
+      properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string', minLength: 1 }, name: { type: 'string' } },
       required: ['outcome', 'role', 'name'],
     }));
     expect(JSON.stringify(executor.structuredRequests[0]?.responseSchema)).not.toContain('fingerprint');
@@ -8457,7 +8662,7 @@ describe('run failure evidence', () => {
       } as unknown as PlanDocument;
       await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
       await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
-        schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {},
+        schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {},
       } as unknown as JsonValueT));
       const session = createFakeBrowserSession(new Map(), {
         assertOutcome: { passed: false, message: 'The dashboard is absent.' },

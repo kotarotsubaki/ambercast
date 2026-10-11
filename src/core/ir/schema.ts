@@ -69,11 +69,33 @@ export const PLAN_SCHEMA_VERSION = 5 as const;
  * locators, matching the Plan v4 changes.
  * Version 3 replaces bare fingerprint-only element entries with intent-bound
  * accessibility locators carrying `locator`, `intentDigest`, and `provenance`.
+ * Version 4 lets an element entry's locator carry an empty accessible name.
  */
-export const GROUNDING_SCHEMA_VERSION = 3 as const;
+export const GROUNDING_SCHEMA_VERSION = 4 as const;
 
-/** The retired grounding version classified as stale during inspection. */
-export const RETIRED_GROUNDING_SCHEMA_VERSION = 2 as const;
+/**
+ * Grounding versions treated as stale rather than eligible for compatibility reads.
+ *
+ * @remarks
+ * Inspection and replay share this authority so retirement does not depend on
+ * either an independently maintained literal or arithmetic on the current version.
+ */
+export const RETIRED_GROUNDING_SCHEMA_VERSIONS = [2, 3] as const;
+
+/**
+ * Determines whether an unvalidated schema version identifies retired grounding.
+ *
+ * @param value - The raw schema version read from an artifact.
+ * @returns Whether the value is the numeric version 2 or 3; strings and all
+ * other values are not retired-version matches.
+ * @remarks
+ * Both inspection and replay use the shared retirement set. A false result
+ * does not establish that an artifact is valid or current; callers still
+ * validate its schema and provenance.
+ */
+export function isRetiredGroundingSchemaVersion(value: unknown): boolean {
+  return (RETIRED_GROUNDING_SCHEMA_VERSIONS as readonly unknown[]).includes(value);
+}
 
 /**
  * Validates a whole secret reference.
@@ -221,8 +243,12 @@ export type TargetDefinition = z.infer<typeof TargetDefinition>;
 /**
  * Validates an accessibility locator.
  *
- * Empty roles or accessible names cannot identify meaningful targets. A
- * separate variant keeps {@link ElementRef} extensible without a
+ * Plan and trace references require a role and a non-empty accessible name.
+ * The empty-name exception belongs only to {@link GroundingElementLocator},
+ * where it denotes an element with no accessible name. Keeping that exception
+ * separate preserves the plan, trace, and agentic contracts while allowing
+ * locally verified grounding of unnamed elements.
+ * A separate variant keeps {@link ElementRef} extensible without a
  * shape-breaking redesign.
  */
 export const AccessibilityElementRef = z.strictObject({
@@ -235,6 +261,25 @@ export const AccessibilityElementRef = z.strictObject({
  * The parsed accessibility-locator variant of an element reference.
  */
 export type AccessibilityElementRef = z.infer<typeof AccessibilityElementRef>;
+
+/**
+ * Validates an accessibility locator stored in a grounding entry, including
+ * an empty accessible name for an unnamed element.
+ *
+ * @remarks
+ * This dedicated type contains the empty-name exception without relaxing
+ * {@link AccessibilityElementRef} for plans, traces, or agentic execution.
+ * A locator records the observed node's role and name after local uniqueness
+ * and fingerprint checks; it does not authorize selecting among duplicates
+ * by position or fingerprint. Whitespace names remain permitted strings.
+ */
+export const GroundingElementLocator = z.strictObject({
+  strategy: z.literal('accessibility'),
+  role: z.string().min(1),
+  name: z.string(),
+});
+/** The parsed grounding locator, whose name may be empty. */
+export type GroundingElementLocator = z.infer<typeof GroundingElementLocator>;
 
 /**
  * Validates an element locator used by actions, checks, captures, and traces.
@@ -418,12 +463,18 @@ export type GeneratedQuotedElementIntent = z.infer<typeof GeneratedQuotedElement
  * Wrap it in `ElementBindingProposalResponse` before sending it to a provider.
  *
  * @remarks
+ * A found answer may have an empty name because an unnamed element can still
+ * be locally verified by role and normalized name. Its role must remain
+ * non-empty to identify the proposed accessibility role; a missing or null
+ * name is not an unnamed-element answer. The runtime verifies uniqueness and
+ * records the observed node rather than trusting the proposal as a locator.
+ *
  * Built with `z.union` rather than `z.discriminatedUnion` because it emits
  * JSON Schema `anyOf` under the required object root instead of a nested
  * `oneOf`, which Codex's strict JSON Schema validation rejects.
  */
 export const ElementBindingProposal = z.union([
-  z.strictObject({ outcome: z.literal('found'), role: z.string().min(1), name: z.string().min(1) }),
+  z.strictObject({ outcome: z.literal('found'), role: z.string().min(1), name: z.string() }),
   z.strictObject({ outcome: z.literal('none') }),
   z.strictObject({ outcome: z.literal('ambiguous') }),
 ]);
@@ -1378,20 +1429,25 @@ export type VerificationCoverage = z.infer<typeof VerificationCoverage>;
 export type TraceRecordWithCoverageStorage = TraceRecord;
 
 /**
- * Grounding v3 evidence for an intent-bound accessibility locator.
+ * Validates grounding v4 evidence for an intent-bound accessibility locator.
  *
+ * @remarks
  * The digest binds the locator to the committed intent preimage; provenance
  * distinguishes a literal quote match from an AI-proposed first binding.
+ * The locator uses {@link GroundingElementLocator} so a confirmed unnamed
+ * binding survives document validation and replay. Keeping the shared
+ * non-empty-name reference here would reject that binding at persistence,
+ * even if the entry itself carried the current version's name.
  */
-export const ElementGroundingEntryV3 = z.strictObject({
+export const ElementGroundingEntryV4 = z.strictObject({
   kind: z.literal('element'),
-  locator: AccessibilityElementRef,
+  locator: GroundingElementLocator,
   fingerprint: Fingerprint,
   intentDigest: HexSha256,
   provenance: z.enum(['quoted-match', 'ai-proposed']),
 });
-/** The parsed grounding v3 element entry. */
-export type ElementGroundingEntryV3 = z.infer<typeof ElementGroundingEntryV3>;
+/** The parsed grounding v4 element entry. */
+export type ElementGroundingEntryV4 = z.infer<typeof ElementGroundingEntryV4>;
 
 /**
  * Validates grounding recorded for an AI-directed step.
@@ -1418,11 +1474,11 @@ export type AiGroundingEntry = z.infer<typeof AiGroundingEntry>;
  * Validates the distinct grounding records for element-based and AI-directed
  * steps.
  *
- * The discriminator separates intent-bound v3 element evidence (locator,
+ * The discriminator separates intent-bound v4 element evidence (locator,
  * fingerprint, intent digest, and provenance) from an AI execution trace.
  */
 export const GroundingEntry = z.discriminatedUnion('kind', [
-  ElementGroundingEntryV3,
+  ElementGroundingEntryV4,
   AiGroundingEntry,
 ]);
 

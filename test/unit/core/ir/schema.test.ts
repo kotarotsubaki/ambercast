@@ -2,6 +2,8 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import { typedJsonSchema } from '../../../../src/core/ai/typed-json-schema.js';
+import { validateAiResponse } from '../../../../src/adapters/ai/shared/response-validator.js';
+import { AiResponseInvalidError } from '../../../../src/core/errors/ai-response-invalid-error.js';
 import { FinalOutcome } from '../../../../src/adapters/ai/agentic/final-outcome.js';
 import { toCanonicalArtifactText } from '../../../../src/core/ir/canonical-json.js';
 import {
@@ -15,7 +17,7 @@ import {
   ElementCountCheck,
   ElementBindingProposal,
   ElementBindingProposalResponse,
-  ElementGroundingEntryV3,
+  ElementGroundingEntryV4,
   ElementIntent,
   ElementRef,
   ElementVisibleCheck,
@@ -278,15 +280,15 @@ describe('TEST-I8 initial binding schemas', () => {
   };
 
   it('requires every grounding field and rejects unknown keys and provenance', () => {
-    expectAccepted(ElementGroundingEntryV3, entry);
-    expectAccepted(ElementGroundingEntryV3, { ...entry, provenance: 'ai-proposed' });
+    expectAccepted(ElementGroundingEntryV4, entry);
+    expectAccepted(ElementGroundingEntryV4, { ...entry, provenance: 'ai-proposed' });
     for (const field of Object.keys(entry)) {
       const incomplete = { ...entry } as Record<string, unknown>;
       delete incomplete[field];
-      expectRejected(ElementGroundingEntryV3, incomplete);
+      expectRejected(ElementGroundingEntryV4, incomplete);
     }
-    expectRejected(ElementGroundingEntryV3, { ...entry, extra: true });
-    expectRejected(ElementGroundingEntryV3, { ...entry, provenance: 'manual' });
+    expectRejected(ElementGroundingEntryV4, { ...entry, extra: true });
+    expectRejected(ElementGroundingEntryV4, { ...entry, provenance: 'manual' });
   });
 
   it.each([
@@ -298,18 +300,35 @@ describe('TEST-I8 initial binding schemas', () => {
     expectRejected(ElementBindingProposal, { ...proposal, extra: true });
   });
 
-  it('requires found role and name and rejects empty values and unknown outcomes', () => {
+  it('requires found role and name while accepting empty accessible names', () => {
     const found = { outcome: 'found', role: 'button', name: 'Submit' };
     expectRejected(ElementBindingProposal, { outcome: 'found', name: 'Submit' });
     expectRejected(ElementBindingProposal, { outcome: 'found', role: 'button' });
     expectRejected(ElementBindingProposal, { ...found, role: '' });
-    expectRejected(ElementBindingProposal, { ...found, name: '' });
+    expectAccepted(ElementBindingProposal, { ...found, role: 'textbox', name: '' });
+    expectAccepted(ElementBindingProposal, { ...found, role: 'textbox', name: ' ' });
     expectRejected(ElementBindingProposal, { outcome: 'unknown' });
     expectRejected(ElementBindingProposal, {});
   });
 });
 
 describe('element binding provider schema', () => {
+  it('publishes an unconstrained string name and validates an unnamed proposal', () => {
+    const schema = typedJsonSchema(ElementBindingProposalResponse);
+    const json = schema as unknown as { properties: { proposal: { anyOf: { properties: { outcome: { const: string }; name?: unknown } }[] } } };
+    const found = json.properties.proposal.anyOf.find((branch) => branch.properties.outcome.const === 'found');
+    expect(found?.properties.name).toEqual({ type: 'string' });
+    expect(validateAiResponse('{"proposal":{"outcome":"found","role":"textbox","name":""}}', schema))
+      .toEqual({ proposal: { outcome: 'found', role: 'textbox', name: '' } });
+  });
+
+  it.each([
+    { outcome: 'found', role: 'textbox', name: null },
+    { outcome: 'found', role: 'textbox' },
+  ])('rejects a null or omitted provider name: %j', (proposal) => {
+    expect(() => validateAiResponse(JSON.stringify({ proposal }), typedJsonSchema(ElementBindingProposalResponse)))
+      .toThrow(AiResponseInvalidError);
+  });
   it('has one strict root object containing three strict anyOf proposal branches and no oneOf', () => {
     const schema = typedJsonSchema(ElementBindingProposalResponse) as Record<string, unknown>;
     expect(schema).toMatchObject({ type: 'object', additionalProperties: false, required: ['proposal'] });
@@ -1110,11 +1129,11 @@ describe('PlanDocument', () => {
   });
 
   // SPEC-C1 C1-2
-  it('accepts Plan v4 and Grounding v2 and rejects retired versions (SPEC-1, SPEC-3)', () => {
+  it('accepts current Plan and Grounding versions and rejects retired versions (SPEC-1, SPEC-3)', () => {
     expectAccepted(PlanDocument, plan([]));
     expectRejected(PlanDocument, { ...plan([]), schemaVersion: 3 });
     expectRejected(PlanDocument, { ...plan([]), schemaVersion: 4 });
-    expectAccepted(GroundingDocument, { schemaVersion: 3, planDigest: DIGEST_B, entries: {} });
+    expectAccepted(GroundingDocument, { schemaVersion: 4, planDigest: DIGEST_B, entries: {} });
     expectRejected(GroundingDocument, { schemaVersion: 1, planDigest: DIGEST_B, entries: {} });
   });
 
@@ -1190,12 +1209,38 @@ describe('PlanDocument', () => {
 });
 
 describe('GroundingDocument', () => {
+  it('accepts an unnamed v4 element locator while rejecting retired v3', () => {
+    const entry = {
+      kind: 'element', locator: { strategy: 'accessibility', role: 'textbox', name: '' },
+      fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A },
+      intentDigest: DIGEST_B, provenance: 'ai-proposed',
+    };
+    expectAccepted(ElementGroundingEntryV4, entry);
+    const document = { schemaVersion: 4, planDigest: DIGEST_B, entries: { memo: entry } };
+    expectAccepted(GroundingDocument, document);
+    expectRejected(GroundingDocument, { ...document, schemaVersion: 3 });
+  });
+
+  it.each(traceVariants.filter(([, , event]) => 'element' in (event as object)))
+    ('keeps empty names rejected in %s trace events and records', (_name, schema, event) => {
+      const unnamed = { ...(event as object), element: { ...TARGET, name: '' } };
+      expectRejected(schema, unnamed);
+      expectRejected(TraceEntry, unnamed);
+      expectRejected(TraceRecord, { events: [unnamed], verification: [{ type: 'assert', check: 'text-visible', text: 'Ready' }] });
+    });
+
+  it.each(traceAssertVariants.filter(([, event]) => 'element' in (event as object)))
+    ('keeps empty names rejected in %s trace verification', (_name, event) => {
+      const unnamed = { ...(event as object), element: { ...TARGET, name: '' } };
+      expectRejected(TraceAssert, unnamed);
+      expectRejected(TraceRecord, { events: [], verification: [unnamed] });
+    });
   // Fresh generation creates an empty grounding artifact alongside its plan. The
   // element and AI entry shapes stay distinct, so each needs direct positive
   // coverage rather than relying on digest.test.ts's createGrounding() helper.
   it('accepts an element grounding entry with a fingerprint', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
@@ -1211,7 +1256,7 @@ describe('GroundingDocument', () => {
 
   it('accepts an empty entries record for a freshly generated cold-grounding artifact', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {},
     });
@@ -1219,7 +1264,7 @@ describe('GroundingDocument', () => {
 
   it('accepts an AI grounding entry with a populated trace', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
@@ -1235,7 +1280,7 @@ describe('GroundingDocument', () => {
 
   it('accepts a document with mixed element and AI grounding entries', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
@@ -1257,11 +1302,11 @@ describe('GroundingDocument', () => {
   });
 
   it('rejects wrong document fields, invalid entry keys, and unknown properties', () => {
-    expectRejected(GroundingDocument, { schemaVersion: 3, planDigest: 'b'.repeat(63), entries: {} });
-    expectRejected(GroundingDocument, { schemaVersion: 3, planDigest: DIGEST_B, entries: { '1': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } } } });
-    expectRejected(GroundingDocument, { schemaVersion: 3, planDigest: DIGEST_B, entries: {}, unexpected: true });
+    expectRejected(GroundingDocument, { schemaVersion: 4, planDigest: 'b'.repeat(63), entries: {} });
+    expectRejected(GroundingDocument, { schemaVersion: 4, planDigest: DIGEST_B, entries: { '1': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } } } });
+    expectRejected(GroundingDocument, { schemaVersion: 4, planDigest: DIGEST_B, entries: {}, unexpected: true });
     expectRejected(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A }, unexpected: true },
@@ -1271,7 +1316,7 @@ describe('GroundingDocument', () => {
 
   it('rejects a grounding entry without a kind', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         step: { fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } },
@@ -1281,7 +1326,7 @@ describe('GroundingDocument', () => {
 
   it('rejects a grounding entry with an unknown kind', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'widget' },
@@ -1291,7 +1336,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an element grounding entry with a trace', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         step: {
@@ -1305,7 +1350,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an AI grounding entry with a fingerprint', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         step: {
@@ -1322,7 +1367,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an element grounding entry without a fingerprint', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'element' },
@@ -1332,7 +1377,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an AI grounding entry without a trace', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'ai' },

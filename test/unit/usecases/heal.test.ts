@@ -1569,6 +1569,24 @@ describe('heal state-machine contract', () => {
     expect(containWrites).not.toHaveBeenCalled();
   });
 
+  it.each([2, 3])('TEST-7 rejects retired v%s grounding before launching a browser or writing', async (schemaVersion) => {
+    const scenario = await createScenario();
+    const grounding = JSON.parse(await scenario.storage.readText(GROUNDING));
+    const retiredText = toCanonicalArtifactText({ ...grounding, schemaVersion });
+    await scenario.storage.writeText(GROUNDING, retiredText);
+    const containWrites = vi.fn(scenario.deps.containWrites);
+    const result = await heal({ ...scenario.deps, containWrites }, OPTIONS);
+    expect(result.outcome.results).toEqual([]);
+    expect(result.outcome.errors).toHaveLength(1);
+    expect(result.outcome.errors[0]?.error).toBeInstanceOf(FsIoError);
+    expect(result.outcome.errors[0]?.error).toMatchObject({
+      kind: 'fs-io-error', message: 'The grounding artifact is not valid and current.',
+    });
+    expect(scenario.deps.uiExecutor).not.toHaveBeenCalled();
+    expect(containWrites).not.toHaveBeenCalled();
+    expect(await scenario.storage.readText(GROUNDING)).toBe(retiredText);
+  });
+
   it('keeps a cache-hit baseline replay browser-visible and persists failure evidence', async () => {
     const base = createInMemoryStorage();
     const writeBinary = vi.fn<StorageAdapter['writeBinary']>(base.writeBinary);

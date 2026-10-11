@@ -24,7 +24,7 @@ describe('Plan v4 and grounding v2 contract', () => {
     expect(parse(makePlan()).success).toBe(true);
     expect(parse({ ...makePlan(), schemaVersion: 3 }).success).toBe(false);
     expect(parse({ ...makePlan(), schemaVersion: 4 }).success).toBe(false);
-    const current = { schemaVersion: 3, planDigest: 'b'.repeat(64), entries: {} };
+    const current = { schemaVersion: 4, planDigest: 'b'.repeat(64), entries: {} };
     expect(GroundingDocument.safeParse(current).success).toBe(true);
     expect(GroundingDocument.safeParse({ ...current, schemaVersion: 1 }).success).toBe(false);
     expect(planValidator(makePlan())).toBe(true);
@@ -130,7 +130,7 @@ describe('Plan v4 and grounding v2 contract', () => {
 
   it('publishes v4 and v2 schema identities and the frozen v3 schema accepts a v3 fixture', () => {
     expect(getPlanJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json');
-    expect(getGroundingJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json');
+    expect(getGroundingJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json');
     const frozen = JSON.parse(readFileSync(new URL('../../../../website/src/schemas-frozen/plan.v3.schema.json', import.meta.url), 'utf8'));
     const legacy = JSON.parse(readFileSync(new URL('../../../fixtures/ir/golden/plan.golden.artifact.json', import.meta.url), 'utf8'));
     expect(frozen.$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json');
@@ -141,7 +141,7 @@ describe('Plan v4 and grounding v2 contract', () => {
   it('emits the current build schemas with Plan v4, grounding v2, and report 3.10', () => {
     const readBuilt = (name: string) => JSON.parse(readFileSync(new URL(`../../../../dist/schema/${name}.schema.json`, import.meta.url), 'utf8'));
     expect(readBuilt('plan').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json');
-    expect(readBuilt('grounding').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json');
+    expect(readBuilt('grounding').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json');
     expect(readBuilt('report').oneOf.every((variant: { properties: { schemaVersion: { const: string } } }) => variant.properties.schemaVersion.const === '3.10')).toBe(true);
   });
 });

@@ -1450,7 +1450,8 @@ Ambercast publishes these metadata and byte-identical files to the site and npm.
 | plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v4 snapshot retained for consumers of the retired contract. | available |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed current `PlanDocument`, including targets and steps. | available |
 | grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v2 snapshot retained for consumers of the retired contract. | available |
-| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
+| grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v3 snapshot retained for consumers of the retired contract. | available |
+| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.10"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
 Each `$id` equals its public-path URL; byte-identical schema files are published to the site and the npm `schemas/` export.
@@ -1462,7 +1463,7 @@ The current Astro configuration sets `site` to the `https://kotarotsubaki.github
 | generated file | validates | generated from | npm export |
 | --- | --- | --- | --- |
 | `plan.schema.json` | A completed current `PlanDocument` with Plan `schemaVersion` 5, provenance source, targets, and steps. | Zod `PlanDocument` converted as JSON Schema 2020-12. | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
-| `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 3, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
+| `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 4, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.10. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
@@ -2363,7 +2364,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/overview/
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.9.0. The implementation accepts Plan schema version 5 and Grounding schema version 3. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L73)
+This specification describes the artifacts accepted by ambercast 0.9.0. The implementation accepts Plan schema version 5 and Grounding schema version 4. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L74)
 
 ## Normative language {#normative-language}
 
@@ -2387,7 +2388,7 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Artifact | Accepted value | Evidence |
 | --- | --- | --- |
 | Plan `schemaVersion` | `5` | [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L62) |
-| Grounding `schemaVersion` | `3` | [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L73) |
+| Grounding `schemaVersion` | `4` | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L74) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:258](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L258) |
 | Report `schemaVersion` | `3.10` | [src/report/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/schema.ts#L58) |
 
@@ -2709,7 +2710,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/value-types/
 
 ## Shared types {#shared-types}
 
-All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L183) Regexes are quoted verbatim from the runtime authority.
+All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L254) Regexes are quoted verbatim from the runtime authority.
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2717,9 +2718,12 @@ All other chapters MUST use these definitions rather than restating their shapes
 |  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L168) |
 |  | `locale` | string | optional | min length 1 | Authored BCP-47-shaped locale tag, canonicalized by the config loader before this point. | [src/core/ir/schema.ts:210](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L210) |
-| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L183) |
-|  | `role` | string | required | min 1 | Exact accessibility role. | [src/core/ir/schema.ts:185](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L185) |
-|  | `name` | string | required | min 1 | Accessible name. | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L186) |
+| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L254) |
+|  | `role` | string | required | min 1 | Exact accessibility role. | [src/core/ir/schema.ts:256](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L256) |
+|  | `name` | string | required | min 1 | Accessible name. | [src/core/ir/schema.ts:257](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L257) |
+| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | [src/core/ir/schema.ts:276](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L276) |
+|  | `role` | string | required | min 1 | Exact accessibility role. | [src/core/ir/schema.ts:278](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L278) |
+|  | `name` | string | required | may be empty | An empty string denotes an element without an accessible name and matches only nodes whose normalized name is empty. | [src/core/ir/schema.ts:279](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L279) |
 | `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | Literal quoted excerpt text. | [src/core/ir/schema.ts:359](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L359) |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the quoted excerpt. | [src/core/ir/schema.ts:360](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L360) |
 | `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | Source-backed natural-language element description. | [src/core/ir/schema.ts:367](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L367) |
@@ -2791,7 +2795,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/grounding-document/
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `3` | Grounding format version. | [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L73), [src/core/ir/schema.ts:1663](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1663) |
+| `schemaVersion` | integer | required | literal `4` | Grounding format version. | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L74), [src/core/ir/schema.ts:1663](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1663) |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the associated plan. | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | Cached step grounding keyed by ID. | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1370) |
 
@@ -2799,11 +2803,11 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/grounding-document/
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV3` | `kind` | string | required | literal `element` | Element-entry discriminator. | [src/core/ir/schema.ts:1362](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1362) |
-|  | `locator` | `AccessibilityElementRef` | required | [Value types](/ambercast/spec/value-types/#shared-types) | Observed locator bound to the intent. | [src/core/ir/schema.ts:1363](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1363) |
-|  | `fingerprint` | `Fingerprint` | required | [Element fingerprint](/ambercast/spec/fingerprint/#algorithm) | Accessibility-neighborhood evidence. | [src/core/ir/schema.ts:1364](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1364) |
-|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | [src/core/ir/schema.ts:1365](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1365) |
-|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | [src/core/ir/schema.ts:1366](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1366) |
+| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element-entry discriminator. | [src/core/ir/schema.ts:1442](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1442) |
+|  | `locator` | `GroundingElementLocator` | required | [Value types](/ambercast/spec/value-types/#shared-types) | Observed locator bound to the intent. | [src/core/ir/schema.ts:1444](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1444) |
+|  | `fingerprint` | `Fingerprint` | required | [Element fingerprint](/ambercast/spec/fingerprint/#algorithm) | Accessibility-neighborhood evidence. | [src/core/ir/schema.ts:1445](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1445) |
+|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | [src/core/ir/schema.ts:1446](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1446) |
+|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | [src/core/ir/schema.ts:1447](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1447) |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI-entry discriminator. | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1114) |
 |  | `trace` | `TraceRecord` | required | strict trace | Replayable successful trace. | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1116) |
 
@@ -2844,7 +2848,7 @@ This illustrative `planDigest` refers to the complete Plan example in [Plan docu
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -2861,6 +2865,10 @@ After successful replay of an existing trace, an implementation MUST leave that 
 An element entry MUST be written or overwritten only when its binding reaches `confirmed`: at least one step must name that element step in its own non-empty committed `confirms` list, and every such step must pass in the same case. For an `element-visible` confirming assertion, a pass counts as a valid confirmation basis only when exactly one candidate matches; a pass with multiple matches does not confirm the binding. An `acted`-only binding is discarded at write-back and never persisted. [src/usecases/run.ts:147-160](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L147-L160) [src/usecases/run.ts:2877-2892](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L2877-L2892) [src/usecases/run.ts:3251-3295](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L3251-L3295)
 
 For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L1075)
+
+Grounding versions 2 and 3 are retired. `check` reports `stale-grounding` before schema validation under committed policy; uncommitted policy yields `fresh-without-grounding`. Without `--resolve`, `run` reports `GROUNDING_UNRESOLVED` with `recoverable-miss` when the plan digest matches and an element step needs grounding; a differing digest yields `missing`.
+
+`run --resolve` starts with an empty cache and can persist v4 under the existing write-back conditions. `generate` on an unchanged fresh plan replaces a retired cache with empty v4 grounding. `heal` reports `FS_IO_ERROR` until you regenerate with `ambercast run --resolve --update-cache`. Versions 1 and unknown versions remain invalid in `check` and cache misses in `run`.
 
 ## Rationale {#rationale}
 
@@ -2890,6 +2898,8 @@ Implementations MUST serialize the descriptor with [Canonical JSON](/ambercast/s
 A fingerprint mismatch MUST be treated as a miss, never as evidence that the old element is safe to replay. This follows the implemented version gate and mismatch invalidation. [src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L215) [src/core/ir/fingerprint.ts:39](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L39)
 
 `hit`, `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, and `snapshot-invalid` are distinct resolution outcomes. An absent or malformed tree is `element-not-found`; more than one normalized role/name match is `ambiguous-match`; an old or differing hash is `fingerprint-mismatch`. [src/core/ir/fingerprint.ts:347](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L347), [src/core/ir/fingerprint.ts:388](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L388) An unpaired surrogate produces no fingerprint at generation and `element-not-found` at resolution. [src/core/ir/fingerprint.ts:181](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L181)
+
+An empty-name reference matches only nodes whose normalized name is empty.
 
 ## Quote matching {#quote-matching}
 
@@ -2935,7 +2945,7 @@ This section is the canonical owner of `check` status derivation. Reference page
 | CHK-03 | `fresh-without-grounding` | Plan is fresh; companion is not valid; repository policy is `uncommitted`. | pass |
 | CHK-04 | `missing-grounding` | Plan is fresh; companion inspection is `missing`; policy requires committed grounding. | fail |
 | CHK-05 | `invalid-grounding` | Plan is fresh; companion inspection is `invalid` (JSON/schema/canonical coverage failure). | fail |
-| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest` or retired grounding `schemaVersion: 2`, checked before companion schema-shape validation). | fail |
+| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest` or retired grounding `schemaVersion: 2` or `3`, checked before companion schema-shape validation). | fail |
 | CHK-07 | `missing-plan` | A selected test has no plan artifact. | fail |
 | CHK-08 | `orphaned-plan` | An in-scope plan inverse-maps to a test path that does not exist. | fail |
 | CHK-09 | `orphaned-grounding` | An in-scope grounding artifact inverse-maps to a path for which no corresponding test prompt exists. | fail |
@@ -3133,6 +3143,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| Grounding v3 → v4 lets an element entry's locator carry an empty accessible name for an element that has none (unique by role). v2 and v3 are retired: check reports stale-grounding, run without --resolve fails with GROUNDING_UNRESOLVED, and heal fails until grounding is regenerated. | repo:src/core/ir/schema.ts | Run ambercast run --resolve --update-cache to regenerate grounding; AI steps re-execute. generate on an unchanged plan replaces a v2 or v3 grounding with an empty v4 grounding. An older ambercast cannot read v4 grounding, and its generate replaces v4 grounding with an empty v3 one. On rollback, regenerate grounding with the older version; unnamed-element bindings cannot recover because that version rejects empty names. Do not use mixed ambercast versions with the same grounding. |
 | report 3.9 → 3.10 adds `CASE_ABORTED` (environment, case-scope, exit 3, `{reason, stepId}` details) and `PROMPT_AMBIGUOUS` (usage, case-scope, exit 2, `{ambiguities}` details). Every `run` CaseAbort, agentic target-rejection, and unclassified-exception row now carries a matching case error instead of none; `heal` surfaces its Stage 3 and final-replay failures as case errors for every kind (not only agentic). A generate or heal Stage 3 ambiguous-prompt failure becomes `PROMPT_AMBIGUOUS` (exit 2) instead of an uncoded crash (exit 3). | repo:src/report/schema.ts, repo:src/usecases/run.ts, repo:src/usecases/heal-report.ts, repo:src/usecases/generate.ts | Report consumers MUST accept the current `3.10` contract, including `CASE_ABORTED` and `PROMPT_AMBIGUOUS` with their case-scoped details. This additive report change requires no Plan or grounding regeneration. `heal` reports more `errors` per case and more rows as `errored` in `summary`; a test asserting empty `errors` for these rows must account for the new case errors. A test relying on the prior uncoded exit-3 crash for an ambiguous prompt must expect exit 2 and a result row instead. [repo:src/report/schema.ts] |
 | report 3.8 → 3.9 adds four confirmation issue codes to `AiResponseIssueCode` and `AGENTIC_STEP_FAILED` to case-scoped environment errors. In the same release, AI-directed assert and trace replay pass/fail judgment adopt deadline-bearing polling. | [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/schema.ts#L57), repo:src/usecases/run.ts | Report consumers MUST accept the current `3.9` contract, including `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate` on `AiResponseIssueCode`, plus `AGENTIC_STEP_FAILED` with its case-scoped details. This additive report change requires no Plan or grounding regeneration. Tests relying on a single failed observation from AI-directed assert or trace replay must account for polling through the deadline. [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/schema.ts#L57) |
 | Deadline-bearing polling (the eight `run.ts` call sites: first-binding stage 1, the four plan assert loops (including the `text-visible` / `url-matches` browser-check path), the AI-directed assert tool, and the two trace replay pass/fail judgments (events and verification)) always takes one more observation after the wait that reaches the deadline, and that observation is judged as the final result even if the real timer fires after the deadline. Element-assert `expected` text omits the role segment when no `roleHint` is present. | repo:src/usecases/run.ts | No Plan, grounding, or report regeneration is required. A test relying on the previous stale pre-deadline sample (or the double-space `expected` text without a role hint) must update its expectation. |
@@ -3717,11 +3728,12 @@ This page outlines published machine-readable resources and the rules governing 
 | [`schemas/plan.v5.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json) | available |
 | [`schemas/grounding.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json) | available |
 | [`schemas/grounding.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json) | available |
+| [`schemas/grounding.v4.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json) | available |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | available |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | available |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | available |
 
-`schemas/plan.v2.schema.json`, `schemas/plan.v3.schema.json`, `schemas/plan.v4.schema.json`, and `schemas/grounding.v2.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v5 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
+`schemas/plan.v2.schema.json`, `schemas/plan.v3.schema.json`, `schemas/plan.v4.schema.json`, `schemas/grounding.v2.schema.json`, and `schemas/grounding.v3.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v5 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
 
 Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
 

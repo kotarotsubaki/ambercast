@@ -68,7 +68,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
           { id: 'see-ready', target: 'app', kind: 'assert', check: 'text-visible', text: harness.readyText, timeoutMs: 5000, confirms: ['click-submit'] },
         ],
       };
-      const grounding: GroundingDocument = { schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} };
+      const grounding: GroundingDocument = { schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} };
       await storage.writeText(file, prompt);
       await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as JsonValueT));
       await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText(grounding as JsonValueT));

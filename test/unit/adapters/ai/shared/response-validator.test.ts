@@ -14,6 +14,7 @@ function schema() {
 describe('validateAiResponse', () => {
   it.each([
     { proposal: { outcome: 'found', role: 'button', name: 'Submit' } },
+    { proposal: { outcome: 'found', role: 'button', name: '' } },
     { proposal: { outcome: 'none' } },
     { proposal: { outcome: 'ambiguous' } },
   ])('accepts the wrapped $proposal.outcome branch through Zod and AJV', (value) => {
@@ -31,7 +32,6 @@ describe('validateAiResponse', () => {
     ['missing found role', { proposal: { outcome: 'found', name: 'Submit' } }],
     ['empty found role', { proposal: { outcome: 'found', role: '', name: 'Submit' } }],
     ['missing found name', { proposal: { outcome: 'found', role: 'button' } }],
-    ['empty found name', { proposal: { outcome: 'found', role: 'button', name: '' } }],
     ['unknown outcome', { proposal: { outcome: 'unknown' } }],
     ['null proposal', { proposal: null }],
     ['empty root', {}],

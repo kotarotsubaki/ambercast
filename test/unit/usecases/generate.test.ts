@@ -1073,7 +1073,7 @@ describe('generate', () => {
     });
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(JSON.parse(await recordingStorage.storage.readText(`${TEST_DIR}/first.ambercast.grounding.json`))).toEqual({
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: computePlanDigest(firstPlan),
       entries: {},
     });
@@ -1456,6 +1456,28 @@ describe('generate', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it.each([2, 3])('TEST-7 replaces retired v%s grounding with empty v4 without regenerating a fresh plan', async (schemaVersion) => {
+    const { deps, execute, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath);
+    const planPath = deps.layout.planPathFor(testPath);
+    const planText = await recordingStorage.storage.readText(planPath);
+    const plan = JSON.parse(planText) as PlanDocument;
+    const groundingPath = deps.layout.groundingPathFor(testPath);
+    await recordingStorage.storage.writeText(groundingPath, toCanonicalArtifactText({
+      schemaVersion, planDigest: computePlanDigest(plan), entries: {},
+    }));
+    recordingStorage.reset();
+    const result = await generate(deps, DEFAULT_OPTIONS);
+    expect(result.results).toMatchObject([{ status: 'skipped-fresh' }]);
+    expect(execute).not.toHaveBeenCalled();
+    expect(recordingStorage.writes).toEqual([expect.objectContaining({ path: groundingPath })]);
+    expect(JSON.parse(await recordingStorage.storage.readText(groundingPath))).toEqual({
+      schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {},
+    });
+    expect(await recordingStorage.storage.readText(planPath)).toBe(planText);
+  });
+
   it('treats a v1-tagged grounding document as stale, rewrites it empty, and keeps the plan fresh', async () => {
     const { deps, execute, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
@@ -1488,7 +1510,7 @@ describe('generate', () => {
       readonly entries: unknown;
     };
     expect(rewrittenGrounding).toMatchObject({
-      schemaVersion: 3, // SPEC-3: a v1 cache is replaced by the current v3 cache.
+      schemaVersion: 4, // SPEC-3: a v1 cache is replaced by the current v4 cache.
       planDigest: computePlanDigest(plan),
     });
     expect(rewrittenGrounding.entries).toStrictEqual({});
@@ -2146,7 +2168,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 3, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 4, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -2171,7 +2193,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 3, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 4, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -3768,7 +3790,7 @@ describe('generate v5 element intent and confirmation contracts', () => {
     const first = await generate(scenario.deps, DEFAULT_OPTIONS);
     expect(first.results).toMatchObject([{ status: 'generated' }]);
     expect(JSON.parse(await scenario.deps.storage.readText(planPath))).toMatchObject({ schemaVersion: 5 });
-    expect(JSON.parse(await scenario.deps.storage.readText(groundingPath))).toEqual(expect.objectContaining({ schemaVersion: 3, entries: {} }));
+    expect(JSON.parse(await scenario.deps.storage.readText(groundingPath))).toEqual(expect.objectContaining({ schemaVersion: 4, entries: {} }));
     await scenario.deps.storage.writeText(planPath, toCanonicalArtifactText(oldPlan as unknown as JsonValueT));
     const forced = await generate(scenario.deps, { ...DEFAULT_OPTIONS, force: true });
     expect(forced.results).toMatchObject([{ status: 'generated' }]);

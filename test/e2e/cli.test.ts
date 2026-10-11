@@ -86,7 +86,7 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
   );
   await writeFile(
     join(project, 'tests', 'test.ambercast.grounding.json'),
-    toCanonicalArtifactText({ schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} }),
+    toCanonicalArtifactText({ schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} }),
   );
 }
 

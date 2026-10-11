@@ -26,7 +26,7 @@ description: "`inputsDigest` 必须（MUST）是对新构建对象的规范 JSON
 | CHK-03 | `fresh-without-grounding` | Plan 为 fresh；伴生项无效；仓库策略为 `uncommitted`。 | pass |
 | CHK-04 | `missing-grounding` | Plan 为 fresh；伴生项检查结果为 `missing`；策略要求已提交的 grounding。 | fail |
 | CHK-05 | `invalid-grounding` | Plan 为 fresh；伴生项检查结果为 `invalid`（JSON/模式/规范覆盖范围失败）。 | fail |
-| CHK-06 | `stale-grounding` | Plan 为 fresh；伴生项检查结果为 `stale`（存在另一个 `planDigest`，或使用已废弃的 grounding `schemaVersion: 2`；后者先于伴生项自身的 schema 形状验证进行检查）。 | fail |
+| CHK-06 | `stale-grounding` | Plan 为 fresh；伴生项检查结果为 `stale`（存在另一个 `planDigest`，或使用已废弃的 grounding `schemaVersion: 2` 或 `3`；后者先于伴生项自身的 schema 形状验证进行检查）。 | fail |
 | CHK-07 | `missing-plan` | 选定的测试没有 plan 制品。 | fail |
 | CHK-08 | `orphaned-plan` | 范围内的 plan 反向映射到不存在的测试路径。 | fail |
 | CHK-09 | `orphaned-grounding` | 范围内的 grounding 制品反向映射到不存在对应测试提示词的路径。 | fail |

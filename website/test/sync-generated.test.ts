@@ -16,7 +16,7 @@ afterEach(() => {
 const requiredSources = {
   'dist/schema/config.schema.json': '{"schema":"config","unicode":"雪"}\n',
   'dist/schema/plan.schema.json': '{"schema":"plan","current":"v5"}\n',
-  'dist/schema/grounding.schema.json': '{"schema":"grounding","current":"v3"}\n',
+  'dist/schema/grounding.schema.json': '{"schema":"grounding","current":"v4"}\n',
   'dist/schema/report.schema.json': '{"schema":"report"}\n',
   'dist/manifest/capabilities.json': '{"commands":["generate"]}\n',
   'dist/manifest/cli.json': '{"version":"0.3.1"}\n',
@@ -26,19 +26,21 @@ const frozenSchemaSource = {
   'website/src/schemas-frozen/plan.v2.schema.json': '{"schema":"plan","frozen":"v2"}\n',
   'website/src/schemas-frozen/plan.v3.schema.json': '{"schema":"plan","frozen":"v3"}\n',
   'website/src/schemas-frozen/plan.v4.schema.json': '{"schema":"plan","frozen":"v4"}\n',
+  'website/src/schemas-frozen/grounding.v3.schema.json': '{"schema":"grounding","frozen":"v3"}\n',
   'website/src/schemas-frozen/grounding.v2.schema.json': '{"schema":"grounding","frozen":"v2"}\n',
 };
 
 const publications: ReadonlyArray<readonly [string, string]> = [
   ['dist/schema/config.schema.json', 'website/public/schemas/config.schema.json'],
   ['dist/schema/plan.schema.json', 'website/public/schemas/plan.v5.schema.json'],
-  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.v3.schema.json'],
+  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.v4.schema.json'],
   ['dist/schema/report.schema.json', 'website/public/schemas/report.v3.schema.json'],
   ['dist/manifest/capabilities.json', 'website/public/capabilities.json'],
   ['dist/manifest/cli.json', 'website/public/manifest/cli.json'],
   ['website/src/schemas-frozen/plan.v3.schema.json', 'website/public/schemas/plan.v3.schema.json'],
   ['website/src/schemas-frozen/plan.v2.schema.json', 'website/public/schemas/plan.v2.schema.json'],
   ['website/src/schemas-frozen/plan.v4.schema.json', 'website/public/schemas/plan.v4.schema.json'],
+  ['website/src/schemas-frozen/grounding.v3.schema.json', 'website/public/schemas/grounding.v3.schema.json'],
   ['website/src/schemas-frozen/grounding.v2.schema.json', 'website/public/schemas/grounding.v2.schema.json'],
 ];
 
@@ -270,6 +272,17 @@ describe('frozen Plan v2 schema integrity', () => {
     expect(schema.$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json');
     expect(schema.title).toBe('ambercast plan schema v2');
     expect(schema.properties.schemaVersion.const).toBe(2);
+  });
+});
+
+describe('frozen Grounding v3 schema integrity', () => {
+  it('preserves the retired v3 schema bytes and identity', () => {
+    const source = readFileSync(new URL('../src/schemas-frozen/grounding.v3.schema.json', import.meta.url));
+    const schema = JSON.parse(source.toString()) as { $id: string; title: string; properties: { schemaVersion: { const: number } } };
+    expect(createHash('sha256').update(source).digest('hex')).toBe('715f70554f802132aad5771e5dc5aca5e46699b3d7e99bc289f6b69fe2c6bd95');
+    expect(schema.$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json');
+    expect(schema.title).toBe('ambercast grounding schema v3');
+    expect(schema.properties.schemaVersion.const).toBe(3);
   });
 });
 

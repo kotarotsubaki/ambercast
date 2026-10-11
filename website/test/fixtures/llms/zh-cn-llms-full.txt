@@ -1460,7 +1460,8 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | plan（历史快照） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 为已废弃契约的使用者保留的冻结 Plan v4 快照。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 当前完整的 `PlanDocument`，包含目标（targets）与步骤（steps）。 | 可用 |
 | grounding（历史快照） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | 为已废弃契约的使用者保留的冻结 Grounding v2 快照。 | 可用 |
-| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
+| grounding（历史快照） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | 为已废弃契约的使用者保留的冻结 Grounding v3 快照。 | 可用 |
+| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | 可用 |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.10"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告外层信封（envelope）及其命令专属结果。 | 可用 |
 
 - 每个 `$id` 均与其公开路径 URL 完全一致；内容完全一致（byte-identical）的 Schema 文件已发布至文档站点以及 npm 的 `schemas/` 导出。
@@ -1471,7 +1472,7 @@ ambercast 已发布这些元数据，以及在站点与 npm 之间内容完全�
 | 生成的文件 | 验证对象 | 生成来源 | npm 导出 |
 | --- | --- | --- | --- |
 | `plan.schema.json` | 包含 Plan `schemaVersion` 5、来源出处（provenance source）、目标（targets）与步骤（steps）的当前完整 `PlanDocument`。 | Zod `PlanDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
-| `grounding.schema.json` | 包含 Grounding `schemaVersion` 3、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
+| `grounding.schema.json` | 包含 Grounding `schemaVersion` 4、`planDigest` 及以步骤为主键记录项的 `GroundingDocument`。 | Zod `GroundingDocument` 转换为 JSON Schema 2020-12。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | 当前存在的配置文档，其 `$schema` 为必填项，其余声明的设置项均为可选项。 | Zod `RawConfig` 转换为 JSON Schema 2020-12。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `report.schema.json` | 包含 Report `schemaVersion` 3.10 的结构化报告外层信封（envelope）及其命令专属结果。 | Zod `ReportEnvelope` 转换为 JSON Schema 2020-12。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
@@ -2359,7 +2360,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.9.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 3。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:73]
+本规范描述了 ambercast 0.9.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 4。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:74]
 
 ## 规范性用语 {#normative-language}
 
@@ -2383,7 +2384,7 @@ flowchart LR
 | 工件 | 接受的值 | 证据 |
 | --- | --- | --- |
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
-| Grounding `schemaVersion` | `3` | repo:src/core/ir/schema.ts:73 |
+| Grounding `schemaVersion` | `4` | repo:src/core/ir/schema.ts:74 |
 | 指纹算法 | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
 | Report `schemaVersion` | `3.10` | repo:src/report/schema.ts:58 |
 
@@ -2699,7 +2700,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/
 
 ## 共享类型 {#shared-types}
 
-所有其他章节必须（MUST）使用这些定义，而不是重新陈述其形态。下述每个对象都是严格的：未知属性必须（MUST）被拒绝。[src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L183) 正则表达式逐字引用自运行时权威定义。
+所有其他章节必须（MUST）使用这些定义，而不是重新陈述其形态。下述每个对象都是严格的：未知属性必须（MUST）被拒绝。[src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) 正则表达式逐字引用自运行时权威定义。
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2707,9 +2708,12 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/
 |  | `surface` | string | required | literal `web` | 执行界面。 | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | 每个 secret 允许的源。 | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L168) |
 |  | `locale` | string | optional | min length 1 | 由配置加载器规范化后的 BCP-47 格式 locale 标签。 | repo:src/core/ir/schema.ts:210 |
-| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L183) |
-|  | `role` | string | required | min 1 | 精确的可访问性角色。 | [src/core/ir/schema.ts:185](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L185) |
-|  | `name` | string | required | min 1 | 可访问名称。 | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L186) |
+| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) |
+|  | `role` | string | required | min 1 | 精确的可访问性角色。 | [src/core/ir/schema.ts:256](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L256) |
+|  | `name` | string | required | min 1 | 可访问名称。 | [src/core/ir/schema.ts:257](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L257) |
+| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | repo:src/core/ir/schema.ts:276 |
+|  | `role` | string | required | min 1 | 精确匹配的无障碍角色。 | repo:src/core/ir/schema.ts:278 |
+|  | `name` | string | required | may be empty | 空字符串表示没有 accessible name 的元素，仅匹配规范化后名称为空的节点。 | repo:src/core/ir/schema.ts:279 |
 | `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 字面引用的摘录文本。 | repo:src/core/ir/schema.ts:359 |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用摘录的位置。 | repo:src/core/ir/schema.ts:360 |
 | `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | 有来源依据的自然语言元素描述。 | repo:src/core/ir/schema.ts:367 |
@@ -2781,7 +2785,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | 必填 | 字面量 `3` | Grounding 格式版本。 | repo:src/core/ir/schema.ts:73,1663 |
+| `schemaVersion` | integer | 必填 | 字面量 `4` | Grounding 格式版本。 | repo:src/core/ir/schema.ts:74,1663 |
 | `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联计划的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 grounding。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
 
@@ -2789,11 +2793,11 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV3` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | repo:src/core/ir/schema.ts:1362 |
-|  | `locator` | `AccessibilityElementRef` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | repo:src/core/ir/schema.ts:1363 |
-|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | repo:src/core/ir/schema.ts:1364 |
-|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | repo:src/core/ir/schema.ts:1365 |
-|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | repo:src/core/ir/schema.ts:1366 |
+| `ElementGroundingEntryV4` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | repo:src/core/ir/schema.ts:1442 |
+|  | `locator` | `GroundingElementLocator` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | repo:src/core/ir/schema.ts:1444 |
+|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | repo:src/core/ir/schema.ts:1445 |
+|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | repo:src/core/ir/schema.ts:1446 |
+|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | repo:src/core/ir/schema.ts:1447 |
 | `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。 | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114) |
 |  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可重放的成功 trace。 | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1116) |
 
@@ -2834,7 +2838,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -2851,6 +2855,10 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 元素条目仅在其绑定达到 `confirmed` 时才可写入或覆盖：至少一个步骤须在自身非空且已提交的 `confirms` 列表中指定该元素步骤，并且所有此类步骤均须在同一用例中通过。若确认步骤是 `element-visible` 断言，其通过仅在恰好一个候选元素匹配时才构成有效的确认依据；多个候选元素匹配时，即使断言通过，也不能确认绑定。仅达到 `acted` 的绑定在回写时被丢弃，绝不持久化。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
 
 对于每个 `TraceFillSecret`，`secretRef` 必须（MUST）属于所在 Plan AI 步骤已提交的 `secrets[].ref` 集合。违规属于完整性故障，且严禁（MUST NOT）回退到智能体执行。 [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
+
+定位缓存 v2 和 v3 已废弃。`check` 在 committed 策略下于 schema 校验前报告 `stale-grounding`，在 uncommitted 策略下报告 `fresh-without-grounding`。不带 `--resolve` 的 `run` 在执行计划摘要相符且元素步骤需要重新定位时报告 `GROUNDING_UNRESOLVED`，原因为 `recoverable-miss`。摘要不符时原因为 `missing`。
+
+`run --resolve` 从空缓存重新绑定，并在满足现有写回条件时保存 v4。`generate` 将未改变的 fresh 执行计划的旧缓存替换为空的 v4。`heal` 报告 `FS_IO_ERROR`，因此必须先运行 `ambercast run --resolve --update-cache` 重新生成。v1 和未知版本仍在 `check` 中为 invalid，在 `run` 中为缓存未命中。
 
 ## 设计理由 {#rationale}
 
@@ -2880,6 +2888,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/
 指纹不匹配必须（MUST）被视为未命中，绝不能作为旧元素可以安全重放的证据。这遵循了已实现的版本门禁和不匹配失效机制。[src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L215) [src/core/ir/fingerprint.ts:39](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L39)
 
 `hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 和 `snapshot-invalid` 是截然不同的解析结果。缺失或畸形的树为 `element-not-found`；存在多个归一化 role/name 匹配项为 `ambiguous-match`；哈希过旧或不同为 `fingerprint-mismatch`。[src/core/ir/fingerprint.ts:347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L347), [src/core/ir/fingerprint.ts:388](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L388) 未配对的代理项在生成时不产生指纹，在解析时产生 `element-not-found`。[src/core/ir/fingerprint.ts:181](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L181)
+
+名称为空的引用仅匹配规范化后名称为空的节点。
 
 ## 引用匹配 {#quote-matching}
 
@@ -2925,7 +2935,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/
 | CHK-03 | `fresh-without-grounding` | Plan 为 fresh；伴生项无效；仓库策略为 `uncommitted`。 | pass |
 | CHK-04 | `missing-grounding` | Plan 为 fresh；伴生项检查结果为 `missing`；策略要求已提交的 grounding。 | fail |
 | CHK-05 | `invalid-grounding` | Plan 为 fresh；伴生项检查结果为 `invalid`（JSON/模式/规范覆盖范围失败）。 | fail |
-| CHK-06 | `stale-grounding` | Plan 为 fresh；伴生项检查结果为 `stale`（存在另一个 `planDigest`，或使用已废弃的 grounding `schemaVersion: 2`；后者先于伴生项自身的 schema 形状验证进行检查）。 | fail |
+| CHK-06 | `stale-grounding` | Plan 为 fresh；伴生项检查结果为 `stale`（存在另一个 `planDigest`，或使用已废弃的 grounding `schemaVersion: 2` 或 `3`；后者先于伴生项自身的 schema 形状验证进行检查）。 | fail |
 | CHK-07 | `missing-plan` | 选定的测试没有 plan 制品。 | fail |
 | CHK-08 | `orphaned-plan` | 范围内的 plan 反向映射到不存在的测试路径。 | fail |
 | CHK-09 | `orphaned-grounding` | 范围内的 grounding 制品反向映射到不存在对应测试提示词的路径。 | fail |
@@ -3123,6 +3133,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| Grounding v3 → v4 允许按 role 唯一的无名称元素的定位器携带空 accessible name。v2 和 v3 已废弃：check 报告 stale-grounding，不带 --resolve 的 run 以 GROUNDING_UNRESOLVED 失败，heal 在定位缓存重新生成前失败。 | repo:src/core/ir/schema.ts | 运行 ambercast run --resolve --update-cache 重新生成定位缓存；AI 步骤会重新执行。generate 将未改变执行计划的 v2 或 v3 定位缓存替换为空的 v4。旧版 ambercast 无法读取 v4，其 generate 会将 v4 替换为空的 v3。 回退后需要使用旧版本重新生成定位缓存。旧版本拒绝空名称，因此无法恢复无名称元素的绑定。不得用不同 ambercast 版本处理同一定位缓存。 |
 | report 3.9 → 3.10：新增 `CASE_ABORTED`（environment、case 作用域、退出码 3、`{reason, stepId}` details）和 `PROMPT_AMBIGUOUS`（usage、case 作用域、退出码 2、`{ambiguities}` details）。每个 `run` CaseAbort、agentic 目标拒绝和未分类异常结果行现在都携带对应的 case 错误，而不是没有错误；`heal` 将 Stage 3 和最终回放的失败作为 case 错误报告，涵盖所有 kind，而非仅限 agentic。generate 或 heal 的 Stage 3 因提示词歧义而失败时，会产生 `PROMPT_AMBIGUOUS`（退出码 2），而不是无错误代码的崩溃（退出码 3）。 | repo:src/report/schema.ts, repo:src/usecases/run.ts, repo:src/usecases/heal-report.ts, repo:src/usecases/generate.ts | Report 消费者必须（MUST）接受当前的 `3.10` 契约，包括携带 case 作用域 details 的 `CASE_ABORTED` 和 `PROMPT_AMBIGUOUS`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。`heal` 报告中每个 case 的 `errors` 会增多，`summary` 中标记为 `errored` 的结果行也会增多；断言这些结果行的 `errors` 为空的测试必须考虑新的 case 错误。依赖提示词歧义时旧有无错误代码的退出码 3 崩溃的测试，必须改为期待退出码 2 和一条结果行。[repo:src/report/schema.ts] |
 | report 3.8 → 3.9：为 `AiResponseIssueCode` 新增四个确认引用 issue code，并为 case 范围的 environment 错误新增 `AGENTIC_STEP_FAILED`。同一版本中，AI 引导的断言工具和追踪重放的合格/不合格判定采用了带截止时间的轮询。 | repo:src/report/schema.ts:57, repo:src/usecases/run.ts | Report 消费者必须（MUST）接受当前的 `3.9` 契约，包括 `AiResponseIssueCode` 中的 `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action` 和 `confirms-duplicate`，以及携带 case 范围 details 的 `AGENTIC_STEP_FAILED`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。依赖 AI 引导的断言工具或追踪重放单次不合格观测的测试，需要考虑截止时间前的轮询。[repo:src/report/schema.ts:57] |
 | 带截止时间的轮询（`run.ts` 中的八个站点：首次绑定阶段 1、四个 plan assert 循环（包括 `text-visible` / `url-matches` 的浏览器检查路径）、AI 引导的断言工具，以及追踪重放的两个合格/不合格判定（事件与验证））在到达截止时间的等待之后，总会再进行一次观测，并将该次观测判定为最终结果（即使真实计时器在截止时间之后才触发）。元素 assert 的 `expected` 文字在没有 `roleHint` 时不包含角色部分。 | repo:src/usecases/run.ts | 无需重新生成 Plan、grounding 或 report。依赖截止前陈旧样本（或无 roleHint 时含双空格的 `expected` 文字）的测试需要更新期望值。 |
@@ -3734,11 +3745,12 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-
 | [`schemas/plan.v5.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json) | 可用 |
 | [`schemas/grounding.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json) | 可用 |
 | [`schemas/grounding.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json) | 可用 |
+| [`schemas/grounding.v4.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json) | 可用 |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | 可用 |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 可用 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 可用 |
 
-`schemas/plan.v2.schema.json`、`schemas/plan.v3.schema.json`、`schemas/plan.v4.schema.json` 与 `schemas/grounding.v2.schema.json` 是复制到文档站点的冻结、已提交历史快照。当前构建会生成 config Schema、Plan v5 Schema、grounding Schema、report Schema、`capabilities.json` 与 `manifest/cli.json`，其文档站点与 npm 分发包中的字节完全一致。
+`schemas/plan.v2.schema.json`、`schemas/plan.v3.schema.json`、`schemas/plan.v4.schema.json`、`schemas/grounding.v2.schema.json` 与 `schemas/grounding.v3.schema.json` 是复制到文档站点的冻结、已提交历史快照。当前构建会生成 config Schema、Plan v5 Schema、grounding Schema、report Schema、`capabilities.json` 与 `manifest/cli.json`，其文档站点与 npm 分发包中的字节完全一致。
 
 本页面介绍在本次发布中已上线的产物。
 

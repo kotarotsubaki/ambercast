@@ -23,7 +23,7 @@ This section is the canonical owner of `check` status derivation. Reference page
 | CHK-03 | `fresh-without-grounding` | Plan is fresh; companion is not valid; repository policy is `uncommitted`. | pass |
 | CHK-04 | `missing-grounding` | Plan is fresh; companion inspection is `missing`; policy requires committed grounding. | fail |
 | CHK-05 | `invalid-grounding` | Plan is fresh; companion inspection is `invalid` (JSON/schema/canonical coverage failure). | fail |
-| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest` or retired grounding `schemaVersion: 2`, checked before companion schema-shape validation). | fail |
+| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest` or retired grounding `schemaVersion: 2` or `3`, checked before companion schema-shape validation). | fail |
 | CHK-07 | `missing-plan` | A selected test has no plan artifact. | fail |
 | CHK-08 | `orphaned-plan` | An in-scope plan inverse-maps to a test path that does not exist. | fail |
 | CHK-09 | `orphaned-grounding` | An in-scope grounding artifact inverse-maps to a path for which no corresponding test prompt exists. | fail |

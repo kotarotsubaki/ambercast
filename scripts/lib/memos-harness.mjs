@@ -661,7 +661,17 @@ export async function runProcess(command, args, opts = {}) {
       if (!terminating) finish();
     });
     opts.signal?.addEventListener('abort', terminate, { once: true });
-    if (opts.timeoutMs !== undefined) timer = setTimeout(terminate, opts.timeoutMs);
+    if (opts.timeoutMs !== undefined) {
+      const timeoutMs = opts.timeoutMs;
+      const startedAt = performance.now();
+      const onTimeout = () => {
+        if (settled || terminating) return;
+        const remaining = timeoutMs - (performance.now() - startedAt);
+        if (remaining > 0) { timer = setTimeout(onTimeout, remaining); return; }
+        void terminate();
+      };
+      timer = setTimeout(onTimeout, timeoutMs);
+    }
     if (opts.signal?.aborted) void terminate();
   });
 }

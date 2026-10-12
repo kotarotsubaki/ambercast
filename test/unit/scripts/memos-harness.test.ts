@@ -676,6 +676,97 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
     }
   }, 10_000);
 
+  it('TEST-77 reschedules the apparent-elapsed-time check instead of terminating when the timer callback fires before timeoutMs has really elapsed', async () => {
+    const pidFile = join(temporaryRoot(), 'early-timeout-pid');
+    let pid: number | undefined;
+    const realKill = process.kill.bind(process);
+    const signals: NodeJS.Signals[] = [];
+    const kill = vi.spyOn(process, 'kill').mockImplementation((target, signal) => {
+      if (target < 0 && (signal === 'SIGTERM' || signal === 'SIGKILL')) signals.push(signal);
+      return realKill(target, signal);
+    });
+    const timeoutSpy = vi.spyOn(global, 'setTimeout');
+    const now = vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(10).mockReturnValue(60);
+    try {
+      const script = 'echo $$ > "$1"; sleep 30 & wait';
+      const result = await runProcess('sh', ['-c', script, 'memos-test', pidFile], { timeoutMs: 50 });
+      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      expect(signals).toEqual(['SIGTERM']);
+      expect(result.signal).toBe('SIGTERM');
+      expect(now).toHaveBeenCalledTimes(3);
+      const delays = timeoutSpy.mock.calls.map(([, delay]) => delay);
+      expect(delays).toContain(50);
+      expect(delays).toContain(40);
+    } finally {
+      kill.mockRestore();
+      now.mockRestore();
+      timeoutSpy.mockRestore();
+      if (!pid && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      if (pid) try { realKill(-pid, 'SIGKILL'); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
+  }, 10_000);
+
+  it('TEST-78 terminates on the very first callback firing, without any reschedule, when the apparent elapsed time exactly equals timeoutMs', async () => {
+    const pidFile = join(temporaryRoot(), 'exact-timeout-pid');
+    let pid: number | undefined;
+    const realKill = process.kill.bind(process);
+    const signals: NodeJS.Signals[] = [];
+    const kill = vi.spyOn(process, 'kill').mockImplementation((target, signal) => {
+      if (target < 0 && (signal === 'SIGTERM' || signal === 'SIGKILL')) signals.push(signal);
+      return realKill(target, signal);
+    });
+    const now = vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(50);
+    try {
+      const script = 'echo $$ > "$1"; sleep 30 & wait';
+      const result = await runProcess('sh', ['-c', script, 'memos-test', pidFile], { timeoutMs: 50 });
+      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      expect(signals).toEqual(['SIGTERM']);
+      expect(result.signal).toBe('SIGTERM');
+      expect(now).toHaveBeenCalledTimes(2);
+    } finally {
+      kill.mockRestore();
+      now.mockRestore();
+      if (!pid && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      if (pid) try { realKill(-pid, 'SIGKILL'); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
+  }, 10_000);
+
+  it('TEST-79 reschedules by exactly the 1ms remainder when the callback fires 1ms before timeoutMs, then terminates on the next firing', async () => {
+    const pidFile = join(temporaryRoot(), 'remainder-timeout-pid');
+    let pid: number | undefined;
+    const realKill = process.kill.bind(process);
+    const signals: NodeJS.Signals[] = [];
+    const kill = vi.spyOn(process, 'kill').mockImplementation((target, signal) => {
+      if (target < 0 && (signal === 'SIGTERM' || signal === 'SIGKILL')) signals.push(signal);
+      return realKill(target, signal);
+    });
+    const timeoutSpy = vi.spyOn(global, 'setTimeout');
+    const now = vi.spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValueOnce(49).mockReturnValue(51);
+    try {
+      const script = 'echo $$ > "$1"; sleep 30 & wait';
+      const result = await runProcess('sh', ['-c', script, 'memos-test', pidFile], { timeoutMs: 50 });
+      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      expect(signals).toEqual(['SIGTERM']);
+      expect(result.signal).toBe('SIGTERM');
+      expect(now).toHaveBeenCalledTimes(3);
+      const delays = timeoutSpy.mock.calls.map(([, delay]) => delay);
+      expect(delays).toContain(50);
+      expect(delays).toContain(1);
+    } finally {
+      kill.mockRestore();
+      now.mockRestore();
+      timeoutSpy.mockRestore();
+      if (!pid && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      if (pid) try { realKill(-pid, 'SIGKILL'); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
+  }, 10_000);
+
   it('TEST-74 generate mode inherits stdin/stderr and forwards only captured stdout to the sink', async () => {
     const myStdin = fs.fstatSync(0), myStderr = fs.fstatSync(2), myStdout = fs.fstatSync(1);
     const script = "const fs=require('fs');const r={};for(const fd of [0,1,2]){try{const s=fs.fstatSync(fd);r[fd]=[s.dev,s.ino];}catch{r[fd]=null;}}process.stdout.write(JSON.stringify(r)+'\\n');process.stdout.write('generate output\\n');";

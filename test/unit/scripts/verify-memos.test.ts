@@ -21,7 +21,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return { ...actual, renameSync: vi.fn(actual.renameSync), writeFileSync: vi.fn(actual.writeFileSync), mkdirSync: vi.fn(actual.mkdirSync),
-    copyFileSync: vi.fn(actual.copyFileSync),
+    copyFileSync: vi.fn(actual.copyFileSync), rmSync: vi.fn(actual.rmSync),
     existsSync: vi.fn(actual.existsSync), readFileSync: vi.fn(actual.readFileSync) };
 });
 const prompt = 'tests/ambercast/memos-sign-in-create-memo.test.md';
@@ -163,6 +163,7 @@ afterEach(async () => {
   vi.mocked(fs.writeFileSync).mockImplementation(actual.writeFileSync);
   vi.mocked(fs.mkdirSync).mockImplementation(actual.mkdirSync);
   vi.mocked(fs.copyFileSync).mockImplementation(actual.copyFileSync);
+  vi.mocked(fs.rmSync).mockImplementation(actual.rmSync);
   vi.mocked(fs.existsSync).mockImplementation(actual.existsSync);
   vi.mocked(fs.readFileSync).mockImplementation(actual.readFileSync);
   const realChild = await vi.importActual<typeof import('node:child_process')>('node:child_process');
@@ -740,7 +741,11 @@ describe('main', () => {
           for (const key of ['CI', 'GITHUB_ACTIONS', 'AMBERCAST_AI_PROVIDER']) expect(call.opts.env).not.toHaveProperty(key);
         }
         if (call.kind === 'replay') {
-          expect(fs.readdirSync(join(dirname(call.opts.cwd), 'data'))).toEqual([]);
+          const runRoot = dirname(call.opts.cwd);
+          expect(fs.existsSync(join(runRoot, 'data'))).toBe(false);
+          expect(f.starts[1]!.data).toBe(join(runRoot, 'data-reset'));
+          expect(f.starts[1]!.data).not.toBe(f.starts[0]!.data);
+          expect(fs.readdirSync(f.starts[1]!.data)).toEqual([]);
           expect(call.argv).not.toContain('--resolve'); expect(call.argv).not.toContain('--update-cache');
         }
         if (call.kind === 'generate' || call.kind === 'resolve') {
@@ -886,6 +891,129 @@ describe('main', () => {
       expect(fs.readFileSync(foreignTemp, 'utf8')).toBe('another writer owns this file');
       expect(Object.keys(snapshot(f.fixture)).some((path) => path.endsWith(`.tmp-${f.starts[0]!.runId}`))).toBe(false);
       expect(f.roots()).toEqual([]);
+    });
+    it('TEST-76 fails and never starts a second container when the mid-reset container removal fails', async () => {
+      let removeAttempts = 0;
+      const f: Fake = createFakeDeps({ runner: { removeContainer: async (name: string) => {
+        removeAttempts++;
+        if (removeAttempts === 1) throw new Error('removal failed');
+        f.containers.delete(name);
+      } } });
+      const before = snapshot(f.fixture);
+      expect(await run(f, ['--regenerate'])).toBe(1);
+      fail(f, 'replay'); expect(last(f)).toContain('removal failed');
+      expect(f.starts).toHaveLength(1); expect(f.calls('replay')).toEqual([]); expect(f.calls('judge')).toEqual([]);
+      expect(snapshot(f.fixture)).toEqual(before);
+      expect(f.runnerCount('removeContainer')).toBeGreaterThanOrEqual(2); expect(f.containers.size).toBe(0); expect(f.roots()).toEqual([]);
+    });
+    it('TEST-76 fails without reusing a pre-existing data-reset directory', async () => {
+      const f: Fake = createFakeDeps({ runProcess: async (call) => {
+        if (call.kind === 'resolve') {
+          const resetDataDir = join(dirname(call.opts.cwd), 'data-reset');
+          fs.mkdirSync(resetDataDir); fs.writeFileSync(join(resetDataDir, 'stale'), 'leftover from an earlier aborted reset');
+        }
+        return f.successfulProcess(call);
+      } });
+      const before = snapshot(f.fixture);
+      expect(await run(f, ['--regenerate'])).toBe(1);
+      fail(f, 'replay'); expect(last(f)).toContain('EEXIST');
+      expect(f.starts).toHaveLength(1); expect(f.calls('replay')).toEqual([]); expect(f.calls('judge')).toEqual([]);
+      expect(snapshot(f.fixture)).toEqual(before); expect(f.roots()).toEqual([]);
+    });
+    it.each(['container', 'ready', 'bootstrap'])('TEST-76 fails when the second %s after reset fails', async (stage) => {
+      const f: Fake = createFakeDeps({
+        runner: {
+          startContainer: async (spec: ContainerSpec) => {
+            f.containers.add(spec.name);
+            if (stage === 'container' && f.starts.length === 2) throw new Error('second container failed');
+          },
+          isRunning: async (name: string) => (stage === 'ready' && f.starts.length === 2) ? false : f.containers.has(name),
+        },
+        fetch: async (url: string) => {
+          if (stage === 'bootstrap' && url.endsWith('/profile') && f.starts.length === 2) {
+            return { status: 200, json: async () => ({ needsSetup: false }) };
+          }
+          const body = url.endsWith('/profile') ? { needsSetup: true } : url.endsWith('/signin') ? { accessToken: 'token' } : {};
+          return { status: 200, ok: true, json: async () => body, text: async () => JSON.stringify(body) };
+        },
+      });
+      const before = snapshot(f.fixture);
+      expect(await run(f, ['--regenerate'])).toBe(1);
+      fail(f, stage); expect(f.starts).toHaveLength(2);
+      expect(f.calls('replay')).toEqual([]); expect(f.calls('judge')).toEqual([]);
+      expect(snapshot(f.fixture)).toEqual(before); expect(f.roots()).toEqual([]);
+    });
+    it.each(['SIGINT', 'SIGTERM'].flatMap((signal) =>
+      ['removal-wait', 'before-switch', 'after-switch', 'second-container', 'second-ready', 'second-bootstrap'].map((point) => ({ signal, point }))))
+    ('TEST-76 interrupts the reset step at each new checkpoint (table-driven)', async ({ signal, point }) => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      let emitted = false;
+      const f: Fake = createFakeDeps({
+        runner: {
+          removeContainer: async (name: string) => {
+            if (point === 'removal-wait' && f.starts.length === 1 && !emitted) { f.signals.emit(signal); emitted = true; }
+            f.containers.delete(name);
+          },
+          startContainer: async (spec: ContainerSpec) => {
+            f.containers.add(spec.name);
+            if (point === 'second-container' && f.starts.length === 2 && !emitted) { f.signals.emit(signal); emitted = true; }
+          },
+          isRunning: async (name: string) => {
+            if (point === 'second-ready' && f.starts.length === 2 && !emitted) { f.signals.emit(signal); emitted = true; }
+            return f.containers.has(name);
+          },
+        },
+        fetch: async (url: string, opts: RequestInit = {}) => {
+          if (point === 'second-bootstrap' && url.endsWith('/profile') && f.starts.length === 2 && !emitted) { f.signals.emit(signal); emitted = true; }
+          if (opts.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+          const body = url.endsWith('/profile') ? { needsSetup: true } : url.endsWith('/signin') ? { accessToken: 'token' } : {};
+          return { status: 200, ok: true, json: async () => body, text: async () => JSON.stringify(body) };
+        },
+        runProcess: async (call) => {
+          const outcome = await f.successfulProcess(call);
+          if (call.kind === 'resolve' && point === 'before-switch') {
+            vi.mocked(fs.mkdirSync).mockImplementationOnce((path, opts) => {
+              f.signals.emit(signal); emitted = true;
+              return actual.mkdirSync(path, opts);
+            });
+          }
+          if (call.kind === 'resolve' && point === 'after-switch') {
+            vi.mocked(fs.rmSync).mockImplementationOnce((path, opts) => {
+              f.signals.emit(signal); emitted = true;
+              return actual.rmSync(path, opts);
+            });
+          }
+          return outcome;
+        },
+      });
+      const before = snapshot(f.fixture);
+      expect(await run(f, ['--regenerate'])).toBe(signal === 'SIGINT' ? 130 : 143);
+      expect(emitted).toBe(true);
+      const expectedStage = point === 'removal-wait' || point === 'before-switch' || point === 'after-switch' ? 'replay'
+        : point === 'second-container' ? 'container' : point === 'second-ready' ? 'ready' : 'bootstrap';
+      expect(last(f)).toBe(`verify-memos: FAIL stage=${expectedStage} reason=interrupted aiCalls=n/a`);
+      expect(f.starts).toHaveLength(['second-container', 'second-ready', 'second-bootstrap'].includes(point) ? 2 : 1);
+      expect(f.calls('replay')).toEqual([]); expect(f.calls('judge')).toEqual([]);
+      expect(f.fetchCalls.filter((c) => c.url.endsWith('/auth/signin')).length).toBe(1);
+      expect(snapshot(f.fixture)).toEqual(before);
+      expect(f.containers.size).toBe(0); expect(f.roots()).toEqual([]);
+    });
+    it.each(['SIGINT', 'SIGTERM'])('TEST-76 tears down even with --keep when %s arrives during the reset directory switch', async (signal) => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      const f: Fake = createFakeDeps({ runProcess: async (call) => {
+        const outcome = await f.successfulProcess(call);
+        if (call.kind === 'resolve') {
+          vi.mocked(fs.mkdirSync).mockImplementationOnce((path, opts) => {
+            f.signals.emit(signal); return actual.mkdirSync(path, opts);
+          });
+        }
+        return outcome;
+      } });
+      const before = snapshot(f.fixture);
+      expect(await run(f, ['--regenerate', '--keep'])).toBe(signal === 'SIGINT' ? 130 : 143);
+      expect(last(f)).toBe('verify-memos: FAIL stage=replay reason=interrupted aiCalls=n/a');
+      expect(f.starts).toHaveLength(1); expect(f.containers.size).toBe(0); expect(f.roots()).toEqual([]);
+      expect(snapshot(f.fixture)).toEqual(before);
     });
   });
 });

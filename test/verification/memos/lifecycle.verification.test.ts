@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   BASE_URL, MEMOS_IMAGE, PORT, HarnessError, assertPortFree, bootstrapAdmin,
@@ -116,5 +117,32 @@ describe('lifecycle.verification', () => {
     }
     expect(await runner.listContainers()).toEqual([]);
     expect(existsSync(second.dataDir)).toBe(false);
+  });
+
+  it('TEST-75 real Docker lifecycle: Memos reset remounts onto a fresh data-reset path, not the same one', async (ctx) => {
+    if (skipReason) ctx.skip(skipReason);
+    const run = createRunRoot(tmpdir(), randomBytes);
+    const password = generateAdminPassword();
+    try {
+      await start(run);
+      await bootstrapAdmin({ fetch, username: 'verifier', password });
+      // Remount onto a fresh path (the GAP fix this test guards): deleting
+      // and immediately re-mounting the SAME host path crashes Memos with
+      // SQLITE_CANTOPEN on macOS/OrbStack.
+      await runner.removeContainer(run.containerName);
+      const resetDataDir = join(run.runRoot, 'data-reset');
+      mkdirSync(resetDataDir);
+      rmSync(run.dataDir, { recursive: true, force: true });
+      const resetRun = { ...run, dataDir: resetDataDir };
+      await start(resetRun);
+      const profile = await fetch(`${BASE_URL}/api/v1/instance/profile`, { signal: AbortSignal.timeout(5_000) });
+      expect(profile.status).toBe(200);
+      expect((await profile.json()).needsSetup).toBe(true);
+      await bootstrapAdmin({ fetch, username: 'verifier', password });
+    } finally {
+      await teardown(run);
+    }
+    expect(await runner.listContainers()).toEqual([]);
+    expect(existsSync(run.runRoot)).toBe(false);
   });
 });

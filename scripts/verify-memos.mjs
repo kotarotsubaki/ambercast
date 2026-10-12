@@ -329,8 +329,18 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
           await deps.runner.removeContainer(root.containerName, dockerOptions());
           interrupted();
+          // Remount on a fresh path (GAP fix, 2026-10-12): deleting and
+          // immediately re-mounting the same host bind-mount path raced
+          // macOS/OrbStack's virtualized filesystem layer and crashed Memos
+          // with SQLITE_CANTOPEN on restart (confirmed 5/6 and 5/6 failures
+          // reusing the same path, 6/6 successes on a fresh one). Exclusive
+          // creation (no {recursive: true}) fails instead of reusing a
+          // leftover data-reset/ from an earlier, aborted reset.
+          const resetDataDir = join(root.runRoot, 'data-reset');
+          fs.mkdirSync(resetDataDir);
           fs.rmSync(root.dataDir, { recursive: true, force: true });
-          fs.mkdirSync(root.dataDir);
+          root.dataDir = resetDataDir;
+          interrupted();
         }, false);
         await startInstance();
       }

@@ -7,7 +7,7 @@ import { ElementBindingProposalResponse } from '#core/ir/schema.js';
 import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
 import { buildRedactedAiProposalContext } from '#usecases/run.js';
 import type { JsonValueT } from '#core/ir/schema.js';
-import { countConfirmsLiveMatches } from '../support/confirms-live-check.js';
+import { CONFIRMS_LIVE_MIN_PASSES, runConfirmsLiveAttempts } from '../support/confirms-live-check.js';
 
 let available = false;
 
@@ -54,27 +54,31 @@ describe('codex-cli smoke contract', () => {
     })).resolves.toMatchObject({ data: { proposal: { outcome: 'none' } } });
   });
 
-  it('Issue #598 TEST-11 P selects input confirmations in two of three generations', async (context) => {
+  it('Issue #598 TEST-11 P passes at least six of nine independent generations', async (context) => {
     if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
     const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
-    expect(await countConfirmsLiveMatches(executor, 'P')).toBeGreaterThanOrEqual(2);
-  }, 960_000);
+    const { passes } = await runConfirmsLiveAttempts(executor, 'P');
+    expect(passes).toBeGreaterThanOrEqual(CONFIRMS_LIVE_MIN_PASSES);
+  }, 2_700_000);
 
-  it('Issue #598 TEST-11 N1 selects input confirmations in two of three generations', async (context) => {
+  it('Issue #598 TEST-11 N1 passes at least six of nine independent generations', async (context) => {
     if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
     const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
-    expect(await countConfirmsLiveMatches(executor, 'N1')).toBeGreaterThanOrEqual(2);
-  }, 960_000);
+    const { passes } = await runConfirmsLiveAttempts(executor, 'N1');
+    expect(passes).toBeGreaterThanOrEqual(CONFIRMS_LIVE_MIN_PASSES);
+  }, 2_700_000);
 
-  it('Issue #598 TEST-11 N2 selects input confirmations in two of three generations', async (context) => {
+  it('Issue #598 TEST-11 N2 passes at least six of nine independent generations', async (context) => {
     if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
     const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
-    expect(await countConfirmsLiveMatches(executor, 'N2')).toBeGreaterThanOrEqual(2);
-  }, 960_000);
+    const { passes } = await runConfirmsLiveAttempts(executor, 'N2');
+    expect(passes).toBeGreaterThanOrEqual(CONFIRMS_LIVE_MIN_PASSES);
+  }, 2_700_000);
 
-  it('Issue #598 TEST-11 N3 selects input confirmations in two of three generations', async (context) => {
+  it('Issue #598 TEST-11 N3 passes at least six of nine independent generations', async (context) => {
     if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
     const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
-    expect(await countConfirmsLiveMatches(executor, 'N3')).toBeGreaterThanOrEqual(2);
-  }, 960_000);
+    const { passes } = await runConfirmsLiveAttempts(executor, 'N3');
+    expect(passes).toBeGreaterThanOrEqual(CONFIRMS_LIVE_MIN_PASSES);
+  }, 2_700_000);
 });

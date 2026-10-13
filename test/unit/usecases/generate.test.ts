@@ -63,6 +63,57 @@ vi.mock('#core/secrets/env-var-name.js', async (importOriginal) => {
   return { ...actual, assertNoEnvVarCollision: envVarNameMocks.assertNoEnvVarCollision };
 });
 
+describe('#598 generator evidence policy', () => {
+  it('TEST-3 sends the exact evidence policy once in the provider prompt', async () => {
+    const execute = vi.fn(async (_request: AiExecuteRequest) => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(execute).toHaveBeenCalledOnce();
+    const policy = "When setting confirms on an assertion or ai step, list only earlier click, press, fill, fill-secret, or capture steps whose intended effects are evidenced by the exact state it verifies. Do not exclude a step solely because it precedes a submit or another action. Include preceding fill and fill-secret steps when the verified outcome provides evidence for their intended effects; for example, a state that shows the result of signing in as the entered user evidences both the username and the password inputs, while a state that any signed-in session would show, such as a sign-out button, evidences neither. Do not infer confirmation from temporal order or general workflow dependency alone, and exclude steps whose effects the check does not verify.";
+    expect(execute.mock.calls[0]?.[0].prompt.split(policy)).toHaveLength(2);
+  });
+
+  it.each([false, true])('TEST-9 preserves evidenced input confirms with overwritten input=%s', async (overwritten) => {
+    const line = overwritten
+      ? 'Open the sign-in page. Enter the username "alice", then replace it with the username "verifier". Enter the saved password and click "Sign in". Assert that the text "Signed in as verifier" is displayed.'
+      : 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the text "Signed in as verifier" is displayed.';
+    const intent = (description: string, roleHint: string) => ({
+      description, roleHint, startAnchor: 'L3', startColumn: 1,
+      endAnchor: 'L3', endColumn: line.length + 1, citation: line,
+    });
+    const signInColumn = line.indexOf('"Sign in"') + 2;
+    const confirms = ['fill-username', 'fill-password', 'click-sign-in'];
+    const data = { steps: [
+      { id: 'open', kind: 'action', action: 'navigate', target: 'web', url: '/sign-in' },
+      ...(overwritten ? [{ id: 'fill-username-first', kind: 'action', action: 'fill', target: 'web', intent: intent('Username field', 'textbox'), value: 'alice' }] : []),
+      { id: 'fill-username', kind: 'action', action: 'fill', target: 'web', intent: intent('Username field', 'textbox'), value: 'verifier' },
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: intent('Password field', 'textbox'), secret: { nameHint: 'password' } },
+      { id: 'click-sign-in', kind: 'action', action: 'click', target: 'web', intent: {
+        ...intent('Sign in button', 'button'),
+        quote: { text: 'Sign in', startAnchor: 'L3', startColumn: signInColumn, endAnchor: 'L3', endColumn: signInColumn + 'Sign in'.length },
+      } },
+      { id: 'verify-user', kind: 'assert', check: 'text-visible', target: 'web', text: 'Signed in as verifier', confirms },
+    ], ambiguities: [] } as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data, raw: JSON.stringify(data) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const file = await writePrompt(scenario.recordingStorage.storage, 'sign-in.test.md', `# Sign in\n\n${line}\n`);
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), { ...DEFAULT_OPTIONS, files: [file], maxAttempts: 1 });
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(execute).toHaveBeenCalledOnce();
+    const plan = PlanDocument.parse(JSON.parse(await scenario.deps.storage.readText(scenario.deps.layout.planPathFor(file))));
+    expect(plan.steps.find((step) => step.id === 'verify-user')).toHaveProperty('confirms', ['fill-username', 'fill-password', 'click-sign-in']);
+    // Secret naming diagnostics do not change which input lacks outcome evidence.
+    const warnings = outcome.results[0]?.warnings ?? [];
+    expect(warnings.filter((warning) => warning.kind === 'action-unconfirmed')).toEqual(
+      overwritten ? [{ kind: 'action-unconfirmed', stepId: 'fill-username-first' }] : [],
+    );
+    const report = buildGenerateReport({ outcome, options: DEFAULT_OPTIONS, startedAt: '2026-10-13T00:00:00Z', durationMs: 0 });
+    assertDiagnosable(report.envelope);
+  });
+});
+
 describe('TEST-A1, TEST-A2, TEST-A5 and TEST-A7 generation confirms', () => {
   const click = { id: 'click-submit', kind: 'action', action: 'click', target: 'web', intent: QUOTED_INTENT };
   const navigate = { id: 'visit', kind: 'action', action: 'navigate', target: 'web', url: 'https://example.test' };

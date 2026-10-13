@@ -170,8 +170,8 @@ describe('TEST-V1 report-only version change', () => {
     expect(GROUNDING_SCHEMA_VERSION).toBe(4);
     expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
     // Pins the producer-input fingerprints so this test fails if either changes; update only with a deliberate plan-producer change.
-    expect(promptTemplateFingerprint()).toBe('41cbe77e7b967242094b421f8b278e1ea6083e0d5ce30bf3c8ba9ebc33ba17d5');
-    expect(planProducerBundleFingerprint()).toBe('58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58');
+    expect(promptTemplateFingerprint()).toBe('90af9b1b05b4b37057cdf8b2c52e24998474bc79c6c402482f7d137248f8e535');
+    expect(planProducerBundleFingerprint()).toBe('fc88faa7a1420e3ad68be4d52d6f766e79ddacc8165131ffbb47d99417fd399a');
     const prompt = readFileSync(new URL('../../fixtures/issue-518-v5.test.md', import.meta.url), 'utf8');
     const fixture = JSON.parse(readFileSync(new URL('../../fixtures/issue-518-v5.ambercast.plan.json', import.meta.url), 'utf8')) as {
       source: { inputsDigest: string }; targets: Record<string, { surface: 'web'; baseUrl: string }>;

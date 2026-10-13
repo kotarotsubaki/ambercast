@@ -485,8 +485,8 @@ describe('startAgenticMcpServer', () => {
     await server.close();
   });
 
-  it('keeps the producer-bundle fingerprint at the v5 baseline', () => {
-    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58');
+  it('keeps the producer-bundle fingerprint at the #598 baseline', () => {
+    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('fc88faa7a1420e3ad68be4d52d6f766e79ddacc8165131ffbb47d99417fd399a');
   });
 
   it('projects a terminal schema latch into the case report without attempts', async () => {

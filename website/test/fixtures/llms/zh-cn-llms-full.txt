@@ -832,6 +832,18 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/upgrade/
 
 然后运行 `npx ambercast generate --force <file>` 并响应新的同意提示。对于 CI 或其他非交互环境，请先将已审查的名称添加到 `secrets.allow`。重新生成的 Plan 使用 v3 同意／许可列表模型。
 
+## 生成器变更后重新定位 {#reground-after-producer-change}
+
+生成器的 `confirms` 指令发生变化后，producer 指纹随之改变，早期版本生成的所有执行计划都会过期。重新生成执行计划会把其定位缓存替换为空缓存，下面的步骤会让每个元素步骤重新绑定。Plan 5、Grounding 4 和 report 3.10 保持不变。
+
+1. 运行 `npx ambercast check --json`，确认受影响的执行计划报告为 `stale`。
+2. 对每个过期的执行计划运行 `npx ambercast generate <file>`。查看 diff，确认体现某个输入效果的断言，其 `confirms` 列出了该输入。
+   - 如果 generate 对某个输入给出 `action-unconfirmed` 警告，请不要继续第 3 步。
+   - 普通的 run 会在该输入处以 `GROUNDING_UNRESOLVED` 失败。
+   - 请加入能体现该输入效果的断言，例如登录后的用户名，然后重做第 2 步。
+3. 在本机运行 `npx ambercast run --resolve --update-cache <file>`。重新生成后定位缓存为空，所以对每个没有逐字引用的元素步骤，ambercast 会调用一次 AI。CI 默认不保存定位缓存。
+4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。请将执行计划和定位缓存一起提交。
+
 ## 验证 {#verification}
 
 - 接受重新生成后，`npx ambercast check` 的退出代码为 `0`。
@@ -3133,6 +3145,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| 生成器的 confirms 指令不再让提供方排除前面的动作。它会列出那些其预期效果有已验证状态作为证据的前置 click、press、fill、fill-secret 或 capture 步骤，因此位于提交之前的 fill 也可以被确认并保存。producer bundle 指纹会变化。Plan 5、Grounding 4 和 report 3.10 保持不变。 | repo:src/core/ai/prompt-envelope.ts | 早期版本生成的所有执行计划都已过期。先运行 `ambercast generate`，再运行 `ambercast run --resolve --update-cache`。重新生成会把定位缓存替换为空缓存，因此每个元素步骤都会重新绑定。没有逐字引用的步骤会调用一次 AI。然后确认普通的 `ambercast run` 以零次 AI 调用通过，并将执行计划和定位缓存一起提交。 |
 | Grounding v3 → v4 允许按 role 唯一的无名称元素的定位器携带空 accessible name。v2 和 v3 已废弃：check 报告 stale-grounding，不带 --resolve 的 run 以 GROUNDING_UNRESOLVED 失败，heal 在定位缓存重新生成前失败。 | repo:src/core/ir/schema.ts | 运行 ambercast run --resolve --update-cache 重新生成定位缓存；AI 步骤会重新执行。generate 将未改变执行计划的 v2 或 v3 定位缓存替换为空的 v4。旧版 ambercast 无法读取 v4，其 generate 会将 v4 替换为空的 v3。 回退后需要使用旧版本重新生成定位缓存。旧版本拒绝空名称，因此无法恢复无名称元素的绑定。不得用不同 ambercast 版本处理同一定位缓存。 |
 | report 3.9 → 3.10：新增 `CASE_ABORTED`（environment、case 作用域、退出码 3、`{reason, stepId}` details）和 `PROMPT_AMBIGUOUS`（usage、case 作用域、退出码 2、`{ambiguities}` details）。每个 `run` CaseAbort、agentic 目标拒绝和未分类异常结果行现在都携带对应的 case 错误，而不是没有错误；`heal` 将 Stage 3 和最终回放的失败作为 case 错误报告，涵盖所有 kind，而非仅限 agentic。generate 或 heal 的 Stage 3 因提示词歧义而失败时，会产生 `PROMPT_AMBIGUOUS`（退出码 2），而不是无错误代码的崩溃（退出码 3）。 | repo:src/report/schema.ts, repo:src/usecases/run.ts, repo:src/usecases/heal-report.ts, repo:src/usecases/generate.ts | Report 消费者必须（MUST）接受当前的 `3.10` 契约，包括携带 case 作用域 details 的 `CASE_ABORTED` 和 `PROMPT_AMBIGUOUS`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。`heal` 报告中每个 case 的 `errors` 会增多，`summary` 中标记为 `errored` 的结果行也会增多；断言这些结果行的 `errors` 为空的测试必须考虑新的 case 错误。依赖提示词歧义时旧有无错误代码的退出码 3 崩溃的测试，必须改为期待退出码 2 和一条结果行。[repo:src/report/schema.ts] |
 | report 3.8 → 3.9：为 `AiResponseIssueCode` 新增四个确认引用 issue code，并为 case 范围的 environment 错误新增 `AGENTIC_STEP_FAILED`。同一版本中，AI 引导的断言工具和追踪重放的合格/不合格判定采用了带截止时间的轮询。 | repo:src/report/schema.ts:57, repo:src/usecases/run.ts | Report 消费者必须（MUST）接受当前的 `3.9` 契约，包括 `AiResponseIssueCode` 中的 `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action` 和 `confirms-duplicate`，以及携带 case 范围 details 的 `AGENTIC_STEP_FAILED`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。依赖 AI 引导的断言工具或追踪重放单次不合格观测的测试，需要考虑截止时间前的轮询。[repo:src/report/schema.ts:57] |

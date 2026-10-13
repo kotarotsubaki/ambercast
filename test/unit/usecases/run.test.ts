@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -1178,6 +1179,25 @@ describe('run', () => {
 
     expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'integrity-violation', exitCode: 4 });
+    expect(uiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('TEST-7b reports the released 0.7.0 save-note plan as STALE_PLAN without resolve', async () => {
+    const { deps, uiExecutor, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage, 'save-note.test.md',
+      readFileSync(new URL('../../fixtures/v0.7.0-save-note/save-note.test.md', import.meta.url), 'utf8'));
+    for (const [path, name] of [
+      [deps.layout.planPathFor(testPath), 'save-note.ambercast.plan.json'],
+      [deps.layout.groundingPathFor(testPath), 'save-note.ambercast.grounding.json'],
+    ]) {
+      await recordingStorage.storage.writeText(path!, readFileSync(new URL(`../../fixtures/v0.7.0-save-note/${name}`, import.meta.url), 'utf8'));
+    }
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, files: [testPath], resolve: false });
+    const report = buildRunReport({ outcome, options: { allowEmpty: false, list: false }, startedAt: '2026-10-13T00:00:00Z', durationMs: 0 });
+    expect(report.envelope.errors).toEqual([expect.objectContaining({ code: 'STALE_PLAN' })]);
+    expect(report.exitCode).toBe(4);
+    assertDiagnosable(report.envelope);
+    assertZeroAiCalls(report.envelope);
     expect(uiExecutor).not.toHaveBeenCalled();
   });
 

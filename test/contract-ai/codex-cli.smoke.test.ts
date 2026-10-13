@@ -7,6 +7,7 @@ import { ElementBindingProposalResponse } from '#core/ir/schema.js';
 import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
 import { buildRedactedAiProposalContext } from '#usecases/run.js';
 import type { JsonValueT } from '#core/ir/schema.js';
+import { countConfirmsLiveMatches } from '../support/confirms-live-check.js';
 
 let available = false;
 
@@ -52,4 +53,28 @@ describe('codex-cli smoke contract', () => {
       responseSchema: typedJsonSchema(ElementBindingProposalResponse),
     })).resolves.toMatchObject({ data: { proposal: { outcome: 'none' } } });
   });
+
+  it('Issue #598 TEST-11 P selects input confirmations in two of three generations', async (context) => {
+    if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
+    const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
+    expect(await countConfirmsLiveMatches(executor, 'P')).toBeGreaterThanOrEqual(2);
+  }, 960_000);
+
+  it('Issue #598 TEST-11 N1 selects input confirmations in two of three generations', async (context) => {
+    if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
+    const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
+    expect(await countConfirmsLiveMatches(executor, 'N1')).toBeGreaterThanOrEqual(2);
+  }, 960_000);
+
+  it('Issue #598 TEST-11 N2 selects input confirmations in two of three generations', async (context) => {
+    if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
+    const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
+    expect(await countConfirmsLiveMatches(executor, 'N2')).toBeGreaterThanOrEqual(2);
+  }, 960_000);
+
+  it('Issue #598 TEST-11 N3 selects input confirmations in two of three generations', async (context) => {
+    if (!available) context.skip('The Codex CLI is unavailable for the opt-in live smoke check.');
+    const executor = createCodexCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
+    expect(await countConfirmsLiveMatches(executor, 'N3')).toBeGreaterThanOrEqual(2);
+  }, 960_000);
 });

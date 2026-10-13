@@ -36,7 +36,7 @@ description: 跨版本安全升级 ambercast 的操作流程与验证方法。
    - 普通的 run 会在该输入处以 `GROUNDING_UNRESOLVED` 失败。
    - 请加入能体现该输入效果的断言，例如登录后的用户名，然后重做第 2 步。
 3. 在本机运行 `npx ambercast run --resolve --update-cache <file>`。重新生成后定位缓存为空，所以对每个没有逐字引用的元素步骤，ambercast 会调用一次 AI。CI 默认不保存定位缓存。
-4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。请将执行计划和定位缓存一起提交。
+4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。执行计划始终提交；只有 `grounding.repositoryPolicy` 为 `committed` 时才将定位缓存与执行计划一起提交，为 `uncommitted` 时保留在本地。
 
 ## 验证 {#verification}
 

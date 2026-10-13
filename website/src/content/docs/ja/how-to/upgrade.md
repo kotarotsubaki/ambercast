@@ -36,7 +36,7 @@ Plan v2 用に作成されたプロンプトには、旧シークレットグラ
    - 通常の run はその入力で `GROUNDING_UNRESOLVED` になる。
    - サインイン後のユーザー名のように、その入力の効果を示す assert を足し、手順 2 をやり直す。
 3. 手元で `npx ambercast run --resolve --update-cache <file>` を実行する。再生成の直後はグラウンディングが空なので、逐語の引用がない要素ステップごとに ambercast が AI を 1 回呼ぶ。CI は既定でグラウンディングを保存しない。
-4. `npx ambercast check` で計画が `fresh` であることを確かめる。続けて `npx ambercast run <file>` を実行し、pass することと、レポートの `aiCalls` が 0 であることを確かめる。計画とグラウンディングは一緒にコミットする。
+4. `npx ambercast check` で計画が `fresh` であることを確かめる。続けて `npx ambercast run <file>` を実行し、pass することと、レポートの `aiCalls` が 0 であることを確かめる。計画は常にコミットする。グラウンディングは `grounding.repositoryPolicy` が `committed` のときだけ計画と一緒にコミットし、`uncommitted` なら手元に置く。
 
 ## 確認 {#verification}
 

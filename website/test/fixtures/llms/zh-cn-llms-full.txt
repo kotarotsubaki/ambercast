@@ -2006,7 +2006,7 @@ ambercast 当前已实现的命令包括 init、generate、run、check、heal、
 # ambercast generate
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/generate/
 
-`ambercast generate` 命令用于根据提示词生成测试执行计划与伴生文件。您可以直接指定字面提示词路径，或在缺省时由命令执行自动发现；同时支持通过参数配置严格模式、强制生成、预览运行、AI 提供商覆盖以及输出格式。
+`ambercast generate` 命令用于根据提示词生成测试执行计划与伴生文件。您可以直接指定字面提示词路径，或在缺省时由命令执行自动发现；同时支持通过参数配置强制生成、预览运行、AI 提供商覆盖以及输出格式。
 
 ## 命令行参数 {#flags}
 

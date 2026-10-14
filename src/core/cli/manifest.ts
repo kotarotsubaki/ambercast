@@ -128,7 +128,6 @@ export const CLI_MANIFEST: VersionlessCliManifest = {
       summary: 'Generate deterministic plans',
       positional: { name: 'files', variadic: true, description: 'literal prompts; absent selects discovery' },
       flags: [
-        { name: 'strict', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'strict generation policy', default: 'false', lineBreakAfter: false },
         { name: 'force', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'force generation', default: 'false', lineBreakAfter: false },
         { name: 'dry-run', alias: null, value: null, hidden: false, acceptedValues: null, shownValue: null, effect: 'preview: would-generate only when generation is needed; fresh Plan returns skipped-fresh; neither outcome writes', default: 'false', lineBreakAfter: false },
         { name: 'target', alias: null, value: '<name>', hidden: false, acceptedValues: null, shownValue: null, effect: 'select target', default: 'omitted', lineBreakAfter: false },

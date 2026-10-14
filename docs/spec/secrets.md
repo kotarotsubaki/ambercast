@@ -30,7 +30,9 @@ The sink policy parses and normalizes origins at runtime; an absent configured e
 
 ## Literal-secret rejection {#literal-secret-rejection}
 
-This section is the canonical owner of literal-secret detector semantics. Reference pages MUST only summarize the detector boundary for their local purpose and link here. Before persistence or report serialization, generation MUST inspect every provider-derived JSON string and object key, including `generatorMeta` and ambiguities, using lexical-key and array-index traversal order. For each string value or object key, an embedded `{{secrets.` marker (SEC-17) MUST be rejected before the four primitive detectors below are checked; among those, the first match in the fixed order below MUST be rejected. [repo:src/usecases/generator-secret-policy.ts:162-250]
+This section is the canonical owner of literal-secret detector semantics. Reference pages MUST only summarize the detector boundary for their local purpose and link here. Before persistence or report serialization, generation MUST inspect every provider-derived JSON string and object key, including `generatorMeta`, `ambiguities`, and `assumptions`, using lexical-key and array-index traversal order. For each string value or object key, an embedded `{{secrets.` marker (SEC-17) MUST be rejected before the four primitive detectors below are checked; among those, the first match in the fixed order below MUST be rejected. [repo:src/usecases/generator-secret-policy.ts:162-250]
+
+An `assumptions` item that matches secret detection MUST become `An assumption was omitted because it looked like a secret.`. Generation MUST continue with that replacement. [repo:src/usecases/generate.ts]
 
 | id | detector | matching value | exception | classified failure |
 | --- | --- | --- | --- | --- |

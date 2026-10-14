@@ -204,7 +204,7 @@ function checkInput() {
 
 function generateInput() {
   return {
-    files: [], strict: false, force: false, dryRun: false,
+    files: [], force: false, dryRun: false,
     allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR,
   };
 }

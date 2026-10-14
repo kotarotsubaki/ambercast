@@ -28,7 +28,11 @@ Then run `npx ambercast generate --force <file>` and respond to the new consent 
 
 ## Re-ground after a producer change {#reground-after-producer-change}
 
-A new generator instruction for `confirms` changes the producer fingerprint, so plans from earlier releases are stale. Regenerating a plan replaces its grounding with an empty one, and the steps below bind every element step again. Plan 5, Grounding 4, and report 3.10 are unchanged.
+Changes to generator instructions or the response contract change the producer fingerprint, so plans from earlier releases are stale. Regenerating a plan replaces its grounding with an empty one, and the steps below bind every element step again. Plan 5 and Grounding 4 are unchanged.
+
+Report 3.11 adds `generator-assumption` warnings and optional `warnings` on `healed` rows. Update your report schema if you validate a closed union.
+
+The CLI `--strict` flag and MCP `strict` argument have been removed. Remove them from your calls. `ambercast generate --strict` exits 2 as an unknown option, and MCP rejects `strict` during input validation.
 
 1. Run `npx ambercast check --json` and confirm that the affected plans report `stale`.
 2. Run `npx ambercast generate <file>` for each stale plan. In the diff, check that each assert lists in its `confirms` the inputs whose effects it shows.

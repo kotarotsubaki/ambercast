@@ -10,7 +10,6 @@ description: 详细参考 ambercast generate 的命令行参数、AI 提供商�
 | 参数 | 取值类型 | 效果 | 默认值 |
 | --- | --- | --- | --- |
 | files | path[] | 字面提示词路径；缺省时执行自动发现 | discovery |
-| --strict | boolean | 严格生成策略 | false |
 | --force | boolean | 强制执行生成 | false |
 | --dry-run | boolean | 预览：仅在需要生成时返回 `would-generate`；未过期的 Plan 返回 `skipped-fresh`；两种结果均不写入产物 | false |
 | --target | name | 选择目标 | omitted |

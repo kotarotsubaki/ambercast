@@ -12,7 +12,6 @@ description: ambercast generate コマンドのフラグ仕様および成果物
 | flag | value | effect | default |
 | --- | --- | --- | --- |
 | files | path[] | literal prompts; absent selects discovery | discovery |
-| --strict | boolean | strict generation policy | false |
 | --force | boolean | force generation | false |
 | --dry-run | boolean | preview: `would-generate` only when generation is needed; fresh Plan returns `skipped-fresh`; neither outcome writes | false |
 | --target | name | select target | omitted |

@@ -13,7 +13,7 @@ Init options:
   --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
-  --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
+  --force  --dry-run  --target <name>  --ai <claude|codex>
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:

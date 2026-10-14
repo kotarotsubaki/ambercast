@@ -114,6 +114,7 @@ export async function createScenario(options: {
   readonly uiExecutor?: HealDeps['uiExecutor'];
   readonly assertOutcome?: AssertOutcome;
   readonly targets?: PlanDocument['targets'];
+  readonly defaultTarget?: string | undefined;
 } = {}): Promise<HealScenario> {
   const base = options.storage ?? createInMemoryStorage();
   const textWrites = vi.fn<StorageAdapter['writeText']>(base.writeText);
@@ -184,8 +185,12 @@ export async function createScenario(options: {
         testDir: TEST_DIR,
         testMatch: ['**/*.test.md'],
         testIgnore: ['**/.runs/**'],
-        targets: RESOLVED_TARGETS,
-        defaultTarget: 'web',
+        targets: options.targets === undefined ? RESOLVED_TARGETS : Object.fromEntries(
+          Object.entries(options.targets).map(([name, target]) => [name, { ...RESOLVED_TARGETS.web, ...target }]),
+        ),
+        ...(Object.hasOwn(options, 'defaultTarget')
+          ? options.defaultTarget === undefined ? {} : { defaultTarget: options.defaultTarget }
+          : { defaultTarget: 'web' }),
         ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
         secrets: { allow: '*' },
         ci: { heal: false, updateGroundingCache: false },

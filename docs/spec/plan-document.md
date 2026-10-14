@@ -42,7 +42,8 @@ Provider element-bearing step proposals use transient `GeneratedElementIntent` a
 | --- | --- | --- | --- | --- | --- | --- |
 | `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [[spec/steps#generated-forms]] | Provider proposal. | repo:src/core/ir/schema.ts:1250-1253 |
 |  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | Provider metadata. | repo:src/core/ir/schema.ts:1250-1253 |
-|  | `ambiguities` | `JsonValue[]` | required | none | Ambiguity payloads. | repo:src/core/ir/schema.ts:1250-1253 |
+|  | `ambiguities` | `JsonValue[]` | required | none | Steps whose target cannot be assigned. | repo:src/core/ir/schema.ts:1250-1253 |
+|  | `assumptions` | `string[]` | optional | string items only | Other assumptions absent from the prompt; report warnings, never stored in the Plan. | repo:src/core/ir/schema.ts |
 | `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | Proposed success criterion. | repo:src/core/ir/schema.ts:844 |
 |  | `assertion` | `TraceAssert` | required | strict trace assertion | Transient terminal evidence. | repo:src/core/ir/schema.ts:846 |
 

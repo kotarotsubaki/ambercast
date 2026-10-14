@@ -45,7 +45,8 @@ description: "`PlanDocument` は厳格なオブジェクトである。"
 | --- | --- | --- | --- | --- | --- | --- |
 | `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [ステップ](/ambercast/ja/spec/steps/#generated-forms) | プロバイダーの提案。 | [src/core/ir/schema.ts:1234](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1234) |
 |  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | プロバイダーのメタデータ。 | [src/core/ir/schema.ts:1236](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1236) |
-|  | `ambiguities` | `JsonValue[]` | required | none | 曖昧性のペイロード。 | [src/core/ir/schema.ts:1237](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1237) |
+|  | `ambiguities` | `JsonValue[]` | required | none | ターゲットを割り当てられないステップ。 | repo:src/core/ir/schema.ts |
+|  | `assumptions` | `string[]` | optional | string items only | プロンプトにない他の仮定。レポートの警告であり、計画には保存しない。 | repo:src/core/ir/schema.ts |
 | `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | 提案された成功基準。 | [src/core/ir/schema.ts:844](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L844) |
 |  | `assertion` | `TraceAssert` | required | strict trace assertion | 一時的な終端エビデンス。 | [src/core/ir/schema.ts:846](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L846) |
 

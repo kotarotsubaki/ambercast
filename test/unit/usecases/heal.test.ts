@@ -41,6 +41,7 @@ import {
   heal,
   type HealCommitOutcome,
   type HealDeps,
+  type HealCaseOutcome,
 } from '#usecases/heal.js';
 import type { GenerateDeps } from '#usecases/generate.js';
 import { PlanNavigationResolutionError, type RunOutcome } from '#usecases/run.js';
@@ -51,8 +52,8 @@ import { createRecordingEventSink } from '../../doubles/create-recording-event-s
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession, elementRefKey, type FakeBrowserSessionEntry } from '../../doubles/fake-browser-session.js';
-import { assertDiagnosable } from '../../support/report-assertions.js';
-import { createScenario, healAccessibilityTree, healSnapshot, groundingEntry, committedIntent, TEST_DIR, PROMPT, TARGETS, RESOLVED_TARGETS, FINGERPRINT, SUBMIT, PASSWORD, REPAIRED_PASSWORD, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT, FIXTURE_SPAN, OPTIONS, type HealScenario } from '../../support/heal-scenario.js';
+import { assertDiagnosable, assertNoSecretDisclosure, collectStorageArtifacts } from '../../support/report-assertions.js';
+import { createScenario, healAccessibilityTree, healSnapshot, groundingEntry, committedIntent, TEST_DIR, RUNS_DIR, PROMPT, TARGETS, RESOLVED_TARGETS, FINGERPRINT, SUBMIT, PASSWORD, REPAIRED_PASSWORD, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT, FIXTURE_SPAN, OPTIONS, type HealScenario } from '../../support/heal-scenario.js';
 
 const aiExecutorUnavailableObserver = vi.hoisted(() => ({ messages: [] as string[] }));
 
@@ -153,6 +154,234 @@ afterEach(() => {
 
 const PLAN = '/workspace/tests/login.ambercast.plan.json';
 const GROUNDING = '/workspace/tests/login.ambercast.grounding.json';
+
+// A spread avoids excess-property checks: this proves outcome discrimination,
+// rather than merely rejecting a property missing from every outcome.
+function assertAssumptionWarningTypes(outcome: HealCaseOutcome): void {
+  const warningBearing = { ...outcome, warnings: [{ kind: 'generator-assumption' as const, message: 'A' }] };
+  const accepted: HealCaseOutcome = { ...warningBearing, repairOutcome: 'healed' };
+  // @ts-expect-error SPEC-7 forbids warnings on partially healed outcomes.
+  const partial: HealCaseOutcome = { ...warningBearing, repairOutcome: 'partially-healed' };
+  // @ts-expect-error SPEC-7 forbids warnings on unresolved outcomes.
+  const unresolved: HealCaseOutcome = { ...warningBearing, repairOutcome: 'unresolved' };
+  // @ts-expect-error SPEC-7 forbids warnings when no repair was needed.
+  const unchanged: HealCaseOutcome = { ...warningBearing, repairOutcome: 'no-changes-needed' };
+  void [accepted, partial, unresolved, unchanged];
+}
+void assertAssumptionWarningTypes;
+
+describe('TEST-7 accepted Stage 3 assumptions (SPEC-3, SPEC-7)', () => {
+  const invalidTail = { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'navigate', url: '/ignored' }], ambiguities: [] };
+
+  async function candidateScenario(assumptions?: readonly string[], candidateSteps: unknown = [
+    { id: 'regenerated', kind: 'action', target: 'web', action: 'navigate', url: '/dashboard' },
+  ]) {
+    const candidate = { steps: candidateSteps, ambiguities: [], ...(assumptions === undefined ? {} : { assumptions }) };
+    const executor = createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request)
+      : { data: stage2Frontier(request) === undefined ? candidate : invalidTail, raw: JSON.stringify(candidate) } });
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'broken', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
+      grounding: {}, aiExecutor: executor, sessionEntries: liveEntries(REPAIRED_SUBMIT),
+    });
+    return { scenario, executor, candidate };
+  }
+
+  function settledReport(result: Awaited<ReturnType<typeof heal>>, application: 'preview-only' | 'applied' | 'no-artifact-change') {
+    return buildHealReport({ startedAt: '2026-08-25T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false },
+      outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application })) },
+    });
+  }
+
+  it.each([
+    ['one', ['A'], ['A']],
+    ['ordered duplicates and blanks', ['A', '  ', ' B ', 'A', '\n', ''], ['A', ' B ', 'A']],
+    ['long message', ['Assumed page '.repeat(8192)], ['Assumed page '.repeat(8192)]],
+  ] as const)('retains %s assumptions only after Stage 3 acceptance', async (_name, assumptions, expected) => {
+    const { scenario, executor } = await candidateScenario(assumptions);
+    const original = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    const result = await heal(scenario.deps, OPTIONS);
+    const row = result.outcome.results[0];
+    expect(row?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(row?.repairOutcome).toBe('healed');
+    expect(executor.structuredRequests.filter((request) => stage2Frontier(request) === undefined)).toHaveLength(1);
+    expect(row).toHaveProperty('warnings', expected.map((message) => ({ kind: 'generator-assumption', message })));
+    expect(result.commits.size).toBe(1);
+    const preview = settledReport(result, 'preview-only');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.envelope.results[0]).toHaveProperty('application', 'preview-only');
+    expect(preview.envelope.results[0]).toHaveProperty('warnings', expected.map((message) => ({ kind: 'generator-assumption', message })));
+    assertDiagnosable(preview.envelope);
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(original);
+    await expect(result.commits.get(OPTIONS.files[0]!)?.commit()).resolves.toEqual({ outcome: 'committed' });
+    const applied = settledReport(result, 'applied');
+    expect(applied.exitCode).toBe(0);
+    expect(applied.envelope.results[0]).toHaveProperty('warnings', expected.map((message) => ({ kind: 'generator-assumption', message })));
+    const plan = JSON.parse(await scenario.storage.readText(PLAN));
+    expect(plan.steps[0].id).toBe('regenerated');
+    expect(plan).not.toHaveProperty('assumptions');
+    expect(plan).not.toHaveProperty('warnings');
+  });
+
+  it.each([
+    ['absent', undefined], ['empty', []], ['blank', ['', ' ', '\n', '\t\r\n']],
+  ] as const)('omits the warnings key for %s assumptions after accepted replay', async (_name, assumptions) => {
+    const { scenario } = await candidateScenario(assumptions);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('healed');
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+  });
+
+  it('filters action warnings out of an accepted Stage 3 candidate while retaining assumptions', async () => {
+    const { scenario } = await candidateScenario(['A'], [{
+      id: 'regenerated', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT),
+    }]);
+    let candidateWarnings: unknown;
+    generateRunObserver.afterGenerate = (outcome) => { candidateWarnings = outcome.results[0]?.warnings; };
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(candidateWarnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'action-unconfirmed' }),
+      { kind: 'generator-assumption', message: 'A' },
+    ]));
+    expect(result.outcome.results[0]).toHaveProperty('warnings', [{ kind: 'generator-assumption', message: 'A' }]);
+  });
+
+  it('keeps Stage 1-only healed rows free of generator warnings', async () => {
+    let bindings = 0;
+    const executor = createFakeAiExecutor({ execute: async (request) => {
+      if (!isElementBindingProposalRequest(request)) return { data: { steps: [], ambiguities: [], assumptions: ['Unused generation assumption'] }, raw: '{}' };
+      return bindings++ === 0
+        ? { data: { proposal: { outcome: 'none' } }, raw: '{}' }
+        : elementBindingProposal(request);
+    } });
+    const scenario = await createScenario({ steps: [
+      Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+      Step.parse({ id: 'confirm-submit', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] }),
+    ], grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) }, sessionEntries: liveEntries(SUBMIT), aiExecutor: executor });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage1', stepId: 'click-submit', outcome: 'accepted' });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('healed');
+    expect(executor.structuredRequests.every(isElementBindingProposalRequest)).toBe(true);
+    expect(executor.structuredRequests.length).toBeGreaterThan(0);
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+  });
+
+  it.each([
+    ['embedded reference', 'Typed {{secrets.password}} into the field.'],
+    ['entropy token', 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea'],
+  ])('replaces a secret-shaped assumption (%s) without disclosing it in report or committed artifacts', async (_name, secret) => {
+    const { scenario } = await candidateScenario(['A', secret, 'A']);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(result.outcome.results[0]).toHaveProperty('warnings', [
+      { kind: 'generator-assumption', message: 'A' },
+      { kind: 'generator-assumption', message: 'An assumption was omitted because it looked like a secret.' },
+      { kind: 'generator-assumption', message: 'A' },
+    ]);
+    await expect(result.commits.get(OPTIONS.files[0]!)?.commit()).resolves.toEqual({ outcome: 'committed' });
+    const output = settledReport(result, 'applied');
+    assertDiagnosable(output.envelope);
+    await scenario.storage.writeText(`${RUNS_DIR}/assumptions/report.json`, JSON.stringify(output.envelope));
+    const artifacts = await collectStorageArtifacts(scenario.storage, [RUNS_DIR, PLAN, GROUNDING]);
+    expect(artifacts.length).toBeGreaterThanOrEqual(3);
+    assertNoSecretDisclosure({ secrets: { assumption: secret }, report: output.envelope, artifacts });
+  });
+
+  it('discards nonempty assumptions from a not-passing Stage 3 candidate and remains unresolved', async () => {
+    const { scenario, executor, candidate } = await candidateScenario(['A'], [
+      { id: 'regenerated', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' },
+    ]);
+    const before = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(candidate.assumptions).toEqual(['A']);
+    expect(executor.structuredRequests.some((request) => stage2Frontier(request) === undefined)).toBe(true);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('unresolved');
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+    expect(result.commits.size).toBe(0);
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(before);
+    assertDiagnosable(settledReport(result, 'no-artifact-change').envelope);
+  });
+
+  it('discards nonempty assumptions when the Stage 3 secret set is rejected', async () => {
+    const { scenario, candidate } = await candidateScenario(['A'], [{
+      id: 'new-secret', kind: 'action', target: 'web', action: 'fill-secret',
+      intent: generatedIntent(PASSWORD), secret: { nameHint: 'password' },
+    }]);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(candidate.assumptions).toEqual(['A']);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'secret-set-rejected' });
+    expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved', stage3Rejection: { reason: 'secret-set-changed', added: ['password'], removed: [] } });
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+    expect(result.commits.size).toBe(0);
+    assertDiagnosable(settledReport(result, 'no-artifact-change').envelope);
+  });
+
+  it('discards Stage 3 assumptions when restoring a partially healed incremental candidate', async () => {
+    const candidate = { steps: [
+      { id: 'regenerated-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) },
+      { id: 'regenerated-after', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(AFTER_SUBMIT) },
+    ], ambiguities: [], assumptions: ['A'] };
+    const executor = createFakeAiExecutor({ execute: async (request) => {
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
+      return { data: stage2Frontier(request) === undefined ? candidate : {
+        steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [],
+      }, raw: '{}' };
+    } });
+    const scenario = await createScenario({ steps: [
+      Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+      Step.parse({ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: committedIntent(AFTER_SUBMIT) }),
+    ], sessionEntries: new Map([
+      [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+      [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT),
+    ]), aiExecutor: executor });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(candidate.assumptions).toEqual(['A']);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 1 });
+    expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'partially-healed', finalFirstFailureIndex: 1 });
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+    expect(result.commits.size).toBe(1);
+    assertDiagnosable(settledReport(result, 'preview-only').envelope);
+  });
+
+  it('discards assumptions advertised on an accepted Stage 2 response without entering Stage 3', async () => {
+    const response = { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [], assumptions: ['Stage two assumption'] };
+    const executor = createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request) : { data: response, raw: JSON.stringify(response) } });
+    const scenario = await createScenario({ sessionEntries: new Map([
+      [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT),
+    ]), aiExecutor: executor });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(response.assumptions).toHaveLength(1);
+    expect(executor.structuredRequests.filter((request) => stage2Frontier(request) !== undefined)).toHaveLength(1);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage2', stepId: 'click-submit', outcome: 'accepted' });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('healed');
+    expect(result.outcome.results[0]?.repairTrace?.some((entry) => entry.stage === 'stage3')).toBe(false);
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+  });
+
+  it('classifies single-target Stage 3 ambiguities as AI_RESPONSE_INVALID and exit three', async () => {
+    const executor = createFakeAiExecutor({ execute: async (request) => ({
+      data: stage2Frontier(request) === undefined ? { steps: [], ambiguities: ['Unclear target'] } : invalidTail, raw: '{}',
+    }) });
+    const scenario = await createScenario({ steps: [Step.parse({ id: 'broken', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: executor });
+    const before = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(executor.structuredRequests.filter((request) => stage2Frontier(request) === undefined)).toHaveLength(1);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual(expect.objectContaining({ stage: 'stage3', outcome: 'failed' }));
+    expect(result.outcome.results[0]?.stage3Error).toBeInstanceOf(AiResponseInvalidError);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'failed', code: 'AI_RESPONSE_INVALID' });
+    const output = settledReport(result, 'no-artifact-change');
+    expect(output.exitCode).toBe(3);
+    expect(output.envelope.errors).toContainEqual(expect.objectContaining({ code: 'AI_RESPONSE_INVALID', details: expect.objectContaining({ issues: [{ code: 'schema-mismatch', path: ['ambiguities'] }] }) }));
+    assertDiagnosable(output.envelope);
+    expect(result.commits.size).toBe(0);
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(before);
+  });
+});
 const GENERATED_INSTRUCTION_TEXT_FIELD = 'cita' + 'tion';
 function generatedIntent(ref: ElementRef) {
   return { description: ref.name, roleHint: ref.role, startAnchor: 'L3', startColumn: 8, endAnchor: 'L3', endColumn: 14, citation: 'submit' };
@@ -3041,20 +3270,32 @@ describe('heal state-machine contract', () => {
   });
 
   it('reports two Stage 3 ambiguities without a crash or artifact commit', async () => {
+    const executor = createFakeAiExecutor({ execute: async (request) => ({
+      data: request.prompt.startsWith('Repair the requested')
+        ? { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }
+        : { steps: [], ambiguities: ['Unclear target Alpha', 'Unclear target Beta'] },
+      raw: '{}',
+    }) });
     const scenario = await createScenario({
       grounding: {},
-      aiExecutor: createFakeAiExecutor({ execute: async (request) => ({
-        data: request.prompt.startsWith('Repair the requested')
-          ? { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }
-          : { steps: [], ambiguities: ['Unclear target Alpha', 'Unclear target Beta'] },
-        raw: '{}',
-      }) }),
+      targets: { ...TARGETS, shop: { surface: 'web', baseUrl: 'https://shop.example.test' } },
+      defaultTarget: undefined,
+      steps: [
+        Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+        Step.parse({ id: 'shop', kind: 'action', target: 'shop', action: 'navigate', url: '/' }),
+      ],
+      aiExecutor: executor,
     });
     const planBefore = await scenario.storage.readText(PLAN);
     const groundingBefore = await scenario.storage.readText(GROUNDING);
     const result = await heal(scenario.deps, OPTIONS);
     const row = result.outcome.results[0];
     expect(row).toBeDefined();
+    expect(row?.repairTrace).toContainEqual(expect.objectContaining({ stage: 'stage3' }));
+    const requests = executor.structuredRequests.filter((request) => request.prompt.includes('Assign a target name'));
+    expect(requests).toHaveLength(1);
+    expect(Object.keys((requests[0]?.context as { targets: object }).targets)).toEqual(['web', 'shop']);
+    expect(requests[0]?.context).not.toHaveProperty('defaultTarget');
     const report = buildHealReport({
       startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },

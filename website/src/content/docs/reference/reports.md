@@ -11,7 +11,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.10 |
+| `schemaVersion` | literal 3.11 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -38,6 +38,18 @@ In `GenerateResult`, every branch is strict. The optional metrics listed below a
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
+The AI provider may list assumptions absent from the prompt in an optional string array, `assumptions`. `generate` adds each nonblank assumption to `warnings` as `{ kind: 'generator-assumption', message }` on `generated` and `would-generate` results. Assumptions do not stop `generate` or `heal`.
+
+The human output shows `  warning: <message>` immediately after the result line. Ambercast replaces an item that matches secret detection with `An assumption was omitted because it looked like a secret.`.
+
+Ambercast does not store assumptions in the plan. A fresh re-run returns `skipped-fresh` without assumption warnings. Use `--force` to regenerate and see assumptions again; regeneration is non-deterministic.
+
+The `ambiguities` field on `generated` and `would-generate` results is always `[]`. Provider `ambiguities` means only that a step's target cannot be assigned.
+
+Ambercast retries a single-target response with nonempty `ambiguities` as `AI_RESPONSE_INVALID`. If retries exhaust, it exits 3. Unresolved multi-target assignment still produces `PROMPT_AMBIGUOUS` and exit 2.
+
+Consumers that validate warning kinds as a closed union need the report 3.11 schema.
+
 ## Run results {#run-results}
 
 In `RunResult`, every branch is strict.
@@ -62,6 +74,8 @@ In `CheckResult`, every branch is strict.
 ## Heal results {#heal-results}
 
 In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, `sessions`, and `explanation`; `aiCalls` is optional.
+
+Only a `healed` row may include optional `warnings` containing `generator-assumption` items from the accepted Stage 3 candidate's `assumptions`. Other heal results forbid `warnings`. Assumptions do not fail Stage 3.
 
 | repairOutcome | Allowed Application | Allowed stopReason |
 | --- | --- | --- |
@@ -139,16 +153,16 @@ The `reportPersistence` property tracks the write outcome:
 Only the writer is pinned to the current schema version; the viewer reads any 3.x report leniently.
 
 ```json
-{"schemaVersion":"3.10","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.10","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.10","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.10","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}

@@ -124,9 +124,9 @@ describe('report assertions', () => {
     expect(message).toContain('errors[0]');
   });
 
-  it('TEST-A4 keeps all ten generic fallbacks anchored in production source', () => {
-    expect(GENERIC_FALLBACK_MESSAGES).toHaveLength(10);
-    expect(new Set(GENERIC_FALLBACK_MESSAGES).size).toBe(10);
+  it('TEST-A4 keeps all eleven generic fallbacks anchored in production source', () => {
+    expect(GENERIC_FALLBACK_MESSAGES).toHaveLength(11);
+    expect(new Set(GENERIC_FALLBACK_MESSAGES).size).toBe(11);
     const src = fileURLToPath(new URL('../../../src/', import.meta.url));
     const files = readdirSync(src, { recursive: true, encoding: 'utf8' }).filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'));
     const texts = files.map((name) => readFileSync(join(src, name), 'utf8'));

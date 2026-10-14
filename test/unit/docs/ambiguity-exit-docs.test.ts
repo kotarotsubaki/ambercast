@@ -29,8 +29,8 @@ describe('documented ambiguity exit codes', () => {
     expect(tableRow(exitTable, '2')).toContain('PROMPT_AMBIGUOUS');
   });
 
-  it('includes --strict in the skill exit 2 row', () => {
-    expect(tableRow(exitTable, '2')).toContain('`--strict`');
+  it('TEST-8 omits --strict from the skill exit 2 row', () => {
+    expect(tableRow(exitTable, '2')).not.toContain('`--strict`');
   });
 
   it.each(locales)('omits strict from the %s generate tool row', (locale) => {

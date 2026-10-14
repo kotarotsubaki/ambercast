@@ -28,7 +28,11 @@ description: 跨版本安全升级 ambercast 的操作流程与验证方法。
 
 ## 生成器变更后重新定位 {#reground-after-producer-change}
 
-生成器的 `confirms` 指令发生变化后，producer 指纹随之改变，早期版本生成的所有执行计划都会过期。重新生成执行计划会把其定位缓存替换为空缓存，下面的步骤会让每个元素步骤重新绑定。Plan 5、Grounding 4 和 report 3.10 保持不变。
+生成器指令或响应契约发生变化后，producer 指纹随之改变，早期版本生成的执行计划会过期。重新生成执行计划会把其定位缓存替换为空缓存，下面的步骤会让每个元素步骤重新绑定。Plan 5 和 Grounding 4 保持不变。
+
+report 3.11 新增 `generator-assumption` 警告及 `healed` 行的可选 `warnings`。验证封闭 union 的使用者需要更新 report Schema。
+
+CLI 的 `--strict` 选项和 MCP 的 `strict` 参数已移除。请从调用中删除这两个参数。`ambercast generate --strict` 因未知选项以退出码 2 结束，MCP 在输入验证时拒绝 `strict`。
 
 1. 运行 `npx ambercast check --json`，确认受影响的执行计划报告为 `stale`。
 2. 对每个过期的执行计划运行 `npx ambercast generate <file>`。查看 diff，确认体现某个输入效果的断言，其 `confirms` 列出了该输入。

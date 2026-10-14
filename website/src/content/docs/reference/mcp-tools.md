@@ -27,7 +27,7 @@ Inputs are strict objects. Unknown keys, type mismatches, and invalid refinement
 | Scope | Properties and defaults |
 | --- | --- |
 | Common workflow input | `files?: string[]` (omission and `[]` both select config discovery; relative paths use the session root), `allowEmpty?: boolean` (false) |
-| `ambercast_generate` | `target?: string` (restricts which Target definitions the generator may use), `strict?: boolean` (false), `force?: boolean` (false), `dryRun?: boolean` (false), `ai?: 'claude' \| 'codex'` |
+| `ambercast_generate` | `target?: string` (restricts which Target definitions the generator may use), `force?: boolean` (false), `dryRun?: boolean` (false), `ai?: 'claude' \| 'codex'` |
 | `ambercast_run` | `grep?: string` (valid regular expression), `resolve?: boolean` (false), `updateCache?: boolean` (false), `ai?: 'claude' \| 'codex'` |
 | `ambercast_check` | Common input only |
 | `ambercast_heal` | `dryRun?: boolean` (true), `applyToken?: string`, `ai?: 'claude' \| 'codex'` |

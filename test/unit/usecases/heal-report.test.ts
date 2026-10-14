@@ -47,8 +47,27 @@ function report(input: { readonly outcome?: SettledHealOutcome; readonly error?:
 }
 
 describe('buildHealReport', () => {
-  it('emits the shared 3.10 schema version', () => {
-    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.10');
+  it('emits the shared 3.11 schema version', () => {
+    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.11');
+  });
+
+  it.each([
+    ['applied', 0], ['preview-only', 0], ['declined', 1], ['apply-failed', 3], ['partially-applied', 3],
+  ] as const)('TEST-7 preserves ordered healed warnings and %s application with exit %i', (application, exitCode) => {
+    const warnings = [
+      { kind: 'generator-assumption' as const, message: 'A' },
+      { kind: 'generator-assumption' as const, message: ' B ' },
+      { kind: 'generator-assumption' as const, message: 'A' },
+    ];
+    const row = { ...healed(), repairOutcome: 'healed' as const, application, warnings,
+      repairTrace: [{ stage: 'stage3' as const, outcome: 'accepted' as const }] };
+    const errors = application === 'apply-failed' || application === 'partially-applied'
+      ? [{ file: row.file, error: new FsIoError('write failed', { partiallyWritten: application === 'partially-applied' ? ['plan'] : [] }) }]
+      : [];
+    const output = report({ outcome: outcome({ results: [row], errors }) });
+    expect(output.envelope.results[0]).toMatchObject({ status: 'completed', repairOutcome: 'healed', application, warnings, repairTrace: row.repairTrace });
+    expect(output.exitCode).toBe(exitCode);
+    assertDiagnosable(output.envelope);
   });
 
   it('serializes a completed healed candidate without exposing internal progress indices, for a case with no Stage 3 activity', () => {

@@ -8,10 +8,25 @@ import { buildGeneratorTask } from '#core/ai/prompt-envelope.js';
 import { buildRedactedAiProposalContext } from '#usecases/run.js';
 import type { JsonValueT } from '#core/ir/schema.js';
 import { CONFIRMS_LIVE_MIN_PASSES, runConfirmsLiveAttempts } from '../support/confirms-live-check.js';
+import { countAmbiguityLiveOutcomes } from '../support/ambiguity-live-check.js';
 
 let available = false;
 
 describe('claude-code-cli smoke contract', () => {
+  it('#600 ambiguity live check S: single target, path-less prompt does not stop on ambiguity', async context => {
+    if (!available) context.skip('The Claude CLI is unavailable for the opt-in live smoke check.');
+    const result = await countAmbiguityLiveOutcomes(createClaudeCodeCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) }), 'S');
+    const { records: _records, ...counts } = result;
+    expect(result.passed, JSON.stringify(counts)).toBe(true);
+  }, 2_700_000);
+
+  it('#600 ambiguity live check M: genuinely ambiguous multi-target prompt stops with PROMPT_AMBIGUOUS', async context => {
+    if (!available) context.skip('The Claude CLI is unavailable for the opt-in live smoke check.');
+    const result = await countAmbiguityLiveOutcomes(createClaudeCodeCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) }), 'M');
+    const { records: _records, ...counts } = result;
+    expect(result.passed, JSON.stringify(counts)).toBe(true);
+  }, 2_700_000);
+
   it('Issue #596 TEST-14 identifies an unnamed memo editor in two of three validated responses', async context => {
     if (!available) context.skip('The Claude CLI is unavailable for the opt-in live smoke check.');
     const executor = createClaudeCodeCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });

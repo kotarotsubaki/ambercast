@@ -13,7 +13,7 @@ export type ScannedArtifact = { path: string; bytes: Uint8Array };
  * Canonical generic error messages that require supporting details to be diagnosable.
  *
  * @remarks
- * These ten messages reflect the report producers' current fallback vocabulary.
+ * These messages reflect the report producers' current fallback vocabulary.
  * Producer wording changes must update this list together with the source-text
  * contract test, so a new or removed fallback cannot silently escape scrutiny.
  */
@@ -28,6 +28,7 @@ export const GENERIC_FALLBACK_MESSAGES: readonly string[] = [
 	'Report finalization failed schema validation.',
 	'The AI provider call failed.',
 	'The AI-directed interaction did not complete successfully.',
+	'The generated assumptions could not be inspected.',
 ];
 
 /**

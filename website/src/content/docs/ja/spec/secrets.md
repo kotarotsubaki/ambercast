@@ -33,7 +33,9 @@ Heal は新たな同意決定を行ってはならない（MUST NOT）。Stage 3
 
 ## シークレットリテラルの拒否 {#literal-secret-rejection}
 
-本セクションは、リテラルシークレット検出器のセマンティクスに対する正準な定義元である。リファレンスページは局所的な目的に対して検出器境界を要約するのみにとどめ、本セクションへリンクしなければならない（MUST）。永続化またはレポートのシリアライズの前に、生成処理は `generatorMeta` および曖昧性を含む、プロバイダに由来するすべてのJSON文字列およびオブジェクトキーを、字句キーおよび配列インデックスの走査順序で検査しなければならない（MUST）。各文字列値またはオブジェクトキーについて、埋め込まれた `{{secrets.` マーカー（SEC-17）は、以下の4種の primitive 検出器を確認するより前に拒否しなければならない（MUST）。それらの間では、以下の固定順序で最初に一致した検出器で拒否しなければならない（MUST）。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
+本セクションは、リテラルシークレット検出器のセマンティクスに対する正準な定義元である。リファレンスページは局所的な目的に対して検出器境界を要約するのみにとどめ、本セクションへリンクしなければならない（MUST）。永続化またはレポートのシリアライズの前に、生成処理は `generatorMeta`、`ambiguities`、`assumptions`を含む、プロバイダに由来するすべてのJSON文字列およびオブジェクトキーを、字句キーおよび配列インデックスの走査順序で検査しなければならない（MUST）。各文字列値またはオブジェクトキーについて、埋め込まれた `{{secrets.` マーカー（SEC-17）は、以下の4種の primitive 検出器を確認するより前に拒否しなければならない（MUST）。それらの間では、以下の固定順序で最初に一致した検出器で拒否しなければならない（MUST）。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
+
+秘匿値の検査に当たった `assumptions` の項目は `An assumption was omitted because it looked like a secret.` に置き換えなければならない（MUST）。生成は置換後も継続しなければならない（MUST）。[repo:src/usecases/generate.ts]
 
 | id | 検出器 | 一致する値 | 例外 | 分類される障害 |
 | --- | --- | --- | --- | --- |

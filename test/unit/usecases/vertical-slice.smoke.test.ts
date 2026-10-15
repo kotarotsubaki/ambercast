@@ -54,7 +54,6 @@ const GENERATED_RESPONSE: GeneratedPlanResponse = {
 
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [TEST_PATH],
-  strict: false,
   force: false,
   maxAttempts: 1,
   dryRun: false,

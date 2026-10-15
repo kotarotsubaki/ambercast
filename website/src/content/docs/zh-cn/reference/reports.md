@@ -9,7 +9,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.10` |
+| `schemaVersion` | 字面量 `3.11` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -38,6 +38,18 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
+AI provider 可在可选的字符串数组 `assumptions` 中列出提示词未明确说明的假设。`generate` 排除纯空白条目，将其余假设作为 `{ kind: 'generator-assumption', message }` 加入 `generated` 和 `would-generate` 结果的 `warnings`。假设不会阻止 `generate` 或 `heal`。
+
+终端在结果行之后显示 `  warning: <message>`。ambercast 将命中机密检测的条目替换为 `An assumption was omitted because it looked like a secret.`。
+
+ambercast 不会将假设保存到执行计划中。再次运行仍为 fresh 的执行计划会返回 `skipped-fresh`，不显示假设警告。使用 `--force` 重新生成可再次查看假设，但重新生成的结果不确定。
+
+`generated` 和 `would-generate` 结果的 `ambiguities` 始终为 `[]`。provider 的 `ambiguities` 仅表示无法为步骤分配目标。
+
+单目标请求的响应若含非空 `ambiguities`，ambercast 会以 `AI_RESPONSE_INVALID` 重试。重试耗尽后退出码为 3。多目标分配未解决时仍产生 `PROMPT_AMBIGUOUS`，退出码为 2。
+
+将警告类型作为封闭 union 验证的使用者需要 report 3.11 的 Schema。
+
 ## Run 结果 {#run-results}
 
 `RunResult` 的每个分支均为严格模式。
@@ -62,6 +74,8 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 ## Heal 结果 {#heal-results}
 
 `HealResult` 的每个已完成分支均要求具备 `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps` 和 `explanation`；`aiCalls` 为可选字段。
+
+只有 `healed` 行可包含可选字段 `warnings`，其中的 `generator-assumption` 来自 Stage 3 接受的候选项的 `assumptions`。其他 heal 结果禁止 `warnings`。假设不会使 Stage 3 失败。
 
 | `repairOutcome` | 允许的 application | 允许的 stopReason |
 | --- | --- | --- |
@@ -137,16 +151,16 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 只有写入方会固定使用当前的 schema 版本；查看器会宽松地读取任意 3.x 版本的报告。
 
 ```json
-{"schemaVersion":"3.10","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.10","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.10","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.10","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}

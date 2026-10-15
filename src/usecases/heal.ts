@@ -2,7 +2,7 @@ import type { AmbercastError } from '#core/errors/types.js';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import type { FsIoError } from '#core/errors/fs-io-error.js';
 import { reportError } from '#report/error-mapping.js';
-import type { ExecutedRunResult, HealStageOneNotEligibleReason, RepairTraceEntry, StepResult } from '#report/schema.js';
+import type { ExecutedRunResult, GeneratorAssumptionWarning, HealStageOneNotEligibleReason, RepairTraceEntry, StepResult } from '#report/schema.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { RunCaseOutcome, RunDeps } from './run.js';
 import { buildConfirmsIndex, isRetiredPlanVersion, run, validateTrustedInstructionCoveredPlanText } from './run.js';
@@ -76,9 +76,6 @@ export interface HealOptions {
   /** Optional explicit target name; an invalid name never falls back. */
   readonly target?: string;
 
-  /** Whether provider ambiguity is rejected rather than retained for review. */
-  readonly strict?: boolean;
-
   /** Whether an otherwise empty selected set may succeed. */
   readonly allowEmpty?: boolean;
 
@@ -150,8 +147,15 @@ export interface HealCaseError {
  * replay actually performed. They remain separate because successful
  * regeneration can still lead to a browser, integrity, AI, or I/O failure
  * while replaying its candidate.
+ *
+ * Warnings exist only on a healed outcome and carry generator-assumption
+ * warnings from an accepted Stage 3 candidate.
+ *
+ * Heal owns warning filtering and typing; report validation is defensive,
+ * since a warnings key on another outcome would replace the report with an
+ * emergency envelope. Application policy remains independent of warnings.
  */
-export interface HealCaseOutcome {
+interface HealCaseOutcomeBase {
   /** Stable case identity shared by report rows and pending commits. */
   readonly id: string;
 
@@ -224,12 +228,18 @@ export interface HealCaseOutcome {
    *
    * Unlike the mode-independent measured fields, this diagnostic evidence lets
    * a report alone explain a `--dry-run` versus `--yes` divergence. The
-   * producer will always populate it, including an empty array for
+   * producer always populates it, including an empty array for
    * `no-changes-needed`, while the report schema remains optional to tolerate
    * external and legacy input.
    */
   readonly repairTrace: readonly RepairTraceEntry[];
 }
+
+/** Execution-backed repair evidence, with assumptions only for an accepted Stage 3 plan. */
+export type HealCaseOutcome = HealCaseOutcomeBase & (
+  | { readonly repairOutcome: 'healed'; readonly warnings?: readonly GeneratorAssumptionWarning[] | undefined }
+  | { readonly repairOutcome: Exclude<HealCaseOutcomeBase['repairOutcome'], 'healed'>; readonly warnings?: undefined }
+);
 
 /**
  * Ordered healing observations, lifecycle failures, and batch facts.
@@ -952,6 +962,9 @@ async function trySingleStepRepair(
   const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
   const request = {
     prompt: buildGeneratorTask('Repair the requested failing plan step. Return exactly one replacement step with the requested ID, preserving its kind and obligations. Use the supplied test prompt, target definitions, plan continuity, and replay evidence to repair the failure.'),
+    // The shared response schema advertises assumptions, but Stage 2 repairs
+    // only a step and deliberately discards that value. Warning disclosure
+    // belongs to an accepted full-plan regeneration, not a subtree response.
     responseSchema: typedJsonSchema(GeneratedPlanResponse),
     context: buildStage2RepairContext({
       normalizedTestMd: normalized,
@@ -1119,6 +1132,8 @@ export type FullPlanRepairResult =
   }
   | {
     readonly kind: 'replayed';
+    // Candidate assumptions describe this plan only until its replay is accepted.
+    readonly warnings: readonly GeneratorAssumptionWarning[];
     readonly plan: TrustedPlan;
     readonly measurement: ReplayMeasurement & { readonly interrupted: false };
   };
@@ -1166,7 +1181,6 @@ async function tryFullPlanRepair(
     }, {
       files: [file],
       list: false,
-      strict: options.strict ?? false,
       force: true,
       maxAttempts: 1,
       allowEmpty: options.allowEmpty ?? false,
@@ -1180,6 +1194,10 @@ async function tryFullPlanRepair(
       return { kind: 'interrupted' };
     }
     if (item.status !== 'candidate') {
+      // A single-target response reporting target ambiguity is an invalid AI
+      // response rather than an unresolved prompt. With Stage 3's single
+      // attempt, its classified error becomes stage3Error and the trace's
+      // AI_RESPONSE_INVALID code, selecting heal exit 3 without a retry here.
       if (item.error instanceof IntegrityViolationError) throw item.error;
       overlay.restore(snapshot);
       return { kind: 'failed', stage3Error: item.error };
@@ -1205,7 +1223,10 @@ async function tryFullPlanRepair(
       overlay.restore(snapshot);
       return { kind: 'interrupted' };
     }
-    return { kind: 'replayed', plan: candidatePlan, measurement: replay };
+    // Secret and action warnings do not belong to heal's report contract.
+    // Assumptions never veto Stage 3's secret-set and replay acceptance gates.
+    const warnings = (item.warnings ?? []).filter((warning): warning is GeneratorAssumptionWarning => warning.kind === 'generator-assumption');
+    return { kind: 'replayed', plan: candidatePlan, measurement: replay, warnings };
   } catch (error) {
     // Every IntegrityViolationError, whether an exact class or subclass and
     // whether from generation or the internal measureReplay call, is rethrown
@@ -1243,6 +1264,7 @@ function caseOutcome(
   stopReason: HealCaseOutcome['stopReason'],
   aiCalls: number,
   repairTrace: readonly RepairTraceEntry[],
+  warnings: readonly GeneratorAssumptionWarning[],
 ): HealCaseOutcome {
   const repairOutcome = fullPlanReplayed
     ? (measurement.firstFailureIndex === plan.steps.length ? 'healed' : 'unresolved')
@@ -1253,11 +1275,10 @@ function caseOutcome(
         : measurement.firstFailureIndex > baseline
           ? 'partially-healed'
           : 'unresolved';
-  return {
+  const base = {
     id: file,
     file,
     planFile,
-    repairOutcome,
     steps: measurement.replay.result.steps,
     sessions: measurement.replay.result.sessions,
     explanation: measurement.replay.result.explanation,
@@ -1272,6 +1293,9 @@ function caseOutcome(
     finalReplayError: measurement.replay.error,
     repairTrace,
   };
+  return repairOutcome === 'healed'
+    ? { ...base, repairOutcome, ...(warnings.length === 0 ? {} : { warnings }) }
+    : { ...base, repairOutcome };
 }
 
 /**
@@ -1366,6 +1390,9 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
   let repairKind: RepairKind | undefined;
   let stage3Error: AmbercastError | undefined;
   let fullPlanReplayed = false;
+  // Rejected or interrupted candidates cannot annotate the best
+  // retained Stage 1/2 measurement with assumptions from a different plan.
+  let warnings: readonly GeneratorAssumptionWarning[] = [];
   let stage3Required = baselineFirstFailureIndex !== plan.steps.length;
   const visitedFrontiers = new Set<number>();
   const repairHistory: RepairHistoryEntry[] = [];
@@ -1545,6 +1572,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
               // unrounded failure index, including -1.
               if (full.measurement.firstFailureIndex === full.plan.steps.length) {
                 repairTrace.push({ stage: 'stage3', outcome: 'accepted' });
+                warnings = full.warnings;
                 plan = full.plan;
                 measurement = full.measurement;
                 repairKind = 'full-plan';
@@ -1581,6 +1609,7 @@ async function healCase(deps: HealDeps, options: HealOptions, file: string): Pro
     stopReason,
     budget.aiCalls,
     repairTrace,
+    warnings,
   );
   const commit = outcome.stage3Rejection === undefined && (outcome.repairOutcome === 'healed' || outcome.repairOutcome === 'partially-healed') && overlay.hasBufferedWrites()
     ? commitFor(file, planFile, overlay, repairKind ?? 'grounding-element')

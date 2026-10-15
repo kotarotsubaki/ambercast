@@ -27,7 +27,7 @@ MCP 服务器依次提供六个工具：`ambercast_generate`、`ambercast_run`�
 | 范围 | 属性与默认值 |
 | --- | --- |
 | 通用工作流输入 | `files?: string[]`（省略和 `[]` 都使用配置发现；相对路径以 session root 为基准）、`allowEmpty?: boolean`（false） |
-| `ambercast_generate` | `target?: string`（限制生成器可用的 Target 定义）、`strict?: boolean`（false）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
+| `ambercast_generate` | `target?: string`（限制生成器可用的 Target 定义）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_run` | `grep?: string`（有效正则表达式）、`resolve?: boolean`（false）、`updateCache?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_check` | 仅通用输入 |
 | `ambercast_heal` | `dryRun?: boolean`（true）、`applyToken?: string`、`ai?: 'claude' \| 'codex'` |

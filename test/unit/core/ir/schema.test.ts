@@ -805,6 +805,47 @@ describe('InstructionAttributedSteps', () => {
   });
 });
 
+describe('TEST-1 generator assumptions response contract (SPEC-1)', () => {
+  const response = { steps: [], ambiguities: [] };
+
+  it.each([
+    ['missing', {}],
+    ['empty', { assumptions: [] }],
+    ['one string', { assumptions: ['a'] }],
+    ['blank strings', { assumptions: ['', '  ', '\n'] }],
+    ['duplicates and long strings', { assumptions: ['a', 'a', 'a'.repeat(100_000)] }],
+  ])('accepts %s assumptions in both local and requested schemas', (_name, fields) => {
+    expectZodAndJsonSchemaVerdict(GeneratedPlanResponse, { ...response, ...fields }, true);
+    expectZodAndJsonSchemaVerdict(GeneratedPlanResponseRequest, { ...response, ...fields }, true);
+  });
+
+  it.each([
+    ['null', null], ['number item', [1]], ['scalar string', 'a'],
+    ['null item', [null]], ['mixed items', ['a', 2]],
+  ])('rejects %s assumptions after accepting the valid response', (_name, assumptions) => {
+    expectAccepted(GeneratedPlanResponse, { ...response, assumptions: ['a'] });
+    expectZodAndJsonSchemaVerdict(GeneratedPlanResponse, { ...response, assumptions }, false);
+    expectZodAndJsonSchemaVerdict(GeneratedPlanResponseRequest, { ...response, assumptions }, false);
+  });
+
+  it('advertises an optional string array without changing required JSON-valued ambiguities', () => {
+    const schema = typedJsonSchema(GeneratedPlanResponseRequest);
+    expect(schema.required).toContain('ambiguities');
+    const originalContract = typedJsonSchema(z.strictObject({
+      steps: z.array(GeneratedStep),
+      generatorMeta: z.record(z.string(), JsonValue).optional(),
+      ambiguities: z.array(JsonValue),
+    }));
+    expect((schema.properties as Record<string, unknown>).ambiguities)
+      .toEqual((originalContract.properties as Record<string, unknown>).ambiguities);
+    expect(schema.$defs).toEqual(originalContract.$defs);
+    expectAccepted(GeneratedPlanResponse, { steps: [], ambiguities: ['', null, 1, { key: true }, ['x']] });
+    expectRejected(GeneratedPlanResponse, { steps: [] });
+    expect(schema).toHaveProperty('properties.assumptions', { type: 'array', items: { type: 'string' } });
+    expect(schema.required).not.toContain('assumptions');
+  });
+});
+
 // SPEC-C1 C1-1
 describe('provider-facing secret naming schemas', () => {
   const generatedFillSecret = {

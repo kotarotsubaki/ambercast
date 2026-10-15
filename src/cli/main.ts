@@ -67,7 +67,6 @@ interface ParsedGenerateCommand {
   readonly command: 'generate';
   readonly input: {
     readonly files: readonly string[];
-    readonly strict: boolean;
     readonly force: boolean;
     readonly dryRun: boolean;
     readonly target?: string;
@@ -250,9 +249,9 @@ function projectCauseName(cause: unknown): string {
  * or free text; literal backslashes are preserved unescaped. This does not
  * affect the `status` column or the JSON output path. Stage 3 secret-set
  * rejection adds one result-local remediation line
- * immediately after its row, rather than entering the error channel: healing
- * must leave artifacts unchanged until regeneration receives fresh consent
- * (SPEC-C3-2).
+ * after its row and any assumption warnings, rather than entering the error
+ * channel: healing must leave artifacts unchanged until regeneration receives
+ * fresh consent from the user.
  */
 export function renderHumanReport(
   envelope: Awaited<ReturnType<typeof runRunCommand>>['envelope'],
@@ -284,9 +283,22 @@ export function renderHumanReport(
     const statusColor = healthy ? '32' : status === 'would-generate' ? '33' : '31';
     const reason = typeof item.reason === 'string' ? `: ${escapeControlChars(item.reason)}` : '';
     const row = `${colorize(status, statusColor, color)} ${escapeControlChars(String(item.file ?? item.id ?? ''))}${reason}`.trimEnd();
+    // Provider text is untrusted, so the terminal projection escapes it while
+    // only the original report retains raw text for JSON and MCP consumers.
+    // Other warning kinds stay off screen to preserve their presentation contract.
+    const resultLines = [row];
+    if (Array.isArray(item.warnings)) {
+      for (const value of item.warnings as readonly unknown[]) {
+        if (value === null || typeof value !== 'object') continue;
+        const warning = value as { readonly kind?: unknown; readonly message?: unknown };
+        if (warning.kind === 'generator-assumption' && typeof warning.message === 'string') {
+          resultLines.push(`  ${colorize('warning', '33', color)}: ${escapeControlChars(warning.message)}`);
+        }
+      }
+    }
     return item.stage3Rejection?.reason === 'secret-set-changed'
-      ? [row, `  hint: 秘匿値の構成が変わった。ambercast generate --force ${escapeControlChars(String(item.file ?? item.id ?? ''))} で再生成し同意を取り直す`]
-      : [row];
+      ? [...resultLines, `  hint: 秘匿値の構成が変わった。ambercast generate --force ${escapeControlChars(String(item.file ?? item.id ?? ''))} で再生成し同意を取り直す`]
+      : resultLines;
   });
 
   for (const error of errors) {
@@ -329,7 +341,6 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
   }
 
   const files: string[] = [];
-  let strict = false;
   let force = false;
   let dryRun = false;
   let target: string | undefined;
@@ -350,9 +361,7 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
     const flag = flags.get(argument);
     if (flag !== undefined) {
       if (flag.value === null) {
-        if (flag.name === 'strict') {
-          strict = true;
-        } else if (flag.name === 'force') {
+        if (flag.name === 'force') {
           force = true;
         } else if (flag.name === 'dry-run') {
           dryRun = true;
@@ -397,7 +406,6 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
     command: 'generate',
     input: {
       files,
-      strict,
       force,
       dryRun,
       ...(target === undefined ? {} : { target }),

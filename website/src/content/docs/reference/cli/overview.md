@@ -27,7 +27,7 @@ Init options:
   --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
-  --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
+  --force  --dry-run  --target <name>  --ai <claude|codex>
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
@@ -60,7 +60,7 @@ Heal configuration:
 | command | positional | accepted options | configuration path |
 | --- | --- | --- | --- |
 | init | none | dir, yes/-y, force, no-color | --dir argument (cwd when omitted) |
-| generate | literal paths; no paths = discovery | strict, force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| generate | literal paths; no paths = discovery | force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |

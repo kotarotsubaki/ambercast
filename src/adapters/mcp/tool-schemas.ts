@@ -11,7 +11,6 @@ export const generateInputSchema = z.object({
   files: z.string().array().optional(),
   target: z.string().optional(),
   allowEmpty: z.boolean().optional(),
-  strict: z.boolean().optional(),
   force: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   ai: z.enum(['claude', 'codex']).optional(),

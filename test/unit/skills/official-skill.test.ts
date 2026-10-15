@@ -48,7 +48,7 @@ const REQUIRED_SECTION_TEXT = [
   ['ambercast.config.json', 'testDir', 'tests/ambercast', 'runsDir', 'baseUrl', 'defaultTarget', '--target', 'npx ambercast generate --list --json', 'AMBERCAST_SECRET_'],
   ['.test.md', '{{secrets.', 'secrets.allow', 'SECRET_CONSENT_REQUIRED', 'AMBERCAST_SECRET_', 'action-unconfirmed', 'straight double quotes', '### Good example', '### Bad example'],
   ['npx ambercast generate', 'npx ambercast run --json', 'npx ambercast check', 'npx ambercast heal --dry-run', '--resolve', '--update-cache', 'grounding.localWriteBack', '--yes'],
-  ['2 > 3 > 4 > 1 > 5 > 0', 'summary', 'results[]', 'errors[].code', '--strict', 'testIgnore', 'stderr'],
+  ['2 > 3 > 4 > 1 > 5 > 0', 'summary', 'results[]', 'errors[].code', 'testIgnore', 'stderr'],
   ['.ambercast.plan.json', '.ambercast.grounding.json', 'grounding.repositoryPolicy', 'runsDir', 'tests/ambercast/.runs'],
   ['ci.heal', '--resolve', '--force', '--yes', 'secret'],
   URLS,
@@ -379,7 +379,7 @@ describe('official ambercast skill', () => {
   });
 
   it('SPEC-8 preserves the approved draft byte-for-byte', () => {
-    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('2c8e6225bf7d91b8a44594dee5252a416a77b83953135b4030aab933acc504a0');
+    expect(createHash('sha256').update(readFileSync(skillPath)).digest('hex')).toBe('09be5c1ac1589f01798f415b6dbd1ac83ae624ab4542ca329969cf8e18b8d842');
   });
 
   it('SPEC-9 and SPEC-10 keep skill flags aligned with the CLI usage contract', () => {

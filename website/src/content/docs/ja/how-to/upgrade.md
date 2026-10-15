@@ -28,7 +28,11 @@ Plan v2 用に作成されたプロンプトには、旧シークレットグラ
 
 ## プロデューサー変更後の再グラウンディング {#reground-after-producer-change}
 
-ジェネレーターの `confirms` 指示が変わるとプロデューサーのフィンガープリントも変わり、以前の計画は stale になる。計画を再生成するとグラウンディングは空に置き換わるため、以下の手順ですべての要素ステップを束縛し直す。Plan 5、Grounding 4、report 3.10 は変わらない。
+ジェネレーターの指示や応答契約が変わるとプロデューサーのフィンガープリントも変わり、以前の計画は stale になる。計画を再生成するとグラウンディングは空に置き換わるため、以下の手順ですべての要素ステップを束縛し直す。Plan 5 と Grounding 4 は変わらない。
+
+report 3.11 は `generator-assumption` の警告と、`healed` 行の任意の `warnings` を追加する。閉じた union を検証する利用者は report のスキーマを更新する。
+
+CLI の `--strict` と MCP の `strict` 引数は削除された。呼び出しから両者を取り除く。`ambercast generate --strict` は未知のオプションとして終了コード 2 になり、MCP は `strict` を入力検証で拒否する。
 
 1. `npx ambercast check --json` を実行し、対象の計画が `stale` と報告されることを確かめる。
 2. stale の計画ごとに `npx ambercast generate <file>` を実行する。差分を見て、入力の効果を示す assert の `confirms` にその入力が入ったことを確かめる。

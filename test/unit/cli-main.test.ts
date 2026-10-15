@@ -56,7 +56,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.10' as const,
+  schemaVersion: '3.11' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -66,7 +66,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.10' as const,
+  schemaVersion: '3.11' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -77,7 +77,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.10' as const,
+  schemaVersion: '3.11' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -102,7 +102,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.10' as const,
+  schemaVersion: '3.11' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -271,7 +271,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.10', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.11', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -292,7 +292,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.10', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.11', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },
@@ -361,7 +361,7 @@ describe('main()', () => {
     const result = await run(['generate', 'login.test.md', '--list', '--no-color', '--config', 'ambercast.config.json']);
 
     expect(runGenerateCommand).toHaveBeenCalledWith(expect.objectContaining({
-      files: ['login.test.md'], list: true, dryRun: false, force: false, strict: false,
+      files: ['login.test.md'], list: true, dryRun: false, force: false,
       configPathOverride: 'ambercast.config.json',
     }));
     expect(result.stdout).toContain('login.test.md');
@@ -426,6 +426,19 @@ describe('main()', () => {
     expect(process.listenerCount('SIGTERM')).toBe(initialSigtermListeners);
   });
 
+  it.each([
+    { label: 'bare', argv: ['generate', '--strict'] },
+    { label: 'json', argv: ['generate', '--strict', '--json'] },
+    { label: 'dry-run', argv: ['generate', '--dry-run', '--strict'] },
+  ])('TEST-8 rejects removed generate option before runtime composition ($label)', async ({ argv }) => {
+    const result = await run(argv);
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Unknown generate option: --strict.');
+    expect(result.stderr).toContain(expectedUsage);
+    expect(runGenerateCommand).not.toHaveBeenCalled();
+  });
+
   it('writes exactly one valid JSON envelope for a parsed dry-run invocation', async () => {
     const envelope = {
       ...ENVELOPE,
@@ -440,9 +453,10 @@ describe('main()', () => {
     };
     runGenerateCommand.mockResolvedValue({ exitCode: 1, envelope });
 
-    const result = await run(['generate', '--dry-run', '--strict', '--json']);
+    const result = await run(['generate', '--dry-run', '--json']);
 
-    expect(runGenerateCommand).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true, strict: true }));
+    expect(runGenerateCommand).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true }));
+    expect(runGenerateCommand.mock.calls[0]![0]).not.toHaveProperty('strict');
     expect(ReportEnvelope.safeParse(JSON.parse(result.stdout)).success).toBe(true);
     expect(result.stderr).toBe('');
     expect(result.exitCode).toBe(1);
@@ -1489,6 +1503,144 @@ describe('main()', () => {
 
       expect(result.stdout).toBe(`${expectedJson}\n`);
     });
+  });
+});
+
+describe('TEST-6 generator assumption screen projection (SPEC-6)', () => {
+  const assumption = (message: string) => ({ kind: 'generator-assumption', message });
+  const generated = { id: 'login', file: 'login.test.md', status: 'generated', dryRun: false };
+  const healed = { ...generated, status: 'completed', repairOutcome: 'healed', application: 'applied' };
+  // Renderer boundary tests deliberately include malformed report data; schema acceptance is tested separately.
+  const render = (results: readonly unknown[], command = 'generate', color = false) =>
+    renderHumanReport({ ...ENVELOPE, command, results } as never, color);
+
+  it.each(['generate', 'heal', 'run', 'check', 'review'])('prints each assumption immediately after a generated row for command %s', (command) => {
+    expect(render([{ ...generated, warnings: [assumption('First'), assumption('Second'), assumption('First')] }], command))
+      .toBe('generated login.test.md\n  warning: First\n  warning: Second\n  warning: First\n');
+  });
+
+  it('keeps warnings adjacent to their own rows and before trailing errors', () => {
+    const envelope = { ...ENVELOPE, results: [
+      { ...generated, warnings: [assumption('A'), assumption('A')] },
+      { ...generated, file: 'second.test.md', warnings: [assumption('B')] },
+      { ...generated, file: 'third.test.md' },
+    ], errors: [{ message: 'Trailing diagnostic' }] };
+    expect(renderHumanReport(envelope as never, false)).toBe('generated login.test.md\n  warning: A\n  warning: A\ngenerated second.test.md\n  warning: B\ngenerated third.test.md\nerror Trailing diagnostic\n');
+  });
+
+  it.each([
+    ['ESC', '\u001b', '\\u001b'], ['CR', '\r', '\\r'], ['LF', '\n', '\\n'],
+    ['BEL', '\u0007', '\\u0007'], ['NUL', '\u0000', '\\u0000'], ['TAB', '\t', '\\t'],
+    ['BS', '\b', '\\b'], ['FF', '\f', '\\f'], ['DEL', '\u007f', '\\u007f'],
+    ['C1', '\u0085', '\\u0085'],
+  ])('escapes %s in assumption text without emitting its raw control byte', (_name, control, escaped) => {
+    const output = render([{ ...generated, warnings: [assumption(`before${control}after`)] }]);
+    expect(output).toBe(`generated login.test.md\n  warning: before${escaped}after\n`);
+    expect(output.slice('generated login.test.md\n'.length).trimEnd()).not.toContain(control);
+  });
+
+  it('preserves padding, literal backslashes, Unicode, empty text and long messages without a display limit', () => {
+    const messages = ['  padded  ', 'folder\\name', '日本語 😀', '', 'x'.repeat(100_000)];
+    expect(render([{ ...generated, warnings: messages.map(assumption) }]))
+      .toBe(`generated login.test.md\n${messages.map((message) => `  warning: ${message}\n`).join('')}`);
+  });
+
+  const hiddenWarnings = [
+    { kind: 'action-unconfirmed', stepId: 'click' },
+    { kind: 'secret-name-reused-across-targets', name: 'PASSWORD', stepIds: ['click'] },
+    { kind: 'secret-target-changed', name: 'PASSWORD', stepId: 'click', previousTarget: {}, target: {} },
+    { kind: 'allowed-names-truncated', kept: 1, dropped: 2 },
+    { kind: 'unknown', message: 'Hidden unknown' },
+  ];
+  it('renders only assumptions when action, secret and unknown warnings are interleaved', () => {
+    expect(render([{ ...generated, warnings: [hiddenWarnings[0], assumption('Visible A'), ...hiddenWarnings.slice(1), assumption('Visible B')] }]))
+      .toBe('generated login.test.md\n  warning: Visible A\n  warning: Visible B\n');
+  });
+
+  it.each([
+    ['string', 'warnings'], ['object', assumption('Not an array')], ['null', null], ['undefined', undefined],
+  ])('preserves the exact row and does not throw for %s warnings', (_name, warnings) => {
+    expect(render([{ ...generated, warnings }])).toBe('generated login.test.md\n');
+  });
+
+  it.each([
+    ['null', null], ['string', 'x'], ['number', 1], ['array', []],
+    ['wrong kind', { kind: 'other', message: 'Hidden' }],
+    ['numeric message', { kind: 'generator-assumption', message: 1 }],
+    ['null message', { kind: 'generator-assumption', message: null }],
+    ['undefined message', { kind: 'generator-assumption', message: undefined }],
+    ['boolean message', { kind: 'generator-assumption', message: false }],
+    ['object message', { kind: 'generator-assumption', message: {} }],
+    ['missing message', { kind: 'generator-assumption' }],
+  ])('skips a %s item while still rendering a valid neighboring assumption', (_name, invalid) => {
+    expect(render([{ ...generated, warnings: [invalid, assumption('Valid')] }]))
+      .toBe('generated login.test.md\n  warning: Valid\n');
+  });
+
+  it('does not dereference null or primitive elements in a mixed warning array', () => {
+    expect(render([{ ...generated, warnings: [null, 'x', 1, assumption('Valid')] }]))
+      .toBe('generated login.test.md\n  warning: Valid\n');
+  });
+
+  it('escapes every C0, DEL and C1 byte in a colored warning without allowing injected ANSI', () => {
+    const codes = [...Array.from({ length: 32 }, (_, index) => index), ...Array.from({ length: 33 }, (_, index) => 127 + index)];
+    const named: Record<number, string> = { 8: '\\b', 9: '\\t', 10: '\\n', 12: '\\f', 13: '\\r' };
+    const message = codes.map((code) => String.fromCharCode(code)).join('') + '[31mInjected';
+    const escaped = codes.map((code) => named[code] ?? `\\u${code.toString(16).padStart(4, '0')}`).join('') + '[31mInjected';
+    expect(render([{ ...generated, warnings: [assumption(message)] }], 'generate', true))
+      .toBe(`\u001b[32mgenerated\u001b[0m login.test.md\n  \u001b[33mwarning\u001b[0m: ${escaped}\n`);
+  });
+
+  it.each([false, true])('colors only the warning label with color=%s', (color) => {
+    const output = render([{ ...generated, warnings: [assumption('Plain message')] }], 'generate', color);
+    expect(output).toBe(color
+      ? '\u001b[32mgenerated\u001b[0m login.test.md\n  \u001b[33mwarning\u001b[0m: Plain message\n'
+      : 'generated login.test.md\n  warning: Plain message\n');
+    if (!color) expect(output).not.toContain('\u001b');
+    expect(output.split(': ')[1]).toBe('Plain message\n');
+  });
+
+  it.each(['applied', 'preview-only', 'declined', 'apply-failed', 'partially-applied'])('prints assumptions on a healed row with application %s', (application) => {
+    expect(render([{ ...healed, application, warnings: [assumption('Heal A'), assumption('Heal A')] }], 'heal'))
+      .toBe('completed login.test.md\n  warning: Heal A\n  warning: Heal A\n');
+  });
+
+  it('prints heal assumptions before the result-local secret-set rejection hint', () => {
+    expect(render([{ ...healed, warnings: [assumption('Heal A')], stage3Rejection: { reason: 'secret-set-changed' } }], 'heal'))
+      .toBe('completed login.test.md\n  warning: Heal A\n  hint: 秘匿値の構成が変わった。ambercast generate --force login.test.md で再生成し同意を取り直す\n');
+  });
+
+  it.each([
+    { label: 'missing', warnings: undefined }, { label: 'empty array', warnings: [] },
+    { label: 'other kinds', warnings: hiddenWarnings },
+    { label: 'malformed items', warnings: [null, 'x', 1, [], { kind: 'generator-assumption', message: null }] },
+  ])('preserves the previous exact output when no displayable assumption exists ($label)', ({ warnings }) => {
+    expect(render([{ ...generated, ...(warnings === undefined ? {} : { warnings }) }])).toBe('generated login.test.md\n');
+    expect(render([{ ...healed, ...(warnings === undefined ? {} : { warnings }) }], 'heal')).toBe('completed login.test.md\n');
+  });
+
+  it.each([
+    ['generate', runGenerateCommand, generated], ['heal', runHealCommand, healed],
+  ] as const)('keeps original warnings and control text unchanged in %s JSON output', async (command, runtime, row) => {
+    const warnings = [assumption('Raw\u001b\r\n\u0007 text'), ...hiddenWarnings, assumption('Duplicate'), assumption('Duplicate')];
+    const envelope = { ...ENVELOPE, command, results: [{ ...row, warnings }] };
+    const before = JSON.stringify(envelope);
+    runtime.mockResolvedValue({ exitCode: 0, envelope });
+    const output = await run([command, '--json', '--no-color']);
+    expect(runtime).toHaveBeenCalledOnce();
+    expect(output.exitCode).toBe(0);
+    expect(output.stderr).toBe('');
+    expect(output.stdout).toBe(`${before}\n`);
+    expect(JSON.parse(output.stdout).results[0].warnings).toEqual(warnings);
+    expect(JSON.stringify(envelope)).toBe(before);
+  });
+
+  it('leaves the original warning objects unchanged when rendering human output', () => {
+    const warnings = [assumption('Raw\u001b\n text'), assumption('Same'), assumption('Same')];
+    const envelope = { ...ENVELOPE, results: [{ ...generated, warnings }] };
+    const before = JSON.stringify(envelope);
+    expect(renderHumanReport(envelope as never, false)).toBe('generated login.test.md\n  warning: Raw\\u001b\\n text\n  warning: Same\n  warning: Same\n');
+    expect(JSON.stringify(envelope)).toBe(before);
   });
 });
 

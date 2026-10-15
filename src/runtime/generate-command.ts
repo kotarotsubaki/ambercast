@@ -71,8 +71,6 @@ function reportTimestamp(date: Date): string {
 export interface GenerateCommandInput {
   /** Literal prompt paths, or an empty list for configured discovery. */
   readonly files: readonly string[];
-  /** Retains the strict flag for the separate ambiguity exit-1 policy; ambiguous prompts fail with exit 2 before it applies. */
-  readonly strict: boolean;
   /** Whether fresh plans regenerate. */
   readonly force: boolean;
   /** Whether writes are previewed. */
@@ -154,7 +152,6 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
     startedAt,
     durationMs: Math.max(0, Math.round(clock.monotonicMs() - startedMs)),
     options: {
-      strict: input.strict,
       dryRun: input.dryRun,
       allowEmpty: input.allowEmpty,
       list: input.list,
@@ -226,7 +223,6 @@ export async function runGenerateCommand(input: GenerateCommandInput): Promise<G
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       }, {
         files: input.files.map((file) => (isAbsolutePath(file) ? file : joinPath(input.cwd, file))),
-        strict: input.strict,
         force: input.force,
         maxAttempts: config.ai.maxGenerateAttempts,
         dryRun: input.dryRun,

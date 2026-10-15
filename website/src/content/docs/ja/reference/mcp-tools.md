@@ -27,7 +27,7 @@ MCP サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`�
 | 範囲 | プロパティと既定値 |
 | --- | --- |
 | 共通 | `files?: string[]`（省略と `[]` はともに config discovery、相対パスは session root 基準）、`allowEmpty?: boolean`（false） |
-| `ambercast_generate` | `target?: string`（ジェネレーターが利用できる Target 定義を制限する）、`strict?: boolean`（false）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
+| `ambercast_generate` | `target?: string`（ジェネレーターが利用できる Target 定義を制限する）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_run` | `grep?: string`（有効な正規表現）、`resolve?: boolean`（false）、`updateCache?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_check` | 共通入力のみ |
 | `ambercast_heal` | `dryRun?: boolean`（true）、`applyToken?: string`、`ai?: 'claude' \| 'codex'` |

@@ -23,7 +23,6 @@ export const PROMPT = `# Sign in\n\nWhen I submit valid credentials, I reach the
 export const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 export const DEFAULT_OPTIONS: GenerateOptions = {
   files: [],
-  strict: false,
   force: false,
   maxAttempts: 2,
   dryRun: false,
@@ -80,7 +79,25 @@ export function createRecordingStorage(
   };
 }
 
-export function createScenario(overrides: Partial<GenerateDeps> = {}) {
+export interface GenerateScenarioOptions {
+  readonly targets?: Readonly<Record<string, Pick<
+    GenerateDeps['config']['targets'][string],
+    'surface' | 'baseUrl' | 'description' | 'secretSinkOrigins' | 'locale'
+  >>>;
+  /** Omit to retain web; explicitly pass undefined to remove the default. */
+  readonly defaultTarget?: string | undefined;
+}
+
+/**
+ * Target options resolve with the existing fixture's executor settings so the
+ * configured targets and real provider context share one definition. Dependency
+ * overrides remain authoritative, preserving callers that supply a full config.
+ */
+export function createScenario(overrides: Partial<GenerateDeps> = {}, options: GenerateScenarioOptions = {}) {
+  const targets = options.targets === undefined ? RESOLVED_TARGETS : Object.fromEntries(
+    Object.entries(options.targets).map(([name, target]) => [name, { ...RESOLVED_TARGETS.web, ...target }]),
+  );
+  const defaultTarget = Object.hasOwn(options, 'defaultTarget') ? options.defaultTarget : 'web';
   const recordingStorage = createRecordingStorage();
   const events = createRecordingEventSink();
   const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({
@@ -99,8 +116,8 @@ export function createScenario(overrides: Partial<GenerateDeps> = {}) {
       testDir: TEST_DIR,
       testMatch: ['**/*.test.md'],
       testIgnore: ['**/.runs/**'],
-      targets: RESOLVED_TARGETS,
-      defaultTarget: 'web',
+      targets,
+      ...(defaultTarget === undefined ? {} : { defaultTarget }),
       ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
     },
     ...overrides,

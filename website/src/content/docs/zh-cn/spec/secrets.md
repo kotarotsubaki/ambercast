@@ -33,7 +33,9 @@ Heal 严禁（MUST NOT）作出新的同意决定。如果其 Stage 3 完整 Pla
 
 ## 字面量机密拒绝 {#literal-secret-rejection}
 
-本节是字面量机密检测器语义的权威所有者。参考页面必须（MUST）仅出于其局部目的概述检测器边界，并链接至此处。在持久化或报告序列化之前，生成过程必须（MUST）按照字典序键和数组索引的遍历顺序，检查来自 provider 的每个 JSON 字符串和对象键，包括 `generatorMeta` 和歧义项。对于每个字符串值或对象键，嵌入的 `{{secrets.` 标记（SEC-17）必须（MUST）在检查以下四种 primitive 检测器之前被拒绝；在这四者之间，必须（MUST）按以下固定顺序拒绝首个匹配的检测器。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
+本节是字面量机密检测器语义的权威所有者。参考页面必须（MUST）仅出于其局部目的概述检测器边界，并链接至此处。在持久化或报告序列化之前，生成过程必须（MUST）按照字典序键和数组索引的遍历顺序，检查来自 provider 的每个 JSON 字符串和对象键，包括 `generatorMeta`、`ambiguities` 和 `assumptions`。对于每个字符串值或对象键，嵌入的 `{{secrets.` 标记（SEC-17）必须（MUST）在检查以下四种 primitive 检测器之前被拒绝；在这四者之间，必须（MUST）按以下固定顺序拒绝首个匹配的检测器。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
+
+命中机密检测的 `assumptions` 条目必须（MUST）替换为 `An assumption was omitted because it looked like a secret.`。生成必须（MUST）在替换后继续。[repo:src/usecases/generate.ts]
 
 | id | 检测器 | 匹配值 | 例外 | 分类故障 |
 | --- | --- | --- | --- | --- |

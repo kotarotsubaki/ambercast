@@ -77,7 +77,6 @@ const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, sourceSpan: { startLine: 4,
 const RUN_OPTIONS: RunOptions = { files: [], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [],
-  strict: false,
   force: false,
   maxAttempts: 1,
   dryRun: false,

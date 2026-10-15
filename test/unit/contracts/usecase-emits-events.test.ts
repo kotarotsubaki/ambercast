@@ -30,7 +30,6 @@ const TARGETS = { web: { baseUrl: 'https://example.test', executor: { kind: 'pla
 const GENERATED_RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [TEST_PATH],
-  strict: false,
   force: false,
   maxAttempts: 1,
   dryRun: false,

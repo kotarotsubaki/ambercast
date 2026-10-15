@@ -1611,7 +1611,16 @@ export type InstructionCoveredPlanDocument = PlanDocument;
 export const GeneratedPlanResponse = z.strictObject({
   steps: z.array(GeneratedStep),
   generatorMeta: z.record(z.string(), JsonValue).optional(),
+  // Ambiguities describe steps whose target cannot be determined; the
+  // optional assumptions field describes every other dependency of the plan
+  // that the prompt does not state. The ambiguity value contract stays unchanged.
+  // Optionality preserves existing provider and fake responses, but null,
+  // non-arrays, and non-string assumption items remain schema mismatches
+  // rather than being coerced. Policy and Request variants inherit the field
+  // through extend. Heal Stage 2 advertises it through this shared response
+  // schema but discards the accepted value.
   ambiguities: z.array(JsonValue),
+  assumptions: z.array(z.string()).optional(),
 });
 
 /**

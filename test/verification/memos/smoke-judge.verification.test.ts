@@ -9,6 +9,7 @@ describe.skipIf(!hasReport)('smoke-judge.verification', () => {
     const report = JSON.parse(readFileSync(process.env.AMBERCAST_VERIFY_MEMOS_REPORT!, 'utf8'));
     const artifactRoots = JSON.parse(process.env.AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS!);
     const secrets = JSON.parse(process.env.AMBERCAST_VERIFY_MEMOS_SECRETS!);
-    await judgeSmokeReport({ report, artifactRoots, secrets });
+    const mode = process.env.AMBERCAST_VERIFY_MEMOS_MODE === 'disclosure-only' ? 'disclosure-only' : 'full';
+    await judgeSmokeReport({ report, artifactRoots, secrets, mode });
   });
 });

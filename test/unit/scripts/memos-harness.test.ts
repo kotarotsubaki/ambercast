@@ -801,13 +801,32 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
     expect(result.stdout).toContain(password);
     expect(result.stderr).toContain(password);
     const forwarded = sink.join('');
-    // stdout and stderr are independent streams forwarded through the same
-    // sink; their chunks can interleave in real time, so this only checks
-    // that each stream's own redaction succeeded, not cross-stream adjacency.
+    // stdout and stderr now share one carry buffer (see the adjacent
+    // cross-boundary test below), so the exact number of redactions can
+    // vary with chunk interleaving timing; only full-password absence is
+    // asserted as the security property.
     expect(forwarded).not.toContain(password);
     expect(forwarded).toContain('out-before'); expect(forwarded).toContain('out-after');
     expect(forwarded).toContain('err-before'); expect(forwarded).toContain('err-after');
-    expect(forwarded.match(/\[redacted\]/g)).toHaveLength(2);
+    expect((forwarded.match(/\[redacted\]/g) ?? []).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('TEST-74 resolve mode redacts a password split across the stdout/stderr boundary', async () => {
+    const password = 'cd'.repeat(16);
+    const script = `const secret=${JSON.stringify(password)};process.stdout.write('out:'+secret.slice(0,16));`
+      + `setTimeout(()=>{process.stderr.write(secret.slice(16)+':err');},30);`;
+    const sink: string[] = [];
+    const result = await runProcess(process.execPath, ['-e', script], {
+      stdio: 'resolve', password, onStderrChunk: (chunk: string) => sink.push(chunk),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(password.slice(0, 16));
+    expect(result.stderr).toContain(password.slice(16));
+    const forwarded = sink.join('');
+    expect(forwarded).not.toContain(password);
+    expect(forwarded).toContain('[redacted]');
+    expect(forwarded).toContain('out:');
+    expect(forwarded).toContain(':err');
   });
 });
 

@@ -6,6 +6,7 @@
  * so verify-memos.mjs shells out to vitest instead.
  */
 
+import { deepStrictEqual } from 'node:assert';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ReportEnvelope } from '#report/schema.js';
@@ -87,7 +88,6 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
       violations.push(identityViolation);
     }
 
-    // assertDiagnosable
     try {
       reportAssertions.assertDiagnosable(report);
     } catch (e) {
@@ -95,7 +95,6 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
       violations.push(message);
     }
 
-    // assertZeroAiCalls
     try {
       reportAssertions.assertZeroAiCalls(report);
     } catch (e) {
@@ -103,7 +102,6 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
       violations.push(message);
     }
 
-    // Summary checks: total===1, passed===1, exactly one status:'passed'
     const parseResult = ReportEnvelope.safeParse(report);
     if (parseResult.success) {
       const parsed = parseResult.data;
@@ -119,6 +117,9 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
       const passedResults = parsed.results.filter(r => 'status' in r && r.status === 'passed');
       if (passedResults.length !== 1) {
         violations.push(`exactly one result with status:'passed' expected, found ${passedResults.length}`);
+      }
+      if (parsed.results.length !== 1) {
+        violations.push(`results.length is ${parsed.results.length}, expected 1`);
       }
     } else {
       // Schema validation failed already handled by assertDiagnosable
@@ -136,7 +137,6 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
       throw new Error(`judgeSmokeReport: cannot read <path>: ${message}`);
     }
 
-    // assertNoSecretDisclosure
     try {
       reportAssertions.assertNoSecretDisclosure({ secrets, report, artifacts });
     } catch (e) {
@@ -156,7 +156,6 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
  * Returns a violation message or null if identity is verified.
  */
 function findAndCompareLatestReport(report: unknown, artifactRoots: readonly string[]): string | null {
-  // Find all .runs directories and their report.json files
   const reportFiles: { path: string; mtime: number }[] = [];
 
   for (const root of artifactRoots) {
@@ -166,7 +165,6 @@ function findAndCompareLatestReport(report: unknown, artifactRoots: readonly str
       continue;
     }
 
-    // List all subdirectories of .runs (each should contain a report.json)
     const entries = readDirSync(runsDir);
     for (const entry of entries) {
       const entryPath = join(runsDir, entry);
@@ -187,11 +185,9 @@ function findAndCompareLatestReport(report: unknown, artifactRoots: readonly str
     return 'no persisted report found in .runs directory';
   }
 
-  // Find the latest-mtime report
   reportFiles.sort((a, b) => b.mtime - a.mtime);
   const latest = reportFiles[0]!;
 
-  // Read and parse the persisted report
   let persistedReport: unknown;
   try {
     const content = readFileSync(latest.path, 'utf8');
@@ -201,15 +197,15 @@ function findAndCompareLatestReport(report: unknown, artifactRoots: readonly str
     return `cannot read ${JSON.stringify(latest.path)}: ${message}`;
   }
 
-  // Deep equal comparison
-  if (JSON.stringify(report) !== JSON.stringify(persistedReport)) {
+  try {
+    deepStrictEqual(report, persistedReport);
+  } catch {
     return `persisted report differs from provided report`;
   }
 
   return null;
 }
 
-// Node.js fs sync helpers
 function existsSync(path: string): boolean {
   try {
     statSync(path);

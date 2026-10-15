@@ -178,6 +178,17 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   function requireSuccess(result, advice = '') {
     if (result.status !== 0) throw new Error(`${exitReason(result)}${result.stderr ? ` ${result.stderr}` : ''}${advice ? `; ${advice}` : ''}`);
   }
+  // A disclosure-only judge failure is only a confirmed leak when the judge
+  // child actually ran assertNoSecretDisclosure and found one
+  // (`judgeSmokeReport: N violation(s)`). A storage read failure
+  // (`judgeSmokeReport: cannot read ...`) or any other judge crash/timeout
+  // before it ever reached that check is a failed inspection, not a
+  // confirmed leak, and must not be reported as one.
+  function classifyJudgeFailure(message) {
+    if (/judgeSmokeReport: cannot read /.test(message)) return `judge inspection failed: ${message}`;
+    if (/judgeSmokeReport: \d+ violation/.test(message)) return `secret disclosed: ${message}`;
+    return `judge inspection failed: ${message}`;
+  }
   function withLock(fn) {
     try { fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx', mode: 0o600 }); }
     catch (error) {
@@ -329,13 +340,12 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
           await deps.runner.removeContainer(root.containerName, dockerOptions());
           interrupted();
-          // Remount on a fresh path (GAP fix, 2026-10-12): deleting and
-          // immediately re-mounting the same host bind-mount path raced
-          // macOS/OrbStack's virtualized filesystem layer and crashed Memos
-          // with SQLITE_CANTOPEN on restart (confirmed 5/6 and 5/6 failures
-          // reusing the same path, 6/6 successes on a fresh one). Exclusive
-          // creation (no {recursive: true}) fails instead of reusing a
-          // leftover data-reset/ from an earlier, aborted reset.
+          // Deleting and immediately re-mounting the same host bind-mount
+          // path races macOS/OrbStack's virtualized filesystem layer and can
+          // crash Memos with SQLITE_CANTOPEN on restart, so this remounts on
+          // a fresh path instead. Exclusive creation (no {recursive: true})
+          // fails instead of silently reusing a leftover data-reset/ left by
+          // an earlier, aborted reset.
           const resetDataDir = join(root.runRoot, 'data-reset');
           fs.mkdirSync(resetDataDir);
           fs.rmSync(root.dataDir, { recursive: true, force: true });
@@ -361,7 +371,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           if (result.status === 4) reason += `; ${REGENERATE}`;
           try { await judge('disclosure-only'); } catch (error) {
             interrupted();
-            reason += `; secret disclosed: ${message(error)}`;
+            reason += `; ${classifyJudgeFailure(message(error))}`;
           }
           throw new Error(reason);
         }

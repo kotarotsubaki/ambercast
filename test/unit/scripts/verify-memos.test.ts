@@ -173,9 +173,9 @@ afterEach(async () => {
 });
 
 describe('parseArgs', () => {
-  // Decision (maintainer, 2026-10-10): omitted manifest/ai are undefined.
-  // Missing keys and explicit undefined have identical option behavior; toEqual
-  // accepts both representations, so this is not a behavioral GAP.
+  // Omitted manifest/ai come back undefined rather than absent keys; missing
+  // keys and explicit undefined have identical option behavior, and toEqual
+  // accepts both representations.
   it.each([
     { argv: [], expected: {} },
     { argv: ['--keep'], expected: { keep: true } },
@@ -214,7 +214,6 @@ describe('main', () => {
       const f: Fake = stageFake('preflight'); expect(await run(f)).toBe(1); fail(f, 'preflight');
       expect(f.runnerCount('startContainer')).toBe(0); expect(f.processCalls).toEqual([]); expect(f.roots()).toEqual([]);
     });
-    // The revised plan fixes attribution to SPEC-2's table, overriding TEST-9's stage=fixture.
     it.each(files.flatMap((file) => [false, true].map((regenerate) => ({ file, regenerate }))))
     ('TEST-9 fails when fixture files are missing', async ({ file, regenerate }) => {
       const f: Fake = createFakeDeps(); fs.rmSync(join(f.fixture, file));
@@ -695,19 +694,35 @@ describe('main', () => {
       expect(f.err()).not.toContain(password); expect(f.out()).not.toContain(password);
       expect(f.calls('judge')).toHaveLength(1);
     });
-    it('TEST-70 adds secret disclosed to a failed replay when disclosure-only judging fails', async () => {
+    it('TEST-70 adds secret disclosed to a failed replay when disclosure-only judging finds a real leak', async () => {
       const leaked = JSON.stringify({ ...report, errors: [{ code: 'SECRET', message: password }] });
       const f: Fake = createFakeDeps({ runProcess: (call) => {
         if (call.kind === 'replay') return result(1, leaked);
         if (call.kind === 'judge') {
           expect(call.opts.env.AMBERCAST_VERIFY_MEMOS_MODE).toBe('disclosure-only');
           expect(fs.readFileSync(call.opts.env.AMBERCAST_VERIFY_MEMOS_REPORT!, 'utf8')).toBe(leaked);
-          return result(1, '', 'secret disclosed');
+          return result(1, '', 'judgeSmokeReport: 1 violation(s)\n- assertNoSecretDisclosure: secret "memos.password" found in report');
         }
         return f.successfulProcess(call);
       } });
       expect(await run(f)).toBe(1); fail(f, 'replay', '0');
-      expect(last(f)).toContain('exit=1'); expect(last(f)).toContain('secret disclosed');
+      expect(last(f)).toContain('exit=1');
+      expect(last(f)).toContain('secret disclosed: exit=1 judgeSmokeReport: 1 violation(s)');
+      expect(f.calls('judge')).toHaveLength(1);
+    });
+    it('TEST-70 reports a disclosure-only judge inspection failure distinctly from a real secret disclosure', async () => {
+      const leaked = JSON.stringify({ ...report, errors: [{ code: 'SECRET', message: password }] });
+      const f: Fake = createFakeDeps({ runProcess: (call) => {
+        if (call.kind === 'replay') return result(1, leaked);
+        if (call.kind === 'judge') {
+          expect(call.opts.env.AMBERCAST_VERIFY_MEMOS_MODE).toBe('disclosure-only');
+          return result(1, '', 'judgeSmokeReport: cannot read <path>: ENOENT');
+        }
+        return f.successfulProcess(call);
+      } });
+      expect(await run(f)).toBe(1); fail(f, 'replay', '0');
+      expect(last(f)).toContain('judge inspection failed: exit=1 judgeSmokeReport: cannot read');
+      expect(last(f)).not.toContain('secret disclosed');
       expect(f.calls('judge')).toHaveLength(1);
     });
     it('TEST-57 runs generate before any password or container, then resolve, a full reset, then a normal replay, in order', async () => {

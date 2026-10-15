@@ -67,6 +67,9 @@ const violations: Violation[] = [
     ...report, summary: { ...report.summary, total: 2, passed: 2 },
     results: [report.results[0], { ...report.results[0], id: 'case-b' }],
   }) },
+  { name: 'extra skipped result alongside the passing one', expected: /results\.length is 2, expected 1/, inject: ({ report }) => ({
+    ...report, results: [report.results[0], { id: 'case-b', file: 'case-b.test.md', status: 'skipped' }],
+  }) },
   { name: 'failed result without evidence', expected: /assertDiagnosable:/, inject: ({ report }) => ({
     ...report, summary: { ...report.summary, passed: 0, failed: 1 },
     results: [{ ...report.results[0], status: 'failed' }],
@@ -114,6 +117,14 @@ describe('judgeSmokeReport', () => {
       ...report, results: [{ ...report.results[0], aiCalls: 1 }],
     }, 1_700_000_000);
     persist(runs, 'replay', report, 1_700_000_100);
+    await expect(judgeSmokeReport({ report, artifactRoots, secrets })).resolves.toBeUndefined();
+  });
+
+  it('TEST-44 accepts a persisted report whose JSON keys are reordered but deeply equal', async () => {
+    const { artifactRoots, runs, report, secrets } = fixture();
+    const reordered = Object.fromEntries([...Object.entries(report)].reverse());
+    mkdirSync(join(runs, 'replay'));
+    writeFileSync(join(runs, 'replay', 'report.json'), JSON.stringify(reordered));
     await expect(judgeSmokeReport({ report, artifactRoots, secrets })).resolves.toBeUndefined();
   });
 

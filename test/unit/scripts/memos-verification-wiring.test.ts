@@ -15,8 +15,10 @@ describe('memos verification wiring', () => {
     expect(config.targets.memos.baseUrl).toBe('http://127.0.0.1:5230');
     expect(config.defaultTarget).toBe('memos');
     expect(Array.isArray(config.secrets.allow)).toBe(true);
-    // This lane commits the [] seed. The lead-only acceptance test owns the
-    // exactly-one-entry oracle after regeneration, outside this file's scope.
+    // The committed fixture seeds an empty allow-list; a regenerated fixture
+    // populates it with exactly one secret name. Both shapes are valid here,
+    // since this check only constrains the committed seed, not the
+    // post-regeneration oracle.
     expect([0, 1]).toContain(config.secrets.allow.length);
 
     const prompt = readFileSync(
@@ -30,13 +32,22 @@ Type "ambercast smoke memo" into the memo editor and click "Save". Assert that t
 `);
   });
 
+  test('the smoke-judge verification entry point wires AMBERCAST_VERIFY_MEMOS_MODE into judgeSmokeReport\'s mode', () => {
+    const source = readFileSync(
+      new URL('test/verification/memos/smoke-judge.verification.test.ts', root), 'utf8',
+    );
+    expect(source).toMatch(/AMBERCAST_VERIFY_MEMOS_MODE/);
+    expect(source).toMatch(/judgeSmokeReport\(\{[^}]*mode/);
+  });
+
   test('TEST-63 package.json, vitest configs, and AGENTS.md are wired as documented', () => {
     const pkg = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
     expect(pkg.scripts['verify:memos']).toBe('node scripts/verify-memos.mjs');
     expect(pkg.scripts['test:verification:memos']).toBe('vitest run --config vitest.config.verification.ts');
 
+    const baseRef = execSync('git merge-base HEAD main', { cwd: root, encoding: 'utf8' }).trim();
     const committedPkg = JSON.parse(
-      execSync('git show HEAD:package.json', { cwd: root, encoding: 'utf8' }),
+      execSync(`git show ${baseRef}:package.json`, { cwd: root, encoding: 'utf8' }),
     );
     const dependencyKeys = (manifest: typeof pkg) =>
       [...new Set([...Object.keys(manifest.dependencies), ...Object.keys(manifest.devDependencies)])].sort();

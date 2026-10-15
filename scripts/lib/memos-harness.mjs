@@ -610,6 +610,7 @@ export async function runProcess(command, args, opts = {}) {
         return;
       }
       stream.on('data', chunk => {
+        chunk = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
         save(chunk);
         if (!password) { opts.onStderrChunk(chunk); return; }
         const characters = chunk.split('').map(character => ({ character, output: character, sequence: sequence++ }));

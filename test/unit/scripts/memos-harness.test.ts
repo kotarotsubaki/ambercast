@@ -632,15 +632,17 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
     const pidFile = join(dir, 'pid');
     const grandchildPidFile = join(dir, 'grandchild-pid');
     const controller = new AbortController();
-    // A backgrounded job gets its own stdin reassigned by the shell's job
-    // control, even non-interactively; `<&0` re-attaches the fifo explicitly.
-    const script = `${ignoreTerm ? 'trap "" TERM; ' : ''}exec < "$1"; echo $$ > "$2"; cat <&0 & echo $! > "$3"; wait`;
+    // dash replaces an asynchronous job's stdin with /dev/null before applying
+    // its redirections. Open the FIFO directly; <&0 would duplicate /dev/null.
+    const script = `${ignoreTerm ? 'trap "" TERM; ' : ''}exec < "$1"; echo $$ > "$2"; cat < "$1" & echo $! > "$3"; wait`;
     let pid: number | undefined;
     let rejected = false;
+    let settled = false;
     let launchError: unknown;
     const observed = runProcess('sh', ['-c', script, 'memos-test', fifo, pidFile, grandchildPidFile],
       { signal: controller.signal, stdio: 'generate', onStderrChunk: () => {} })
-      .catch((error: unknown) => { rejected = true; launchError = error; return undefined; });
+      .catch((error: unknown) => { rejected = true; launchError = error; return undefined; })
+      .finally(() => { settled = true; });
     try {
       const deadline = Date.now() + 2000;
       while (!fs.existsSync(pidFile) && !rejected && Date.now() < deadline) await delay(10);
@@ -656,6 +658,9 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       expect(grandchildPid).toBeGreaterThan(0);
       expect(() => process.kill(grandchildPid, 0)).not.toThrow();
       await delay(100);
+      expect(settled).toBe(false);
+      expect(() => process.kill(-pid!, 0)).not.toThrow();
+      expect(() => process.kill(grandchildPid, 0)).not.toThrow();
       const started = Date.now();
       controller.abort();
       const result = await observed;

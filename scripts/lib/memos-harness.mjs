@@ -553,9 +553,8 @@ export function defaultIsPidAlive(pid) {
  * `'generate'` inherits stdin and stderr (consent needs a real TTY on both ends
  * per SPEC-2's 2026-10-11 revision) and only captures/forwards stdout.
  * `'resolve'` inherits stdin but captures and forwards both stdout and stderr,
- * sharing one password.length - 1 byte carry-over buffer across both streams
- * (not one per stream) so a secret split across the stdout/stderr boundary is
- * still caught before it is forwarded. Captured report data (the raw bytes
+ * detecting passwords both within each stream and across arrival-order
+ * boundaries before forwarding in arrival order. Captured report data (the raw bytes
  * before redaction) remains available for disclosure judging.
  */
 export async function runProcess(command, args, opts = {}) {
@@ -572,49 +571,56 @@ export async function runProcess(command, args, opts = {}) {
     let terminating = false;
     let settled = false;
     let timer;
-    const flushers = [];
-    // Shared across both streams: a password split between stdout and
-    // stderr only redacts correctly if both halves land in the same carry
-    // buffer before either stream flushes (SPEC-2's full-redaction
-    // guarantee). A carry buffer kept per stream cannot detect a split that
-    // lands across the stream boundary rather than within one stream.
-    let carry = '';
+    // Stream-local and arrival-order views share character references, so
+    // interleaving cannot hide a match or reorder unrelated output. A prefix
+    // that can still complete in either view holds back the output queue;
+    // only process completion releases every pending tail, since a closed
+    // stream's last prefix can still complete on the other stream.
+    let pending = [];
+    const tails = [[], [], []];
+    let sequence = 0;
     const password = opts.password;
+    function scan(view, characters) {
+      const entries = [...tails[view], ...characters];
+      const text = entries.map(entry => entry.character).join('');
+      let match = text.indexOf(password);
+      while (match !== -1) {
+        for (let i = match; i < match + password.length; i++) entries[i].output = '';
+        entries[match].output = '[redacted]';
+        match = text.indexOf(password, match + 1);
+      }
+      let length = Math.min(password.length - 1, text.length);
+      while (length > 0 && !text.endsWith(password.slice(0, length))) length--;
+      tails[view] = length ? entries.slice(-length) : [];
+    }
     function forward(final = false) {
-      if (!password) {
-        if (carry) { opts.onStderrChunk(carry); carry = ''; }
-        return;
-      }
-      const boundary = final ? carry.length : Math.max(0, carry.length - password.length + 1);
-      let cursor = 0;
-      let output = '';
-      while (cursor < boundary) {
-        const match = carry.indexOf(password, cursor);
-        if (match < 0 || match >= boundary) {
-          output += carry.slice(cursor, boundary);
-          cursor = boundary;
-        } else {
-          output += carry.slice(cursor, match) + '[redacted]';
-          cursor = match + password.length;
-        }
-      }
-      carry = carry.slice(cursor);
+      const boundary = final ? sequence
+        : Math.min(sequence, ...tails.filter(tail => tail.length).map(tail => tail[0].sequence));
+      let count = 0;
+      while (count < pending.length && pending[count].sequence < boundary) count++;
+      const output = pending.slice(0, count).map(entry => entry.output).join('');
+      pending = pending.slice(count);
       if (output) opts.onStderrChunk(output);
     }
-    function capture(stream, save) {
+    function capture(stream, save, view) {
       if (!stream) return;
       stream.setEncoding('utf8');
       if (!forwarding || !opts.onStderrChunk) {
         stream.on('data', chunk => { save(chunk); });
         return;
       }
-      stream.on('data', chunk => { save(chunk); carry += chunk; forward(); });
-      const flush = () => forward(true);
-      stream.once('end', flush);
-      flushers.push(flush);
+      stream.on('data', chunk => {
+        save(chunk);
+        if (!password) { opts.onStderrChunk(chunk); return; }
+        const characters = chunk.split('').map(character => ({ character, output: character, sequence: sequence++ }));
+        pending = pending.concat(characters);
+        scan(view, characters);
+        scan(2, characters);
+        forward();
+      });
     }
-    capture(child.stdout, chunk => { stdout += chunk; });
-    capture(child.stderr, chunk => { stderr += chunk; });
+    capture(child.stdout, chunk => { stdout += chunk; }, 0);
+    capture(child.stderr, chunk => { stderr += chunk; }, 1);
     function cleanup() {
       clearTimeout(timer);
       opts.signal?.removeEventListener('abort', terminate);
@@ -623,7 +629,7 @@ export async function runProcess(command, args, opts = {}) {
       if (settled) return;
       settled = true;
       cleanup();
-      for (const flush of flushers) flush();
+      if (forwarding && opts.onStderrChunk) forward(true);
       resolve({ status: terminating ? null : status, stdout, stderr, signal });
     }
     function send(signal) {

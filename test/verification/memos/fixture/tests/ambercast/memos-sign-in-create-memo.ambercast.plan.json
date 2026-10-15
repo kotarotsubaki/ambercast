@@ -1,0 +1,197 @@
+{
+  "generatorMeta": {
+    "planProducerBundle": {
+      "components": {
+        "elementIntentPolicyRevision": 1,
+        "generatedPlanResponseLocalContract": "c531ed095c2b3b48760bea36e6ee566438c5da5f95a8f120d104ab0ec6417ccc",
+        "generatedPlanResponseSchema": "0f7cf68f9f6b1c5244273b99cecbcc2a4b9d03f8d7c470592c725d7217bd2c64",
+        "generatorPromptTemplate": "35ffade719a6bd62db243d57fa76c10ca83f7df17da82d92b8e7250b433429c5",
+        "generatorSecretPolicyRevision": 5,
+        "generatorTaskInstruction": "730ab212ad679bc42a03e56a6cc5f9247d586b0dbdda4e5fa14f4996c1a50180",
+        "instructionCoveragePolicyRevision": 3
+      },
+      "fingerprint": "2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020"
+    }
+  },
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "8581bce22bc364251a6d5411245410bbe2e1354d4b72dd4c6925470f09dd82da"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "id": "open-sign-in",
+      "kind": "action",
+      "target": "memos",
+      "url": "http://127.0.0.1:5230/auth"
+    },
+    {
+      "action": "fill",
+      "id": "fill-username",
+      "intent": {
+        "description": "Username input on the sign-in form",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 52,
+            "endLine": 3,
+            "startColumn": 44,
+            "startLine": 3
+          },
+          "text": "verifier"
+        },
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 53,
+          "endLine": 3,
+          "startColumn": 34,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "verifier"
+    },
+    {
+      "action": "fill-secret",
+      "id": "fill-password",
+      "intent": {
+        "description": "Password input on the sign-in form",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 76,
+          "endLine": 3,
+          "startColumn": 58,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "secretRef": "{{secrets.password}}",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-sign-in",
+      "intent": {
+        "description": "Sign in button",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 97,
+            "endLine": 3,
+            "startColumn": 90,
+            "startLine": 3
+          },
+          "text": "Sign in"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 98,
+          "endLine": 3,
+          "startColumn": 83,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-sign-in"
+      ],
+      "id": "assert-save-button",
+      "intent": {
+        "description": "Save button is displayed after signing in",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 121,
+            "endLine": 3,
+            "startColumn": 117,
+            "startLine": 3
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 129,
+          "endLine": 3,
+          "startColumn": 112,
+          "startLine": 3
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-username",
+        "fill-password",
+        "click-sign-in"
+      ],
+      "id": "assert-username-visible",
+      "kind": "assert",
+      "target": "memos",
+      "text": "verifier"
+    },
+    {
+      "action": "fill",
+      "id": "fill-memo",
+      "intent": {
+        "description": "Memo editor input",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 49,
+          "endLine": 4,
+          "startColumn": 1,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "ambercast smoke memo"
+    },
+    {
+      "action": "click",
+      "id": "click-save",
+      "intent": {
+        "description": "Save button for the memo editor",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 65,
+            "endLine": 4,
+            "startColumn": 61,
+            "startLine": 4
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 66,
+          "endLine": 4,
+          "startColumn": 54,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-memo",
+        "click-save"
+      ],
+      "id": "assert-memo-in-list",
+      "kind": "assert",
+      "target": "memos",
+      "text": "ambercast smoke memo"
+    }
+  ],
+  "targets": {
+    "memos": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "en-US",
+      "surface": "web"
+    }
+  }
+}

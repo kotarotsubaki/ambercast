@@ -1,0 +1,76 @@
+{
+  "entries": {
+    "click-save": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "8a3604d138f149b3387965d2c4c6dda1533bcc2e53e070f76952a5e7e95deec0"
+      },
+      "intentDigest": "07cefcac6360bf583c7f010753c951def8729085920f497e498fc2560959b1f3",
+      "kind": "element",
+      "locator": {
+        "name": "Save",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-sign-in": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "3216f02a2bd4aebe457b7c25d6a8be79f1fcedc2f701d6ad4db0b4615f6d94e0"
+      },
+      "intentDigest": "463e0bd31bacb9d23cfd35a4e4bc73582a2dee5af06afbe80c60ec123aa65f32",
+      "kind": "element",
+      "locator": {
+        "name": "Sign in",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "fill-memo": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "37158f5623311a6cae9424551667e5be5276a32b37010cb90eaefeca264aec55"
+      },
+      "intentDigest": "e2db2fd599b39e06bdfe2d2fbfffe976dd90dab6292109288108b844c20da1d7",
+      "kind": "element",
+      "locator": {
+        "name": "",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-password": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "5ddd8e6bb92aff820daac95456998be29d4ea9d7cc94a4543d9e31e3cbecd52a"
+      },
+      "intentDigest": "9bec6a29a6e2c195e1252b1244fa03ed5cee7936ac6ae7be60d541ef54d776ea",
+      "kind": "element",
+      "locator": {
+        "name": "Password",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-username": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "f34378aac0c5e319f78db6becf67f1636d116c38dca19b7b00860b37d10e85d0"
+      },
+      "intentDigest": "c19e1a4ceaed0117ed4f691335a6e890a18297b84ed94b8b6e795db4a27f4ac1",
+      "kind": "element",
+      "locator": {
+        "name": "Username",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    }
+  },
+  "planDigest": "6d77091120ac4400b4d26333e6cab5c831754ebfbe3be50727ef71ce735e57e0",
+  "schemaVersion": 4
+}

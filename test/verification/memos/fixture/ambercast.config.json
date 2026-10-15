@@ -9,6 +9,8 @@
   },
   "defaultTarget": "memos",
   "secrets": {
-    "allow": []
+    "allow": [
+      "password"
+    ]
   }
 }

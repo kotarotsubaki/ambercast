@@ -22,6 +22,7 @@ export interface JudgeSmokeReportInput {
   report: unknown;
   /**
    * Storage paths to scan for secret disclosure (directories or files).
+   * Full mode requires a .runs directory path containing persisted replay reports.
    */
   artifactRoots: readonly string[];
   /**
@@ -151,7 +152,7 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
 }
 
 /**
- * Finds the latest-mtime report.json under .runs/ in artifactRoots and compares it to the given report.
+ * Finds the latest-mtime report.json in the .runs directory roots and compares it to the given report.
  * Returns a violation message or null if identity is verified.
  */
 function findAndCompareLatestReport(report: unknown, artifactRoots: readonly string[]): string | null {
@@ -159,8 +160,8 @@ function findAndCompareLatestReport(report: unknown, artifactRoots: readonly str
   const reportFiles: { path: string; mtime: number }[] = [];
 
   for (const root of artifactRoots) {
-    // Walk the directory tree looking for .runs directories
-    const runsDir = join(root, '.runs');
+    // Roots already identify artifacts; file roots have no run subdirectories.
+    const runsDir = root;
     if (!existsSync(runsDir)) {
       continue;
     }

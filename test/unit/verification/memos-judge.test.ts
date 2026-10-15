@@ -36,7 +36,11 @@ function fixture() {
   temporaryDirectories.push(root);
   const runs = join(root, '.runs');
   mkdirSync(runs);
-  return { root, runs, report: validReport(), secrets: { password } };
+  const plan = join(root, 'case-a.ambercast.plan.json');
+  const grounding = join(root, 'case-a.ambercast.grounding.json');
+  writeFileSync(plan, '{}');
+  writeFileSync(grounding, '{}');
+  return { root, runs, artifactRoots: [runs, plan, grounding], report: validReport(), secrets: { password } };
 }
 
 function persist(runs: string, name: string, report: unknown, timestamp?: number) {
@@ -51,46 +55,46 @@ function persist(runs: string, name: string, report: unknown, timestamp?: number
 }
 
 type Fixture = ReturnType<typeof fixture>;
-type Violation = { name: string; inject: (input: Fixture) => unknown };
+type Violation = { name: string; expected: RegExp; inject: (input: Fixture) => unknown };
 
 const violations: Violation[] = [
-  { name: 'nonzero aiCalls', inject: ({ report }) => ({ ...report, results: [{ ...report.results[0], aiCalls: 1 }] }) },
-  { name: 'missing aiCalls', inject: ({ report }) => {
+  { name: 'nonzero aiCalls', expected: /assertZeroAiCalls:/, inject: ({ report }) => ({ ...report, results: [{ ...report.results[0], aiCalls: 1 }] }) },
+  { name: 'missing aiCalls', expected: /assertZeroAiCalls:/, inject: ({ report }) => {
     const { aiCalls: _aiCalls, ...result } = report.results[0] as ExecutedRunResult;
     return { ...report, results: [result] };
   } },
-  { name: 'two results', inject: ({ report }) => ({
+  { name: 'two results', expected: /summary.total is 2, expected 1/, inject: ({ report }) => ({
     ...report, summary: { ...report.summary, total: 2, passed: 2 },
     results: [report.results[0], { ...report.results[0], id: 'case-b' }],
   }) },
-  { name: 'failed result without evidence', inject: ({ report }) => ({
+  { name: 'failed result without evidence', expected: /assertDiagnosable:/, inject: ({ report }) => ({
     ...report, summary: { ...report.summary, passed: 0, failed: 1 },
     results: [{ ...report.results[0], status: 'failed' }],
   }) },
-  { name: 'errored result without matching case error', inject: ({ report }) => ({
+  { name: 'errored result without matching case error', expected: /assertDiagnosable:/, inject: ({ report }) => ({
     ...report, summary: { ...report.summary, passed: 0, errored: 1 },
     results: [{ ...report.results[0], status: 'error' }],
   }) },
-  { name: 'password in artifacts', inject: ({ root, report }) => {
-    writeFileSync(join(root, 'leaked.txt'), password);
+  { name: 'password in artifacts', expected: /assertNoSecretDisclosure:/, inject: ({ runs, report }) => {
+    writeFileSync(join(runs, 'leaked.txt'), password);
     return report;
   } },
-  { name: 'password in report', inject: ({ report }) => ({
+  { name: 'password in report', expected: /assertNoSecretDisclosure:/, inject: ({ report }) => ({
     ...report, results: [{ ...report.results[0], explanation: password }],
   }) },
-  { name: 'invalid schema', inject: ({ report }) => ({ ...report, schemaVersion: 'invalid' }) },
-  { name: 'no persisted report', inject: ({ report }) => report },
-  { name: 'persisted report differs', inject: ({ report }) => report },
+  { name: 'invalid schema', expected: /assertDiagnosable:/, inject: ({ report }) => ({ ...report, schemaVersion: 'invalid' }) },
+  { name: 'no persisted report', expected: /no persisted report found in .runs directory/, inject: ({ report }) => report },
+  { name: 'persisted report differs', expected: /persisted report differs from provided report/, inject: ({ report }) => report },
 ];
 
 describe('judgeSmokeReport', () => {
-  it('TEST-43 passes on a fully valid report and artifacts', async () => {
-    const { root, runs, report, secrets } = fixture();
+  it('TEST-43 passes with the harness artifact roots: .runs directory, plan file, and grounding file', async () => {
+    const { artifactRoots, runs, report, secrets } = fixture();
     persist(runs, 'replay', report);
-    await expect(judgeSmokeReport({ report, artifactRoots: [root], secrets })).resolves.toBeUndefined();
+    await expect(judgeSmokeReport({ report, artifactRoots, secrets })).resolves.toBeUndefined();
   });
 
-  it.each(violations)('TEST-44 rejects $name', async ({ name, inject }) => {
+  it.each(violations)('TEST-44 rejects $name', async ({ name, expected, inject }) => {
     const input = fixture();
     const report = inject(input);
     if (name !== 'no persisted report') {
@@ -100,17 +104,17 @@ describe('judgeSmokeReport', () => {
       persist(input.runs, 'replay', stored);
     }
     await expect(judgeSmokeReport({
-      report, artifactRoots: [input.root], secrets: input.secrets,
-    })).rejects.toThrow(/assertDiagnosable:|assertZeroAiCalls:|assertNoSecretDisclosure:|judgeSmokeReport:/);
+      report, artifactRoots: input.artifactRoots, secrets: input.secrets,
+    })).rejects.toThrow(expected);
   });
 
   it('TEST-44 selects only the latest replay report after regenerate', async () => {
-    const { root, runs, report, secrets } = fixture();
+    const { artifactRoots, runs, report, secrets } = fixture();
     persist(runs, 'resolve', {
       ...report, results: [{ ...report.results[0], aiCalls: 1 }],
     }, 1_700_000_000);
     persist(runs, 'replay', report, 1_700_000_100);
-    await expect(judgeSmokeReport({ report, artifactRoots: [root], secrets })).resolves.toBeUndefined();
+    await expect(judgeSmokeReport({ report, artifactRoots, secrets })).resolves.toBeUndefined();
   });
 
   it('TEST-44 disclosure-only accepts diagnostic, AI, summary, and identity violations without disclosure', async () => {
@@ -139,14 +143,14 @@ describe('judgeSmokeReport', () => {
   });
 
   it('TEST-44 aggregates distinct AI and result-count violations as separate lines', async () => {
-    const { root, runs, report, secrets } = fixture();
+    const { artifactRoots, runs, report, secrets } = fixture();
     const invalid = {
       ...report,
       summary: { ...report.summary, total: 2, passed: 2 },
       results: [{ ...report.results[0], aiCalls: 1 }, { ...report.results[0], id: 'case-b', aiCalls: 1 }],
     };
     persist(runs, 'replay', invalid);
-    const failure = await judgeSmokeReport({ report: invalid, artifactRoots: [root], secrets }).catch((error: Error) => error);
+    const failure = await judgeSmokeReport({ report: invalid, artifactRoots, secrets }).catch((error: Error) => error);
     expect(failure).toBeInstanceOf(Error);
     const message = (failure as Error).message;
     const count = /^judgeSmokeReport: (\d+) violation\(s\)/.exec(message);
@@ -158,12 +162,12 @@ describe('judgeSmokeReport', () => {
   });
 
   it('TEST-44 verifies identity before collecting storage artifacts', async () => {
-    const { root, runs, report, secrets } = fixture();
+    const { artifactRoots, runs, report, secrets } = fixture();
     persist(runs, 'replay', { ...report, durationMs: 2 });
     const collect = vi.spyOn(reportAssertions, 'collectStorageArtifacts');
     try {
-      await expect(judgeSmokeReport({ report, artifactRoots: [root], secrets }))
-        .rejects.toThrow(/judgeSmokeReport:[\s\S]*(?:identity|persisted report|report[\s\S]*differ)/i);
+      await expect(judgeSmokeReport({ report, artifactRoots, secrets }))
+        .rejects.toThrow(/persisted report differs from provided report/);
       expect(collect).not.toHaveBeenCalled();
     } finally {
       collect.mockRestore();

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
 import { main, parseArgs } from '../../../scripts/verify-memos.mjs';
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
-import { runProcess } from '../../../scripts/lib/memos-harness.mjs';
+import { runProcess, createDockerRunner, TerminationUnconfirmedError } from '../../../scripts/lib/memos-harness.mjs';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
@@ -35,7 +35,8 @@ const reportText = `  ${JSON.stringify(report)}\n`;
 const dirs: string[] = [];
 type ProcessOptions = { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; signal: AbortSignal;
   stdio?: string; password?: string; onStderrChunk?: (chunk: string) => void };
-type ProcessResult = { status: number | null; stdout: string; stderr: string; signal: string | null };
+type ProcessResult = { status: number | null; stdout: string; stderr: string; signal: string | null;
+  termination?: 'none' | 'confirmed' | 'unconfirmed'; pgid?: number };
 type ProcessCall = { argv: string[]; opts: ProcessOptions; kind: string };
 type ContainerSpec = { runId: string; name: string; data: string; uid: number; gid: number };
 type RunnerCall = { method: string; args: unknown[] };
@@ -145,6 +146,394 @@ function fail(f: Fake, stage: string, aiCalls = 'n/a') {
   expect(last(f)).toMatch(new RegExp(`^verify-memos: FAIL stage=${stage} reason=.+ aiCalls=${aiCalls}$`));
   expect(f.out().match(/verify-memos: (PASS|FAIL)/g)).toHaveLength(1);
 }
+
+const groupMessage = (pgid: number) => `process group ${pgid} not confirmed terminated`;
+function uniqueGroups(f: Fake, ...pgids: number[]) {
+  const reason = last(f).split(' reason=')[1]!.replace(/ aiCalls=.*$/, '');
+  for (const pgid of new Set(pgids)) expect(reason.split(groupMessage(pgid))).toHaveLength(2);
+}
+function unconfirmed(pgid: number, stdout = ''): ProcessResult {
+  return { ...result(0, stdout), termination: 'unconfirmed', pgid };
+}
+function noPublication(f: Fake, before: Record<string, string>) {
+  expect(snapshot(f.fixture)).toEqual(before);
+  expect(vi.mocked(fs.renameSync).mock.calls.filter(([, target]) =>
+    [files[0], plan, grounding].some(file => String(target) === join(f.fixture, file)))).toEqual([]);
+}
+function cleaned(f: Fake) {
+  expect(f.containers.size).toBe(0);
+  expect(f.roots()).toEqual([]);
+  if (f.starts.length) expect(f.runnerCount('removeContainer')).toBeGreaterThanOrEqual(1);
+}
+
+describe('TEST-77 unconfirmed termination evidence', () => {
+  it('does not replay raw fragments after cross-stream redaction of an unconfirmed child', async () => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      if (call.kind !== 'resolve') return f.successfulProcess(call);
+      vi.spyOn(process, 'kill').mockImplementation(() => true);
+      let now = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => { now += 6000; return now; });
+      vi.mocked(childProcess.spawn).mockImplementationOnce(() => {
+        const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; pid: number };
+        child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.pid = 41999;
+        queueMicrotask(() => {
+          child.stderr.emit('data', password.slice(0, 16));
+          child.stdout.emit('data', password.slice(16));
+          child.stderr.emit('data', '\n');
+          child.stderr.emit('data', password.slice(0, 16));
+          child.stdout.emit('data', password.slice(16));
+          child.stderr.emit('data', '\n');
+        });
+        return child as never;
+      });
+      return runProcess(call.argv[0], call.argv.slice(1), { ...call.opts, timeoutMs: 0 });
+    } });
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(f.err()).toContain('[redacted]');
+    expect(f.err()).not.toContain(password.slice(0, 16));
+    uniqueGroups(f, 41999);
+    cleaned(f);
+  });
+
+  it.each(['replay', 'cleanup'])('reserves diagnostic space after a long %s reason', async point => {
+    const f: Fake = createFakeDeps({
+      runProcess: call => {
+        if (point === 'replay' && call.kind === 'replay') return result(7, JSON.stringify({ ...report, errors: [{ message: 'replay failed ' + 'x'.repeat(500) }] }));
+        if (call.kind === 'judge') return unconfirmed(41901);
+        return f.successfulProcess(call);
+      },
+      runner: {
+        removeContainer: async (name: string) => { f.containers.delete(name); throw new Error('cleanup failed ' + 'x'.repeat(500)); },
+        listContainers: async () => { if (f.calls('judge').length) throw new TerminationUnconfirmedError(41902); return [...f.containers]; },
+      },
+    });
+    expect(await run(f)).toBe(1);
+    const reason = last(f).split(' reason=')[1]!.replace(/ aiCalls=.*$/, '');
+    expect(reason.length).toBeLessThanOrEqual(400);
+    expect(reason).toContain(point === 'replay' ? 'exit=7 replay failed' : groupMessage(41901));
+    uniqueGroups(f, 41901, 41902);
+    cleaned(f);
+  });
+
+  it('keeps both partial-publication lists beside a long cleanup failure', async () => {
+    let removals = 0;
+    const f: Fake = createFakeDeps({ runner: { removeContainer: async (name: string) => {
+      f.containers.delete(name);
+      if (++removals > 1) throw new Error('cleanup failed ' + 'x'.repeat(500));
+    } } });
+    const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+    vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+      if (String(destination) === join(f.fixture, plan)) throw new Error('rename failed');
+      return actual.renameSync(source, destination);
+    });
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    const reason = last(f).split(' reason=')[1]!.replace(/ aiCalls=.*$/, '');
+    expect(reason.length).toBeLessThanOrEqual(400);
+    expect(reason).toMatch(/^rename failed; teardown failed: cleanup failed/);
+    expect(reason).toContain('; published files: ambercast.config.json');
+    expect(reason).toContain('; fixture updated: ambercast.config.json');
+    cleaned(f);
+  });
+  it.each(['SIGINT', 'SIGTERM'].flatMap(signal => ['container', 'residual'].map(point => ({ signal, point }))))
+  ('records first evidence in $point cleanup during $signal and finishes cleanup', async ({ signal, point }) => {
+    const f: Fake = createFakeDeps({ runner: {
+      removeContainer: async (name: string) => {
+        f.containers.delete(name);
+        if (point === 'container') {
+          f.signals.emit(signal);
+          throw new TerminationUnconfirmedError(41010);
+        }
+      },
+      listContainers: async () => {
+        if (f.calls('judge').length) {
+          // Neither group has appeared in a child or verification-stage error.
+          f.signals.emit(point === 'residual' ? signal : signal === 'SIGINT' ? 'SIGTERM' : 'SIGINT');
+          throw new TerminationUnconfirmedError(41011);
+        }
+        return [...f.containers];
+      },
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f)).toBe(signal === 'SIGINT' ? 130 : 143);
+    fail(f, 'teardown');
+    expect(last(f)).toContain('reason=interrupted; teardown failed: ');
+    uniqueGroups(f, ...(point === 'container' ? [41010, 41011] : [41011]));
+    if (point === 'residual') expect(last(f)).toBe(`verify-memos: FAIL stage=teardown reason=interrupted; teardown failed: ${groupMessage(41011)} aiCalls=n/a`);
+    expect(f.events.lastIndexOf('listContainers')).toBeGreaterThan(f.events.lastIndexOf('removeContainer'));
+    expect(f.signalCalls.filter(call => call.method === 'off')).toHaveLength(2);
+    noPublication(f, before); cleaned(f);
+  });
+
+  it.each(['same', 'distinct'].flatMap(groups => [false, true].map(earlier => ({ groups, earlier }))))
+  ('renders $groups pgids once across cleanup aggregates (earlier=$earlier)', async ({ groups, earlier }) => {
+    const second = groups === 'same' ? 41012 : 41013;
+    const f: Fake = createFakeDeps({
+      runProcess: call => earlier && call.kind === 'replay' ? result(9, reportText) : f.successfulProcess(call),
+      runner: {
+        removeContainer: async (name: string) => {
+          f.containers.delete(name);
+          throw new TerminationUnconfirmedError(41012);
+        },
+        listContainers: async () => {
+          if (f.calls('judge').length) throw new TerminationUnconfirmedError(second);
+          return [...f.containers];
+        },
+      },
+    });
+    const before = snapshot(f.fixture);
+    expect(await run(f)).toBe(1);
+    fail(f, earlier ? 'replay' : 'teardown', '0');
+    if (earlier) expect(last(f)).toContain('reason=exit=9; teardown failed: ');
+    uniqueGroups(f, 41012, second);
+    noPublication(f, before); cleaned(f);
+  });
+
+  it.each(['SIGINT', 'SIGTERM'].flatMap(signal => ['hasImage', 'stale-list', 'disclosure-judge'].map(point => ({ signal, point }))))
+  ('records $point evidence before $signal can mask it', async ({ signal, point }) => {
+    const f: Fake = createFakeDeps({
+      runner: {
+        hasImage: async () => {
+          if (point === 'hasImage') { f.signals.emit(signal); throw new TerminationUnconfirmedError(41009); }
+          return true;
+        },
+        listContainers: async () => {
+          if (point === 'stale-list' && !f.calls('install').length) {
+            f.signals.emit(signal); throw new TerminationUnconfirmedError(41009);
+          }
+          return [...f.containers];
+        },
+      },
+      runProcess: async call => {
+        if (point === 'disclosure-judge' && call.kind === 'replay') return result(7, reportText);
+        if (point === 'disclosure-judge' && call.kind === 'judge') {
+          f.signals.emit(signal); return unconfirmed(41009);
+        }
+        return f.successfulProcess(call);
+      },
+    });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(signal === 'SIGINT' ? 130 : 143);
+    expect(last(f)).toBe(`verify-memos: FAIL stage=${point === 'disclosure-judge' ? 'replay' : 'preflight'} reason=interrupted; teardown failed: ${groupMessage(41009)} aiCalls=n/a`);
+    expect(f.calls('judge')).toHaveLength(point === 'disclosure-judge' ? 1 : 0);
+    if (point === 'disclosure-judge') expect(f.calls('judge')[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_MODE).toBe('disclosure-only');
+    noPublication(f, before); cleaned(f);
+  });
+
+  it.each(['install', 'generate', 'resolve', 'replay', 'judge'])('stops after an unconfirmed %s child and continues cleanup', async kind => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      if (call.kind === kind) call.opts.onStderrChunk?.('child diagnostic');
+      return call.kind === kind ? { ...success, ...unconfirmed(41001, success.stdout), stderr: 'child diagnostic' } : success;
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    fail(f, kind === 'generate' ? 'fixture' : kind === 'resolve' ? 'replay' : kind, kind === 'judge' ? '0' : 'n/a');
+    expect(last(f)).toBe(`verify-memos: FAIL stage=${kind === 'generate' ? 'fixture' : kind === 'resolve' ? 'replay' : kind} reason=${groupMessage(41001)} aiCalls=${kind === 'judge' ? '0' : 'n/a'}`);
+    uniqueGroups(f, 41001);
+    expect(f.err()).toContain('child diagnostic');
+    expect(f.processCalls.at(-1)!.kind).toBe(kind);
+    noPublication(f, before); cleaned(f);
+  });
+
+  it.each(['hasImage', 'reset-remove'])('attributes a Docker %s failure to its caller stage', async point => {
+    let removals = 0;
+    const docker = createDockerRunner(async () => unconfirmed(41002));
+    const f: Fake = createFakeDeps({ runner: {
+      hasImage: async (...args: never[]) => point === 'hasImage' ? docker.hasImage(...args) : true,
+      removeContainer: async (name: string) => {
+        if (point === 'reset-remove' && ++removals === 1) return docker.removeContainer(name);
+        f.containers.delete(name);
+      },
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    fail(f, point === 'hasImage' ? 'preflight' : 'replay');
+    expect(last(f)).toBe(`verify-memos: FAIL stage=${point === 'hasImage' ? 'preflight' : 'replay'} reason=${groupMessage(41002)} aiCalls=n/a`);
+    uniqueGroups(f, 41002);
+    expect(f.calls('replay')).toEqual([]); expect(f.calls('judge')).toEqual([]);
+    expect(f.starts).toHaveLength(point === 'hasImage' ? 0 : 1);
+    noPublication(f, before); cleaned(f);
+  });
+
+  it.each(['removeContainer', 'listContainers'])('retains teardown %s evidence while finishing other cleanup', async method => {
+    const docker = createDockerRunner(async () => unconfirmed(41003));
+    let hit = false;
+    const f: Fake = createFakeDeps({ runner: {
+      removeContainer: async (name: string) => {
+        f.containers.delete(name);
+        if (method === 'removeContainer') { hit = true; await docker.removeContainer(name); }
+      },
+      listContainers: async () => {
+        if (method === 'listContainers' && f.calls('judge').length) { hit = true; return docker.listContainers(); }
+        return [...f.containers];
+      },
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f)).toBe(1);
+    fail(f, 'teardown', '0'); expect(hit).toBe(true);
+    expect(last(f)).toContain(groupMessage(41003));
+    uniqueGroups(f, 41003);
+    expect(f.calls('judge')).toHaveLength(1);
+    noPublication(f, before); cleaned(f);
+  });
+
+  it('preserves the nonzero replay reason when its disclosure-only judge is unconfirmed', async () => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      if (call.kind === 'replay') return result(7, reportText);
+      if (call.kind === 'judge') return unconfirmed(41004);
+      return f.successfulProcess(call);
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(last(f)).toBe(`verify-memos: FAIL stage=replay reason=exit=7; ${groupMessage(41004)} aiCalls=0`);
+    uniqueGroups(f, 41004);
+    expect(f.calls('judge')).toHaveLength(1);
+    expect(f.calls('judge')[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_MODE).toBe('disclosure-only');
+    expect(f.processCalls.at(-1)!.kind).toBe('judge');
+    noPublication(f, before); cleaned(f);
+  });
+
+  it('appends teardown evidence to an earlier stage failure', async () => {
+    let removals = 0;
+    const f: Fake = createFakeDeps({ runProcess: call => call.kind === 'replay' ? result(9, reportText) : f.successfulProcess(call),
+      runner: { removeContainer: async (name: string) => {
+        f.containers.delete(name);
+        if (++removals > 1) throw new TerminationUnconfirmedError(41005);
+      } } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    fail(f, 'replay', '0');
+    expect(last(f)).toBe(`verify-memos: FAIL stage=replay reason=exit=9; teardown failed: ${groupMessage(41005)} aiCalls=0`);
+    uniqueGroups(f, 41005);
+    expect(f.calls('judge')).toHaveLength(1);
+    expect(f.calls('judge')[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_MODE).toBe('disclosure-only');
+    noPublication(f, before); cleaned(f);
+  });
+
+  it.each(['SIGINT', 'SIGTERM'].flatMap(signal => ['same', 'distinct', 'ordinary'].map(cleanup => ({ signal, cleanup }))))
+  ('retains $signal stage and deduplicates $cleanup cleanup evidence', async ({ signal, cleanup }) => {
+    let removals = 0;
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      if (call.kind === 'replay') { f.signals.emit(signal); return unconfirmed(41006, reportText); }
+      return f.successfulProcess(call);
+    }, runner: { removeContainer: async (name: string) => {
+      f.containers.delete(name);
+      if (++removals > 1) {
+        if (cleanup === 'ordinary') throw new Error('ordinary cleanup failed');
+        throw new TerminationUnconfirmedError(cleanup === 'same' ? 41006 : 41007);
+      }
+    } } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate', '--keep'])).toBe(signal === 'SIGINT' ? 130 : 143);
+    fail(f, 'replay');
+    expect(last(f)).toContain('reason=interrupted; teardown failed: ');
+    expect(last(f).split(groupMessage(41006))).toHaveLength(2);
+    if (cleanup === 'distinct') expect(last(f).split(groupMessage(41007))).toHaveLength(2);
+    if (cleanup === 'ordinary') expect(last(f)).toContain('ordinary cleanup failed');
+    if (cleanup === 'same') expect(last(f)).toBe(`verify-memos: FAIL stage=replay reason=interrupted; teardown failed: ${groupMessage(41006)} aiCalls=n/a`);
+    expect(f.calls('judge')).toEqual([]); expect(f.processCalls.at(-1)!.kind).toBe('replay');
+    noPublication(f, before); cleaned(f);
+  });
+
+  it('fails with --keep and prints the manual process-group cleanup command', async () => {
+    const f: Fake = createFakeDeps({ runProcess: async call => call.kind === 'replay' ? unconfirmed(41008, reportText) : f.successfulProcess(call) });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate', '--keep'])).toBe(1);
+    fail(f, 'replay'); expect(last(f)).toContain(groupMessage(41008));
+    expect(f.err()).toContain(`${groupMessage(41008)}; kill -9 -41008`);
+    expect(f.calls('judge')).toEqual([]); noPublication(f, before);
+    expect(f.roots()).toHaveLength(1); expect(f.containers.size).toBe(1);
+  });
+});
+
+describe('publication diagnostic budget and event-loop boundary', () => {
+  const publishedFiles = [files[0], plan, grounding];
+  const reason = (f: Fake) => last(f).split(' reason=')[1]!.replace(/ aiCalls=.*$/, '');
+
+  it.each(['partial', 'full'].flatMap(publication => [-1, 0, 1].map(delta => ({ publication, delta }))))
+  ('preserves $publication publication tails at body budget $delta', async ({ publication, delta }) => {
+    const list = (publication === 'partial' ? [files[0]] : publishedFiles).join(', ');
+    const tail = `${publication === 'partial' ? `; published files: ${list}` : ''}; fixture updated: ${list}`;
+    const budget = 400 - tail.length;
+    const body = 'x'.repeat(budget + delta);
+    let removals = 0;
+    const f: Fake = createFakeDeps({ runner: { removeContainer: async (name: string) => {
+      f.containers.delete(name);
+      if (++removals > 1 && publication === 'full') throw new Error(body);
+    } } });
+    const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+    vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+      if (publication === 'partial' && String(destination) === join(f.fixture, plan)) throw new Error(body);
+      return actual.renameSync(source, destination);
+    });
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(reason(f)).toBe(body.slice(0, budget) + tail);
+    expect(reason(f).length).toBeLessThanOrEqual(400);
+    fail(f, publication === 'partial' ? 'fixture' : 'teardown', '0');
+    expect(JSON.parse(fs.readFileSync(join(f.fixture, files[0]), 'utf8')).secrets.allow).toEqual(['memos.password']);
+    expect(fs.readFileSync(join(f.fixture, plan), 'utf8')).toBe(publication === 'partial' ? '{"seed":"plan"}\n' : '{"generated":"plan"}\n');
+    expect(fs.readFileSync(join(f.fixture, grounding), 'utf8')).toBe(publication === 'partial' ? '{"seed":"grounding"}\n' : '{"generated":"grounding"}\n');
+    cleaned(f);
+  });
+
+  it.each(['partial', 'full'])('redacts and escapes a long %s body while keeping complete tails', async publication => {
+    const body = `${password}\n\r\t\0\u007f` + 's'.repeat(700);
+    const list = (publication === 'partial' ? [files[0]] : publishedFiles).join(', ');
+    const tail = `${publication === 'partial' ? `; published files: ${list}` : ''}; fixture updated: ${list}`;
+    let removals = 0;
+    const f: Fake = createFakeDeps({ runner: { removeContainer: async (name: string) => {
+      f.containers.delete(name);
+      if (++removals > 1 && publication === 'full') throw new Error(body);
+    } } });
+    const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+    vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+      if (publication === 'partial' && String(destination) === join(f.fixture, plan)) throw new Error(body);
+      return actual.renameSync(source, destination);
+    });
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    const sanitizedBody = '[redacted]\\n\\r\\t\\u0000\\u007f' + 's'.repeat(700);
+    expect(reason(f)).toBe(sanitizedBody.slice(0, 400 - tail.length) + tail);
+    expect(reason(f)).not.toContain(password);
+    expect(reason(f)).not.toMatch(/[\u0000-\u001f\u007f]/);
+    expect(reason(f).length).toBeLessThanOrEqual(400); cleaned(f);
+  });
+
+  it.each(['success', 'failure', 'not-attempted', 'ordinary'])('yields two turns only after attempted publication: %s', async mode => {
+    vi.useFakeTimers({ toFake: ['setImmediate'] });
+    try {
+      const f: Fake = createFakeDeps({ runProcess: async call => mode === 'not-attempted' && call.kind === 'judge'
+        ? result(1, '', 'judge failed') : f.successfulProcess(call) });
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      let attempted = false, settled = false;
+      vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+        if (String(destination) === join(f.fixture, files[0])) {
+          attempted = true;
+          if (mode === 'failure') throw new Error('publication failed');
+        }
+        return actual.renameSync(source, destination);
+      });
+      const outcome = run(f, mode === 'ordinary' ? [] : ['--regenerate']).then(code => { settled = true; return code; });
+      // All fake operations settle on microtasks; no unrelated timer advances the boundary.
+      for (let i = 0; i < 500 && !settled && vi.getTimerCount() === 0; i++) await Promise.resolve();
+      if (mode === 'ordinary' || mode === 'not-attempted') {
+        expect(await outcome).toBe(mode === 'ordinary' ? 0 : 1);
+        expect(vi.getTimerCount()).toBe(0); expect(attempted).toBe(false);
+      } else {
+        expect(attempted).toBe(true);
+        expect(fs.existsSync(join(f.fixture, '.lock'))).toBe(false);
+        expect(f.runnerCount('removeContainer')).toBe(1);
+        expect(f.signals.listenerCount('SIGINT')).toBe(1);
+        expect(settled).toBe(false); expect(vi.getTimerCount()).toBe(1);
+        await vi.advanceTimersToNextTimerAsync();
+        expect(settled).toBe(false); expect(f.runnerCount('removeContainer')).toBe(1);
+        expect(f.signals.listenerCount('SIGINT')).toBe(1); expect(vi.getTimerCount()).toBe(1);
+        await vi.advanceTimersToNextTimerAsync();
+        expect(await outcome).toBe(mode === 'success' ? 0 : 1);
+        cleaned(f);
+      }
+    } finally { vi.useRealTimers(); }
+  });
+});
 function stageFake(stage: string): Fake {
   const error = () => { throw new Error(`${stage} failure`); };
   if (stage === 'preflight') return createFakeDeps({ runner: { checkDaemon: error } });
@@ -609,7 +998,7 @@ describe('main', () => {
       expect(emitted).toBe(true);
       const expectedStage = stage === 'check' || stage === 'generate' ? 'fixture' : stage === 'resolve' ? 'replay' : stage;
       expect(last(f)).toBe(`verify-memos: FAIL stage=${expectedStage} reason=interrupted aiCalls=n/a`);
-      // 2026-10-11 revision: generate now runs before any container exists.
+      // Consent failures need no container cleanup because generation precedes startup.
       const hasContainer = !['pack', 'install', 'chromium', 'check', 'generate'].includes(stage);
       expect(f.runnerCount('removeContainer')).toBe(hasContainer ? 1 : 0);
       expect(f.containers.size).toBe(0); expect(f.roots()).toEqual([]);
@@ -633,6 +1022,7 @@ describe('main', () => {
       }
       expect(await run(f, ['--clean'])).toBe(mode === 'daemon-failure' ? 1 : 0);
       if (mode !== 'daemon-failure') expect(f.out()).toBe(`verify-memos: cleaned containers=${mode === 'stale' ? 1 : 0} dirs=${mode === 'stale' ? 1 : 0}\n`);
+      else { expect(f.out()).toBe(''); expect(f.err()).toContain('preflight'); }
       expect(f.processCalls).toEqual([]); expect(f.starts).toEqual([]); expect(f.runnerCount('pullImage')).toBe(0);
       expect(f.events).not.toContain('port'); expect(f.roots()).toEqual([]);
     });
@@ -649,8 +1039,7 @@ describe('main', () => {
 
   describe('regenerate', () => {
     it('TEST-70 redacts split secrets from resolve streams while preserving judge evidence', async () => {
-      // 2026-10-11 revision: generate no longer carries a password (it runs
-      // before one exists), so only resolve's chunk-split redaction is
+      // Generation precedes password creation, so only resolve's chunk-split redaction is
       // exercised here; generate's stdio wiring is covered by TEST-57/58/74.
       const raw = `before ${password} after`;
       const resolveReport = JSON.stringify({ ...report, runId: 'resolve-run', errors: [{ code: 'STREAM_SECRET', message: raw }],
@@ -730,7 +1119,7 @@ describe('main', () => {
       vi.stubEnv('AMBERCAST_SECRET_OLD', 'stale');
       const f: Fake = createFakeDeps({ runProcess: async (call) => {
         if (call.kind === 'generate') {
-          // 2026-10-11 revision: generate runs before any password exists and
+          // Generation runs before any password exists and
           // before the instance is ever started (SPEC-13), so consent's TTY
           // check never collides with piped redaction.
           expect(f.events).not.toContain('startContainer');
@@ -835,7 +1224,7 @@ describe('main', () => {
       const blockedBeforeInstance = stage.startsWith('generate-') || stage.includes('consent');
       fail(f, blockedBeforeInstance ? 'fixture' : stage === 'resolve' ? 'replay' : stage, stage === 'replay' || stage === 'judge' ? '0' : 'n/a');
       expect(snapshot(f.fixture)).toEqual(before); expect(f.roots()).toEqual([]);
-      // 2026-10-11 revision: generate/consent failures happen before any
+      // Generate/consent failures happen before any
       // password or container exists; resolve failures happen after exactly
       // one (pre-resolve) instance start, replay/judge failures after two.
       expect(f.passwordGenerated()).toBe(!blockedBeforeInstance);
@@ -846,8 +1235,8 @@ describe('main', () => {
         expect(f.fetchCalls).toHaveLength(0);
       }
     });
-    it.each(['pass', 'second-rename-fails', 'judge-fails', 'judge-throws', 'disclosure-only', 'teardown-fails', 'signal-during-publish', 'signal-after-publish'])
-    ('TEST-59 writes back config, plan, grounding atomically and in order after judge passes', async (mode) => {
+    it.each(['pass', 'second-rename-fails', 'judge-fails', 'judge-throws', 'disclosure-only', 'teardown-fails', 'signal-during-publish', 'signal-during-publish-term', 'signal-after-publish'])
+    ('TEST-59 writes back config, plan, grounding atomically and in order after judge passes (%s)', async (mode) => {
       const f: Fake = createFakeDeps({ runProcess: async (call) => {
         if (mode === 'disclosure-only' && call.kind === 'replay') return result(1, reportText);
         if (call.kind === 'judge') {
@@ -879,18 +1268,19 @@ describe('main', () => {
         const tempWrite = vi.mocked(fs.writeFileSync).mock.calls.find((args) => String(args[0]) === String(source));
         expect(tempWrite).toBeDefined(); expect(tempWrite![2]).toEqual(expect.objectContaining({ flag: 'wx' }));
         if (mode === 'second-rename-fails' && file === plan) throw Object.assign(new Error('rename failed'), { code: 'EIO' });
-        if (mode === 'signal-during-publish' && file === files[0]) {
-          f.signals.emit('SIGINT'); expect(f.calls('judge')[0]!.opts.signal.aborted).toBe(false);
+        if (mode.startsWith('signal-during-publish') && file === files[0]) {
+          f.signals.emit(mode.endsWith('-term') ? 'SIGTERM' : 'SIGINT');
         }
+        expect(f.calls('judge')[0]!.opts.signal.aborted).toBe(false);
         actual.renameSync(source, destination); publications.push(file); f.events.push(`published:${file}`);
       });
       const code = await run(f, ['--regenerate']);
-      expect(code).toBe(mode === 'pass' ? 0 : mode === 'signal-during-publish' ? 130 : mode === 'signal-after-publish' ? 143 : 1);
+      expect(code).toBe(mode === 'pass' ? 0 : mode === 'signal-during-publish' ? 130 : ['signal-during-publish-term', 'signal-after-publish'].includes(mode) ? 143 : 1);
       if (['judge-fails', 'judge-throws', 'disclosure-only'].includes(mode)) {
         expect(publications).toEqual([]); expect(snapshot(f.fixture)).toEqual(before);
         expect(f.calls('judge')[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_MODE).toBe(mode === 'disclosure-only' ? 'disclosure-only' : 'full');
       } else {
-        const partial = mode === 'second-rename-fails' || mode === 'signal-during-publish';
+        const partial = mode === 'second-rename-fails';
         expect(publications).toEqual(partial ? [files[0]] : [files[0], plan, grounding]);
         expect(fs.readFileSync(join(f.fixture, prompt), 'utf8')).toBe('Sign in and create a memo.\n');
         if (partial) { expect(snapshot(f.fixture)[plan]).toBe(before[plan]); expect(snapshot(f.fixture)[grounding]).toBe(before[grounding]); }
@@ -900,7 +1290,11 @@ describe('main', () => {
         }
         if (mode === 'second-rename-fails') { fail(f, 'fixture', '0'); expect(last(f)).toContain('ambercast.config.json'); }
         if (mode === 'teardown-fails' || mode.startsWith('signal-')) expect(last(f)).toContain('fixture updated');
-        if (mode.startsWith('signal-')) expect(last(f)).toContain('reason=interrupted');
+        if (mode.startsWith('signal-')) {
+          expect(last(f)).toContain(`reason=interrupted; fixture updated: ${[files[0], plan, grounding].join(', ')}`);
+          expect(last(f)).toContain('aiCalls=n/a');
+          expect(f.calls('judge')[0]!.opts.signal.aborted).toBe(true);
+        }
       }
       expect(fs.existsSync(join(f.fixture, '.lock'))).toBe(false);
       expect(fs.readFileSync(foreignTemp, 'utf8')).toBe('another writer owns this file');

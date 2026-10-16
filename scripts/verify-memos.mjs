@@ -15,7 +15,7 @@ import { createRequire } from 'node:module';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import {
-  MEMOS_IMAGE, MEMOS_VERSION, HOST, PORT, ADMIN_USERNAME, TIMEOUTS, HarnessError,
+  MEMOS_IMAGE, MEMOS_VERSION, HOST, PORT, ADMIN_USERNAME, TIMEOUTS, HarnessError, TerminationUnconfirmedError,
   createExec, createDockerRunner, assertPortFree, createRunRoot, redact, buildChildEnv,
   generateAdminPassword, waitReady, bootstrapAdmin, secretEnvName, buildProjectPackageJson,
   summarizeAiCalls, createTeardown, reapStale, runProcess,
@@ -83,14 +83,32 @@ export function parseArgs(argv) {
  * privately; cleanup failures append to the original reason without hiding it.
  * Signal handlers bind their signal names separately. The first signal pins both
  * its exit code and the current stage; later signals do nothing, allowing teardown
- * to finish. Abort immediately except during SPEC-13's fixture-publication window.
- * There, record the signal, finish the in-flight rename, check interruption after
- * each rename and stop advancing, then abort outside the critical section.
- * Already published files are not rolled back and their names remain diagnostic evidence.
+ * to finish. Abort is deferred until after publication completes or fails; the
+ * synchronous critical section always finishes. Two setImmediate turns allow
+ * real signal delivery before cleanup decisions; injected emits complete publication and
+ * then abort. Already published files are not rolled back and their names remain
+ * diagnostic evidence.
+ *
+ * Unconfirmed termination stops verification and publication. The detecting
+ * step assigns its stage without losing an earlier failure reason. A pgid
+ * list preserves evidence before errors become strings or interruption masks
+ * them; repeated catches of one pgid do not duplicate it. Teardown still
+ * attempts every cleanup with fresh bounded Docker budgets. Teardown failures
+ * append to an earlier failure. Signals retain their original stage,
+ * exit 130/143 and aiCalls=n/a, with reason interrupted followed by a teardown
+ * failure entry for each recorded pgid. Nonsignal --keep fails and
+ * prints each unconfirmed group with its manual kill -9 -<pgid> command.
+ * A disclosure-only judge's unconfirmed termination appends directly to the
+ * replay reason, bypassing the judge classifier; other judge errors retain it.
+ * Final assembly renders each recorded pgid only when its exact message is
+ * absent from the assembled reason, including cleanup aggregates.
+ * Final reason formatting redacts and escapes error text and publication
+ * lists separately, reserves space for process identities and both publication
+ * lists, and caps ordinary error text within the overall 400-character budget.
  *
  * Normal verification copies fixtures without modification and has no AI path.
  * Regeneration clears consent names, then runs generate before any password or
- * container exists (2026-10-11 revision) so consent's TTY check and redaction
+ * container exists so consent's TTY check and redaction
  * never collide: generate inherits stdin/stderr and forwards only its captured
  * stdout to the harness sink. Only after generate validates exactly one
  * consented name does a password get generated and an instance start; resolve
@@ -115,10 +133,16 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   }
   const abort = new AbortController();
   const td = createTeardown();
-  let currentStage = 'preflight', signalStage, sigExit = null, publishing = false;
+  let currentStage = 'preflight', signalStage, sigExit = null, publishing = false, publishAttempted = false;
   let root, password, secretName, manifest, manifestPath, failure, containerRegistered = false;
   let aiCalls = 'n/a';
   const published = [];
+  const unconfirmed = new Map(); // pgid -> { stage } for first-stage evidence
+  function noteUnconfirmed(error) {
+    if (error instanceof TerminationUnconfirmedError && !unconfirmed.has(error.pgid)) {
+      unconfirmed.set(error.pgid, { stage: currentStage });
+    }
+  }
   const fixture = join(deps.repoRoot, 'test/verification/memos/fixture');
   const lockPath = join(fixture, '.lock');
   const message = error => error instanceof Error ? error.message : String(error);
@@ -150,7 +174,10 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       }
       return value;
     } catch (error) {
-      throw error instanceof HarnessError ? error : new HarnessError(stage, message(error));
+      noteUnconfirmed(error);
+      const wrapped = error instanceof HarnessError ? error : new HarnessError(stage, message(error));
+      if (error instanceof TerminationUnconfirmedError) wrapped.pgid = error.pgid;
+      throw wrapped;
     }
   }
   const dockerOptions = () => ({ signal: abort.signal, timeoutMs: TIMEOUTS.docker });
@@ -159,7 +186,9 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   const staleRunner = Object.fromEntries(['listContainers', 'inspectCreated', 'removeContainer'].map(method =>
     [method, async (...args) => {
       interrupted();
-      const value = await deps.runner[method](...args, dockerOptions());
+      let value;
+      try { value = await deps.runner[method](...args, dockerOptions()); }
+      catch (error) { noteUnconfirmed(error); throw error; }
       interrupted();
       return value;
     }]));
@@ -170,6 +199,13 @@ export async function main(argv, platform = process.platform, deps = createDeps(
     if (extra.stdio !== 'generate' && extra.stdio !== 'resolve') {
       if (result.stdout) err(result.stdout);
       if (result.stderr) err(result.stderr);
+    }
+    if (result.termination === 'unconfirmed') {
+      // Forwarding flushes the cross-stream redaction queue before resolution;
+      // replaying raw stream-local captures can disclose previously hidden fragments.
+      const error = new TerminationUnconfirmedError(result.pgid);
+      noteUnconfirmed(error);
+      throw error;
     }
     interrupted();
     return result;
@@ -210,7 +246,11 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   async function startInstance() {
     await step('container', async () => {
       if (!containerRegistered) {
-        td.defer('container', () => deps.runner.removeContainer(root.containerName, freshOptions()));
+        // Aggregation must not erase process identity needed by signal reporting.
+        td.defer('container', async () => {
+          try { await deps.runner.removeContainer(root.containerName, freshOptions()); }
+          catch (error) { noteUnconfirmed(error); throw error; }
+        });
         containerRegistered = true;
       }
       await deps.runner.startContainer({ runId: root.runId, name: root.containerName, data: root.dataDir,
@@ -315,8 +355,8 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         }
       });
       if (options.regenerate) {
-        // generate runs before any password or container exists (SPEC-13,
-        // 2026-10-11 revision): consent needs a real stdin/stderr, and no
+        // generate runs before any password or container exists:
+        // consent needs a real stdin/stderr, and no
         // secret can leak through generate's output at this point.
         await step('fixture', async () => {
           const result = await child(ambercast(), ['generate', PROMPT, ...(options.ai ? ['--ai', options.ai] : [])],
@@ -370,14 +410,19 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           let reason = `${exitReason(result)}${first?.code ? ` ${first.code}` : ''}${first?.message ? ` ${first.message}` : ''}${row?.status ? ` ${row.status}` : ''}`;
           if (result.status === 4) reason += `; ${REGENERATE}`;
           try { await judge('disclosure-only'); } catch (error) {
-            interrupted();
-            reason += `; ${classifyJudgeFailure(message(error))}`;
+            noteUnconfirmed(error);
+            if (error instanceof TerminationUnconfirmedError) {
+              reason += `; process group ${error.pgid} not confirmed terminated`;
+            } else {
+              reason += `; ${classifyJudgeFailure(message(error))}`;
+            }
           }
           throw new Error(reason);
         }
       });
       await step('judge', () => judge('full'));
       if (options.regenerate) {
+        publishAttempted = true;
         await step('fixture', () => withLock(() => {
           const ownedTemps = new Set();
           publishing = true;
@@ -397,10 +442,13 @@ export async function main(argv, platform = process.platform, deps = createDeps(
               fs.renameSync(temporary, destination);
               ownedTemps.delete(temporary);
               published.push(file);
-              if (sigExit !== null) break;
             }
           } catch (error) {
-            throw new Error(`${message(error)}; published files: ${published.join(', ') || 'none'}`);
+            // Keep publication evidence separate so later cleanup diagnostics
+            // consume the body budget rather than extending a protected list.
+            const failure = new HarnessError('fixture', message(error));
+            failure.publishedFiles = [...published];
+            throw failure;
           } finally {
             publishing = false;
             if (sigExit !== null) abort.abort();
@@ -415,12 +463,20 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   }
 
   let teardownError;
+  // A poll-phase signal can arrive after the first check phase. Keep handlers
+  // installed through a second turn before deciding whether resources survive.
+  if (publishAttempted) {
+    await new Promise(resolve => setImmediate(() => setImmediate(resolve)));
+  }
   try {
     if (options.keep && sigExit === null && root) {
       if (password) fs.writeFileSync(join(root.runRoot, 'credentials.json'),
         JSON.stringify({ username: ADMIN_USERNAME, password }), { mode: 0o600 });
       if (containerRegistered) err(`container: ${root.containerName}\ndocker rm -f ${root.containerName}\n`);
       err(`runRoot: ${root.runRoot}\nrm -rf ${JSON.stringify(root.runRoot)}\n`);
+      for (const [pgid] of unconfirmed) {
+        err(`process group ${pgid} not confirmed terminated; kill -9 -${pgid}\n`);
+      }
     } else if (root) {
       await step('teardown', async () => {
         const cleanupError = await td.runAll();
@@ -430,7 +486,10 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           if (containerRegistered && (await deps.runner.listContainers(freshOptions())).includes(root.containerName)) {
             if (!cleanupError) residual.push(`residual container ${root.containerName}`);
           }
-        } catch (error) { residual.push(message(error)); }
+        } catch (error) {
+          noteUnconfirmed(error);
+          if (!residual.some(reason => reason.includes(message(error)))) residual.push(message(error));
+        }
         if (fs.existsSync(root.runRoot)) residual.push(`residual runRoot ${root.runRoot}`);
         if (residual.length) throw new Error(residual.join('; '));
       }, true, true);
@@ -439,23 +498,54 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   finally {
     for (const [name, handler] of Object.entries(handlers)) signals.off(name, handler);
   }
+  function formatReason(body, tail = '') {
+    const sanitize = text => safe(text).replace(/[\u0000-\u001f\u007f]/g, char =>
+      ({ '\n': '\\n', '\r': '\\r', '\t': '\\t' })[char] ?? `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+    const safeTail = sanitize(tail);
+    // Reserve identity evidence independently of ordinary diagnostics, preserving
+    // its position in short reasons and its presence after long reasons are cut.
+    const identities = new Set([...unconfirmed.keys()].map(pgid => `process group ${pgid} not confirmed terminated`));
+    const parts = sanitize(body).split(/(process group \d+ not confirmed terminated)/g);
+    let budget = Math.max(0, 400 - safeTail.length - parts.filter(part => identities.has(part)).join('').length);
+    return parts.map(part => {
+      if (identities.has(part)) return part;
+      const prefix = part.slice(0, budget);
+      budget -= prefix.length;
+      return prefix;
+    }).join('') + safeTail;
+  }
   if (sigExit !== null) {
+    // Interruption replaces verification failure, but preserves ordinary cleanup
+    // evidence. Final assembly renders each recorded pgid only if its exact
+    // message is absent, including messages already in the cleanup aggregate.
     failure = new HarnessError(signalStage, 'interrupted');
     aiCalls = 'n/a';
   }
   if (teardownError) {
-    if (failure) failure.message += `; teardown failed: ${message(teardownError)}`;
-    else failure = new HarnessError('teardown', message(teardownError));
+    const publishedFiles = failure?.publishedFiles;
+    failure = failure
+      ? new HarnessError(failure.stage, `${message(failure)}; teardown failed: ${message(teardownError)}`)
+      : teardownError;
+    if (publishedFiles) failure.publishedFiles = publishedFiles;
   }
-  if (failure && published.length) failure.message += `; fixture updated: ${published.join(', ')}`;
-  if (options.clean) {
-    if (failure) err(`verify-memos: ${failure.message}\n`);
-  } else if (failure) {
-    const reason = safe(failure.message).replace(/[\u0000-\u001f\u007f]/g, char =>
-      ({ '\n': '\\n', '\r': '\\r', '\t': '\\t' })[char] ?? `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`).slice(0, 400);
-    out(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}\n`);
-  } else out(`verify-memos: PASS aiCalls=${aiCalls} sha=${manifest.sha.slice(0, 12)}${manifest.dirty ? '-dirty' : ''} memos=${MEMOS_VERSION}\n`);
-  return sigExit ?? (failure ? 1 : 0);
+  for (const [pgid, { stage }] of unconfirmed) {
+    const text = `process group ${pgid} not confirmed terminated`;
+    if (!failure) failure = new HarnessError(stage, text);
+    else if (!message(failure).includes(text)) {
+      failure.message += `; teardown failed: ${text}`;
+    }
+  }
+  if (failure) {
+    const reasonBody = message(failure);
+    const tail = (failure.publishedFiles ? `; published files: ${failure.publishedFiles.join(', ') || 'none'}` : '')
+      + (published.length ? `; fixture updated: ${published.join(', ')}` : '');
+    const reason = formatReason(reasonBody, tail);
+    if (options.clean) err(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}\n`);
+    else out(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}\n`);
+    return sigExit ?? 1;
+  }
+  if (!options.clean) out(`verify-memos: PASS aiCalls=${aiCalls} sha=${manifest.sha.slice(0, 12)}${manifest.dirty ? '-dirty' : ''} memos=${MEMOS_VERSION}\n`);
+  return 0;
 }
 
 /**

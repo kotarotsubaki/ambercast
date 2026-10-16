@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
-import { assertPortFree, bootstrapAdmin, BootstrapError, buildChildEnv, buildProjectPackageJson, createDockerRunner, createExec, createRunRoot, createTeardown, defaultIsPidAlive, generateAdminPassword, HarnessError, reapStale, ReadyError, RunnerError, runProcess, secretEnvName, summarizeAiCalls, waitReady } from '../../../scripts/lib/memos-harness.mjs';
+import { assertPortFree, bootstrapAdmin, BootstrapError, buildChildEnv, buildProjectPackageJson, createDockerRunner, createExec, createRunRoot, createTeardown, defaultIsPidAlive, generateAdminPassword, HarnessError, reapStale, ReadyError, RunnerError, runProcess, secretEnvName, summarizeAiCalls, TerminationUnconfirmedError, waitReady } from '../../../scripts/lib/memos-harness.mjs';
 
 const roots: string[] = [];
 const prefix = 'ambercast-verify-memos-';
@@ -47,6 +47,62 @@ function bootstrapFetch(statuses = [200, 200, 200], token: unknown = 't') {
 }
 
 describe('createDockerRunner', () => {
+  const operations = [
+    { method: 'checkDaemon', args: [], stdout: '', expected: undefined },
+    { method: 'hasImage', args: ['image'], stdout: '', expected: true },
+    { method: 'pullImage', args: ['image'], stdout: '', expected: undefined },
+    { method: 'startContainer', args: [{ runId: '12345678', name, data: '/data', uid: 1, gid: 1 }], stdout: 'id\n', expected: 'id' },
+    { method: 'isRunning', args: [name], stdout: 'true\n', expected: true },
+    { method: 'inspectEnv', args: [name], stdout: '[A=1]\n', expected: ['A=1'] },
+    { method: 'inspectCreated', args: [name], stdout: '2026-10-16T00:00:00Z\n', expected: '2026-10-16T00:00:00Z' },
+    { method: 'tailLogs', args: [name, 40], stdout: 'logs\n', expected: 'logs\n' },
+    { method: 'removeContainer', args: [name], stdout: '', expected: undefined },
+    { method: 'listContainers', args: [], stdout: `${name}\n`, expected: [name] },
+  ];
+  it.each(operations.flatMap(operation => [0, 1].map(status => ({ ...operation, status }))))(
+    'TEST-64 $method rejects unconfirmed termination before interpreting status=$status', async ({ method, args, stdout, status }) => {
+      const pgid = 60464;
+      const exec = vi.fn(async () => ({ status, stdout, stderr: 'No such container: missing',
+        signal: 'SIGKILL', termination: 'unconfirmed', pgid }));
+      const error = await createDockerRunner(exec)[method](...args).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(TerminationUnconfirmedError);
+      expect(error).not.toBeInstanceOf(HarnessError);
+      expect(error.pgid).toBe(pgid);
+      expect(error.message).toBe(`process group ${pgid} not confirmed terminated`);
+      expect(error).not.toHaveProperty('stage');
+      expect(exec).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each(operations.flatMap(operation => ['none', 'confirmed'].map(termination => ({ ...operation, termination }))))(
+    'TEST-64 $method preserves successful behavior for termination=$termination', async ({ method, args, stdout, expected, termination }) => {
+      expect(await createDockerRunner(async () => ({ status: 0, stdout, stderr: '', signal: null,
+        termination, pgid: 60464 }))[method](...args)).toEqual(expected);
+    },
+  );
+  it.each(['none', 'confirmed'].flatMap(termination => [
+    { termination, method: 'hasImage', args: ['image'], expected: false },
+    { termination, method: 'isRunning', args: [name], expected: false },
+    { termination, method: 'removeContainer', args: [name], expected: undefined },
+  ]))('TEST-64 $method retains absence tolerance for termination=$termination', async ({ method, args, expected, termination }) => {
+    expect(await createDockerRunner(async () => ({ status: 1, stdout: '', stderr: 'No such container: missing',
+      signal: 'SIGTERM', termination, pgid: 60464 }))[method](...args)).toEqual(expected);
+  });
+  it.each(operations.filter(operation => !['hasImage', 'isRunning'].includes(operation.method))
+    .flatMap(operation => ['none', 'confirmed'].map(termination => ({ ...operation, termination }))))(
+    'TEST-64 $method retains RunnerError for ordinary failure with termination=$termination', async ({ method, args, termination }) => {
+      const error = await createDockerRunner(async () => ({ status: 1, stdout: '', stderr: 'denied\nmore detail',
+        signal: 'SIGTERM', termination, pgid: 60464 }))[method](...args).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(RunnerError);
+      expect(error.message).toBe(`${method}: denied`);
+    },
+  );
+  it.each(['none', 'confirmed', 'unconfirmed'])('TEST-64 createExec passes through the exact %s process result', async termination => {
+    const result = { status: null, stdout: 'captured stdout', stderr: 'captured stderr', signal: 'SIGKILL', termination, pgid: 60464 };
+    const runProcessImpl = vi.fn(async () => result);
+    const options = { timeoutMs: 1234, signal: new AbortController().signal };
+    expect(await createExec(runProcessImpl)(['info'], options)).toBe(result);
+    expect(runProcessImpl).toHaveBeenCalledExactlyOnceWith('docker', ['info'], options);
+  });
   it('TEST-68 delegates Docker command, argv and options through createExec to runProcess', async () => {
     const runProcessImpl = vi.fn(async () => ({ status: 0, stdout: '', stderr: '', signal: null }));
     const signal = new AbortController().signal;
@@ -537,6 +593,17 @@ describe('reapStale', () => {
 });
 
 describe.skipIf(process.platform === 'win32')('runProcess', () => {
+  it('TEST-64 reports none and the detached child pgid when no termination is attempted', async () => {
+    const kill = vi.spyOn(process, 'kill');
+    try {
+      const result = await runProcess(process.execPath, ['-e', 'process.stdout.write(String(process.pid)); process.stderr.write("normal stderr"); process.exitCode = 7;']);
+      expect(result).toMatchObject({ status: 7, stderr: 'normal stderr', signal: null, termination: 'none', pgid: Number(result.stdout) });
+      expect(result.pgid).toBeGreaterThan(0);
+      expect(kill.mock.calls.filter(([, signal]) => signal === 'SIGTERM' || signal === 'SIGKILL')).toEqual([]);
+    } finally {
+      kill.mockRestore();
+    }
+  });
   it('TEST-64 applies the same group termination contract on timeout', async () => {
     const pidFile = join(temporaryRoot(), 'timeout-pid');
     let pid: number | undefined;
@@ -551,6 +618,7 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       const result = await runProcess('sh', ['-c', 'trap "" TERM; echo $$ > "$1"; sleep 30 & wait', 'memos-test', pidFile], { timeoutMs: 100 });
       pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
       expect(result.signal).toBe('SIGKILL');
+      expect(result).toMatchObject({ termination: 'confirmed', pgid: pid });
       expect(Date.now() - started).toBeLessThan(12_000);
       expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
       expect(() => process.kill(-pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
@@ -578,10 +646,14 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       const result = await runProcess('sh', ['-c', 'trap "" TERM; echo $$ > "$1"; sleep 30 & wait', 'memos-test', pidFile], { timeoutMs: 100 });
       pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
       expect(result.signal).toBe('SIGKILL');
-      expect(Date.now() - started).toBeLessThan(12_000);
+      expect(result).toMatchObject({ termination: 'unconfirmed', pgid: pid });
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeGreaterThanOrEqual(10_000);
+      expect(elapsed).toBeLessThan(12_000);
       expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
       const warnings = stderr.mock.calls.flatMap(([chunk]) => String(chunk).split('\n')).filter(line => /warn/i.test(line));
       expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toBe('warning: process group termination could not be confirmed after SIGKILL');
     } finally {
       kill.mockRestore(); stderr.mockRestore();
       if (!pid && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
@@ -614,6 +686,7 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       const result = await observed;
       expect(Date.now() - started).toBeLessThan(6000);
       expect(result?.signal).toBe(ignoreTerm ? 'SIGKILL' : 'SIGTERM');
+      expect(result).toMatchObject({ termination: 'confirmed', pgid: pid });
       let gone: unknown;
       try { process.kill(-pid, 0); } catch (error) { gone = error; }
       expect(gone).toMatchObject({ code: 'ESRCH' });
@@ -670,6 +743,7 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       const result = await observed;
       expect(Date.now() - started).toBeLessThan(6000);
       expect(result?.signal).toBe(ignoreTerm ? 'SIGKILL' : 'SIGTERM');
+      expect(result).toMatchObject({ termination: 'confirmed', pgid: pid });
       let gone: unknown;
       try { process.kill(-pid, 0); } catch (error) { gone = error; }
       expect(gone).toMatchObject({ code: 'ESRCH' });

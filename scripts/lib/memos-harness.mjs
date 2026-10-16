@@ -48,6 +48,19 @@ export class RunnerError extends Error {
   }
 }
 
+/**
+ * Reports a process group whose termination could not be confirmed.
+ * @remarks The caller assigns the verification stage; this error carries only
+ * process identity so a Docker adapter cannot misattribute a lifecycle failure.
+ */
+export class TerminationUnconfirmedError extends Error {
+  /** @param {number} pgid - Process group requiring manual termination. */
+  constructor(pgid) {
+    super(`process group ${pgid} not confirmed terminated`);
+    this.pgid = pgid;
+  }
+}
+
 /** A readiness failure with its stage fixed independently of the caller.
  * @param message - Elapsed-time or container-exit evidence and bounded logs.
  */
@@ -89,13 +102,19 @@ export function createExec(runProcessImpl = runProcess) {
  * queries return parsed values and lifecycle commands resolve on success.
  * @throws RunnerError for unsuccessful operations; an absent image is false
  * and removing a nonexistent container succeeds.
+ * @throws TerminationUnconfirmedError when an executor reports unconfirmed
+ * termination; this takes precedence over status and absent-container evidence.
  * @remarks Named, labeled containers allow cleanup even after an ambiguous
  * client failure. Host ownership permits data removal on Linux; disabling rate
  * limiting through the environment avoids ENTRYPOINT argument assumptions.
  */
 export function createDockerRunner(exec) {
+  function assertTerminationConfirmed(result) {
+    if (result.termination === 'unconfirmed') throw new TerminationUnconfirmedError(result.pgid);
+  }
   async function call(method, args, options, absent = false) {
     const result = await exec(args, { timeoutMs: TIMEOUTS.docker, ...options });
+    assertTerminationConfirmed(result);
     if (result.status !== 0 && !(absent && /No such container/i.test(result.stderr))) {
       throw new RunnerError(`${method}: ${result.stderr.split('\n')[0]}`);
     }
@@ -104,7 +123,9 @@ export function createDockerRunner(exec) {
   return {
     async checkDaemon(options) { await call('checkDaemon', ['info'], options); },
     async hasImage(image, options) {
-      return (await exec(['image', 'inspect', image], { timeoutMs: TIMEOUTS.docker, ...options })).status === 0;
+      const result = await exec(['image', 'inspect', image], { timeoutMs: TIMEOUTS.docker, ...options });
+      assertTerminationConfirmed(result);
+      return result.status === 0;
     },
     async pullImage(image, options) { await call('pullImage', ['pull', image], { timeoutMs: TIMEOUTS.pull, ...options }); },
     async startContainer({ runId, name, data, uid, gid }, options) {
@@ -116,6 +137,7 @@ export function createDockerRunner(exec) {
     },
     async isRunning(name, options) {
       const result = await exec(['inspect', '-f', '{{.State.Running}}', name], { timeoutMs: TIMEOUTS.docker, ...options });
+      assertTerminationConfirmed(result);
       return result.status === 0 && result.stdout.trim() === 'true';
     },
     async inspectEnv(name, options) {
@@ -533,6 +555,16 @@ export function defaultIsPidAlive(pid) {
 }
 
 /**
+ * @typedef {object} ProcessResult
+ * @property {number | null} status - Child exit status, or null on termination.
+ * @property {string} stdout - Captured standard output.
+ * @property {string} stderr - Captured standard error.
+ * @property {string | null} signal - Exit or termination signal.
+ * @property {'none' | 'confirmed' | 'unconfirmed'} termination - Group termination evidence.
+ * @property {number} pgid - Detached child's process group identity.
+ */
+
+/**
  * Runs a child in a detached process group with shared timeout/cancellation handling.
  * @param command - Executable path or name.
  * @param args - Argument vector, never containing the password.
@@ -542,16 +574,21 @@ export function defaultIsPidAlive(pid) {
  *   harness's own stderr); `'resolve'` additionally requires `password` (the
  *   secret string to redact). `'generate'` runs before any password exists, so
  *   it forwards its captured stdout verbatim.
- * @returns status, stdout, stderr and signal; nonzero exits remain results for the caller.
+ * @returns {Promise<ProcessResult>} A process result with status, stdout, stderr, signal,
+ *   termination ('none' | 'confirmed' | 'unconfirmed'), and pgid (child.pid).
+ *   Nonzero exits remain results for the caller.
  * @throws Propagates process launch failures.
  * @remarks On abort/timeout, send group SIGTERM immediately and poll for ESRCH
  * every 100 ms for at most five seconds. If unconfirmed, send group SIGKILL and
  * poll for another five seconds. If still unconfirmed, emit one redacted warning
- * and resolve with signal SIGKILL rather than hanging the harness.
+ * and resolve with signal SIGKILL rather than hanging the harness. Termination
+ * is 'none' if cancellation was never attempted, 'confirmed' only after
+ * observing ESRCH following SIGTERM or SIGKILL, and 'unconfirmed' if neither
+ * bounded wait confirms absence. Child exit alone does not confirm group death.
  * ponytail: This is a best-effort cleanup bound, not a guarantee that a stuck
  * process group cannot outlive the harness.
- * `'generate'` inherits stdin and stderr (consent needs a real TTY on both ends
- * per SPEC-2's 2026-10-11 revision) and only captures/forwards stdout.
+ * `'generate'` inherits stdin and stderr because consent needs a real TTY on
+ * both ends, and only captures/forwards stdout.
  * `'resolve'` inherits stdin but captures and forwards both stdout and stderr,
  * detecting passwords both within each stream and across arrival-order
  * boundaries before forwarding in arrival order. Captured report data (the raw bytes
@@ -564,11 +601,13 @@ export async function runProcess(command, args, opts = {}) {
     const child = spawn(command, args, { cwd: opts.cwd, env: opts.env, detached: true,
       stdio: mode === 'inherit-stderr' || mode === 'generate' ? ['inherit', 'pipe', 'inherit']
         : mode === 'resolve' ? ['inherit', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
+    const pgid = child.pid;
     let stdout = '';
     let stderr = '';
     let status = null;
     let exitSignal = null;
     let terminating = false;
+    let termination = 'none';
     let settled = false;
     let timer;
     // Stream-local and arrival-order views share character references, so
@@ -631,7 +670,7 @@ export async function runProcess(command, args, opts = {}) {
       settled = true;
       cleanup();
       if (forwarding && opts.onStderrChunk) forward(true);
-      resolve({ status: terminating ? null : status, stdout, stderr, signal });
+      resolve({ status: terminating ? null : status, stdout, stderr, signal, termination, pgid });
     }
     function send(signal) {
       try { process.kill(-child.pid, signal); } catch (error) {
@@ -654,12 +693,20 @@ export async function runProcess(command, args, opts = {}) {
       terminating = true;
       cleanup();
       send('SIGTERM');
-      if (await gone()) { finish('SIGTERM'); return; }
-      send('SIGKILL');
-      if (!(await gone())) {
-        const warning = 'warning: process group termination could not be confirmed after SIGKILL\n';
-        process.stderr.write(opts.password ? redact(warning, opts.password) : warning);
+      if (await gone()) {
+        termination = 'confirmed';
+        finish('SIGTERM');
+        return;
       }
+      send('SIGKILL');
+      if (await gone()) {
+        termination = 'confirmed';
+        finish('SIGKILL');
+        return;
+      }
+      termination = 'unconfirmed';
+      const warning = 'warning: process group termination could not be confirmed after SIGKILL\n';
+      process.stderr.write(opts.password ? redact(warning, opts.password) : warning);
       finish('SIGKILL');
     }
     child.once('error', error => {

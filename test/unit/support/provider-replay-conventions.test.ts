@@ -11,6 +11,19 @@ describe('provider replay conventions', () => {
     }
   });
 
+  it('TEST-5 states the raw-output rule right after the provider-output item', () => {
+    const text = readFileSync(new URL('../../../AGENTS.md', import.meta.url), 'utf8');
+    const lines = text.split(/^## Testing conventions\s*$/m)[1]!.split(/^## /m)[0]!.split('\n');
+    const rule = lines.filter(line => line.startsWith('- When you fix a'));
+    expect(rule).toHaveLength(1);
+    for (const phrase of ['dogfooding', 'generate', 'heal', 'provider-output', 'recorded', 'reconstructed', 'provenance.note', 'same pull request']) {
+      expect(rule[0]).toContain(phrase);
+    }
+    const providerItem = lines.findIndex(line => line.includes('ProviderFixtureValue'));
+    expect(providerItem).toBeGreaterThanOrEqual(0);
+    expect(lines[providerItem + 1]).toBe(rule[0]);
+  });
+
   it('TEST-21 keeps the harness and support tests free of the spawn runner', () => {
     const support = new URL('.', import.meta.url);
     const files = [

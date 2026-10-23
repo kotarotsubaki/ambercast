@@ -1629,6 +1629,34 @@ describe('main', () => {
       expect(f.calls('generate')).toHaveLength(2); expect(f.starts).toEqual([]); expect(f.passwordGenerated()).toBe(false);
       expect(snapshot(f.fixture)).toEqual(before);
     });
+    it.each([[], ['password', 'memos_password'], ['*']])('rejects invalid consent before regeneration (%j)', async (...allow) => {
+      const f = createFakeDeps(), path = join(f.fixture, files[0]), config = JSON.parse(fs.readFileSync(path, 'utf8'));
+      config.secrets.allow = allow; write(path, JSON.stringify(config));
+      const before = snapshot(f.fixture);
+      expect(await run(f, ['--regenerate'])).toBe(1); fail(f, 'fixture');
+      expect(f.calls('generate')).toEqual([]); expect(f.starts).toEqual([]);
+      expect(snapshot(f.fixture)).toEqual(before);
+    });
+    it.each([['password', 'memos_password'], ['memos_password']])('rejects changed consent after regeneration (%j)', async (...allow) => {
+      const f: Fake = createFakeDeps({ runProcess: async call => {
+        if (call.kind === 'generate') expect(JSON.parse(fs.readFileSync(join(call.opts.cwd, files[0]), 'utf8')).secrets.allow).toEqual(['password']);
+        const success = await f.successfulProcess(call);
+        if (call.kind === 'generate') {
+          const path = join(call.opts.cwd, files[0]), config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          config.secrets.allow = f.calls('generate').length === targets.length ? allow : ['password'];
+          write(path, JSON.stringify(config));
+        }
+        return success;
+      } });
+      const path = join(f.fixture, files[0]), config = JSON.parse(fs.readFileSync(path, 'utf8'));
+      config.secrets.allow = ['password']; write(path, JSON.stringify(config));
+      const before = snapshot(f.fixture);
+      expect(await run(f, ['--regenerate'])).toBe(1); fail(f, 'fixture');
+      expect(f.calls('generate')).toHaveLength(targets.length);
+      expect(f.starts).toEqual([]); expect(f.calls('resolve')).toEqual([]);
+      expect(snapshot(f.fixture)).toEqual(before);
+      expect(vi.mocked(fs.renameSync).mock.calls.filter(([, dest]) => publications.some(p => String(dest) === join(f.fixture, p)))).toEqual([]);
+    });
     it('TEST-544-13 resolves all cases once after all targets have generated and consent has settled', async () => {
       const f: Fake = createFakeDeps({ runProcess: async call => {
         const success = await f.successfulProcess(call);
@@ -1784,7 +1812,7 @@ describe('main', () => {
           expect(f.events).not.toContain('startContainer');
           expect(f.events).not.toContain('/api/v1/auth/signin');
           expect(f.passwordGenerated()).toBe(false);
-          expect(JSON.parse(fs.readFileSync(join(call.opts.cwd, files[0]), 'utf8')).secrets.allow).toEqual(f.calls('generate').length === 1 ? [] : ['memos.password']);
+          expect(JSON.parse(fs.readFileSync(join(call.opts.cwd, files[0]), 'utf8')).secrets.allow).toEqual(['memos.password']);
           expect(fs.existsSync(join(call.opts.cwd, prompt))).toBe(true);
           const targetPrompts = prompts.filter((_, i) => caseTable[i]!.target === targets[f.calls('generate').length - 1]);
           for (const file of targetPrompts.flatMap(p => [p.replace('.test.md', '.ambercast.plan.json'), p.replace('.test.md', '.ambercast.grounding.json')])) expect(fs.existsSync(join(call.opts.cwd, file))).toBe(false);
@@ -1839,8 +1867,6 @@ describe('main', () => {
         }
         return f.successfulProcess(call);
       } });
-      const configPath = join(f.fixture, files[0]), config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      config.secrets.allow = ['old.name']; write(configPath, JSON.stringify(config));
       expect(await run(f, ['--regenerate', '--ai', 'codex'])).toBe(0);
       expect(f.calls('check')).toEqual([]); expect(f.calls('generate')).toHaveLength(targets.length); expect(f.calls('resolve')).toHaveLength(1);
       expect(f.starts).toHaveLength(2);

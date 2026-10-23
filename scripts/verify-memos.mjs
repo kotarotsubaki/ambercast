@@ -180,11 +180,14 @@ export function parseArgs(argv) {
  * lists, and caps ordinary error text within the overall 400-character budget.
  *
  * Normal verification copies fixtures without modification and has no AI path.
- * Regeneration clears consent names, then runs generate before any password or
- * container exists so consent's TTY check and redaction
+ * Regeneration preserves committed consent names and runs generate before any
+ * password or container exists. The generator prefers existing names but does
+ * not enforce them; refuse any request to consent to another name and fail
+ * generation to keep the consent scope unchanged. Consent's TTY check and redaction
  * never collide: generate inherits stdin/stderr and forwards only its captured
- * stdout to the harness sink. Only after generate validates exactly one
- * consented name does a password get generated and an instance start; resolve
+ * stdout to the harness sink. The config must contain exactly one non-wildcard
+ * name before generation and retain that name afterward. Only then does a
+ * password get generated and an instance start; resolve
  * then captures and redacts both of its streams, resets Memos and replays
  * without resolution. Every judge child gets an explicit mode after
  * parent-environment isolation: full for normal acceptance, disclosure-only
@@ -619,14 +622,9 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           }
           assertCaseTable(JSON.parse(fs.readFileSync(join(root.projectDir, CONFIG), 'utf8')));
           if (options.healCheck) originalHealFiles = [plan(HEAL_CASE), grounding(HEAL_CASE)].map(file => fs.readFileSync(join(root.projectDir, file)));
-          if (options.regenerate) {
-            const config = JSON.parse(fs.readFileSync(join(root.projectDir, CONFIG), 'utf8'));
-            config.secrets = { ...config.secrets, allow: [] };
-            fs.writeFileSync(join(root.projectDir, CONFIG), JSON.stringify(config, null, 2) + '\n');
-          }
         });
+        secretName = readConsent();
         if (!options.regenerate) {
-          secretName = readConsent();
           const result = await child(ambercast(), ['check', '--json', ...allPrompts], root.projectDir, TIMEOUTS.replay);
           if (result.status !== 0) {
             let details = '';
@@ -651,7 +649,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
             });
           requireSuccess(result);
         });
-        secretName = readConsent();
+        if (readConsent() !== secretName) throw new Error('secrets.allow must retain the committed consent name');
       }
       password = generateAdminPassword(deps.randomBytes);
       await startInstance();

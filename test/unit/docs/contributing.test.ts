@@ -20,7 +20,7 @@ const REQUIRED_SECTION_TEXT = [
   ['is functional, but breaking changes can still land in a minor release'],
   ['npm test', 'npm run typecheck', 'npm run lint', 'the website build reads the generated schemas and the CLI/capabilities manifests that the root build writes to `dist/`'],
   ['scripts/pack-install.mjs pack', 'scripts/pack-install.mjs install', '--allow-dirty'],
-  [],
+  ['provider-output corpus', 'AGENTS.md'],
   [],
   ['GitHub Security Advisories', 'SECURITY.md'],
 ];

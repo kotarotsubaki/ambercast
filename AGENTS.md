@@ -47,6 +47,7 @@ Test cases are written as natural-language Markdown prompts; the prompt is the s
 - When dogfooding surfaces a false positive, a false negative, or another misclassification in a helper, in production reporting, or in a production classifier such as the generator secret detector, add the reproducing value to the corpus in the same pull request that fixes it, with `source` naming the issue and `date` set to that day.
 - A pull request that adds or changes a generic fallback message in `src/` must update `GENERIC_FALLBACK_MESSAGES` in `test/support/report-assertions.ts` in the same change.
 - Keep provider-output fixtures in `test/fixtures/corpus/provider-output/*.jsonl` and read them with `ProviderFixtureValue`. Replay them into a use case with `replayThroughUseCase` or into an adapter alone with `replayExecute`, and build synthetic faults with `provider-fault-builders.ts`. Scrub secrets from recorded fixtures before commit.
+- When you fix a `generate` or `heal` defect found in dogfooding, add the provider output that triggered it to `test/fixtures/corpus/provider-output/` in the same pull request, with `source` naming the issue: a `recorded` fixture when the output was captured (scrub secrets first), or a `reconstructed` one whose `provenance.note` says how it was rebuilt when it was not kept.
 
 ## Development workflow (enforced)
 

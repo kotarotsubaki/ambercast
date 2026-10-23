@@ -24,7 +24,53 @@ export const ADMIN_USERNAME = 'verifier';
 export const LABEL = 'ambercast-verify=memos';
 export const NAME_PREFIX = 'ambercast-verify-memos-';
 export const READY = { timeoutMs: 30000, intervalMs: 200, requestTimeoutMs: 1000, logTail: 40 };
-export const TIMEOUTS = { docker: 60000, pull: 300000, pack: 300000, replay: 120000, judge: 120000, generate: 900000, resolve: 900000 };
+export const TIMEOUTS = { docker: 60000, pull: 300000, pack: 300000, replay: 120000, judge: 120000, generate: 900000, resolve: 900000, heal: 900000 };
+
+export const HEAL_SELECTOR = '[role="menuitem"]';
+export const HEAL_FROM = 'Settings';
+export const HEAL_TO = 'Control panel';
+
+/**
+ * Raw JavaScript for changing the settings entry's label on each page load.
+ * @remarks Memos embeds additionalScript as the body of a plain script element;
+ * document.body exists when it runs, including on the authentication page and
+ * after reload. No script tags belong in this value. Replacement is restricted
+ * to elements matching HEAL_SELECTOR so assertions elsewhere keep their names.
+ * Within those elements, text nodes whose textContent.trim() equals HEAL_FROM
+ * become HEAL_TO, as do aria-label and title attributes equal to HEAL_FROM.
+ * If body is absent, initialization waits for DOMContentLoaded. An idempotent
+ * replacement runs initially and after MutationObserver notifications on body
+ * with childList, subtree, characterData and attributes enabled, filtering
+ * attributes to ['aria-label', 'title']. This catches lazy menus and attribute
+ * rewrites without requiring a new child to appear.
+ * ponytail: Only one label in one read-only case is changed.
+ */
+export const HEAL_LABEL_SCRIPT = `(() => {
+  const selector = ${JSON.stringify(HEAL_SELECTOR)};
+  const from = ${JSON.stringify(HEAL_FROM)};
+  const to = ${JSON.stringify(HEAL_TO)};
+  function replaceText(node) {
+    if (node.nodeType === 3 && node.textContent.trim() === from) node.textContent = to;
+    for (const child of node.childNodes) replaceText(child);
+  }
+  function replace() {
+    for (const element of document.querySelectorAll(selector)) {
+      replaceText(element);
+      for (const attribute of ['aria-label', 'title']) {
+        if (element.getAttribute(attribute) === from) element.setAttribute(attribute, to);
+      }
+    }
+  }
+  function initialize() {
+    replace();
+    new MutationObserver(replace).observe(document.body, {
+      childList: true, subtree: true, characterData: true, attributes: true,
+      attributeFilter: ['aria-label', 'title'],
+    });
+  }
+  if (document.body) initialize();
+  else document.addEventListener('DOMContentLoaded', initialize, { once: true });
+})();`;
 
 /** A failure attributed to a verification stage for final reporting.
  * @param stage - Public stage name.
@@ -232,15 +278,19 @@ export function createRunRoot(tmpRoot, randomBytes, fns = undefined) {
 }
 
 /**
- * Replaces occurrences of the run password with a disclosure-safe marker.
+ * Replaces occurrences of supplied secrets with a disclosure-safe marker.
  * @param text - Complete text to sanitize before harness output.
- * @param password - Run password whose literal occurrences must be hidden.
+ * @param secrets - Variadic secret values; empty strings, undefined and nonstrings
+ * are ignored so missing credentials cannot insert markers between characters.
  * @returns Sanitized text; producer artifacts remain untouched for judging.
  * @remarks Streaming callers must retain a carry-over suffix before invoking
  * this replacement so a secret split across chunks cannot escape detection.
  */
-export function redact(text, password) {
-  return text.split(password).join('[redacted]');
+export function redact(text, ...secrets) {
+  for (const secret of secrets) {
+    if (typeof secret === 'string' && secret.length > 0) text = text.split(secret).join('[redacted]');
+  }
+  return text;
 }
 
 /**
@@ -365,6 +415,88 @@ export async function bootstrapAdmin(opts) {
   const signin = await request('POST', '/api/v1/auth/signin', { passwordCredentials: { username, password } }, [200]);
   if (typeof signin?.accessToken !== 'string' || signin.accessToken.length === 0) {
     throw new BootstrapError('POST /api/v1/auth/signin -> 200');
+  }
+}
+
+/**
+ * Signs in as the administrator and returns the accessToken.
+ * @param opts - fetch, baseUrl, username, password and optional signal.
+ * @returns A promise containing the nonempty accessToken from the response.
+ * @throws HarnessError at heal for HTTP or network failures, using only method,
+ * path and status or network-error, never bodies or fetch exception messages.
+ * @remarks POST /api/v1/auth/signin sends
+ * {passwordCredentials:{username,password}} and requires HTTP 200. Each request
+ * has a 5,000 ms timeout combined with the caller signal and is not retried.
+ * Tokens remain in memory and are redacted from output, never placed in argv,
+ * files or credentials.json. Restoration signs in again because a heal may
+ * outlast the observed approximately fifteen-minute token lifetime.
+ */
+export async function signInAdmin(opts) {
+  const result = await request(opts, 'POST', '/api/v1/auth/signin', {
+    passwordCredentials: { username: opts.username, password: opts.password },
+  });
+  if (typeof result?.accessToken !== 'string' || result.accessToken.length === 0) {
+    throw new HarnessError('heal', 'POST /api/v1/auth/signin -> 200');
+  }
+  return result.accessToken;
+}
+
+/**
+ * Reads the GENERAL instance setting using an administrator bearer token.
+ * @param opts - fetch, baseUrl, token and optional signal.
+ * @returns The unmodified setting response; the restoration caller treats an
+ * absent additionalScript as an empty string.
+ * @throws HarnessError at heal with method/path/status or network-error only.
+ * @remarks GET /api/v1/instance/settings/GENERAL requires HTTP 200 and
+ * Authorization: Bearer <token>. The observed unset additionalScript is "".
+ * A 5,000 ms timeout is combined with the caller signal, without retries.
+ * Keeping the full snapshot allows restoration to detect unintended changes
+ * to other settings through deep JSON equality after normalizing the script.
+ */
+export async function getGeneralSetting(opts) {
+  return request(opts, 'GET', '/api/v1/instance/settings/GENERAL');
+}
+
+/**
+ * Replaces only the GENERAL setting's additionalScript.
+ * @param opts - fetch, baseUrl, token, value (raw JavaScript) and optional signal.
+ * @returns A promise resolving after an HTTP 200 response.
+ * @throws HarnessError at heal with method/path/status or network-error only;
+ * request/response bodies, tokens and fetch exception messages are excluded.
+ * @remarks PATCH /api/v1/instance/settings/GENERAL?updateMask=additionalScript
+ * sends {name:'instance/settings/GENERAL', generalSetting:{additionalScript:value}}
+ * with Authorization: Bearer <token>. This measured mask preserves other fields.
+ * Each request has a 5,000 ms timeout combined with the caller signal and no
+ * retry: an ambiguous mutation is handled by the caller's single restoration.
+ * Diagnostics identify the path without its updateMask query.
+ */
+export async function patchAdditionalScript(opts) {
+  await request(opts, 'PATCH', '/api/v1/instance/settings/GENERAL', {
+    name: 'instance/settings/GENERAL', generalSetting: { additionalScript: opts.value },
+  }, '?updateMask=additionalScript');
+}
+
+// Keep diagnostics independent of credential-bearing bodies and transport errors.
+async function request({ fetch, baseUrl = BASE_URL, token, signal }, method, path, body, query = '') {
+  let response;
+  try {
+    response = await fetch(baseUrl + path + query, {
+      method,
+      headers: {
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(token === undefined || path === '/api/v1/auth/signin' ? {} : { Authorization: `Bearer ${token}` }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]),
+    });
+  } catch {
+    throw new HarnessError('heal', `${method} ${path} -> network-error`);
+  }
+  if (response.status !== 200) throw new HarnessError('heal', `${method} ${path} -> ${response.status}`);
+  try {
+    return await response.json();
+  } catch {
+    throw new HarnessError('heal', `${method} ${path} -> network-error`);
   }
 }
 

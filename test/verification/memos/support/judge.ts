@@ -14,6 +14,39 @@ import * as reportAssertions from '../../../support/report-assertions.js';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 
 /**
+ * Parses judge configuration without reading the report or storage artifacts.
+ *
+ * @returns The configuration, or undefined when no report path is supplied.
+ * @throws When the mode, full-mode case count, or supplied JSON is invalid.
+ */
+export function parseJudgeEnv(env: NodeJS.ProcessEnv) {
+  const reportFile = env.AMBERCAST_VERIFY_MEMOS_REPORT;
+  if (!reportFile) return undefined;
+
+  const mode = env.AMBERCAST_VERIFY_MEMOS_MODE ?? 'full';
+  if (mode !== 'full' && mode !== 'disclosure-only' && mode !== 'heal-report') {
+    throw new Error('Invalid AMBERCAST_VERIFY_MEMOS_MODE');
+  }
+  let expectedCases: number | undefined;
+  if (mode === 'full') {
+    const value = env.AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES;
+    if (value === undefined || !/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+      throw new Error('AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES must be a safe positive decimal integer');
+    }
+    expectedCases = Number(value);
+  }
+  return {
+    reportFile,
+    artifactRoots: env.AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS === undefined
+      ? undefined : JSON.parse(env.AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS) as string[],
+    secrets: env.AMBERCAST_VERIFY_MEMOS_SECRETS === undefined
+      ? undefined : JSON.parse(env.AMBERCAST_VERIFY_MEMOS_SECRETS) as Record<string, string>,
+    mode: mode as NonNullable<JudgeSmokeReportInput['mode']>,
+    ...(expectedCases === undefined ? {} : { expectedCases }),
+  };
+}
+
+/**
  * Input to {@link judgeSmokeReport}.
  */
 export interface JudgeSmokeReportInput {
@@ -35,9 +68,12 @@ export interface JudgeSmokeReportInput {
    * verification; `'disclosure-only'` skips identity and diagnostic checks,
    * running only artifact collection and secret disclosure detection (so a replay
    * that fails earlier assertions still reveals whether secrets leaked into
-   * storage artifacts).
+   * storage artifacts). `'heal-report'` checks only the heal envelope,
+   * diagnosability, and disclosure in the report itself.
    */
-  mode?: 'full' | 'disclosure-only';
+  mode?: 'full' | 'disclosure-only' | 'heal-report';
+  /** The positive integer number of passing replay cases expected; defaults to 1. */
+  expectedCases?: number;
 }
 
 /**
@@ -50,16 +86,16 @@ export interface JudgeSmokeReportInput {
  *   bytes); also when storage reads fail. The error message format is
  *   `judgeSmokeReport: <n> violation(s)` followed by `- ` prefixed violation lines.
  * @remarks
- * The function implements two distinct execution modes selected by `mode`.
+ * The function supports replay, artifact-disclosure, and heal-report checks.
  *
  * In `full` mode (the default), the function first verifies report identity: it locates
  * the latest-mtime `report.json` under the `.runs/` paths in `artifactRoots`.
- * ReportEnvelope carries no `runId`, so only SPEC-10's latest-mtime fallback
+ * ReportEnvelope carries no `runId`, so only the latest-mtime fallback
  * is reachable. No persisted report is an identity violation. It then deep-equals
  * that persisted report against the passed `report` **before** collecting storage artifacts,
- * enforcing the required ordering for TEST-44. Only after identity verification does it
+ * enforcing report identity before scanning artifacts. Only after identity verification does it
  * proceed through the assertion chain: `assertDiagnosable` (schema + evidence), `assertZeroAiCalls`,
- * summary counts (total 1, passed 1, exactly one `status: 'passed'`), and finally
+ * summary and result counts against `expectedCases`, and finally
  * `assertNoSecretDisclosure` over the collected artifacts.
  * Only an identity violation skips artifact collection and disclosure detection;
  * diagnostic, AI-call, and summary violations still accumulate with disclosure violations.
@@ -70,16 +106,46 @@ export interface JudgeSmokeReportInput {
  * prior assertions have already failed, so a non-zero replay still reveals whether any
  * secrets leaked into storage snapshots.
  *
+ * In `heal-report` mode, storage is not read. The report must conform to
+ * ReportEnvelope with command `heal`, be diagnosable, and disclose no secrets.
+ * Invalid `expectedCases` throws TypeError for nonnumbers or RangeError for
+ * numbers that are not positive integers, before any report or storage checks.
+ *
  * All violations are accumulated and reported together in a single aggregated error with
  * the shared format used by #547's assertion helpers. Storage adapter read failures are
  * wrapped with the `judgeSmokeReport: cannot read <path>: <message>` prefix to distinguish
  * them from assertion violations.
  */
 export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<void> {
-  const { report, artifactRoots, secrets, mode = 'full' } = input;
+  const { report, artifactRoots, secrets, mode = 'full', expectedCases = 1 } = input;
+  if (typeof expectedCases !== 'number') {
+    throw new TypeError('expectedCases must be a number');
+  }
+  if (!Number.isInteger(expectedCases) || expectedCases <= 0) {
+    throw new RangeError('expectedCases must be a positive integer');
+  }
 
   const violations: string[] = [];
   let identityViolation: string | null = null;
+
+  if (mode === 'heal-report') {
+    const parsed = ReportEnvelope.safeParse(report);
+    if (!parsed.success) {
+      violations.push('report does not conform to ReportEnvelope');
+    } else if (parsed.data.command !== 'heal') {
+      violations.push('report command must be heal');
+    }
+    try {
+      reportAssertions.assertDiagnosable(report);
+    } catch (e) {
+      violations.push(e instanceof Error ? e.message : String(e));
+    }
+    try {
+      reportAssertions.assertNoSecretDisclosure({ secrets, report, artifacts: [] });
+    } catch (e) {
+      violations.push(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   if (mode === 'full') {
     // Identity verification: find latest-mtime report.json under .runs/
@@ -107,19 +173,19 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
       const parsed = parseResult.data;
       const summary = parsed.summary;
 
-      if (summary.total !== 1) {
-        violations.push(`summary.total is ${summary.total}, expected 1`);
+      if (summary.total !== expectedCases) {
+        violations.push(`summary.total is ${summary.total}, expected ${expectedCases}`);
       }
-      if (summary.passed !== 1) {
-        violations.push(`summary.passed is ${summary.passed}, expected 1`);
+      if (summary.passed !== expectedCases) {
+        violations.push(`summary.passed is ${summary.passed}, expected ${expectedCases}`);
       }
 
       const passedResults = parsed.results.filter(r => 'status' in r && r.status === 'passed');
-      if (passedResults.length !== 1) {
-        violations.push(`exactly one result with status:'passed' expected, found ${passedResults.length}`);
+      if (passedResults.length !== expectedCases) {
+        violations.push(`${expectedCases === 1 ? 'exactly one' : `exactly ${expectedCases}`} result with status:'passed' expected, found ${passedResults.length}`);
       }
-      if (parsed.results.length !== 1) {
-        violations.push(`results.length is ${parsed.results.length}, expected 1`);
+      if (parsed.results.length !== expectedCases) {
+        violations.push(`results.length is ${parsed.results.length}, expected ${expectedCases}`);
       }
     } else {
       // Schema validation failed already handled by assertDiagnosable
@@ -127,7 +193,7 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
   }
 
   // Identity alone gates disclosure checks so unrelated violations do not hide leaks.
-  if (identityViolation === null) {
+  if (mode !== 'heal-report' && identityViolation === null) {
     let artifacts: reportAssertions.ScannedArtifact[] = [];
     try {
       artifacts = await reportAssertions.collectStorageArtifacts(createFsStorage(), artifactRoots);

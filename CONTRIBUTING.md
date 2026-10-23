@@ -38,14 +38,17 @@ checks the archive and installed package against this manifest. It changes the
 target project's `package.json` and lockfile, including on failure; do not
 commit those changes.
 
-Use this flow to try an unpublished upstream build in the dogfood downstream
-project. Do not commit a development build's generated `plan` or `grounding`
-there. For a release check, pack the release commit and install it into the
-mid-layer verification target before the release PR, then verify that target
-again against the published version after publication. The mid-layer procedure
-is tracked in issue #544. Before merging the release PR, also follow the
-compatibility-table/glossary/spec-overview update procedure in AGENTS.md's
-Branching & releases section.
+Use this flow to try an unpublished upstream build in the dogfood downstream project. Do not commit a development build's generated `plan` or `grounding` there. For a release, follow the Release checklist below; before merging the release PR, also follow the compatibility-table/glossary/spec-overview update procedure in AGENTS.md's Branching & releases section.
+
+## Release checklist
+
+The middle verification layer, a pinned Memos instance driven by `npm run verify:memos`, is the pre-release check. Dogfooding in a downstream product (the upper layer) is optional and never blocks a release.
+
+1. Before merging the release PR, check out the release PR head and run `npm run verify:memos` and then `npm run verify:memos -- --heal-check`. Both need Docker and a local Chromium; `--heal-check` also calls Claude through the local Claude Code CLI. Each run must end with a `PASS` line. Paste both final lines, including `sha=`, into the release PR.
+2. If either run fails, do not merge the release PR. Fix the cause through the normal issue flow first.
+3. After npm publication, run `npm run verify:memos -- --published <version>` against the published package and confirm it ends with `PASS`.
+
+If `npm run verify:memos` reports stale plans, regenerate the fixture with `npm run verify:memos -- --regenerate` in a normal issue PR before the release. It calls a real AI provider and asks for secret consent, so run it locally.
 
 ## How to contribute
 

@@ -5,6 +5,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { REPORT_SCHEMA_VERSION, ReportEnvelope, type ExecutedRunResult } from '#report/schema.js';
 import * as reportAssertions from '../../support/report-assertions.js';
 import { judgeSmokeReport } from '../../verification/memos/support/judge.js';
+import * as judgeModule from '../../verification/memos/support/judge.js';
+
+// Keep the contract callable while its new exports are introduced independently.
+const judgeWithCaseCount = judgeSmokeReport as (input: {
+  report: unknown; artifactRoots: readonly string[]; secrets: Record<string, string>;
+  expectedCases?: unknown; mode?: 'full' | 'disclosure-only' | 'heal-report';
+}) => Promise<void>;
+const parseJudgeEnv = (env: NodeJS.ProcessEnv): unknown => {
+  const parse = (judgeModule as unknown as {
+  parseJudgeEnv: (env: NodeJS.ProcessEnv) => unknown;
+  }).parseJudgeEnv;
+  expect(parse).toBeTypeOf('function');
+  return parse(env);
+};
 
 const temporaryDirectories: string[] = [];
 const password = 'memos-test-password-549';
@@ -91,6 +105,88 @@ const violations: Violation[] = [
 ];
 
 describe('judgeSmokeReport', () => {
+  function sevenCaseReport() {
+    const report = validReport();
+    return ReportEnvelope.parse({ ...report,
+      summary: { total: 7, passed: 7, failed: 0, errored: 0, skipped: 0 },
+      results: Array.from({ length: 7 }, (_, index) => ({ ...report.results[0], id: `case-${index}`, file: `case-${index}.test.md` })),
+    });
+  }
+  it('TEST-544-10 accepts seven passing zero-AI cases when seven are expected', async () => {
+    const input = fixture();
+    const report = sevenCaseReport();
+    persist(input.runs, 'replay', report);
+    await expect(judgeWithCaseCount({ ...input, report, expectedCases: 7 })).resolves.toBeUndefined();
+  });
+  it.each(['six rows', 'one failed row', 'summary total six'])(
+    'TEST-544-10 aggregates count violations for $0 with seven expected', async variation => {
+      const input = fixture();
+      const report = sevenCaseReport();
+      if (variation === 'six rows') {
+        report.results.pop();
+        report.summary.total = 6;
+        report.summary.passed = 6;
+      } else if (variation === 'one failed row') {
+        report.results[0] = { ...report.results[0], status: 'failed' } as ExecutedRunResult;
+        report.summary.passed = 6;
+        report.summary.failed = 1;
+      } else report.summary.total = 6;
+      persist(input.runs, 'replay', report);
+      const failure = await judgeWithCaseCount({ ...input, report, expectedCases: 7 }).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toMatch(/^judgeSmokeReport: \d+ violation\(s\)/);
+      expect((failure as Error).message).toMatch(/(?:total|passed|results|result)[^\n]*(?:expected 7|7[^\n]*expected)/);
+    },
+  );
+  it.each([0, -1, 1.5, NaN, '7'])('TEST-544-10 rejects invalid expectedCases %s before artifact collection', async expectedCases => {
+    const collect = vi.spyOn(reportAssertions, 'collectStorageArtifacts');
+    try {
+      await expect(judgeWithCaseCount({ report: null, artifactRoots: [], secrets: {}, expectedCases }))
+        .rejects.toBeInstanceOf(typeof expectedCases === 'number' ? RangeError : TypeError);
+      expect(collect).not.toHaveBeenCalled();
+    } finally { collect.mockRestore(); }
+  });
+
+  function healReport() {
+    return ReportEnvelope.parse({
+      schemaVersion: REPORT_SCHEMA_VERSION,
+      command: 'heal',
+      startedAt: '2026-01-01T00:00:00Z',
+      durationMs: 1,
+      summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 0 },
+      errors: [],
+      results: [{
+        id: 'case-a', file: 'case-a.test.md', planFile: 'case-a.ambercast.plan.json',
+        status: 'completed', repairOutcome: 'healed', application: 'applied', stopReason: 'settled',
+        durationMs: 1, aiCalls: 2, steps: [], sessions: {}, explanation: '',
+      }],
+    });
+  }
+  it('TEST-544-26 heal-report accepts a conforming heal without replay counts, zero-AI, or storage identity checks', async () => {
+    const report = healReport();
+    const collect = vi.spyOn(reportAssertions, 'collectStorageArtifacts');
+    const zeroAi = vi.spyOn(reportAssertions, 'assertZeroAiCalls');
+    const diagnose = vi.spyOn(reportAssertions, 'assertDiagnosable');
+    const disclosure = vi.spyOn(reportAssertions, 'assertNoSecretDisclosure');
+    try {
+      await expect(judgeWithCaseCount({ report, artifactRoots: ['/nonexistent-heal-artifacts'], secrets: { password }, mode: 'heal-report', expectedCases: 7 }))
+        .resolves.toBeUndefined();
+      expect(collect).not.toHaveBeenCalled();
+      expect(zeroAi).not.toHaveBeenCalled();
+      expect(diagnose).toHaveBeenCalledWith(report);
+      expect(disclosure).toHaveBeenCalledWith({ secrets: { password }, report, artifacts: [] });
+    } finally { collect.mockRestore(); zeroAi.mockRestore(); diagnose.mockRestore(); disclosure.mockRestore(); }
+  });
+  it.each(['invalid schema', 'run command', 'password disclosure'])(
+    'TEST-544-26 heal-report rejects $0', async variation => {
+      const report = healReport();
+      const invalid = variation === 'invalid schema' ? { ...report, schemaVersion: 'invalid' }
+        : variation === 'run command' ? validReport()
+          : { ...report, results: [{ ...report.results[0], explanation: password }] };
+      await expect(judgeWithCaseCount({ report: invalid, artifactRoots: [], secrets: { password }, mode: 'heal-report' }))
+        .rejects.toThrow();
+    },
+  );
   it('TEST-43 passes with the harness artifact roots: .runs directory, plan file, and grounding file', async () => {
     const { artifactRoots, runs, report, secrets } = fixture();
     persist(runs, 'replay', report);
@@ -194,5 +290,37 @@ describe('judgeSmokeReport', () => {
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toMatch(/^judgeSmokeReport: cannot read /);
     expect((failure as Error).message).toContain(missing);
+  });
+});
+
+describe('parseJudgeEnv', () => {
+  const reportEnv = { AMBERCAST_VERIFY_MEMOS_REPORT: '/unused/report.json', AMBERCAST_VERIFY_MEMOS_MODE: 'full' };
+  it.each([undefined, ''])('TEST-544-11 skips without an expected count when report is %s', report => {
+    const env: NodeJS.ProcessEnv = { AMBERCAST_VERIFY_MEMOS_MODE: 'full' };
+    if (report !== undefined) env.AMBERCAST_VERIFY_MEMOS_REPORT = report;
+    expect(parseJudgeEnv(env)).toBeUndefined();
+  });
+  it.each([undefined, '0', '-1', '1.5', 'abc', '07', '9007199254740993', '', '+7', ' 7', '7 ', '1e1', '9007199254740992'])(
+    'TEST-544-11 rejects invalid full-mode expected count %s', value => {
+      expect(judgeModule).toHaveProperty('parseJudgeEnv', expect.any(Function));
+      const env: NodeJS.ProcessEnv = { ...reportEnv };
+      if (value !== undefined) env.AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES = value;
+      expect(() => parseJudgeEnv(env)).toThrow();
+    },
+  );
+  it.each(['1', '7', '9007199254740991'])('TEST-544-11 parses safe positive decimal count %s', value => {
+    expect(parseJudgeEnv({ ...reportEnv, AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES: value }))
+      .toEqual(expect.objectContaining({ expectedCases: Number(value) }));
+  });
+  it.each(['disclosure-only', 'heal-report'])('TEST-544-11 %s never reads expected count', mode => {
+    const env: NodeJS.ProcessEnv = { ...reportEnv, AMBERCAST_VERIFY_MEMOS_MODE: mode };
+    Object.defineProperty(env, 'AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES', {
+      get() { throw new Error('expected count must not be read'); },
+    });
+    expect(() => parseJudgeEnv(env)).not.toThrow();
+  });
+  it('TEST-544-11 rejects an unknown mode', () => {
+    expect(judgeModule).toHaveProperty('parseJudgeEnv', expect.any(Function));
+    expect(() => parseJudgeEnv({ ...reportEnv, AMBERCAST_VERIFY_MEMOS_MODE: 'other', AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES: '7' })).toThrow();
   });
 });

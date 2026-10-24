@@ -62,6 +62,9 @@ If `npm run verify:memos` reports stale plans, regenerate the fixture with `npm 
    release-please — a malformed title breaks versioning, so CI enforces it.
 4. All review conversations must be resolved before merge; CodeRabbit reviews
    every PR automatically.
+5. If your change fixes a `generate` or `heal` defect that a real provider
+   response triggered, add that response to the provider-output corpus as
+   described in `AGENTS.md` (Testing conventions).
 
 ## About AGENTS.md and .claude/
 

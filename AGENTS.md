@@ -21,6 +21,21 @@ Test cases are written as natural-language Markdown prompts; the prompt is the s
 - `package.json` — `files: ["bin", "dist", "skills"]` limits what gets published; keep agent/config files and sources out of the tarball
 - `AGENTS.md` / `CLAUDE.md` — agent guidance (this file is canonical)
 
+## Product principles (binding)
+
+The purpose of ambercast is stated once, publicly, on the Philosophy page: `website/src/content/docs/philosophy.md` (published at https://kotarotsubaki.github.io/ambercast/philosophy/). Its eight sections are the binding principles, cited by their heading anchors:
+
+- `tests-as-assets` — a test must stay valuable after it is written: it resists breaking, it can be read, and it is not locked to a tool.
+- `intent-primary` — the natural-language prompt is the only source of truth; the plan is derived from it, and a change of intent shows up as a clear diff.
+- `plans-are-disposable` — plans are rebuilt, never protected; a breaking plan-format change is acceptable, prompt instability is not.
+- `simple-surface-rigorous-core` — the daily surface is the prompt, screenshots, and run results; repeatability, run-to-run variance, and AI cost live in the structured layer underneath.
+- `wrong-pass` — a test that passes while the product is broken is the worst outcome; assertion quality comes first, CI never heals by default, and a rewrite applies only after approval.
+- `humans-and-agents` — coding agents are first-class users, and one documentation set serves humans and agents alike.
+- `assets-stay-local` — prompts, plans, screenshots, and run records live in the user's repository and on the user's machine; ambercast holds no credentials and pays for no AI usage.
+- `five-pains` — fragile E2E tests, unreadable test code, manual click-through effort, assets that are hard to accumulate, and testing for vibe coders are the standard for every "should we add this" call.
+
+These bind every product and design decision, not only code: feature proposals, plans, issue triage, docs, and reviews. A plan states which principles the change serves and confirms that none is violated (its `## Principles` section). A change that conflicts with a principle is handled like a fixed design decision: stop and ask the maintainer, and never argue around it in a plan, comment, or review. A principle itself changes only by a maintainer decision made on the Philosophy page, in all three locales, in one change; this list is a citation index, never the place to reword one.
+
 ## Core design decisions (fixed — do not re-litigate in code)
 
 - The prompt (`<name>.test.md`) is the source of truth. The IR is a generated artifact, never hand-edited.

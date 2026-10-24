@@ -2466,31 +2466,31 @@ describe('run', () => {
       expect(reportError(result.outcome.results[0]!.error!, { scope: 'case', caseId: 'login' })).toMatchObject({ code: 'AI_RESPONSE_INVALID' });
     });
 
-    it('keeps a confirmed first binding when a later provider proposal is rejected', async () => {
-      let calls = 0;
+    it('keeps a quoted-match first binding when a later provider proposal is rejected', async () => {
       const executor = createFakeAiExecutor({ execute: async () => {
-        if (++calls === 1) return { data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' };
         validateAiResponse('{"outcome":"none"}', typedJsonSchema(ElementBindingProposalResponse));
-        throw new Error('The second old proposal must fail validation.');
+        throw new Error('The old proposal must fail validation.');
       } });
       const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
       vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
       const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
-      const testPath = await writePrompt(recordingStorage.storage);
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
       await seedFreshArtifacts(recordingStorage.storage, testPath, [
-        { id: 'click-first', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+        { id: 'click-first', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT },
         { id: 'confirm-first', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['click-first'] },
         { id: 'click-second', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
       ]);
       const outcome = await run({ ...deps, config: { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } }, DEFAULT_OPTIONS);
 
-      expect(executor.structuredRequests).toHaveLength(2);
-      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed', confirmed: true } });
+      expect(executor.structuredRequests).toHaveLength(1);
+      expect(executor.structuredRequests[0]?.context).not.toHaveProperty('quote');
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'quoted-match', confirmed: true } });
+      expect(outcome.results[0]?.result.steps[1]).toMatchObject({ status: 'passed' });
       expect(outcome.results[0]?.result.steps[2]).toMatchObject({ status: 'error' });
       expect(outcome.results[0]?.result.steps[2]).not.toHaveProperty('binding');
       expect(outcome.results[0]?.error).toMatchObject({ kind: 'ai-response-invalid', exitCode: 3, details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
       const grounding = await readGrounding(recordingStorage.storage, testPath);
-      expect(grounding.entries['click-first']).toMatchObject({ kind: 'element', provenance: 'ai-proposed' });
+      expect(grounding.entries['click-first']).toMatchObject({ kind: 'element', provenance: 'quoted-match' });
       expect(grounding.entries['click-second']).toBeUndefined();
       expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
       expect(reportError(outcome.results[0]!.error!, { scope: 'case', caseId: 'login' })).toMatchObject({ code: 'AI_RESPONSE_INVALID' });

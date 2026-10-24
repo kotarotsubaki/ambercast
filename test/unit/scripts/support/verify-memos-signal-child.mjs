@@ -2,30 +2,39 @@
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { dirname, join } from 'node:path';
+import { CASES } from '../../../../scripts/verify-memos.mjs';
 
 const [tmpRoot, mode, keep] = process.argv.slice(2);
 const repoRoot = join(tmpRoot, 'repo');
 const fixture = join(repoRoot, 'test/verification/memos/fixture');
-const prompt = 'tests/ambercast/memos-sign-in-create-memo.test.md';
-const plan = prompt.replace('.test.md', '.ambercast.plan.json');
-const grounding = prompt.replace('.test.md', '.ambercast.grounding.json');
-const publishedFiles = ['ambercast.config.json', plan, grounding];
-const generatedConfig = { secrets: { allow: ['memos.password'] }, generated: 'config' };
+const prompt = id => `tests/ambercast/${id}.test.md`;
+const plan = id => `tests/ambercast/${id}.ambercast.plan.json`;
+const grounding = id => `tests/ambercast/${id}.ambercast.grounding.json`;
+const publishedFiles = ['ambercast.config.json', ...CASES.map(c => plan(c.id)), ...CASES.map(c => grounding(c.id))];
+const config = { targets: {
+  memos: { baseUrl: 'http://127.0.0.1:5230', locale: 'en-US' },
+  'memos-readonly': { baseUrl: 'http://127.0.0.1:5230', locale: 'en-US', healReplayIsolation: 'idempotent' },
+  'memos-ja': { baseUrl: 'http://127.0.0.1:5230', locale: 'ja-JP' },
+}, secrets: { allow: ['password'] } };
+const generatedConfig = { ...config, generated: 'config' };
 const containers = new Set();
 let removals = 0;
 function write(path, text) {
   fs.mkdirSync(dirname(path), { recursive: true });
   fs.writeFileSync(path, text);
 }
-write(join(fixture, 'ambercast.config.json'), JSON.stringify({ secrets: { allow: ['memos.password'] } }));
-write(join(fixture, prompt), 'Sign in and create a memo.\n');
-write(join(fixture, plan), '{"seed":"plan"}\n');
-write(join(fixture, grounding), '{"seed":"grounding"}\n');
+write(join(fixture, 'ambercast.config.json'), JSON.stringify(config));
+for (const c of CASES) {
+  write(join(fixture, prompt(c.id)), '');
+  write(join(fixture, plan(c.id)), '{"seed":"plan"}\n');
+  write(join(fixture, grounding(c.id)), '{"seed":"grounding"}\n');
+}
 const manifest = join(repoRoot, 'pack-manifest.json');
 write(manifest, JSON.stringify({ sha: '0123456789abcdef'.repeat(4), dirty: false }));
 
 const rename = fs.renameSync;
 let publicationCount = 0;
+const published = [];
 fs.renameSync = (source, destination) => {
   const file = publishedFiles.find(name => destination === join(fixture, name));
   if (file) {
@@ -47,10 +56,12 @@ fs.renameSync = (source, destination) => {
       fs.writeSync(1, 'RAISED\n');
     }
   }
-  return rename(source, destination);
+  const result = rename(source, destination);
+  if (file) published.push(file);
+  return result;
 };
 syncBuiltinESMExports();
-// Import only after patching the shared builtin so main sees this exact seam.
+// Synchronizing the shared builtin makes main see this exact seam.
 const { main } = await import('../../../../scripts/verify-memos.mjs');
 const result = (stdout = '') => ({ status: 0, stdout, stderr: '', signal: null, termination: 'none', pgid: process.pid });
 let sequence = 0;
@@ -74,12 +85,19 @@ const deps = {
     if (args.includes('pack')) return result(`manifest: ${manifest}\n`);
     if (args.includes('generate')) {
       write(join(opts.cwd, 'ambercast.config.json'), JSON.stringify(generatedConfig));
-      write(join(opts.cwd, plan), '{"generated":"plan"}\n');
-      write(join(opts.cwd, grounding), '{"generated":"grounding"}\n');
+      for (const c of CASES.filter(c => args.includes(prompt(c.id)))) {
+        const generatedPlan = c.target === 'memos-readonly'
+          ? JSON.stringify({ targets: { 'memos-readonly': {} }, steps: [
+            { action: 'fill', target: c.target, value: 'verifier' },
+            { action: 'fill-secret', target: c.target, secretRef: '{{secrets.password}}' },
+          ] }) + '\n' : '{"generated":"plan"}\n';
+        write(join(opts.cwd, plan(c.id)), generatedPlan);
+        write(join(opts.cwd, grounding(c.id)), '{"generated":"grounding"}\n');
+      }
     }
     if (args.includes('run')) {
       const runId = args.includes('--resolve') ? 'resolve-run' : 'replay-run';
-      const text = JSON.stringify({ runId, results: [{ status: 'passed', aiCalls: 0 }], errors: [] });
+      const text = JSON.stringify({ runId, results: CASES.map(c => ({ id: c.id, status: 'passed', aiCalls: 0 })), errors: [] });
       write(join(opts.cwd, 'tests/ambercast/.runs', runId, 'report.json'), text);
       return result(text);
     }
@@ -92,6 +110,6 @@ const deps = {
 fs.readFile(new URL(import.meta.url), async error => {
   if (error) throw error;
   process.exitCode = await main(['--regenerate', ...(keep === 'keep' ? ['--keep'] : [])], process.platform, deps);
-  fs.writeSync(1, `FINAL_STATE ${JSON.stringify({ containers: [...containers], removals,
+  fs.writeSync(1, `FINAL_STATE ${JSON.stringify({ containers: [...containers], removals, publishedFiles: published,
     runRoots: fs.readdirSync(tmpRoot).filter(name => name.startsWith('ambercast-verify-memos-')) })}\n`);
 });

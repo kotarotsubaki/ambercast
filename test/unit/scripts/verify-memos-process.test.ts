@@ -5,11 +5,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+// @ts-expect-error The production ESM script is deliberately untyped JavaScript.
+import { CASES } from '../../../scripts/verify-memos.mjs';
 
 const childFixture = fileURLToPath(new URL('./support/verify-memos-signal-child.mjs', import.meta.url));
-const prompt = 'tests/ambercast/memos-sign-in-create-memo.test.md';
+const caseTable = CASES as readonly { id: string; target: string }[];
+const prompt = `tests/ambercast/${caseTable[0]!.id}.test.md`;
 const plan = prompt.replace('.test.md', '.ambercast.plan.json');
 const grounding = prompt.replace('.test.md', '.ambercast.grounding.json');
+const publishedFiles = ['ambercast.config.json',
+  ...caseTable.map(c => `tests/ambercast/${c.id}.ambercast.plan.json`),
+  ...caseTable.map(c => `tests/ambercast/${c.id}.ambercast.grounding.json`)];
 
 describe.skipIf(process.platform === 'win32')('verify-memos real publication signals', () => {
   it.each(['external', 'poll'].flatMap(mode => [false, true].map(keep => ({ mode, keep }))))
@@ -46,7 +52,11 @@ describe.skipIf(process.platform === 'win32')('verify-memos real publication sig
       expect.soft(exit, `${stdout}\n${stderr}`).toEqual({ code: 130, signal: null });
       const fixture = join(root, 'repo/test/verification/memos/fixture');
       expect.soft(JSON.parse(fs.readFileSync(join(fixture, 'ambercast.config.json'), 'utf8')))
-        .toEqual({ secrets: { allow: ['memos.password'] }, generated: 'config' });
+        .toEqual({ targets: {
+          memos: { baseUrl: 'http://127.0.0.1:5230', locale: 'en-US' },
+          'memos-readonly': { baseUrl: 'http://127.0.0.1:5230', locale: 'en-US', healReplayIsolation: 'idempotent' },
+          'memos-ja': { baseUrl: 'http://127.0.0.1:5230', locale: 'ja-JP' },
+        }, secrets: { allow: ['password'] }, generated: 'config' });
       expect.soft(fs.readFileSync(join(fixture, plan), 'utf8')).toBe('{"generated":"plan"}\n');
       expect.soft(fs.readFileSync(join(fixture, grounding), 'utf8')).toBe('{"generated":"grounding"}\n');
       expect.soft(fs.existsSync(join(fixture, '.lock'))).toBe(false);
@@ -57,6 +67,8 @@ describe.skipIf(process.platform === 'win32')('verify-memos real publication sig
         const state = JSON.parse(stateLine.slice('FINAL_STATE '.length));
         expect.soft(state.containers).toEqual([]);
         expect.soft(state.runRoots).toEqual([]);
+        expect.soft(state.publishedFiles).toEqual(publishedFiles);
+        expect.soft(state.publishedFiles).toHaveLength(15);
         // One reset removal plus final cleanup proves --keep cannot bypass teardown.
         expect.soft(state.removals).toBe(2);
       }

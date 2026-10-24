@@ -48,6 +48,8 @@ The middle verification layer, a pinned Memos instance driven by `npm run verify
 2. If either run fails, do not merge the release PR. Fix the cause through the normal issue flow first.
 3. After npm publication, run `npm run verify:memos -- --published <version>` against the published package and confirm it ends with `PASS`.
 
+The middle-layer scenario fixture is generated in #624; until it is committed, the runs in steps 1 and 3 cannot pass, so step 2 does not block the release; record in the release PR that those runs were not runnable.
+
 If `npm run verify:memos` reports stale plans, regenerate the fixture with `npm run verify:memos -- --regenerate` in a normal issue PR before the release. It calls a real AI provider and may ask for secret consent, so run it locally.
 
 ## How to contribute

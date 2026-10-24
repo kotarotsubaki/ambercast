@@ -3,4 +3,4 @@
 Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the "Save" button is displayed. Then assert that the text "verifier" is displayed.
 Type "ambercast delete target" into the memo editor and click "Save". Assert that the text "ambercast delete target" is displayed in the memo list.
 Click the Search button in the sidebar. Type "ambercast delete target" into the search box and press Enter.
-Open the menu of the only memo in the list, choose "Delete" and confirm with "Delete". Assert that the text "ambercast delete target" is no longer displayed.
+Open the menu of the only memo in the list, choose "More", choose "Delete" and confirm with "Delete". Assert that the text "ambercast delete target" is no longer displayed.

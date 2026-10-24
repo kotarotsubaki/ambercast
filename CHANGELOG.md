@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0](https://github.com/kotarotsubaki/ambercast/compare/v0.9.0...v0.10.0) (2026-10-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **generate:** warn on generator assumptions instead of failing, and remove --strict ([#601](https://github.com/kotarotsubaki/ambercast/issues/601))
+* **generate:** confirm inputs whose effects the verified state evidences ([#599](https://github.com/kotarotsubaki/ambercast/issues/599))
+* **run:** ground unnamed elements unique by role and retire grounding v2/v3 for v4 ([#597](https://github.com/kotarotsubaki/ambercast/issues/597))
+
+### Bug Fixes
+
+* **generate:** confirm inputs whose effects the verified state evidences ([#599](https://github.com/kotarotsubaki/ambercast/issues/599)) ([2c0454d](https://github.com/kotarotsubaki/ambercast/commit/2c0454d4ae379db2b0b7de8822fd5892023f46ad))
+* **generate:** warn on generator assumptions instead of failing, and remove --strict ([#601](https://github.com/kotarotsubaki/ambercast/issues/601)) ([4a6a230](https://github.com/kotarotsubaki/ambercast/commit/4a6a230aed4a15a77c140897fba8f86e7f76e094))
+* **run:** ground unnamed elements unique by role and retire grounding v2/v3 for v4 ([#597](https://github.com/kotarotsubaki/ambercast/issues/597)) ([ef883d5](https://github.com/kotarotsubaki/ambercast/commit/ef883d56eca88ebfbbe32b10eed06c5ea3f2aee5))
+* **run:** wrap element-binding response in an object root both providers accept ([#586](https://github.com/kotarotsubaki/ambercast/issues/586)) ([fa78bb3](https://github.com/kotarotsubaki/ambercast/commit/fa78bb3d378ad1925173b005fcd98cf3a89005a6))
+* **verification:** finish fixture publication before handling signals and fail runs with unconfirmed process-group termination ([#605](https://github.com/kotarotsubaki/ambercast/issues/605)) ([d1383f3](https://github.com/kotarotsubaki/ambercast/commit/d1383f383f6dfd3f4171d7bade1568a109f1d114))
+
 ## [0.9.0](https://github.com/kotarotsubaki/ambercast/compare/v0.8.0...v0.9.0) (2026-10-08)
 
 

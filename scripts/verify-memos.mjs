@@ -37,7 +37,7 @@ const CONFIG = 'ambercast.config.json';
  *
  * A mark must be a positive safe integer and may not cover every case. Marks are
  * validated in preflight right after the Docker check and before any file set is
- * derived, so an invalid mark is reported as a fixture failure ahead of any
+ * consulted, so an invalid mark is reported as a fixture failure ahead of any
  * missing-file report. The case table itself (targets, heal isolation) is still
  * validated across every entry regardless of marks or selection.
  */

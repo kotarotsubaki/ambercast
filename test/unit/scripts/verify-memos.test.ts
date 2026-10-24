@@ -787,6 +787,7 @@ describe('parseArgs case selection', () => {
 describe('main case selection', () => {
   it('TEST-SEL-5 copies, checks, replays and judges only the selected case', async () => {
     const f = createFakeDeps({ fixtureCases: [signInId] });
+    for (const other of prompts.slice(1)) fs.unlinkSync(join(f.fixture, other));
     expect(await run(f, ['--case', signInId])).toBe(0);
     const copied = vi.mocked(fs.copyFileSync).mock.calls.map(([from]) => relative(f.fixture, String(from))).filter(p => !p.startsWith('..'));
     expect(copied).toEqual([files[0], prompts[0], plans[0], groundings[0]]);

@@ -39,6 +39,11 @@ export const CASES = Object.freeze([
   { id: 'memos-ja-locale', target: 'memos-ja' },
 ]);
 const HEAL_CASE = 'memos-settings-dialog';
+/**
+ * The settings-entry step identity comes from the generated plan, never a
+ * handwritten guess. An undefined identity stops the heal check with an explicit
+ * error before H3 can accept an unrelated grounding failure.
+ */
 export const HEAL_STEP_ID = undefined;
 const prompt = id => `tests/ambercast/${id}.test.md`;
 const plan = id => `tests/ambercast/${id}.ambercast.plan.json`;
@@ -73,9 +78,7 @@ function assertCaseTable(config) {
  * exactly one fill of verifier and one fill-secret referencing that secret.
  * @remarks Prompt and plan review own the read-only guarantee. This defensive
  * check protects both regeneration publication and H5 because repair regeneration
- * may select another target. The caller assigns fixture or heal; H5 reports
- * 'repaired plan is not read-only'. HEAL_STEP_ID will be read from the regenerated
- * plan's unquoted settings-entry click, never guessed before generation.
+ * may select another target. The caller assigns fixture or heal attribution.
  */
 function assertReadOnlyHealPlan(plan, secretName) {
   const steps = plan.steps ?? [];
@@ -101,8 +104,8 @@ function assertReadOnlyHealPlan(plan, secretName) {
  * ai requires regenerate, and allowDirty cannot accompany an explicit manifest.
  * @remarks This is the sole owner of argument meaning; pack-install retains
  * responsibility for the tarball's dirty-state policy.
- * --published will exclude manifest, allowDirty, regenerate and clean, while
- * allowing keep and healCheck. --heal-check will exclude regenerate and clean;
+ * --published excludes manifest, allowDirty, regenerate and clean, while
+ * allowing keep and healCheck. --heal-check excludes regenerate and clean;
  * clean remains exclusive. Published versions accept semver core and prerelease,
  * rejecting numeric leading zeros, build metadata, ranges, tags and empty values.
  * Argument validation remains side-effect free and reports usage with exit 2.
@@ -197,17 +200,10 @@ export function parseArgs(argv) {
  * Partial publication names affected files and is recoverable by full regeneration;
  * a later ordinary check is not guaranteed to detect every partial combination.
  *
- * Preflight requires all 22 fixture
- * files, or only config and prompts for regeneration. Copying under the fixture
- * lock precedes assertCaseTable; only heal checks retain the heal case's original
- * plan/cache bytes in memory, avoiding a later unlocked fixture read. Check and
- * replay each enumerate all prompts in order once; check keeps its current
- * budget, while replay gets TIMEOUTS.replay times CASES.length. The full judge
- * receives expectedCases=CASES.length and all plan/cache artifact paths. A failed
- * replay retains the first nonpassed row's report id verbatim in its reason.
- * ponytail: Cases run serially in one run. This does not guarantee that each case
- * passes when replayed individually; real-instance evidence covers only the full
- * sequential run and individual replays of the heal case in H3, H6 and H8.
+ * Fixture copying and retention of the heal case's original plan/cache share
+ * one lock, preventing restoration from reading a different fixture generation.
+ * Cases share a sequential run; acceptance of that run does not establish that
+ * every case passes individually.
  *
  * After ordinary replay and judge succeed, --heal-check enters one heal
  * stage for H1 through H8. H1 signs in and snapshots GENERAL. H2 installs the
@@ -228,8 +224,7 @@ export function parseArgs(argv) {
  * required H7 restoration is attempted exactly once. A failed H7 never proceeds
  * to H8. Judge failures in H6/H8 and heal-report judge failures after H4/H5 keep
  * stage=heal and begin their reason with 'judge:'.
- * HEAL_STEP_ID will be fixed only after regeneration identifies the unquoted
- * settings-entry click. No runtime config rewrite or healed-fixture publication
+ * No runtime config rewrite or healed-fixture publication
  * is permitted: idempotent isolation belongs to the declared read-only target.
  *
  * H2 marks restoreNeeded immediately before fetch starts, since a lost
@@ -267,12 +262,8 @@ export function parseArgs(argv) {
  * Each step call emits one ok line: heal has one, regeneration has five fixture
  * lines (copy, three generates, publication), and published runs have no pack line.
  *
- * Regeneration generates by first-seen target order, with --target to prevent
- * ambiguous assignment and per-target budgets proportional to prompt counts.
- * A failure stops later groups. Consent is checked once after all three generates,
- * before password/container creation. One all-case resolve gets its proportional
- * budget, then instance reset, replay, judge and the read-only check gate all 15
- * publications in PUBLISH_FILES order under the existing lock/rename protocol.
+ * Explicit targets prevent ambiguous assignment during regeneration, and budgets
+ * scale with prompt counts. Acceptance and the read-only contract gate publication.
  * Prompts are never published and partial publication recovers by full regeneration.
  *
  * --published skips packing and installs ambercast@<version> directly with
@@ -436,10 +427,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   }]));
   for (const [name, handler] of Object.entries(handlers)) signals.on(name, handler);
 
-  // One boundary assigns failures; explicit announce=false suppresses repeated
-  // preflight substeps, while every other call -- including a stage name used
-  // more than once, such as fixture's copy/generate/publish steps or
-  // container/ready/bootstrap's two regenerate cycles -- prints its own ok line.
+  // A shared boundary keeps failure attribution consistent across lifecycle stages.
   async function step(stage, fn, announce = true, cleanup = false) {
     currentStage = stage;
     const start = deps.clock.now();

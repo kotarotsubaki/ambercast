@@ -16,7 +16,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 export const MEMOS_IMAGE = 'neosmemo/memos:0.31.0';
 export const MEMOS_VERSION = '0.31.0';
 export const HOST = '127.0.0.1';
-// ponytail: A fixed loopback endpoint preserves the committed plan's inputsDigest;
+// A fixed loopback endpoint preserves the committed plan's inputsDigest;
 // concurrent instances require a separate port/freshness design.
 export const PORT = 5230;
 export const BASE_URL = 'http://127.0.0.1:5230';
@@ -36,14 +36,9 @@ export const HEAL_TO = 'Control panel';
  * document.body exists when it runs, including on the authentication page and
  * after reload. No script tags belong in this value. Replacement is restricted
  * to elements matching HEAL_SELECTOR so assertions elsewhere keep their names.
- * Within those elements, text nodes whose textContent.trim() equals HEAL_FROM
- * become HEAL_TO, as do aria-label and title attributes equal to HEAL_FROM.
- * If body is absent, initialization waits for DOMContentLoaded. An idempotent
- * replacement runs initially and after MutationObserver notifications on body
- * with childList, subtree, characterData and attributes enabled, filtering
- * attributes to ['aria-label', 'title']. This catches lazy menus and attribute
- * rewrites without requiring a new child to appear.
- * ponytail: Only one label in one read-only case is changed.
+ * Observation covers lazy menus and attribute rewrites without requiring a new
+ * child to appear. Replacements are idempotent so observer notifications cannot
+ * sustain a mutation loop. Only one label in one read-only case is changed.
  */
 export const HEAL_LABEL_SCRIPT = `(() => {
   const selector = ${JSON.stringify(HEAL_SELECTOR)};
@@ -244,7 +239,7 @@ export async function assertPortFree(port, host = HOST, listen = undefined) {
  * preexisting names and mkdir EEXIST are collisions, not permission to reuse.
  * Recheck the destination immediately before rename to avoid replacing an
  * existing empty directory on POSIX; clean our temporary root before retrying.
- * ponytail: The check does not eliminate TOCTOU. The residual collision risk
+ * The check does not eliminate TOCTOU. The residual collision risk
  * with a 32-bit random ID is accepted because portable Node lacks RENAME_NOREPLACE.
  */
 export function createRunRoot(tmpRoot, randomBytes, fns = undefined) {
@@ -424,10 +419,7 @@ export async function bootstrapAdmin(opts) {
  * @returns A promise containing the nonempty accessToken from the response.
  * @throws HarnessError at heal for HTTP or network failures, using only method,
  * path and status or network-error, never bodies or fetch exception messages.
- * @remarks POST /api/v1/auth/signin sends
- * {passwordCredentials:{username,password}} and requires HTTP 200. Each request
- * has a 5,000 ms timeout combined with the caller signal and is not retried.
- * Tokens remain in memory and are redacted from output, never placed in argv,
+ * @remarks Tokens remain in memory and are redacted from output, never placed in argv,
  * files or credentials.json. Restoration signs in again because a heal may
  * outlast the observed approximately fifteen-minute token lifetime.
  */
@@ -447,10 +439,7 @@ export async function signInAdmin(opts) {
  * @returns The unmodified setting response; the restoration caller treats an
  * absent additionalScript as an empty string.
  * @throws HarnessError at heal with method/path/status or network-error only.
- * @remarks GET /api/v1/instance/settings/GENERAL requires HTTP 200 and
- * Authorization: Bearer <token>. The observed unset additionalScript is "".
- * A 5,000 ms timeout is combined with the caller signal, without retries.
- * Keeping the full snapshot allows restoration to detect unintended changes
+ * @remarks Keeping the full snapshot allows restoration to detect unintended changes
  * to other settings through deep JSON equality after normalizing the script.
  */
 export async function getGeneralSetting(opts) {
@@ -463,11 +452,8 @@ export async function getGeneralSetting(opts) {
  * @returns A promise resolving after an HTTP 200 response.
  * @throws HarnessError at heal with method/path/status or network-error only;
  * request/response bodies, tokens and fetch exception messages are excluded.
- * @remarks PATCH /api/v1/instance/settings/GENERAL?updateMask=additionalScript
- * sends {name:'instance/settings/GENERAL', generalSetting:{additionalScript:value}}
- * with Authorization: Bearer <token>. This measured mask preserves other fields.
- * Each request has a 5,000 ms timeout combined with the caller signal and no
- * retry: an ambiguous mutation is handled by the caller's single restoration.
+ * @remarks The field mask preserves other settings. Requests are not retried:
+ * an ambiguous mutation is handled by the caller's single restoration.
  * Diagnostics identify the path without its updateMask query.
  */
 export async function patchAdditionalScript(opts) {
@@ -590,7 +576,7 @@ export function createTeardown() {
  * ten minutes; temporary roots require age over a minute and missing/dead ownership.
  * Reap a fixture lock only for a dead pid and reread its contents immediately
  * before unlinking; a changed pid belongs to another acquirer and must be preserved.
- * ponytail: The lock recheck narrows TOCTOU but is not an OS-level lock guarantee.
+ * The lock recheck narrows TOCTOU but is not an OS-level lock guarantee.
  */
 export async function reapStale(opts) {
   const { runner, tmpRoot, lockPath, isPidAlive = defaultIsPidAlive, rm = fs.rmSync,
@@ -672,7 +658,7 @@ export async function reapStale(opts) {
  * @returns 'dead' only for ESRCH, 'live' for success or EPERM, and 'unknown' for
  * every other thrown value, including non-Error values.
  * @remarks Unknown is never authority to delete another run's resources.
- * ponytail: PID reuse and EPERM can retain stale resources by appearing live;
+ * PID reuse and EPERM can retain stale resources by appearing live;
  * accepting leftovers is safer than deleting a possibly live owner's resources.
  */
 export function defaultIsPidAlive(pid) {
@@ -717,7 +703,7 @@ export function defaultIsPidAlive(pid) {
  * is 'none' if cancellation was never attempted, 'confirmed' only after
  * observing ESRCH following SIGTERM or SIGKILL, and 'unconfirmed' if neither
  * bounded wait confirms absence. Child exit alone does not confirm group death.
- * ponytail: This is a best-effort cleanup bound, not a guarantee that a stuck
+ * This is a best-effort cleanup bound, not a guarantee that a stuck
  * process group cannot outlive the harness.
  * `'generate'` inherits stdin and stderr because consent needs a real TTY on
  * both ends, and only captures/forwards stdout.

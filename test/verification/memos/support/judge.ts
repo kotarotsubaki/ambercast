@@ -88,15 +88,11 @@ export interface JudgeSmokeReportInput {
  * @remarks
  * The function supports replay, artifact-disclosure, and heal-report checks.
  *
- * In `full` mode (the default), the function first verifies report identity: it locates
- * the latest-mtime `report.json` under the `.runs/` paths in `artifactRoots`.
- * ReportEnvelope carries no `runId`, so only the latest-mtime fallback
- * is reachable. No persisted report is an identity violation. It then deep-equals
- * that persisted report against the passed `report` **before** collecting storage artifacts,
- * enforcing report identity before scanning artifacts. Only after identity verification does it
- * proceed through the assertion chain: `assertDiagnosable` (schema + evidence), `assertZeroAiCalls`,
- * summary and result counts against `expectedCases`, and finally
- * `assertNoSecretDisclosure` over the collected artifacts.
+ * In `full` mode (the default), the supplied report must match the latest persisted
+ * report. ReportEnvelope carries no `runId`, so modification time determines
+ * identity. A missing persisted report is an identity violation. Acceptance also
+ * requires diagnosable evidence, zero AI calls, the expected passing case count,
+ * and no secret disclosure in the report or collected artifacts.
  * Only an identity violation skips artifact collection and disclosure detection;
  * diagnostic, AI-call, and summary violations still accumulate with disclosure violations.
  *
@@ -148,7 +144,6 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
   }
 
   if (mode === 'full') {
-    // Identity verification: find latest-mtime report.json under .runs/
     identityViolation = findAndCompareLatestReport(report, artifactRoots);
     if (identityViolation !== null) {
       violations.push(identityViolation);
@@ -188,7 +183,7 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
         violations.push(`results.length is ${parsed.results.length}, expected ${expectedCases}`);
       }
     } else {
-      // Schema validation failed already handled by assertDiagnosable
+      // assertDiagnosable owns schema diagnostics, avoiding duplicate violations.
     }
   }
 
@@ -199,7 +194,6 @@ export async function judgeSmokeReport(input: JudgeSmokeReportInput): Promise<vo
       artifacts = await reportAssertions.collectStorageArtifacts(createFsStorage(), artifactRoots);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      // Storage read failures use the judge prefix directly
       throw new Error(`judgeSmokeReport: cannot read <path>: ${message}`);
     }
 
@@ -241,7 +235,6 @@ function findAndCompareLatestReport(report: unknown, artifactRoots: readonly str
           const mtime = statSync(reportPath).mtimeMs;
           reportFiles.push({ path: reportPath, mtime });
         } catch {
-          // Skip files we can't stat
         }
       }
     }

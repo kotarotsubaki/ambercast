@@ -9,6 +9,149 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertPortFree, bootstrapAdmin, BootstrapError, buildChildEnv, buildProjectPackageJson, createDockerRunner, createExec, createRunRoot, createTeardown, defaultIsPidAlive, generateAdminPassword, HarnessError, reapStale, ReadyError, RunnerError, runProcess, secretEnvName, summarizeAiCalls, TerminationUnconfirmedError, waitReady } from '../../../scripts/lib/memos-harness.mjs';
 
 const roots: string[] = [];
+// @ts-expect-error The production ESM script is deliberately untyped JavaScript.
+import { signInAdmin, getGeneralSetting, patchAdditionalScript, redact, HEAL_LABEL_SCRIPT, HEAL_SELECTOR, HEAL_FROM, HEAL_TO } from '../../../scripts/lib/memos-harness.mjs';
+
+describe('instance settings API', () => {
+  const token = 'private-bearer-token';
+  const password = 'private-admin-password';
+  const value = 'private-script-body';
+  const setting = { name: 'instance/settings/GENERAL', generalSetting: { additionalScript: value, instanceUrl: 'unchanged' } };
+  const operations = [
+    { name: 'signInAdmin', call: signInAdmin, method: 'POST', path: '/api/v1/auth/signin', query: '',
+      body: { passwordCredentials: { username: 'verifier', password } }, result: { accessToken: token }, expected: token },
+    { name: 'getGeneralSetting', call: getGeneralSetting, method: 'GET', path: '/api/v1/instance/settings/GENERAL', query: '',
+      body: undefined, result: setting, expected: setting },
+    { name: 'patchAdditionalScript', call: patchAdditionalScript, method: 'PATCH', path: '/api/v1/instance/settings/GENERAL', query: '?updateMask=additionalScript',
+      body: { name: 'instance/settings/GENERAL', generalSetting: { additionalScript: value } }, result: setting, expected: undefined },
+  ];
+  it.each(operations)('TEST-544-20 $name sends the measured request and returns its result', async operation => {
+    const fetch = vi.fn().mockResolvedValue(response(200, operation.result));
+    const signal = new AbortController().signal;
+    const result = await operation.call({ fetch, baseUrl, username: 'verifier', password, token, value, signal });
+    if (operation.name !== 'patchAdditionalScript') expect(result).toEqual(operation.expected);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe(baseUrl + operation.path + operation.query);
+    expect(init.method).toBe(operation.method);
+    const headers = new Headers(init.headers);
+    expect(headers.get('Authorization')).toBe(operation.name === 'signInAdmin' ? null : `Bearer ${token}`);
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal.aborted).toBe(false);
+    if (operation.body === undefined) expect(init.body).toBeUndefined();
+    else {
+      expect(headers.get('Content-Type')).toBe('application/json');
+      expect(JSON.parse(init.body)).toEqual(operation.body);
+    }
+  });
+  it.each(operations.flatMap(operation => [201, 204, 400, 401, 500, 'network-error'].map(failure => ({ ...operation, failure }))))(
+    'TEST-544-20 $name rejects $failure without retries or secret diagnostics', async operation => {
+      const body = `${token} ${password} ${value} response-body-marker`;
+      const fetch = operation.failure === 'network-error'
+        ? vi.fn().mockRejectedValue(new Error(body))
+        : vi.fn().mockResolvedValue(response(operation.failure as number, { body }));
+      const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        const error = await operation.call({ fetch, baseUrl, username: 'verifier', password, token, value }).catch((caught: unknown) => caught);
+        expect(error).toBeInstanceOf(HarnessError);
+        expect(error).toMatchObject({ stage: 'heal', message: `${operation.method} ${operation.path} -> ${operation.failure}` });
+        expect(fetch).toHaveBeenCalledTimes(1);
+        const diagnostics = String(error) + stderr.mock.calls.map(call => String(call[0])).join('');
+        for (const secret of [token, password, value, 'response-body-marker']) expect(diagnostics).not.toContain(secret);
+      } finally { stderr.mockRestore(); }
+    },
+  );
+  it.each(operations.flatMap(operation => ['timeout', 'caller', 'timeout without caller'].map(cancellation => ({ ...operation, cancellation }))))(
+    'TEST-544-20 $name combines its five-second timeout with $cancellation cancellation', async operation => {
+      const timeoutController = new AbortController();
+      const caller = new AbortController();
+      const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutController.signal);
+      const fetch = vi.fn((_url: string, init: { signal: AbortSignal }) => new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(new Error(`${token} ${value}`)), { once: true });
+      }));
+      try {
+        const pending = operation.call({ fetch, baseUrl, username: 'verifier', password, token, value,
+          ...(operation.cancellation === 'timeout without caller' ? {} : { signal: caller.signal }) })
+          .catch((error: unknown) => error);
+        expect(timeout).toHaveBeenCalledExactlyOnceWith(5000);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(fetch.mock.calls[0]![1].signal.aborted).toBe(false);
+        (operation.cancellation === 'caller' ? caller : timeoutController).abort();
+        const error = await pending;
+        expect(error).toBeInstanceOf(HarnessError);
+        expect(error).toMatchObject({ stage: 'heal', message: `${operation.method} ${operation.path} -> network-error` });
+        expect(fetch.mock.calls[0]![1].signal.aborted).toBe(true);
+        expect(fetch).toHaveBeenCalledTimes(1);
+      } finally { timeout.mockRestore(); }
+    },
+  );
+  it.each([
+    { text: 'abc', secrets: [], expected: 'abc' },
+    ...['', undefined, null, 7, false, {}].map(secret => ({ text: 'abc', secrets: [secret], expected: 'abc' })),
+    { text: 'xtokx', secrets: ['tok', 'pw'], expected: 'x[redacted]x' },
+    { text: 'tok pw tok', secrets: ['tok', 'pw'], expected: '[redacted] [redacted] [redacted]' },
+    { text: 'tok', secrets: ['', undefined, 'tok', null], expected: '[redacted]' },
+    { text: 'pw pw', secrets: ['pw'], expected: '[redacted] [redacted]' },
+  ])('TEST-544-20 redact replaces only nonempty string secrets ($text, $secrets)', ({ text, secrets, expected }) => {
+    expect(redact(text, ...secrets)).toBe(expected);
+  });
+});
+
+describe('HEAL_LABEL_SCRIPT', () => {
+  function environment(hasBody = true) {
+    const text = { nodeType: 3, textContent: HEAL_FROM, childNodes: [] };
+    const nestedText = { nodeType: 3, textContent: HEAL_FROM, childNodes: [] };
+    const attrs: Record<string, string> = { 'aria-label': HEAL_FROM, title: HEAL_FROM };
+    const element = { nodeType: 1, childNodes: [text, { nodeType: 1, childNodes: [nestedText] }],
+      getAttribute: (key: string) => attrs[key] ?? null,
+      setAttribute: (key: string, value: string) => { attrs[key] = value; } };
+    const outside = { nodeType: 3, textContent: HEAL_FROM, childNodes: [] };
+    const body = { nodeType: 1, childNodes: [element, outside] };
+    const listeners = new Map<string, () => void>();
+    const document = { body: hasBody ? body : null, querySelectorAll: vi.fn(() => [element]),
+      addEventListener: vi.fn((event: string, listener: () => void) => { listeners.set(event, listener); }) };
+    const observe = vi.fn();
+    let callback: (records: unknown[]) => void = () => { throw new Error('observer not registered'); };
+    const MutationObserver = vi.fn(function (listener: typeof callback) { callback = listener; return { observe }; });
+    const run = () => new Function('document', 'MutationObserver', HEAL_LABEL_SCRIPT)(document, MutationObserver);
+    return { document, body, text, nestedText, outside, attrs, listeners, observe, run, notify: (records: unknown[]) => callback(records) };
+  }
+  it('TEST-544-21 exports the measured selector and label constants', () => {
+    expect([HEAL_SELECTOR, HEAL_FROM, HEAL_TO]).toEqual(['[role="menuitem"]', 'Settings', 'Control panel']);
+    expect(HEAL_LABEL_SCRIPT).not.toBe('');
+  });
+  it('TEST-544-21 waits for DOMContentLoaded when body is absent', () => {
+    const env = environment(false);
+    env.run();
+    expect(env.document.addEventListener.mock.calls.some(([event, listener]) => event === 'DOMContentLoaded' && typeof listener === 'function')).toBe(true);
+    expect(env.text.textContent).toBe(HEAL_FROM);
+    expect(env.observe).not.toHaveBeenCalled();
+    env.document.body = env.body;
+    env.listeners.get('DOMContentLoaded')!();
+    expect(env.text.textContent).toBe(HEAL_TO);
+    expect(env.observe).toHaveBeenCalledTimes(1);
+  });
+  it('TEST-544-21 replaces scoped nested text and labels, preserves outside text, and is idempotent', () => {
+    const env = environment();
+    env.run();
+    expect(env.document.querySelectorAll).toHaveBeenCalledWith(HEAL_SELECTOR);
+    for (let count = 0; count < 3; count++) {
+      expect([env.text.textContent, env.nestedText.textContent, env.attrs['aria-label'], env.attrs.title]).toEqual(Array(4).fill(HEAL_TO));
+      expect(env.outside.textContent).toBe(HEAL_FROM);
+      if (count < 2) env.notify([{ type: 'childList', target: env.body }]);
+    }
+  });
+  it('TEST-544-21 observes text and label mutations and repairs attribute-only changes', () => {
+    const env = environment();
+    env.run();
+    expect(env.observe).toHaveBeenCalledExactlyOnceWith(env.body, {
+      childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-label', 'title'],
+    });
+    env.attrs['aria-label'] = HEAL_FROM;
+    env.notify([{ type: 'attributes', attributeName: 'aria-label', target: env.body.childNodes[0] }]);
+    expect(env.attrs['aria-label']).toBe(HEAL_TO);
+  });
+});
 const prefix = 'ambercast-verify-memos-';
 const name = prefix + '12345678';
 const baseUrl = 'http://127.0.0.1:5230';

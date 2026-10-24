@@ -21,9 +21,9 @@ const generatedFixtureFiles = expectedCases.slice(1).flatMap(({ id }) =>
     new URL(`tests/ambercast/${id}${suffix}`, fixture)),
 );
 const generatedFixtureCount = generatedFixtureFiles.filter(file => existsSync(file)).length;
-// Issue #624 will generate the artifacts for cases 2–7; handwritten IR must not stand
-// in for that generation. These checks resume automatically when the files exist,
-// while a partially populated fixture remains a failure rather than being skipped.
+// Generated artifacts (#624) are checked as a complete set: skip only when all
+// are absent, run when complete, and fail on partial presence so missing coverage
+// cannot silently pass. Handwritten IR cannot substitute for generation.
 const generatedFixturesAbsent = generatedFixtureCount === 0;
 const signIn = 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the "Save" button is displayed. Then assert that the text "verifier" is displayed.';
 const originalPrompt = `# Sign in to Memos and create a memo

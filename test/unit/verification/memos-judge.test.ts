@@ -7,7 +7,7 @@ import * as reportAssertions from '../../support/report-assertions.js';
 import { judgeSmokeReport } from '../../verification/memos/support/judge.js';
 import * as judgeModule from '../../verification/memos/support/judge.js';
 
-// Keep the contract callable while its new exports are introduced independently.
+// Widen the test boundary so malformed case counts reach runtime validation.
 const judgeWithCaseCount = judgeSmokeReport as (input: {
   report: unknown; artifactRoots: readonly string[]; secrets: Record<string, string>;
   expectedCases?: unknown; mode?: 'full' | 'disclosure-only' | 'heal-report';

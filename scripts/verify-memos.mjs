@@ -96,19 +96,11 @@ function assertReadOnlyHealPlan(plan, secretName) {
 /**
  * Parses verification, regeneration or cleanup options without resource creation.
  * @param argv - Arguments excluding the executable and script name.
- * @returns Options for manifest, allowDirty, keep, regenerate, ai and clean,
- * plus healCheck (false by default) and
- * published (undefined by default, otherwise an exact npm version).
+ * @returns Validated options for verification, regeneration or cleanup.
  * @throws A usage error for unknown/duplicate flags, missing values, positional
- * arguments, invalid providers or incompatible combinations. Cleanup is exclusive;
- * ai requires regenerate, and allowDirty cannot accompany an explicit manifest.
+ * arguments, invalid providers or incompatible combinations.
  * @remarks This is the sole owner of argument meaning; pack-install retains
  * responsibility for the tarball's dirty-state policy.
- * --published excludes manifest, allowDirty, regenerate and clean, while
- * allowing keep and healCheck. --heal-check excludes regenerate and clean;
- * clean remains exclusive. Published versions accept semver core and prerelease,
- * rejecting numeric leading zeros, build metadata, ranges, tags and empty values.
- * Argument validation remains side-effect free and reports usage with exit 2.
  */
 export function parseArgs(argv) {
   const options = { manifest: undefined, ai: undefined, allowDirty: false, keep: false, regenerate: false, clean: false, healCheck: false, published: undefined };
@@ -143,136 +135,56 @@ export function parseArgs(argv) {
  * @param signals - SIGINT/SIGTERM event source, defaulting to process.
  * @returns Exit code 0 for success, 1 for verification/precondition failure, 2 for
  * usage/unsupported platform, 130 for SIGINT or 143 for SIGTERM; never calls process.exit.
- * @remarks Reject usage before side effects. Preflight orders daemon, fixture,
- * stale reaping, port, manifest, image and browser-version checks before creating
- * a run root or container. pack-install owns tarball identity and installation;
- * the isolated project probes its own Chromium before container startup.
- * A single step wrapper owns stage attribution and stage completion timing.
- * Capture the final ordinary replay JSON even on nonzero exit before judging its
- * failure; AI totals never come from generate or resolve. Every output string is
- * redacted, and the final verdict is emitted once, after cleanup/residual checks.
- * Cleanup mode emits only its cleaned-count line; usage/Windows emits no stdout.
+ * @remarks The harness owns lifecycle and stage attribution; pack-install owns
+ * package identity and installation, and the judge owns report schema acceptance,
+ * diagnosability and disclosure checks. Replay alone supplies the acceptance AI
+ * count; generation, resolution and repair have separate accounting.
  *
- * Register cleanup before ambiguous container creation and run it once with a
- * fresh signal/budget after child termination handling. --keep applies only to
- * nonsignal completion, reports only created resources, and stores credentials
- * privately; cleanup failures append to the original reason without hiding it.
- * Signal handlers bind their signal names separately. The first signal pins both
- * its exit code and the current stage; later signals do nothing, allowing teardown
- * to finish. Abort is deferred until after publication completes or fails; the
- * synchronous critical section always finishes. Two setImmediate turns allow
- * real signal delivery before cleanup decisions; injected emits complete publication and
- * then abort. Already published files are not rolled back and their names remain
- * diagnostic evidence.
+ * Cleanup is registered before ambiguous resource creation and uses independent
+ * cancellation so interruption cannot prevent teardown. The first signal pins
+ * its exit and stage; later signals cannot disrupt recovery. Publication is a
+ * synchronous critical section, so interruption waits for it to finish and
+ * preserves evidence of any published files. Unconfirmed child termination
+ * prevents further verification and publication; process identities survive
+ * aggregation and truncation so manual recovery remains possible.
  *
- * Unconfirmed termination stops verification and publication. The detecting
- * step assigns its stage without losing an earlier failure reason. A pgid
- * list preserves evidence before errors become strings or interruption masks
- * them; repeated catches of one pgid do not duplicate it. Teardown still
- * attempts every cleanup with fresh bounded Docker budgets. Teardown failures
- * append to an earlier failure. Signals retain their original stage,
- * exit 130/143 and aiCalls=n/a, with reason interrupted followed by a teardown
- * failure entry for each recorded pgid. Nonsignal --keep fails and
- * prints each unconfirmed group with its manual kill -9 -<pgid> command.
- * A disclosure-only judge's unconfirmed termination appends directly to the
- * replay reason, bypassing the judge classifier; other judge errors retain it.
- * Final assembly renders each recorded pgid only when its exact message is
- * absent from the assembled reason, including cleanup aggregates.
- * Final reason formatting redacts and escapes error text and publication
- * lists separately, reserves space for process identities and both publication
- * lists, and caps ordinary error text within the overall 400-character budget.
+ * Regeneration preserves the consent scope before credentials or containers
+ * exist. The generator prefers existing names but does not enforce them; refuse
+ * consent to any alternative name and fail if that scope changes. Inherited
+ * terminal streams preserve interactive consent, while resolution captures and
+ * redacts output once credentials exist. Successful acceptance gates publication;
+ * partial publication requires full regeneration.
  *
- * Normal verification copies fixtures without modification and has no AI path.
- * Regeneration preserves committed consent names and runs generate before any
- * password or container exists. The generator prefers existing names but does
- * not enforce them; refuse any request to consent to another name and fail
- * generation to keep the consent scope unchanged. Consent's TTY check and redaction
- * never collide: generate inherits stdin/stderr and forwards only its captured
- * stdout to the harness sink. The config must contain exactly one non-wildcard
- * name before generation and retain that name afterward. Only then does a
- * password get generated and an instance start; resolve
- * then captures and redacts both of its streams, resets Memos and replays
- * without resolution. Every judge child gets an explicit mode after
- * parent-environment isolation: full for normal acceptance, disclosure-only
- * solely for a nonzero replay with an available report.
- * Only a successfully resolved full judge permits fixture publication under its
- * lock, in config/plan/grounding order via private temporary files and renames.
- * Partial publication names affected files and is recoverable by full regeneration;
- * a later ordinary check is not guaranteed to detect every partial combination.
+ * Fixture copying and retention of the original heal plan/cache share one lock,
+ * making the retained bytes the restoration authority even if fixtures change
+ * later. Cases share a sequential run; acceptance does not establish independent
+ * execution of every case.
  *
- * Fixture copying and retention of the heal case's original plan/cache share
- * one lock, preventing restoration from reading a different fixture generation.
- * Cases share a sequential run; acceptance of that run does not establish that
- * every case passes individually.
+ * Heal relies on the declared read-only target's idempotent isolation, never a
+ * runtime config rewrite. The expected binding miss must identify the intended
+ * case and step, preventing unrelated failures from masquerading as repair
+ * evidence. Preview must preserve artifacts, application must change them, and
+ * replay must establish both repair and reversibility. Reports supplement child
+ * success rather than replace it; only the deliberate binding miss accepts
+ * failure. The judge owns report validity; the harness owns protocol outcomes
+ * and the defensive read-only plan check, without inspecting grounding internals.
  *
- * After ordinary replay and judge succeed, --heal-check enters one heal
- * stage for H1 through H8. H1 signs in and snapshots GENERAL. H2 installs the
- * narrowly scoped label script. H3 uses replayExpectingMiss to prove exit 4 is a
- * zero-AI, single-case GROUNDING_UNRESOLVED at HEAL_STEP_ID, rather than accepting
- * an unrelated stale plan or a label change that did nothing. H4 previews heal
- * with --dry-run and verifies unchanged SHA-256 plan/cache hashes; H5 applies
- * with --yes, requires at least one changed hash and checks the repaired plan's
- * read-only contract. Both heals use --json --no-color --ai claude, require one
- * completed row for the exact prompt with repairOutcome healed and respectively
- * preview-only/applied, and run the heal-report judge before outcome checks.
- * Neither is retried. H6 replays without resolution and judges one zero-AI case.
- * H7 restores settings. H8 restores project plan/cache from the retained bytes,
- * then repeats the one-case zero-AI replay and judge to prove reversibility.
- * H4, H5, H6 and H8 require both child exit 0 and their report conditions; H3
- * alone expects exit 4 and is the only path that accepts a nonzero child exit
- * as success. The first failure in any step stops all later steps, except that
- * required H7 restoration is attempted exactly once. A failed H7 never proceeds
- * to H8. Judge failures in H6/H8 and heal-report judge failures after H4/H5 keep
- * stage=heal and begin their reason with 'judge:'.
- * No runtime config rewrite or healed-fixture publication
- * is permitted: idempotent isolation belongs to the declared read-only target.
+ * A settings PATCH can succeed despite a lost response, so restoration becomes
+ * mandatory as soon as mutation starts. Restoration is attempted once with fresh
+ * cancellation and credentials, using the settings snapshot as its authority.
+ * Interruption permits restoration to finish but prevents further verification.
+ * Failed restoration overrides resource retention to avoid leaving the injected
+ * script active. Its evidence survives interruption and diagnostic truncation.
+ * Tokens remain in memory and participate in redaction; disclosure checks still
+ * use the password. Saved repair reports join replay artifacts in disclosure
+ * scans so repair output cannot escape the acceptance boundary.
  *
- * H2 marks restoreNeeded immediately before fetch starts, since a lost
- * response cannot prove the mutation did not happen. restoreAttempted guarantees
- * one H7 attempt across finally, signals and --keep. H7 uses a fresh signal with
- * request timeouts and a new sign-in token, patches the snapshot script, then
- * checks deep JSON equality with missing additionalScript normalized to "".
- * A failed restoration preserves the original failure; --keep then yields to
- * teardown and adds '; --keep not honored: restore failed', preventing a retained
- * instance from serving the label script. Signals still exit 130/143 after
- * restoration and teardown. Heal children share replay's isolated secret env;
- * TIMEOUTS.heal allows 900,000 ms per heal and the three replays each get 120,000.
- *
- * Heal stdout and the three replay reports are saved as heal-dry-run.json,
- * heal-apply.json, heal-broken-report.json, heal-report.json and restore-report.json
- * under runRoot. H6/H8 disclosure scans also include both heal reports and the
- * broken replay report. The heal-report judge owns schema acceptance,
- * diagnosability and report disclosure; the harness does not invent schema-version
- * checks or inspect repaired grounding contents. Tokens stay only in memory and
- * join password redaction; disclosure assertions continue to use the password.
- *
- * The final ordinary replay to finish owns aiCalls, including H3 even though its
- * failure is expected; generate, resolve and heal do not contribute. Heal totals
- * sum H4/H5 results, becoming unknown if either lacks aiCalls. Successful local
- * output remains 'verify-memos: PASS aiCalls=0 sha=<12 digits>[-dirty] memos=0.31.0';
- * heal checks append ' heal=healed healAiCalls=<n|unknown>'. Published runs replace
- * sha with 'package=ambercast@<version>'. Failures retain
- * 'verify-memos: FAIL stage=<stage> reason=<reason> aiCalls=<n|unknown|n/a>'.
- * Restoration failures reserve a protected '; restore failed: <reason>' tail
- * (reason bounded to 120 characters) before ordinary text consumes the 400-character
- * budget, just like process identities. Interruption replaces the original reason
- * with interrupted but preserves restoration failure evidence. Publication tails
- * use '; published files: <k> of 15' and '; fixture updated: <k> of 15'; the full
- * redacted, untruncated file list goes to stderr immediately before the verdict.
- * Each step call emits one ok line: heal has one, regeneration has five fixture
- * lines (copy, three generates, publication), and published runs have no pack line.
- *
- * Explicit targets prevent ambiguous assignment during regeneration, and budgets
- * scale with prompt counts. Acceptance and the read-only contract gate publication.
- * Prompts are never published and partial publication recovers by full regeneration.
- *
- * --published skips packing and installs ambercast@<version> directly with
- * npm install --save-dev --no-audit --no-fund in the isolated project, using
- * TIMEOUTS.pack. The installed package version must match exactly; failed install
- * reports exit and 'the published package may not be available yet; rerun later'
- * without polling or retry. It has no sha/dirty identity. Fresh dependency-code
- * execution requires direct maintainer authorization for manifests, lockfile,
- * command and install-script/network effects before a real harness run.
+ * Explicit targets prevent ambiguous assignment during regeneration. Prompts
+ * remain authoritative and are never replaced by generated artifacts. Published
+ * verification installs the requested package directly; availability failures
+ * remain visible to the caller rather than triggering implicit retries.
+ * Executing a fresh dependency graph requires direct maintainer authorization
+ * for the manifests, command, and install-script, network and filesystem effects.
  */
 export async function main(argv, platform = process.platform, deps = createDeps(), signals = process) {
   if (platform === 'win32') {
@@ -297,14 +209,10 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   const published = [];
   const unconfirmed = new Map(); // pgid -> { stage } for first-stage evidence
   /**
-   * Runs H1-H8 after full acceptance, keeping every failure in stage heal.
-   * @remarks H4, H5, H6 and H8 require both child exit 0 and their report
-   * conditions so a valid-looking report cannot hide a process failure. Only H3
-   * expects exit 4 and accepts a nonzero child exit as success. The first failure
-   * stops later steps, with required H7 restoration attempted exactly once as
-   * the sole exception; H7 failure prevents H8. H6/H8 judge failures and the
-   * heal-report judge failures after H4/H5 begin their reason with 'judge:' while
-   * retaining stage heal, preserving both the failing check and its heal context.
+   * Verifies repair and reversibility after ordinary acceptance.
+   * @remarks Restoration is the only operation allowed to continue after failure;
+   * a plausible report cannot override child failure. Judge errors retain their
+   * heal context so diagnostics identify both the protocol and the failed check.
    */
   async function healCheck() {
     if (!(deps.healStepId ?? HEAL_STEP_ID)) throw new Error('HEAL_STEP_ID is undefined; regenerate the heal plan and set its settings-entry step id');
@@ -354,6 +262,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       }
       await replay('heal-report.json');
       await restore(new AbortController().signal);
+      interrupted();
       if (restoreFailed) throw new Error('restoration failed');
       paths.forEach((file, i) => fs.writeFileSync(file, originalHealFiles[i]));
       await replay('restore-report.json');
@@ -381,13 +290,10 @@ export async function main(argv, platform = process.platform, deps = createDeps(
     } catch (error) { restoreFailed = message(error); }
   }
   /**
-   * Proves the label change broke the intended binding through a direct child call.
-   * @remarks H3 bypasses the ordinary replay step and its --regenerate guidance.
-   * Require one JSON result, zero AI calls, exit 4 and a case-scoped error matching
-   * its id and HEAL_STEP_ID. Exit 0 means 'label change did not break the heal case';
-   * other exits use 'unexpected exit=<n>', and mismatched errors use
-   * 'unexpected failure: <first code>'. Save stdout before parsing and retain this
-   * completed ordinary replay's aiCalls even when its expected-miss check fails.
+   * Proves the label change broke the intended binding.
+   * @remarks The ordinary replay wrapper recommends regeneration on failure,
+   * which would conceal the deliberate binding miss here. Matching the case and
+   * step prevents an unrelated failure from satisfying the repair precondition.
    */
   async function replayExpectingMiss() {
     const result = await child(ambercast(), ['run', '--json', '--no-color', prompt(HEAL_CASE)], root.projectDir, TIMEOUTS.replay, secrets());
@@ -480,12 +386,8 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   function requireSuccess(result, advice = '') {
     if (result.status !== 0) throw new Error(`${exitReason(result)}${result.stderr ? ` ${result.stderr}` : ''}${advice ? `; ${advice}` : ''}`);
   }
-  // A disclosure-only judge failure is only a confirmed leak when the judge
-  // child actually ran assertNoSecretDisclosure and found one
-  // (`judgeSmokeReport: N violation(s)`). A storage read failure
-  // (`judgeSmokeReport: cannot read ...`) or any other judge crash/timeout
-  // before it ever reached that check is a failed inspection, not a
-  // confirmed leak, and must not be reported as one.
+  // Only a completed disclosure assertion establishes a leak; inspection failures
+  // preserve uncertainty instead of incorrectly reporting confirmed disclosure.
   function classifyJudgeFailure(message) {
     if (/judgeSmokeReport: cannot read /.test(message)) return `judge inspection failed: ${message}`;
     if (/judgeSmokeReport: \d+ violation/.test(message)) return `secret disclosed: ${message}`;

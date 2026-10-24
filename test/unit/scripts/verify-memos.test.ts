@@ -916,6 +916,42 @@ describe('main', () => {
       if (mode !== 'missing-script') expect(f.calls('replay').length).toBeLessThan(4);
       cleaned(f);
     });
+    it.each(['SIGINT', 'SIGTERM'].flatMap(signal =>
+      ['signin', 'patch', 'get'].map(point => ({ signal, point }))))
+    ('TEST-544-19 finishes H7 but skips H8 after $signal during restoration $point', async ({ signal, point }) => {
+      let emitted = false;
+      const order: string[] = [];
+      const f: Fake = createFakeDeps({
+        fetch: async (url, opts) => {
+          const path = new URL(url).pathname;
+          const inRestoration = f.calls('replay').length === 3;
+          const matches = point === 'signin' ? path.endsWith('/auth/signin')
+            : path === settingsPath && (point === 'patch' ? opts.method === 'PATCH' : opts.method !== 'PATCH');
+          if (inRestoration && matches && !emitted) {
+            emitted = true;
+            f.signals.emit(signal);
+            expect(opts.signal!.aborted).toBe(false);
+          }
+          const response = await f.successfulFetch(url, opts);
+          if (inRestoration && path === settingsPath && opts.method !== 'PATCH') order.push('restored');
+          return response;
+        },
+        runner: { removeContainer: async (name: string) => { order.push('teardown'); f.containers.delete(name); } },
+      });
+      expect(await run(f, ['--heal-check', '--keep'])).toBe(signal === 'SIGINT' ? 130 : 143);
+      expect(emitted).toBe(true);
+      expectRestored(f);
+      expect(f.calls('replay')).toHaveLength(3);
+      expect(fullJudges(f)).toHaveLength(2);
+      const project = f.calls('replay')[0]!.opts.cwd;
+      const projectWrites = vi.mocked(fs.writeFileSync).mock.calls.filter(([path]) =>
+        [healPlan, healGrounding].some(file => String(path) === join(project, file)));
+      expect(projectWrites).toHaveLength(1);
+      expect(JSON.parse(String(projectWrites[0]![1]))).toEqual(readOnlyPlan('Open Control panel'));
+      expect(order).toEqual(['restored', 'teardown']);
+      expect(last(f)).toBe('verify-memos: FAIL stage=heal reason=interrupted aiCalls=n/a');
+      cleaned(f);
+    });
     it.each(['pass', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'H7', 'H8', 'SIGINT-H4', 'SIGTERM-H5', 'keep'])
     ('TEST-544-19 preserves all fixture bytes on every heal exit and restores before cleanup (%s)', async point => {
       const order: string[] = []; let gets = 0;

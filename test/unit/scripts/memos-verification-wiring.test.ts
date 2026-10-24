@@ -165,8 +165,20 @@ describe('memos verification wiring', () => {
     const { CASES } = await harnessExports();
     expect(Array.isArray(CASES)).toBe(true);
     expect(CASES).toHaveLength(7);
-    expect(CASES).toEqual(expectedCases);
+    // knownIssue marks are validated by the harness itself; only identity and order are pinned here.
+    expect((CASES as { id: string; target: string }[]).map(({ id, target }) => ({ id, target }))).toEqual(expectedCases);
     expect(Object.isFrozen(CASES)).toBe(true);
+  });
+
+  it('TEST-SEL-12 documents --case, PASS-PARTIAL, known= and the interim smoke', () => {
+    const contributing = readFileSync(new URL('CONTRIBUTING.md', root), 'utf8');
+    for (const text of ['--case <id>', 'PASS-PARTIAL', 'cases=', 'known=',
+      'npm run verify:memos -- --case memos-sign-in-create-memo',
+      'npm run verify:memos -- --published <version> --case memos-sign-in-create-memo',
+      'interim', 'not a complete pre-release verification', 'do not merge the release PR', 'Do not run `--heal-check`']) {
+      expect(contributing, text).toContain(text);
+    }
+    expect(readFileSync(new URL('AGENTS.md', root), 'utf8')).toContain('--case');
   });
 
   it('TEST-544-4 keeps generated fixtures entirely absent or complete', () => {

@@ -28,6 +28,7 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 const configFile = 'ambercast.config.json';
 const caseTable = CASES as readonly { id: string; target: string }[];
+const caseIds = caseTable.map(c => c.id);
 const prompts = caseTable.map(c => `tests/ambercast/${c.id}.test.md`);
 const plans = prompts.map(p => p.replace('.test.md', '.ambercast.plan.json'));
 const groundings = prompts.map(p => p.replace('.test.md', '.ambercast.grounding.json'));
@@ -86,7 +87,7 @@ function navigationPlan(c: { id: string; target: string }, generated = false) {
     targets: { [c.target]: { surface: 'web', baseUrl: 'http://127.0.0.1:5230', locale: c.target === 'memos-ja' ? 'ja-JP' : 'en-US' } },
     steps: [{ id: 'open', kind: 'action', action: 'navigate', target: c.target, url: 'http://127.0.0.1:5230/auth' }] });
 }
-function writeSuiteFixture(fixture: string) {
+function writeSuiteFixture(fixture: string, generated: readonly string[] = caseIds) {
   write(join(fixture, files[0]), JSON.stringify({ testDir: 'tests/ambercast', defaultTarget: 'memos',
     targets: { memos: { baseUrl: 'http://127.0.0.1:5230', locale: 'en-US' },
       'memos-readonly': { baseUrl: 'http://127.0.0.1:5230', locale: 'en-US', healReplayIsolation: 'idempotent' },
@@ -94,6 +95,7 @@ function writeSuiteFixture(fixture: string) {
     secrets: { allow: ['memos.password'] }, heal: { maxStepRepairs: 2 } }));
   for (const [i, c] of caseTable.entries()) {
     write(join(fixture, prompts[i]!), i === 0 ? 'Sign in and create a memo.\n' : `# ${c.id}\n`);
+    if (!generated.includes(c.id)) continue;
     write(join(fixture, plans[i]!), JSON.stringify(i === healIndex ? readOnlyPlan() : navigationPlan(c)));
     write(join(fixture, groundings[i]!), JSON.stringify({ seed: c.id }));
   }
@@ -114,7 +116,9 @@ type RunnerCall = { method: string; args: unknown[] };
 type RunnerMethod = (...args: never[]) => unknown;
 type FetchResult = { status: number; ok?: boolean; json: () => Promise<unknown>; text?: () => Promise<string> };
 type Overrides = { runner?: Record<string, RunnerMethod>; runProcess?: (call: ProcessCall) => Promise<ProcessResult> | ProcessResult;
-  fetch?: (url: string, opts: RequestInit) => Promise<FetchResult>; assertPortFree?: RunnerMethod; readPlaywrightVersion?: RunnerMethod };
+  fetch?: (url: string, opts: RequestInit) => Promise<FetchResult>; assertPortFree?: RunnerMethod; readPlaywrightVersion?: RunnerMethod;
+  /** Cases whose plan and grounding exist in the fake fixture; prompts and config are always written. */
+  fixtureCases?: readonly string[] };
 function result(status: number | null = 0, stdout = '', stderr = '', signal: string | null = null): ProcessResult { return { status, stdout, stderr, signal }; }
 function write(path: string, value: string) { fs.mkdirSync(dirname(path), { recursive: true }); fs.writeFileSync(path, value); }
 function snapshot(root: string): Record<string, string> {
@@ -134,7 +138,7 @@ function createFakeDeps(overrides: Overrides = {}) {
   const repoRoot = join(tmpRoot, 'repo'), fixture = join(repoRoot, 'test/verification/memos/fixture');
   const manifest = join(repoRoot, 'pack-manifest.json');
   write(manifest, JSON.stringify({ sha, dirty: false }));
-  writeSuiteFixture(fixture);
+  writeSuiteFixture(fixture, overrides.fixtureCases);
   const stdout: string[] = [], stderr: string[] = [], events: string[] = [];
   const runnerCalls: RunnerCall[] = [], processCalls: ProcessCall[] = [], starts: ContainerSpec[] = [];
   const fetchCalls: { url: string; opts: RequestInit }[] = [], signalCalls: { method: string; name: string; handler: () => void }[] = [];
@@ -683,7 +687,7 @@ describe('parseArgs', () => {
     { argv: ['--published', '0.10.0', '--keep'], expected: { published: '0.10.0', keep: true } },
   ])('TEST-544-1 accepts exact versions and compatible heal options ($argv)', ({ argv, expected }) => {
     expect(parseArgs(argv)).toEqual({ manifest: undefined, ai: undefined, allowDirty: false, keep: false,
-      regenerate: false, clean: false, healCheck: false, published: undefined, ...expected });
+      regenerate: false, clean: false, healCheck: false, published: undefined, cases: caseIds, ...expected });
   });
   it.each([
     ['--heal-check', '--regenerate'], ['--published'], ['--published', ''], ['--published', 'latest'],
@@ -695,7 +699,7 @@ describe('parseArgs', () => {
   ])('TEST-544-1 rejects invalid combinations before any side effect (%s)', async (...argv) => {
     const f = createFakeDeps({});
     expect(await run(f, argv)).toBe(2);
-    expect(f.err()).toContain('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--heal-check] [--regenerate [--ai claude|codex]] | --clean');
+    expect(f.err()).toContain('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--ai claude|codex]] | --clean');
     expect(f.out()).toBe(''); expect(f.runnerCalls).toEqual([]); expect(f.processCalls).toEqual([]);
     expect(f.fetchCalls).toEqual([]); expect(f.roots()).toEqual([]);
   });
@@ -715,7 +719,7 @@ describe('parseArgs', () => {
     { argv: ['--allow-dirty', '--keep', '--regenerate'], expected: { allowDirty: true, keep: true, regenerate: true } },
   ])('TEST-1 accepts every valid argument combination', ({ argv, expected }) => {
     expect(parseArgs(argv)).toEqual({ manifest: undefined, ai: undefined,
-      allowDirty: false, keep: false, regenerate: false, clean: false, healCheck: false, published: undefined, ...expected });
+      allowDirty: false, keep: false, regenerate: false, clean: false, healCheck: false, published: undefined, cases: caseIds, ...expected });
   });
   it.each([
     ['--unknown'], ['--keep', '--keep'], ['--allow-dirty', '--allow-dirty'], ['--manifest'], ['--ai'], ['positional'],
@@ -731,6 +735,193 @@ describe('parseArgs', () => {
     const f: Fake = createFakeDeps(); expect(await run(f, ['--unknown'], 'win32')).toBe(2);
     expect(f.err()).toContain('verify-memos: Windows is not supported'); expect(f.err()).not.toContain('[--manifest');
     expect(f.out()).toBe(''); expect(f.runnerCalls).toEqual([]); expect(f.processCalls).toEqual([]); expect(f.roots()).toEqual([]);
+  });
+});
+
+const selUsage = 'verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--ai claude|codex]] | --clean';
+const [signInId, editId, , , tagId] = caseIds as [string, string, string, string, string];
+const healId = caseIds[healIndex]!;
+const passLine = (tail: string, head = 'PASS') => `verify-memos: ${head} aiCalls=0 sha=${sha.slice(0, 12)} memos=0.31.0${tail}`;
+const without = (ids: readonly string[], drop: string) => ids.filter(id => id !== drop);
+/** Marks cases as known failures on the shared table for one test, restoring it afterwards. */
+async function withMarks(marks: Record<number, unknown>, body: () => Promise<void>) {
+  const table = caseTable as unknown as Record<string, unknown>[];
+  for (const [i, value] of Object.entries(marks)) table[Number(i)]!.knownIssue = value;
+  try { await body(); } finally { for (const i of Object.keys(marks)) delete table[Number(i)]!.knownIssue; }
+}
+function untouched(f: Fake) {
+  expect(f.out()).toBe(''); expect(f.runnerCalls).toEqual([]); expect(f.processCalls).toEqual([]);
+  expect(f.fetchCalls).toEqual([]); expect(f.roots()).toEqual([]);
+}
+
+describe('parseArgs case selection', () => {
+  it('TEST-SEL-1 orders the selection by the case table, not by argument order', () => {
+    expect(parseArgs(['--case', tagId, '--case', signInId]).cases).toEqual([signInId, tagId]);
+  });
+  it('TEST-SEL-2 selects every case without --case', () => {
+    expect(parseArgs([]).cases).toEqual(caseIds);
+  });
+  it.each([
+    [['--case', 'memos-unknown']], [['--case', '']], [['--case', '--keep']], [['--case']], [[`--case=${signInId}`]],
+    [['--case', signInId, '--case', signInId]], [['--clean', '--case', signInId]], [['--case', signInId, '--case', tagId, '--clean']],
+    [['--regenerate', '--case', signInId]], [['--case', signInId, '--regenerate']],
+    [['--heal-check', '--case', signInId]], [['--case', 'positional-extra', signInId]],
+  ])('TEST-SEL-3 rejects invalid selections with the exact usage text and no side effect (%j)', async argv => {
+    const f: Fake = createFakeDeps(); expect(await run(f, argv)).toBe(2);
+    expect(f.err()).toBe(`${selUsage}\n`); untouched(f);
+  });
+  it('TEST-SEL-4 accepts --heal-check only when the selection contains the heal case', async () => {
+    expect(parseArgs(['--heal-check', '--case', healId]).cases).toEqual([healId]);
+    expect(() => parseArgs(['--heal-check', '--case', signInId])).toThrow();
+    const f: Fake = createFakeDeps({ fixtureCases: [healId] });
+    expect(await run(f, ['--heal-check', '--case', healId])).toBe(0);
+  });
+  it.each([['--keep'], ['--allow-dirty'], ['--manifest', 'm.json']])('TEST-SEL-1 combines with %s', (...extra) => {
+    expect(parseArgs([...extra, '--case', signInId]).cases).toEqual([signInId]);
+  });
+  it('TEST-SEL-1 combines with --published', () => {
+    expect(parseArgs(['--published', '0.10.0', '--case', signInId]).cases).toEqual([signInId]);
+  });
+});
+
+describe('main case selection', () => {
+  it('TEST-SEL-5 copies, checks, replays and judges only the selected case', async () => {
+    const f = createFakeDeps({ fixtureCases: [signInId] });
+    expect(await run(f, ['--case', signInId])).toBe(0);
+    const copied = vi.mocked(fs.copyFileSync).mock.calls.map(([from]) => relative(f.fixture, String(from))).filter(p => !p.startsWith('..'));
+    expect(copied).toEqual([files[0], prompts[0], plans[0], groundings[0]]);
+    expectCommand(f.calls('check')[0]!, ['check', '--json', prompt], 120_000);
+    expectCommand(f.calls('replay')[0]!, ['run', '--json', '--no-color', prompt], 120_000);
+    const judge = fullJudges(f); expect(judge).toHaveLength(1);
+    expect(judge[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES).toBe('1');
+    const cwd = f.calls('replay')[0]!.opts.cwd;
+    expect(JSON.parse(judge[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS!)).toEqual([join(cwd, 'tests/ambercast/.runs'), join(cwd, plan), join(cwd, grounding)]);
+  });
+  it('TEST-SEL-6 does not shrink the required set to the fixture files that exist', async () => {
+    const f = createFakeDeps({ fixtureCases: [signInId] });
+    expect(await run(f)).toBe(1); fail(f, 'preflight');
+    expect(last(f)).toContain('missing fixture tests/ambercast/memos-edit-memo.ambercast.plan.json');
+    expect(f.calls('pack')).toEqual([]); expect(f.starts).toEqual([]);
+  });
+  it('TEST-SEL-7 validates the whole case table even for a one-case selection', async () => {
+    const f = createFakeDeps({ fixtureCases: [signInId] });
+    const configPath = join(f.fixture, files[0]), config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    delete config.targets['memos-ja']; write(configPath, JSON.stringify(config));
+    expect(await run(f, ['--case', signInId])).toBe(1); fail(f, 'fixture'); expect(f.starts).toEqual([]);
+  });
+  it('TEST-SEL-8 marks a subset pass as PASS-PARTIAL with the selected ids in table order', async () => {
+    const f = createFakeDeps({ fixtureCases: [signInId, tagId] });
+    expect(await run(f, ['--case', tagId, '--case', signInId])).toBe(0);
+    expect(last(f)).toBe(passLine(` cases=${signInId},${tagId}`, 'PASS-PARTIAL'));
+    expect(f.out()).not.toContain('PASS aiCalls');
+  });
+  it.each([[caseIds.flatMap(id => ['--case', id])], [[]]])('TEST-SEL-9 keeps the whole-set line unchanged (%j)', async argv => {
+    const f = createFakeDeps({}); expect(await run(f, argv)).toBe(0);
+    expect(last(f)).toBe(passLine(''));
+  });
+  it('TEST-SEL-10 combines a selection with --published without packing', async () => {
+    const f = createFakeDeps({ fixtureCases: [signInId] });
+    expect(await run(f, ['--published', '0.10.0', '--case', signInId])).toBe(0);
+    expect(last(f)).toBe(`verify-memos: PASS-PARTIAL aiCalls=0 package=ambercast@0.10.0 memos=0.31.0 cases=${signInId}`);
+    expect(f.calls('pack')).toEqual([]);
+  });
+  it('TEST-SEL-11 runs selection replay, full judge, then the heal protocol on the heal case only', async () => {
+    const f = createFakeDeps({ fixtureCases: [signInId, healId] });
+    expect(await run(f, ['--heal-check', '--case', healId, '--case', signInId])).toBe(0);
+    expect(last(f)).toBe(passLine(` cases=${signInId},${healId} heal=healed healAiCalls=5`, 'PASS-PARTIAL'));
+    const replays = f.calls('replay').map(c => c.argv.slice(4));
+    expect(replays).toEqual([[prompts[0], healPrompt], [healPrompt], [healPrompt], [healPrompt]]);
+    expect(fullJudges(f)[0]!.opts.env.AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES).toBe('2');
+    const order = f.events.filter(e => ['replay', 'judge', 'heal-dry-run', 'heal-apply'].includes(e));
+    expect(order.slice(0, 3)).toEqual(['replay', 'judge', 'replay']);
+    expect(order.indexOf('heal-dry-run')).toBeGreaterThan(2);
+  });
+});
+
+describe('main known failures', () => {
+  const others = without(caseIds, editId);
+  it('TEST-SEL-13 leaves a marked case out of the default selection and names it on the pass line', async () => {
+    await withMarks({ 1: 632 }, async () => {
+      const f = createFakeDeps({ fixtureCases: others });
+      expect(await run(f)).toBe(0);
+      const rest = prompts.filter(p => p !== prompts[1]);
+      expect(f.calls('check')[0]!.argv.slice(3)).toEqual(rest);
+      expect(f.calls('replay')[0]!.argv.slice(4)).toEqual(rest);
+      expect(last(f)).toBe(passLine(` known=${editId}#632`));
+    });
+  });
+  it.each(['.ambercast.plan.json', '.ambercast.grounding.json'])('TEST-SEL-14 fails preflight when a marked case has a fixture (%s)', async suffix => {
+    await withMarks({ 1: 632 }, async () => {
+      const f = createFakeDeps({ fixtureCases: others });
+      write(join(f.fixture, `tests/ambercast/${editId}${suffix}`), '{}');
+      expect(await run(f)).toBe(1); fail(f, 'preflight');
+      expect(last(f)).toContain(`known failure ${editId} (#632) has a fixture; remove knownIssue from CASES`);
+      expect(f.starts).toEqual([]); expect(f.calls('pack')).toEqual([]);
+    });
+  });
+  it('TEST-SEL-15 refuses to select a marked case explicitly', async () => {
+    await withMarks({ 1: 632 }, async () => {
+      const f: Fake = createFakeDeps(); expect(await run(f, ['--case', editId])).toBe(2); untouched(f);
+    });
+  });
+  it.each([
+    { name: 'heal case marked', marks: { 5: 632 } }, { name: 'zero', marks: { 1: 0 } }, { name: 'string', marks: { 1: '632' } },
+    { name: 'fraction', marks: { 1: 1.5 } }, { name: 'every case marked', marks: Object.fromEntries(caseIds.map((_, i) => [i, 632])) },
+  ])('TEST-SEL-16 rejects an invalid mark as a fixture failure before reporting files ($name)', async ({ marks }) => {
+    await withMarks(marks, async () => {
+      const f = createFakeDeps({});
+      expect(await run(f)).toBe(1); fail(f, 'fixture'); expect(f.calls('pack')).toEqual([]); expect(f.starts).toEqual([]);
+    });
+  });
+  it('TEST-SEL-17 shows the mark next to a subset pass', async () => {
+    await withMarks({ 1: 632 }, async () => {
+      const f = createFakeDeps({ fixtureCases: others });
+      expect(await run(f, ['--case', signInId])).toBe(0);
+      expect(last(f)).toBe(passLine(` cases=${signInId} known=${editId}#632`, 'PASS-PARTIAL'));
+    });
+  });
+  it('TEST-SEL-18 regenerates, resolves, replays, judges and publishes only unmarked cases', async () => {
+    await withMarks({ 1: 632 }, async () => {
+      const f = createFakeDeps({ fixtureCases: others }), actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      const renamed: string[] = [];
+      vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+        renamed.push(relative(f.fixture, String(destination))); return actual.renameSync(source, destination);
+      });
+      expect(await run(f, ['--regenerate'])).toBe(0);
+      const rest = prompts.filter(p => p !== prompts[1]);
+      expect(f.calls('generate').flatMap(c => c.argv)).not.toContain(prompts[1]);
+      expect(f.calls('generate')).toHaveLength(3);
+      expectCommand(f.calls('resolve')[0]!, ['run', '--resolve', '--update-cache', '--json', ...rest], 900_000 * 6);
+      expectCommand(f.calls('replay')[0]!, ['run', '--json', '--no-color', ...rest], 120_000 * 6);
+      const judge = fullJudges(f)[0]!;
+      expect(judge.opts.env.AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES).toBe('6');
+      const cwd = f.calls('replay')[0]!.opts.cwd;
+      const keep = (list: string[]) => list.filter((_, i) => i !== 1);
+      expect(JSON.parse(judge.opts.env.AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS!)).toEqual([
+        join(cwd, 'tests/ambercast/.runs'), ...keep(plans).map(p => join(cwd, p)), ...keep(groundings).map(p => join(cwd, p))]);
+      const expected = [files[0], ...keep(plans), ...keep(groundings)];
+      expect(renamed.filter(p => publications.includes(p))).toEqual(expected);
+      expect(f.err()).toContain(`verify-memos: published files: ${expected.join(', ')}`);
+    });
+  });
+  it('TEST-SEL-18 skips generate for a target left with no case', async () => {
+    await withMarks({ 6: 637 }, async () => {
+      const f = createFakeDeps({ fixtureCases: without(caseIds, caseIds[6]!) });
+      expect(await run(f, ['--regenerate'])).toBe(0);
+      expect(f.calls('generate').map(c => c.argv[3])).toEqual(['memos', 'memos-readonly']);
+    });
+  });
+  it('TEST-SEL-18 counts the reduced publication set when the second rename fails', async () => {
+    await withMarks({ 1: 632 }, async () => {
+      const f = createFakeDeps({ fixtureCases: others }), actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      let attempted = 0;
+      vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+        if (publications.some(p => String(destination) === join(f.fixture, p)) && ++attempted === 2) throw new Error('rename failed');
+        return actual.renameSync(source, destination);
+      });
+      expect(await run(f, ['--regenerate'])).toBe(1); fail(f, 'fixture', '0');
+      expect(last(f)).toContain('published files: 1 of 13');
+    });
   });
 });
 

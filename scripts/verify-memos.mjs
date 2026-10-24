@@ -28,6 +28,18 @@ const CONFIG = 'ambercast.config.json';
  * Explicit case membership and fixture paths derived from the same naming
  * convention make missing fixtures detectable instead of silently shrinking
  * coverage through automatic discovery.
+ *
+ * An element may carry `knownIssue`, the number of a product-bug issue that stops
+ * its fixture from being generated. Such a case leaves the default selection
+ * instead of silently disappearing: every passing line names it as `known=<id>#<n>`,
+ * and a fixture that appears for it fails preflight so the mark cannot outlive the
+ * bug. The heal case can never be marked, because the heal protocol depends on it.
+ *
+ * A mark must be a positive safe integer and may not cover every case. Marks are
+ * validated in preflight right after the Docker check and before any file set is
+ * derived, so an invalid mark is reported as a fixture failure ahead of any
+ * missing-file report. The case table itself (targets, heal isolation) is still
+ * validated across every entry regardless of marks or selection.
  */
 export const CASES = Object.freeze([
   { id: 'memos-sign-in-create-memo', target: 'memos' },
@@ -48,8 +60,7 @@ export const HEAL_STEP_ID = undefined;
 const prompt = id => `tests/ambercast/${id}.test.md`;
 const plan = id => `tests/ambercast/${id}.ambercast.plan.json`;
 const grounding = id => `tests/ambercast/${id}.ambercast.grounding.json`;
-const FIXTURE_FILES = [CONFIG, ...CASES.flatMap(c => [prompt(c.id), plan(c.id), grounding(c.id)])];
-const PUBLISH_FILES = [CONFIG, ...CASES.map(c => plan(c.id)), ...CASES.map(c => grounding(c.id))];
+const isMarked = c => c.knownIssue !== undefined;
 const REGENERATE = 'npm run verify:memos -- --regenerate (real AI provider, local only)';
 
 /**
@@ -96,18 +107,36 @@ function assertReadOnlyHealPlan(plan, secretName) {
 /**
  * Parses verification, regeneration or cleanup options without resource creation.
  * @param argv - Arguments excluding the executable and script name.
- * @returns Validated options for verification, regeneration or cleanup.
+ * @returns Validated options for verification, regeneration or cleanup, including
+ * `cases`: the selected case ids in CASES order (every unmarked case without --case).
  * @throws A usage error for unknown/duplicate flags, missing values, positional
- * arguments, invalid providers or incompatible combinations.
+ * arguments, invalid providers, unknown/duplicate/known-failure case ids or
+ * incompatible combinations.
  * @remarks This is the sole owner of argument meaning; pack-install retains
  * responsibility for the tarball's dirty-state policy.
+ *
+ * --case is repeatable (the one flag exempt from the duplicate-flag rule) but
+ * rejects a repeated value. The selection narrows what is replayed and never
+ * widens it, so a missing fixture is never absorbed by shrinking the set on the
+ * caller's behalf: only an explicit --case does that. --heal-check needs the heal
+ * case selected because the heal protocol replays it; --regenerate with --case is
+ * refused because publishing a subset would leave a mixed-generation fixture.
  */
 export function parseArgs(argv) {
   const options = { manifest: undefined, ai: undefined, allowDirty: false, keep: false, regenerate: false, clean: false, healCheck: false, published: undefined };
   const keys = { '--manifest': 'manifest', '--ai': 'ai', '--allow-dirty': 'allowDirty', '--keep': 'keep', '--regenerate': 'regenerate', '--clean': 'clean', '--heal-check': 'healCheck', '--published': 'published' };
   const seen = new Set();
+  const chosen = [];
+  const selectable = CASES.filter(c => !isMarked(c));
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
+    if (flag === '--case') {
+      const value = argv[++i];
+      if (!value || value.startsWith('--') || chosen.includes(value) || !selectable.some(c => c.id === value)) throw new Error(`invalid value: ${flag}`);
+      chosen.push(value);
+      seen.add(flag);
+      continue;
+    }
     if (!Object.hasOwn(keys, flag) || seen.has(flag)) throw new Error(`invalid argument: ${flag}`);
     seen.add(flag);
     if (['--manifest', '--ai', '--published'].includes(flag)) {
@@ -118,11 +147,13 @@ export function parseArgs(argv) {
   }
   if ((options.clean && seen.size !== 1) || (options.ai && !options.regenerate)
     || (options.ai && !['claude', 'codex'].includes(options.ai)) || (options.allowDirty && options.manifest)
-    || (options.healCheck && options.regenerate)
+    || (options.healCheck && options.regenerate) || (chosen.length && options.regenerate)
+    || (options.healCheck && chosen.length && !chosen.includes(HEAL_CASE))
     || (options.published && (options.manifest || options.allowDirty || options.regenerate
       || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?$/.test(options.published)))) {
     throw new Error('incompatible arguments');
   }
+  options.cases = selectable.filter(c => !chosen.length || chosen.includes(c.id)).map(c => c.id);
   return options;
 }
 
@@ -193,7 +224,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   }
   let options;
   try { options = parseArgs(argv); } catch {
-    deps.stderr.write('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--heal-check] [--regenerate [--ai claude|codex]] | --clean\n');
+    deps.stderr.write('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--ai claude|codex]] | --clean\n');
     return 2;
   }
   const abort = new AbortController();
@@ -204,8 +235,15 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   let token, snapshot, originalHealFiles, restoreNeeded = false, restoreAttempted = false, restoreFailed;
   const tokens = new Set();
   let healAiCalls = 0;
-  const allPrompts = CASES.map(c => prompt(c.id));
-  const copyFiles = options.regenerate ? [CONFIG, ...allPrompts] : FIXTURE_FILES;
+  // One selection drives every file set, command and judge input below, so a
+  // stage can never cover a different set of cases than the one the pass line names.
+  // The case table itself is still validated whole (assertCaseTable).
+  const selected = CASES.filter(c => options.cases.includes(c.id));
+  const marked = CASES.filter(isMarked);
+  const allPrompts = selected.map(c => prompt(c.id));
+  const copyFiles = options.regenerate ? [CONFIG, ...allPrompts]
+    : [CONFIG, ...selected.flatMap(c => [prompt(c.id), plan(c.id), grounding(c.id)])];
+  const PUBLISH_FILES = [CONFIG, ...selected.map(c => plan(c.id)), ...selected.map(c => grounding(c.id))];
   const published = [];
   const unconfirmed = new Map(); // pgid -> { stage } for first-stage evidence
   /**
@@ -428,7 +466,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       clock: deps.clock, signal: abort.signal }));
     await step('bootstrap', () => bootstrapAdmin({ fetch: deps.fetch, password, signal: abort.signal }));
   }
-  async function judge(mode, { expectedCases = CASES.length, reportFile = 'report.json', artifactRoots } = {}) {
+  async function judge(mode, { expectedCases = selected.length, reportFile = 'report.json', artifactRoots } = {}) {
     const result = await child(join(deps.repoRoot, 'node_modules/.bin/vitest'),
       ['run', '--config', 'vitest.config.verification.ts', 'test/verification/memos/smoke-judge.verification.test.ts'],
       deps.repoRoot, TIMEOUTS.judge, {
@@ -436,7 +474,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         AMBERCAST_VERIFY_MEMOS_REPORT: join(root.runRoot, reportFile),
         AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES: String(expectedCases),
         AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS: JSON.stringify(artifactRoots ?? [
-          join(root.projectDir, 'tests/ambercast/.runs'), ...CASES.map(c => join(root.projectDir, plan(c.id))), ...CASES.map(c => join(root.projectDir, grounding(c.id))),
+          join(root.projectDir, 'tests/ambercast/.runs'), ...selected.map(c => join(root.projectDir, plan(c.id))), ...selected.map(c => join(root.projectDir, grounding(c.id))),
         ]),
         AMBERCAST_VERIFY_MEMOS_SECRETS: JSON.stringify({ [secretName]: password }),
       });
@@ -449,7 +487,17 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       const counts = await step('preflight', () => reapStale({ runner: staleRunner, tmpRoot: deps.tmpRoot, lockPath }));
       out(`verify-memos: cleaned containers=${counts.containers} dirs=${counts.dirs}\n`);
     } else {
+      await step('fixture', () => {
+        if (marked.some(c => !Number.isSafeInteger(c.knownIssue) || c.knownIssue < 1 || c.id === HEAL_CASE) || marked.length === CASES.length) {
+          throw new Error('invalid knownIssue mark in CASES');
+        }
+      }, false);
       await step('preflight', () => {
+        for (const c of marked) {
+          if ([plan(c.id), grounding(c.id)].some(file => fs.existsSync(join(fixture, file)))) {
+            throw new Error(`known failure ${c.id} (#${c.knownIssue}) has a fixture; remove knownIssue from CASES`);
+          }
+        }
         for (const file of copyFiles) {
           if (!fs.existsSync(join(fixture, file))) {
             throw new Error(`missing fixture ${file}; ${file === CONFIG || allPrompts.includes(file)
@@ -531,10 +579,10 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         // generate runs before any password or container exists:
         // consent needs a real stdin/stderr, and no
         // secret can leak through generate's output at this point.
-        for (const target of new Set(CASES.map(c => c.target))) await step('fixture', async () => {
-          const selected = CASES.filter(c => c.target === target).map(c => prompt(c.id));
-          const result = await child(ambercast(), ['generate', '--target', target, ...selected, ...(options.ai ? ['--ai', options.ai] : [])],
-            root.projectDir, TIMEOUTS.generate * selected.length, {}, {
+        for (const target of new Set(selected.map(c => c.target))) await step('fixture', async () => {
+          const targetPrompts = selected.filter(c => c.target === target).map(c => prompt(c.id));
+          const result = await child(ambercast(), ['generate', '--target', target, ...targetPrompts, ...(options.ai ? ['--ai', options.ai] : [])],
+            root.projectDir, TIMEOUTS.generate * targetPrompts.length, {}, {
               stdio: 'generate', onStderrChunk: chunk => err(chunk),
             });
           requireSuccess(result);
@@ -546,7 +594,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       if (options.regenerate) {
         await step('replay', async () => {
           const result = await child(ambercast(), ['run', '--resolve', '--update-cache', '--json', ...allPrompts,
-            ...(options.ai ? ['--ai', options.ai] : [])], root.projectDir, TIMEOUTS.resolve * CASES.length, secrets(), {
+            ...(options.ai ? ['--ai', options.ai] : [])], root.projectDir, TIMEOUTS.resolve * selected.length, secrets(), {
               stdio: 'resolve', password, onStderrChunk: chunk => err(chunk),
             });
           requireSuccess(result);
@@ -569,7 +617,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         await startInstance();
       }
       await step('replay', async () => {
-        const result = await child(ambercast(), ['run', '--json', '--no-color', ...allPrompts], root.projectDir, TIMEOUTS.replay * CASES.length, secrets());
+        const result = await child(ambercast(), ['run', '--json', '--no-color', ...allPrompts], root.projectDir, TIMEOUTS.replay * selected.length, secrets());
         if (result.status === null) throw new Error(exitReason(result));
         let report;
         try { report = JSON.parse(result.stdout); } catch {
@@ -725,7 +773,12 @@ export async function main(argv, platform = process.platform, deps = createDeps(
     return sigExit ?? 1;
   }
   if (publishAttempted) err(`verify-memos: published files: ${published.join(', ') || 'none'}\n`);
-  if (!options.clean) out(`verify-memos: PASS aiCalls=${aiCalls} ${options.published ? `package=ambercast@${options.published}` : `sha=${manifest.sha.slice(0, 12)}${manifest.dirty ? '-dirty' : ''}`} memos=${MEMOS_VERSION}${options.healCheck ? ` heal=healed healAiCalls=${healAiCalls}` : ''}\n`);
+  // A pass that covers fewer cases than the default selection must not read as a
+  // whole-set pass, and marked cases are named every time because they are never
+  // verified. Order is fixed: cases, known, heal tail.
+  const partial = selected.length !== CASES.length - marked.length;
+  const tail = `${partial ? ` cases=${selected.map(c => c.id).join(',')}` : ''}${marked.length ? ` known=${marked.map(c => `${c.id}#${c.knownIssue}`).join(',')}` : ''}`;
+  if (!options.clean) out(`verify-memos: ${partial ? 'PASS-PARTIAL' : 'PASS'} aiCalls=${aiCalls} ${options.published ? `package=ambercast@${options.published}` : `sha=${manifest.sha.slice(0, 12)}${manifest.dirty ? '-dirty' : ''}`} memos=${MEMOS_VERSION}${tail}${options.healCheck ? ` heal=healed healAiCalls=${healAiCalls}` : ''}\n`);
   return 0;
 }
 

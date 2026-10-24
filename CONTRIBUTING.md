@@ -48,7 +48,9 @@ The middle verification layer, a pinned Memos instance driven by `npm run verify
 2. If either run fails, do not merge the release PR. Fix the cause through the normal issue flow first.
 3. After npm publication, run `npm run verify:memos -- --published <version>` against the published package and confirm it ends with `PASS`.
 
-The middle-layer scenario fixture is generated in #624; until it is committed, the runs in steps 1 and 3 cannot pass, so step 2 does not block the release; record in the release PR that those runs were not runnable.
+`--case <id>` (repeatable) replays only the named cases, still with zero AI calls, and the final line then starts with `PASS-PARTIAL` and ends with `cases=<id>,<id>`. A `PASS-PARTIAL` line is not a whole-set pass. A trailing `known=<id>#<n>` lists a case that is left out because a product bug (issue `#<n>`) stops its fixture from being generated; it is never verified, and the release PR must name it with its issue.
+
+The middle-layer scenario fixture is generated in #624. Until the whole fixture is committed, run the one-case smoke in place of steps 1 and 3: `npm run verify:memos -- --case memos-sign-in-create-memo` before merging, and `npm run verify:memos -- --published <version> --case memos-sign-in-create-memo` after publication. Paste each `PASS-PARTIAL` line into the release PR and list the case ids that were not run. This is an interim smoke, not a complete pre-release verification. If the smoke fails, do not merge the release PR, as in step 2. Do not run `--heal-check` until the whole fixture is committed: its heal case has no fixture yet and the settings-entry step id is unset.
 
 If `npm run verify:memos` reports stale plans, regenerate the fixture with `npm run verify:memos -- --regenerate` in a normal issue PR before the release. It calls a real AI provider and may ask for secret consent, so run it locally.
 

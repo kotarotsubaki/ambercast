@@ -10,4 +10,5 @@
 - Wire Claude Code hooks through `settings.json`.
 - Store per-issue state, plans, and review artifacts in the gitignored `impl/` directory.
 - Store personal orchestration state in the gitignored `logs/` and `todos/` directories.
+- Use `agents/haiku-worker.md` for judgment-free chores delegated to a Haiku subagent.
 - Use `../.agents/skills/` for repo-scoped Agent Skills, including gh-stack and Codex's Ambercast implementation adapter.

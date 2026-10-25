@@ -361,6 +361,16 @@ describe('element binding provider schema', () => {
       expect(typedJsonSchema(response)).toHaveProperty('type', 'object');
     }
   });
+
+  it('pins the root $schema, the sole proposal property, and the found role and name constraints', () => {
+    const schema = typedJsonSchema(ElementBindingProposalResponse);
+    const root = schema as unknown as { $schema: string; properties: { proposal: { anyOf: { properties: { outcome: { const: string }; role?: unknown; name?: unknown } }[] } } };
+    const found = root.properties.proposal.anyOf.find((branch) => branch.properties.outcome.const === 'found');
+    expect(root.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
+    expect(Object.keys(root.properties)).toEqual(['proposal']);
+    expect(found?.properties.role).toStrictEqual({ type: 'string', minLength: 1 });
+    expect(found?.properties.name).toStrictEqual({ type: 'string' });
+  });
 });
 
 describe('TargetDefinition', () => {

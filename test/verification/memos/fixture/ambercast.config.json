@@ -5,6 +5,15 @@
     "memos": {
       "baseUrl": "http://127.0.0.1:5230",
       "locale": "en-US"
+    },
+    "memos-readonly": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "en-US",
+      "healReplayIsolation": "idempotent"
+    },
+    "memos-ja": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "ja-JP"
     }
   },
   "defaultTarget": "memos",
@@ -12,5 +21,8 @@
     "allow": [
       "password"
     ]
+  },
+  "heal": {
+    "maxStepRepairs": 2
   }
 }

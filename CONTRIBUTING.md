@@ -38,12 +38,19 @@ checks the archive and installed package against this manifest. It changes the
 target project's `package.json` and lockfile, including on failure; do not
 commit those changes.
 
-Use this flow to try an unpublished upstream build in the dogfood downstream
-project. Do not commit a development build's generated `plan` or `grounding`
-there. For a release check, pack the release commit and install it into the
-mid-layer verification target before the release PR, then verify that target
-again against the published version after publication. The mid-layer procedure
-is tracked in issue #544.
+Use this flow to try an unpublished upstream build in the dogfood downstream project. Do not commit a development build's generated `plan` or `grounding` there. For a release, follow the Release checklist below; before merging the release PR, also follow the compatibility-table/glossary/spec-overview update procedure in AGENTS.md's Branching & releases section.
+
+## Release checklist
+
+The middle verification layer, a pinned Memos instance driven by `npm run verify:memos`, is the pre-release check. Dogfooding in a downstream product (the upper layer) is optional and never blocks a release.
+
+1. Before merging the release PR, check out the release PR head and run `npm run verify:memos` and then `npm run verify:memos -- --heal-check`. Both need Docker and a local Chromium; `--heal-check` also calls Claude through the local Claude Code CLI. Each run must end with a `PASS` line. Paste both final lines, including `sha=`, into the release PR.
+2. If either run fails, do not merge the release PR. Fix the cause through the normal issue flow first.
+3. After npm publication, run `npm run verify:memos -- --published <version>` against the published package and confirm it ends with `PASS`.
+
+The middle-layer scenario fixture is generated in #624; until it is committed, the runs in steps 1 and 3 cannot pass, so step 2 does not block the release; record in the release PR that those runs were not runnable.
+
+If `npm run verify:memos` reports stale plans, regenerate the fixture with `npm run verify:memos -- --regenerate` in a normal issue PR before the release. It calls a real AI provider and may ask for secret consent, so run it locally.
 
 ## How to contribute
 
@@ -57,6 +64,9 @@ is tracked in issue #544.
    release-please — a malformed title breaks versioning, so CI enforces it.
 4. All review conversations must be resolved before merge; CodeRabbit reviews
    every PR automatically.
+5. If your change fixes a `generate` or `heal` defect that a real provider
+   response triggered, add that response to the provider-output corpus as
+   described in `AGENTS.md` (Testing conventions).
 
 ## About AGENTS.md and .claude/
 

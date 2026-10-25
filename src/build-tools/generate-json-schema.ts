@@ -19,6 +19,8 @@
  *
  * Config defaults become dotted paths for lookup while retaining arrays,
  * `null`, primitives, and empty objects as their original leaf values.
+ * The writer also keeps a private family-count manifest beside these artifacts,
+ * separate from the public `capabilities.json` flat code list.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,7 +33,7 @@ import { EXIT_CODES } from '#core/errors/exit-codes.js';
 import { getGroundingJsonSchema, getPlanJsonSchema } from '#core/ir/json-schema.js';
 import { FINGERPRINT_ALGORITHM, GROUNDING_SCHEMA_VERSION, PLAN_SCHEMA_VERSION } from '#core/ir/schema.js';
 import { getReportJsonSchema } from '#report/json-schema.js';
-import { ReportErrorCode, REPORT_SCHEMA_VERSION } from '#report/schema.js';
+import { ENVIRONMENT_REPORT_ERROR_CODES, ReportErrorCode, REPORT_SCHEMA_VERSION, USAGE_REPORT_ERROR_CODES } from '#report/schema.js';
 
 function isNonEmptyPlainObject(value: unknown): value is object {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length > 0;
@@ -61,6 +63,10 @@ export function flattenDefaults(value: object): Record<string, unknown> {
  *
  * Writer injection keeps byte-level output tests independent of the
  * filesystem while direct execution supplies the synchronous file writer.
+ * The writer derives the private error-family manifest from the schema arrays
+ * by default; `errorFamilies` lets tests substitute a mutated copy to prove
+ * the website detects drift without changing the report schema.
+ * Direct execution omits that override and therefore uses the live arrays.
  *
  * @param deps - The output directory and synchronous writer supplied by the
  * build entry point or a test double.
@@ -68,7 +74,9 @@ export function flattenDefaults(value: object): Record<string, unknown> {
 export function writeGeneratedArtifacts(deps: {
   writeFile: (path: string, content: string) => void;
   outDir: string;
+  errorFamilies?: { usage: readonly string[]; environment: readonly string[] };
 }): void {
+  const errorFamilies = deps.errorFamilies ?? { usage: USAGE_REPORT_ERROR_CODES, environment: ENVIRONMENT_REPORT_ERROR_CODES };
   deps.writeFile(join(deps.outDir, 'schema', 'plan.schema.json'), JSON.stringify(getPlanJsonSchema()));
   deps.writeFile(join(deps.outDir, 'schema', 'grounding.schema.json'), JSON.stringify(getGroundingJsonSchema()));
   deps.writeFile(join(deps.outDir, 'schema', 'config.schema.json'), JSON.stringify(getConfigJsonSchema()));
@@ -85,6 +93,10 @@ export function writeGeneratedArtifacts(deps: {
     fingerprintAlgorithm: FINGERPRINT_ALGORITHM,
     exitCodes: EXIT_CODES,
     errorCodes: ReportErrorCode.options,
+  }));
+  deps.writeFile(join(deps.outDir, 'manifest', 'report-error-families.json'), JSON.stringify({
+    usage: errorFamilies.usage,
+    environment: errorFamilies.environment,
   }));
   deps.writeFile(join(deps.outDir, 'manifest', 'config-defaults.json'), JSON.stringify(flattenDefaults(DEFAULT_RAW_CONFIG)));
 }

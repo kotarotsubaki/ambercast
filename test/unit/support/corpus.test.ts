@@ -28,9 +28,10 @@ function problems(file: string, expected: Array<{ location: string; reason: RegE
     expect(message).not.toBe('loadCorpus returned without reporting corpus problems');
     expect(message).toContain(file);
     expect(message.split('\n')[0]).toBe(`loadCorpus: ${file}: ${expected.length} problem(s)`);
+    expect(message.split('\n').filter((line) => line.startsWith('- '))).toHaveLength(expected.length);
     let previous = message.indexOf('\n');
     for (const { location, reason } of expected) {
-      const next = message.indexOf(location, previous + 1);
+      const next = message.indexOf(`- ${location}: `, previous + 1);
       expect(next).toBeGreaterThan(previous);
       const line = message.slice(next, message.indexOf('\n', next) < 0 ? undefined : message.indexOf('\n', next));
       expect(line).toMatch(reason);
@@ -175,6 +176,41 @@ describe('loadCorpus invalid inputs (TEST-A12, SPEC-A11)', () => {
       expect(error).toBeInstanceOf(Error);
       expect(error).not.toBeInstanceOf(TypeError);
       expect((error as Error).message).toMatch(/^loadCorpus: invalid input:/);
+    }
+  });
+});
+
+describe('loadCorpus formatted row problems', () => {
+  it('TEST-FA1 renders two row problems with indented multiline schema details', () => {
+    const file = temporaryFile(`${row('bad')}\n${row('also-bad', { note: '' })}`);
+    const throwing = { value: z.string().transform((value) => {
+      if (value === 'bad') z.object({ first: z.number(), second: z.boolean() }).parse({ first: value, second: value });
+      return value;
+    }), expected: z.string() };
+    try { loadCorpus(file, throwing); throw new Error('expected a corpus rejection'); }
+    catch (error) {
+      expect((error as Error).message).toBe(`loadCorpus: ${file}: 2 problem(s)\n- line 1: value schema threw: [\n    {\n      "expected": "number",\n      "code": "invalid_type",\n      "path": [\n        "first"\n      ],\n      "message": "Invalid input: expected number, received string"\n    },\n    {\n      "expected": "boolean",\n      "code": "invalid_type",\n      "path": [\n        "second"\n      ],\n      "message": "Invalid input: expected boolean, received string"\n    }\n  ]\n- line 2: 'note' must be a non-blank string`);
+    }
+  });
+
+  it('TEST-FA1 indents a schema detail that starts with a dash', () => {
+    const file = temporaryFile(row('bad'));
+    const throwing = { value: z.string().transform(() => { throw new Error('boom\n- detail'); }), expected: z.string() };
+    try { loadCorpus(file, throwing); throw new Error('expected a corpus rejection'); }
+    catch (error) {
+      const message = (error as Error).message;
+      expect(message).toBe(`loadCorpus: ${file}: 1 problem(s)\n- line 1: value schema threw: boom\n  - detail`);
+      expect(message.split('\n').filter((line) => line.startsWith('- '))).toHaveLength(1);
+    }
+  });
+
+  it('TEST-FA1 indents a newline in an extra key name', () => {
+    const file = temporaryFile(row('a', { 'x\n- injected': true }));
+    try { loadCorpus(file, schemas); throw new Error('expected a corpus rejection'); }
+    catch (error) {
+      const message = (error as Error).message;
+      expect(message).toBe(`loadCorpus: ${file}: 1 problem(s)\n- line 1: has extra key(s): x\n  - injected`);
+      expect(message.split('\n').filter((line) => line.startsWith('- '))).toHaveLength(1);
     }
   });
 });

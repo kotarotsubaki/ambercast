@@ -11,10 +11,10 @@ MCP サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`�
 
 | ツール | 対応 CLI | アノテーション | `isError: true` | `isError: false` の負の結果 |
 | --- | --- | --- | --- | --- |
-| `ambercast_generate` | generate | false / false / true（弱）/ false | exit 2・3 | exit 1（strict 曖昧）、exit 5 |
+| `ambercast_generate` | generate | false / false / true（弱）/ false | exit 2（`PROMPT_AMBIGUOUS` 含む）・3 | exit 5 |
 | `ambercast_run` | run | false / false / false / true | exit 2・3・4（MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED） | exit 1（assertion red）、exit 5 |
 | `ambercast_check` | check | true / false / true / false | exit 2・3 | exit 4（stale は results[].status の正常成果）、exit 5 |
-| `ambercast_heal` | heal | false / true / false / true | exit 2（CI 拒否含む）・3・4、`HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED` | exit 1（未解決・拒否）、exit 5 |
+| `ambercast_heal` | heal | false / true / false / true | exit 2（CI 拒否と `PROMPT_AMBIGUOUS` を含む）・3・4、`HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED` | exit 1（未解決・拒否）、exit 5 |
 | `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`、failed 時の `JOB_FAILED`、結果のある completed/cancelled は元ツールの写像 | 非終端 record・一覧・queued cancel record |
 | `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
 
@@ -27,7 +27,7 @@ MCP サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`�
 | 範囲 | プロパティと既定値 |
 | --- | --- |
 | 共通 | `files?: string[]`（省略と `[]` はともに config discovery、相対パスは session root 基準）、`allowEmpty?: boolean`（false） |
-| `ambercast_generate` | `target?: string`（ジェネレーターが利用できる Target 定義を制限する）、`strict?: boolean`（false）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
+| `ambercast_generate` | `target?: string`（ジェネレーターが利用できる Target 定義を制限する）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_run` | `grep?: string`（有効な正規表現）、`resolve?: boolean`（false）、`updateCache?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_check` | 共通入力のみ |
 | `ambercast_heal` | `dryRun?: boolean`（true）、`applyToken?: string`、`ai?: 'claude' \| 'codex'` |

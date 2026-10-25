@@ -62,17 +62,6 @@
       },
       "flags": [
         {
-          "name": "strict",
-          "alias": null,
-          "value": null,
-          "hidden": false,
-          "acceptedValues": null,
-          "shownValue": null,
-          "effect": "strict generation policy",
-          "default": "false",
-          "lineBreakAfter": false
-        },
-        {
           "name": "force",
           "alias": null,
           "value": null,

@@ -144,7 +144,7 @@ function coveredTrace(overrides: Partial<TraceRecord & { verificationCoverage: R
 
 function duplicateReaderFailureGroundingRaw(plan: PlanDocument = coveredPlan()): string {
   const deepButValidJson = `${'['.repeat(15_000)}0${']'.repeat(15_000)}`;
-  return `{"entries":{},"readerStress":${deepButValidJson},"planDigest":"${computePlanDigest(plan)}","schemaVersion":3}`;
+  return `{"entries":{},"readerStress":${deepButValidJson},"planDigest":"${computePlanDigest(plan)}","schemaVersion":4}`;
 }
 
 async function arrangeArtifacts(
@@ -156,7 +156,7 @@ async function arrangeArtifacts(
 ): Promise<void> {
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     planDigest: computePlanDigest(plan),
     entries: {
       ...additionalEntries,
@@ -183,7 +183,7 @@ async function arrangeRawGrounding(
   await storage.writeText(
     layout.groundingPathFor(TEST_PATH),
     options.raw ?? toCanonicalArtifactText({
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: options.planDigest ?? computePlanDigest(plan),
       entries,
     } as unknown as JsonValueT),
@@ -828,7 +828,7 @@ describe('run instruction coverage trust boundary', () => {
       const covered = JSON.stringify(coveredTrace());
       const legacy = JSON.stringify({ events: [], verification: [READY_ASSERTION] });
       const planDigest = computePlanDigest(coveredPlan());
-      const raw = `{"entries":{${entriesBody(covered, legacy)}},"planDigest":"${planDigest}","schemaVersion":3}`;
+      const raw = `{"entries":{${entriesBody(covered, legacy)}},"planDigest":"${planDigest}","schemaVersion":4}`;
       await arrangeRawGrounding(recording.storage, {}, { raw });
       recording.resetMutations();
       const arranged = scenario(recording);
@@ -861,7 +861,7 @@ describe('run instruction coverage trust boundary', () => {
         'reach-dashboard': { kind: 'ai', trace: coveredTrace() },
       });
       const planDigest = computePlanDigest(coveredPlan());
-      const raw = `{"entries":${coveredEntries},"entries":${laterEntries},"planDigest":"${planDigest}","schemaVersion":3}`;
+      const raw = `{"entries":${coveredEntries},"entries":${laterEntries},"planDigest":"${planDigest}","schemaVersion":4}`;
       await arrangeRawGrounding(recording.storage, {}, { raw });
       recording.resetMutations();
       const arranged = scenario(recording);

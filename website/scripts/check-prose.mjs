@@ -218,11 +218,11 @@ export async function checkProse({ docsRoot, configPath, report, runners }) {
         for (const block of textBlocks) {
           if (block.nodeType === 'heading') continue;
           let findings;
-          try { findings = await runners.zhlint(block.joinedText); }
+          try { findings = await runners.zhlint(block.zhlintText); }
           catch (error) { throw tagged('tool-failure', error.message); }
           for (const finding of findings) {
             violations.push({ check: 'prose', locale, page: slug,
-              line: block.segments[0]?.line ?? null, rule: 'zhlint', severity: 'error',
+              line: block.startLine ?? null, rule: 'zhlint', severity: 'error',
               expected: '', actual: finding.message });
           }
         }

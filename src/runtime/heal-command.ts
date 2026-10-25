@@ -377,6 +377,7 @@ function settleHealOutcome(
   }
 
   const commitErrors: Array<HealOutcome['errors'][number]> = [];
+  // Warnings describe an accepted measured candidate, not persistence authorization.
   const results = outcome.results.map((result) => {
     const settlement = settlementsByCaseId.get(result.id);
     switch (result.repairOutcome) {
@@ -457,7 +458,8 @@ function settleHealOutcome(
             return unexpected(`unknown confirmation outcome: ${String(confirmation)}`);
         }
       default:
-        return unexpected(`unknown repair outcome: ${String(result.repairOutcome)}`);
+        // External input can still carry a repair outcome outside the declared union.
+        return unexpected(`unknown repair outcome: ${String((result as { readonly repairOutcome: unknown }).repairOutcome)}`);
     }
   });
 

@@ -24,6 +24,7 @@ import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-e
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { AmbercastError, type AmbercastError as AmbercastErrorType, type ErrorKind } from '#core/errors/types.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { dropNavigateConfirms } from '#core/ir/confirms-validation.js';
 import { computePlanDigest } from '#core/ir/digest.js';
@@ -54,7 +55,7 @@ import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink } from '#ports/system.js';
 import { REPORT_ERROR_DETAILS } from '#report/error-mapping.js';
 import { AiResponseIssue, CONFIRMS_ISSUE_CODES } from '#report/schema.js';
-import type { AiResponseIssueCode, AiResponseIssuePath, ReportErrorCode } from '#report/schema.js';
+import type { AiResponseIssueCode, AiResponseIssuePath, GeneratorAssumptionWarning, ReportErrorCode } from '#report/schema.js';
 import { REDACTED_ISSUE_PATH_SEGMENT, redactDynamicPathSegments } from '#core/ai/response-issue-path.js';
 import {
   assertNoLiteralSecrets,
@@ -188,22 +189,37 @@ type PrepareInstructionCoveredStepsResult =
   | { readonly success: true; readonly data: InstructionAttributedSteps }
   | { readonly success: false; readonly issues: readonly ((InstructionCoverageIssue | ElementIntentIssue | TextEqualsSelfQuoteIssue) & { readonly stepId: string })[] };
 
+/**
+ * This module's own closed set of self-quote issue codes (currently one
+ * member), proven a subset of `AiResponseIssueCode` by an independent
+ * reverse tripwire further below. Deriving this type *from* the report
+ * vocabulary with `Extract<AiResponseIssueCode, '...'>` instead would make
+ * that proof vacuous for the same reason `SecretNamingIssueCode` in
+ * secret-naming.ts documents: a type derived from the report vocabulary is
+ * trivially a subset of itself even after the literal is removed from that
+ * vocabulary (#492).
+ */
+export type TextEqualsSelfQuoteIssueCode = 'text-equals-self-quote';
+
 /** Retryable refusal when one assertion uses its target quote as its expected value. */
 type TextEqualsSelfQuoteIssue = {
-  readonly code: Extract<AiResponseIssueCode, 'text-equals-self-quote'>;
+  readonly code: TextEqualsSelfQuoteIssueCode;
   readonly path: readonly (string | number)[];
   readonly message: string;
 };
 
-// Fails to compile if 'text-equals-self-quote' is ever removed from or renamed
-// away in the report vocabulary, since Extract would then resolve to never and
-// no value could satisfy TextEqualsSelfQuoteIssue['code'].
-const _selfQuoteCodeKnownToReport: TextEqualsSelfQuoteIssue['code'] = 'text-equals-self-quote';
-void _selfQuoteCodeKnownToReport;
+// Fails to compile if TextEqualsSelfQuoteIssueCode ever gains a member the
+// report vocabulary does not know about. This check starts from this
+// module's own union rather than from AiResponseIssueCode — see
+// TextEqualsSelfQuoteIssueCode's own doc comment above for why that
+// direction matters (#492).
+const _selfQuoteCodeReverseTripwire: Record<Exclude<TextEqualsSelfQuoteIssueCode, AiResponseIssueCode>, never> = {};
+void _selfQuoteCodeReverseTripwire;
 
 /** Non-fatal report warning for an action with no confirming step. */
 type ActionUnconfirmedWarning = { readonly kind: 'action-unconfirmed'; readonly stepId: StepId };
-type GenerateWarning = SecretWarning | ActionUnconfirmedWarning;
+// Unstated dependencies are report-only evidence, not generation failures.
+type GenerateWarning = SecretWarning | ActionUnconfirmedWarning | GeneratorAssumptionWarning;
 
 /** Retains the generated step identity when element intent cannot be attributed. */
 class ElementIntentAttributionError extends Error {
@@ -442,9 +458,6 @@ export interface GenerateOptions {
   /** Literal prompt paths, or an empty list to use configured discovery. */
   readonly files: readonly string[];
 
-  /** Whether non-empty ambiguities escalate after generation. */
-  readonly strict: boolean;
-
   /** Whether a fresh existing plan still regenerates. */
   readonly force: boolean;
 
@@ -585,7 +598,7 @@ export interface GenerateFileOutcome {
   /** Prepared final plan returned only when an internal caller forbids settlement. */
   readonly plan?: PlanDocumentType;
 
-  /** Provider ambiguities retained only for generated or previewed plans. */
+  /** Always empty for generated or would-generate results; retained for report compatibility. */
   readonly ambiguities?: readonly JsonValueT[];
 
   /** Classified per-file failure retained only for a failed result. */
@@ -643,9 +656,9 @@ type PreparedCandidate = {
   readonly plan: PlanDocumentType;
   /** Secret naming outcomes used to compute the batch-wide unmet set. */
   readonly uses: readonly GenerateSecretOutcome[];
-  /** Non-fatal naming diagnostics retained through reporting. */
+  /** Non-fatal diagnostics retained through consent and reporting. */
   readonly warnings: readonly GenerateWarning[];
-  /** Provider ambiguities retained for later strict-exit evaluation. */
+  /** Always empty for a prepared candidate; retained for report compatibility. */
   readonly ambiguities: readonly JsonValueT[];
   /** Whether the final plan required generation or was already fresh. */
   readonly origin: 'generated' | 'fresh';
@@ -899,12 +912,15 @@ function finalSecretRows(
 }
 
 function finalWarnings(candidate: PreparedCandidate, plan: PlanDocumentType): GenerateWarning[] {
+  // Renaming secrets preserves assumption order and duplicates independently
+  // of the secret-warning comparator and recomputed action evidence.
   return [
     ...([
-      ...existingPlanWarnings(plan).filter((warning) => warning.kind !== 'action-unconfirmed'),
-      ...candidate.warnings.filter((warning) => warning.kind !== 'secret-name-reused-across-targets' && warning.kind !== 'action-unconfirmed'),
-    ].sort((left, right) => compareSecretWarnings(left as unknown as SecretWarning, right as unknown as SecretWarning))),
+      ...existingPlanWarnings(plan).filter((warning) => warning.kind !== 'action-unconfirmed' && warning.kind !== 'generator-assumption'),
+      ...candidate.warnings.filter((warning) => warning.kind !== 'secret-name-reused-across-targets' && warning.kind !== 'action-unconfirmed' && warning.kind !== 'generator-assumption'),
+    ].sort(compareSecretWarnings)),
     ...actionUnconfirmedWarnings(plan),
+    ...candidate.warnings.filter((warning) => warning.kind === 'generator-assumption'),
   ];
 }
 
@@ -1153,11 +1169,13 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
           const deadline = composeAiDeadline(deps.signal, deps.config.ai.timeoutMs);
           // In v4 context targets include every allowed Target's surface,
           // baseUrl, and optional description; defaultTarget is separate and
-          // omitted when --target restricts the set. The one-Target prompt
-          // requires the provider to assign that name to every step.
+          // omitted when --target restricts the set. Assumptions reach reports
+          // rather than the secret-reference substitution path, so the provider must omit both
+          // secret values and references there. This guidance is advisory;
+          // generate remains the authoritative owner of response classification.
           const targetInstruction = allowedTargetNames.length === 1
-            ? `Assign target: ${allowedTargetNames[0]} to every step. Do not report target ambiguity.`
-            : 'Assign a target name to every step using the prompt and context.targets. If a step does not identify a target, use context.defaultTarget when provided; otherwise list that step in ambiguities.';
+            ? `Assign target: ${allowedTargetNames[0]} to every step. Leave ambiguities empty. In assumptions, list each assumption the plan depends on that the prompt does not state, such as an inferred page path or URL. Never put secret values or secret references in assumptions.`
+            : 'Assign a target name to every step using the prompt and context.targets. If a step does not identify a target, use context.defaultTarget when provided. List a step in ambiguities only when its target still cannot be determined; the steps may then be empty. In assumptions, list each other assumption the plan depends on that the prompt does not state, such as an inferred page path or URL. Never put secret values or secret references in assumptions.';
           const request = {
             prompt: buildGeneratorTask(`${GENERATE_PLAN_TASK_INSTRUCTION} ${targetInstruction}`),
             responseSchema: GENERATED_PLAN_RESPONSE_SCHEMA,
@@ -1192,10 +1210,12 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
 
           // Parsed-value traversal keeps dynamic provider data non-disclosive even
           // where generated-schema structure cannot identify the true container.
-          // V4 validates the required step target and membership in the
-          // offered set before inspecting ambiguities. Missing or foreign
-          // names are AI response errors even for a one-Target request; the
-          // use case never supplies a missing name on the provider's behalf.
+          // Schema parsing comes first because the ambiguity and
+          // assumption checks read typed fields. Classification then precedes
+          // membership: an ambiguous response can legitimately carry steps
+          // whose target is undetermined, and a membership error would mask
+          // the more informative PROMPT_AMBIGUOUS. Generate never supplies a
+          // missing target on the provider's behalf.
           const parsedResponse = GeneratedPlanResponseForPolicy.safeParse(response.data);
           if (!parsedResponse.success) {
             return outcomeForError(new AiResponseInvalidError(
@@ -1208,6 +1228,43 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
                 })),
               },
             ));
+          }
+          // Generate owns blank removal; report validation is defensive.
+          // Nonblank messages retain their original whitespace.
+          const assumptions = (parsedResponse.data.assumptions ?? []).filter((text) => text.trim() !== '');
+          const ambiguities = parsedResponse.data.ambiguities;
+          // Array inspection preserves indexed secret-rejection diagnostics.
+          try {
+            assertNoLiteralSecrets(ambiguities);
+          } catch (error) {
+            return outcomeForError(fileFailure(error, 'The generated ambiguities could not be inspected.'));
+          }
+          // Dependencies are non-fatal: only rejected items are replaced, so
+          // neighboring messages and provider order survive secret inspection.
+          for (const [index, item] of assumptions.entries()) {
+            try {
+              assertNoLiteralSecrets(item);
+            } catch (error) {
+              if (error instanceof SecretLiteralRejectedError) {
+                assumptions[index] = 'An assumption was omitted because it looked like a secret.';
+              } else {
+                return outcomeForError(fileFailure(error, 'The generated assumptions could not be inspected.'));
+              }
+            }
+          }
+          // The single-target issue path is a live failure-classification
+          // contract. Multi-target diagnostics expose only the ambiguity count.
+          if (ambiguities.length > 0) {
+            if (allowedTargetNames.length === 1) {
+              return outcomeForError(new AiResponseInvalidError(
+                'The AI provider response reported target ambiguities for a single-target request.',
+                { raw: response.raw, issues: [{ code: 'schema-mismatch', path: ['ambiguities'] }] },
+              ));
+            }
+            return { kind: 'terminal', error: new PromptAmbiguousError(
+              'The generated plan has unresolved target ambiguities.',
+              ambiguities.length,
+            ) };
           }
           if (parsedResponse.data.steps.some((step) => !Object.hasOwn(resolvedTargets, step.target))) {
             return outcomeForError(new AiResponseInvalidError(
@@ -1332,12 +1389,6 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             return outcomeForError(fileFailure(error, 'The generated plan could not be inspected.'));
           }
 
-          try {
-            assertNoLiteralSecrets(response.data.ambiguities);
-          } catch (error) {
-            return outcomeForError(fileFailure(error, 'The generated ambiguities could not be inspected.'));
-          }
-
           const secrets = secretRowsForPlan(parsedPlan.data, secretAllow, named.uses);
           const projection = projectAllowedNames(secretAllow);
           const secretWarnings = [
@@ -1345,20 +1396,20 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             ...targetChangeWarnings(forcedPreviousPlan, parsedPlan.data),
             ...(projection.dropped === 0 ? [] : [{ kind: 'allowed-names-truncated' as const, kept: projection.kept, dropped: projection.dropped }]),
           ].sort(compareSecretWarnings);
+          // Assumptions belong only to the successful attempt's report, never
+          // to persisted plans or later skipped-fresh results.
           const warnings: GenerateWarning[] = [
             ...secretWarnings,
             ...actionUnconfirmedWarnings(parsedPlan.data),
+            ...assumptions.map((message) => ({ kind: 'generator-assumption' as const, message })),
           ];
 
-          if (response.data.ambiguities.length > 0) {
-            return { kind: 'terminal', error: new (class extends AmbercastError {
-              readonly kind = 'assertion-failed' as const;
-            })('The generated plan has unresolved target ambiguities.') };
-          }
+          // Success rows keep ambiguities empty for report
+          // compatibility; unresolved target assignment cannot reach either row.
           if (options.dryRun) {
             return {
               kind: 'success',
-              outcome: { file, status: 'would-generate', planFile: planPath, ambiguities: response.data.ambiguities, secrets, ...(warnings.length === 0 ? {} : { warnings }) },
+              outcome: { file, status: 'would-generate', planFile: planPath, ambiguities: [], secrets, ...(warnings.length === 0 ? {} : { warnings }) },
             };
           }
 
@@ -1367,7 +1418,7 @@ async function generatePreparedOccurrence(deps: GenerateDeps & { readonly stageT
             await deps.storage.writeText(groundingPath, asArtifactText(emptyGrounding(parsedPlan.data) as unknown as JsonValueT));
             return {
               kind: 'success',
-              outcome: { file, status: 'generated', planFile: planPath, ambiguities: response.data.ambiguities, secrets, ...(warnings.length === 0 ? {} : { warnings }) },
+              outcome: { file, status: 'generated', planFile: planPath, ambiguities: [], secrets, ...(warnings.length === 0 ? {} : { warnings }) },
             };
           } catch (error) {
             return outcomeForError(fsIoError('The generated artifacts could not be written.', error));

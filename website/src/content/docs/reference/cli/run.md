@@ -3,7 +3,7 @@ title: ambercast run
 description: Reference for the ambercast run command, covering CLI flags, replay paths, explicit AI resolution, grounding write-back, and report persistence.
 ---
 
-`ambercast run` executes test prompts against target environments, managing deterministic replay and run writes. Replay makes zero AI calls by default: a grounding miss fails closed as `grounding-unresolved` with exit code 4 and a hint to use `--resolve`. Pass `--resolve` to opt into live AI resolution for misses.
+`ambercast run` executes test prompts against target environments. It manages deterministic replay and run writes. Replay makes zero AI calls by default: a grounding miss fails closed as `grounding-unresolved` with exit code 4 and a hint to use `--resolve`. Pass `--resolve` to opt into live AI resolution for misses.
 
 ## Flags {#flags}
 
@@ -21,6 +21,8 @@ description: Reference for the ambercast run command, covering CLI flags, replay
 | --json | boolean | JSON envelope | false |
 | --no-color | boolean | disable ANSI | false |
 
+See [Resolve missing grounding](#resolve) for `--resolve` and `--ai`, [Grounding write-back](#grounding-write-back) for `--update-cache`, and the next section for when `--stale=regenerate` is rejected.
+
 <a id="replay-paths"></a>
 
 ## Replay {#replay}
@@ -35,7 +37,7 @@ The runtime rejects `--stale=regenerate` before configuration or file I/O. Durin
 
 ## AI calls {#ai-calls}
 
-A provider resolver is passed to the run use case, so grounded replay can proceed without an available provider; a cache miss can use it only when `--resolve` is passed.
+`run` always has access to a provider resolver, but grounded replay proceeds without calling it even when no provider is available. A cache miss can call the resolver only when you pass `--resolve`.
 
 ## Resolve missing grounding {#resolve}
 
@@ -43,7 +45,7 @@ A provider resolver is passed to the run use case, so grounded replay can procee
 
 ## Grounding write-back {#grounding-write-back}
 
-`run` writes changed grounding only when the resolved write-back gate permits it; see [Configuration](/ambercast/reference/configuration/#grounding) for every local and CI condition.
+`run` writes changed grounding only when the resolved write-back gate permits it. `--update-cache` is one explicit input to that gate: it combines with `ci.updateGroundingCache` in CI, and with the `localWriteBack` setting locally. See [Configuration](/ambercast/reference/configuration/#grounding) for every local and CI condition.
 
 ## Report and exits {#report-and-exits}
 

@@ -23,7 +23,7 @@ Init options:
   --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
-  --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
+  --force  --dry-run  --target <name>  --ai <claude|codex>
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
@@ -60,7 +60,7 @@ ambercast 当前已实现的命令包括 init、generate、run、check、heal、
 | 命令 | 位置参数 | 支持的选项 | 配置路径 |
 | --- | --- | --- | --- |
 | init | 无 | dir, yes/-y, force, no-color | `--dir` 参数（未指定时为 cwd） |
-| generate | 字面路径；未指定路径则执行发现 | strict, force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| generate | 字面路径；未指定路径则执行发现 | force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | run | 字面路径；未指定路径则执行发现 | grep, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | 字面路径；未指定路径则执行发现 | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |

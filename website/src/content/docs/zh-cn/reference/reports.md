@@ -9,7 +9,7 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.9` |
+| `schemaVersion` | 字面量 `3.11` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
 | `durationMs` | 非负整数 |
@@ -38,6 +38,18 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
+AI provider 可在可选的字符串数组 `assumptions` 中列出提示词未明确说明的假设。`generate` 排除纯空白条目，将其余假设作为 `{ kind: 'generator-assumption', message }` 加入 `generated` 和 `would-generate` 结果的 `warnings`。假设不会阻止 `generate` 或 `heal`。
+
+终端在结果行之后显示 `  warning: <message>`。ambercast 将命中机密检测的条目替换为 `An assumption was omitted because it looked like a secret.`。
+
+ambercast 不会将假设保存到执行计划中。再次运行仍为 fresh 的执行计划会返回 `skipped-fresh`，不显示假设警告。使用 `--force` 重新生成可再次查看假设，但重新生成的结果不确定。
+
+`generated` 和 `would-generate` 结果的 `ambiguities` 始终为 `[]`。provider 的 `ambiguities` 仅表示无法为步骤分配目标。
+
+单目标请求的响应若含非空 `ambiguities`，ambercast 会以 `AI_RESPONSE_INVALID` 重试。重试耗尽后退出码为 3。多目标分配未解决时仍产生 `PROMPT_AMBIGUOUS`，退出码为 2。
+
+将警告类型作为封闭 union 验证的使用者需要 report 3.11 的 Schema。
+
 ## Run 结果 {#run-results}
 
 `RunResult` 的每个分支均为严格模式。
@@ -62,6 +74,8 @@ ambercast 的所有结构化输出均通过统一的信封（Envelope）与命�
 ## Heal 结果 {#heal-results}
 
 `HealResult` 的每个已完成分支均要求具备 `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps` 和 `explanation`；`aiCalls` 为可选字段。
+
+只有 `healed` 行可包含可选字段 `warnings`，其中的 `generator-assumption` 来自 Stage 3 接受的候选项的 `assumptions`。其他 heal 结果禁止 `warnings`。假设不会使 Stage 3 失败。
 
 | `repairOutcome` | 允许的 application | 允许的 stopReason |
 | --- | --- | --- |
@@ -103,11 +117,12 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十三个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十五个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
 
 | 代码 | 可选的 `details` 形状 |
 | --- | --- |
 | `AGENTIC_STEP_FAILED` | 仅限 case 作用域：`{ stepId: 非空白字符串, actions: 非负整数, assertions: 非负整数, passedAssertions: 非负整数, failedAssertions: 非负整数, targetRejections: 非负整数, lastFailedAssertion?: { check: "text-visible"、"element-visible"、"text-equals"、"url-matches" 或 "element-count"; expected: 字符串 } }`；计数描述已完成的工具调用。 |
+| `CASE_ABORTED` | 仅限 case 作用域：`{ reason: "run-reference-invalid"、"run-value-missing"、"secret-fill-incomplete"、"agentic-no-terminal-evidence"、"agentic-coverage-inexact"、"agentic-proof-invalid"、"grounding-secret-contaminated" 或 "grounding-snapshot-invalid"; stepId: string }`；`reason` 为八个预定义值之一。 |
 | `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任一 instruction-coverage、element-intent 或 confirms issue code（`confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`）、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected" 或 "secret-conflicting-target-names"（后两者始终带有 stepId）; path: Array<string 或非负整数>; stepId?: StepId }>, attempts?: ... }` |
 | `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token 或 embedded-secret-reference; path: 非空白字符串; attempts?: ... }` |
 | `SECRET_ENV_VAR_COLLISION` | `{ envVar: 非空白字符串, refs: SecretRef[] }` |
@@ -115,6 +130,7 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 | `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正整数, column: 正整数, kind: "grant-line" 或 "reference" }> }` |
 | `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" 或 "launch-failed"; engine: 非空白字符串 }` |
 | `EXECUTOR_UNSUPPORTED` | `{ target: 非空白字符串, executor: 非空白字符串, reason: "surface-mismatch" 或 "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 非空白字符串 } }` |
+| `PROMPT_AMBIGUOUS` | 仅限 case 作用域：`{ ambiguities: 大于或等于 1 的整数 }`。 |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
 | `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
@@ -135,16 +151,16 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 只有写入方会固定使用当前的 schema 版本；查看器会宽松地读取任意 3.x 版本的报告。
 
 ```json
-{"schemaVersion":"3.9","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.9","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.9","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.9","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容性链接 {#report-persistence}

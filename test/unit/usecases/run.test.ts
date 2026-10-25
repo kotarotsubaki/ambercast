@@ -1,10 +1,13 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createFsStorage } from '#adapters/storage/fs-storage.js';
 import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
+import { typedJsonSchema } from '#core/ai/typed-json-schema.js';
+import { validateAiResponse } from '#adapters/ai/shared/response-validator.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { BrowserLaunchFailedError } from '#core/errors/browser-launch-failed-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
@@ -21,9 +24,11 @@ import { SecretSyntaxRejectedError } from '#core/errors/secret-syntax-rejected-e
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
+import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { ERROR_EXIT_CODES } from '#core/errors/exit-codes.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
+import * as canonicalJson from '#core/ir/canonical-json.js';
 import { computeInputsDigest, computeIntentDigest, computePlanDigest, sha256HexOfCanonicalJson } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
@@ -35,11 +40,13 @@ import {
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import {
   GroundingDocument,
+  ElementBindingProposalResponse,
+  GROUNDING_SCHEMA_VERSION,
+  PLAN_SCHEMA_VERSION,
   type ElementRef,
   type Fingerprint,
   type JsonValueT,
   type PlanDocument,
-  Step,
   type TraceAssert,
   type TraceEntry,
   type TraceRecord,
@@ -49,7 +56,7 @@ import type { AiAgenticRequest, InstructionCoveredAiAgenticRequest } from '#port
 import type { BrowserSession, GroundedResolution, PerformableAction } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { buildRedactedAiProposalContext, buildUnclassifiedRejectionEvent, classifyBrowserLaunchFailure, jsonContainsResolvedSecret, PlanNavigationResolutionError, run, type RunDeps, type RunOptions } from '#usecases/run.js';
+import { buildRedactedAiProposalContext, buildUnclassifiedRejectionEvent, classifyBrowserLaunchFailure, inspectGroundingCoverageSource, jsonContainsResolvedSecret, PlanNavigationResolutionError, run, serializePersistableGrounding, type RunDeps } from '#usecases/run.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { buildRunReport } from '#usecases/run-report.js';
@@ -59,12 +66,10 @@ import { GroundingUnresolvedDetails, REPORT_SCHEMA_VERSION, StepResult } from '#
 import { baseUrlSecretPolicy } from '../../doubles/base-url-secret-policy.js';
 import { boundTarget } from '../../doubles/bound-target.js';
 import { createFixedClock } from '../../doubles/create-fixed-clock.js';
-import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { expectSecretSinkOriginViolation } from '../../doubles/expect-secret-sink-origin-violation.js';
 import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import {
-  createFakeBrowserSession as createRawFakeBrowserSession,
   awaitElementPresenceCalls,
   elementRefKey,
   scheduleFakeAppearance,
@@ -74,6 +79,8 @@ import {
 } from '../../doubles/fake-browser-session.js';
 import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
+import { assertDiagnosable, assertNoSecretDisclosure, assertZeroAiCalls, collectStorageArtifacts } from '../../support/report-assertions.js';
+import { TEST_DIR, RUNS_DIR, TARGETS, RESOLVED_TARGETS, PROMPT, DEFAULT_INSTRUCTION_COVERAGE, FINGERPRINT, EMAIL, PASSWORD, SUBMIT, DEFAULT_OPTIONS, createFakeBrowserSession, createScenario, elementGrounding, intentDigestsFor, liveEntries, writePrompt, createFreshPlan, seedFreshArtifacts, aiStep, expectStopgapOutcome, type TestStep } from '../../support/run-scenario.js';
 
 const groundingModeAccesses = vi.hoisted(() => ({ accesses: [] as string[] }));
 const requestConstructionFailure = vi.hoisted(() => ({ enabled: false }));
@@ -93,6 +100,210 @@ vi.mock('#core/ai/ai-deadline.js', async (importOriginal) => {
       });
     },
   };
+});
+
+describe('Issue596 grounding v4', () => {
+  const intent = { description: 'Memo editor', roleHint: 'textbox', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 } };
+  const unnamed = { strategy: 'accessibility', role: 'textbox', name: '' } as const;
+  const capture = (nodes: readonly { role: string; name: string }[]) => ({ tree: { role: 'root', name: '', children: nodes.map((node) => ({ ...node, children: [] })) }, rawYaml: JSON.stringify(nodes), scalarValues: [] });
+  async function fixture(options: { nodes?: readonly { role: string; name: string }[]; proposal?: { outcome: 'found'; role: string; name: string }; roleHint?: string | null; quote?: string; existing?: boolean } = {}) {
+    const nodes = options.nodes ?? [{ role: 'textbox', name: 'User' }, unnamed];
+    const locator = { strategy: 'accessibility', ...(nodes.find((node) => node.name === '') ?? nodes[0]!) } as const;
+    const snapshot = capture(nodes);
+    const fingerprint = computeAccessibilityFingerprint(snapshot.tree, locator, []);
+    const session = createFakeBrowserSession(liveEntries([locator], fingerprint.kind === 'ok' ? fingerprint.fingerprint : FINGERPRINT));
+    vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(snapshot);
+    const proposal = options.proposal ?? { outcome: 'found', role: 'textbox', name: '' };
+    const executor = createFakeAiExecutor({ execute: async () => ({ data: { proposal }, raw: JSON.stringify({ proposal }) }) });
+    const base = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+    const deps = { ...base.deps, config: { ...base.deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } };
+    const prompt = options.quote === undefined ? PROMPT : `# Memo\n\nFill "${options.quote}" with text.\n`;
+    const selectedIntent = { description: intent.description, sourceSpan: { ...intent.sourceSpan, endColumn: prompt.split('\n')[2]!.length + 1 }, ...(options.roleHint === null ? {} : { roleHint: options.roleHint ?? 'textbox' }), ...(options.quote === undefined ? {} : { quote: { text: options.quote, sourceSpan: { startLine: 3, startColumn: 7, endLine: 3, endColumn: 7 + options.quote.length } } }) };
+    const testPath = await writePrompt(base.recordingStorage.storage, 'login.test.md', prompt);
+    const plan = await createFreshPlan(base.recordingStorage.storage, testPath, [
+      { id: 'fill-memo', kind: 'action', action: 'fill', value: 'text', intent: selectedIntent },
+      { id: 'confirm-memo', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['fill-memo'] },
+    ]);
+    const groundingPath = deps.layout.groundingPathFor(testPath);
+    const empty: GroundingDocument = { schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} };
+    if (options.existing) await base.recordingStorage.storage.writeText(groundingPath, toCanonicalArtifactText(empty as unknown as JsonValueT));
+    return { ...base, deps, session, executor, plan, testPath, groundingPath, empty };
+  }
+  const actions = (f: Awaited<ReturnType<typeof fixture>>) => f.session.operations().filter((operation) => operation.type === 'perform');
+  const report = (outcome: Awaited<ReturnType<typeof run>>) => buildRunReport({ startedAt: '2026-10-11T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome }).envelope;
+
+  it.each([undefined, 'memo'])('TEST-4 binds an unnamed textbox after quote %s', async (quote) => {
+    const f = await fixture(quote === undefined ? {} : { quote });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect(actions(f)).toHaveLength(1);
+    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['fill-memo']).toMatchObject({ locator: unnamed, provenance: 'ai-proposed' });
+  });
+  it.each([
+    { label: 'duplicate', nodes: [unnamed, unnamed], name: '', roleHint: 'textbox' },
+    { label: 'fabricated name', nodes: [unnamed], name: 'Memo editor', roleHint: 'textbox' },
+    { label: 'role mismatch', nodes: [unnamed], name: '', roleHint: 'button' },
+  ])('TEST-5 rejects $label without an action', async ({ nodes, name, roleHint }) => {
+    const f = await fixture({ nodes, roleHint, proposal: { outcome: 'found', role: 'textbox', name } });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'proposal-rejected' } });
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect(actions(f)).toEqual([]);
+  });
+  it.each([
+    { label: 'whitespace proposal', role: 'textbox', name: ' ', roleHint: 'textbox', quote: undefined },
+    { label: 'generic without hint', role: 'generic', name: '', roleHint: null, quote: undefined },
+  ])('TEST-5 binds $label with the observed name', async ({ role, name, roleHint, quote }) => {
+    const f = await fixture({ nodes: [{ role, name: '' }], roleHint, proposal: { outcome: 'found', role, name }, ...(quote === undefined ? {} : { quote }) });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    expect(outcome.results[0]?.result.steps[0], outcome.results[0]?.error?.message).toMatchObject({ status: 'passed', binding: { provenance: quote === undefined ? 'ai-proposed' : 'quoted-match' } });
+    expect(f.executor.structuredRequests).toHaveLength(quote === undefined ? 1 : 0);
+    expect(actions(f)).toHaveLength(1);
+    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['fill-memo']).toMatchObject({ locator: { strategy: 'accessibility', role, name: '' } });
+  });
+  it('TEST-5 rejects a whitespace quote before binding', async () => {
+    const f = await fixture({ nodes: [unnamed], quote: ' ' });
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+    expect(outcome.results[0]?.error?.message).toBe('The generated plan contains invalid element intents or source spans.');
+    expect(f.executor.structuredRequests).toHaveLength(0);
+    expect(actions(f)).toEqual([]);
+  });
+  it.each([2, 3])('TEST-7 retires grounding v%i for matching and mismatching digests', async (schemaVersion) => {
+    for (const matching of [true, false]) {
+      const f = await fixture();
+      await f.recordingStorage.storage.writeText(f.groundingPath, toCanonicalArtifactText({ ...f.empty, schemaVersion, planDigest: matching ? f.empty.planDigest : 'f'.repeat(64) } as unknown as JsonValueT));
+      const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', exitCode: 4, details: { reason: matching ? 'recoverable-miss' : 'missing' } });
+      if (matching) expect(outcome.results[0]?.error?.message).toBe('The grounding cache uses a retired schema and AI resolution is not permitted. Pass --resolve to permit resolution.');
+      expect(actions(f)).toEqual([]);
+      expect(f.executor.structuredRequests).toHaveLength(0);
+    }
+  });
+  it.each([2, 3])('TEST-7 replaces retired grounding v%i when resolve is allowed', async (schemaVersion) => {
+    const f = await fixture();
+    await f.recordingStorage.storage.writeText(f.groundingPath, toCanonicalArtifactText({ ...f.empty, schemaVersion } as unknown as JsonValueT));
+    expect((await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true })).results[0]?.result.status).toBe('passed');
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).schemaVersion).toBe(4);
+  });
+  it('TEST-8 replays exact saved bytes with zero AI calls and persists byte-identically on repeat', async () => {
+    const f = await fixture();
+    expect((await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true })).results[0]?.result.status).toBe('passed');
+    const before = await f.recordingStorage.storage.readText(f.groundingPath);
+    const replay = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(replay.results[0]?.result.steps[0], replay.results[0]?.error?.message).toMatchObject({ status: 'passed', binding: { provenance: 'grounding' } });
+    assertZeroAiCalls(report(replay));
+    expect(f.executor.structuredRequests).toHaveLength(1);
+    expect((await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true })).results[0]?.result.status).toBe('passed');
+    expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(before);
+  });
+  it('TEST-8 retains strict grounding with a coverage-bearing AI entry', async () => {
+    const f = await fixture();
+    await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    const document = await readGrounding(f.recordingStorage.storage, f.testPath);
+    const text = toCanonicalArtifactText({ ...document, entries: { ...document.entries, 'recorded-ai': { kind: 'ai', trace: coveredTrace([], [passingText('Done')]) } } } as unknown as JsonValueT);
+    expect(inspectGroundingCoverageSource(text, f.empty.planDigest)).toMatchObject({ kind: 'strict-grounding', coverageClaimStepIds: ['recorded-ai'] });
+  });
+  it('TEST-8 rejects ambiguous unnamed replay with no new action', async () => {
+    const f = await fixture();
+    await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    const performed = actions(f).length;
+    vi.mocked(f.session.accessibilitySnapshot).mockResolvedValue(capture([unnamed, unnamed]));
+    vi.spyOn(f.session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason: 'ambiguous-match' });
+    const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'recoverable-miss' } });
+    expect(actions(f)).toHaveLength(performed);
+    assertZeroAiCalls(report(outcome));
+  });
+  it('TEST-9 rejects an invalid locator role at serialization', () => {
+    const document = { schemaVersion: 4, planDigest: 'a'.repeat(64), entries: { invalid: { kind: 'element', locator: { ...unnamed, role: '' }, fingerprint: FINGERPRINT, intentDigest: 'b'.repeat(64), provenance: 'ai-proposed' } } } as GroundingDocument;
+    expect(() => serializePersistableGrounding(document)).toThrow(IntegrityViolationError);
+    expect(() => serializePersistableGrounding(document)).toThrow('The grounding cache does not satisfy the grounding schema.');
+  });
+  it('TEST-9 isolates schema failure to persistence and preserves absent storage', async () => {
+    const f = await fixture();
+    const failure = GroundingDocument.safeParse({});
+    const parse = vi.spyOn(GroundingDocument, 'safeParse').mockReturnValue(failure);
+    let outcome: Awaited<ReturnType<typeof run>>;
+    let calls: number;
+    try { outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true }); calls = parse.mock.calls.length; } finally { parse.mockRestore(); }
+    expect(calls).toBe(1);
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation: 'The grounding cache does not satisfy the grounding schema.' });
+    expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
+    expect(report(outcome).errors).toContainEqual(expect.objectContaining({ code: 'INTEGRITY_VIOLATION' }));
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([]);
+    expect(await f.recordingStorage.storage.exists(f.groundingPath)).toBe(false);
+  });
+  it('TEST-9 writes exactly the validated serialization output', async () => {
+    const f = await fixture();
+    await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true });
+    const text = await f.recordingStorage.storage.readText(f.groundingPath);
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([{ path: f.groundingPath, text: serializePersistableGrounding(JSON.parse(text)) }]);
+  });
+  it('TEST-9 keeps canonicalize failures as FsIoError with existing bytes unchanged', async () => {
+    const f = await fixture({ existing: true });
+    const before = await f.recordingStorage.storage.readText(f.groundingPath);
+    f.recordingStorage.writes.length = 0;
+    const serialize = canonicalJson.toCanonicalArtifactText;
+    let persistenceAttempts = 0;
+    // Target only the populated cache; plan validation and report serialization
+    // must retain their real canonicalization paths.
+    const canonicalize = vi.spyOn(canonicalJson, 'toCanonicalArtifactText').mockImplementation((value) => {
+      const document = value as unknown as GroundingDocument;
+      if (document.schemaVersion === 4 && document.entries?.['fill-memo'] !== undefined) {
+        persistenceAttempts += 1;
+        throw new RangeError('Cannot canonicalize a string with an unpaired surrogate.');
+      }
+      return serialize(value);
+    });
+    let outcome: Awaited<ReturnType<typeof run>>;
+    try { outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true }); } finally { canonicalize.mockRestore(); }
+    expect(persistenceAttempts).toBe(1);
+    expect(actions(f)).toHaveLength(1);
+    expect(outcome.results[0]?.result.steps.find((step) => step.id === 'confirm-memo')).toMatchObject({ status: 'passed' });
+    expect(outcome.results[0]?.result.steps[0], outcome.results[0]?.error?.message).toMatchObject({ status: 'passed' });
+    expect(outcome.results[0]?.error).toBeInstanceOf(FsIoError);
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(IntegrityViolationError);
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([]);
+    expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(before);
+  });
+  it('TEST-9 preserves an existing proposal rejection when canonicalization also fails', async () => {
+    const f = await fixture({ existing: true });
+    await createFreshPlan(f.recordingStorage.storage, f.testPath, [
+      ...f.plan.steps,
+      { id: 'reject-memo', kind: 'action', action: 'fill', value: 'text', intent: { ...intent, roleHint: 'button' } },
+    ]);
+    const before = await f.recordingStorage.storage.readText(f.groundingPath);
+    f.recordingStorage.writes.length = 0;
+    const serialize = canonicalJson.toCanonicalArtifactText;
+    let persistenceAttempts = 0;
+    // A confirmed entry makes the cache dirty before the later rejection,
+    // so this tests error preservation after a real persistence attempt.
+    const canonicalize = vi.spyOn(canonicalJson, 'toCanonicalArtifactText').mockImplementation((value) => {
+      const document = value as unknown as GroundingDocument;
+      if (document.schemaVersion === 4 && document.entries?.['fill-memo'] !== undefined) {
+        persistenceAttempts += 1;
+        throw new RangeError('Cannot canonicalize a string with an unpaired surrogate.');
+      }
+      return serialize(value);
+    });
+    let outcome: Awaited<ReturnType<typeof run>>;
+    try { outcome = await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true }); } finally { canonicalize.mockRestore(); }
+    expect(persistenceAttempts).toBe(1);
+    expect(actions(f)).toHaveLength(1);
+    expect(outcome.results[0]?.result.steps.find((step) => step.id === 'confirm-memo')).toMatchObject({ status: 'passed' });
+    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(outcome.results[0]?.error).toBeInstanceOf(GroundingUnresolvedError);
+    expect(outcome.results[0]?.error).toMatchObject({ details: { reason: 'proposal-rejected' } });
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(IntegrityViolationError);
+    expect(outcome.results[0]?.error).not.toBeInstanceOf(FsIoError);
+    expect(report(outcome).errors).toContainEqual(expect.objectContaining({ code: 'GROUNDING_UNRESOLVED' }));
+    expect(f.recordingStorage.writes.filter((write) => write.path === f.groundingPath)).toEqual([]);
+    expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(before);
+  });
 });
 
 describe('TEST-R10 staleness precedence', () => {
@@ -217,8 +428,8 @@ describe('TEST-R11 report and event vocabulary', () => {
   const stepEvents = (events: ReturnType<typeof createRecordingEventSink>) =>
     events.emitted().filter((event): event is Extract<RunEvent, { type: 'step-result' }> => event.type === 'step-result');
 
-  it('accepts report 3.9 bindings and all four new unresolved reasons', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.9');
+  it('accepts report 3.11 bindings and all four new unresolved reasons', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
     expect(StepResult.parse({
       id: 'click-submit', type: 'action', target: 'web', status: 'passed',
       binding: { provenance: 'grounding', confirmed: true },
@@ -226,6 +437,12 @@ describe('TEST-R11 report and event vocabulary', () => {
     for (const reason of ['no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed']) {
       expect(GroundingUnresolvedDetails.parse({ stepId: 'click-submit', reason }).reason).toBe(reason);
     }
+  });
+
+  it('advances grounding to v4 while preserving plan and report versions', () => {
+    expect(PLAN_SCHEMA_VERSION).toBe(5);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
+    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
   });
 
   it.each(['no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed'] as const)(
@@ -297,7 +514,7 @@ describe('TEST-R11 report and event vocabulary', () => {
   });
 
   it('omits binding when stage 2 returns no candidate before stage 3', async () => {
-    const executor = createFakeAiExecutor({ execute: async () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }) });
+    const executor = createFakeAiExecutor({ execute: async () => ({ data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }) });
     const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }], samples: [capture([])], executor, resolveTimeoutMs: 0 });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
     expect(outcome.results[0]?.error).toMatchObject({ details: { reason: 'no-candidate' } });
@@ -333,11 +550,50 @@ describe('TEST-R11 report and event vocabulary', () => {
     ['failed', [capture(['Submit']), capture([])], false],
   ] as const)('TEST-7 keeps ai-proposed confirmation %s after a later confirmer', async (_label, samples, confirmed) => {
     const executor = createFakeAiExecutor({ execute: async () => ({
-      data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}',
+      data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}',
     }) });
     const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }, confirm] as readonly TestStep[], samples, executor, resolveTimeoutMs: 0 });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
     expect(outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ provenance: 'ai-proposed', confirmed });
+  });
+
+  it.each([
+    ['passed', true],
+    ['failed', false],
+  ] as const)('TEST-7 promotes an action binding only after an ai step listed as its confirmer %s via trace replay', async (_label, confirmed) => {
+    const confirmingAiStep = { ...aiStep('confirm-via-ai'), instructionCoverage: [{ id: 'dashboard-reached', kind: 'success' as const, sourceSpan: intent.sourceSpan }], confirms: ['click-submit'] } as TestStep;
+    const f = await fixture({
+      steps: [click, confirmingAiStep],
+      entries: { 'confirm-via-ai': { kind: 'ai', trace: coveredTrace([], [passingText('Cached dashboard')]) } },
+    });
+    if (_label === 'failed') vi.spyOn(f.session, 'evaluateAssert').mockResolvedValue({ passed: false, message: 'Dashboard not shown' });
+
+    const outcome = await run(f.deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ id: 'click-submit', status: 'passed', binding: { provenance: 'quoted-match', confirmed } });
+  });
+
+  it('keeps a navigate step\'s binding state independent of another case\'s confirmed action sharing its step id', async () => {
+    // ponytail: bindingStates is a runCase-local const (run.ts ~4212). On the
+    // ordinary success path, an element-binding step re-executes groundedTarget
+    // and overwrites its own entry, masking a hypothetical cross-case leak.
+    // Navigate never touches bindingStates, making such a leak observable here.
+    const session = createFakeBrowserSession(liveEntries([SUBMIT], FINGERPRINT));
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const firstPath = await writePrompt(recordingStorage.storage, 'first.test.md');
+    const secondPath = await writePrompt(recordingStorage.storage, 'second.test.md');
+    const clickStep: TestStep = { id: 'shared-id', kind: 'action', action: 'click', target: 'web', intent: SUBMIT_INTENT };
+    await seedFreshArtifacts(recordingStorage.storage, firstPath, [clickStep], {
+      'shared-id': { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest: computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT }), provenance: 'quoted-match' },
+    });
+    const navigateStep: TestStep = { id: 'shared-id', kind: 'action', action: 'navigate', target: 'web', url: '/next' };
+    await seedFreshArtifacts(recordingStorage.storage, secondPath, [navigateStep], {});
+
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, files: [firstPath, secondPath] });
+
+    expect(outcome.results[0]?.result.steps[0]).toMatchObject({ id: 'shared-id', status: 'passed', binding: { provenance: 'grounding', confirmed: true } });
+    expect(outcome.results[1]?.result.steps[0]).toMatchObject({ id: 'shared-id', status: 'passed' });
+    expect(outcome.results[1]?.result.steps[0]).not.toHaveProperty('binding');
   });
 
   it('measures stage-1 quote wait with an integer fake-clock duration and no AI timing', async () => {
@@ -353,7 +609,7 @@ describe('TEST-R11 report and event vocabulary', () => {
     const clock = createFixedClock(new Date('2026-08-09T00:00:00Z'), 0);
     const executor = createFakeAiExecutor({ execute: async () => {
       await clock.sleep(17);
-      return { data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' };
+      return { data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' };
     } });
     const f = await fixture({ clock, executor, steps: [{ ...click, intent: unquotedIntent }], resolveTimeoutMs: 0 });
     const outcome = await run(f.deps, DEFAULT_OPTIONS);
@@ -369,7 +625,7 @@ describe('TEST-R11 report and event vocabulary', () => {
 
   it('emits ai-proposed for a stage-2 element candidate', async () => {
     const executor = createFakeAiExecutor({ execute: async () => ({
-      data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}',
+      data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}',
     }) });
     const f = await fixture({ steps: [{ ...click, intent: unquotedIntent }], executor, resolveTimeoutMs: 0 });
     await run(f.deps, DEFAULT_OPTIONS);
@@ -418,22 +674,8 @@ vi.mock('#core/ir/grounding-recovery-mode.js', async (importOriginal) => {
   };
 });
 
-const TEST_DIR = '/workspace/tests';
-const RUNS_DIR = '/workspace/tests/.runs';
-const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test', executor: { kind: 'playwright', browser: 'chromium' } } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
-const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
 const QUOTED_PROMPT = '# Sign in\n\nWhen I "Submit" with "Password", I reach the dashboard.\n';
-const DEFAULT_INSTRUCTION_COVERAGE = [{
-  id: 'dashboard-reached',
-  kind: 'success' as const,
-  sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 },
-}] as const;
-const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) };
 const DIFFERENT_FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'b'.repeat(64) };
-const EMAIL: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Email' };
-const PASSWORD: ElementRef = { strategy: 'accessibility', role: 'textbox', name: 'Password' };
-const SUBMIT: ElementRef = { strategy: 'accessibility', role: 'button', name: 'Submit' };
 const INTENT_SPAN = { startLine: 3, startColumn: 1, endLine: 3, endColumn: 56 };
 const EMAIL_INTENT = { description: 'Email textbox', sourceSpan: INTENT_SPAN, roleHint: 'textbox' };
 const PASSWORD_INTENT = { description: 'Password textbox', sourceSpan: INTENT_SPAN, roleHint: 'textbox' };
@@ -443,14 +685,6 @@ const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, quote: { text: 'Password', 
 const EMAIL_CAPTURE_DIGEST = computeIntentDigest({ stepKind: 'capture', operation: 'capture', intent: EMAIL_INTENT });
 const SUBMIT_CAPTURE_DIGEST = computeIntentDigest({ stepKind: 'capture', operation: 'capture', intent: SUBMIT_INTENT });
 const PASSWORD_FILL_SECRET_DIGEST = computeIntentDigest({ stepKind: 'action', operation: 'fill-secret', intent: PASSWORD_INTENT });
-const DEFAULT_OPTIONS: RunOptions = {
-  files: [],
-  resolve: true,
-  updateCache: false,
-  allowEmpty: false,
-  list: false,
-  stale: 'fail',
-};
 const AI_TIMEOUT_MESSAGE = 'The AI provider did not respond within the configured timeout.';
 const GENERIC_ABORT_EXPLANATION = 'The browser session could not complete this case and no deterministic fallback is available.';
 const HIGH_ENTROPY_TOKEN_LITERAL = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea';
@@ -659,7 +893,9 @@ describe('classifyBrowserLaunchFailure', () => {
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error', explanation, steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'agentic-step-failed', exitCode: 3, details: {
+      stepId: 'recorded-ai', targetRejections: 0,
+    } });
   });
 
   it.each([
@@ -703,199 +939,9 @@ const CREDENTIAL_LITERALS = [
   ['a high-entropy token', HIGH_ENTROPY_TOKEN_LITERAL, 'high-entropy-token'],
 ] as const;
 
-function createFakeBrowserSession(
-  entries: Map<string, FakeBrowserSessionEntry>,
-  options: FakeBrowserSessionOptions = {},
-) {
-  return createRawFakeBrowserSession(entries, {
-    baseUrl: TARGETS.web.baseUrl,
-    currentUrl: TARGETS.web.baseUrl,
-    ...options,
-  });
-}
-
-interface RecordingStorage {
-  readonly storage: StorageAdapter;
-  readonly reads: string[];
-  readonly exists: string[];
-  readonly writes: Array<{ readonly path: string; readonly text: string }>;
-}
-
-interface Scenario {
-  readonly deps: RunDeps;
-  readonly uiExecutor: ReturnType<typeof vi.fn<RunDeps['uiExecutor']>>;
-  readonly events: ReturnType<typeof createRecordingEventSink>;
-  readonly recordingStorage: RecordingStorage;
-  readonly sessionFactory: ReturnType<typeof vi.fn<() => BrowserSession>>;
-  readonly resolveAiExecutor: ReturnType<typeof vi.fn<RunDeps['resolveAiExecutor']>>;
-}
-
-type TestStep = Step extends infer Branch
-  ? Branch extends Step
-    ? 'intent' extends keyof Branch
-      ? Omit<Branch, 'target'> & { target?: string | ElementRef; element?: ElementRef }
-      : Omit<Branch, 'target'> & { target?: string }
-    : never
-  : never;
-
-function createRecordingStorage(): RecordingStorage {
-  const backing = createInMemoryStorage();
-  const reads: string[] = [];
-  const exists: string[] = [];
-  const writes: Array<{ readonly path: string; readonly text: string }> = [];
-
-  return {
-    reads,
-    exists,
-    writes,
-    storage: {
-      ...backing,
-      async readText(path) {
-        reads.push(path);
-        return backing.readText(path);
-      },
-      async exists(path) {
-        exists.push(path);
-        return backing.exists(path);
-      },
-      async writeText(path, text) {
-        writes.push({ path, text });
-        return backing.writeText(path, text);
-      },
-    },
-  };
-}
-
-function createScenario(overrides: Partial<RunDeps> = {}): Scenario {
-  const recordingStorage = createRecordingStorage();
-  const events = createRecordingEventSink();
-  const sessionFactory = vi.fn<() => BrowserSession>(() => createFakeBrowserSession(new Map()));
-  const driver = createFakeUiExecutor(sessionFactory);
-  const uiExecutor = vi.fn<RunDeps['uiExecutor']>(() => driver);
-  const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => {
-    throw new Error('The scenario did not permit an AI fallback.');
-  });
-  const deps: RunDeps = {
-    storage: recordingStorage.storage,
-    layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
-    clock: createFixedClock(new Date('2026-08-09T00:00:00.000Z'), 0),
-    runId: '2026-08-09T000000Z-550e8400-e29b-41d4-a716-446655440000',
-    uiExecutor,
-    secrets: createFakeSecretsProvider(new Map()),
-    resolveAiExecutor,
-    events: events.sink,
-    discoverTestFiles: vi.fn(async () => ['login.test.md']),
-    isCI: false,
-    config: {
-      testDir: TEST_DIR,
-      testMatch: ['**/*.test.md'],
-      testIgnore: ['**/.runs/**'],
-      targets: RESOLVED_TARGETS,
-      defaultTarget: 'web',
-      ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-      ci: { heal: false, updateGroundingCache: false },
-      grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-      secrets: { allow: '*' },
-    },
-    ...overrides,
-    allocateCallId: overrides.allocateCallId ?? createCallIdAllocator(),
-  };
-
-  return { deps, uiExecutor, events, recordingStorage, sessionFactory, resolveAiExecutor };
-}
-
 function withSingleAssertionObservation(deps: RunDeps): RunDeps {
   // These cases isolate non-polling behavior; TEST-B1-B8 cover retries with a positive budget.
   return { ...deps, config: { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } };
-}
-
-function elementGrounding(stepIds: readonly string[], locators: Readonly<Record<string, ElementRef>> = {}, fingerprint: Fingerprint = FINGERPRINT, intentDigests: Readonly<Record<string, string>> = {}): GroundingDocument['entries'] {
-  return Object.fromEntries(stepIds.map((id) => [id, {
-    kind: 'element',
-    locator: locators[id] ?? (/capture-second/.test(id) ? SUBMIT : /assert-path-a-account|assert-after-pipelines|assert-after-trace-replay|password|secret/.test(id) ? PASSWORD : /email|capture|name|prefix|reference|first|host|token/.test(id) ? EMAIL : SUBMIT),
-    fingerprint,
-    intentDigest: intentDigests[id] ?? 'a'.repeat(64),
-    provenance: 'quoted-match',
-  }])) as GroundingDocument['entries'];
-}
-
-function intentDigestsFor(steps: readonly TestStep[]): Readonly<Record<string, string>> {
-  return Object.fromEntries(steps.flatMap((step) => {
-    if ((step.kind !== 'action' && step.kind !== 'capture') || !('intent' in step)) return [];
-    return [[step.id, computeIntentDigest({ stepKind: step.kind, operation: step.kind === 'capture' ? 'capture' : step.action, intent: step.intent })]];
-  }));
-}
-
-function liveEntries(
-  refs: readonly ElementRef[],
-  currentFingerprint: Fingerprint = FINGERPRINT,
-): Map<string, FakeBrowserSessionEntry> {
-  return new Map(refs.map((ref) => [elementRefKey(ref), { exists: true, currentFingerprint }]));
-}
-
-async function writePrompt(storage: StorageAdapter, relativePath = 'login.test.md', contents = PROMPT): Promise<string> {
-  const path = `${TEST_DIR}/${relativePath}`;
-  await storage.writeText(path, contents);
-  return path;
-}
-
-async function createFreshPlan(
-  storage: StorageAdapter,
-  testPath: string,
-  steps: readonly TestStep[] = [],
-  targetDefinitions: PlanDocument['targets'] = TARGETS,
-): Promise<PlanDocument> {
-  const planTargets = Object.fromEntries(Object.entries(targetDefinitions).map(([name, definition]) => [
-    name,
-    { surface: 'web', baseUrl: definition.baseUrl, ...(definition.secretSinkOrigins === undefined ? {} : { secretSinkOrigins: definition.secretSinkOrigins }) },
-  ])) as PlanDocument['targets'];
-  // SPEC-9/10: v4 binds each Plan step to a named Target. Legacy fixture
-  // locators used `target`; keep their element meaning while migrating them.
-  const committedSteps = steps.map((step) => {
-    const legacy = step as unknown as Record<string, unknown>;
-    const target = typeof legacy.target === 'string' ? legacy.target : Object.keys(targetDefinitions)[0];
-    const element = legacy.intent === undefined && typeof legacy.target === 'object' && legacy.target !== null
-      ? { element: legacy.target }
-      : {};
-    return Step.parse({ ...legacy, ...element, target });
-  });
-  const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
-  const inputsDigest = computeInputsDigest({
-    normalizedTestMd,
-    schemaVersion: 5,
-    generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
-    planProducerBundleFingerprint: planProducerBundleFingerprint(),
-    targetDefinitions: planTargets,
-  });
-  const plan = {
-    schemaVersion: 5,
-    source: { inputsDigest },
-    targets: planTargets,
-    steps: committedSteps,
-  } as unknown as PlanDocument;
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-
-  await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
-  return plan;
-}
-
-async function seedFreshArtifacts(
-  storage: StorageAdapter,
-  testPath: string,
-  steps: readonly TestStep[] = [],
-  entries: GroundingDocument['entries'] = {},
-  targetDefinitions: PlanDocument['targets'] = TARGETS,
-): Promise<PlanDocument> {
-  const plan = await createFreshPlan(storage, testPath, steps, targetDefinitions);
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-  const grounding: GroundingDocument = {
-    schemaVersion: 3,
-    planDigest: computePlanDigest(plan),
-    entries,
-  };
-
-  await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText(grounding as unknown as JsonValueT));
-  return plan;
 }
 
 function legacyTrace(events: readonly TraceEntry[], verification: readonly TraceAssert[]): TraceRecord {
@@ -997,19 +1043,6 @@ async function readGrounding(storage: StorageAdapter, testPath: string): Promise
   return GroundingDocument.parse(JSON.parse(await storage.readText(layout.groundingPathFor(testPath))));
 }
 
-function aiStep(id?: string): Extract<Step, { kind: 'ai' }>;
-function aiStep(id: string, secrets: readonly string[]): Extract<Step, { kind: 'ai' }>;
-function aiStep(id = 'recorded-ai', secrets?: readonly string[]): TestStep {
-  const base = {
-    id,
-    kind: 'ai' as const,
-    instruction: 'Complete the sign-in flow and verify the dashboard.',
-    instructionCoverage: DEFAULT_INSTRUCTION_COVERAGE,
-  };
-
-  return (secrets === undefined ? base : { ...base, secrets: secrets.map((ref) => ({ ref })) }) as unknown as TestStep;
-}
-
 function configWithAiTimeout(timeoutMs: number): RunDeps['config'] {
   return {
     testDir: TEST_DIR,
@@ -1065,24 +1098,6 @@ function runWithinAiTimeoutTestWindow(deps: RunDeps): Promise<Awaited<ReturnType
         reject(error);
       },
     );
-  });
-}
-
-function expectStopgapOutcome(
-  outcome: Awaited<ReturnType<typeof run>>,
-  abortingStepId: string,
-  skippedStepId: string,
-  completedStepId?: string,
-): void {
-  expect(outcome.results).toHaveLength(1);
-  expect(outcome.results[0]?.error).toBeUndefined();
-  expect(outcome.results[0]?.result).toMatchObject({
-    status: 'error',
-    steps: [
-      ...(completedStepId === undefined ? [] : [{ id: completedStepId, status: 'passed' }]),
-      { id: abortingStepId, status: 'error', kind: 'environment' },
-      { id: skippedStepId, status: 'skipped' },
-    ],
   });
 }
 
@@ -1164,6 +1179,25 @@ describe('run', () => {
 
     expect(outcome.results[0]?.error).toBeInstanceOf(IntegrityViolationError);
     expect(outcome.results[0]?.error).toMatchObject({ kind: 'integrity-violation', exitCode: 4 });
+    expect(uiExecutor).not.toHaveBeenCalled();
+  });
+
+  it('TEST-7b reports the released 0.7.0 save-note plan as STALE_PLAN without resolve', async () => {
+    const { deps, uiExecutor, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage, 'save-note.test.md',
+      readFileSync(new URL('../../fixtures/v0.7.0-save-note/save-note.test.md', import.meta.url), 'utf8'));
+    for (const [path, name] of [
+      [deps.layout.planPathFor(testPath), 'save-note.ambercast.plan.json'],
+      [deps.layout.groundingPathFor(testPath), 'save-note.ambercast.grounding.json'],
+    ]) {
+      await recordingStorage.storage.writeText(path!, readFileSync(new URL(`../../fixtures/v0.7.0-save-note/${name}`, import.meta.url), 'utf8'));
+    }
+    const outcome = await run(deps, { ...DEFAULT_OPTIONS, files: [testPath], resolve: false });
+    const report = buildRunReport({ outcome, options: { allowEmpty: false, list: false }, startedAt: '2026-10-13T00:00:00Z', durationMs: 0 });
+    expect(report.envelope.errors).toEqual([expect.objectContaining({ code: 'STALE_PLAN' })]);
+    expect(report.exitCode).toBe(4);
+    assertDiagnosable(report.envelope);
+    assertZeroAiCalls(report.envelope);
     expect(uiExecutor).not.toHaveBeenCalled();
   });
 
@@ -1628,7 +1662,8 @@ describe('run', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expectStopgapOutcome(outcome, 'fill-reference', 'after-reference', 'before-reference');
+    expectStopgapOutcome(outcome, 'fill-reference', 'after-reference',
+      value.includes('profile') ? 'run-reference-invalid' : 'run-value-missing', 'before-reference');
     expect(resolveGrounded).not.toHaveBeenCalled();
     expect(closed).toHaveBeenCalledTimes(1);
   });
@@ -1972,7 +2007,7 @@ describe('run', () => {
         config: { ...createScenario().deps.config, targets: wideTargets },
         discoverTestFiles: vi.fn(async () => ['wide.test.md']),
         resolveAiExecutor: async () => createFakeAiExecutor({
-          execute: async () => ({ data: { outcome: 'found', role: 'textbox', name: 'Password' }, raw: '{"outcome":"found","role":"textbox","name":"Password"}' }),
+          execute: async () => ({ data: { proposal: { outcome: 'found', role: 'textbox', name: 'Password' } }, raw: '{"proposal":{"outcome":"found","role":"textbox","name":"Password"}}' }),
         }),
         secrets: createFakeSecretsProvider(new Map([[SECRET_REF, SECRET_VALUE]])),
       });
@@ -2357,7 +2392,7 @@ describe('run', () => {
       return result.fingerprint;
     };
     const scriptedAi = (proposal: { outcome: 'found'; role: string; name: string } | { outcome: 'none' } | { outcome: 'ambiguous' }) =>
-      createFakeAiExecutor({ execute: async () => ({ data: proposal, raw: JSON.stringify(proposal) }) });
+      createFakeAiExecutor({ execute: async () => ({ data: { proposal }, raw: JSON.stringify({ proposal }) }) });
     async function scenario(
       session: ReturnType<typeof createFakeBrowserSession>,
       intent: typeof SUBMIT_INTENT | typeof SUBMIT_QUOTED_INTENT,
@@ -2400,6 +2435,67 @@ describe('run', () => {
       expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
     });
 
+    it('sends the wrapped response schema and prompt, then persists a confirmed found binding', async () => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
+      const result = await scenario(session, SUBMIT_INTENT, scriptedAi({ outcome: 'found', role: 'button', name: 'Submit' }), { timeoutMs: 0, confirms: true });
+
+      expect(result.executor.structuredRequests).toHaveLength(1);
+      expect(result.executor.structuredRequests[0]?.responseSchema).toEqual(typedJsonSchema(ElementBindingProposalResponse));
+      expect(result.executor.structuredRequests[0]?.prompt).toContain('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. If that element has no accessible name, return its role with an empty name (""). Return one ElementBindingProposal outcome. Put it under the "proposal" key.');
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed' } });
+      expect((await readGrounding(result.recordingStorage.storage, result.testPath)).entries['click-submit'])
+        .toMatchObject({ kind: 'element', provenance: 'ai-proposed' });
+    });
+
+    it('rejects an old-form provider response without binding, grounding, or report operations', async () => {
+      const executor = createFakeAiExecutor({ execute: () => {
+        validateAiResponse('{"outcome":"found","role":"button","name":"Submit"}', typedJsonSchema(ElementBindingProposalResponse));
+        throw new Error('The old proposal must fail validation.');
+      } });
+      const session = createFakeBrowserSession(new Map());
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
+      const result = await scenario(session, SUBMIT_INTENT, executor, { timeoutMs: 0 });
+
+      expect(executor.structuredRequests).toHaveLength(1);
+      expect(result.outcome.results[0]?.error).toMatchObject({ kind: 'ai-response-invalid', exitCode: 3, details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
+      expect(result.outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'error' });
+      expect(result.outcome.results[0]?.result.steps[0]).not.toHaveProperty('binding');
+      expect((await readGrounding(result.recordingStorage.storage, result.testPath)).entries['click-submit']).toBeUndefined();
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toEqual([]);
+      expect(reportError(result.outcome.results[0]!.error!, { scope: 'case', caseId: 'login' })).toMatchObject({ code: 'AI_RESPONSE_INVALID' });
+    });
+
+    it('keeps a quoted-match first binding when a later provider proposal is rejected', async () => {
+      const executor = createFakeAiExecutor({ execute: async () => {
+        validateAiResponse('{"outcome":"none"}', typedJsonSchema(ElementBindingProposalResponse));
+        throw new Error('The old proposal must fail validation.');
+      } });
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], fingerprintFor('Submit')));
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue(capture(['Submit']));
+      const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)), resolveAiExecutor: async () => executor });
+      const testPath = await writePrompt(recordingStorage.storage, 'login.test.md', QUOTED_PROMPT);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, [
+        { id: 'click-first', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_QUOTED_INTENT },
+        { id: 'confirm-first', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['click-first'] },
+        { id: 'click-second', kind: 'action', action: 'click', target: SUBMIT, intent: SUBMIT_INTENT },
+      ]);
+      const outcome = await run({ ...deps, config: { ...deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } }, DEFAULT_OPTIONS);
+
+      expect(executor.structuredRequests).toHaveLength(1);
+      expect(executor.structuredRequests[0]?.context).not.toHaveProperty('quote');
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'quoted-match', confirmed: true } });
+      expect(outcome.results[0]?.result.steps[1]).toMatchObject({ status: 'passed' });
+      expect(outcome.results[0]?.result.steps[2]).toMatchObject({ status: 'error' });
+      expect(outcome.results[0]?.result.steps[2]).not.toHaveProperty('binding');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'ai-response-invalid', exitCode: 3, details: { issues: expect.arrayContaining([expect.objectContaining({ code: 'schema-mismatch' })]) } });
+      const grounding = await readGrounding(recordingStorage.storage, testPath);
+      expect(grounding.entries['click-first']).toMatchObject({ kind: 'element', provenance: 'quoted-match' });
+      expect(grounding.entries['click-second']).toBeUndefined();
+      expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
+      expect(reportError(outcome.results[0]!.error!, { scope: 'case', caseId: 'login' })).toMatchObject({ code: 'AI_RESPONSE_INVALID' });
+    });
+
     it('TEST-R4 retains the existing AI error classification for a proposal timeout', async () => {
       const executor = createFakeAiExecutor({ execute: () => new Promise<never>(() => undefined) });
       const session = createFakeBrowserSession(new Map());
@@ -2430,7 +2526,56 @@ describe('run', () => {
       expect(() => buildRedactedAiProposalContext(
         proposalContext, resolvedSecrets, new Map(), (value) => value,
       )).toThrowError(/contains a resolved secret value/);
+      expect(() => buildRedactedAiProposalContext(
+        proposalContext, resolvedSecrets, new Map(), (value) => value,
+      )).toThrowError(expect.objectContaining({ reason: 'grounding-secret-contaminated' }));
       expect(executor.structuredRequests).toHaveLength(0);
+    });
+
+    it('TEST-R4 aborts before provider dispatch through run() when a redacted reference collides with a second resolved secret', async () => {
+      // Redaction replaces a resolved secret's value with its own reference,
+      // which contains the secret's name. A second, independently resolved
+      // secret whose value equals that name makes the post-redaction detector
+      // fire with the production redactor and detector unmodified.
+      const leakedValue = 'ALPHA_TOKEN';
+      const passwordRef = '{{secrets.password}}';
+      const otherRef = '{{secrets.other}}';
+      const emailFillSecretDigest = computeIntentDigest({ stepKind: 'action', operation: 'fill-secret', intent: EMAIL_INTENT });
+      const session = createFakeBrowserSession(liveEntries([PASSWORD, EMAIL], FINGERPRINT));
+      const leakedTree = {
+        role: 'root', name: '', children: [
+          { role: 'button', name: 'Submit', children: [] },
+          { role: 'form', name: `Sign in ${leakedValue}`, children: [] },
+        ],
+      };
+      vi.spyOn(session, 'accessibilitySnapshot').mockResolvedValue({ tree: leakedTree, rawYaml: 'stable', scalarValues: [] });
+      const executor = scriptedAi({ outcome: 'none' });
+      const resolveAiExecutor = vi.fn(async () => executor);
+      const { deps, recordingStorage } = createScenario({
+        uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+        resolveAiExecutor,
+        secrets: createFakeSecretsProvider(new Map([[passwordRef, leakedValue], [otherRef, 'password']])),
+      });
+      const steps: TestStep[] = [
+        { id: 'fill-password-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: PASSWORD_INTENT, secretRef: passwordRef },
+        { id: 'fill-other-secret', kind: 'action', action: 'fill-secret', target: 'web', intent: EMAIL_INTENT, secretRef: otherRef },
+        { id: 'click-submit', kind: 'action', action: 'click', target: 'web', intent: SUBMIT_INTENT },
+      ];
+      const testPath = await writePrompt(recordingStorage.storage);
+      await seedFreshArtifacts(recordingStorage.storage, testPath, steps, {
+        'fill-password-secret': { kind: 'element', locator: PASSWORD, fingerprint: FINGERPRINT, intentDigest: PASSWORD_FILL_SECRET_DIGEST, provenance: 'quoted-match' },
+        'fill-other-secret': { kind: 'element', locator: EMAIL, fingerprint: FINGERPRINT, intentDigest: emailFillSecretDigest, provenance: 'quoted-match' },
+      });
+
+      const outcome = await run(deps, DEFAULT_OPTIONS);
+
+      expect(resolveAiExecutor).not.toHaveBeenCalled();
+      expect(executor.structuredRequests).toEqual([]);
+      expect(outcome.results[0]?.result.aiCalls).toBe(0);
+      expect(outcome.results[0]?.error).toMatchObject({
+        kind: 'case-aborted', exitCode: 3, details: { reason: 'grounding-secret-contaminated', stepId: 'click-submit' },
+      });
+      expect(outcome.results[0]?.result.explanation).not.toContain(leakedValue);
     });
 
     it('TEST-R3 accepts a quoted candidate rendered before the deadline without AI and records its wait', async () => {
@@ -2976,6 +3121,28 @@ describe('run', () => {
       await checkNoGroundingOrAi(f);
     });
 
+    it.each(['', '   '] as const)('TEST-8 explains a text-equals failure with empty observed text %j', async (rawText) => {
+      const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit'])], rawText);
+      const captureValue = vi.spyOn(f.session, 'captureValue');
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      const result = outcome.results[0]?.result;
+
+      expect(captureValue).toHaveBeenCalled();
+      expect(await captureValue.mock.results[0]?.value).toBe(rawText);
+      expect(result).toMatchObject({
+        status: 'failed', explanation: 'The element text was empty.',
+        steps: [{ id: 'assert-submit', status: 'failed', actual: 'The element text was empty.' }],
+      });
+      expect(outcome.results[0]?.error).toBeUndefined();
+      const report = buildRunReport({
+        startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+        options: { allowEmpty: false, list: false }, outcome,
+      });
+      expect(report.envelope.errors).toEqual([]);
+      assertDiagnosable(report.envelope);
+      await checkNoGroundingOrAi(f);
+    });
+
     it.each([false, true])('fails ambiguous text-equals with resolve=%s', async (resolve) => {
       const f = await fixture({ ...equals, timeoutMs: 0 }, [capture(['Submit', 'Submit'])]);
       const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve });
@@ -3158,7 +3325,7 @@ describe('run', () => {
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the unclassified case-abort stopgap for an unclassified browser-session error and closes the session', async () => {
+  it('classifies an unclassified browser-session error and closes the session', async () => {
     const closed = vi.fn();
     const session = createFakeBrowserSession(liveEntries([SUBMIT]), {
       onPerform(action) {
@@ -3181,7 +3348,23 @@ describe('run', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expectStopgapOutcome(outcome, 'click-submit', 'after-browser-error', 'before-browser-error');
+    expect(outcome.results[0]?.error).toBeInstanceOf(UnexpectedCrashError);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', steps: [
+      { id: 'before-browser-error', status: 'passed' },
+      { id: 'click-submit', status: 'error', kind: 'environment' },
+      { id: 'after-browser-error', status: 'skipped' },
+    ] });
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id, details: { cause: { name: 'Error' } },
+    })]);
+    assertDiagnosable(report.envelope);
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
@@ -4045,12 +4228,22 @@ describe('run agentic fallback pipeline', () => {
     const planAfter = await recordingStorage.storage.readText(planPath);
     const groundingAfter = await recordingStorage.storage.readText(groundingPath);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', exitCode: 3, details: {
+      reason: 'secret-fill-incomplete', stepId: 'recorded-ai',
+    } });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       explanation: 'The replayed secret fill did not complete.',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+      caseId: outcome.results[0]!.result.id,
+      message: 'The replayed secret fill did not complete.',
+      details: { reason: 'secret-fill-incomplete', stepId: 'recorded-ai' },
+    }]);
+    assertDiagnosable(report.envelope);
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(executeAgentic).not.toHaveBeenCalled();
     expect(executor.agenticRequests).toEqual([]);
@@ -4558,6 +4751,7 @@ describe('run agentic fallback pipeline', () => {
     expect(session.operations().filter((operation) => operation.type === 'perform')).toHaveLength(1);
   });
 
+  // SPEC-2 covers MCP and pipeline origins here because the usecase wrap treats their rejections alike (TEST-6a).
   it.each([
     ['an action', 'ambercast_perform', async (request: AiAgenticRequest) => {
       await request.controller.perform({ type: 'click', element: SUBMIT });
@@ -4571,6 +4765,8 @@ describe('run agentic fallback pipeline', () => {
       });
     }],
   ] as const)('reports a fresh agentic compute-bind miss for %s as a target rejection', async (_description, tool, script) => {
+    // Count rejections caught across the fake executor boundary; the pipeline increments independently before throwing each one.
+    let observedRejections = 0;
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded').mockResolvedValue({
       kind: 'miss',
@@ -4578,7 +4774,12 @@ describe('run agentic fallback pipeline', () => {
     });
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
-        await script(request);
+        try {
+          await script(request);
+        } catch (error) {
+          if (error instanceof AgenticTargetRejection) observedRejections += 1;
+          throw error;
+        }
         return { outcome: 'success' };
       },
     });
@@ -4591,7 +4792,9 @@ describe('run agentic fallback pipeline', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'agentic-step-failed', exitCode: 3, details: {
+      stepId: 'recorded-ai', targetRejections: observedRejections,
+    } });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       explanation: `The AI-directed interaction was rejected by a browser target it could not resolve (${tool}: element-not-found).`,
@@ -4604,6 +4807,151 @@ describe('run agentic fallback pipeline', () => {
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'recorded-ai')]);
     expect(resolveGrounded).toHaveBeenCalledWith(SUBMIT, expect.objectContaining({ mode: 'compute' }));
     expect(session.operations().filter((operation) => operation.type === 'perform' || operation.type === 'evaluate-assert')).toEqual([]);
+    expect(observedRejections).toBeGreaterThan(0);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED',
+      caseId: outcome.results[0]!.result.id,
+      message: outcome.results[0]!.result.explanation,
+      details: expect.objectContaining({ stepId: 'recorded-ai', targetRejections: observedRejections }),
+    })]);
+    assertDiagnosable(report.envelope);
+  });
+
+  // SPEC-2 covers MCP and pipeline origins here because the usecase wrap does not distinguish them (TEST-6a).
+  it('TEST-2 reports the pipeline rejection count when the browser target budget is exhausted', async () => {
+    let observedRejections = 0;
+    const session = createFakeBrowserSession(liveEntries([SUBMIT]));
+    vi.spyOn(session, 'resolveGrounded').mockResolvedValue({ kind: 'miss', reason: 'element-not-found' });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          await request.controller.perform({ type: 'click', element: SUBMIT });
+        } catch (error) {
+          if (!(error instanceof AgenticTargetRejection)) throw error;
+          observedRejections += 1;
+          if (attempt === 3) throw new AgenticTargetRejection(error.tool, error.reason, true);
+        }
+      }
+      throw new Error('The fixture expected four browser target rejections.');
+    } });
+    const { deps, recordingStorage } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    // The shipped executor serializes tool calls; concurrent MCP latch accounting is outside this test's contract.
+    expect(observedRejections).toBeGreaterThan(3);
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      explanation: 'The AI-directed interaction exhausted its browser target budget: ambercast_perform was rejected (element-not-found) after 3 recoverable rejections.',
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED',
+      caseId: outcome.results[0]!.result.id,
+      message: outcome.results[0]!.result.explanation,
+      details: expect.objectContaining({ stepId: 'recorded-ai', targetRejections: observedRejections }),
+    })]);
+    assertDiagnosable(report.envelope);
+  });
+
+  it('TEST-3 reports an unclassified TypeError from the AI executor as a case crash', async () => {
+    const executor = createFakeAiExecutor({ async executeAgentic() { throw new TypeError('provider failed'); } });
+    const { deps, events, recordingStorage } = createScenario({ resolveAiExecutor: async () => executor });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'error',
+      explanation: 'The browser session could not complete this case and no deterministic fallback is available (TypeError).',
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id,
+      details: { cause: { name: 'TypeError' } },
+    })]);
+    expect(events.emitted().filter((event) => event.type === 'unclassified-rejection')).toEqual([
+      expect.objectContaining({ name: 'TypeError', stepId: 'recorded-ai' }),
+    ]);
+    assertDiagnosable(report.envelope);
+  });
+
+  it.each(['browser Error', 'AI thrown value'] as const)('TEST-3 does not disclose a secret-bearing %s across crash surfaces', async (variant) => {
+    const secretRef = '{{secrets.AMBERCAST_SECRET_DUMMY_CRASH}}';
+    const secretValue = 'AMBERCAST_SECRET_DUMMY_CRASH_VALUE';
+    const thrown = variant === 'browser Error'
+      ? Object.assign(new Error(`Private browser failure ${secretValue}`), { name: secretValue })
+      : { name: secretValue, message: `Private provider failure ${secretValue}` };
+    const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
+      onPerform(action) {
+        if (variant === 'browser Error' && action.type === 'navigate') throw thrown;
+      },
+    });
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await request.controller.perform({ type: 'fill-secret', element: PASSWORD, secretRef });
+      throw thrown;
+    } });
+    const { deps, events, recordingStorage } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      resolveAiExecutor: async () => executor,
+      secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    const steps: TestStep[] = variant === 'browser Error'
+      ? [
+        { id: 'fill-crash-secret', kind: 'action', action: 'fill-secret', target: PASSWORD, intent: PASSWORD_INTENT, secretRef },
+        { id: 'throw-crash', kind: 'action', action: 'navigate', url: '/dashboard' },
+      ]
+      : [aiStep('recorded-ai', [secretRef])];
+    await seedFreshArtifacts(recordingStorage.storage, testPath, steps,
+      variant === 'browser Error'
+        ? elementGrounding(['fill-crash-secret'], {}, FINGERPRINT, intentDigestsFor(steps))
+        : {});
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(outcome.results[0]?.error).toMatchObject({
+      kind: 'unexpected-crash',
+    });
+    expect((outcome.results[0]?.error as { cause?: unknown })?.cause).toBe(thrown);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      details: { cause: { name: 'Error' } },
+    })]);
+    assertDiagnosable(report.envelope);
+    const rejection = events.emitted().filter((event) => event.type === 'unclassified-rejection');
+    expect(rejection).toEqual([expect.objectContaining({ name: 'Error' })]);
+    const artifacts = await collectStorageArtifacts(recordingStorage.storage, [
+      deps.layout.runsDirFor(testPath, deps.runId),
+      deps.layout.planPathFor(testPath),
+      deps.layout.groundingPathFor(testPath),
+    ]);
+    assertNoSecretDisclosure({ secrets: { crash: secretValue }, report: report.envelope,
+      artifacts: [...artifacts, { path: 'events.json', bytes: new TextEncoder().encode(JSON.stringify(events.emitted())) }] });
+    assertNoSecretDisclosure({ secrets: { outcome: secretValue }, report: outcome });
   });
 
   it('stops a cancelled trace replay before resolving an agentic fallback', async () => {
@@ -4680,7 +5028,7 @@ describe('run agentic fallback pipeline', () => {
 describe('run path-B element recovery', () => {
   const clickDigest = computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT });
   const storedClick = (fingerprint: Fingerprint = FINGERPRINT) => elementGrounding(['click-submit'], {}, fingerprint, { 'click-submit': clickDigest });
-  const foundSubmit = () => ({ data: { outcome: 'found' as const, role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' });
+  const foundSubmit = () => ({ data: { proposal: { outcome: 'found' as const, role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' });
 
   it('keeps a fingerprint hit deterministic and never resolves an AI executor', async () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT]));
@@ -4876,11 +5224,13 @@ describe('run path-B element recovery', () => {
     });
     expect(requestContext.excerpt).toContain('submit valid credentials');
     const responseSchema = executor.structuredRequests[0]?.responseSchema as unknown as {
-      readonly oneOf: readonly { readonly additionalProperties: boolean; readonly properties: Readonly<Record<string, { readonly type: string }>>; readonly required: readonly string[] }[];
+      readonly type: string;
+      readonly properties: { readonly proposal: { readonly anyOf: readonly unknown[] } };
     };
-    expect(responseSchema.oneOf).toContainEqual(expect.objectContaining({
+    expect(responseSchema.type).toBe('object');
+    expect(responseSchema.properties.proposal.anyOf).toContainEqual(expect.objectContaining({
       additionalProperties: false,
-      properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string', minLength: 1 }, name: { type: 'string', minLength: 1 } },
+      properties: { outcome: { type: 'string', const: 'found' }, role: { type: 'string', minLength: 1 }, name: { type: 'string' } },
       required: ['outcome', 'role', 'name'],
     }));
     expect(JSON.stringify(executor.structuredRequests[0]?.responseSchema)).not.toContain('fingerprint');
@@ -5033,7 +5383,7 @@ describe('run path-B element recovery', () => {
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), {
       snapshot: { accessibilityTree, screenshot: new Uint8Array() },
     });
-    const executor = createFakeAiExecutor({ execute: () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }) });
+    const executor = createFakeAiExecutor({ execute: () => ({ data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }) });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
@@ -5082,7 +5432,7 @@ describe('run path-B element recovery', () => {
     expect(locallyComputedFingerprint).toMatchObject({ algorithm: 'a11y-neighborhood-v2' });
     const session = createFakeBrowserSession(liveEntries([SUBMIT], DIFFERENT_FINGERPRINT), { snapshot: pathBSnapshot() });
     const executor = createFakeAiExecutor({
-      execute: () => ({ data: { outcome: 'none' }, raw: '{"outcome":"none"}' }),
+      execute: () => ({ data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }),
     });
     const { deps, events, recordingStorage } = createScenario({
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
@@ -5252,6 +5602,21 @@ describe('run path-B element recovery', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    expect(report.exitCode).toBe(3);
+    expect(outcome.results[0]?.result.status).toBe('error');
+    expect(report.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+      caseId: outcome.results[0]!.result.id,
+      message: outcome.results[0]!.result.explanation,
+      details: { reason: 'grounding-snapshot-invalid', stepId: 'click-submit' },
+    }]);
+    assertDiagnosable(report.envelope);
+
     expect(JSON.parse(outcome.results[0]?.result.steps.at(-1)?.observed?.accessibilitySnapshot ?? 'null')).toEqual(classificationTree);
   });
 
@@ -5414,7 +5779,7 @@ describe('run path-B element recovery', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expectStopgapOutcome(outcome, 'click-submit', 'after-click', 'fill-password-secret');
+    expectStopgapOutcome(outcome, 'click-submit', 'after-click', 'grounding-secret-contaminated', 'fill-password-secret');
     expect(outcome.results[0]?.result.explanation).toBe(
       'The supplied locator\'s accessibility evidence contains a resolved secret value and cannot be fingerprinted or cached. Add an aria-label that does not echo the secret value to the affected element.',
     );
@@ -5853,7 +6218,7 @@ describe('run AI call timeout composition', () => {
           const data = proposal++ === 0
             ? { outcome: 'found' as const, role: 'textbox', name: 'Email' }
             : { outcome: 'found' as const, role: 'button', name: 'Submit' };
-          return { data, raw: JSON.stringify(data) };
+          return { data: { proposal: data }, raw: JSON.stringify({ proposal: data }) };
         },
       });
       const snapshot = pathBSnapshot();
@@ -6553,6 +6918,9 @@ describe('run agentic wrapper state machine', () => {
     expect(session.operations().filter((operation) => operation.type === 'evaluate-assert')).toHaveLength(0);
     expect(clock.sleepCalls).toEqual([]);
     expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation: 'The AI-directed interaction completed without terminal verification evidence.' });
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+      reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+    } });
   });
 
   it('TEST-B5 includes four seconds of binding in the five-second evaluation deadline', async () => {
@@ -6789,7 +7157,7 @@ describe('run agentic wrapper state machine', () => {
       await request.controller.perform({ type: 'navigate', url: '/dashboard' });
     }],
     ['zero observations', async () => undefined],
-  ] as const)('rejects a nominal agentic success with %s instead of writing grounding', async (_description, script) => {
+  ] as const)('rejects a nominal agentic success with %s instead of writing grounding', async (description, script) => {
     const session = createFakeBrowserSession(new Map());
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
@@ -6807,13 +7175,89 @@ describe('run agentic wrapper state machine', () => {
 
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
-    expect(outcome.results[0]?.error).toBeUndefined();
+    if (description === 'a perform after an earlier passed assertion') {
+      expect(outcome.results[0]?.error).toMatchObject({
+        kind: 'agentic-step-failed', exitCode: 3,
+        details: expect.objectContaining({ stepId: 'recorded-ai', targetRejections: 1 }),
+      });
+      expect(outcome.results[0]?.result).toMatchObject({
+        status: 'error',
+        explanation: 'The AI-directed interaction was rejected by a browser target it could not resolve (ambercast_perform: element-not-found).',
+        steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
+      });
+    } else {
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', exitCode: 3, details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
+    }
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       steps: [{ id: 'recorded-ai', status: 'error', kind: 'environment' }],
     });
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    if (description === 'a perform after an earlier passed assertion') {
+      expect(report.envelope.errors).toEqual([{
+        scope: 'case', kind: 'environment', code: 'AGENTIC_STEP_FAILED',
+        caseId: outcome.results[0]!.result.id,
+        message: outcome.results[0]!.result.explanation,
+        details: {
+          actions: 1, assertions: 1, failedAssertions: 0, passedAssertions: 1,
+          stepId: 'recorded-ai', targetRejections: 1,
+        },
+      }]);
+    } else {
+      expect(report.envelope.errors).toEqual([{
+        scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+        caseId: outcome.results[0]!.result.id,
+        message: outcome.results[0]!.result.explanation,
+        details: { reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai' },
+      }]);
+    }
+    assertDiagnosable(report.envelope);
     expect(recordingStorage.writes).toEqual([]);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({});
+  });
+
+  it.each([
+    ['agentic-coverage-inexact', async (request: InstructionCoveredAiAgenticRequest) => {
+      await request.controller.evaluateAssert(passingText('Dashboard'), 'unlisted-criterion');
+    }, 'The AI-directed interaction did not provide exact terminal criterion coverage.'],
+    ['agentic-proof-invalid', async (request: InstructionCoveredAiAgenticRequest) => {
+      await request.controller.evaluateAssert(passingText('Dashboard'));
+      await request.controller.perform({ type: 'navigate', url: '/dashboard' });
+      await request.controller.evaluateAssert(passingText('Dashboard'), 'dashboard-reached');
+    }, 'The AI-directed interaction produced invalid terminal verification proof.'],
+  ] as const)('TEST-1 reports %s for an agentic terminal contract failure', async (reason, script, explanation) => {
+    const session = createFakeBrowserSession(new Map());
+    const executor = createFakeAiExecutor({ async executeAgentic(request) {
+      await script(request);
+      return { outcome: 'success' };
+    } });
+    const { deps, recordingStorage } = createScenario({
+      uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
+      resolveAiExecutor: async () => executor,
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [aiStep()]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+
+    expect(outcome.results[0]?.result).toMatchObject({ status: 'error', explanation });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([{
+      scope: 'case', kind: 'environment', code: 'CASE_ABORTED',
+      caseId: outcome.results[0]!.result.id, message: explanation,
+      details: { reason, stepId: 'recorded-ai' },
+    }]);
+    assertDiagnosable(report.envelope);
   });
 
   describe('TEST-12 rejection barrier', () => {
@@ -6854,6 +7298,9 @@ describe('run agentic wrapper state machine', () => {
         { before: (request) => request.controller.evaluateAssert(passingText('Dashboard')).then(() => undefined) },
       );
       expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
       expect((await readGrounding(storage, testPath)).entries).toEqual({});
     });
 
@@ -6863,6 +7310,9 @@ describe('run agentic wrapper state machine', () => {
         { fallback: true, assertOutcomes: [{ passed: false, message: 'Cached trace missed.' }] },
       );
       expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
       expect((await readGrounding(storage, testPath)).entries).toEqual(aiGrounding(legacyTrace([], [passingText('Cached trace')])));
     });
 
@@ -6872,6 +7322,9 @@ describe('run agentic wrapper state machine', () => {
         { assertOutcomes: [{ passed: false, message: 'Not yet visible.' }] },
       );
       expect(outcome.results[0]?.result.explanation).toBe('The AI-directed interaction completed without terminal verification evidence.');
+      expect(outcome.results[0]?.error).toMatchObject({ kind: 'case-aborted', details: {
+        reason: 'agentic-no-terminal-evidence', stepId: 'recorded-ai',
+      } });
     });
 
     it('d: clears the barrier only after a new tagged passing assertion and records its trace', async () => {
@@ -7274,7 +7727,7 @@ describe('run deterministic redaction boundary', () => {
     const session = createFakeBrowserSession(liveEntries([PASSWORD]), {
       onPerform(action) {
         if (action.type === 'navigate') {
-          throw new Error(`Plain browser error exposed ${secretValue}.`);
+          throw Object.assign(new Error(`Plain browser error exposed ${secretValue}.`), { name: secretValue });
         }
       },
     });
@@ -7298,8 +7751,28 @@ describe('run deterministic redaction boundary', () => {
         explanation: 'The browser session could not complete this case and no deterministic fallback is available (Error).',
       },
     });
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toBeInstanceOf(UnexpectedCrashError);
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
     expect(outcome.results[0]?.result.explanation).not.toContain(secretValue);
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id,
+      details: { cause: { name: 'Error' } },
+    })]);
+    assertDiagnosable(report.envelope);
+    const artifacts = await collectStorageArtifacts(recordingStorage.storage, [
+      deps.layout.runsDirFor(testPath, deps.runId),
+      deps.layout.planPathFor(testPath),
+      deps.layout.groundingPathFor(testPath),
+    ]);
+    const eventArtifact = { path: 'events.json', bytes: new TextEncoder().encode(JSON.stringify(events.emitted())) };
+    assertNoSecretDisclosure({ secrets: { browserError: secretValue }, report: report.envelope, artifacts: [...artifacts, eventArtifact] });
+    assertNoSecretDisclosure({ secrets: { caseOutcome: secretValue }, report: outcome });
     const rejection = events.emitted().find((event) => event.type === 'unclassified-rejection');
     expect(rejection).toMatchObject({
       type: 'unclassified-rejection', file: `${TEST_DIR}/login.test.md`, stepId: 'throw-generic-error',
@@ -7337,6 +7810,17 @@ describe('run deterministic redaction boundary', () => {
     expect(events.emitted()).toContainEqual(expect.objectContaining({
       type: 'unclassified-rejection', stepId: 'throw-derived-generic-error', name: projectedName, message,
     }));
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.exitCode).toBe(3);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', kind: 'environment', code: 'UNEXPECTED_CRASH',
+      caseId: outcome.results[0]!.result.id,
+      details: { cause: { name: projectedName } },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   it('retains rotating path-A and first-pipeline secret values for a second independent AI pipeline', async () => {
@@ -7982,7 +8466,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
     const outcome = await run(deps, DEFAULT_OPTIONS);
 
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(outcome.results[0]?.error).toBeUndefined();
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',
       explanation: 'The browser session could not complete this case and no deterministic fallback is available (Error).',
@@ -8042,7 +8526,7 @@ describe('run per-case grounding flush and dispatch wiring', () => {
         await evaluateTerminalAssert(request, { type: 'assert', check: 'text-visible', text: '{{run.name}}' });
         return { outcome: 'success' };
       },
-      execute: () => ({ data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' }),
+      execute: () => ({ data: { proposal: { outcome: 'found', role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' }),
     });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
@@ -8198,7 +8682,7 @@ describe('run failure evidence', () => {
       } as unknown as PlanDocument;
       await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
       await storage.writeText(layout.groundingPathFor(testPath), toCanonicalArtifactText({
-        schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {},
+        schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {},
       } as unknown as JsonValueT));
       const session = createFakeBrowserSession(new Map(), {
         assertOutcome: { passed: false, message: 'The dashboard is absent.' },
@@ -8254,6 +8738,62 @@ describe('run failure evidence', () => {
       expected,
       actual: 'intent' in step ? 'matched 0' : 'The browser reported a mismatch.',
     });
+  });
+
+  it('TEST-8 explains a text-visible failure when the browser gives no diagnostic', async () => {
+    const session = createFakeBrowserSession(new Map(), {
+      assertOutcome: { passed: false, message: '' },
+    });
+    const evaluateAssert = vi.spyOn(session, 'evaluateAssert');
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'assert-dashboard', kind: 'assert', check: 'text-visible', text: 'Dashboard', timeoutMs: 0 },
+    ]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(evaluateAssert).toHaveBeenCalled();
+    expect(await evaluateAssert.mock.results[0]?.value).toEqual({ passed: false, message: '' });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'failed', explanation: 'The browser returned no diagnostic.',
+      steps: [{ id: 'assert-dashboard', status: 'failed', actual: 'The browser returned no diagnostic.' }],
+    });
+    expect(outcome.results[0]?.error).toBeUndefined();
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.envelope.errors).toEqual([]);
+    assertDiagnosable(report.envelope);
+  });
+
+  it('TEST-8 explains a url-matches failure when the browser gives no diagnostic', async () => {
+    const session = createFakeBrowserSession(new Map(), {
+      assertOutcome: { passed: false, message: '' },
+    });
+    const evaluateAssert = vi.spyOn(session, 'evaluateAssert');
+    const { deps, recordingStorage } = createScenario({ uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)) });
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath, [
+      { id: 'assert-dashboard-url', kind: 'assert', check: 'url-matches', pattern: '/dashboard/.*', timeoutMs: 0 },
+    ]);
+
+    const outcome = await run(deps, DEFAULT_OPTIONS);
+
+    expect(evaluateAssert).toHaveBeenCalled();
+    expect(await evaluateAssert.mock.results[0]?.value).toEqual({ passed: false, message: '' });
+    expect(outcome.results[0]?.result).toMatchObject({
+      status: 'failed', explanation: 'The browser returned no diagnostic.',
+      steps: [{ id: 'assert-dashboard-url', status: 'failed', actual: 'The browser returned no diagnostic.' }],
+    });
+    expect(outcome.results[0]?.error).toBeUndefined();
+    const report = buildRunReport({
+      startedAt: '2026-10-07T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false }, outcome,
+    });
+    expect(report.envelope.errors).toEqual([]);
+    assertDiagnosable(report.envelope);
   });
 
   it('restores a captured run reference in an expected assertion description exactly once', async () => {
@@ -8802,6 +9342,7 @@ describe('run failure evidence', () => {
     const step = outcome.results[0]?.result.steps[0];
 
     expect(outcome.results[0]?.result.explanation).toBe('The browser session could not complete this case and no deterministic fallback is available (Error).');
+    expect(outcome.results[0]?.error).toMatchObject({ kind: 'unexpected-crash', exitCode: 3 });
     expect(step).toMatchObject({ id: 'open-dashboard', status: 'error', kind: 'environment', screenshot: expect.any(String), observed: expect.any(Object) });
     expect(step).not.toHaveProperty('expected');
     expect(step).not.toHaveProperty('actual');

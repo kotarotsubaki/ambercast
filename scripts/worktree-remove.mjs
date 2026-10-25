@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // Removes an issue worktree only after preserving its implementation records.
+// The default receptacle is the primary checkout's .claude/worktrees, shared
+// with Claude Code's EnterWorktree; its session locks remain Claude Code's to
+// release before cleanup can proceed.
 // Git's worktree inventory is the authority for both target selection and the
 // primary checkout that receives files copied back from a linked worktree.
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
-import { ensureTargetLocked, fail, getErrorMessage, isSameOrDescendant, isStrictDescendant, listWorktrees, resolveCwdRealpath, resolveMainWorktree, resolveReceptacle, runGit } from './lib/worktree.mjs';
+import { ensureTargetLocked, fail, getErrorMessage, isClaudeSessionLock, isSameOrDescendant, isStrictDescendant, listWorktrees, resolveCwdRealpath, resolveMainWorktree, resolveReceptacle, runGit } from './lib/worktree.mjs';
 
 const USAGE = 'Usage: node scripts/worktree-remove.mjs <issue-number|worktree-path> [--force] [--with-branch]';
 const ISSUE_NUMBER = /^[1-9]\d*$/;
@@ -232,6 +235,14 @@ function main() {
     const targetWorktree = selectWorktree(parsed.target, worktrees);
     const targetPath = validateTarget(targetWorktree, mainWorktree, receptacle);
     guardSelfRemoval(targetWorktree, mainWorktree, targetPath);
+
+    // The post-mutex inventory protects ownership acquired between inventories.
+    // Claude Code alone releases its session lock, so refusal precedes record
+    // preservation and transaction creation. The existing finally releases this
+    // invocation's mutex without changing the target or copy destinations.
+    if (isClaudeSessionLock(targetWorktree.locked)) {
+      throw new Error(`Claude Code holds the session lock for ${targetWorktree.path}. Retry after the Claude Code session releases its lock.`);
+    }
 
     if (parsed.withBranch && targetWorktree.branch === undefined) {
       throw new Error(`Worktree ${targetWorktree.path} has no local branch to delete.`);

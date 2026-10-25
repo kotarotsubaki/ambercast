@@ -54,6 +54,7 @@ import { runGenerateCommand } from '#runtime/generate-command.js';
 import { runCheckCommand } from '#runtime/check-command.js';
 import { CLI_MANIFEST, flagLookup, renderUsage } from '#runtime/cli-manifest.js';
 import { escapeControlChars } from '#runtime/control-chars.js';
+import { errorDetailEntries } from '#runtime/error-details.js';
 import { writeDebugCause } from '#runtime/crash-diagnostics.js';
 import { runHealCommand, type HealCommandInput } from '#runtime/heal-command.js';
 import { runInitCommand, type InitCommandDeps, type InitCommandInput, type InitCommandOutput } from '#runtime/init-command.js';
@@ -66,7 +67,6 @@ interface ParsedGenerateCommand {
   readonly command: 'generate';
   readonly input: {
     readonly files: readonly string[];
-    readonly strict: boolean;
     readonly force: boolean;
     readonly dryRun: boolean;
     readonly target?: string;
@@ -171,31 +171,7 @@ const USAGE = renderUsage(CLI_MANIFEST);
  */
 const HEALTHY_REPORT_STATUSES = new Set(['generated', 'skipped-fresh', 'listed', 'fresh', 'fresh-without-grounding', 'passed']);
 
-/**
- * Maps ReportError codes to the details fields the human renderer shows in
- * schema declaration order. It is the human renderer's internal registry and
- * test seam rather than a schema authority. Every ReportError code that
- * declares a `details` branch in `src/report/schema.ts` needs an entry because
- * the renderer uses this table to choose its renderable fields; without one,
- * no fields are renderable for that error. The secret-policy entries retain
- * names, locations, and environment spellings but never values, matching the
- * report schemas' remediation-only evidence boundary.
- */
-export const ERROR_DETAILS_KEY_ORDER: Readonly<Record<string, readonly string[]>> = {
-  EXECUTOR_UNSUPPORTED: ['target', 'executor', 'reason', 'missing', 'surface'],
-  BROWSER_LAUNCH_FAILED: ['reason', 'engine'],
-  PROMPT_PATH_INVALID: ['path', 'reason'],
-  AI_RESPONSE_INVALID: ['issues', 'attempts'],
-  AGENTIC_STEP_FAILED: ['stepId', 'actions', 'assertions', 'passedAssertions', 'failedAssertions', 'targetRejections', 'lastFailedAssertion'],
-  SECRET_LITERAL_REJECTED: ['detector', 'path', 'attempts'],
-  SECRET_ENV_VAR_COLLISION: ['envVar', 'refs'],
-  SECRET_CONSENT_REQUIRED: ['reason', 'secrets'],
-  SECRET_SYNTAX_REJECTED: ['occurrences'],
-  AI_EXECUTOR_UNAVAILABLE: ['attempts'],
-  UNEXPECTED_CRASH: ['cause'],
-  FS_IO_ERROR: ['partiallyWritten'],
-  GROUNDING_UNRESOLVED: ['stepId', 'reason'],
-};
+export { ERROR_DETAILS_KEY_ORDER } from '#runtime/error-details.js';
 
 /**
  * Fixed warning that `main()` writes to stderr exactly once when a run
@@ -218,45 +194,12 @@ function colorize(value: string, color: string, enabled: boolean): string {
 }
 
 /**
- * Formats structured diagnostic details in each code's declared key order.
- *
- * A fixed per-code key-order table follows each `details` sub-schema's field
- * order. `issues` renders each entry as `<code> @ <JSON.stringify(path)>`,
- * joined by `; `. Every other field renders as `key=value`: primitives are
- * stringified, and arrays or objects use compact `JSON.stringify` output.
- * The whole rendered string, including every JSON serialization result, goes
- * through {@link escapeControlChars} before return. There is no JSON carve-out
- * because JSON encoding does not escape DEL or C1 control characters.
+ * Formats shared detail entries for terminal output, escaping each value at
+ * the CLI boundary because JSON encoding does not escape DEL or C1 controls.
  */
 function formatErrorDetails(code: unknown, details: unknown): string {
-  if (details === null || typeof details !== 'object' || Array.isArray(details)) {
-    return '';
-  }
-
-  const detailRecord = details as Record<string, unknown>;
-  const fields = typeof code === 'string' && Object.hasOwn(ERROR_DETAILS_KEY_ORDER, code)
-    ? ERROR_DETAILS_KEY_ORDER[code]!
-    : [];
-
-  return fields
-    .filter((key) => Object.hasOwn(detailRecord, key))
-    .map((key) => {
-      const value = detailRecord[key];
-      if (key === 'issues' && Array.isArray(value)) {
-        const issues = value.map((issue) => {
-          if (issue === null || typeof issue !== 'object' || Array.isArray(issue)) {
-            return escapeControlChars(String(issue));
-          }
-          const issueRecord = issue as Record<string, unknown>;
-          return `${escapeControlChars(String(issueRecord.code ?? ''))} @ ${escapeControlChars(JSON.stringify(issueRecord.path))}`;
-        }).join('; ');
-        return `issues=${issues}`;
-      }
-      const rendered = value !== null && typeof value === 'object'
-        ? JSON.stringify(value)
-        : String(value);
-      return `${key}=${escapeControlChars(rendered)}`;
-    })
+  return errorDetailEntries(typeof code === 'string' ? code : '', details)
+    .map(([key, value]) => `${key}=${escapeControlChars(value)}`)
     .join('; ');
 }
 
@@ -306,9 +249,9 @@ function projectCauseName(cause: unknown): string {
  * or free text; literal backslashes are preserved unescaped. This does not
  * affect the `status` column or the JSON output path. Stage 3 secret-set
  * rejection adds one result-local remediation line
- * immediately after its row, rather than entering the error channel: healing
- * must leave artifacts unchanged until regeneration receives fresh consent
- * (SPEC-C3-2).
+ * after its row and any assumption warnings, rather than entering the error
+ * channel: healing must leave artifacts unchanged until regeneration receives
+ * fresh consent from the user.
  */
 export function renderHumanReport(
   envelope: Awaited<ReturnType<typeof runRunCommand>>['envelope'],
@@ -340,9 +283,22 @@ export function renderHumanReport(
     const statusColor = healthy ? '32' : status === 'would-generate' ? '33' : '31';
     const reason = typeof item.reason === 'string' ? `: ${escapeControlChars(item.reason)}` : '';
     const row = `${colorize(status, statusColor, color)} ${escapeControlChars(String(item.file ?? item.id ?? ''))}${reason}`.trimEnd();
+    // Provider text is untrusted, so the terminal projection escapes it while
+    // only the original report retains raw text for JSON and MCP consumers.
+    // Other warning kinds stay off screen to preserve their presentation contract.
+    const resultLines = [row];
+    if (Array.isArray(item.warnings)) {
+      for (const value of item.warnings as readonly unknown[]) {
+        if (value === null || typeof value !== 'object') continue;
+        const warning = value as { readonly kind?: unknown; readonly message?: unknown };
+        if (warning.kind === 'generator-assumption' && typeof warning.message === 'string') {
+          resultLines.push(`  ${colorize('warning', '33', color)}: ${escapeControlChars(warning.message)}`);
+        }
+      }
+    }
     return item.stage3Rejection?.reason === 'secret-set-changed'
-      ? [row, `  hint: 秘匿値の構成が変わった。ambercast generate --force ${escapeControlChars(String(item.file ?? item.id ?? ''))} で再生成し同意を取り直す`]
-      : [row];
+      ? [...resultLines, `  hint: 秘匿値の構成が変わった。ambercast generate --force ${escapeControlChars(String(item.file ?? item.id ?? ''))} で再生成し同意を取り直す`]
+      : resultLines;
   });
 
   for (const error of errors) {
@@ -385,7 +341,6 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
   }
 
   const files: string[] = [];
-  let strict = false;
   let force = false;
   let dryRun = false;
   let target: string | undefined;
@@ -406,9 +361,7 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
     const flag = flags.get(argument);
     if (flag !== undefined) {
       if (flag.value === null) {
-        if (flag.name === 'strict') {
-          strict = true;
-        } else if (flag.name === 'force') {
+        if (flag.name === 'force') {
           force = true;
         } else if (flag.name === 'dry-run') {
           dryRun = true;
@@ -453,7 +406,6 @@ function parseGenerate(argv: readonly string[], signal: AbortSignal): ParsedGene
     command: 'generate',
     input: {
       files,
-      strict,
       force,
       dryRun,
       ...(target === undefined ? {} : { target }),

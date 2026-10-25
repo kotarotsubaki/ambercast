@@ -27,6 +27,8 @@ export type ExitCode = 0 | 1 | 2 | 3 | 4 | 5;
  * paths even though each is caller-correctable.
  * `agentic-step-failed` identifies a child agent's explicit failure after a
  * normal exit, preserving case-level diagnostic evidence.
+ * Case aborts retain a reason and step identity, while unresolved prompt
+ * ambiguities remain caller-correctable generation failures.
  */
 export type ErrorKind =
   | 'assertion-failed'
@@ -46,12 +48,17 @@ export type ErrorKind =
   | 'ai-executor-unavailable'
   | 'ai-response-invalid'
   | 'agentic-step-failed'
+  | 'case-aborted'
   | 'executor-unsupported'
   | 'fs-io-error'
   | 'unexpected-crash'
   | 'interrupted'
   | 'no-tests-found'
-  | 'port-unavailable';
+  | 'port-unavailable'
+  | 'prompt-ambiguous';
+
+/** Error kinds with a case or run report representation. */
+export type ReportableErrorKind = Exclude<ErrorKind, 'assertion-failed' | 'no-tests-found' | 'port-unavailable'>;
 
 /**
  * Base class for failures that participate in Ambercast's classified error

@@ -13,11 +13,10 @@ import { StaleIrError } from '#core/errors/stale-ir-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
-import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { UI_CAPABILITIES, type UiCapability } from '#core/ir/capabilities.js';
-import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
@@ -33,29 +32,28 @@ import {
   Step,
   type Fingerprint,
 } from '#core/ir/schema.js';
-import { createLayoutResolver } from '#core/layout/resolve.js';
 import { reportError } from '#report/error-mapping.js';
 import { RepairTraceEntry } from '#report/schema.js';
-import type { AssertOutcome, BrowserSession } from '#ports/browser.js';
+import type { BrowserSession } from '#ports/browser.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { EventSink, RunEvent, StageTwoRejectionReason } from '#ports/system.js';
 import {
   heal,
   type HealCommitOutcome,
   type HealDeps,
-  type HealOptions,
+  type HealCaseOutcome,
 } from '#usecases/heal.js';
 import type { GenerateDeps } from '#usecases/generate.js';
 import { PlanNavigationResolutionError, type RunOutcome } from '#usecases/run.js';
 import { buildHealReport } from '#usecases/heal-report.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
-import { createFixedClock } from '../../doubles/create-fixed-clock.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createFakeBrowserSession, elementRefKey, type FakeBrowserSessionEntry } from '../../doubles/fake-browser-session.js';
-import { createFakeSecretsProvider } from '../../doubles/fake-secrets-provider.js';
+import { assertDiagnosable, assertNoSecretDisclosure, collectStorageArtifacts } from '../../support/report-assertions.js';
+import { createScenario, healAccessibilityTree, healSnapshot, groundingEntry, committedIntent, TEST_DIR, RUNS_DIR, PROMPT, TARGETS, RESOLVED_TARGETS, FINGERPRINT, SUBMIT, PASSWORD, REPAIRED_PASSWORD, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT, FIXTURE_SPAN, OPTIONS, type HealScenario } from '../../support/heal-scenario.js';
 
 const aiExecutorUnavailableObserver = vi.hoisted(() => ({ messages: [] as string[] }));
 
@@ -156,34 +154,237 @@ afterEach(() => {
 
 const PLAN = '/workspace/tests/login.ambercast.plan.json';
 const GROUNDING = '/workspace/tests/login.ambercast.grounding.json';
-const TEST_DIR = '/workspace/tests';
-const RUNS_DIR = '/workspace/tests/.runs';
-const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\n';
-const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright' as const, browser: 'chromium' as const }, healReplayIsolation: 'idempotent' as const, resolveTimeoutMs: 5000 } } as const;
-const FINGERPRINT: Fingerprint = { algorithm: 'a11y-neighborhood-v2', hash: 'a'.repeat(64) };
-const SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Submit' };
-const REPAIRED_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Continue' };
-const AFTER_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Open dashboard' };
-const REPAIRED_AFTER_SUBMIT = { strategy: 'accessibility' as const, role: 'button', name: 'Continue to dashboard' };
-const PASSWORD = { strategy: 'accessibility' as const, role: 'textbox', name: 'Password' };
-const REPAIRED_PASSWORD = { strategy: 'accessibility' as const, role: 'textbox', name: 'Continue password' };
-const GENERATED_INSTRUCTION_TEXT_FIELD = 'cita' + 'tion';
-const FIXTURE_SPAN = { startLine: 3, startColumn: 8, endLine: 3, endColumn: 14 } as const;
-function committedIntent(ref: ElementRef) {
-  return { description: ref.name, roleHint: ref.role, sourceSpan: FIXTURE_SPAN };
+
+// A spread avoids excess-property checks: this proves outcome discrimination,
+// rather than merely rejecting a property missing from every outcome.
+function assertAssumptionWarningTypes(outcome: HealCaseOutcome): void {
+  const warningBearing = { ...outcome, warnings: [{ kind: 'generator-assumption' as const, message: 'A' }] };
+  const accepted: HealCaseOutcome = { ...warningBearing, repairOutcome: 'healed' };
+  // @ts-expect-error SPEC-7 forbids warnings on partially healed outcomes.
+  const partial: HealCaseOutcome = { ...warningBearing, repairOutcome: 'partially-healed' };
+  // @ts-expect-error SPEC-7 forbids warnings on unresolved outcomes.
+  const unresolved: HealCaseOutcome = { ...warningBearing, repairOutcome: 'unresolved' };
+  // @ts-expect-error SPEC-7 forbids warnings when no repair was needed.
+  const unchanged: HealCaseOutcome = { ...warningBearing, repairOutcome: 'no-changes-needed' };
+  void [accepted, partial, unresolved, unchanged];
 }
+void assertAssumptionWarningTypes;
+
+describe('TEST-7 accepted Stage 3 assumptions (SPEC-3, SPEC-7)', () => {
+  const invalidTail = { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'navigate', url: '/ignored' }], ambiguities: [] };
+
+  async function candidateScenario(assumptions?: readonly string[], candidateSteps: unknown = [
+    { id: 'regenerated', kind: 'action', target: 'web', action: 'navigate', url: '/dashboard' },
+  ]) {
+    const candidate = { steps: candidateSteps, ambiguities: [], ...(assumptions === undefined ? {} : { assumptions }) };
+    const executor = createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request)
+      : { data: stage2Frontier(request) === undefined ? candidate : invalidTail, raw: JSON.stringify(candidate) } });
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: 'broken', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
+      grounding: {}, aiExecutor: executor, sessionEntries: liveEntries(REPAIRED_SUBMIT),
+    });
+    return { scenario, executor, candidate };
+  }
+
+  function settledReport(result: Awaited<ReturnType<typeof heal>>, application: 'preview-only' | 'applied' | 'no-artifact-change') {
+    return buildHealReport({ startedAt: '2026-08-25T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false },
+      outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application })) },
+    });
+  }
+
+  it.each([
+    ['one', ['A'], ['A']],
+    ['ordered duplicates and blanks', ['A', '  ', ' B ', 'A', '\n', ''], ['A', ' B ', 'A']],
+    ['long message', ['Assumed page '.repeat(8192)], ['Assumed page '.repeat(8192)]],
+  ] as const)('retains %s assumptions only after Stage 3 acceptance', async (_name, assumptions, expected) => {
+    const { scenario, executor } = await candidateScenario(assumptions);
+    const original = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    const result = await heal(scenario.deps, OPTIONS);
+    const row = result.outcome.results[0];
+    expect(row?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(row?.repairOutcome).toBe('healed');
+    expect(executor.structuredRequests.filter((request) => stage2Frontier(request) === undefined)).toHaveLength(1);
+    expect(row).toHaveProperty('warnings', expected.map((message) => ({ kind: 'generator-assumption', message })));
+    expect(result.commits.size).toBe(1);
+    const preview = settledReport(result, 'preview-only');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.envelope.results[0]).toHaveProperty('application', 'preview-only');
+    expect(preview.envelope.results[0]).toHaveProperty('warnings', expected.map((message) => ({ kind: 'generator-assumption', message })));
+    assertDiagnosable(preview.envelope);
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(original);
+    await expect(result.commits.get(OPTIONS.files[0]!)?.commit()).resolves.toEqual({ outcome: 'committed' });
+    const applied = settledReport(result, 'applied');
+    expect(applied.exitCode).toBe(0);
+    expect(applied.envelope.results[0]).toHaveProperty('warnings', expected.map((message) => ({ kind: 'generator-assumption', message })));
+    const plan = JSON.parse(await scenario.storage.readText(PLAN));
+    expect(plan.steps[0].id).toBe('regenerated');
+    expect(plan).not.toHaveProperty('assumptions');
+    expect(plan).not.toHaveProperty('warnings');
+  });
+
+  it.each([
+    ['absent', undefined], ['empty', []], ['blank', ['', ' ', '\n', '\t\r\n']],
+  ] as const)('omits the warnings key for %s assumptions after accepted replay', async (_name, assumptions) => {
+    const { scenario } = await candidateScenario(assumptions);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('healed');
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+  });
+
+  it('filters action warnings out of an accepted Stage 3 candidate while retaining assumptions', async () => {
+    const { scenario } = await candidateScenario(['A'], [{
+      id: 'regenerated', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT),
+    }]);
+    let candidateWarnings: unknown;
+    generateRunObserver.afterGenerate = (outcome) => { candidateWarnings = outcome.results[0]?.warnings; };
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(candidateWarnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'action-unconfirmed' }),
+      { kind: 'generator-assumption', message: 'A' },
+    ]));
+    expect(result.outcome.results[0]).toHaveProperty('warnings', [{ kind: 'generator-assumption', message: 'A' }]);
+  });
+
+  it('keeps Stage 1-only healed rows free of generator warnings', async () => {
+    let bindings = 0;
+    const executor = createFakeAiExecutor({ execute: async (request) => {
+      if (!isElementBindingProposalRequest(request)) return { data: { steps: [], ambiguities: [], assumptions: ['Unused generation assumption'] }, raw: '{}' };
+      return bindings++ === 0
+        ? { data: { proposal: { outcome: 'none' } }, raw: '{}' }
+        : elementBindingProposal(request);
+    } });
+    const scenario = await createScenario({ steps: [
+      Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+      Step.parse({ id: 'confirm-submit', kind: 'assert', target: 'web', check: 'url-matches', pattern: '/dashboard', confirms: ['click-submit'] }),
+    ], grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) }, sessionEntries: liveEntries(SUBMIT), aiExecutor: executor });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage1', stepId: 'click-submit', outcome: 'accepted' });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('healed');
+    expect(executor.structuredRequests.every(isElementBindingProposalRequest)).toBe(true);
+    expect(executor.structuredRequests.length).toBeGreaterThan(0);
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+  });
+
+  it.each([
+    ['embedded reference', 'Typed {{secrets.password}} into the field.'],
+    ['entropy token', 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea'],
+  ])('replaces a secret-shaped assumption (%s) without disclosing it in report or committed artifacts', async (_name, secret) => {
+    const { scenario } = await candidateScenario(['A', secret, 'A']);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'accepted' });
+    expect(result.outcome.results[0]).toHaveProperty('warnings', [
+      { kind: 'generator-assumption', message: 'A' },
+      { kind: 'generator-assumption', message: 'An assumption was omitted because it looked like a secret.' },
+      { kind: 'generator-assumption', message: 'A' },
+    ]);
+    await expect(result.commits.get(OPTIONS.files[0]!)?.commit()).resolves.toEqual({ outcome: 'committed' });
+    const output = settledReport(result, 'applied');
+    assertDiagnosable(output.envelope);
+    await scenario.storage.writeText(`${RUNS_DIR}/assumptions/report.json`, JSON.stringify(output.envelope));
+    const artifacts = await collectStorageArtifacts(scenario.storage, [RUNS_DIR, PLAN, GROUNDING]);
+    expect(artifacts.length).toBeGreaterThanOrEqual(3);
+    assertNoSecretDisclosure({ secrets: { assumption: secret }, report: output.envelope, artifacts });
+  });
+
+  it('discards nonempty assumptions from a not-passing Stage 3 candidate and remains unresolved', async () => {
+    const { scenario, executor, candidate } = await candidateScenario(['A'], [
+      { id: 'regenerated', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' },
+    ]);
+    const before = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(candidate.assumptions).toEqual(['A']);
+    expect(executor.structuredRequests.some((request) => stage2Frontier(request) === undefined)).toBe(true);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('unresolved');
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+    expect(result.commits.size).toBe(0);
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(before);
+    assertDiagnosable(settledReport(result, 'no-artifact-change').envelope);
+  });
+
+  it('discards nonempty assumptions when the Stage 3 secret set is rejected', async () => {
+    const { scenario, candidate } = await candidateScenario(['A'], [{
+      id: 'new-secret', kind: 'action', target: 'web', action: 'fill-secret',
+      intent: generatedIntent(PASSWORD), secret: { nameHint: 'password' },
+    }]);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(candidate.assumptions).toEqual(['A']);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'secret-set-rejected' });
+    expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved', stage3Rejection: { reason: 'secret-set-changed', added: ['password'], removed: [] } });
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+    expect(result.commits.size).toBe(0);
+    assertDiagnosable(settledReport(result, 'no-artifact-change').envelope);
+  });
+
+  it('discards Stage 3 assumptions when restoring a partially healed incremental candidate', async () => {
+    const candidate = { steps: [
+      { id: 'regenerated-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) },
+      { id: 'regenerated-after', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(AFTER_SUBMIT) },
+    ], ambiguities: [], assumptions: ['A'] };
+    const executor = createFakeAiExecutor({ execute: async (request) => {
+      if (isElementBindingProposalRequest(request)) return elementBindingProposal(request);
+      return { data: stage2Frontier(request) === undefined ? candidate : {
+        steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [],
+      }, raw: '{}' };
+    } });
+    const scenario = await createScenario({ steps: [
+      Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+      Step.parse({ id: 'click-after', kind: 'action', target: 'web', action: 'click', intent: committedIntent(AFTER_SUBMIT) }),
+    ], sessionEntries: new Map([
+      [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }],
+      [elementRefKey(AFTER_SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT),
+    ]), aiExecutor: executor });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(candidate.assumptions).toEqual(['A']);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 1 });
+    expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'partially-healed', finalFirstFailureIndex: 1 });
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+    expect(result.commits.size).toBe(1);
+    assertDiagnosable(settledReport(result, 'preview-only').envelope);
+  });
+
+  it('discards assumptions advertised on an accepted Stage 2 response without entering Stage 3', async () => {
+    const response = { steps: [{ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [], assumptions: ['Stage two assumption'] };
+    const executor = createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request)
+      ? elementBindingProposal(request) : { data: response, raw: JSON.stringify(response) } });
+    const scenario = await createScenario({ sessionEntries: new Map([
+      [elementRefKey(SUBMIT), { exists: false, currentFingerprint: FINGERPRINT }], ...liveEntries(REPAIRED_SUBMIT),
+    ]), aiExecutor: executor });
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(response.assumptions).toHaveLength(1);
+    expect(executor.structuredRequests.filter((request) => stage2Frontier(request) !== undefined)).toHaveLength(1);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage2', stepId: 'click-submit', outcome: 'accepted' });
+    expect(result.outcome.results[0]?.repairOutcome).toBe('healed');
+    expect(result.outcome.results[0]?.repairTrace?.some((entry) => entry.stage === 'stage3')).toBe(false);
+    expect(result.outcome.results[0]).not.toHaveProperty('warnings');
+  });
+
+  it('classifies single-target Stage 3 ambiguities as AI_RESPONSE_INVALID and exit three', async () => {
+    const executor = createFakeAiExecutor({ execute: async (request) => ({
+      data: stage2Frontier(request) === undefined ? { steps: [], ambiguities: ['Unclear target'] } : invalidTail, raw: '{}',
+    }) });
+    const scenario = await createScenario({ steps: [Step.parse({ id: 'broken', kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })], grounding: {}, aiExecutor: executor });
+    const before = await Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)]);
+    const result = await heal(scenario.deps, OPTIONS);
+    expect(executor.structuredRequests.filter((request) => stage2Frontier(request) === undefined)).toHaveLength(1);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual(expect.objectContaining({ stage: 'stage3', outcome: 'failed' }));
+    expect(result.outcome.results[0]?.stage3Error).toBeInstanceOf(AiResponseInvalidError);
+    expect(result.outcome.results[0]?.repairTrace).toContainEqual({ stage: 'stage3', outcome: 'failed', code: 'AI_RESPONSE_INVALID' });
+    const output = settledReport(result, 'no-artifact-change');
+    expect(output.exitCode).toBe(3);
+    expect(output.envelope.errors).toContainEqual(expect.objectContaining({ code: 'AI_RESPONSE_INVALID', details: expect.objectContaining({ issues: [{ code: 'schema-mismatch', path: ['ambiguities'] }] }) }));
+    assertDiagnosable(output.envelope);
+    expect(result.commits.size).toBe(0);
+    await expect(Promise.all([scenario.storage.readText(PLAN), scenario.storage.readText(GROUNDING)])).resolves.toEqual(before);
+  });
+});
+const GENERATED_INSTRUCTION_TEXT_FIELD = 'cita' + 'tion';
 function generatedIntent(ref: ElementRef) {
   return { description: ref.name, roleHint: ref.role, startAnchor: 'L3', startColumn: 8, endAnchor: 'L3', endColumn: 14, citation: 'submit' };
-}
-function groundingEntry(ref: ElementRef, fingerprint: Fingerprint, intentRef: ElementRef = ref) {
-  return {
-    kind: 'element' as const,
-    locator: ref,
-    fingerprint,
-    intentDigest: computeIntentDigest({ stepKind: 'action', operation: 'click', intent: committedIntent(intentRef) }),
-    provenance: 'ai-proposed' as const,
-  };
 }
 const AI_STEP = Step.parse({
   id: 'ai-step',
@@ -200,13 +401,6 @@ const CONFIRMED_SUBMIT_STEPS = [
   Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
   Step.parse({ id: 'confirm-submit', kind: 'assert', target: 'web', check: 'text-visible', text: 'Dashboard', confirms: ['click-submit'] }),
 ];
-const OPTIONS: HealOptions = {
-  files: ['/workspace/tests/login.test.md'],
-  dryRun: false,
-  yes: false,
-  list: false,
-};
-
 type Stage2RequestContext = {
   readonly trustedInputs?: {
     readonly frontier?: { readonly index: number; readonly stepId: string };
@@ -240,41 +434,7 @@ function elementBindingProposal(request: { readonly context?: unknown }) {
   const data = matches.length === 1
     ? { outcome: 'found' as const, ...matches[0]! }
     : { outcome: 'none' as const };
-  return { data, raw: JSON.stringify(data) };
-}
-
-/**
- * Mirrors the live accessibility evidence independently from grounded-entry
- * verification. Route-B resolution reads this tree, whereas session entries
- * model the existing-grounding verification path.
- */
-function healAccessibilityTree(entries: ReadonlyMap<string, FakeBrowserSessionEntry>): JsonValueT {
-  const targets = [PASSWORD, REPAIRED_PASSWORD, SUBMIT, REPAIRED_SUBMIT, AFTER_SUBMIT, REPAIRED_AFTER_SUBMIT];
-  return {
-    role: 'root',
-    name: '',
-    children: [{
-      role: 'main',
-      name: 'Application',
-      children: targets
-          .filter((target) => entries.get(elementRefKey(target))?.exists)
-          .map((target) => ({
-            role: 'form',
-            name: `${target.name} control`,
-            children: [{ role: target.role, name: target.name, children: [] }],
-          })),
-    }],
-  };
-}
-
-function healSnapshot(entries: ReadonlyMap<string, FakeBrowserSessionEntry>): {
-  readonly accessibilityTree: JsonValueT;
-  readonly screenshot: Uint8Array;
-} {
-  return {
-    accessibilityTree: healAccessibilityTree(entries),
-    screenshot: new Uint8Array([1, 2, 3]),
-  };
+  return { data: { proposal: data }, raw: JSON.stringify({ proposal: data }) };
 }
 
 function freshFingerprint(
@@ -354,117 +514,6 @@ function withTrackedLegacyReadTrap(storage: StorageAdapter): StorageAdapter {
     async readBinary(path) {
       if (isTrackedArtifact(path)) throw new Error(`Legacy tracked binary read: ${path}`);
       return storage.readBinary(path);
-    },
-  };
-}
-
-function permissiveContainedWrites(base: StorageAdapter): Pick<StorageAdapter, 'writeText' | 'writeBinary' | 'ensureDir'> {
-  return {
-    writeText: base.writeText,
-    writeBinary: base.writeBinary,
-    ensureDir: base.ensureDir,
-  };
-}
-
-interface HealScenario {
-  readonly deps: HealDeps;
-  readonly storage: StorageAdapter;
-  readonly textWrites: ReturnType<typeof vi.fn>;
-  readonly plan: PlanDocument;
-  readonly sessionFactory: ReturnType<typeof vi.fn<() => BrowserSession>>;
-}
-
-async function createScenario(options: {
-  readonly steps?: readonly ReturnType<typeof Step.parse>[];
-  readonly grounding?: GroundingDocument['entries'];
-  readonly sessionEntries?: Map<string, FakeBrowserSessionEntry>;
-  readonly storage?: StorageAdapter;
-  readonly launchFailure?: boolean;
-  readonly prompt?: string;
-  readonly aiExecutor?: ReturnType<typeof createFakeAiExecutor>;
-  readonly secrets?: ReadonlyMap<string, string>;
-  readonly signal?: AbortSignal;
-  readonly uiExecutor?: HealDeps['uiExecutor'];
-  readonly assertOutcome?: AssertOutcome;
-  readonly targets?: PlanDocument['targets'];
-} = {}): Promise<HealScenario> {
-  const base = options.storage ?? createInMemoryStorage();
-  const textWrites = vi.fn<StorageAdapter['writeText']>(base.writeText);
-  const storage: StorageAdapter = { ...base, writeText: textWrites };
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-  const sessionEntries = options.sessionEntries ?? new Map();
-  const sessionFactory = vi.fn<() => BrowserSession>(() => createFakeBrowserSession(sessionEntries, {
-    baseUrl: TARGETS.web.baseUrl,
-    currentUrl: TARGETS.web.baseUrl,
-    snapshot: healSnapshot(sessionEntries),
-    ...(options.assertOutcome === undefined ? {} : { assertOutcome: options.assertOutcome }),
-  }));
-  const plan = PlanDocument.parse({
-    schemaVersion: PLAN_SCHEMA_VERSION,
-    source: {
-      inputsDigest: computeInputsDigest({
-        normalizedTestMd: normalizeTestMd(options.prompt ?? PROMPT),
-        schemaVersion: PLAN_SCHEMA_VERSION,
-        generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
-        planProducerBundleFingerprint: planProducerBundleFingerprint(),
-        targetDefinitions: options.targets ?? TARGETS,
-      }),
-    },
-    targets: options.targets ?? TARGETS,
-    steps: options.steps ?? [Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) })],
-  });
-  const grounding: GroundingDocument = {
-    schemaVersion: GROUNDING_SCHEMA_VERSION,
-    planDigest: computePlanDigest(plan),
-    entries: options.grounding ?? {
-      'click-submit': { ...groundingEntry(SUBMIT, FINGERPRINT) },
-    },
-  };
-
-  await storage.writeText(OPTIONS.files[0]!, options.prompt ?? PROMPT);
-  await storage.writeText(layout.planPathFor(OPTIONS.files[0]!), toCanonicalArtifactText(plan as JsonValueT));
-  await storage.writeText(layout.groundingPathFor(OPTIONS.files[0]!), toCanonicalArtifactText(grounding as JsonValueT));
-  textWrites.mockClear();
-
-  return {
-    storage,
-    textWrites,
-    plan,
-    sessionFactory,
-    deps: {
-      storage,
-      containWrites: () => permissiveContainedWrites(storage),
-      layout,
-      clock: createFixedClock(new Date('2026-08-25T00:00:00.000Z'), 0),
-      runId: '2026-08-25T000000Z-550e8400-e29b-41d4-a716-446655440000',
-      uiExecutor: options.uiExecutor ?? vi.fn<HealDeps['uiExecutor']>(() => options.launchFailure
-        ? {
-          kind: 'playwright', surface: 'web', capabilities: new Set(UI_CAPABILITIES),
-          async launch() { throw new Error('Chromium is unavailable for this fixture.'); },
-        }
-        : createFakeUiExecutor(sessionFactory)),
-      secrets: createFakeSecretsProvider(options.secrets ?? new Map()),
-      resolveAiExecutor: vi.fn(async () => options.aiExecutor ?? createFakeAiExecutor({
-        execute: async () => ({ data: { outcome: 'found', role: 'button', name: 'Submit' }, raw: '{"outcome":"found","role":"button","name":"Submit"}' }),
-      })),
-      allocateCallId: createCallIdAllocator(),
-      events: createRecordingEventSink().sink,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-      discoverTestFiles: vi.fn(async () => ['login.test.md']),
-      isCI: false,
-      configSource: { path: null },
-      config: {
-        testDir: TEST_DIR,
-        testMatch: ['**/*.test.md'],
-        testIgnore: ['**/.runs/**'],
-        targets: RESOLVED_TARGETS,
-        defaultTarget: 'web',
-        ai: { provider: 'codex', timeoutMs: 120_000, maxGenerateAttempts: 2 },
-        secrets: { allow: '*' },
-        ci: { heal: false, updateGroundingCache: false },
-        grounding: { repositoryPolicy: 'committed', localWriteBack: 'auto' },
-        heal: { caseTimeoutMs: 300_000 },
-      },
     },
   };
 }
@@ -818,7 +867,7 @@ describe('heal state-machine contract', () => {
    * Recording the call count before each replay proves the final replay ran,
    * while observing its error checks classification without forging it.
    */
-  it('TEST-B12 keeps a declared failure out of heal errors after a Stage-applied final replay', async () => {
+  it('reports a declared failure from the Stage-applied final replay without changing heal exit one', async () => {
     let attempts = 0;
     const executor = createFakeAiExecutor({
       async executeAgentic(request) {
@@ -854,22 +903,27 @@ describe('heal state-machine contract', () => {
     expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.errors).toEqual([]);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 }]));
-    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(result.outcome.results[0]?.finalReplayError).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.results[0]?.stage3Error).toBeUndefined();
     const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
     });
     expect(report.exitCode).toBe(1);
-    expect(report.envelope.errors).toEqual([]);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'AGENTIC_STEP_FAILED',
+      details: { stepId: AI_STEP.id, actions: 0, assertions: 0,
+        passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   /*
-   * Secret-set rejection must retain the executor's classified failure without
-   * exposing it as a heal error. Read-only replay observations establish that
+   * Secret-set rejection must retain the executor's classified failure.
+   * Read-only replay observations establish that
    * the final invocation and its error are real, rather than injected by a test.
    */
-  it('TEST-B12 omits the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
+  it('reports the classified agentic error from the best-candidate replay after Stage 3 secret-set rejection', async () => {
     let declarations = 0;
     const executor = createFakeAiExecutor({
       async executeAgentic() { declarations += 1; return { outcome: 'failure' }; },
@@ -893,13 +947,18 @@ describe('heal state-machine contract', () => {
     expect(finalReplayErrors.at(-1)).toBeInstanceOf(AgenticStepFailedError);
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage3', outcome: 'secret-set-rejected' }]));
     expect(result.outcome.errors).toEqual([]);
-    expect(result.outcome.results[0]?.finalReplayError).toBeUndefined();
+    expect(result.outcome.results[0]?.finalReplayError).toBeInstanceOf(AgenticStepFailedError);
     const report = buildHealReport({ startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
       options: { allowEmpty: false, list: false },
       outcome: { ...result.outcome, results: result.outcome.results.map((row) => ({ ...row, application: 'no-artifact-change' as const })) },
     });
     expect(report.exitCode).toBe(1);
-    expect(report.envelope.errors).toEqual([]);
+    expect(report.envelope.errors).toEqual([expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'AGENTIC_STEP_FAILED',
+      details: { stepId: AI_STEP.id, actions: 0, assertions: 0,
+        passedAssertions: 0, failedAssertions: 0, targetRejections: 0 },
+    })]);
+    assertDiagnosable(report.envelope);
   });
 
   it('aborts at the initial live measurement when its replay carries an integrity violation', async () => {
@@ -1739,6 +1798,24 @@ describe('heal state-machine contract', () => {
     expect(containWrites).not.toHaveBeenCalled();
   });
 
+  it.each([2, 3])('TEST-7 rejects retired v%s grounding before launching a browser or writing', async (schemaVersion) => {
+    const scenario = await createScenario();
+    const grounding = JSON.parse(await scenario.storage.readText(GROUNDING));
+    const retiredText = toCanonicalArtifactText({ ...grounding, schemaVersion });
+    await scenario.storage.writeText(GROUNDING, retiredText);
+    const containWrites = vi.fn(scenario.deps.containWrites);
+    const result = await heal({ ...scenario.deps, containWrites }, OPTIONS);
+    expect(result.outcome.results).toEqual([]);
+    expect(result.outcome.errors).toHaveLength(1);
+    expect(result.outcome.errors[0]?.error).toBeInstanceOf(FsIoError);
+    expect(result.outcome.errors[0]?.error).toMatchObject({
+      kind: 'fs-io-error', message: 'The grounding artifact is not valid and current.',
+    });
+    expect(scenario.deps.uiExecutor).not.toHaveBeenCalled();
+    expect(containWrites).not.toHaveBeenCalled();
+    expect(await scenario.storage.readText(GROUNDING)).toBe(retiredText);
+  });
+
   it('keeps a cache-hit baseline replay browser-visible and persists failure evidence', async () => {
     const base = createInMemoryStorage();
     const writeBinary = vi.fn<StorageAdapter['writeBinary']>(base.writeBinary);
@@ -1862,7 +1939,7 @@ describe('heal state-machine contract', () => {
     }
   });
 
-  it('skips Stage 1 for an AI step with a current covered trace', async () => {
+  it('TEST-H4 skips Stage 1 for an AI step with a current covered trace, recording trace-current', async () => {
     const scenario = await createScenario({
       steps: [Step.parse({
         id: 'recorded-ai', kind: 'ai', target: 'web', instruction: 'Verify the dashboard.',
@@ -1882,9 +1959,10 @@ describe('heal state-machine contract', () => {
       aiExecutor: createFakeAiExecutor({ execute: async () => ({ data: { confirmed: true }, raw: '{"confirmed":true}' }) }),
     });
 
-    await heal(scenario.deps, OPTIONS);
+    const result = await heal(scenario.deps, OPTIONS);
 
     expect(scenario.deps.uiExecutor).toHaveBeenCalledTimes(3);
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage1', stepId: 'recorded-ai', outcome: 'not-eligible', reason: 'trace-current' }]));
   });
 
   it('keeps none-classified navigate failures out of Stage 1 even with an element entry', async () => {
@@ -3189,6 +3267,54 @@ describe('heal state-machine contract', () => {
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved' });
     expect(result.outcome.results[0]?.stage3Error).toBeInstanceOf(error);
+  });
+
+  it('reports two Stage 3 ambiguities without a crash or artifact commit', async () => {
+    const executor = createFakeAiExecutor({ execute: async (request) => ({
+      data: request.prompt.startsWith('Repair the requested')
+        ? { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'click', intent: generatedIntent(REPAIRED_SUBMIT) }], ambiguities: [] }
+        : { steps: [], ambiguities: ['Unclear target Alpha', 'Unclear target Beta'] },
+      raw: '{}',
+    }) });
+    const scenario = await createScenario({
+      grounding: {},
+      targets: { ...TARGETS, shop: { surface: 'web', baseUrl: 'https://shop.example.test' } },
+      defaultTarget: undefined,
+      steps: [
+        Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: committedIntent(SUBMIT) }),
+        Step.parse({ id: 'shop', kind: 'action', target: 'shop', action: 'navigate', url: '/' }),
+      ],
+      aiExecutor: executor,
+    });
+    const planBefore = await scenario.storage.readText(PLAN);
+    const groundingBefore = await scenario.storage.readText(GROUNDING);
+    const result = await heal(scenario.deps, OPTIONS);
+    const row = result.outcome.results[0];
+    expect(row).toBeDefined();
+    expect(row?.repairTrace).toContainEqual(expect.objectContaining({ stage: 'stage3' }));
+    const requests = executor.structuredRequests.filter((request) => request.prompt.includes('Assign a target name'));
+    expect(requests).toHaveLength(1);
+    expect(Object.keys((requests[0]?.context as { targets: object }).targets)).toEqual(['web', 'shop']);
+    expect(requests[0]?.context).not.toHaveProperty('defaultTarget');
+    const report = buildHealReport({
+      startedAt: '2026-08-09T00:00:00Z', durationMs: 0,
+      options: { allowEmpty: false, list: false },
+      outcome: { ...result.outcome, results: result.outcome.results.map((entry) => ({ ...entry, application: 'no-artifact-change' as const })) },
+    });
+    expect(report.envelope.errors).toContainEqual(expect.objectContaining({
+      scope: 'case', caseId: OPTIONS.files[0], code: 'PROMPT_AMBIGUOUS', details: { ambiguities: 2 },
+    }));
+    expect(report.exitCode).toBe(2);
+    expect(report.envelope.errors).not.toContainEqual(expect.objectContaining({
+      code: 'UNEXPECTED_CRASH', message: 'Healing failed for this case.',
+    }));
+    expect(row?.repairTrace).toContainEqual(expect.objectContaining({
+      stage: 'stage3', outcome: 'failed', code: 'PROMPT_AMBIGUOUS',
+    }));
+    expect(result.commits.size).toBe(0);
+    expect(await scenario.storage.readText(PLAN)).toBe(planBefore);
+    expect(await scenario.storage.readText(GROUNDING)).toBe(groundingBefore);
+    expect(scenario.textWrites).not.toHaveBeenCalled();
   });
 
   it('reports an empty plan as no-changes-needed without treating it as a pre-launch failure', async () => {
@@ -4735,7 +4861,7 @@ describe('TEST-H1 through TEST-H6 Stage 1 grounding repair', () => {
     const scenario = await createScenario({
       steps, grounding: { 'click-submit': groundingEntry(SUBMIT, FINGERPRINT) }, sessionEntries: liveEntries(SUBMIT),
       aiExecutor: createFakeAiExecutor({ execute: async (request) => isElementBindingProposalRequest(request) && bindings++ === 0
-        ? { data: { outcome: 'none' }, raw: '{}' }
+        ? { data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }
         : elementBindingProposal(request) }),
     });
     const beforePlan = await scenario.storage.readText(PLAN);
@@ -4968,6 +5094,47 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
     const result = await heal(depsFor(scenario), OPTIONS);
 
     expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([{ stage: 'stage2', stepId: 'repair-me', outcome: 'rejected', reason }]));
+  });
+
+  it('does not reject a readable-slug step id as Stage 2 literal-secret', async () => {
+    const stepId = 'verify-uploaded-xlsx-backup-json-download-works';
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({
+        data: { steps: [{ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: '/dashboard' }], ambiguities: [] },
+        raw: '{}',
+      }) }),
+    });
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      { stage: 'stage2', stepId: 'verify-uploaded-xlsx-backup-json-download-works', outcome: 'accepted' },
+    ]));
+    expect(result.outcome.results[0]?.repairTrace).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: 'stage2', outcome: 'rejected', reason: 'literal-secret' }),
+    ]));
+  });
+
+  it('still rejects a credential-prefixed value as Stage 2 literal-secret for a readable-slug step id', async () => {
+    const stepId = 'verify-uploaded-xlsx-backup-json-download-works';
+    const scenario = await createScenario({
+      steps: [Step.parse({ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: 'http://[' })],
+      grounding: {},
+      aiExecutor: createFakeAiExecutor({ execute: async () => ({
+        data: { steps: [{ id: stepId, kind: 'action', target: 'web', action: 'navigate', url: 'sk-abcdefghijklmnopqrstuvwxyz0123456789' }], ambiguities: [] },
+        raw: '{}',
+      }) }),
+    });
+    const planBefore = await scenario.storage.readBinary(PLAN);
+
+    const result = await heal(scenario.deps, OPTIONS);
+
+    expect(result.outcome.results[0]?.repairTrace).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: 'stage2', stepId, outcome: 'rejected', reason: 'literal-secret' }),
+    ]));
+    expect(await scenario.storage.readBinary(PLAN)).toEqual(planBefore);
   });
 
   it('records an accepted Stage 2 repair before proceeding', async () => {

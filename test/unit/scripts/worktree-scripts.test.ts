@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ensureTargetLocked,
   formatLockReason,
+  isClaudeSessionLock,
   isSameOrDescendant,
   isStrictDescendant,
   parseWorktreePorcelain,
@@ -296,8 +297,8 @@ beforeEach(async () => {
   const root = await realpath(createdRoot);
   const repositoryName = 'repo';
   const repository = join(root, 'product', 'workspace', repositoryName);
-  const receptacleRoot = join(root, 'product', '.worktrees');
-  const receptacle = join(receptacleRoot, repositoryName);
+  const receptacleRoot = join(repository, '.claude', 'worktrees');
+  const receptacle = receptacleRoot;
 
   await Promise.all([
     initializeRepository(repository),
@@ -331,11 +332,12 @@ describe('worktree-add.mjs', () => {
     expect(output).toContain(`cd ${path}`);
   });
 
-  it('namespaces the default receptacle by the main repository directory basename', () => {
+  it('places the default receptacle inside the main checkout without a namespace', () => {
     runAdd(['110']);
-    const path = join(getFixture().root, 'product', '.worktrees', 'repo', 'issues-110');
+    const path = join(getFixture().repository, '.claude', 'worktrees', 'issues-110');
 
     expect(existsSync(path)).toBe(true);
+    expect(existsSync(join(getFixture().receptacle, 'repo'))).toBe(false);
   });
 
   it('keeps same-number worktrees from differently named repositories separate', async () => {
@@ -346,8 +348,8 @@ describe('worktree-add.mjs', () => {
     runAdd(['110']);
     runAdd(['110'], { cwd: secondRepository });
 
-    expect(existsSync(join(getFixture().receptacleRoot, 'repo', 'issues-110'))).toBe(true);
-    expect(existsSync(join(getFixture().receptacleRoot, secondRepositoryName, 'issues-110'))).toBe(true);
+    expect(existsSync(worktreePath('110'))).toBe(true);
+    expect(existsSync(join(secondRepository, '.claude', 'worktrees', 'issues-110'))).toBe(true);
   });
 
   it('creates a slugged issue branch and directory', () => {
@@ -439,7 +441,7 @@ describe('worktree-add.mjs', () => {
     const repository = join(getFixture().root, 'product', 'workspace', repositoryName);
     await initializeRepository(repository);
 
-    runAdd(['111'], { cwd: repository });
+    runAdd(['111'], { cwd: repository, environment: { AMBERCAST_WORKTREE_ROOT: getFixture().receptacleRoot } });
 
     expect(existsSync(join(getFixture().receptacleRoot, repositoryName, 'issues-111'))).toBe(true);
   });
@@ -465,10 +467,10 @@ describe('worktree-remove.mjs', () => {
     expect(output).toMatch(/removed/i);
   });
 
-  it('removes a namespaced worktree selected by its bare issue number', () => {
+  it('removes a default worktree selected by its bare issue number', () => {
     const path = createWorktree('211');
 
-    expect(path).toBe(join(getFixture().receptacleRoot, 'repo', 'issues-211'));
+    expect(path).toBe(join(getFixture().repository, '.claude', 'worktrees', 'issues-211'));
     runRemove(['211']);
 
     expect(existsSync(path)).toBe(false);
@@ -603,6 +605,32 @@ describe('worktree-remove.mjs', () => {
 });
 
 describe('worktree lifecycle safety primitives', () => {
+  it.each([
+    ['claude session task (pid 123 …)', true],
+    ['claude session ', true],
+    ['claude session arbitrary diagnostic', true],
+    [true, false],
+    [undefined, false],
+    ['issue-610 owner=codex created=2026-10-21T00:00:00Z', false],
+    ['claude-session task', false],
+    [' claude session task', false],
+    ['claude session', false],
+    ['', false],
+    [null, false],
+    [123, false],
+    [{ startsWith: () => true }, false],
+    [['claude session task'], false],
+  ])('classifies session ownership for %j as %s', (value, expected) => {
+    expect(isClaudeSessionLock(value)).toBe(expected);
+  });
+
+  it('ignores nested Claude worktrees in the repository gitignore', () => {
+    const repository = fileURLToPath(new URL('../../../', import.meta.url));
+    // Local excludes must not stand in for the ignore rule shipped to contributors.
+    expect(runGit(repository, ['check-ignore', '--no-index', '-v', '.claude/worktrees/issues-610/probe.txt']).trim())
+      .toMatch(/^\.gitignore:\d+:\.claude\/worktrees\/\t\.claude\/worktrees\/issues-610\/probe\.txt$/);
+  });
+
   it('parses NUL porcelain without changing lock evidence', () => {
     expect(parseWorktreePorcelain('')).toEqual([]);
     expect(parseWorktreePorcelain('worktree /repo\0branch refs/heads/main\0\0')).toEqual([
@@ -806,6 +834,155 @@ describe('worktree-remove locking, validation, and mutex contract', () => {
     const calls = await readJsonLines(shims.gitLog);
     expect(calls.some((args) => args[0] === 'worktree' && ['unlock', 'remove'].includes(args[1] ?? ''))).toBe(false);
   }
+
+  async function createSessionWorktree(issue: string): Promise<string> {
+    const target = join(getFixture().receptacle, `session-${issue}`);
+    runGit(getFixture().repository, ['worktree', 'add', '-b', `issues/${issue}`, target]);
+    return target;
+  }
+
+  async function expectSessionPreserved(target: string, reason: string, shims: { gitLog: string }): Promise<void> {
+    expect(existsSync(target)).toBe(true);
+    const inventory = parseWorktreePorcelain(runGit(getFixture().repository, ['worktree', 'list', '--porcelain', '-z']));
+    const actual = inventory.find((entry: { path: string }) => entry.path === target)?.locked;
+    expect(Buffer.from(actual ?? '')).toEqual(Buffer.from(reason));
+    for (const category of ['logs', 'todos']) {
+      expect(existsSync(join(getFixture().repository, '.claude', category, 'session-only.md'))).toBe(false);
+      await expect(readFile(join(target, '.claude', category, 'session-only.md'), 'utf8')).resolves.toBe('session evidence\n');
+    }
+    expect(existsSync(join(getFixture().receptacle, '.cleanup-lock', 'transaction.json'))).toBe(false);
+    expect(existsSync(join(getFixture().receptacle, '.cleanup-lock'))).toBe(false);
+    const calls = await readJsonLines(shims.gitLog);
+    expect(calls.filter((args) => args[0] === 'worktree' && ['unlock', 'remove', 'lock'].includes(args[1] ?? ''))).toEqual([]);
+    expect(calls.filter((args) => args.join('\0') === ['worktree', 'list', '--porcelain', '-z'].join('\0'))).toHaveLength(2);
+  }
+
+  async function seedSessionRecords(target: string): Promise<void> {
+    for (const category of ['logs', 'todos']) {
+      await mkdir(join(target, '.claude', category), { recursive: true });
+      await writeFile(join(target, '.claude', category, 'session-only.md'), 'session evidence\n');
+    }
+  }
+
+  function expectSessionRefusal(error: string): void {
+    expect.soft(error).toContain('Claude Code');
+    expect.soft(error).toMatch(/session/i);
+    expect.soft(error).toMatch(/retry|try again|re-run/i);
+    expect.soft(error).toMatch(/(?:after|once|until)[\s\S]*releas/i);
+    expect.soft(error).not.toMatch(/--force|unlock/i);
+  }
+
+  it.each([false, true])('refuses Claude Code ownership before copy-back, including force=%s', async (force) => {
+    const target = await createSessionWorktree('610');
+    const reason = 'claude session task (pid 123 …)';
+    await lock(target, reason);
+    await seedSessionRecords(target);
+    const shims = await installCommandShims();
+    const error = expectScriptFailure(() => runRemove(['610', ...(force ? ['--force'] : [])], { environment: shimEnvironment(shims) }));
+    expectSessionRefusal(error);
+    await expectSessionPreserved(target, reason, shims);
+  });
+
+  it('retries the same refused target after Claude Code releases ownership', async () => {
+    const target = await createSessionWorktree('615');
+    const reason = 'claude session retry (pid 123 …)';
+    await lock(target, reason);
+    await seedSessionRecords(target);
+    const shims = await installCommandShims();
+    const error = expectScriptFailure(() => runRemove(['615'], { environment: shimEnvironment(shims) }));
+    expectSessionRefusal(error);
+    await expectSessionPreserved(target, reason, shims);
+
+    // The session releases ownership independently of cleanup; retry must work
+    // with the state left by the refused invocation rather than a fresh fixture.
+    runGit(getFixture().repository, ['worktree', 'unlock', target]);
+    // The fixture repository has no ignore rule for the seeded records, so the
+    // tree is dirty; --force is the documented way past that unrelated guard.
+    runRemove(['615', '--force']);
+    expect(existsSync(target)).toBe(false);
+    expect(branchExists('issues/615')).toBe(true);
+    for (const category of ['logs', 'todos']) {
+      await expect(readFile(join(getFixture().repository, '.claude', category, 'session-only.md'), 'utf8')).resolves.toBe('session evidence\n');
+    }
+    expect(existsSync(join(getFixture().receptacle, '.cleanup-lock'))).toBe(false);
+  });
+
+  it('removes a Claude-created worktree after Claude Code releases its lock', async () => {
+    const target = await createSessionWorktree('611');
+    await lock(target, 'claude session finished (pid 123 …)');
+    runGit(getFixture().repository, ['worktree', 'unlock', target]);
+    runRemove(['611']);
+    expect(existsSync(target)).toBe(false);
+    expect(branchExists('issues/611')).toBe(true);
+  });
+
+  it('reports an existing cleanup mutex before considering Claude ownership', async () => {
+    const target = await createSessionWorktree('612');
+    const reason = 'claude session busy (pid 123 …)';
+    await lock(target, reason);
+    const mutex = join(getFixture().receptacle, '.cleanup-lock');
+    await mkdir(mutex);
+    const journal = '{"operator":"existing cleanup"}';
+    await writeFile(join(mutex, 'transaction.json'), journal);
+    const shims = await installCommandShims();
+    const error = expectScriptFailure(() => runRemove(['612'], { environment: shimEnvironment(shims) }));
+    expect(error).toContain(`Cleanup mutex already exists: ${mutex}`);
+    expect(error).not.toContain('Claude Code');
+    await expect(readFile(join(mutex, 'transaction.json'), 'utf8')).resolves.toBe(journal);
+    expectRegisteredAndLocked(target);
+    expect(runGit(getFixture().repository, ['worktree', 'list', '--porcelain', '-z'])).toContain(`locked ${reason}\0`);
+    await expectNoDestructiveCalls(shims);
+  });
+
+  it('protects a Claude lock acquired just before the authoritative inventory', async () => {
+    const target = await createSessionWorktree('613');
+    await seedSessionRecords(target);
+    const reason = 'claude session late-owner (pid 123 …)';
+    const mutex = join(getFixture().receptacle, '.cleanup-lock');
+    const shims = await installCommandShims({ pauseBefore: ['worktree', 'list', '--porcelain', '-z'], pauseBeforeOccurrence: 2 });
+    const child = spawn(process.execPath, [REMOVE_SCRIPT, '613', '--force'], {
+      cwd: getFixture().repository,
+      env: { ...process.env, ...shimEnvironment(shims) },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
+    const exited = new Promise<number | null>((resolveChild, rejectChild) => {
+      child.once('error', rejectChild);
+      child.once('exit', resolveChild);
+    });
+    try {
+      await waitFor(shims.ready);
+      expect(existsSync(join(getFixture().receptacle, '.cleanup-lock'))).toBe(true);
+      expect(existsSync(join(getFixture().receptacle, '.cleanup-lock', 'transaction.json'))).toBe(false);
+      await lock(target, reason);
+      // Denying journal creation distinguishes refusal before any write from
+      // a late refusal whose finally block merely erases the evidence.
+      await chmod(mutex, 0o555);
+      await expect(writeFile(join(mutex, 'write-probe'), '')).rejects.toMatchObject({ code: 'EACCES' });
+      await writeFile(shims.release, 'release');
+      expect.soft(await exited).toBe(1);
+      expectSessionRefusal(stderr);
+      await expectSessionPreserved(target, reason, shims);
+    } finally {
+      if (child.exitCode === null) {
+        child.kill('SIGTERM');
+        await exited;
+      }
+      if (existsSync(mutex)) {
+        await chmod(mutex, 0o755);
+      }
+    }
+  }, 30_000);
+
+  it('refuses registered worktrees in the old external receptacle', async () => {
+    const target = join(getFixture().root, 'product', '.worktrees', 'repo', 'issues-614');
+    runGit(getFixture().repository, ['worktree', 'add', '-b', 'issues/614', target]);
+    const shims = await installCommandShims();
+    expect(expectScriptFailure(() => runRemove(['614'], { environment: shimEnvironment(shims) }))).toMatch(/receptacle|managed|contain/i);
+    expect(existsSync(target)).toBe(true);
+    await expectNoDestructiveCalls(shims);
+  });
 
   it('unlocks a locked tree before removing it and skips unlock for legacy trees', async () => {
     createWorktree('401');

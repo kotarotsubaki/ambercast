@@ -1,6 +1,7 @@
 // HTML renderers for the ambercast viewer HTTP adapter.
 
 import { VIEW_COPY } from '#core/viewer/copy.js';
+import { errorDetailEntries } from '#runtime/error-details.js';
 import { REPORT_SCHEMA_VERSION } from '#runtime/view-command.js';
 import type { RunListing } from '#runtime/view-command.js';
 
@@ -161,7 +162,14 @@ export function renderRunDetail(listing: RunListing): string {
   const persistedLabel = report.reportPersistence === 'failed' ? copy.header.reportFailed : copy.header.reportPersisted;
   const schemaSegment = listing.envelope.schemaVersion !== REPORT_SCHEMA_VERSION ? ` · ${copy.header.schema} ${escapeHtml(listing.envelope.schemaVersion)}` : '';
   const header = `<h1>${escapeHtml(runId)}</h1><p>${copy.header.started} ${escapeHtml(report.startedAt)} · ${copy.header.duration} ${duration(report.durationMs)} · ${totals} · ${persistedLabel}${schemaSegment} · ${rawLink(runId, copy.header.rawJson)}</p>`;
-  const errors = report.errors.length ? `<section><h2>${copy.runErrors.headingPrefix}${report.errors.length})</h2><ul>${report.errors.map((error) => `<li>${escapeHtml(error.code)} · ${error.scope === 'run' ? 'run' : `case · ${escapeHtml(error.caseId)}`} ${escapeHtml(error.message)}</li>`).join('')}</ul></section>` : '';
+  // Error rows render safe hints and ordered details through the shared
+  // projection, escaping each report-derived value at this HTML boundary.
+  const errors = report.errors.length ? `<section><h2>${copy.runErrors.headingPrefix}${report.errors.length})</h2><ul>${report.errors.map((error) => {
+    const detailEntries = errorDetailEntries(error.code, error.details);
+    const hint = error.hint === undefined ? '' : `<p><span>${copy.errorHint}</span> ${escapeHtml(error.hint)}</p>`;
+    const details = detailEntries.length ? `<p><span>${copy.errorDetails}</span></p><ul>${detailEntries.map(([key, value]) => `<li>${escapeHtml(key)}: ${escapeHtml(value)}</li>`).join('')}</ul>` : '';
+    return `<li>${escapeHtml(error.code)} · ${error.scope === 'run' ? 'run' : `case · ${escapeHtml(error.caseId)}`} ${escapeHtml(error.message)}${hint}${details}</li>`;
+  }).join('')}</ul></section>` : '';
   const cases = report.results.length ? report.results.map((result) => {
     if (result.status === 'listed' || result.status === 'skipped') return `<p>${statusBadge(result.status)} ${escapeHtml(result.file)}</p>`;
     const calls = result.aiCalls ?? 0;

@@ -86,7 +86,7 @@ async function writeSoleTargetConfigAndFreshPlan(project: string, ciHeal = true)
   );
   await writeFile(
     join(project, 'tests', 'test.ambercast.grounding.json'),
-    toCanonicalArtifactText({ schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} }),
+    toCanonicalArtifactText({ schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} }),
   );
 }
 
@@ -143,7 +143,7 @@ describe('bin/ambercast.js (e2e)', () => {
     expect(result.exitCode).toBe(0);
     const envelope = JSON.parse(result.stdout);
     expect(ReportEnvelope.safeParse(envelope).success).toBe(true);
-    expect(envelope.schemaVersion).toBe('3.9');
+    expect(envelope.schemaVersion).toBe('3.11');
     expect(envelope.results).toEqual([expect.objectContaining({ file: expect.stringContaining('test.test.md'), status: 'listed' })]);
   });
 

@@ -9,14 +9,14 @@ sidebar:
 ---
 
 :::caution
-`ambercast review` is not implemented in 0.3.1. The interface and contracts described here represent planned v2 behavior rather than current CLI capabilities.
+`ambercast review` is not implemented in the current release. The interface and contracts described here represent planned v2 behavior rather than current CLI capabilities.
 :::
 
 `ambercast review` defines the planned independent-AI review outcome and known flags.
 
 ## Status {#status}
 
-`ambercast review` is not implemented in 0.3.1 and is not an available CLI command. Its planned v2 role is defined by the CLI design. See the CLI overview for available commands.
+`ambercast review` is not implemented in the current release and is not an available CLI command. Its planned v2 role is defined by the CLI design. See the CLI overview for available commands.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#result-shapes).
 

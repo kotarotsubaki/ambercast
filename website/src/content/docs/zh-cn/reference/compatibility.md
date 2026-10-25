@@ -9,10 +9,14 @@ ambercast 在不同版本之间定义了明确的产物格式兼容性与重新�
 
 | package 版本 | Plan `schemaVersion` | Grounding `schemaVersion` | element fingerprint tag | report `schemaVersion` |
 | --- | --- | --- | --- | --- |
-| `0.1.0` | `2` | `1`（尚未确认） | `a11y-neighborhood-v2` | `3.0` |
+| `0.1.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
-| `0.4.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
-| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.5.0` | `3` | `1` | `a11y-neighborhood-v2` | `3.5` |
+| `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
+| `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
+| `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
+
+表中列出 0.1.0、0.2.0、每个变更 Plan 或 Grounding Schema 版本的发布版本，以及从 0.8.0 起的所有发布版本。
 
 0.2.0 版本变更了 provider 请求契约，但并未递增 Plan 的 `schemaVersion`。该变更改变了 `producerBundleFingerprint` 以及每个提示词的 `inputsDigest`，导致 0.1.0 版本的 Plan 变为陈旧状态（stale）。
 

@@ -4,13 +4,14 @@ import { orderSchemaFilenames } from '../scripts/lib/published-schemas.mjs';
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 describe('orderSchemaFilenames', () => {
-  it('orders the current eight published schema files by kind then version, regardless of input order', () => {
+  it('orders the current nine published schema files by kind then version, regardless of input order', () => {
     const shuffled = [
       'plan.v3.schema.json',
       'report.v3.schema.json',
       'config.schema.json',
       'grounding.v2.schema.json',
       'grounding.v3.schema.json',
+      'grounding.v4.schema.json',
       'plan.v4.schema.json',
       'plan.v5.schema.json',
       'plan.v2.schema.json',
@@ -23,6 +24,7 @@ describe('orderSchemaFilenames', () => {
       'plan.v5.schema.json',
       'grounding.v2.schema.json',
       'grounding.v3.schema.json',
+      'grounding.v4.schema.json',
       'report.v3.schema.json',
     ]);
   });

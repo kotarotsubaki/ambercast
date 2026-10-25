@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ERROR_EXIT_CODES, type ErrorExitCode } from '../../../src/core/errors/exit-codes.js';
 import type { ErrorKind } from '../../../src/core/errors/types.js';
+import { REPORT_ERROR_DETAILS } from '../../../src/report/error-mapping.js';
 import { ReportError, ReportErrorCode } from '../../../src/report/schema.js';
 
 interface SchemaUnderTest {
@@ -37,10 +38,12 @@ const ERROR_CODE_CORRESPONDENCE = [
   { errorKind: 'fs-io-error', reportCode: 'FS_IO_ERROR', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'unexpected-crash', reportCode: 'UNEXPECTED_CRASH', exitCode: 3, reportKind: 'environment' },
   { errorKind: 'interrupted', reportCode: 'INTERRUPTED', exitCode: 3, reportKind: 'environment' },
+  { errorKind: 'case-aborted', reportCode: 'CASE_ABORTED', exitCode: 3, reportKind: 'environment' },
+  { errorKind: 'prompt-ambiguous', reportCode: 'PROMPT_AMBIGUOUS', exitCode: 2, reportKind: 'usage' },
 ] as const satisfies readonly ErrorCodeCorrespondence[];
 
 const LEGACY_ERROR_CODES_WITHOUT_KIND = ['SECRET_GRANT_UNATTRIBUTABLE'] as const;
-const CASE_SCOPE_ONLY_CODES = ['SECRET_ENV_VAR_COLLISION', 'SECRET_CONSENT_REQUIRED', 'SECRET_SYNTAX_REJECTED', 'GROUNDING_UNRESOLVED', 'EXECUTOR_UNSUPPORTED'] as const;
+const CASE_SCOPE_ONLY_CODES = ['SECRET_ENV_VAR_COLLISION', 'SECRET_CONSENT_REQUIRED', 'SECRET_SYNTAX_REJECTED', 'GROUNDING_UNRESOLVED', 'EXECUTOR_UNSUPPORTED', 'CASE_ABORTED', 'PROMPT_AMBIGUOUS'] as const;
 
 const REPORTABLE_ERROR_KINDS = [
   'config-invalid',
@@ -63,6 +66,8 @@ const REPORTABLE_ERROR_KINDS = [
   'fs-io-error',
   'unexpected-crash',
   'interrupted',
+  'case-aborted',
+  'prompt-ambiguous',
 ] as const;
 
 function expectAccepted(schema: SchemaUnderTest, value: unknown): void {
@@ -74,11 +79,19 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     expect((ERROR_EXIT_CODES as Record<string, ErrorExitCode>)[errorKind]).toBe(exitCode);
   });
 
-  it('keeps assertion-failed and no-tests-found out of the correspondence table', () => {
+  it('keeps assertion-failed, no-tests-found, and port-unavailable out of the correspondence table', () => {
     const mappedKinds = ERROR_CODE_CORRESPONDENCE.map(({ errorKind }) => errorKind);
 
     expect(mappedKinds).not.toContain('assertion-failed');
     expect(mappedKinds).not.toContain('no-tests-found');
+    expect(mappedKinds).not.toContain('port-unavailable');
+  });
+
+  it('maps exactly the reportable ErrorKinds from the exit-code table', () => {
+    const excludedKinds = new Set(['assertion-failed', 'no-tests-found', 'port-unavailable']);
+    const reportableKinds = Object.keys(ERROR_EXIT_CODES).filter((kind) => !excludedKinds.has(kind));
+
+    expect(new Set(Object.keys(REPORT_ERROR_DETAILS))).toStrictEqual(new Set(reportableKinds));
   });
 
   it('covers every ReportErrorCode and reportable ErrorKind exactly once', () => {
@@ -144,12 +157,21 @@ describe('ErrorKind and ReportErrorCode correspondence', () => {
     }).success).toBe(false);
   });
 
-  it.each(CASE_SCOPE_ONLY_CODES)('accepts %s only as a case-scoped usage error', (code) => {
+  it.each(CASE_SCOPE_ONLY_CODES.filter((code) => code !== 'CASE_ABORTED' && code !== 'PROMPT_AMBIGUOUS'))('accepts %s only as a case-scoped usage error', (code) => {
     expectAccepted(ReportError, {
       scope: 'case', kind: 'usage', code, message: 'The test case encountered a secret-policy error.', caseId: 'case-a',
     });
     expect(ReportError.safeParse({
       scope: 'run', kind: 'usage', code, message: 'The command encountered a secret-policy error.',
     }).success).toBe(false);
+  });
+
+  it.each([
+    { code: 'CASE_ABORTED', kind: 'environment', details: { reason: 'run-value-missing', stepId: 'step-a' } },
+    { code: 'PROMPT_AMBIGUOUS', kind: 'usage', details: { ambiguities: 2 } },
+  ] as const)('accepts $code only as a case-scoped $kind error with validated details', ({ code, kind, details }) => {
+    const base = { kind, code, message: 'The case needs attention.', details };
+    expectAccepted(ReportError, { ...base, scope: 'case', caseId: 'case-a' });
+    expect(ReportError.safeParse({ ...base, scope: 'run' }).success).toBe(false);
   });
 });

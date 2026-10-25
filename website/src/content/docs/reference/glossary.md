@@ -3,7 +3,7 @@ title: Glossary
 description: Normative site-wide terminology and index of literal translation-invariant tokens for Ambercast.
 ---
 
-This page is the single owner of site-wide terminology and the index of literal tokens that translators must preserve. Every definition here is normative and kept to a single sentence; follow each linked owner contract for complete field, flag, status, or error tables. Planned-only tokens have no 0.3.1 runtime semantics and are not available in current releases.
+This page is the single owner of site-wide terminology and the index of literal tokens that translators must preserve. Every definition here is normative and kept to a single sentence; follow each linked owner contract for complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
 
 ## Artifact terms {#artifact-terms}
 
@@ -45,7 +45,7 @@ The following command- and report-bound definitions govern execution, target res
 
 ## Translation invariant registry {#translation-invariant-registry}
 
-The following registry is the exhaustive inventory of literal tokens that must be preserved verbatim by translators across reference documentation:
+The following registry is the exhaustive inventory of literal tokens that must be preserved verbatim by translators across reference documentation. The report version in the fourth column is the `REPORT_SCHEMA_VERSION` recorded in that release's release commit.
 
 | invariant | normative sentence | owner | not to be confused with |
 | --- | --- | --- | --- |
@@ -56,7 +56,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--allow-empty` | `--allow-empty` makes an empty selection permissible for commands that parse it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--list` |
 | `--allow-headless` | `--allow-headless` lifts view's non-interactive refusal; it is a no-op when the terminal is already interactive. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#interactive-gate) | implemented `--headed` |
 | `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
-| `--clear` | `--clear` is planned-only and has no accepted 0.3.1 baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
+| `--clear` | `--clear` is planned-only and has no accepted current baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
 | `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
 | `--dir` | `--dir` names the directory `ambercast init` scaffolds into. | `ambercast init`; [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
 | `--dry-run` | `--dry-run` withholds artifact writes for generate and heal. | generate/heal; [ambercast generate](/ambercast/reference/cli/generate/#flags) | `--list` |
@@ -64,16 +64,16 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--host` | `--host` selects view's bind address; a concrete IP or `localhost`, never a wildcard. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#host-binding) | target `baseUrl` |
 | `--json` | `--json` selects serialized structured-report output after an implemented command other than `init` or `view` returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
 | `--list` | `--list` is parsed by `generate`, `run`, `check`, and `heal`; each command page owns its listing result semantics. Neither `init` nor `view` accepts it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
-| `--no-reset` | `--no-reset` is planned-only and has no accepted 0.3.1 run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
+| `--no-reset` | `--no-reset` is planned-only and has no accepted current run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` fixes view to a single strict port instead of auto-incrementing through candidates. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#port-selection) | config `viewer.port` |
 | `--yes` | `--yes` authorizes heal settlement without an interactive confirmation, and skips init's confirmation prompt; neither substitutes for the user's own review. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | generate `--force` |
 | `.ambercast.grounding.json` | `.ambercast.grounding.json` is the exact adjacent Grounding companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Plan suffix |
 | `.ambercast.plan.json` | `.ambercast.plan.json` is the exact adjacent Plan companion suffix. | layout resolver; [File layout](/ambercast/reference/file-layout/#companions) | Grounding suffix |
-| `.baseline` | `.baseline` is planned-only and no 0.3.1 layout resolver derives it. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-storage-and-freshness) | implemented `.runs` |
+| `.baseline` | `.baseline` is planned-only and no current layout resolver derives it. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-storage-and-freshness) | implemented `.runs` |
 | `.runs` | `.runs` is the final segment of the default `runsDir`, not an independently resolved root. | configuration / [File layout](/ambercast/reference/file-layout/#run-artifacts) | companion artifacts |
 | `.test.md` | `.test.md` is the exact suffix required for a discovered prompt path to receive layout mappings. | layout resolver; [Prompt file format](/ambercast/reference/prompt-format/#file-identity) | arbitrary Markdown |
 | `0.1.0` | `0.1.0` names the 2026-09-03 release in the repository changelog. | [Changelog](/ambercast/reference/changelog/#release-010) | artifact schema version |
-| `0.7.0` | `0.7.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.9` |
+| `0.9.0` | `0.9.0` is the current package version documented by this Reference set. | package / [Compatibility](/ambercast/reference/compatibility/#compatibility-table) | report `3.10` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` is the fixed process-exit precedence from strongest to weakest. | exit selector; [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) | numeric order |
 | `@ambercast-secret` | `@ambercast-secret` is rejected legacy prompt syntax and must be removed before regenerating a Plan v3 artifact. | prompt parser; [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants) | secret reference |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` supplies the environment provider override. | config environment; [Environment variables](/ambercast/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -91,13 +91,13 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` is the whole-value anchored regular expression built from `SECRET_REF_SOURCE`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | unanchored fragment |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` is the only accepted element-fingerprint algorithm literal. | `Fingerprint`; [Element fingerprint](/ambercast/spec/fingerprint/) | Plan schema version 2 |
 | `ambercast` | `ambercast` is the package binary name and CLI program. | package / CLI overview | an artifact schema |
-| `ambercast baseline` | `ambercast baseline` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
+| `ambercast baseline` | `ambercast baseline` is planned-only and rejected by the current parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast check` | `ambercast check` is the implemented read-only freshness command. | [ambercast check](/ambercast/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
 | `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` starts the implemented stdio MCP server. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | MCP tool name |
-| `ambercast restore` | `ambercast restore` is planned-only and rejected by the 0.3.1 parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
+| `ambercast restore` | `ambercast restore` is planned-only and rejected by the current parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
 | `ambercast run` | `ambercast run` is the implemented deterministic replay command. | [ambercast run](/ambercast/reference/cli/run/) | `ambercast generate` |
 | `ambercast view` | `ambercast view` is the implemented read-only local results viewer. | [ambercast view](/ambercast/reference/cli/view/) | `ambercast run` |

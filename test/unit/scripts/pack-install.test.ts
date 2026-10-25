@@ -2,11 +2,17 @@
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
 import { TARBALL_SOURCE_PATHS, prepareStaging, detectPackageManager, lockfileHasIntegrity, readPackResult, checkInstalledVersion, main } from '../../../scripts/pack-install.mjs';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, spawnSync: vi.fn(actual.spawnSync) };
+});
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const dirs: string[] = [];
@@ -51,30 +57,31 @@ describe('prepareStaging', () => {
 
 describe('detectPackageManager', () => {
   it.each([
-    ['both lockfiles', ['pnpm-lock.yaml', 'package-lock.json'], undefined, undefined, true],
-    ['yarn.lock', ['yarn.lock'], undefined, undefined, true],
-    ['bun.lock', ['bun.lock'], undefined, undefined, true],
-    ['bun.lockb', ['bun.lockb'], undefined, undefined, true],
-    ['pnpm lockfile', ['pnpm-lock.yaml'], undefined, 'pnpm', false],
-    ['npm lockfile', ['package-lock.json'], undefined, 'npm', false],
-    ['pnpm declaration', [], 'pnpm@10.12.4', 'pnpm', false],
-    ['npm declaration', [], 'npm@11.4.2', 'npm', false],
-    ['yarn declaration', [], 'yarn@4.0.0', undefined, true],
-    ['no hint', [], undefined, 'npm', false],
-  ])('TEST-B7 %s', (_label, lockfiles, packageManager, expected, rejects) => {
+    ['both lockfiles', ['pnpm-lock.yaml', 'package-lock.json'], undefined, undefined, undefined, 'Both pnpm-lock.yaml and package-lock.json present; use --pm to specify'],
+    ['yarn.lock', ['yarn.lock'], undefined, undefined, undefined, 'Unsupported lockfile detected'],
+    ['bun.lock', ['bun.lock'], undefined, undefined, undefined, 'Unsupported lockfile detected'],
+    ['bun.lockb', ['bun.lockb'], undefined, undefined, undefined, 'Unsupported lockfile detected'],
+    ['pnpm lockfile', ['pnpm-lock.yaml'], undefined, undefined, 'pnpm', undefined],
+    ['npm lockfile', ['package-lock.json'], undefined, undefined, 'npm', undefined],
+    ['pnpm declaration', [], 'pnpm@10.12.4', undefined, 'pnpm', undefined],
+    ['npm declaration', [], 'npm@11.4.2', undefined, 'npm', undefined],
+    ['yarn declaration', [], 'yarn@4.0.0', undefined, undefined, 'Unsupported package manager declaration: yarn@4.0.0'],
+    ['no hint', [], undefined, undefined, 'npm', undefined],
+    ['explicit yarn', [], undefined, 'yarn', undefined, 'Unsupported package manager: yarn'],
+  ])('TEST-B7 %s', (_label, lockfiles, packageManager, override, expected, rejection) => {
     const dir = freshDir();
     writeFileSync(join(dir, 'package.json'), JSON.stringify(packageManager ? { packageManager } : {}));
     for (const name of lockfiles as string[]) writeFileSync(join(dir, name), '');
-    if (rejects) {
+    if (rejection) {
       let failure: unknown;
       try {
-        detectPackageManager(dir);
+        detectPackageManager(dir, override);
       } catch (error) {
         failure = error;
       }
       expect(failure).toBeInstanceOf(Error);
-      expect((failure as Error).message).not.toBe('not implemented');
-    } else expect(detectPackageManager(dir)).toBe(expected);
+      expect((failure as Error).message).toBe(rejection);
+    } else expect(detectPackageManager(dir, override)).toBe(expected);
   });
   it('TEST-B7 explicit --pm wins even when both lockfiles exist', () => {
     const dir = freshDir();
@@ -158,7 +165,7 @@ describe('checkInstalledVersion', () => {
       await expect(Promise.race([
         Promise.resolve().then(() => checkInstalledVersion(bin, '1.2.3', 200)),
         new Promise((resolve) => { timer = setTimeout(() => resolve('still running'), 1000); }),
-      ])).rejects.toThrow();
+      ])).rejects.toThrow('failed (SIGTERM)');
       expect(Date.now() - start).toBeGreaterThanOrEqual(150);
       expect(Date.now() - start).toBeLessThan(1000);
       expect(existsSync(started)).toBe(true);
@@ -197,5 +204,13 @@ describe('main (argv parsing)', () => {
     expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).toBe('pack-install: Windows is not supported\n');
     expect(stdout).not.toHaveBeenCalled();
   });
-  it.todo('TEST-B9 GAP: relative --out-dir resolves against cwd; no specified path output for direct main calls');
+  it('TEST-FB1: git status ENOENT aborts before build and out-dir creation', async () => {
+    const outDir = join(freshDir(), 'out');
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    vi.mocked(spawnSync).mockImplementationOnce(() => ({ error: { code: 'ENOENT' }, status: null, signal: null, stdout: '', stderr: '' }) as unknown as ReturnType<typeof spawnSync>);
+    await expect(main(['pack', '--out-dir', outDir], 'linux')).resolves.toBe(1);
+    expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain('pack-install: git status failed (ENOENT)');
+    expect(existsSync(outDir)).toBe(false);
+    expect(vi.mocked(spawnSync)).toHaveBeenCalledTimes(1);
+  });
 });

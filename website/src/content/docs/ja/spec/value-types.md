@@ -5,7 +5,7 @@ description: "他のすべての章は、それらの形状を再記述するの
 
 ## 共有型 {#shared-types}
 
-他のすべての章は、それらの形状を再記述するのではなく、これらの定義を使用しなければならない（MUST）。以下のすべてのオブジェクトは厳格（strict）であり、未知のプロパティは拒絶されなければならない（MUST）。[src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L183) 正規表現はランタイムオーソリティから逐語的に引用されている。
+他のすべての章は、それらの形状を再記述するのではなく、これらの定義を使用しなければならない（MUST）。以下のすべてのオブジェクトは厳格（strict）であり、未知のプロパティは拒絶されなければならない（MUST）。[src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) 正規表現はランタイムオーソリティから逐語的に引用されている。
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -13,9 +13,12 @@ description: "他のすべての章は、それらの形状を再記述するの
 |  | `surface` | string | required | literal `web` | 実行サーフェス。 | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | シークレットごとの許可されたオリジン。 | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L168) |
 |  | `locale` | string | optional | min length 1 | config loader が正規化した後の BCP-47 形式の locale タグ。 | repo:src/core/ir/schema.ts:210 |
-| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L183) |
-|  | `role` | string | required | min 1 | 正確なアクセシビリティロール。 | [src/core/ir/schema.ts:185](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L185) |
-|  | `name` | string | required | min 1 | アクセシブル名。 | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L186) |
+| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) |
+|  | `role` | string | required | min 1 | 正確なアクセシビリティロール。 | [src/core/ir/schema.ts:256](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L256) |
+|  | `name` | string | required | min 1 | アクセシブル名。 | [src/core/ir/schema.ts:257](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L257) |
+| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | repo:src/core/ir/schema.ts:276 |
+|  | `role` | string | required | min 1 | 完全一致のアクセシビリティロール。 | repo:src/core/ir/schema.ts:278 |
+|  | `name` | string | required | may be empty | 空文字は accessible name を持たない要素を表し、正規化後の名前が空のノードにだけ一致する。 | repo:src/core/ir/schema.ts:279 |
 | `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 引用された抜粋のリテラルテキスト。 | repo:src/core/ir/schema.ts:359 |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用された抜粋の位置。 | repo:src/core/ir/schema.ts:360 |
 | `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | プロンプトの根拠に結び付いた自然言語の要素記述。 | repo:src/core/ir/schema.ts:367 |

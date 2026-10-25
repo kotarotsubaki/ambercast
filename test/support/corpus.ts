@@ -6,6 +6,12 @@ import type { ZodType } from 'zod';
 /** One validated corpus row, together with its original one-based source line number. */
 export type CorpusEntry<V, E> = { value: V; expected: E; note: string; source: string; date: string; line: number };
 
+/** Shared formatter for one corpus row problem; see `loadCorpus`'s remarks for the rendering rationale. */
+function pushProblem(allProblems: string[], lineNum: number, reason: string): void {
+  const normalizedReason = reason.replace(/\n/g, '\n  ');
+  allProblems.push(`- line ${lineNum}: ${normalizedReason}`);
+}
+
 /**
  * Reads and validates a JSON Lines corpus synchronously, for use with `it.each`.
  *
@@ -46,6 +52,14 @@ export type CorpusEntry<V, E> = { value: V; expected: E; note: string; source: s
  * that key order matters. Only a row with no other problem can become the earlier
  * side of a duplicate comparison — a row already rejected for some other reason must
  * not suppress a genuine duplicate finding against a still-earlier good row.
+ *
+ * Each problem occupies one `- `-prefixed physical line, matching file-level
+ * problems. When a reason contains a newline, indent every continuation line by
+ * exactly two spaces after the `- `-prefixed first line. Apply this rendering to
+ * every row problem, regardless of its source, so the number of `- `-prefixed
+ * physical lines always equals the reported problem count. A newline can come from
+ * an extra JSON key's name as well as from a schema exception message, so handling
+ * only schema exceptions would make that count unreliable.
  */
 export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V>; expected: ZodType<E> }): readonly CorpusEntry<V, E>[] {
   if (!schemas || typeof schemas !== 'object' || !('value' in schemas) || !('expected' in schemas)) {
@@ -120,7 +134,7 @@ export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V
     const normalizedLine = line.endsWith('\r') ? line.slice(0, -1) : line;
 
     if (normalizedLine.trim().length === 0) {
-      allProblems.push(`line ${lineNum}: blank line`);
+      pushProblem(allProblems, lineNum, 'blank line');
       continue;
     }
 
@@ -128,12 +142,12 @@ export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V
     try {
       parsed = JSON.parse(normalizedLine);
     } catch (e) {
-      allProblems.push(`line ${lineNum}: invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+      pushProblem(allProblems, lineNum, `invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
       continue;
     }
 
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      allProblems.push(`line ${lineNum}: value is not a plain object`);
+      pushProblem(allProblems, lineNum, 'value is not a plain object');
       continue;
     }
 
@@ -144,23 +158,23 @@ export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V
     const hasDate = 'date' in parsed;
 
     if (!hasValue) {
-      allProblems.push(`line ${lineNum}: missing required key 'value'`);
+      pushProblem(allProblems, lineNum, "missing required key 'value'");
       continue;
     }
     if (!hasExpected) {
-      allProblems.push(`line ${lineNum}: missing required key 'expected'`);
+      pushProblem(allProblems, lineNum, "missing required key 'expected'");
       continue;
     }
     if (!hasNote) {
-      allProblems.push(`line ${lineNum}: missing required key 'note'`);
+      pushProblem(allProblems, lineNum, "missing required key 'note'");
       continue;
     }
     if (!hasSource) {
-      allProblems.push(`line ${lineNum}: missing required key 'source'`);
+      pushProblem(allProblems, lineNum, "missing required key 'source'");
       continue;
     }
     if (!hasDate) {
-      allProblems.push(`line ${lineNum}: missing required key 'date'`);
+      pushProblem(allProblems, lineNum, "missing required key 'date'");
       continue;
     }
 
@@ -168,7 +182,7 @@ export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V
     const allowedKeys = new Set(['value', 'expected', 'note', 'source', 'date']);
     const extraKeys = keys.filter(k => !allowedKeys.has(k));
     if (extraKeys.length > 0) {
-      allProblems.push(`line ${lineNum}: has extra key(s): ${extraKeys.join(', ')}`);
+      pushProblem(allProblems, lineNum, `has extra key(s): ${extraKeys.join(', ')}`);
       continue;
     }
 
@@ -176,7 +190,7 @@ export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V
     try {
       value = schemas.value.parse(parsed.value);
     } catch (e) {
-      allProblems.push(`line ${lineNum}: value schema threw: ${e instanceof Error ? e.message : String(e)}`);
+      pushProblem(allProblems, lineNum, `value schema threw: ${e instanceof Error ? e.message : String(e)}`);
       continue;
     }
 
@@ -184,37 +198,37 @@ export function loadCorpus<V, E>(file: URL | string, schemas: { value: ZodType<V
     try {
       expected = schemas.expected.parse(parsed.expected);
     } catch (e) {
-      allProblems.push(`line ${lineNum}: expected schema threw: ${e instanceof Error ? e.message : String(e)}`);
+      pushProblem(allProblems, lineNum, `expected schema threw: ${e instanceof Error ? e.message : String(e)}`);
       continue;
     }
 
     const note = parsed.note;
     if (typeof note !== 'string' || note.trim().length === 0) {
-      allProblems.push(`line ${lineNum}: 'note' must be a non-blank string`);
+      pushProblem(allProblems, lineNum, "'note' must be a non-blank string");
       continue;
     }
 
     const source = parsed.source;
     if (typeof source !== 'string' || !/^[#][1-9][0-9]*$/.test(source)) {
-      allProblems.push(`line ${lineNum}: 'source' must match '#' followed by digits with no leading zero (e.g. #1, #540)`);
+      pushProblem(allProblems, lineNum, "'source' must match '#' followed by digits with no leading zero (e.g. #1, #540)");
       continue;
     }
 
     const date = parsed.date;
     if (typeof date !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)) {
-      allProblems.push(`line ${lineNum}: 'date' must be in YYYY-MM-DD format`);
+      pushProblem(allProblems, lineNum, "'date' must be in YYYY-MM-DD format");
       continue;
     }
 
     const dateObj = new Date(`${date}T00:00:00Z`);
     if (Number.isNaN(dateObj.getTime()) || dateObj.toISOString().slice(0, 10) !== date) {
-      allProblems.push(`line ${lineNum}: 'date' is not a valid calendar date`);
+      pushProblem(allProblems, lineNum, "'date' is not a valid calendar date");
       continue;
     }
 
     const valueStr = JSON.stringify(parsed.value);
     if (seenValues.has(valueStr)) {
-      allProblems.push(`line ${lineNum}: duplicates value of line ${seenValues.get(valueStr)}`);
+      pushProblem(allProblems, lineNum, `duplicates value of line ${seenValues.get(valueStr)}`);
       continue;
     }
     seenValues.set(valueStr, lineNum);

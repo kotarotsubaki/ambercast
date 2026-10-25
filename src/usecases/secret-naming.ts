@@ -12,6 +12,18 @@ import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.j
 import { secretNameFor } from '#core/ir/secret-ref.js';
 
 /**
+ * This module's own closed set of secret-naming issue codes, proven a
+ * subset of `AiResponseIssueCode` by the reverse tripwire further below.
+ * Deriving this union *from* the report vocabulary with
+ * `Extract<AiResponseIssueCode, '...'>` instead would make that subset proof
+ * vacuous: a type derived from the report vocabulary is trivially "a subset
+ * of itself" even after a literal is removed from that vocabulary, so the
+ * proof must start from this module's own vocabulary to actually catch that
+ * removal (#492).
+ */
+export type SecretNamingIssueCode = 'secret-allowed-name-not-projected' | 'secret-conflicting-target-names';
+
+/**
  * Records one pre-normalization secret use and the deterministic name chosen
  * for it.
  *
@@ -214,7 +226,7 @@ export function deriveSecretNames(
   };
   const projected = new Set(sets.projected);
   const candidates: Candidate[] = [];
-  const invalidIssues: { code: Extract<AiResponseIssueCode, 'secret-allowed-name-not-projected'>; path: AiResponseIssuePath; stepId: StepId }[] = [];
+  const invalidIssues: { code: Extract<SecretNamingIssueCode, 'secret-allowed-name-not-projected'>; path: AiResponseIssuePath; stepId: StepId }[] = [];
   for (const [stepIndex, step] of attributed.entries()) {
     if (sets.candidateStepIndexes !== undefined && !sets.candidateStepIndexes.has(stepIndex)) continue;
     const current = step as unknown as Record<string, unknown>;
@@ -244,13 +256,14 @@ export function deriveSecretNames(
 
   const owners = new Map<SecretName, { readonly source: SecretUse['selectionSource'] }>();
   const targetNames = new Map<string, SecretName>();
-  const targetIssues: { code: Extract<AiResponseIssueCode, 'secret-conflicting-target-names'>; path: AiResponseIssuePath; stepId: StepId }[] = [];
+  const targetIssues: { code: Extract<SecretNamingIssueCode, 'secret-conflicting-target-names'>; path: AiResponseIssuePath; stepId: StepId }[] = [];
 
-  // Fails to compile if either secret-naming code is ever removed from the
-  // report vocabulary, since Exclude would then include it and no empty
-  // object could satisfy the required key.
-  const _secretNamingCodesKnownToReport: Record<Exclude<'secret-allowed-name-not-projected' | 'secret-conflicting-target-names', AiResponseIssueCode>, never> = {};
-  void _secretNamingCodesKnownToReport;
+  // Fails to compile if SecretNamingIssueCode ever gains a member the report
+  // vocabulary does not know about. This check starts from this module's own
+  // union rather than from AiResponseIssueCode — see SecretNamingIssueCode's
+  // own doc comment above for why that direction matters (#492).
+  const _secretNamingCodesReverseTripwire: Record<Exclude<SecretNamingIssueCode, AiResponseIssueCode>, never> = {};
+  void _secretNamingCodesReverseTripwire;
 
   for (const reservation of sets.reservations ?? []) {
     if (!owners.has(reservation.name)) owners.set(reservation.name, { source: reservation.selectionSource });

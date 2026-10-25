@@ -33,14 +33,16 @@ Heal 严禁（MUST NOT）作出新的同意决定。如果其 Stage 3 完整 Pla
 
 ## 字面量机密拒绝 {#literal-secret-rejection}
 
-本节是字面量机密检测器语义的权威所有者。参考页面必须（MUST）仅出于其局部目的概述检测器边界，并链接至此处。在持久化或报告序列化之前，生成过程必须（MUST）按照字典序键和数组索引的遍历顺序，检查来自 provider 的每个 JSON 字符串和对象键，包括 `generatorMeta` 和歧义项。对于每个字符串值或对象键，嵌入的 `{{secrets.` 标记（SEC-17）必须（MUST）在检查以下四种 primitive 检测器之前被拒绝；在这四者之间，必须（MUST）按以下固定顺序拒绝首个匹配的检测器。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
+本节是字面量机密检测器语义的权威所有者。参考页面必须（MUST）仅出于其局部目的概述检测器边界，并链接至此处。在持久化或报告序列化之前，生成过程必须（MUST）按照字典序键和数组索引的遍历顺序，检查来自 provider 的每个 JSON 字符串和对象键，包括 `generatorMeta`、`ambiguities` 和 `assumptions`。对于每个字符串值或对象键，嵌入的 `{{secrets.` 标记（SEC-17）必须（MUST）在检查以下四种 primitive 检测器之前被拒绝；在这四者之间，必须（MUST）按以下固定顺序拒绝首个匹配的检测器。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
+
+命中机密检测的 `assumptions` 条目必须（MUST）替换为 `An assumption was omitted because it looked like a secret.`。生成必须（MUST）在替换后继续。[repo:src/usecases/generate.ts]
 
 | id | 检测器 | 匹配值 | 例外 | 分类故障 |
 | --- | --- | --- | --- | --- |
 | SEC-01 | `credential-prefix-sk` | 以 `sk-` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
 | SEC-02 | `credential-prefix-ghp` | 以 `ghp_` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
 | SEC-03 | `credential-prefix-aws-access-key` | 以 `AKIA` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-04 | `high-entropy-token` | 具有 token 形状（至少 32 个 UTF-16 代码单元、无空白字符、每个字符均属于 `[A-Za-z0-9+/=_.-]`）且香农熵至少 4.0 比特，其中频数键按 Unicode 码点迭代，但每个概率分母使用 UTF-16 代码单元长度 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest`；在 `steps[<index>].url`、`steps[<index>].pattern`、`targets[<key>].baseUrl` 的值位置同样例外 | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-04 | `high-entropy-token` | 具有 token 形状（至少 32 个 UTF-16 代码单元、无空白字符、每个字符均属于 `[A-Za-z0-9+/=_.-]`）且香农熵至少 4.0 比特，其中频数键按 Unicode 码点迭代，但每个概率分母使用 UTF-16 代码单元长度 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest`；在 `steps[<index>].url`、`steps[<index>].pattern`、`targets[<key>].baseUrl` 的值位置同样例外；此外，当值为可读 slug（匹配 step-id 的语法，具有至少两个以连字符分隔的段，每段为 `[a-z]+`、`[0-9]{1,3}` 或 `[a-z]{1,4}[0-9]{1,3}` 之一，且至少两段为 `[a-z]+`）时，在 `steps[<index>].id`、`steps[<index>].confirms[<index>]`、`steps[<index>].instructionCoverage[<index>].id` 的值位置同样例外；对象键及其他位置不例外 | `SECRET_LITERAL_REJECTED`, exit `2` |
 | SEC-17 | `embedded-secret-reference` | 包含 `{{secrets.` 标记、但不是有效全值 `SecretRef` 的字符串值或对象键 | 仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
 
 有效的全值 `SecretRef` 无论作为字符串值还是对象键，均可豁免本节的所有检测器；其余的键在遍历其值之前都会传递给检测器。拒绝诊断信息必须（MUST）仅包含检测器和脱敏后的类 JSON 路径；其严禁（MUST NOT）保留检测到的字面量，且检测到的对象键使用 `[redacted-key]`。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585) [src/usecases/generator-secret-policy.ts:615](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L615) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/errors/exit-codes.ts#L31)

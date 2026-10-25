@@ -216,7 +216,10 @@ describe('workflow-control-surface path classifier', () => {
     expect(isWorkflowControlPath('website/test/docs-skill.test.ts')).toBe(false);
   });
 
-  it('reports no workflow-control-surface matches for a synthetic diff touching only this layer\'s file set', () => {
+  // This synthetic diff mirrors layer 3's own file set, not the real #500 layer-3 commit
+  // range (not a stable oracle to assert against from an arbitrary checkout depth); it
+  // exercises isWorkflowControlPath's classification only.
+  it('classifies a synthetic diff shaped like this layer\'s own file set as touching no workflow-control-surface path', () => {
     const root = tempGitRoot();
     mkdirSync(join(root, '.agents/skills/docs-writing/references'), { recursive: true });
     mkdirSync(join(root, '.claude/skills'), { recursive: true });

@@ -1,0 +1,99 @@
+---
+title: 5 分钟内完成第一个测试
+description: 初始化项目后生成、重放并确认第一个生成测试，5 分钟内完成这篇教程。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+先用 `npx ambercast init` 初始化项目，再用 `npx ambercast generate` 和 `npx ambercast run` 跑通第一个测试。
+
+## 前提条件 \{#prerequisites}
+
+- 需要 Node.js 22.14 或更高版本。
+- 需要已认证的 Claude Code 或 Codex CLI。首次 `generate` 直接需要 Node.js 和已认证的提供商；没有可用提供商时的错误代码见[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary)。
+- `run` 需要 Chromium 二进制程序。生成阶段本身不配置浏览器驱动。
+
+ambercast 使用以下默认值。
+
+- 默认 `testDir` 为 `tests/ambercast`。
+- 默认目标为 `web-user`，地址为 `http://localhost:3000`，使用 Chromium。
+
+## 操作步骤 \{#steps}
+
+运行 `npx ambercast init` 并确认后，会创建以下文件。
+
+- `ambercast.config.json`：写入默认 `testDir` 和 `target` 的配置文件，文件要求见[配置](/ambercast/zh-cn/reference/configuration/#file-selection)
+- `tests/ambercast/find-page.test.md`：示例测试 prompt
+- 在 `.gitignore` 中追加一行，在 `AGENTS.md` 中追加一节
+
+创建的示例 prompt 内容如下。
+
+```markdown
+# Find a page
+
+When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
+```
+
+:::caution
+`init` 不会询问 URL。生成的 `ambercast.config.json` 始终以 `http://localhost:3000` 为目标。如果应用运行在其他地址，先修改 `targets.web-user.baseUrl`。
+
+:::
+
+<Steps>
+
+1. ## 初始化项目 \{#init}
+
+   ```bash
+   npx ambercast init
+   ```
+
+2. ## 启动应用并生成执行计划 \{#generate}
+
+   由人工或操作员启动并确认应用运行在配置的 `baseUrl` 上。
+
+   ```bash
+   npx ambercast generate tests/ambercast/find-page.test.md
+   ```
+
+   成功后得到：
+
+   - 退出码 `0`，结果状态为 `generated`
+   - 在生成的 prompt 旁写入执行计划和定位缓存两个派生文件
+
+   使用设置提示词 ([Agent 设置](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)) 的 agent 会假定服务已在运行，未经请求不会自行启动服务。
+
+3. ## 重放测试 \{#run}
+
+   ```bash
+   npx ambercast run --resolve tests/ambercast/find-page.test.md
+   ```
+
+   成功后得到：
+
+   - 退出码 `0`
+   - 在配置的 runs 目录下，为本次调用写入一份 `report.json`
+
+4. ## 检查并提交改动 \{#review-commit}
+
+   ```bash
+   git status --short
+   ```
+
+   对每个已跟踪的改动文件运行 `git diff -- <path>` 进行检查。对未跟踪的 prompt、执行计划、定位缓存路径，检查其完整内容，或运行 `git diff --no-index /dev/null <path>`。
+
+   检查完成后，由人工提交这三个文件。`init` 创建的 `ambercast.config.json` 等文件也要单独检查并提交，方式与提交其他改动相同。
+
+</Steps>
+
+不带参数的 `npx ambercast generate` 和 `npx ambercast run` 会匹配配置的测试目录、匹配规则、忽略规则下的全部测试。本教程的命令特意指定了单个 `.test.md`；仅在另行获得批准的全量测试操作中使用不带参数的形式。
+
+## 验证 \{#verification}
+
+- 确认解析器创建了 `tests/ambercast/find-page.ambercast.plan.json` 和 `tests/ambercast/find-page.ambercast.grounding.json`。
+- 确认 `npx ambercast run --resolve tests/ambercast/find-page.test.md` 以退出码 `0` 结束，并报告该用例 `passed`。
+
+## 下一步 \{#next-steps}
+
+接下来学习如何编写 prompt。
+
+<LinkCard title="编写有效的 prompt" href="/ambercast/zh-cn/how-to/write-effective-prompts/" description="学习编写易于审阅、聚焦明确的测试 prompt。" />

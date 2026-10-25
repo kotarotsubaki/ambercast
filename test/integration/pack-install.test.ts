@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
-import { chmod, copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,6 +69,40 @@ interface Manifest {
 function manifest(f: Fixture): Manifest {
   return JSON.parse(readFileSync(manifestPath(f), 'utf8'));
 }
+
+/**
+ * Checks the actual ambercast file entry independently of lockfileHasIntegrity,
+ * so an integrity string on another package cannot satisfy the install oracle.
+ * Only entries in packages: qualify; matching snapshots: entries return false.
+ */
+function pnpmLockHasEntry(text: string, integrity: string): boolean {
+  const lines = text.split('\n');
+  const start = lines.findIndex((line) => /^packages:\s*$/.test(line));
+  if (start === -1) return false;
+  let end = start + 1;
+  while (end < lines.length && (lines[end]!.trim() === '' || /^\s/.test(lines[end]!))) end++;
+  for (let i = start + 1; i < end - 1; i++) {
+    if (/^  ambercast@file:.+:$/.test(lines[i]!) && lines[i + 1]!.startsWith(`    resolution: {integrity: ${integrity},`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+describe('pnpmLockHasEntry (TEST-FB5 helper)', () => {
+  it('matches the ambercast entry inside packages:', () => {
+    expect(pnpmLockHasEntry("lockfileVersion: '9.0'\npackages:\n  ambercast@file:/tmp/a.tgz:\n    resolution: {integrity: sha512-testhash, tarball: file:/tmp/a.tgz}\n", 'sha512-testhash')).toBe(true);
+  });
+  it('rejects matching integrity under another package key', () => {
+    expect(pnpmLockHasEntry("lockfileVersion: '9.0'\npackages:\n  other@file:/tmp/a.tgz:\n    resolution: {integrity: sha512-testhash, tarball: file:/tmp/a.tgz}\n", 'sha512-testhash')).toBe(false);
+  });
+  it('rejects a single-line snapshots entry', () => {
+    expect(pnpmLockHasEntry("lockfileVersion: '9.0'\npackages: {}\nsnapshots:\n  ambercast@file:/tmp/a.tgz: {}\n", 'sha512-testhash')).toBe(false);
+  });
+  it('rejects a matching two-line entry outside packages:', () => {
+    expect(pnpmLockHasEntry("lockfileVersion: '9.0'\npackages: {}\nsnapshots:\n  ambercast@file:/tmp/a.tgz:\n    resolution: {integrity: sha512-testhash, tarball: file:/tmp/a.tgz}\n", 'sha512-testhash')).toBe(false);
+  });
+});
 
 function succeeds(result: Result): void {
   expect(result.status, result.stderr).toBe(0);
@@ -236,23 +270,23 @@ describe('pack-install integration (real git + npm/pnpm fixture)', () => {
     succeeds(install(f, ['--manifest', manifestPath(f)]));
   }, 60000);
 
-  it.skipIf(!pnpmVersion)('TEST-B5: explicit pnpm install checks lockfile (skipped: pnpm not available)', async () => {
+  it.skipIf(!pnpmVersion)(`TEST-B5: explicit pnpm install checks lockfile${pnpmVersion ? '' : ' (skipped: pnpm not available)'}`, async () => {
     const f = await fixture();
     succeeds(pack(f));
     const result = install(f, ['--manifest', manifestPath(f), '--pm', 'pnpm']);
     succeeds(result);
     expect(result.stdout).toContain('installed with pnpm');
-    expect(readFileSync(join(f.consumer, 'pnpm-lock.yaml'), 'utf8')).toContain(`integrity: ${manifest(f).integrity}`);
+    expect(pnpmLockHasEntry(readFileSync(join(f.consumer, 'pnpm-lock.yaml'), 'utf8'), manifest(f).integrity)).toBe(true);
   }, 60000);
 
-  it.skipIf(!pnpmVersion)('TEST-B5: packageManager selects pnpm without --pm (skipped: pnpm not available)', async () => {
+  it.skipIf(!pnpmVersion)(`TEST-B5: packageManager selects pnpm without --pm${pnpmVersion ? '' : ' (skipped: pnpm not available)'}`, async () => {
     const f = await fixture();
     succeeds(pack(f));
     await writeFile(join(f.consumer, 'package.json'), JSON.stringify({ name: 'consumer', private: true, packageManager: `pnpm@${pnpmVersion}` }) + '\n');
     const result = install(f, ['--manifest', manifestPath(f)]);
     succeeds(result);
     expect(result.stdout).toContain('installed with pnpm');
-    expect(readFileSync(join(f.consumer, 'pnpm-lock.yaml'), 'utf8')).toContain(`integrity: ${manifest(f).integrity}`);
+    expect(pnpmLockHasEntry(readFileSync(join(f.consumer, 'pnpm-lock.yaml'), 'utf8'), manifest(f).integrity)).toBe(true);
   }, 60000);
 
   it('TEST-B6: changed tarball fails integrity validation', async () => {
@@ -319,6 +353,33 @@ describe('pack-install integration (real git + npm/pnpm fixture)', () => {
     fails(run(f, ['install', f.consumer, '--manifest', manifestPath(f), '--pm', 'pnpm'], { env: { ...f.env, PATH: limited } }), 'pnpm not found on PATH');
   }, 60000);
 
+  it('TEST-FB2: pnpm install failure is reported without which on PATH', async () => {
+    const f = await fixture();
+    succeeds(pack(f));
+    const bin = join(f.root, 'limited-path');
+    await mkdir(bin);
+    await symlink(process.execPath, join(bin, 'node'));
+    const shim = join(bin, 'pnpm');
+    await writeFile(shim, '#!/bin/sh\nexit 7\n');
+    await chmod(shim, 0o755);
+    const result = run(f, ['install', f.consumer, '--manifest', manifestPath(f), '--pm', 'pnpm'], { env: { ...f.env, PATH: bin } });
+    fails(result, /pack-install: pnpm install failed \(7\)/);
+    expect(existsSync(join(f.consumer, 'node_modules'))).toBe(false);
+    expect(existsSync(join(f.consumer, 'package-lock.json'))).toBe(false);
+    expect(readFileSync(fileURLToPath(new URL('../../scripts/pack-install.mjs', import.meta.url)), 'utf8')).not.toMatch(/['"]which['"]/);
+  }, 60000);
+
+  it('TEST-FB2: pnpm absent is detected even with other tools reachable', async () => {
+    const f = await fixture();
+    succeeds(pack(f));
+    const realWhich = execFileSync('which', ['which'], { encoding: 'utf8' }).trim();
+    const bin = join(f.root, 'limited-path');
+    await mkdir(bin);
+    await symlink(realWhich, join(bin, 'which'));
+    const result = run(f, ['install', f.consumer, '--manifest', manifestPath(f), '--pm', 'pnpm'], { env: { ...f.env, PATH: bin } });
+    fails(result, 'pack-install: pnpm not found on PATH');
+  }, 60000);
+
   it.each([
     ['schemaVersion', (m: Record<string, unknown>) => { m.schemaVersion = 2; }],
     ['name', (m: Record<string, unknown>) => { m.name = ''; }],
@@ -363,14 +424,29 @@ describe('pack-install integration (real git + npm/pnpm fixture)', () => {
     expect(existsSync(JSON.parse(readFileSync(path, 'utf8')).tarball)).toBe(true);
   }, 60000);
 
-  it('TEST-B12: failed git status aborts without creating out-dir', async () => {
+  it('TEST-FB1: signaled git status reports SIGTERM before creating out-dir', async () => {
     const f = await fixture();
     const shims = join(f.root, 'shims');
     await mkdir(shims);
     const shim = join(shims, 'git');
-    await writeFile(shim, `#!/bin/sh\nif [ "$1" = "status" ]; then exit 128; fi\nexec '${realGit}' "$@"\n`);
+    await writeFile(shim, `#!/bin/sh\nif [ "$1" = "status" ]; then kill -TERM $$; fi\nexec '${realGit}' "$@"\n`);
     await chmod(shim, 0o755);
-    fails(run(f, ['pack', '--out-dir', f.out], { env: { ...f.env, PATH: `${shims}${delimiter}${f.env.PATH ?? ''}` } }), 'git status failed (128)');
+    const result = run(f, ['pack', '--out-dir', f.out], { env: { ...f.env, PATH: `${shims}${delimiter}${f.env.PATH ?? ''}` } });
+    expect(result.status).toBe(1);
+    expect(result.stderr.trimEnd().split('\n').at(-1)).toBe('pack-install: git status failed (SIGTERM)');
+    expect(existsSync(f.out)).toBe(false);
+  }, 60000);
+
+  it('TEST-FB1: git status stderr precedes its exit-code failure', async () => {
+    const f = await fixture();
+    const shims = join(f.root, 'shims');
+    await mkdir(shims);
+    const shim = join(shims, 'git');
+    await writeFile(shim, `#!/bin/sh\nif [ "$1" = "status" ]; then echo boom >&2; exit 128; fi\nexec '${realGit}' "$@"\n`);
+    await chmod(shim, 0o755);
+    const result = run(f, ['pack', '--out-dir', f.out], { env: { ...f.env, PATH: `${shims}${delimiter}${f.env.PATH ?? ''}` } });
+    expect(result.status).toBe(1);
+    expect(result.stderr.trimEnd().split('\n').slice(-2)).toEqual(['boom', 'pack-install: git status failed (128)']);
     expect(existsSync(f.out)).toBe(false);
   }, 60000);
 });

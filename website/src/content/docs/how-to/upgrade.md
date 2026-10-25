@@ -26,6 +26,22 @@ Prompts created for Plan v2 can contain legacy secret grant lines. Remove every 
 
 Then run `npx ambercast generate --force <file>` and respond to the new consent prompt. For CI or another non-interactive environment, add the reviewed names to `secrets.allow` first. The regenerated Plan uses the v3 consent/allowlist model.
 
+## Re-ground after a producer change {#reground-after-producer-change}
+
+Changes to generator instructions or the response contract change the producer fingerprint, so plans from earlier releases are stale. Regenerating a plan replaces its grounding with an empty one, and the steps below bind every element step again. Plan 5 and Grounding 4 are unchanged.
+
+Report 3.11 adds `generator-assumption` warnings and optional `warnings` on `healed` rows. Update your report schema if you validate a closed union.
+
+The CLI `--strict` flag and MCP `strict` argument have been removed. Remove them from your calls. `ambercast generate --strict` exits 2 as an unknown option, and MCP rejects `strict` during input validation.
+
+1. Run `npx ambercast check --json` and confirm that the affected plans report `stale`.
+2. Run `npx ambercast generate <file>` for each stale plan. In the diff, check that each assert lists in its `confirms` the inputs whose effects it shows.
+   - If generate warns `action-unconfirmed` for an input, do not go on to step 3.
+   - A plain run fails on that input with `GROUNDING_UNRESOLVED`.
+   - Add an assert that shows the effect of that input, such as the signed-in user name, and repeat step 2.
+3. Run `npx ambercast run --resolve --update-cache <file>` on your machine. The grounding is empty after regeneration, so ambercast calls AI once for each element step that has no verbatim quote. CI does not save the grounding by default.
+4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report. Always commit the plan. Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`; when it is `uncommitted`, keep the grounding local.
+
 ## Verification {#verification}
 
 - `npx ambercast check` exits `0` after accepted regeneration.

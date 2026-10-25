@@ -42,12 +42,14 @@ export function getPlanJsonSchema(): z.core.JSONSchema.BaseSchema {
  * Like {@link getPlanJsonSchema}, this filesystem-free, deterministic getter
  * gives strict-AJV tests and the build tool the same derived value. It attaches
  * the grounding artifact's published schema identifier, title, and description.
+ * The v4 identity distinguishes grounding locators that permit unnamed elements
+ * from retired contracts; it does not relax plan or trace element references.
  */
 export function getGroundingJsonSchema(): z.core.JSONSchema.BaseSchema {
   return {
     ...z.toJSONSchema(GroundingDocument),
-    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json',
-    title: 'ambercast grounding schema v3',
+    $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json',
+    title: 'ambercast grounding schema v4',
     description: 'Validates the committed grounding cache associated with one plan digest.',
   };
 }

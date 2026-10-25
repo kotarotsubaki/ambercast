@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { ResolvedConfig } from '#core/config/schema.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
@@ -10,8 +10,14 @@ import {
   type GenerateCommandInput,
   type GenerateCommandOutput,
 } from '#runtime/generate-command.js';
-import type { ConsentCapability, ConsentRequest } from '#usecases/generate.js';
+import type { ConsentCapability, ConsentRequest, GenerateOptions } from '#usecases/generate.js';
+import type { HealOptions } from '#usecases/heal.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
+
+// TEST-8: compile-time contracts cover internal generation and healing callers.
+expectTypeOf<Extract<keyof GenerateOptions, 'strict'>>().toEqualTypeOf<never>();
+expectTypeOf<Extract<keyof HealOptions, 'strict'>>().toEqualTypeOf<never>();
+expectTypeOf<Extract<keyof GenerateCommandInput, 'strict'>>().toEqualTypeOf<never>();
 
 const mocks = vi.hoisted(() => ({
   loadConfig: vi.fn(),
@@ -84,7 +90,7 @@ function reportOutput(
   const output = {
     exitCode,
     envelope: {
-      schemaVersion: '3.9' as const,
+      schemaVersion: '3.11' as const,
       command: 'generate',
       startedAt: '2026-08-08T00:00:00Z',
       durationMs: 1,
@@ -100,7 +106,7 @@ function reportOutput(
 
 function input(overrides: Partial<GenerateCommandInput> = {}): GenerateCommandInput {
   return {
-    files: [], strict: false, force: false, dryRun: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides,
+    files: [], force: false, dryRun: false, allowEmpty: false, list: false, cwd: '/workspace', stderr: TEST_STDERR, ...overrides,
   };
 }
 
@@ -256,7 +262,7 @@ describe('runGenerateCommand', () => {
     const cwd = `${projectRoot}/nested-cwd`;
     const rawEnvelope = {
       ...output.envelope,
-      schemaVersion: '3.9',
+      schemaVersion: '3.11',
       results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, secrets: [], ambiguities: [] }],
       summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 },
     } as unknown as GenerateCommandOutput['envelope'];
@@ -300,7 +306,7 @@ describe('runGenerateCommand', () => {
     const { output } = arrangeSuccessfulCommand('codex', 'codex');
     const cwd = '/workspace/no-config-project';
     const config = { ...CONFIG, projectRoot: cwd, testDir: `${cwd}/tests`, runsDir: `${cwd}/tests/.runs` };
-    const rawEnvelope = { ...output.envelope, schemaVersion: '3.9', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, secrets: [], ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
+    const rawEnvelope = { ...output.envelope, schemaVersion: '3.11', results: [{ id: `${cwd}/tests/login.test.md`, file: `${cwd}/tests/login.test.md`, planFile: `${cwd}/tests/login.ambercast.plan.json`, status: 'generated', dryRun: false, secrets: [], ambiguities: [] }], summary: { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 } } as unknown as GenerateCommandOutput['envelope'];
     mocks.loadConfig.mockResolvedValue({ resolved: config, source: { path: null } });
     mocks.buildGenerateReport.mockReturnValue({ ...output, envelope: rawEnvelope });
 

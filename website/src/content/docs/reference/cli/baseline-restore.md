@@ -9,14 +9,14 @@ sidebar:
 ---
 
 :::caution
-`ambercast baseline` and `ambercast restore` are planned features not implemented in 0.3.1. The interfaces and behaviors described here represent intended designs rather than current functionality.
+`ambercast baseline` and `ambercast restore` are planned features not implemented in the current release. The interfaces and behaviors described here represent intended designs rather than current functionality.
 :::
 
 `ambercast baseline` and `ambercast restore` define the planned database boundary for ambercast, maintaining baseline capture and restoration as distinct operations.
 
 ## Status {#status}
 
-`ambercast baseline` and `ambercast restore` are not implemented in 0.3.1 and are not available CLI commands. Their planned database boundary is defined by the DB reset design. See the CLI overview for available commands.
+`ambercast baseline` and `ambercast restore` are not implemented in the current release and are not available CLI commands. Their planned database boundary is defined by the DB reset design. See the CLI overview for available commands.
 
 Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Configuration](/ambercast/reference/configuration/#key-table).
 

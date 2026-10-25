@@ -7,7 +7,6 @@ import {
   promptTemplateFingerprint,
   toAnchoredLines,
 } from '#core/ai/prompt-envelope.js';
-import { createCallIdAllocator } from '#core/ai/call-id-allocator.js';
 import {
   PlanDocument,
   type GeneratedPlanResponse,
@@ -20,7 +19,6 @@ import * as planProducerBundle from '#core/ai/plan-producer-bundle.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
-import { createLayoutResolver } from '#core/layout/resolve.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
 import { AiExecutorUnavailableError } from '#core/errors/ai-executor-unavailable-error.js';
 import { ConfigInvalidError } from '#core/errors/config-invalid-error.js';
@@ -30,12 +28,13 @@ import { SecretEnvVarCollisionError } from '#core/errors/secret-env-var-collisio
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { UnexpectedCrashError } from '#core/errors/unexpected-crash-error.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
+import { PromptAmbiguousError } from '#core/errors/prompt-ambiguous-error.js';
 import { TargetUnresolvedError } from '#core/errors/target-unresolved-error.js';
 import { AmbercastError } from '#core/errors/types.js';
 import type { AiExecuteRequest, AiExecuteResult } from '#ports/ai.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, RunEvent } from '#ports/system.js';
-import { generate, projectAllowedNames, type GenerateDeps, type GenerateOptions } from '#usecases/generate.js';
+import { generate, projectAllowedNames, type GenerateDeps } from '#usecases/generate.js';
 import { buildGenerateReport } from '#usecases/generate-report.js';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { getReportJsonSchema } from '#report/json-schema.js';
@@ -45,9 +44,15 @@ import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { validateCommittedInstructionCoverage } from '#usecases/instruction-coverage-policy.js';
 import { detectSecretLiteral } from '#usecases/generator-secret-policy.js';
 import { REDACTED_ISSUE_PATH_SEGMENT } from '#core/ai/response-issue-path.js';
-import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
 import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createRecordingEventSink } from '../../doubles/create-recording-event-sink.js';
+import { assertDiagnosable, assertNoSecretDisclosure, collectStorageArtifacts } from '../../support/report-assertions.js';
+import { createScenario, withSecretConfig, writePrompt, createFreshPlan, seedFreshArtifacts, createRecordingStorage, TEST_DIR, RUNS_DIR, TARGETS, RESOLVED_TARGETS, NAMED_INTENT_LINE, PROMPT, RESPONSE, DEFAULT_OPTIONS } from '../../support/generate-scenario.js';
+
+const ASSUMPTION_TARGETS = {
+  admin: { surface: 'web' as const, baseUrl: 'https://admin.example.test', description: 'Administration console' },
+  shop: { surface: 'web' as const, baseUrl: 'https://shop.example.test', description: 'Customer storefront' },
+};
 
 const envVarNameMocks = vi.hoisted(() => ({
   assertNoEnvVarCollision: vi.fn(),
@@ -61,6 +66,57 @@ vi.mock('#core/secrets/env-var-name.js', async (importOriginal) => {
   envVarNameMocks.actualAssertNoEnvVarCollision = actual.assertNoEnvVarCollision;
   envVarNameMocks.assertNoEnvVarCollision.mockImplementation(actual.assertNoEnvVarCollision);
   return { ...actual, assertNoEnvVarCollision: envVarNameMocks.assertNoEnvVarCollision };
+});
+
+describe('#598 generator evidence policy', () => {
+  it('TEST-3 sends the exact evidence policy once in the provider prompt', async () => {
+    const execute = vi.fn(async (_request: AiExecuteRequest) => ({ data: RESPONSE, raw: JSON.stringify(RESPONSE) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(execute).toHaveBeenCalledOnce();
+    const policy = "When setting confirms on an assertion or ai step, list only earlier click, press, fill, fill-secret, or capture steps whose intended effects are evidenced by the exact state it verifies. Do not exclude a step solely because it precedes a submit or another action. Include preceding fill and fill-secret steps when the verified outcome provides evidence for their intended effects; for example, a state that shows the result of signing in as the entered user evidences both the username and the password inputs, while a state that any signed-in session would show, such as a sign-out button, evidences neither. Do not infer confirmation from temporal order or general workflow dependency alone, and exclude steps whose effects the check does not verify.";
+    expect(execute.mock.calls[0]?.[0].prompt.split(policy)).toHaveLength(2);
+  });
+
+  it.each([false, true])('TEST-9 preserves evidenced input confirms with overwritten input=%s', async (overwritten) => {
+    const line = overwritten
+      ? 'Open the sign-in page. Enter the username "alice", then replace it with the username "verifier". Enter the saved password and click "Sign in". Assert that the text "Signed in as verifier" is displayed.'
+      : 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the text "Signed in as verifier" is displayed.';
+    const intent = (description: string, roleHint: string) => ({
+      description, roleHint, startAnchor: 'L3', startColumn: 1,
+      endAnchor: 'L3', endColumn: line.length + 1, citation: line,
+    });
+    const signInColumn = line.indexOf('"Sign in"') + 2;
+    const confirms = ['fill-username', 'fill-password', 'click-sign-in'];
+    const data = { steps: [
+      { id: 'open', kind: 'action', action: 'navigate', target: 'web', url: '/sign-in' },
+      ...(overwritten ? [{ id: 'fill-username-first', kind: 'action', action: 'fill', target: 'web', intent: intent('Username field', 'textbox'), value: 'alice' }] : []),
+      { id: 'fill-username', kind: 'action', action: 'fill', target: 'web', intent: intent('Username field', 'textbox'), value: 'verifier' },
+      { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: intent('Password field', 'textbox'), secret: { nameHint: 'password' } },
+      { id: 'click-sign-in', kind: 'action', action: 'click', target: 'web', intent: {
+        ...intent('Sign in button', 'button'),
+        quote: { text: 'Sign in', startAnchor: 'L3', startColumn: signInColumn, endAnchor: 'L3', endColumn: signInColumn + 'Sign in'.length },
+      } },
+      { id: 'verify-user', kind: 'assert', check: 'text-visible', target: 'web', text: 'Signed in as verifier', confirms },
+    ], ambiguities: [] } as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data, raw: JSON.stringify(data) }));
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) });
+    const file = await writePrompt(scenario.recordingStorage.storage, 'sign-in.test.md', `# Sign in\n\n${line}\n`);
+    const outcome = await generate(withSecretConfig(scenario.deps, '*'), { ...DEFAULT_OPTIONS, files: [file], maxAttempts: 1 });
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(execute).toHaveBeenCalledOnce();
+    const plan = PlanDocument.parse(JSON.parse(await scenario.deps.storage.readText(scenario.deps.layout.planPathFor(file))));
+    expect(plan.steps.find((step) => step.id === 'verify-user')).toHaveProperty('confirms', ['fill-username', 'fill-password', 'click-sign-in']);
+    // Secret naming diagnostics do not change which input lacks outcome evidence.
+    const warnings = outcome.results[0]?.warnings ?? [];
+    expect(warnings.filter((warning) => warning.kind === 'action-unconfirmed')).toEqual(
+      overwritten ? [{ kind: 'action-unconfirmed', stepId: 'fill-username-first' }] : [],
+    );
+    const report = buildGenerateReport({ outcome, options: DEFAULT_OPTIONS, startedAt: '2026-10-13T00:00:00Z', durationMs: 0 });
+    assertDiagnosable(report.envelope);
+  });
 });
 
 describe('TEST-A1, TEST-A2, TEST-A5 and TEST-A7 generation confirms', () => {
@@ -241,13 +297,6 @@ afterEach(() => {
   secretNamingMocks.deriveSecretNames.mockImplementation(actualDeriveSecretNames);
 });
 
-const TEST_DIR = '/workspace/tests';
-const RUNS_DIR = '/workspace/tests/.runs';
-const TARGETS = { web: { surface: 'web' as const, baseUrl: 'https://example.test' } } as const;
-const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
-const NAMED_INTENT_LINE = 'Use "Account", "Token one", "Token two", "Alpha", "Beta", "First", "Second", "Retained", and "Added" fields.';
-const PROMPT = `# Sign in\n\nWhen I submit valid credentials, I reach the dashboard.\nPassword "Password"\n${NAMED_INTENT_LINE}\n`;
-const RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const FIRST_SECRET_REF = '{{secrets.FOO}}';
 const PASSWORD_TARGET = { description: 'Password', roleHint: 'textbox', sourceSpan: { startLine: 4, startColumn: 1, endLine: 4, endColumn: 20 }, quote: { text: 'Password', sourceSpan: { startLine: 4, startColumn: 11, endLine: 4, endColumn: 19 } } } as const;
 const PASSWORD_INTENT = PASSWORD_TARGET;
@@ -292,16 +341,6 @@ const coveredResponse = {
   ambiguities: [],
 } as unknown as GeneratedPlanResponse;
 
-const DEFAULT_OPTIONS: GenerateOptions = {
-  files: [],
-  strict: false,
-  force: false,
-  maxAttempts: 2,
-  dryRun: false,
-  allowEmpty: false,
-  list: false,
-};
-
 describe('projectAllowedNames', () => {
   it('deduplicates then applies default UTF-16 order before the 64-name cap', () => {
     const names = ['z', 'a', 'z', 'A', 'a'] as never;
@@ -329,92 +368,6 @@ describe('projectAllowedNames', () => {
     expect(projectAllowedNames('*')).toEqual({ names: [], kept: 0, dropped: 0 });
   });
 });
-
-interface RecordingStorage {
-  readonly storage: StorageAdapter;
-  readonly reads: string[];
-  readonly exists: string[];
-  readonly writes: { readonly path: string; readonly content: string }[];
-  reset(): void;
-}
-
-function createRecordingStorage(
-  fail: { readonly read?: string; readonly write?: string } = {},
-): RecordingStorage {
-  const backing = createInMemoryStorage();
-  const reads: string[] = [];
-  const exists: string[] = [];
-  const writes: { path: string; content: string }[] = [];
-
-  return {
-    reads,
-    exists,
-    writes,
-    storage: {
-      ...backing,
-      async readText(path) {
-        reads.push(path);
-        if (path === fail.read) {
-          throw new Error(`read failed: ${path}`);
-        }
-        return backing.readText(path);
-      },
-      async exists(path) {
-        exists.push(path);
-        return backing.exists(path);
-      },
-      async writeText(path, content) {
-        if (path === fail.write) {
-          throw new Error(`write failed: ${path}`);
-        }
-        writes.push({ path, content });
-        return backing.writeText(path, content);
-      },
-    },
-    reset() {
-      reads.splice(0);
-      exists.splice(0);
-      writes.splice(0);
-    },
-  };
-}
-
-function createScenario(overrides: Partial<GenerateDeps> = {}) {
-  const recordingStorage = createRecordingStorage();
-  const events = createRecordingEventSink();
-  const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => ({
-    data: RESPONSE,
-    raw: JSON.stringify(RESPONSE),
-  }));
-  const deps: GenerateDeps = {
-    storage: recordingStorage.storage,
-    layout: createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR }),
-    resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
-    events: events.sink,
-    clock: { now: () => new Date(0), monotonicMs: () => 0, sleep: async () => undefined },
-    allocateCallId: createCallIdAllocator(),
-    discoverTestFiles: vi.fn(async () => ['login.test.md']),
-    config: {
-      testDir: TEST_DIR,
-      testMatch: ['**/*.test.md'],
-      testIgnore: ['**/.runs/**'],
-      targets: RESOLVED_TARGETS,
-      defaultTarget: 'web',
-      ai: { provider: 'codex', timeoutMs: 100, maxGenerateAttempts: 2 },
-    },
-    ...overrides,
-  };
-
-  return { deps, events, execute, recordingStorage };
-}
-
-function withSecretConfig(deps: GenerateDeps, allow: readonly string[] | '*'): GenerateDeps {
-  return {
-    ...deps,
-    config: { ...deps.config, secrets: { allow }, projectRoot: '/workspace' } as unknown as GenerateDeps['config'],
-    configSource: { path: '/workspace/ambercast.config.json' },
-  } as unknown as GenerateDeps;
-}
 
 function sequenceClock(readings: readonly number[]): Clock {
   let index = 0;
@@ -482,58 +435,6 @@ function sequentialTimeoutConfig(timeoutMsValues: readonly number[]) {
   };
 }
 
-async function writePrompt(storage: StorageAdapter, relativePath = 'login.test.md', contents = PROMPT): Promise<string> {
-  const path = `${TEST_DIR}/${relativePath}`;
-  await storage.writeText(path, contents);
-  return path;
-}
-
-async function createFreshPlan(
-  storage: StorageAdapter,
-  testPath: string,
-  steps: readonly Step[] = [],
-  targetDefinitions: PlanDocument['targets'] = TARGETS,
-): Promise<PlanDocument> {
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-  const normalizedTestMd = normalizeTestMd(await storage.readText(testPath));
-  const referencedTargetNames = new Set(steps.map((step) => step.target));
-  const planTargets = Object.fromEntries(
-    Object.entries(targetDefinitions).filter(([name]) => referencedTargetNames.has(name)),
-  ) as PlanDocument['targets'];
-  const inputsDigest = computeInputsDigest({
-    normalizedTestMd,
-    schemaVersion: 5,
-    generatorPromptTemplateFingerprint: promptTemplateFingerprint(),
-    planProducerBundleFingerprint: planProducerBundle.planProducerBundleFingerprint(),
-    targetDefinitions: planTargets,
-  });
-  const plan = {
-    schemaVersion: 5,
-    source: { inputsDigest },
-    targets: planTargets,
-    steps: [...steps],
-  } as unknown as PlanDocument;
-
-  await storage.writeText(layout.planPathFor(testPath), toCanonicalArtifactText(plan as unknown as JsonValueT));
-  return plan;
-}
-
-async function seedFreshArtifacts(
-  storage: StorageAdapter,
-  testPath: string,
-  steps: readonly Step[] = [],
-  targetDefinitions: PlanDocument['targets'] = TARGETS,
-): Promise<void> {
-  const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
-  const plan = await createFreshPlan(storage, testPath, steps, targetDefinitions);
-  const grounding: GroundingDocument = { schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} };
-
-  await storage.writeText(
-    layout.groundingPathFor(testPath),
-    toCanonicalArtifactText(grounding as unknown as JsonValueT),
-  );
-}
-
 describe('generate', () => {
 
   it('keeps the generated success-span fixture locally re-extractable from its prompt', () => {
@@ -591,6 +492,27 @@ describe('generate', () => {
       expect(planText).not.toContain('When I submit valid credentials');
     },
   );
+
+  it('generates a plan with a readable-slug step id in one provider call', async () => {
+    const stepId = 'verify-uploaded-xlsx-backup-json-download-works';
+    const response = {
+      ...coveredResponse,
+      steps: [{ ...coveredResponse.steps[0], id: stepId }],
+    } as GeneratedPlanResponse;
+    const execute = vi.fn(async () => ({ data: response, raw: JSON.stringify(response) }));
+    const { deps, recordingStorage } = createScenario({
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+    });
+    const testPath = await writePrompt(recordingStorage.storage);
+    recordingStorage.reset();
+
+    const outcome = await generate(deps, DEFAULT_OPTIONS);
+
+    expect(outcome.results[0]?.status).toBe('generated');
+    expect(execute).toHaveBeenCalledTimes(1);
+    const planText = await recordingStorage.storage.readText(deps.layout.planPathFor(testPath));
+    expect(JSON.parse(planText)).toMatchObject({ steps: [{ id: stepId }] });
+  });
 
   it.each([
     ['missing success intent', [], ['verificationIntent', REDACTED_ISSUE_PATH_SEGMENT], 'intent-id-missing'],
@@ -927,7 +849,7 @@ describe('generate', () => {
     await generate(deps, DEFAULT_OPTIONS);
 
     expect(request?.prompt).toBe(
-      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan. Assign target: web to every step. Do not report target ambiguity.`, // SPEC-11
+      `${GENERATOR_INSTRUCTION_COVERAGE_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE.trim()}\n\n${GENERATOR_SECRET_POLICY_TEMPLATE.trim()}\n\nGenerate a deterministic ambercast execution plan. Assign target: web to every step. Leave ambiguities empty. In assumptions, list each assumption the plan depends on that the prompt does not state, such as an inferred page path or URL. Never put secret values or secret references in assumptions.`, // TEST-2 / SPEC-1
     );
     expect(request?.context).toEqual({
       testMd: toAnchoredLines(normalizeTestMd(PROMPT)),
@@ -1042,10 +964,10 @@ describe('generate', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('gives list precedence over dry-run, force, and strict without reading prompts or writing artifacts', async () => {
+  it('gives list precedence over dry-run and force without reading prompts or writing artifacts', async () => {
     const { deps, events, execute, recordingStorage } = createScenario({ discoverTestFiles: async () => ['login.test.md'] });
 
-    await expect(generate(deps, { ...DEFAULT_OPTIONS, list: true, dryRun: true, force: true, strict: true }))
+    await expect(generate(deps, { ...DEFAULT_OPTIONS, list: true, dryRun: true, force: true }))
       .resolves.toEqual({ results: [{ file: `${TEST_DIR}/login.test.md`, status: 'listed' }], noTestsFound: false, interrupted: false });
     expect(execute).not.toHaveBeenCalled();
     expect(events.emitted()).toEqual([]);
@@ -1207,7 +1129,7 @@ describe('generate', () => {
     });
     expect(resolveAiExecutor).not.toHaveBeenCalled();
     expect(JSON.parse(await recordingStorage.storage.readText(`${TEST_DIR}/first.ambercast.grounding.json`))).toEqual({
-      schemaVersion: 3,
+      schemaVersion: 4,
       planDigest: computePlanDigest(firstPlan),
       entries: {},
     });
@@ -1590,6 +1512,28 @@ describe('generate', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it.each([2, 3])('TEST-7 replaces retired v%s grounding with empty v4 without regenerating a fresh plan', async (schemaVersion) => {
+    const { deps, execute, recordingStorage } = createScenario();
+    const testPath = await writePrompt(recordingStorage.storage);
+    await seedFreshArtifacts(recordingStorage.storage, testPath);
+    const planPath = deps.layout.planPathFor(testPath);
+    const planText = await recordingStorage.storage.readText(planPath);
+    const plan = JSON.parse(planText) as PlanDocument;
+    const groundingPath = deps.layout.groundingPathFor(testPath);
+    await recordingStorage.storage.writeText(groundingPath, toCanonicalArtifactText({
+      schemaVersion, planDigest: computePlanDigest(plan), entries: {},
+    }));
+    recordingStorage.reset();
+    const result = await generate(deps, DEFAULT_OPTIONS);
+    expect(result.results).toMatchObject([{ status: 'skipped-fresh' }]);
+    expect(execute).not.toHaveBeenCalled();
+    expect(recordingStorage.writes).toEqual([expect.objectContaining({ path: groundingPath })]);
+    expect(JSON.parse(await recordingStorage.storage.readText(groundingPath))).toEqual({
+      schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {},
+    });
+    expect(await recordingStorage.storage.readText(planPath)).toBe(planText);
+  });
+
   it('treats a v1-tagged grounding document as stale, rewrites it empty, and keeps the plan fresh', async () => {
     const { deps, execute, recordingStorage } = createScenario();
     const testPath = await writePrompt(recordingStorage.storage);
@@ -1622,7 +1566,7 @@ describe('generate', () => {
       readonly entries: unknown;
     };
     expect(rewrittenGrounding).toMatchObject({
-      schemaVersion: 3, // SPEC-3: a v1 cache is replaced by the current v3 cache.
+      schemaVersion: 4, // SPEC-3: a v1 cache is replaced by the current v4 cache.
       planDigest: computePlanDigest(plan),
     });
     expect(rewrittenGrounding.entries).toStrictEqual({});
@@ -1970,6 +1914,7 @@ describe('generate', () => {
       'provider rejection',
       new AiExecutorUnavailableError('provider unavailable'),
       'ai-executor-unavailable',
+      'AI_EXECUTOR_UNAVAILABLE',
       2,
       [{ attempt: 1, code: 'AI_EXECUTOR_UNAVAILABLE' }],
     ],
@@ -1977,10 +1922,11 @@ describe('generate', () => {
       'invalid response rejection',
       new AiResponseInvalidError('invalid response'),
       'ai-response-invalid',
+      'AI_RESPONSE_INVALID',
       3,
       [{ attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' }],
     ],
-  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, expectedAiCalls, expectedAttempts) => {
+  ] as const)('keeps %s as a failed file and continues to later files', async (_description, error, kind, code, expectedAiCalls, expectedAttempts) => {
     const execute = vi.fn(async (request: AiExecuteRequest<unknown>) => {
       if (request.context !== null && typeof request.context === 'object' && 'testMd' in request.context && JSON.stringify(request.context.testMd).includes('first')) {
         throw error;
@@ -2012,6 +1958,17 @@ describe('generate', () => {
       ],
     });
     expect(outcome.results[0]?.error).toMatchObject({ details: { attempts: expectedAttempts } });
+    const { envelope, exitCode } = buildGenerateReport({ outcome, options: DEFAULT_OPTIONS, startedAt: '2026-10-07T00:00:00Z', durationMs: 1 });
+    expect(exitCode).toBe(3);
+    expect(envelope.errors).toEqual([{
+      scope: 'case', caseId: `${TEST_DIR}/first.test.md`, kind: 'environment', code,
+      message: error.message,
+      details: code === 'AI_RESPONSE_INVALID'
+        ? { issues: [], attempts: expectedAttempts }
+        : { attempts: expectedAttempts },
+    }]);
+    expect(envelope.summary).toEqual({ total: 2, passed: 1, failed: 0, errored: 1, skipped: 0 });
+    assertDiagnosable(envelope);
     expect(execute).toHaveBeenCalledTimes(expectedAiCalls);
     expect(aiCallEvents(events.emitted())).toHaveLength(expectedAiCalls);
     expect(aiEvents(events.emitted())).toHaveLength(expectedAiCalls * 2);
@@ -2267,7 +2224,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 3, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 4, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -2292,7 +2249,7 @@ describe('generate', () => {
         await recordingStorage.storage.writeText(groundingPath, '{ malformed');
       }
       if (groundingState === 'digest-mismatched') {
-        const staleGrounding: GroundingDocument = { schemaVersion: 3, planDigest: 'f'.repeat(64), entries: {} };
+        const staleGrounding: GroundingDocument = { schemaVersion: 4, planDigest: 'f'.repeat(64), entries: {} };
         await recordingStorage.storage.writeText(
           groundingPath,
           toCanonicalArtifactText(staleGrounding as unknown as JsonValueT),
@@ -2340,18 +2297,42 @@ describe('generate', () => {
     expect(recordingStorage.writes).toEqual([expect.objectContaining({ path: groundingPath })]);
   });
 
-  it('rejects provider ambiguities before generated or previewed plans are written (SPEC-12)', async () => {
+  it.each([
+    ['generated', { ...DEFAULT_OPTIONS }],
+    ['dry-run', { ...DEFAULT_OPTIONS, dryRun: true }],
+  ] as const)('TEST-4 classifies provider ambiguities in %s mode without writing plans or disclosing prose', async (_mode, options) => {
+    const ambiguities = ['Unclear target Alpha', 'Unclear target Beta'];
+    const execute = vi.fn(async () => ({ data: { steps: [], ambiguities }, raw: '{...}' }));
     const { deps, recordingStorage } = createScenario({
-      resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data: { steps: [], ambiguities: ['unclear target'] }, raw: '{...}' }) }),
-    });
-    await writePrompt(recordingStorage.storage);
+      resolveAiExecutor: async () => createFakeAiExecutor({ execute }),
+    }, { targets: ASSUMPTION_TARGETS, defaultTarget: undefined });
+    const file = await writePrompt(recordingStorage.storage);
+    recordingStorage.reset();
 
-    await expect(generate(deps, { ...DEFAULT_OPTIONS, strict: true })).resolves.toMatchObject({
-      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
+    const outcome = await generate(deps, options);
+    const error = outcome.results[0]?.error;
+    expect(execute).toHaveBeenCalledOnce();
+    expect(outcome.results).toMatchObject([{ file, status: 'failed' }]);
+    expect(error).toBeInstanceOf(PromptAmbiguousError);
+    expect(error).toMatchObject({
+      kind: 'prompt-ambiguous',
+      message: 'The generated plan has unresolved target ambiguities.',
+      details: { ambiguities: 2 },
+      exitCode: 2,
     });
-    await expect(generate(deps, { ...DEFAULT_OPTIONS, dryRun: true, strict: false, force: true })).resolves.toMatchObject({
-      results: [{ status: 'failed', error: { message: 'The generated plan has unresolved target ambiguities.', exitCode: 1 } }],
-    });
+    expect(recordingStorage.writes).toEqual([]);
+    await expect(deps.storage.exists(deps.layout.planPathFor(file))).resolves.toBe(false);
+    await expect(deps.storage.exists(deps.layout.groundingPathFor(file))).resolves.toBe(false);
+
+    const { envelope, exitCode } = buildGenerateReport({ outcome, options, startedAt: '2026-10-07T00:00:00Z', durationMs: 1 });
+    expect(exitCode).toBe(2);
+    expect(envelope.errors).toEqual([{
+      scope: 'case', caseId: file, kind: 'usage', code: 'PROMPT_AMBIGUOUS',
+      message: error?.message, details: { ambiguities: 2 },
+    }]);
+    expect(envelope.summary).toEqual({ total: 1, passed: 0, failed: 0, errored: 1, skipped: 0 });
+    expect(JSON.stringify(envelope)).not.toContain('Unclear target');
+    assertDiagnosable(envelope);
   });
 
   it.each([
@@ -3829,6 +3810,29 @@ describe('generate v5 element intent and confirmation contracts', () => {
     ] }]);
   });
 
+  it.each([
+    ['generated', false],
+    ['would-generate', true],
+  ] as const)('TEST-G4 orders secret warnings before an unconfirmed action warning on a %s row', async (status, dryRun) => {
+    const data = {
+      steps: [
+        { id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT },
+        { id: 'fill-account', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...generatedNamedIntent('Account'), quote: undefined }, secret: { nameHint: 'password' } },
+        { id: 'press-key', kind: 'action', action: 'press', target: 'web', intent: GENERATED_PASSWORD_INTENT, key: 'Enter' },
+        { id: 'verify', kind: 'assert', check: 'text-visible', target: 'web', text: 'Dashboard', confirms: ['press-key'] },
+      ],
+      ambiguities: [],
+    } as unknown as GeneratedPlanResponse;
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute: async () => ({ data, raw: JSON.stringify(data) }) }) });
+    await writePrompt(scenario.recordingStorage.storage);
+    const outcome = await generate(withSecretConfig(scenario.deps, ['password']), { ...DEFAULT_OPTIONS, dryRun });
+    expect(outcome.results).toMatchObject([{ status, warnings: [
+      { kind: 'secret-name-reused-across-targets', name: 'password', stepIds: ['fill-password', 'fill-account'] },
+      { kind: 'action-unconfirmed', stepId: 'fill-password' },
+      { kind: 'action-unconfirmed', stepId: 'fill-account' },
+    ] }]);
+  });
+
   it('TEST-G6 regenerates a v4 plan with v2 grounding and suppresses old-target warning on force', async () => {
     const scenario = createScenario();
     const file = await writePrompt(scenario.recordingStorage.storage);
@@ -3842,7 +3846,7 @@ describe('generate v5 element intent and confirmation contracts', () => {
     const first = await generate(scenario.deps, DEFAULT_OPTIONS);
     expect(first.results).toMatchObject([{ status: 'generated' }]);
     expect(JSON.parse(await scenario.deps.storage.readText(planPath))).toMatchObject({ schemaVersion: 5 });
-    expect(JSON.parse(await scenario.deps.storage.readText(groundingPath))).toEqual(expect.objectContaining({ schemaVersion: 3, entries: {} }));
+    expect(JSON.parse(await scenario.deps.storage.readText(groundingPath))).toEqual(expect.objectContaining({ schemaVersion: 4, entries: {} }));
     await scenario.deps.storage.writeText(planPath, toCanonicalArtifactText(oldPlan as unknown as JsonValueT));
     const forced = await generate(scenario.deps, { ...DEFAULT_OPTIONS, force: true });
     expect(forced.results).toMatchObject([{ status: 'generated' }]);
@@ -5250,5 +5254,505 @@ describe('generate interruption contract', () => {
     }
     expect(dispose).toHaveBeenCalledOnce();
     dispose.mockRestore();
+  });
+});
+
+describe('#600 generator assumptions and target ambiguity (TEST-2, TEST-4)', () => {
+  type ResponseWithAssumptions = Omit<GeneratedPlanResponse, 'assumptions'> & { readonly assumptions?: readonly string[] | undefined };
+  const assumption = (message: string) => ({ kind: 'generator-assumption', message });
+  const omitted = 'An assumption was omitted because it looked like a secret.';
+  const entropyToken = 'Zx9Qp2Lm7Vt4Rk8Ns3Wc6Yb1Hd5Jf0Ea';
+  const singleTargetMessage = 'The AI provider response reported target ambiguities for a single-target request.';
+  const issue = { code: 'schema-mismatch', path: ['ambiguities'] };
+
+  function fixture(responses: readonly ResponseWithAssumptions[], multi = false) {
+    let dispatch = 0;
+    const execute = vi.fn(async (_request: AiExecuteRequest<unknown>) => {
+      const data = responses[Math.min(dispatch++, responses.length - 1)];
+      if (data === undefined) throw new Error('The assumption fixture requires a response.');
+      return { data, raw: JSON.stringify(data) };
+    });
+    const scenario = createScenario({ resolveAiExecutor: async () => createFakeAiExecutor({ execute }) },
+      multi ? { targets: ASSUMPTION_TARGETS, defaultTarget: undefined } : {});
+    return { ...scenario, execute };
+  }
+
+  function report(outcome: Awaited<ReturnType<typeof generate>>, options = DEFAULT_OPTIONS) {
+    return buildGenerateReport({ outcome, options, startedAt: '2026-10-14T00:00:00Z', durationMs: 1 });
+  }
+
+  function assumptionWarnings(row: { readonly warnings?: readonly { readonly kind: string }[] } | undefined) {
+    return (row?.warnings ?? []).filter((warning) => warning.kind === 'generator-assumption');
+  }
+
+  async function expectNoArtifacts(scenario: ReturnType<typeof fixture>, file: string) {
+    expect(scenario.recordingStorage.writes).toEqual([]);
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).toBe(false);
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.groundingPathFor(file))).toBe(false);
+  }
+
+  it('TEST-2 ends a multi-target request with the byte-exact SPEC-1 instruction', async () => {
+    const scenario = fixture([RESPONSE], true);
+    await writePrompt(scenario.deps.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated' }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(scenario.execute.mock.calls[0]?.[0].context).toMatchObject({ targets: ASSUMPTION_TARGETS });
+    expect(scenario.execute.mock.calls[0]?.[0].context).not.toHaveProperty('defaultTarget');
+    expect(scenario.execute.mock.calls[0]?.[0].prompt.endsWith('Assign a target name to every step using the prompt and context.targets. If a step does not identify a target, use context.defaultTarget when provided. List a step in ambiguities only when its target still cannot be determined; the steps may then be empty. In assumptions, list each other assumption the plan depends on that the prompt does not state, such as an inferred page path or URL. Never put secret values or secret references in assumptions.')).toBe(true);
+  });
+
+  it.each([1, 2])('TEST-4a retries single-target ambiguity up to maxAttempts=%i and writes neither artifact', async (maxAttempts) => {
+    const data = { steps: [], ambiguities: ['x'] };
+    const scenario = fixture([data]);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const options = { ...DEFAULT_OPTIONS, maxAttempts };
+    const outcome = await generate(scenario.deps, options);
+    const built = report(outcome, options);
+    expect(outcome.results).toMatchObject([{ file, status: 'failed', aiCalls: maxAttempts }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(maxAttempts);
+    expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+    expect(outcome.results[0]?.error).toMatchObject({ message: singleTargetMessage, details: { raw: JSON.stringify(data), issues: [issue] } });
+    expect(built.exitCode).toBe(3);
+    expect(built.envelope.errors).toMatchObject([{ code: 'AI_RESPONSE_INVALID', details: { issues: [issue] } }]);
+    expect(assumptionWarnings(outcome.results[0])).toEqual([]);
+    expect(assumptionWarnings(built.envelope.results[0] as { warnings?: { kind: string }[] })).toEqual([]);
+    if (maxAttempts === 2) {
+      expect(scenario.execute.mock.calls[1]?.[0].context).toMatchObject({
+        previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [issue] }],
+      });
+      expect(outcome.results[0]?.error?.details?.attempts).toEqual([
+        { attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' },
+      ]);
+    }
+    assertDiagnosable(built.envelope);
+    await expectNoArtifacts(scenario, file);
+  });
+
+  it('TEST-4a writes the corrected second response after single-target ambiguity feedback', async () => {
+    const scenario = fixture([
+      { steps: [], ambiguities: ['x'], assumptions: ['A'] },
+      { steps: [], ambiguities: [], assumptions: ['B'] },
+    ]);
+    const file = await writePrompt(scenario.deps.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 2, ambiguities: [], warnings: [assumption('B')] }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(2);
+    expect(scenario.execute.mock.calls[1]?.[0].context).toMatchObject({ previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [issue] }] });
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).toBe(true);
+    expect(report(outcome).exitCode).toBe(0);
+  });
+
+  it.each([false, true])('TEST-4a preserves old plan and grounding bytes after forced ambiguity failure with dryRun=%s', async (dryRun) => {
+    const scenario = fixture([{ steps: [], ambiguities: ['x'] }]);
+    const file = await writePrompt(scenario.deps.storage);
+    await seedFreshArtifacts(scenario.deps.storage, file);
+    const planPath = scenario.deps.layout.planPathFor(file);
+    const groundingPath = scenario.deps.layout.groundingPathFor(file);
+    const planBytes = await scenario.deps.storage.readBinary(planPath);
+    const groundingBytes = await scenario.deps.storage.readBinary(groundingPath);
+    scenario.recordingStorage.reset();
+    const options = { ...DEFAULT_OPTIONS, force: true, dryRun, maxAttempts: 2 };
+    const outcome = await generate(scenario.deps, options);
+    expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: 2 }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(2);
+    expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+    expect(report(outcome, options).exitCode).toBe(3);
+    assertDiagnosable(report(outcome, options).envelope);
+    expect(scenario.recordingStorage.writes).toEqual([]);
+    expect(await scenario.deps.storage.readBinary(planPath)).toEqual(planBytes);
+    expect(await scenario.deps.storage.readBinary(groundingPath)).toEqual(groundingBytes);
+  });
+
+  it.each([
+    ['step text', ['step x'], 1], ['empty text', [''], 1], ['null', [null], 1],
+    ['duplicates', ['step x', 'step x'], 2], ['mixed boundary values', ['', null, 'step x', 'step x'], 4],
+  ] as const)('TEST-4b counts %s ambiguity entries and terminates with empty steps after one call', async (_label, ambiguities, count) => {
+    const scenario = fixture([{ steps: [], ambiguities: [...ambiguities] }], true);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 2 });
+    expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: 1 }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(scenario.execute.mock.calls[0]?.[0].context).toMatchObject({ targets: ASSUMPTION_TARGETS });
+    expect(outcome.results[0]?.error).toBeInstanceOf(PromptAmbiguousError);
+    const built = report(outcome);
+    expect(built.exitCode).toBe(2);
+    expect(built.envelope.errors).toEqual([{ scope: 'case', caseId: file, kind: 'usage', code: 'PROMPT_AMBIGUOUS', message: 'The generated plan has unresolved target ambiguities.', details: { ambiguities: count } }]);
+    expect(assumptionWarnings(outcome.results[0])).toEqual([]);
+    assertDiagnosable(built.envelope);
+    await expectNoArtifacts(scenario, file);
+  });
+
+  describe.each([
+    ['multi-target ambiguity', true, 'step x'],
+    ['multi-target secret ambiguity', true, entropyToken],
+    ['single-target ambiguity', false, 'step x'],
+  ] as const)('TEST-4 / SPEC-3 schema precedence over %s', (_label, multi, ambiguity) => {
+    it.each([
+      ['null', null, ['assumptions']],
+      ['numeric item', [1], ['assumptions', 0]],
+      ['non-array', 'a', ['assumptions']],
+      ['mixed null item', ['a', null], ['assumptions', 1]],
+    ] as const)('rejects %s assumptions at the schema path before ambiguity inspection', async (_shape, assumptions, path) => {
+      if (ambiguity === entropyToken) expect(detectSecretLiteral(ambiguity)).toBe('high-entropy-token');
+      // Malformed provider data must reach the use-case schema rather than a typed fixture adapter.
+      const data = { steps: [], ambiguities: [ambiguity], assumptions } as unknown as ResponseWithAssumptions;
+      const scenario = fixture([data], multi);
+      const file = await writePrompt(scenario.deps.storage);
+      scenario.recordingStorage.reset();
+      const options = { ...DEFAULT_OPTIONS, maxAttempts: 2 };
+      const outcome = await generate(scenario.deps, options);
+      expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: 2 }]);
+      expect(scenario.execute).toHaveBeenCalledTimes(2);
+      expect(scenario.execute.mock.calls[0]?.[0].context).toMatchObject({
+        targets: multi ? ASSUMPTION_TARGETS : TARGETS,
+      });
+      expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+      expect(outcome.results[0]?.error?.details?.attempts).toEqual([
+        { attempt: 1, code: 'AI_RESPONSE_INVALID' }, { attempt: 2, code: 'AI_RESPONSE_INVALID' },
+      ]);
+      const built = report(outcome, options);
+      expect(built.exitCode).toBe(3);
+      expect(built.envelope.errors).toMatchObject([{ code: 'AI_RESPONSE_INVALID' }]);
+      assertDiagnosable(built.envelope);
+      await expectNoArtifacts(scenario, file);
+      if (ambiguity === entropyToken) {
+        assertNoSecretDisclosure({ secrets: { ambiguity: entropyToken }, report: built.envelope });
+      }
+      // Code alone cannot distinguish schema rejection from the single-target ambiguity policy.
+      const schemaIssue = { code: 'schema-mismatch', path: [...path] };
+      expect(outcome.results[0]?.error?.details?.issues).toEqual([schemaIssue]);
+      expect(built.envelope.errors).toMatchObject([{ details: { issues: [schemaIssue] } }]);
+      expect(scenario.execute.mock.calls[1]?.[0].context).toMatchObject({
+        previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [schemaIssue] }],
+      });
+    });
+  });
+
+  it.each([
+    ['out-of-set target', { id: 'visit', kind: 'action', action: 'navigate', target: 'outside', url: '/' }],
+    ['invalid source attribution', { id: 'click-password', kind: 'action', action: 'click', target: 'admin', intent: { ...QUOTED_INTENT, citation: 'not in the prompt' } }],
+    ['plan secret literal', { id: 'fill-password', kind: 'action', action: 'fill', target: 'admin', intent: GENERATED_PASSWORD_INTENT, value: entropyToken }],
+  ] as const)('TEST-4c classifies multi-target ambiguity before %s', async (_label, step) => {
+    const scenario = fixture([{ steps: [step], ambiguities: ['step x'] } as unknown as GeneratedPlanResponse], true);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: 1 }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(outcome.results[0]?.error).toBeInstanceOf(PromptAmbiguousError);
+    expect(report(outcome).envelope.errors).toMatchObject([{ code: 'PROMPT_AMBIGUOUS', details: { ambiguities: 1 } }]);
+    expect(report(outcome).exitCode).toBe(2);
+    assertDiagnosable(report(outcome).envelope);
+    await expectNoArtifacts(scenario, file);
+  });
+
+  it.each([false, true])('TEST-4d/e/i emits assumptions in provider order with empty report ambiguities for multi=%s', async (multi) => {
+    const messages = multi ? ['First assumption.', 'Second assumption.'] : ['No path was given, so the plan navigates to the baseUrl.'];
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: messages }], multi);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 1, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(outcome.results[0]?.warnings).toEqual(messages.map(assumption));
+    const built = report(outcome);
+    expect(built.exitCode).toBe(0);
+    expect(built.envelope.results).toMatchObject([{ status: 'generated', ambiguities: [], warnings: messages.map(assumption) }]);
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).toBe(true);
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.groundingPathFor(file))).toBe(true);
+    const plan = JSON.parse(await scenario.deps.storage.readText(scenario.deps.layout.planPathFor(file)));
+    expect(plan).not.toHaveProperty('assumptions');
+    expect(plan).not.toHaveProperty('warnings');
+  });
+
+  it.each([false, true])('TEST-4i previews the same ordered assumption warnings without artifact writes for multi=%s', async (multi) => {
+    const messages = ['First assumption.', 'Second assumption.', 'First assumption.'];
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: messages }], multi);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const options = { ...DEFAULT_OPTIONS, dryRun: true };
+    const outcome = await generate(scenario.deps, options);
+    expect(outcome.results).toMatchObject([{ status: 'would-generate', aiCalls: 1, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(outcome.results[0]?.warnings).toEqual(messages.map(assumption));
+    expect(report(outcome, options).exitCode).toBe(0);
+    expect(report(outcome, options).envelope.results).toMatchObject([{ status: 'would-generate', ambiguities: [], warnings: messages.map(assumption) }]);
+    await expectNoArtifacts(scenario, file);
+  });
+
+  it.each([false, true])('TEST-4f rejects an ambiguity entropy token before target membership for multi=%s', async (multi) => {
+    expect(detectSecretLiteral(entropyToken)).toBe('high-entropy-token');
+    const scenario = fixture([{ steps: [{ id: 'visit', kind: 'action', action: 'navigate', target: 'outside', url: '/' }], ambiguities: [entropyToken] }], multi);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts: 2 });
+    expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: 2 }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(2);
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretLiteralRejectedError);
+    expect(outcome.results[0]?.error?.details).toMatchObject({ detector: 'high-entropy-token', path: '[0]', attempts: [
+      { attempt: 1, code: 'SECRET_LITERAL_REJECTED' }, { attempt: 2, code: 'SECRET_LITERAL_REJECTED' },
+    ] });
+    expect(scenario.execute.mock.calls[1]?.[0].context).toMatchObject({ previousAttempts: [{ attempt: 1, code: 'SECRET_LITERAL_REJECTED' }] });
+    const built = report(outcome);
+    expect(built.envelope.errors).toMatchObject([{ code: 'SECRET_LITERAL_REJECTED', details: { path: '[0]' } }]);
+    assertDiagnosable(built.envelope);
+    assertNoSecretDisclosure({ secrets: { ambiguity: entropyToken }, report: built.envelope });
+    await expectNoArtifacts(scenario, file);
+  });
+
+  it.each([1, 2])('TEST-4f exhausts secret ambiguity retries with empty steps at maxAttempts=%i', async (maxAttempts) => {
+    const scenario = fixture([{ steps: [], ambiguities: [entropyToken] }]);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const outcome = await generate(scenario.deps, { ...DEFAULT_OPTIONS, maxAttempts });
+    expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: maxAttempts }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(maxAttempts);
+    expect(outcome.results[0]?.error).toBeInstanceOf(SecretLiteralRejectedError);
+    expect(outcome.results[0]?.error?.details).toMatchObject({ path: '[0]' });
+    assertDiagnosable(report(outcome).envelope);
+    assertNoSecretDisclosure({ secrets: { ambiguity: entropyToken }, report: report(outcome).envelope });
+    await expectNoArtifacts(scenario, file);
+  });
+
+  it.each([
+    ['embedded reference', 'Typed {{secrets.password}} into the field.'],
+    ['entropy token', entropyToken],
+  ])('TEST-4f replaces only a secret-shaped assumption (%s), preserves neighbors and duplicates, and discloses no original text', async (_label, secretText) => {
+    const messages = ['Before.', secretText, 'After.', 'Before.', secretText];
+    const expected = ['Before.', omitted, 'After.', 'Before.', omitted].map(assumption);
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: messages }]);
+    const file = await writePrompt(scenario.deps.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 1, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    const built = report(outcome);
+    expect(built.exitCode).toBe(0);
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.planPathFor(file))).toBe(true);
+    expect(await scenario.deps.storage.exists(scenario.deps.layout.groundingPathFor(file))).toBe(true);
+    // Persist the builder's report as the runtime consumer does, then scan all
+    // output roots. Generate itself owns only the two artifact writes.
+    await scenario.deps.storage.writeText(`${RUNS_DIR}/assumptions/report.json`, JSON.stringify(built.envelope));
+    const artifacts = await collectStorageArtifacts(scenario.deps.storage, [RUNS_DIR, scenario.deps.layout.planPathFor(file), scenario.deps.layout.groundingPathFor(file)]);
+    expect(artifacts).toHaveLength(3);
+    assertNoSecretDisclosure({ secrets: { assumptionText: secretText }, report: built.envelope, artifacts });
+    expect(outcome.results[0]?.warnings).toEqual(expected);
+    expect(built.envelope.results).toMatchObject([{ warnings: expected, ambiguities: [] }]);
+  });
+
+  it('TEST-4f previews a replaced secret assumption without writing artifacts or disclosing its original text', async () => {
+    const secretText = 'Typed {{secrets.password}} into the field.';
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: ['Before.', secretText, 'After.'] }]);
+    const file = await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const options = { ...DEFAULT_OPTIONS, dryRun: true };
+    const outcome = await generate(scenario.deps, options);
+    expect(outcome.results).toMatchObject([{ status: 'would-generate', aiCalls: 1, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    const built = report(outcome, options);
+    expect(built.exitCode).toBe(0);
+    expect(outcome.results[0]?.warnings).toEqual(['Before.', omitted, 'After.'].map(assumption));
+    assertNoSecretDisclosure({ secrets: { assumptionText: secretText }, report: built.envelope });
+    await expectNoArtifacts(scenario, file);
+  });
+
+  it.each([
+    ['multi-target ambiguity', ['step x'], true, 'PROMPT_AMBIGUOUS', 1],
+    ['secret ambiguity', [entropyToken], false, 'SECRET_LITERAL_REJECTED', 2],
+  ] as const)('TEST-4b/f preserves existing artifact bytes after forced %s failure', async (_label, ambiguities, multi, code, calls) => {
+    const scenario = fixture([{ steps: [], ambiguities: [...ambiguities] }], multi);
+    const file = await writePrompt(scenario.deps.storage);
+    await seedFreshArtifacts(scenario.deps.storage, file);
+    const planPath = scenario.deps.layout.planPathFor(file);
+    const groundingPath = scenario.deps.layout.groundingPathFor(file);
+    const planBytes = await scenario.deps.storage.readBinary(planPath);
+    const groundingBytes = await scenario.deps.storage.readBinary(groundingPath);
+    scenario.recordingStorage.reset();
+    const options = { ...DEFAULT_OPTIONS, force: true, maxAttempts: 2 };
+    const outcome = await generate(scenario.deps, options);
+    expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: calls }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(calls);
+    const built = report(outcome, options);
+    expect(built.envelope.errors).toMatchObject([{ code }]);
+    assertDiagnosable(built.envelope);
+    expect(scenario.recordingStorage.writes).toEqual([]);
+    expect(await scenario.deps.storage.readBinary(planPath)).toEqual(planBytes);
+    expect(await scenario.deps.storage.readBinary(groundingPath)).toEqual(groundingBytes);
+    if (code === 'SECRET_LITERAL_REJECTED') {
+      const artifacts = await collectStorageArtifacts(scenario.deps.storage, [planPath, groundingPath]);
+      assertNoSecretDisclosure({ secrets: { ambiguity: entropyToken }, report: built.envelope, artifacts });
+    }
+  });
+
+  it('TEST-4k does not replay assumption warnings on a fresh run after producing them', async () => {
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: ['First assumption.'] }]);
+    const file = await writePrompt(scenario.deps.storage);
+    const generated = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(generated.results).toMatchObject([{ status: 'generated', warnings: [assumption('First assumption.')] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    const planBytes = await scenario.deps.storage.readBinary(scenario.deps.layout.planPathFor(file));
+    const groundingBytes = await scenario.deps.storage.readBinary(scenario.deps.layout.groundingPathFor(file));
+    scenario.recordingStorage.reset();
+    const fresh = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(fresh.results).toMatchObject([{ status: 'skipped-fresh', aiCalls: 0 }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(fresh.results[0]).not.toHaveProperty('warnings');
+    expect(report(fresh).envelope.results[0]).not.toHaveProperty('warnings');
+    expect(scenario.recordingStorage.writes).toEqual([]);
+    expect(await scenario.deps.storage.readBinary(scenario.deps.layout.planPathFor(file))).toEqual(planBytes);
+    expect(await scenario.deps.storage.readBinary(scenario.deps.layout.groundingPathFor(file))).toEqual(groundingBytes);
+  });
+
+  it('TEST-4f pins the accepted whole-value secret reference assumption verbatim', async () => {
+    const message = '{{secrets.password}}';
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: [message] }]);
+    await writePrompt(scenario.deps.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 1, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(outcome.results[0]?.warnings).toEqual([assumption(message)]);
+    expect(report(outcome).envelope.results).toMatchObject([{ warnings: [assumption(message)] }]);
+  });
+
+  it.each([
+    ['absent', undefined], ['empty array', []], ['empty string', ['']], ['whitespace only', ['  ', '\n']],
+  ] as const)('TEST-4g omits the warnings key for %s assumptions', async (_label, assumptions) => {
+    const scenario = fixture([{ steps: [], ambiguities: [], ...(assumptions === undefined ? {} : { assumptions }) }]);
+    await writePrompt(scenario.deps.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 1, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(outcome.results[0]).not.toHaveProperty('warnings');
+    expect(report(outcome).envelope.results[0]).not.toHaveProperty('warnings');
+    expect(report(outcome).exitCode).toBe(0);
+  });
+
+  it('TEST-4g removes only blank items and preserves nonblank whitespace, order and duplicates', async () => {
+    const messages = ['  ', '  First assumption.  ', '', '\n', 'Second assumption.', '\t', '  First assumption.  '];
+    const expected = ['  First assumption.  ', 'Second assumption.', '  First assumption.  '].map(assumption);
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: messages }]);
+    await writePrompt(scenario.deps.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 1, ambiguities: [] }]);
+    expect(outcome.results[0]?.warnings).toEqual(expected);
+    expect(report(outcome).envelope.results).toMatchObject([{ warnings: expected }]);
+  });
+
+  it('TEST-4d preserves a very long assumption without a length limit or truncation', async () => {
+    const message = 'The plan assumes the landing page is available. '.repeat(2048);
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: [message] }]);
+    await writePrompt(scenario.deps.storage);
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 1, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledOnce();
+    expect(outcome.results[0]?.warnings).toEqual([assumption(message)]);
+    expect(report(outcome).envelope.results).toMatchObject([{ warnings: [assumption(message)] }]);
+  });
+
+  it.each([
+    ['generated with assumptions', false, ['Same assumption.', 'Same assumption.']],
+    ['preview with assumptions', true, ['Same assumption.', 'Same assumption.']],
+    ['generated without assumptions', false, undefined],
+    ['preview without assumptions', true, undefined],
+  ] as const)('TEST-4h orders secret, action and duplicate assumption warnings in %s', async (_label, dryRun, assumptions) => {
+    const data = { steps: [
+      { id: 'first', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { allowedName: 'password' } },
+      { id: 'second', kind: 'action', action: 'fill-secret', target: 'web', intent: { ...GENERATED_PASSWORD_INTENT, description: 'Other password' }, secret: { allowedName: 'password' } },
+    ], ambiguities: [], ...(assumptions === undefined ? {} : { assumptions }) } as unknown as ResponseWithAssumptions;
+    const scenario = fixture([data]);
+    await writePrompt(scenario.deps.storage);
+    const options = { ...DEFAULT_OPTIONS, dryRun };
+    const outcome = await generate(withSecretConfig(scenario.deps, ['password']), options);
+    expect(outcome.results).toMatchObject([{ status: dryRun ? 'would-generate' : 'generated', aiCalls: 1, ambiguities: [] }]);
+    expect(outcome.results[0]?.warnings).toEqual([
+      { kind: 'secret-name-reused-across-targets', name: 'password', stepIds: ['first', 'second'] },
+      { kind: 'action-unconfirmed', stepId: 'first' }, { kind: 'action-unconfirmed', stepId: 'second' },
+      ...(assumptions ?? []).map(assumption),
+    ]);
+    expect(report(outcome, options).envelope.results[0]).toHaveProperty('warnings', outcome.results[0]?.warnings);
+  });
+
+  it.each([false, true])('TEST-4j excludes assumptions from invalid attribution and retains only the successful attempt with dryRun=%s', async (dryRun) => {
+    const bad = { steps: [{ id: 'click-password', kind: 'action', action: 'click', target: 'web', intent: { ...QUOTED_INTENT, citation: 'not in the prompt' } }], ambiguities: [], assumptions: ['A'] } as unknown as ResponseWithAssumptions;
+    const scenario = fixture([bad, { steps: [], ambiguities: [], assumptions: ['B'] }]);
+    await writePrompt(scenario.deps.storage, 'login.test.md', QUOTED_PROMPT);
+    const options = { ...DEFAULT_OPTIONS, dryRun };
+    const outcome = await generate(scenario.deps, options);
+    expect(outcome.results).toMatchObject([{ status: dryRun ? 'would-generate' : 'generated', aiCalls: 2, ambiguities: [] }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(2);
+    expect(scenario.execute.mock.calls[1]?.[0].context).toMatchObject({ previousAttempts: [{ attempt: 1, code: 'AI_RESPONSE_INVALID', issues: [expect.objectContaining({ code: 'intent-citation-mismatch' })] }] });
+    expect(outcome.results[0]?.warnings).toEqual([assumption('B')]);
+    expect(report(outcome, options).envelope.results).toMatchObject([{ warnings: [assumption('B')] }]);
+  });
+
+  it.each([false, true])('TEST-4k skips a fresh plan without calling an assumption-producing provider with dryRun=%s', async (dryRun) => {
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: ['Would have been returned.'] }]);
+    const file = await writePrompt(scenario.deps.storage);
+    await seedFreshArtifacts(scenario.deps.storage, file);
+    scenario.recordingStorage.reset();
+    const options = { ...DEFAULT_OPTIONS, dryRun };
+    const outcome = await generate(scenario.deps, options);
+    expect(outcome.results).toMatchObject([{ status: 'skipped-fresh', aiCalls: 0 }]);
+    expect(scenario.execute).not.toHaveBeenCalled();
+    expect(assumptionWarnings(outcome.results[0])).toEqual([]);
+    expect(report(outcome, options).envelope.results).toMatchObject([{ status: 'skipped-fresh' }]);
+    expect(report(outcome, options).envelope.results[0]).not.toHaveProperty('warnings');
+    expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('TEST-4k lists without calling an assumption-producing provider or exposing warnings', async () => {
+    const scenario = fixture([{ steps: [], ambiguities: [], assumptions: ['Would have been returned.'] }]);
+    await writePrompt(scenario.deps.storage);
+    scenario.recordingStorage.reset();
+    const options = { ...DEFAULT_OPTIONS, list: true };
+    const outcome = await generate(scenario.deps, options);
+    expect(outcome.results).toMatchObject([{ status: 'listed' }]);
+    expect(scenario.execute).not.toHaveBeenCalled();
+    expect(assumptionWarnings(outcome.results[0])).toEqual([]);
+    expect(report(outcome, options).envelope.results).toMatchObject([{ status: 'listed' }]);
+    expect(report(outcome, options).envelope.results[0]).not.toHaveProperty('warnings');
+    expect(scenario.recordingStorage.writes).toEqual([]);
+  });
+
+  it('TEST-4k omits assumptions after final attribution failure despite receiving them on every attempt', async () => {
+    const data = { steps: [{ id: 'click-password', kind: 'action', action: 'click', target: 'web', intent: { ...QUOTED_INTENT, citation: 'not in the prompt' } }], ambiguities: [], assumptions: ['Not a successful assumption.'] } as unknown as ResponseWithAssumptions;
+    const scenario = fixture([data]);
+    const file = await writePrompt(scenario.deps.storage, 'login.test.md', QUOTED_PROMPT);
+    scenario.recordingStorage.reset();
+    const outcome = await generate(scenario.deps, DEFAULT_OPTIONS);
+    expect(outcome.results).toMatchObject([{ status: 'failed', aiCalls: 2 }]);
+    expect(scenario.execute).toHaveBeenCalledTimes(2);
+    expect(outcome.results[0]?.error).toBeInstanceOf(AiResponseInvalidError);
+    expect(outcome.results[0]?.error?.details).toMatchObject({ issues: [expect.objectContaining({ code: 'intent-citation-mismatch' })] });
+    expect(assumptionWarnings(outcome.results[0])).toEqual([]);
+    expect(report(outcome).envelope.results[0]).not.toHaveProperty('warnings');
+    assertDiagnosable(report(outcome).envelope);
+    await expectNoArtifacts(scenario, file);
+  });
+
+  it.each([
+    ['ordered duplicates', ['First assumption.', 'Second assumption.', 'First assumption.']],
+    ['no assumptions', []],
+    ['absent assumptions', undefined],
+  ] as const)('TEST-4l keeps assumption warnings last after interactive rename with %s', async (_label, assumptions) => {
+    const data = { steps: [{ id: 'fill-password', kind: 'action', action: 'fill-secret', target: 'web', intent: GENERATED_PASSWORD_INTENT, secret: { nameHint: 'login_password' } }], ambiguities: [], ...(assumptions === undefined ? {} : { assumptions }) } as unknown as ResponseWithAssumptions;
+    const scenario = fixture([data]);
+    const file = await writePrompt(scenario.deps.storage);
+    const request = vi.fn(async (input: Parameters<NonNullable<GenerateDeps['consent']>['request']>[0]) => {
+      const renames = [{ file, name: 'password', newName: 'account_password' }] as const;
+      expect(input.validateRenames(renames)).toEqual({ ok: true });
+      return { kind: 'allowed' as const, renames };
+    });
+    const commitAllowlist = vi.fn(async () => undefined);
+    const outcome = await generate(withSecretConfig({ ...scenario.deps, consent: { request, commitAllowlist } }, []), DEFAULT_OPTIONS);
+    expect(request).toHaveBeenCalledOnce();
+    expect(commitAllowlist).toHaveBeenCalledExactlyOnceWith('/workspace/ambercast.config.json', ['account_password'], undefined);
+    expect(outcome.results).toMatchObject([{ status: 'generated', aiCalls: 1, ambiguities: [], secrets: [expect.objectContaining({ name: 'account_password', selectionSource: 'interactive-rename' })] }]);
+    const plan = PlanDocument.parse(JSON.parse(await scenario.deps.storage.readText(scenario.deps.layout.planPathFor(file))));
+    expect(plan.steps).toMatchObject([{ secretRef: '{{secrets.account_password}}' }]);
+    expect(outcome.results[0]?.warnings).toEqual([{ kind: 'action-unconfirmed', stepId: 'fill-password' }, ...(assumptions ?? []).map(assumption)]);
+    expect(report(outcome).envelope.results[0]).toHaveProperty('warnings', outcome.results[0]?.warnings);
   });
 });

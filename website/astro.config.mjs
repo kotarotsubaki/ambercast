@@ -12,10 +12,48 @@ const site = 'https://kotarotsubaki.github.io';
 const base = '/ambercast';
 const assetUrl = (asset) => new URL(`${base}/${asset}`, site).href;
 
+// Issue #309 (approved mapping): the nine root-locale mappings for legacy
+// documentation URLs, expanded below to root/ja/zh-cn for 27 total
+// redirects. `reference/configuration` is deliberately absent -- it has
+// its own slug and no legacy URL to migrate from, so nothing maps to or
+// from it. No `to` ever equals its own `from`, so no redirect here can
+// point at itself.
+const legacyRedirectMap = [
+  ['guides/introduction', 'introduction'],
+  ['guides/getting-started', 'tutorials/quick-start'],
+  ['guides/writing-prompts', 'how-to/write-effective-prompts'],
+  ['guides/commands', 'reference/cli/overview'],
+  ['guides/exit-codes', 'reference/exit-codes'],
+  ['guides/artifacts', 'reference/file-layout'],
+  ['guides/secrets', 'how-to/manage-secrets'],
+  ['guides/ci', 'tutorials/github-actions'],
+  ['reference/cli', 'reference/cli/overview'],
+];
+
+// `localePrefix` (leading slash, no trailing slash) builds each redirect's
+// source key; `localeSegment` (trailing slash, no leading slash) builds its
+// destination value -- kept as two differently-shaped variables rather than
+// one, since conflating them produces a malformed value (a missing or a
+// doubled slash) for every non-root locale.
+const legacyRedirectLocales = [
+  { localePrefix: '', localeSegment: '' },
+  { localePrefix: '/ja', localeSegment: 'ja/' },
+  { localePrefix: '/zh-cn', localeSegment: 'zh-cn/' },
+];
+const redirects = Object.fromEntries(
+  legacyRedirectMap.flatMap(([from, to]) =>
+    legacyRedirectLocales.map(({ localePrefix, localeSegment }) => [
+      `${localePrefix}/${from}`,
+      `${base}/${localeSegment}${to}/`,
+    ]),
+  ),
+);
+
 export default defineConfig({
   site,
   base,
   trailingSlash: 'always',
+  redirects,
   markdown: {
     // The local plugin preserves explicit heading anchors while avoiding the upstream
     // remark-custom-heading-id package; entering this pipeline at all still requires
@@ -55,7 +93,9 @@ export default defineConfig({
         Footer: './src/components/Footer.astro',
       },
       // Bundled themes own token colors while Starlight keeps its UI surfaces in sync
-      // with site tokens. Contrast normalization preserves their token colors.
+      // with site tokens. minSyntaxHighlightingColorContrast: 0 below disables Expressive
+      // Code's contrast-normalization pass entirely, so the bundled themes' token colors
+      // reach the page exactly as authored, unmodified.
       expressiveCode: {
         themes: ['vesper', 'min-light'],
         plugins: [pluginLineNumbers(), pluginCollapsibleSections()],

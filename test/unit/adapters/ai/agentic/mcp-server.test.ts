@@ -1,17 +1,23 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { PassThrough } from 'node:stream';
+import { createMcpServer } from '#adapters/mcp/server.js';
+import { createSystemClock } from '#adapters/system/system-clock.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { describe, expect, it } from 'vitest';
+import { executeAgentic } from '#adapters/ai/agentic/agentic-executor.js';
 import { startAgenticMcpServer } from '#adapters/ai/agentic/mcp-server.js';
+import type { CommandRunner } from '#adapters/ai/shared/command-runner.js';
 import { computePlanProducerBundleFingerprint, liveProducerBundleInputs } from '#core/ai/plan-producer-bundle.js';
 import { AiResponseInvalidError } from '#core/errors/ai-response-invalid-error.js';
-import { AgenticTargetRejection } from '#core/errors/agentic-target-rejection.js';
+import { AGENTIC_TARGET_REJECTION_LIMIT, AgenticTargetRejection } from '#core/errors/agentic-target-rejection.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { SecretUnresolvedError } from '#core/errors/secret-unresolved-error.js';
 import type { InstructionCoverageAiActionController } from '#ports/ai.js';
 import { reportError } from '#report/error-mapping.js';
 import { AiResponseIssue } from '#report/schema.js';
 import { ERROR_DETAILS_KEY_ORDER } from '../../../../../src/cli/main.js';
+import { connectClient } from '../../../../support/mcp-client.js';
 
 function createController(overrides: Partial<InstructionCoverageAiActionController> = {}) {
   const calls = { perform: 0, evaluateAssert: 0, snapshotForResolution: 0 };
@@ -27,25 +33,6 @@ function createController(overrides: Partial<InstructionCoverageAiActionControll
     },
   };
   return { controller, calls };
-}
-
-async function connectClient(url: string, token: string, responseBodies?: string[]): Promise<Client> {
-  const client = new Client({ name: 'ambercast-mcp-test', version: '1.0.0' });
-  const requestInit = { headers: { authorization: `Bearer ${token}` } };
-  const transport = new StreamableHTTPClientTransport(new URL(url), responseBodies === undefined
-    ? { requestInit }
-    : {
-      requestInit,
-      fetch: async (input, init) => {
-        const response = await fetch(input, init);
-        responseBodies.push(await response.clone().text());
-        return response;
-      },
-    });
-  // SDK 1.30's transport declaration is not exact-optional compatible with
-  // Client's Transport parameter even though the runtime transport is valid.
-  await client.connect(transport as never);
-  return client;
 }
 
 async function unauthorizedRequest(url: string, token?: string): Promise<Response> {
@@ -102,6 +89,31 @@ type LatchCase = {
 };
 
 describe('startAgenticMcpServer', () => {
+  it.each([true, false])('TEST-8 rejects removed strict=%s at the generate MCP boundary', async (strict) => {
+    let calls = 0;
+    const success = async () => ({ exitCode: 0, envelope: { summary: 'ok' } });
+    const server = createMcpServer({
+      sessionRoot: '/workspace', version: '0.6.0', stderr: new PassThrough(),
+      generate: async () => { calls += 1; return success(); },
+      run: success, check: success, healPreview: success,
+    }, { clock: createSystemClock() });
+    const client = new Client({ name: 'strict-removal-test', version: '1.0.0' });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const tools = await client.listTools();
+      expect(tools.tools.map((tool) => tool.name)).toContain('ambercast_generate');
+      const result = await client.callTool({ name: 'ambercast_generate', arguments: { strict } });
+      expect(result.isError).toBe(true);
+      expect(calls).toBe(0);
+      const recovered = await client.callTool({ name: 'ambercast_generate', arguments: {} });
+      expect(recovered.isError).toBe(false);
+      expect(calls).toBe(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
   it('binds strictly to loopback and closes idempotently', async () => {
     const { controller } = createController();
     const server = await startAgenticMcpServer(controller);
@@ -502,8 +514,8 @@ describe('startAgenticMcpServer', () => {
     await server.close();
   });
 
-  it('keeps the producer-bundle fingerprint at the v5 baseline', () => {
-    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58');
+  it('keeps the producer-bundle fingerprint at the #600 baseline', () => {
+    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020');
   });
 
   it('projects a terminal schema latch into the case report without attempts', async () => {
@@ -581,6 +593,73 @@ describe('startAgenticMcpServer', () => {
     genericToolError(await client.callTool({ name: 'ambercast_snapshot', arguments: {} }));
     await client.close();
     await server.close();
+  });
+
+  // This exercises the adapter's MCP latch; AgenticStepFailedError is wrapped one layer up by the usecase,
+  // whose private executeAgentic has no MCP-specific budget (run.test.ts TEST-6a).
+  it.each(['recovered', 'exhausted'] as const)('passes %s target rejection through the real MCP executor boundary', async (mode) => {
+    let observedRejections = 0;
+    const { controller, calls } = createController({
+      perform: async () => {
+        if (mode === 'exhausted' || observedRejections === 0) {
+          observedRejections += 1;
+          throw new AgenticTargetRejection('ambercast_perform', 'element-not-found');
+        }
+      },
+    });
+    const request = {
+      instructionPrompt: 'Continue to the next page.', allowedSecretRefs: [], allowedRunRefs: [],
+      trustedInstructionCoverage: [], controller,
+    };
+    let mcpUrl = '';
+    let mcpToken = '';
+    const invocation = async (url: string, token: string) => {
+      mcpUrl = url;
+      mcpToken = token;
+      return {
+        command: 'test-provider', args: [], env: {}, cleanup: async () => undefined,
+        readFinalOutcome: async () => ({ outcome: 'success' as const }),
+      };
+    };
+    const run: CommandRunner = async (_command, _args, options) => {
+      const result = { outcome: 'exited' as const, stdout: '', stderr: '', exitCode: 0 };
+      let client: Client | undefined;
+      try {
+        client = await connectClient(mcpUrl, mcpToken);
+        const callsToMake = mode === 'exhausted' ? AGENTIC_TARGET_REJECTION_LIMIT + 1 : 2;
+        for (let index = 0; index < callsToMake; index += 1) {
+          const result = await client.callTool({ name: 'ambercast_perform', arguments: { action } });
+          if (index < AGENTIC_TARGET_REJECTION_LIMIT && (mode === 'exhausted' || index === 0)) {
+            expect(JSON.parse(toolText(result))).toStrictEqual(targetBody(
+              'ambercast_perform', 'element-not-found', AGENTIC_TARGET_REJECTION_LIMIT - index - 1,
+            ));
+          } else if (mode === 'exhausted') {
+            genericToolError(result);
+          } else {
+            expect(result.isError).not.toBe(true);
+          }
+        }
+      } finally {
+        try {
+          await client?.close();
+        } finally {
+          options?.onChildSettled?.(result);
+        }
+      }
+      return result;
+    };
+
+    // The shipped executor serializes calls; concurrent MCP latch accounting is outside this contract.
+    if (mode === 'exhausted') {
+      await expect(executeAgentic(request, run, invocation)).rejects.toMatchObject({
+        tool: 'ambercast_perform', reason: 'element-not-found', exhausted: true,
+      });
+      expect(observedRejections).toBe(AGENTIC_TARGET_REJECTION_LIMIT + 1);
+    } else {
+      await expect(executeAgentic(request, run, invocation)).resolves.toEqual({ outcome: 'success' });
+      expect(observedRejections).toBe(1);
+    }
+    expect(calls.perform).toBe(mode === 'exhausted' ? observedRejections : observedRejections + 1);
   });
 
   it('ignores an externally supplied exhausted flag but latches a mismatched tool identity immediately', async () => {

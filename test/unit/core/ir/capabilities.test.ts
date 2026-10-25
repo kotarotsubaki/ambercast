@@ -37,7 +37,7 @@ const plan = (steps: Step[], names = ['A']) => PlanDocument.parse({
   steps,
 });
 const grounding = (entries: GroundingDocument['entries']) => GroundingDocument.parse({
-  schemaVersion: 3,
+  schemaVersion: 4,
   planDigest: 'b'.repeat(64),
   entries,
 });

@@ -52,7 +52,7 @@ The middle verification layer, a pinned Memos instance driven by `npm run verify
 
 The middle-layer scenario fixture is generated in #624. Until the plan and grounding of every unmarked case are committed, `HEAL_STEP_ID` is set, and both the plain run and `--heal-check` pass, run the one-case smoke in place of steps 1 and 3: `npm run verify:memos -- --case memos-sign-in-create-memo` before merging, and `npm run verify:memos -- --published <version> --case memos-sign-in-create-memo` after publication. Paste each `PASS-PARTIAL` line into the release PR and list the case ids that were not run. This is an interim smoke, not a complete pre-release verification. If the smoke fails, do not merge the release PR, as in step 2. Do not run `--heal-check` until the whole fixture is committed: its heal case has no fixture yet and the settings-entry step id is unset.
 
-If `npm run verify:memos` reports stale plans, regenerate the fixture with `npm run verify:memos -- --regenerate` in a normal issue PR before the release. It calls a real AI provider and may ask for secret consent, so run it locally.
+If `npm run verify:memos` reports stale plans, regenerate the fixture with `npm run verify:memos -- --regenerate` in a normal issue PR before the release. It calls a real AI provider and may ask for secret consent, so run it locally. Before resolve, regeneration checks the plan's `confirms` without calling the AI and stops if an action has no confirming assertion.
 
 ## How to contribute
 

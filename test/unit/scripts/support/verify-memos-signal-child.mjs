@@ -88,16 +88,17 @@ const deps = {
       for (const c of CASES.filter(c => args.includes(prompt(c.id)))) {
         const generatedPlan = c.target === 'memos-readonly'
           ? JSON.stringify({ targets: { 'memos-readonly': {} }, steps: [
-            { action: 'fill', target: c.target, value: 'verifier' },
-            { action: 'fill-secret', target: c.target, secretRef: '{{secrets.password}}' },
-          ] }) + '\n' : '{"generated":"plan"}\n';
+            { id: 'username', kind: 'action', action: 'fill', target: c.target, value: 'verifier' },
+            { id: 'password', kind: 'action', action: 'fill-secret', target: c.target, secretRef: '{{secrets.password}}' },
+            { id: 'confirmed', kind: 'assert', check: 'text-visible', target: c.target, confirms: ['username', 'password'] },
+          ] }) + '\n' : JSON.stringify({ generated: 'plan', steps: [] }) + '\n';
         write(join(opts.cwd, plan(c.id)), generatedPlan);
         write(join(opts.cwd, grounding(c.id)), '{"generated":"grounding"}\n');
       }
     }
     if (args.includes('run')) {
       const runId = args.includes('--resolve') ? 'resolve-run' : 'replay-run';
-      const text = JSON.stringify({ runId, results: CASES.map(c => ({ id: c.id, status: 'passed', aiCalls: 0 })), errors: [] });
+      const text = JSON.stringify({ runId, results: CASES.filter(c => args.includes(prompt(c.id))).map(c => ({ id: c.id, file: prompt(c.id), steps: [], status: 'passed', aiCalls: 0 })), errors: [] });
       write(join(opts.cwd, 'tests/ambercast/.runs', runId, 'report.json'), text);
       return result(text);
     }

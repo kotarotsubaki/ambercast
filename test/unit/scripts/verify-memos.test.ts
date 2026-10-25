@@ -12,7 +12,7 @@ import { main, parseArgs, CASES } from '../../../scripts/verify-memos.mjs';
 import { REPORT_SCHEMA_VERSION, ReportEnvelope } from '#report/schema.js';
 import { PLAN_SCHEMA_VERSION, PlanDocument } from '#core/ir/schema.js';
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
-import { runProcess, createDockerRunner, TerminationUnconfirmedError } from '../../../scripts/lib/memos-harness.mjs';
+import { runProcess, createDockerRunner, TerminationUnconfirmedError, unconfirmedSteps } from '../../../scripts/lib/memos-harness.mjs';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
@@ -54,6 +54,7 @@ function readOnlyPlan(settingsLabel = 'Open settings') {
       { id: 'username', kind: 'action', action: 'fill', target: 'memos-readonly', value: 'verifier', intent: { description: 'Username input', roleHint: 'textbox', sourceSpan: fakeSourceSpan } },
       { id: 'password', kind: 'action', action: 'fill-secret', target: 'memos-readonly', secretRef: '{{secrets.memos.password}}', intent: { description: 'Password input', roleHint: 'textbox', sourceSpan: fakeSourceSpan } },
       { id: fakeHealStepId, kind: 'action', action: 'click', target: 'memos-readonly', intent: { description: settingsLabel, roleHint: 'menuitem', sourceSpan: fakeSourceSpan } },
+      { id: 'confirmed-settings', kind: 'assert', check: 'text-visible', target: 'memos-readonly', text: 'Settings', confirms: ['username', 'password', 'settings-entry'] },
     ] });
 }
 function suiteReport(selected: readonly string[] = prompts, aiCalls = 0) {
@@ -61,7 +62,7 @@ function suiteReport(selected: readonly string[] = prompts, aiCalls = 0) {
     summary: { total: selected.length, passed: selected.length, failed: 0, errored: 0, skipped: 0 }, errors: [] as Record<string, unknown>[],
     reportPersistence: 'persisted', results: selected.map(file => ({ id: file, file,
       planFile: file.replace('.test.md', '.ambercast.plan.json'), status: 'passed', durationMs: 1, aiCalls,
-      steps: [], sessions: {}, explanation: '' })) };
+      steps: [] as Record<string, unknown>[], sessions: {}, explanation: '' })) };
 }
 function brokenReport(aiCalls = 0) {
   const envelope = suiteReport([healPrompt], aiCalls);
@@ -188,7 +189,7 @@ function createFakeDeps(overrides: Overrides = {}) {
     }
     if (kind === 'resolve' || kind === 'replay') {
       const replayNumber = processCalls.filter(c => c.kind === 'replay' && c.opts.cwd === opts.cwd).length;
-      const envelope = kind === 'resolve' ? suiteReport(prompts, 9)
+      const envelope = kind === 'resolve' ? suiteReport(prompts.filter(p => call.argv.includes(p)), 9)
         : replayNumber === 1 ? report : replayNumber === 2 ? brokenReport() : suiteReport([healPrompt]);
       const text = kind === 'replay' && replayNumber === 1 ? reportText : JSON.stringify(envelope);
       write(join(opts.cwd, 'tests/ambercast/.runs', `${kind}-${replayNumber}`, 'report.json'), text);
@@ -238,6 +239,148 @@ function createFakeDeps(overrides: Overrides = {}) {
 type Fake = ReturnType<typeof createFakeDeps>;
 async function run(f: Fake, argv: string[] = [], platform = 'linux') { return main(argv, platform, f.deps, f.signals); }
 function last(f: Fake) { return f.out().trimEnd().split('\n').at(-1)!; }
+
+describe('confirms regeneration gates', () => {
+  it('the read-only fake has complete confirms coverage', () => {
+    expect(unconfirmedSteps(readOnlyPlan())).toEqual([]);
+  });
+  it.each([false, true])('TEST-CNF-6 stops before password creation and resolve with all uncovered cases (long=%s)', async long => {
+    const missing = long ? Array.from({ length: 40 }, (_, i) => `uncovered-step-${i}`) : ['click-first', 'capture-last'];
+    const indices = [0, caseTable.findIndex(c => c.target !== caseTable[0]!.target)];
+    expect(new Set(indices.map(i => caseTable[i]!.target)).size).toBe(2);
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      if (call.kind === 'generate') for (const i of indices) {
+        if (!call.argv.includes(prompts[i]!)) continue;
+        write(join(call.opts.cwd, plans[i]!), JSON.stringify({ steps: [
+          ...missing.map(id => ({ id, kind: 'capture' })),
+        ] }));
+      }
+      return success;
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(f.calls('generate')).toHaveLength(targets.length);
+    const reason = `unconfirmed steps: ${indices.map(i => `${caseIds[i]}=${missing.join(',')}`).join('; ')}`;
+    if (long) expect(reason.length).toBeGreaterThan(400);
+    expect(last(f)).toBe(`verify-memos: FAIL stage=fixture reason=${reason.slice(0, 400)} aiCalls=n/a`);
+    expect(f.err().split('\n').filter(line => line === reason)).toHaveLength(1);
+    expect(f.err().match(/unconfirmed steps:/g)).toHaveLength(1);
+    expect(f.events.filter(event => event === 'password-generated')).toEqual([]);
+    expect(f.runnerCount('startContainer')).toBe(0);
+    expect(f.calls('resolve')).toEqual([]);
+    noPublication(f, before);
+  });
+  it('TEST-CNF-6 checks consent retention before uncovered plans', async () => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      if (call.kind === 'generate') {
+        if (call.argv.includes(prompt)) write(join(call.opts.cwd, plan), JSON.stringify({ steps: [{ id: 'uncovered', kind: 'capture' }] }));
+        if (f.calls('generate').length === targets.length) {
+          const path = join(call.opts.cwd, configFile), config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          config.secrets.allow = ['changed.name'];
+          write(path, JSON.stringify(config));
+        }
+      }
+      return success;
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(f.calls('generate')).toHaveLength(targets.length);
+    expect(last(f)).toBe('verify-memos: FAIL stage=fixture reason=secrets.allow must retain the committed consent name aiCalls=n/a');
+    expect(f.err()).not.toContain('unconfirmed steps:');
+    expect(f.passwordGenerated()).toBe(false);
+    expect(f.runnerCount('startContainer')).toBe(0);
+    expect(f.calls('resolve')).toEqual([]);
+    noPublication(f, before);
+  });
+  it.each(['missing', 'json', 'steps'])('TEST-CNF-7 rejects an uninspectable generated plan (%s)', async mode => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      if (call.kind === 'generate' && call.argv.includes(prompt)) {
+        const path = join(call.opts.cwd, plan);
+        if (mode === 'missing') fs.rmSync(path);
+        else write(path, mode === 'json' ? '{' : '{}');
+      }
+      return success;
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(last(f)).toMatch(new RegExp(`^verify-memos: FAIL stage=fixture reason=cannot inspect plan ${caseIds[0]}: .+ aiCalls=n/a$`));
+    if (mode === 'steps') expect(last(f)).toContain('plan has no steps');
+    expect(f.calls('resolve')).toEqual([]);
+    noPublication(f, before);
+  });
+  function noResetOrReplay(f: Fake, before: Record<string, string>) {
+    expect(f.runnerCount('startContainer')).toBe(1);
+    expect(vi.mocked(fs.mkdirSync).mock.calls.filter(([path]) => String(path).endsWith('/data-reset'))).toEqual([]);
+    expect(f.calls('replay')).toEqual([]);
+    expect(vi.mocked(fs.renameSync).mock.calls.filter(([, dest]) => publications.some(p => String(dest) === join(f.fixture, p)))).toEqual([]);
+    noPublication(f, before);
+  }
+  it.each([false, true])('TEST-CNF-8 rejects false bindings even when every assertion passed (long=%s)', async long => {
+    const missing = long ? Array.from({ length: 40 }, (_, i) => `false-binding-${39 - i}`) : ['b', 'a'];
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      if (call.kind !== 'resolve') return success;
+      const envelope = JSON.parse(success.stdout);
+      for (const [index, row] of envelope.results.entries()) row.steps = missing.flatMap(id => [
+        { id, kind: 'action', status: 'passed', binding: { provenance: 'ai-proposed', confirmed: index > 1 } },
+        { id: `true-${id}`, kind: 'action', status: 'passed', binding: { provenance: 'grounding', confirmed: true } },
+        { id: `assertion-${id}`, kind: 'assert', status: 'passed' },
+      ]);
+      envelope.results.reverse();
+      return result(0, JSON.stringify(envelope));
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    const reason = `unconfirmed bindings after resolve: ${caseIds[1]}=${missing.join(',')}; ${caseIds[0]}=${missing.join(',')}`;
+    if (long) expect(reason.length).toBeGreaterThan(400);
+    expect(last(f)).toBe(`verify-memos: FAIL stage=replay reason=${reason.slice(0, 400)} aiCalls=n/a`);
+    expect(f.err().split('\n').filter(line => line === reason)).toHaveLength(1);
+    expect(f.err().match(/unconfirmed bindings after resolve:/g)).toHaveLength(1);
+    noResetOrReplay(f, before);
+  });
+  it.each(['not-array', 'empty', 'missing', 'extra', 'duplicate', 'steps', 'wrong-file'])('TEST-CNF-9 rejects an uninspectable resolve report (%s)', async mode => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      if (call.kind !== 'resolve') return success;
+      const envelope = JSON.parse(success.stdout);
+      if (mode === 'not-array') envelope.results = {};
+      if (mode === 'empty') envelope.results = [];
+      if (mode === 'missing') envelope.results.pop();
+      if (mode === 'extra') envelope.results.push({ file: 'tests/ambercast/extra.test.md', steps: [] });
+      if (mode === 'duplicate') envelope.results[1] = envelope.results[0];
+      if (mode === 'steps') envelope.results[0].steps = {};
+      if (mode === 'wrong-file') envelope.results[0].file = 'elsewhere.test.md';
+      return result(0, JSON.stringify(envelope));
+    } });
+    const before = snapshot(f.fixture);
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(last(f)).toBe('verify-memos: FAIL stage=replay reason=cannot inspect resolve report aiCalls=n/a');
+    noResetOrReplay(f, before);
+  });
+  it('TEST-CNF-10 preserves successful regeneration order and publication for confirmed bindings', async () => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      if (call.kind !== 'resolve') return success;
+      const envelope = JSON.parse(success.stdout);
+      for (const row of envelope.results) row.steps = [
+        { id: 'confirmed', status: 'passed', binding: { provenance: 'grounding', confirmed: true } },
+        { id: 'assertion', status: 'passed' },
+      ];
+      return result(0, JSON.stringify(envelope));
+    } });
+    expect(await run(f, ['--regenerate'])).toBe(0);
+    expect(f.calls('generate')).toHaveLength(targets.length);
+    expect(f.calls('resolve')).toHaveLength(1);
+    expect(f.calls('replay')).toHaveLength(1);
+    expect(f.runnerCount('startContainer')).toBe(2);
+    const order = ['generate', 'password-generated', 'startContainer', 'resolve', 'replay', 'judge'].map(event => f.events.indexOf(event));
+    expect(order.every((value, index) => value >= 0 && (index === 0 || value > order[index - 1]!))).toBe(true);
+    expect(vi.mocked(fs.renameSync).mock.calls.filter(([, dest]) => publications.some(p => String(dest) === join(f.fixture, p))).map(([, dest]) => relative(f.fixture, String(dest)))).toEqual(publications);
+  });
+});
 function fail(f: Fake, stage: string, aiCalls = 'n/a') {
   expect(last(f)).toMatch(new RegExp(`^verify-memos: FAIL stage=${stage} reason=.+ aiCalls=${aiCalls}$`));
   expect(f.out().match(/verify-memos: (PASS|FAIL)/g)).toHaveLength(1);
@@ -1910,6 +2053,7 @@ describe('main', () => {
           } else {
             const generated = readOnlyPlan();
             generated.steps.push({ id: 'write-memo', kind: 'action', action: 'fill', target: 'memos-readonly', value: 'unsafe mutation', intent: { description: 'Memo input', roleHint: 'textbox', sourceSpan: fakeSourceSpan } });
+            generated.steps.push({ id: 'confirmed-write', kind: 'assert', check: 'text-visible', target: 'memos-readonly', text: 'Memo', confirms: ['write-memo'] });
             expect(PlanDocument.safeParse(generated).success).toBe(true);
             write(join(call.opts.cwd, healPlan), JSON.stringify(generated));
           }

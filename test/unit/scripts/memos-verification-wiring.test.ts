@@ -45,7 +45,7 @@ describe('committed confirms coverage', () => {
     expect(sentence).toMatch(/without calling the AI|no AI/i);
     expect(sentence).toMatch(/stop/i);
     expect(sentence).toMatch(/action/i);
-    expect(sentence).toMatch(/no confirming assert|without.*confirm.*assert|lack.*confirm.*assert/i);
+    expect(sentence).toMatch(/capture or non-navigation action has no confirming step/i);
   });
 });
 const signIn = 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the "Save" button is displayed. Then assert that the text "verifier" is displayed.';

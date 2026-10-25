@@ -3066,29 +3066,38 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
         normalized = tuple(
             line.rstrip() for line in text.splitlines() if line.strip()
         )
-        self.assertEqual(
+        # `.claude/worktrees/` (managed worktree receptacle) is optional so the
+        # contract holds both before and after it is added; no other drift passes.
+        worktrees = (".claude/worktrees/",)
+        self.assertIn(
             normalized,
-            (
-                "node_modules/", "dist/", "*.tgz",
-                "# local AI agent state (shared Claude/Codex config is committed)",
-                ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
-                ".claude/impl/", ".claude/impl-archive/", "CLAUDE.local.md",
-                "# product runtime artifacts (run results, screenshots — see AGENTS.md)",
-                ".runs/", ".env", ".env.*", "!.env.example", "coverage/", ".DS_Store",
+            tuple(
+                (
+                    "node_modules/", "dist/", "*.tgz",
+                    "# local AI agent state (shared Claude/Codex config is committed)",
+                    ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
+                    ".claude/impl/", ".claude/impl-archive/", *extra, "CLAUDE.local.md",
+                    "# product runtime artifacts (run results, screenshots — see AGENTS.md)",
+                    ".runs/", ".env", ".env.*", "!.env.example", "coverage/", ".DS_Store",
+                )
+                for extra in ((), worktrees)
             ),
         )
         active = [
             line for line in text.splitlines()
             if line and not line.lstrip().startswith("#")
         ]
-        self.assertEqual(
+        self.assertIn(
             active,
             [
-                "node_modules/", "dist/", "*.tgz",
-                ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
-                ".claude/impl/", ".claude/impl-archive/", "CLAUDE.local.md",
-                ".runs/", ".env", ".env.*",
-                "!.env.example", "coverage/", ".DS_Store",
+                [
+                    "node_modules/", "dist/", "*.tgz",
+                    ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
+                    ".claude/impl/", ".claude/impl-archive/", *extra, "CLAUDE.local.md",
+                    ".runs/", ".env", ".env.*",
+                    "!.env.example", "coverage/", ".DS_Store",
+                ]
+                for extra in ((), worktrees)
             ],
         )
 

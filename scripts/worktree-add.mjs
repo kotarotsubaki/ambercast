@@ -1,6 +1,9 @@
 #!/usr/bin/env node
-// Creates an isolated issue worktree without depending on one developer's
-// checkout location. Git remains the authority for branch and worktree state.
+// Creates an isolated issue worktree in the primary checkout's .claude/worktrees
+// receptacle, shared with Claude Code's EnterWorktree by default. Git remains
+// the authority for branch and worktree state. This command does not run through
+// Claude Code, so it supplies its own ownership lock rather than relying on a
+// Claude Code pid lock.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -113,6 +116,9 @@ function main() {
 
   const worktrees = listWorktrees();
   const mainWorktree = resolveMainWorktree(worktrees);
+  // Resolve from the primary checkout even when invoked from a linked tree.
+  // The in-repository default needs no namespace; only a shared external root
+  // override adds the repository basename to isolate sibling repositories.
   const receptacle = resolveReceptacle(mainWorktree);
   const branch = parsed.slug === undefined ? `issues/${parsed.issue}` : `issues/${parsed.issue}-${parsed.slug}`;
   const directoryName = parsed.slug === undefined ? `issues-${parsed.issue}` : `issues-${parsed.issue}-${parsed.slug}`;

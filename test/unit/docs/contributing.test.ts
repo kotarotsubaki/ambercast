@@ -13,14 +13,15 @@ import { CLI_MANIFEST } from '#core/cli/manifest.js';
 
 const CONTRIBUTING_PATH = new URL('../../../CONTRIBUTING.md', import.meta.url);
 
-const HEADINGS = ['## Current state', '## Development', '## Testing an unpublished build in another project', '## How to contribute', '## About AGENTS.md and .claude/', '## Security'];
+const HEADINGS = ['## Current state', '## Development', '## Testing an unpublished build in another project', '## Release checklist', '## How to contribute', '## About AGENTS.md and .claude/', '## Security'];
 
 /** One literal-substring list per heading in `HEADINGS`, checked against that heading's own section body only. */
 const REQUIRED_SECTION_TEXT = [
   ['is functional, but breaking changes can still land in a minor release'],
   ['npm test', 'npm run typecheck', 'npm run lint', 'the website build reads the generated schemas and the CLI/capabilities manifests that the root build writes to `dist/`'],
   ['scripts/pack-install.mjs pack', 'scripts/pack-install.mjs install', '--allow-dirty'],
-  [],
+  ['npm run verify:memos', '--heal-check', '--published <version>', 'never blocks a release'],
+  ['provider-output corpus', 'AGENTS.md'],
   [],
   ['GitHub Security Advisories', 'SECURITY.md'],
 ];

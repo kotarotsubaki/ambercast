@@ -306,6 +306,28 @@ export function formatLockReason(issue, owner, createdIso) {
 }
 
 /**
+ * Determines whether a worktree lock reason identifies a Claude Code session.
+ *
+ * @remarks
+ * Claude Code's pid-bearing lock marks ownership by its session, rather than
+ * permission for another tool to reclaim the worktree. The prefix identifies
+ * that ownership without depending on the remaining diagnostic format. PID
+ * liveness checks cannot authorize removal: even an apparently stale session
+ * lock belongs to Claude Code, which must release it before cleanup is retried.
+ * Parsing the full reason would unnecessarily couple cleanup to its name and
+ * pid formatting and could fail to protect an otherwise recognizable session.
+ *
+ * @param {unknown} lock - Lock value from the worktree inventory, including a bare lock or an absent value.
+ * @returns {boolean} Whether the value is a string beginning with `claude session `; bare locks, absent values, and other reasons do not match.
+ * @example
+ * isClaudeSessionLock('claude session task (pid 123)'); // true
+ * isClaudeSessionLock(true); // false
+ */
+export function isClaudeSessionLock(lock) {
+  return typeof lock === 'string' && lock.startsWith('claude session ');
+}
+
+/**
  * Resolves the primary checkout's top-level directory from Git's inventory.
  *
  * @remarks
@@ -329,12 +351,15 @@ export function resolveMainWorktree(worktrees) {
 }
 
 /**
- * Resolves the repository-namespaced directory that contains managed worktrees.
+ * Resolves the directory that contains the repository's managed worktrees.
  *
  * @remarks
- * A per-product namespace prevents repositories sharing a receptacle from
- * colliding on issue numbers. The override must be absolute so process cwd
- * cannot silently change which managed paths the lifecycle commands protect.
+ * The default is `.claude/worktrees` directly beneath the primary checkout,
+ * where the repository itself isolates issue numbers from sibling repositories.
+ * Only an `AMBERCAST_WORKTREE_ROOT` override receives the repository basename
+ * namespace, because repositories can share that external root. The override
+ * must be absolute so process cwd cannot silently change which managed paths
+ * the lifecycle commands protect.
  *
  * @param {string} mainWorktree - Absolute top-level path of the primary checkout.
  * @returns {string} Absolute managed-worktree receptacle for this repository.
@@ -353,5 +378,5 @@ export function resolveReceptacle(mainWorktree) {
     return resolve(override, basename(mainWorktree));
   }
 
-  return resolve(mainWorktree, '..', '..', '.worktrees', basename(mainWorktree));
+  return resolve(mainWorktree, '.claude', 'worktrees');
 }

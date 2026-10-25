@@ -45,7 +45,8 @@ description: "`PlanDocument` 是一个严格对象。"
 | --- | --- | --- | --- | --- | --- | --- |
 | `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [步骤](/ambercast/zh-cn/spec/steps/#generated-forms) | 提供方提议。 | [src/core/ir/schema.ts:1234](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1234) |
 |  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | 提供方元数据。 | [src/core/ir/schema.ts:1236](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1236) |
-|  | `ambiguities` | `JsonValue[]` | required | none | 歧义有效负载。 | [src/core/ir/schema.ts:1237](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1237) |
+|  | `ambiguities` | `JsonValue[]` | required | none | 无法分配目标的步骤。 | repo:src/core/ir/schema.ts |
+|  | `assumptions` | `string[]` | optional | string items only | 提示词未说明的其他假设。作为报告警告，不保存到执行计划中。 | repo:src/core/ir/schema.ts |
 | `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | 提议的成功准则。 | [src/core/ir/schema.ts:844](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L844) |
 |  | `assertion` | `TraceAssert` | required | strict trace assertion | 瞬态终态证据。 | [src/core/ir/schema.ts:846](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L846) |
 

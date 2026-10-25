@@ -165,6 +165,29 @@ describe('IR JSON Schema corpus equivalence', () => {
 });
 
 describe('IR JSON Schema documents', () => {
+  it('allows empty grounding locator names while keeping trace element names non-empty', () => {
+    type Node = { properties?: Record<string, Node>; oneOf?: Node[]; anyOf?: Node[]; const?: string; minLength?: number; type?: string };
+    const locatorNames: Node[] = [];
+    const traceNames: Node[] = [];
+    const visit = (value: unknown): void => {
+      if (value === null || typeof value !== 'object') return;
+      const node = value as Node;
+      if (node.properties?.kind?.const === 'element') locatorNames.push(node.properties.locator!.properties!.name!);
+      if (node.properties?.type?.const === 'click') {
+        const element = node.properties.element!;
+        const accessibility = element.oneOf?.[0] ?? element.anyOf?.[0] ?? element;
+        traceNames.push(accessibility.properties!.name!);
+      }
+      Object.values(value).forEach((child) => {
+        if (Array.isArray(child)) child.forEach(visit);
+        else visit(child);
+      });
+    };
+    visit(getGroundingJsonSchema());
+    expect(locatorNames).toEqual([{ type: 'string' }]);
+    expect(traceNames.length).toBeGreaterThan(0);
+    expect(traceNames.every((name) => name.type === 'string' && name.minLength === 1)).toBe(true);
+  });
   it.each([
     ['plan', getPlanJsonSchema],
     ['grounding', getGroundingJsonSchema],
@@ -190,8 +213,8 @@ describe('IR JSON Schema documents', () => {
       'grounding',
       getGroundingJsonSchema,
       {
-        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json',
-        title: 'ambercast grounding schema v3',
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json',
+        title: 'ambercast grounding schema v4',
         description: 'Validates the committed grounding cache associated with one plan digest.',
       },
     ],
@@ -204,7 +227,7 @@ describe('IR JSON Schema documents', () => {
   });
 
   // SPEC-C1 C1-2
-  it('publishes Plan v5 instruction coverage and Grounding-v3 trace coverage (SPEC-1, SPEC-3, SPEC-7)', () => {
+  it('publishes Plan v5 instruction coverage and Grounding-v4 trace coverage (SPEC-1, SPEC-3, SPEC-7)', () => {
     const planV5 = {
       schemaVersion: 5,
       source: { inputsDigest: 'a'.repeat(64) },
@@ -221,8 +244,8 @@ describe('IR JSON Schema documents', () => {
         }],
       }],
     };
-    const coveredGroundingV3 = {
-      schemaVersion: 3,
+    const coveredGroundingV4 = {
+      schemaVersion: 4,
       planDigest: 'b'.repeat(64),
       entries: {
         'reach-dashboard': {
@@ -244,7 +267,7 @@ describe('IR JSON Schema documents', () => {
     expect(validators.plan(planWithoutCoverage)).toBe(false);
     expect(PlanDocument.safeParse({ ...planV5, schemaVersion: 3 }).success).toBe(false);
     expect(validators.plan({ ...planV5, schemaVersion: 3 })).toBe(false);
-    expect(GroundingDocument.safeParse(coveredGroundingV3).success).toBe(true);
-    expect(validators.grounding(coveredGroundingV3)).toBe(true);
+    expect(GroundingDocument.safeParse(coveredGroundingV4).success).toBe(true);
+    expect(validators.grounding(coveredGroundingV4)).toBe(true);
   });
 });

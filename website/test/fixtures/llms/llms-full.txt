@@ -199,26 +199,30 @@ Intent, once written, stays put. The plan is rebuilt only when it needs to be. T
 # Your first test in 5 minutes
 Source: https://kotarotsubaki.github.io/ambercast/tutorials/quick-start/
 
-This tutorial guides you through creating and running your first generated test with ambercast. By relying on built-in defaults—including a target application running at `http://localhost:3000` and tests placed in `tests/ambercast`—you can generate and replay an end-to-end test without creating a configuration file.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Initialize a project with `npx ambercast init`, then run your first test with `npx ambercast generate` and `npx ambercast run`.
 
-Before generating and running tests, verify that your environment meets the walkthrough-wide requirements:
+## Prerequisites \{#prerequisites}
 
-- **Node.js**: Version 22.14 or later.
-- **AI Provider**: An installed, authenticated Claude Code or Codex CLI. The first `generate` directly requires Node.js and an installed, authenticated provider. If no provider is available for generation, ambercast outputs the environment error code `AI_EXECUTOR_UNAVAILABLE`.
-- **Browser Driver**: A Chromium binary. The walkthrough includes `run`, which configures a browser driver. Generation itself does not configure a browser driver, so Chromium is required by `run`, not by generation.
+- Node.js 22.14 or later is required.
+- An authenticated Claude Code or Codex CLI is required. The first `generate` directly requires Node.js and an authenticated provider. See [Error codes](/ambercast/reference/error-codes/#code-vocabulary) for the error code when no provider is available.
+- `run` requires a Chromium binary. Generation itself does not configure a browser driver.
 
-ambercast applies default settings for your workspace:
+ambercast uses these defaults:
 
 - The default `testDir` is `tests/ambercast`.
-- The default target is `web-user` at `http://localhost:3000` using Chromium.
+- The default target is `web-user`, at `http://localhost:3000`, using Chromium.
 
-If a configuration file exists, `$schema` is required; no-file configuration is handled outside `RawConfig`. For this tutorial, you do not need to create a configuration file.
+## Steps \{#steps}
 
-## Steps {#steps}
+Running `npx ambercast init` and approving it creates these files:
 
-1. Do not create a configuration file. Create exactly `tests/ambercast/find-page.test.md`:
+- `ambercast.config.json`, a config file with the default `testDir` and `target` written in. See [Configuration](/ambercast/reference/configuration/#file-selection) for the file's requirements.
+- `tests/ambercast/find-page.test.md`, a sample test prompt
+- an appended line in `.gitignore`, and an appended section in `AGENTS.md`
+
+The sample prompt it creates reads as follows.
 
 ```markdown
 # Find a page
@@ -226,32 +230,69 @@ If a configuration file exists, `$schema` is required; no-file configuration is 
 When I open the application, navigate to the search page, search for "ambercast", and see "Search results".
 ```
 
-Alternatively, `npx ambercast init` scaffolds this same file together with a minimal `ambercast.config.json` and an AGENTS.md section; this tutorial stays on the no-config path so you can see the defaults at work.
+:::caution
+`init` never asks for a URL. The scaffolded `ambercast.config.json` always targets `http://localhost:3000`. If your app runs elsewhere, edit `targets.web-user.baseUrl` first.
 
-Its terminal `.test.md` suffix is eligible for companion-path resolution.
+:::
 
-2. Have a human or operator start and confirm the application at `http://localhost:3000`, then run `npx ambercast generate tests/ambercast/find-page.test.md`.
+<Steps>
 
-Successful generation exits `0` with result status `generated`. Its report field is `planFile`, while generation writes both derived companions beside the named prompt. When an agent uses the setup prompt ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)), it assumes the server is already running and does not start it without a request.
+1. ## Initialize the project \{#init}
 
-3. Run `npx ambercast run --resolve tests/ambercast/find-page.test.md`.
+   ```bash
+   npx ambercast init
+   ```
 
-On a passed replay, the process exits with code `0`. In addition, `run` creates a per-invocation `report.json` below the configured runs directory.
+2. ## Start the app and generate a plan \{#generate}
 
-4. Run `git status --short` first. Review every changed tracked file with `git diff -- <path>`; for every untracked prompt, plan, or grounding path shown there, inspect its full contents or run `git diff --no-index /dev/null <path>`. Then have a human commit the reviewed three files.
+   Have a human or operator start and confirm the application at the configured `baseUrl`.
 
-An agent presents the complete change set and commits only after an explicit request in the conversation; neither a CLI flag nor `--yes` is that approval ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)).
+   ```bash
+   npx ambercast generate tests/ambercast/find-page.test.md
+   ```
 
-### Scope note
+   Success leaves you with:
 
-The no-argument forms `npx ambercast generate` and `npx ambercast run` discover every test matching the configured test directory, match, and ignore rules. Use either form only in a separately approved all-discovered-tests operation; this tutorial's commands intentionally name one `.test.md`.
+   - exit code `0`, result status `generated`
+   - two derived files, plan and grounding, written beside the generated prompt
 
-## Completion state {#completion-state}
+   An agent using the setup prompt ([Agent setup](/ambercast/agents/setup-prompt/#copy-paste-prompt)) assumes the server is already running and does not start it without a request.
 
-- The resolver maps the prompt to `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
-- `npx ambercast run --resolve tests/ambercast/find-page.test.md` exited `0` and reports `passed` for the case.
+3. ## Replay the test \{#run}
 
-Links: [Configuration](/ambercast/reference/configuration/), [File layout](/ambercast/reference/file-layout/), [ambercast generate](/ambercast/reference/cli/generate/), [ambercast run](/ambercast/reference/cli/run/), [Write effective prompts](/ambercast/how-to/write-effective-prompts/).
+   ```bash
+   npx ambercast run --resolve tests/ambercast/find-page.test.md
+   ```
+
+   Success leaves you with:
+
+   - exit code `0`
+   - a per-invocation `report.json` written under the configured runs directory
+
+4. ## Review and commit the changes \{#review-commit}
+
+   ```bash
+   git status --short
+   ```
+
+   Review every tracked, changed file with `git diff -- <path>`. For an untracked prompt, plan, or grounding path, inspect its full contents or run `git diff --no-index /dev/null <path>`.
+
+   After review, a human commits the three files. Also review and commit the files `init` created, such as `ambercast.config.json`, separately, the same way you commit any other change.
+
+</Steps>
+
+The no-argument forms of `npx ambercast generate` and `npx ambercast run` target every test matching your configured test directory, match rules, and ignore rules. This tutorial's commands intentionally name one `.test.md`; use the no-argument forms only in a separately approved all-tests operation.
+
+## Verification \{#verification}
+
+- Confirm the resolver created `tests/ambercast/find-page.ambercast.plan.json` and `tests/ambercast/find-page.ambercast.grounding.json`.
+- Confirm `npx ambercast run --resolve tests/ambercast/find-page.test.md` exits `0` and reports `passed` for the case.
+
+## Next steps \{#next-steps}
+
+Next, learn how to write prompts.
+
+<LinkCard title="Write effective prompts" href="/ambercast/how-to/write-effective-prompts/" description="Learn to write test prompts that are easy to review and stay focused." />
 
 ---
 
@@ -512,33 +553,64 @@ Run `npx ambercast generate --list` only to confirm prompt selection; this comma
 # Select which tests run
 Source: https://kotarotsubaki.github.io/ambercast/how-to/select-tests/
 
-Use these selection recipes to choose which test prompts run.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Choose which test prompts run by path, pattern filter, or config exclusion.
 
-- Default discovery matches `**/*.test.md` and ignores runs, plans, and grounding companions.
+## Prerequisites \{#prerequisites}
 
-## Steps {#steps}
+Default discovery matches `**/*.test.md` and ignores runs, plans, and grounding companion files.
 
-1. Run `npx ambercast run tests/ambercast/sign-in.test.md --list`.
-   A positional is a literal prompt path and `--list` returns without replay.
+## Steps \{#steps}
 
-2. Run `npx ambercast run --grep 'sign-in' --list`.
-   The parser builds a regular expression for discovery filtering.
+<Steps>
 
-3. Put `"testMatch":["**/*.test.md"],"testIgnore":["**/.runs/**"]` in a valid config.
-   A matching ignore excludes a path even when it matches `testMatch`.
+1. ## Name a file directly \{#direct-path}
 
-4. Run `npx ambercast run --list -- --literal.test.md` for a literal path beginning with `--`.
-   Flags such as `--list` must precede the separator; everything after `--` is a literal positional path, so a trailing `--list` would be treated as a file name.
+   ```bash
+   npx ambercast run tests/ambercast/sign-in.test.md --list
+   ```
 
-## Verification {#verification}
+   A positional argument is a literal prompt path. `--list` returns results without replaying.
 
-- Expect exit `0` for `--list` when selected paths are reported; resolve zero matches with `--allow-empty` only when intentional.
+2. ## Filter with a regular expression \{#grep-filter}
 
-## Related {#related}
+   ```bash
+   npx ambercast run --grep 'sign-in' --list
+   ```
 
-Links: [Discovery patterns](/ambercast/reference/discovery-patterns/), [ambercast run](/ambercast/reference/cli/run/), [ambercast generate](/ambercast/reference/cli/generate/), [Configuration](/ambercast/reference/configuration/).
+   The parser builds a discovery-filtering regular expression. See [every `run` flag](/ambercast/reference/cli/run/#flags) beyond `--grep`.
+
+3. ## Exclude paths in your config \{#config-ignore}
+
+   Add these keys to a valid config file.
+
+   ```json
+   {
+     "testMatch": ["**/*.test.md"],
+     "testIgnore": ["**/.runs/**"]
+   }
+   ```
+
+   A matching `testIgnore` excludes a path even when it also matches `testMatch`. See [discovery patterns](/ambercast/reference/discovery-patterns/) for the matching rules, and [Configuration](/ambercast/reference/configuration/) for how to write the file.
+
+4. ## Pass a path that starts with a hyphen \{#literal-dash-path}
+
+   ```bash
+   npx ambercast run --list -- --literal.test.md
+   ```
+
+   Put the literal path after `--`. Put flags like `--list` before `--`: every argument after `--` is a literal positional path, so a trailing `--list` there is treated as a filename.
+
+</Steps>
+
+## Verification \{#verification}
+
+`--list` exits `0` when it reports the selected paths. Resolve a zero-match result with `--allow-empty` only when you intend it.
+
+## Related \{#related}
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate command, which uses the same selection rules." />
 
 ---
 
@@ -753,6 +825,22 @@ Prompts created for Plan v2 can contain legacy secret grant lines. Remove every 
 ```
 
 Then run `npx ambercast generate --force <file>` and respond to the new consent prompt. For CI or another non-interactive environment, add the reviewed names to `secrets.allow` first. The regenerated Plan uses the v3 consent/allowlist model.
+
+## Re-ground after a producer change {#reground-after-producer-change}
+
+Changes to generator instructions or the response contract change the producer fingerprint, so plans from earlier releases are stale. Regenerating a plan replaces its grounding with an empty one, and the steps below bind every element step again. Plan 5 and Grounding 4 are unchanged.
+
+Report 3.11 adds `generator-assumption` warnings and optional `warnings` on `healed` rows. Update your report schema if you validate a closed union.
+
+The CLI `--strict` flag and MCP `strict` argument have been removed. Remove them from your calls. `ambercast generate --strict` exits 2 as an unknown option, and MCP rejects `strict` during input validation.
+
+1. Run `npx ambercast check --json` and confirm that the affected plans report `stale`.
+2. Run `npx ambercast generate <file>` for each stale plan. In the diff, check that each assert lists in its `confirms` the inputs whose effects it shows.
+   - If generate warns `action-unconfirmed` for an input, do not go on to step 3.
+   - A plain run fails on that input with `GROUNDING_UNRESOLVED`.
+   - Add an assert that shows the effect of that input, such as the signed-in user name, and repeat step 2.
+3. Run `npx ambercast run --resolve --update-cache <file>` on your machine. The grounding is empty after regeneration, so ambercast calls AI once for each element step that has no verbatim quote. CI does not save the grounding by default.
+4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report. Always commit the plan. Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`; when it is `uncommitted`, keep the grounding local.
 
 ## Verification {#verification}
 
@@ -1050,7 +1138,7 @@ All objects across the public report schemas are strict and reject unknown field
 
 | Field | Type and Contract |
 | --- | --- |
-| `schemaVersion` | literal 3.10 |
+| `schemaVersion` | literal 3.11 |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
 | `durationMs` | non-negative integer |
@@ -1077,6 +1165,18 @@ In `GenerateResult`, every branch is strict. The optional metrics listed below a
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
+The AI provider may list assumptions absent from the prompt in an optional string array, `assumptions`. `generate` adds each nonblank assumption to `warnings` as `{ kind: 'generator-assumption', message }` on `generated` and `would-generate` results. Assumptions do not stop `generate` or `heal`.
+
+The human output shows `  warning: <message>` immediately after the result line. Ambercast replaces an item that matches secret detection with `An assumption was omitted because it looked like a secret.`.
+
+Ambercast does not store assumptions in the plan. A fresh re-run returns `skipped-fresh` without assumption warnings. Use `--force` to regenerate and see assumptions again; regeneration is non-deterministic.
+
+The `ambiguities` field on `generated` and `would-generate` results is always `[]`. Provider `ambiguities` means only that a step's target cannot be assigned.
+
+Ambercast retries a single-target response with nonempty `ambiguities` as `AI_RESPONSE_INVALID`. If retries exhaust, it exits 3. Unresolved multi-target assignment still produces `PROMPT_AMBIGUOUS` and exit 2.
+
+Consumers that validate warning kinds as a closed union need the report 3.11 schema.
+
 ## Run results {#run-results}
 
 In `RunResult`, every branch is strict.
@@ -1101,6 +1201,8 @@ In `CheckResult`, every branch is strict.
 ## Heal results {#heal-results}
 
 In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, `sessions`, and `explanation`; `aiCalls` is optional.
+
+Only a `healed` row may include optional `warnings` containing `generator-assumption` items from the accepted Stage 3 candidate's `assumptions`. Other heal results forbid `warnings`. Assumptions do not fail Stage 3.
 
 | repairOutcome | Allowed Application | Allowed stopReason |
 | --- | --- | --- |
@@ -1178,16 +1280,16 @@ The `reportPersistence` property tracks the write outcome:
 Only the writer is pinned to the current schema version; the viewer reads any 3.x report leniently.
 
 ```json
-{"schemaVersion":"3.10","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.10","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.10","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.10","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility link {#report-persistence}
@@ -1378,8 +1480,9 @@ Ambercast publishes these metadata and byte-identical files to the site and npm.
 | plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v4 snapshot retained for consumers of the retired contract. | available |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed current `PlanDocument`, including targets and steps. | available |
 | grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v2 snapshot retained for consumers of the retired contract. | available |
-| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.10"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
+| grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v3 snapshot retained for consumers of the retired contract. | available |
+| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.11"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
 Each `$id` equals its public-path URL; byte-identical schema files are published to the site and the npm `schemas/` export.
 
@@ -1390,9 +1493,9 @@ The current Astro configuration sets `site` to the `https://kotarotsubaki.github
 | generated file | validates | generated from | npm export |
 | --- | --- | --- | --- |
 | `plan.schema.json` | A completed current `PlanDocument` with Plan `schemaVersion` 5, provenance source, targets, and steps. | Zod `PlanDocument` converted as JSON Schema 2020-12. | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
-| `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 3, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
+| `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 4, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.10. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.11. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 Running `npm run build` compiles the package and then runs `node dist/schema-gen.js`, which creates the schema directory recursively and writes exactly the four files above.
 
@@ -1410,7 +1513,7 @@ Validating only the generated Plan JSON Schema does not establish duplicate-step
 
 ## Report schema {#report-schema}
 
-`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.10, required step Target identity, and the session inventory on executed run and completed heal results. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
+`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.11, required step Target identity, and the session inventory on executed run and completed heal results. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
 
 ---
 
@@ -1758,7 +1861,7 @@ Inputs are strict objects. Unknown keys, type mismatches, and invalid refinement
 | Scope | Properties and defaults |
 | --- | --- |
 | Common workflow input | `files?: string[]` (omission and `[]` both select config discovery; relative paths use the session root), `allowEmpty?: boolean` (false) |
-| `ambercast_generate` | `target?: string` (restricts which Target definitions the generator may use), `strict?: boolean` (false), `force?: boolean` (false), `dryRun?: boolean` (false), `ai?: 'claude' \| 'codex'` |
+| `ambercast_generate` | `target?: string` (restricts which Target definitions the generator may use), `force?: boolean` (false), `dryRun?: boolean` (false), `ai?: 'claude' \| 'codex'` |
 | `ambercast_run` | `grep?: string` (valid regular expression), `resolve?: boolean` (false), `updateCache?: boolean` (false), `ai?: 'claude' \| 'codex'` |
 | `ambercast_check` | Common input only |
 | `ambercast_heal` | `dryRun?: boolean` (true), `applyToken?: string`, `ai?: 'claude' \| 'codex'` |
@@ -1842,7 +1945,7 @@ Init options:
   --dir <path>  --yes, -y  --force  --no-color
 
 Generate options:
-  --strict  --force  --dry-run  --target <name>  --ai <claude|codex>
+  --force  --dry-run  --target <name>  --ai <claude|codex>
   --allow-empty  --list  --json  --config <path>  --no-color
 
 Run options:
@@ -1875,7 +1978,7 @@ Heal configuration:
 | command | positional | accepted options | configuration path |
 | --- | --- | --- | --- |
 | init | none | dir, yes/-y, force, no-color | --dir argument (cwd when omitted) |
-| generate | literal paths; no paths = discovery | strict, force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
+| generate | literal paths; no paths = discovery | force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
 | check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
 | heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
@@ -1910,7 +2013,6 @@ The `ambercast generate` command compiles test prompts into plans and companion 
 | flag | value | effect | default |
 | --- | --- | --- | --- |
 | files | path[] | literal prompts; absent selects discovery | discovery |
-| --strict | boolean | strict generation policy | false |
 | --force | boolean | force generation | false |
 | --dry-run | boolean | preview: `would-generate` only when generation is needed; fresh Plan returns `skipped-fresh`; neither outcome writes | false |
 | --target | name | limit available generation targets to this target only | omitted |
@@ -1946,7 +2048,7 @@ Process-code values and their priority are owned by [Exit codes](/ambercast/refe
 # ambercast run
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/run/
 
-`ambercast run` executes test prompts against target environments, managing deterministic replay and run writes. Replay makes zero AI calls by default: a grounding miss fails closed as `grounding-unresolved` with exit code 4 and a hint to use `--resolve`. Pass `--resolve` to opt into live AI resolution for misses.
+`ambercast run` executes test prompts against target environments. It manages deterministic replay and run writes. Replay makes zero AI calls by default: a grounding miss fails closed as `grounding-unresolved` with exit code 4 and a hint to use `--resolve`. Pass `--resolve` to opt into live AI resolution for misses.
 
 ## Flags {#flags}
 
@@ -1964,6 +2066,8 @@ Source: https://kotarotsubaki.github.io/ambercast/reference/cli/run/
 | --json | boolean | JSON envelope | false |
 | --no-color | boolean | disable ANSI | false |
 
+See [Resolve missing grounding](#resolve) for `--resolve` and `--ai`, [Grounding write-back](#grounding-write-back) for `--update-cache`, and the next section for when `--stale=regenerate` is rejected.
+
 <a id="replay-paths"></a>
 
 ## Replay {#replay}
@@ -1978,7 +2082,7 @@ The runtime rejects `--stale=regenerate` before configuration or file I/O. Durin
 
 ## AI calls {#ai-calls}
 
-A provider resolver is passed to the run use case, so grounded replay can proceed without an available provider; a cache miss can use it only when `--resolve` is passed.
+`run` always has access to a provider resolver, but grounded replay proceeds without calling it even when no provider is available. A cache miss can call the resolver only when you pass `--resolve`.
 
 ## Resolve missing grounding {#resolve}
 
@@ -1986,7 +2090,7 @@ A provider resolver is passed to the run use case, so grounded replay can procee
 
 ## Grounding write-back {#grounding-write-back}
 
-`run` writes changed grounding only when the resolved write-back gate permits it; see [Configuration](/ambercast/reference/configuration/#grounding) for every local and CI condition.
+`run` writes changed grounding only when the resolved write-back gate permits it. `--update-cache` is one explicit input to that gate: it combines with `ci.updateGroundingCache` in CI, and with the `localWriteBack` setting locally. See [Configuration](/ambercast/reference/configuration/#grounding) for every local and CI condition.
 
 ## Report and exits {#report-and-exits}
 
@@ -2289,7 +2393,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/overview/
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.9.0. The implementation accepts Plan schema version 5 and Grounding schema version 3. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L73)
+This specification describes the artifacts accepted by ambercast 0.9.0. The implementation accepts Plan schema version 5 and Grounding schema version 4. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L74)
 
 ## Normative language {#normative-language}
 
@@ -2313,9 +2417,9 @@ Every digest path MUST use [Canonical JSON](/ambercast/spec/canonical-json/#dige
 | Artifact | Accepted value | Evidence |
 | --- | --- | --- |
 | Plan `schemaVersion` | `5` | [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L62) |
-| Grounding `schemaVersion` | `3` | [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L73) |
+| Grounding `schemaVersion` | `4` | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L74) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:258](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L258) |
-| Report `schemaVersion` | `3.10` | [src/report/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/schema.ts#L58) |
+| Report `schemaVersion` | `3.11` | [src/report/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/schema.ts#L58) |
 
 ## Reading order {#reading-order}
 
@@ -2376,7 +2480,8 @@ Provider element-bearing step proposals use transient `GeneratedElementIntent` a
 | --- | --- | --- | --- | --- | --- | --- |
 | `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [Steps](/ambercast/spec/steps/#generated-forms) | Provider proposal. | [src/core/ir/schema.ts:1250-1253](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1250-L1253) |
 |  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | Provider metadata. | [src/core/ir/schema.ts:1250-1253](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1250-L1253) |
-|  | `ambiguities` | `JsonValue[]` | required | none | Ambiguity payloads. | [src/core/ir/schema.ts:1250-1253](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1250-L1253) |
+|  | `ambiguities` | `JsonValue[]` | required | none | Steps whose target cannot be assigned. | [src/core/ir/schema.ts:1250-1253](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1250-L1253) |
+|  | `assumptions` | `string[]` | optional | string items only | Other assumptions absent from the prompt; report warnings, never stored in the Plan. | repo:src/core/ir/schema.ts |
 | `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | Proposed success criterion. | [src/core/ir/schema.ts:844](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L844) |
 |  | `assertion` | `TraceAssert` | required | strict trace assertion | Transient terminal evidence. | [src/core/ir/schema.ts:846](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L846) |
 
@@ -2635,7 +2740,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/value-types/
 
 ## Shared types {#shared-types}
 
-All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L183) Regexes are quoted verbatim from the runtime authority.
+All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L254) Regexes are quoted verbatim from the runtime authority.
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2643,9 +2748,12 @@ All other chapters MUST use these definitions rather than restating their shapes
 |  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L168) |
 |  | `locale` | string | optional | min length 1 | Authored BCP-47-shaped locale tag, canonicalized by the config loader before this point. | [src/core/ir/schema.ts:210](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L210) |
-| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | [src/core/ir/schema.ts:183](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L183) |
-|  | `role` | string | required | min 1 | Exact accessibility role. | [src/core/ir/schema.ts:185](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L185) |
-|  | `name` | string | required | min 1 | Accessible name. | [src/core/ir/schema.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L186) |
+| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L254) |
+|  | `role` | string | required | min 1 | Exact accessibility role. | [src/core/ir/schema.ts:256](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L256) |
+|  | `name` | string | required | min 1 | Accessible name. | [src/core/ir/schema.ts:257](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L257) |
+| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | [src/core/ir/schema.ts:276](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L276) |
+|  | `role` | string | required | min 1 | Exact accessibility role. | [src/core/ir/schema.ts:278](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L278) |
+|  | `name` | string | required | may be empty | An empty string denotes an element without an accessible name and matches only nodes whose normalized name is empty. | [src/core/ir/schema.ts:279](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L279) |
 | `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | Literal quoted excerpt text. | [src/core/ir/schema.ts:359](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L359) |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the quoted excerpt. | [src/core/ir/schema.ts:360](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L360) |
 | `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | Source-backed natural-language element description. | [src/core/ir/schema.ts:367](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L367) |
@@ -2717,7 +2825,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/grounding-document/
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `3` | Grounding format version. | [src/core/ir/schema.ts:73](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L73), [src/core/ir/schema.ts:1663](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1663) |
+| `schemaVersion` | integer | required | literal `4` | Grounding format version. | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L74), [src/core/ir/schema.ts:1663](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1663) |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the associated plan. | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1369) |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | Cached step grounding keyed by ID. | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1370) |
 
@@ -2725,11 +2833,11 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/grounding-document/
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV3` | `kind` | string | required | literal `element` | Element-entry discriminator. | [src/core/ir/schema.ts:1362](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1362) |
-|  | `locator` | `AccessibilityElementRef` | required | [Value types](/ambercast/spec/value-types/#shared-types) | Observed locator bound to the intent. | [src/core/ir/schema.ts:1363](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1363) |
-|  | `fingerprint` | `Fingerprint` | required | [Element fingerprint](/ambercast/spec/fingerprint/#algorithm) | Accessibility-neighborhood evidence. | [src/core/ir/schema.ts:1364](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1364) |
-|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | [src/core/ir/schema.ts:1365](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1365) |
-|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | [src/core/ir/schema.ts:1366](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1366) |
+| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element-entry discriminator. | [src/core/ir/schema.ts:1442](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1442) |
+|  | `locator` | `GroundingElementLocator` | required | [Value types](/ambercast/spec/value-types/#shared-types) | Observed locator bound to the intent. | [src/core/ir/schema.ts:1444](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1444) |
+|  | `fingerprint` | `Fingerprint` | required | [Element fingerprint](/ambercast/spec/fingerprint/#algorithm) | Accessibility-neighborhood evidence. | [src/core/ir/schema.ts:1445](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1445) |
+|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | [src/core/ir/schema.ts:1446](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1446) |
+|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | [src/core/ir/schema.ts:1447](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1447) |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI-entry discriminator. | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1114) |
 |  | `trace` | `TraceRecord` | required | strict trace | Replayable successful trace. | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L1116) |
 
@@ -2770,7 +2878,7 @@ This illustrative `planDigest` refers to the complete Plan example in [Plan docu
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -2787,6 +2895,10 @@ After successful replay of an existing trace, an implementation MUST leave that 
 An element entry MUST be written or overwritten only when its binding reaches `confirmed`: at least one step must name that element step in its own non-empty committed `confirms` list, and every such step must pass in the same case. For an `element-visible` confirming assertion, a pass counts as a valid confirmation basis only when exactly one candidate matches; a pass with multiple matches does not confirm the binding. An `acted`-only binding is discarded at write-back and never persisted. [src/usecases/run.ts:147-160](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L147-L160) [src/usecases/run.ts:2877-2892](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L2877-L2892) [src/usecases/run.ts:3251-3295](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L3251-L3295)
 
 For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L1075)
+
+Grounding versions 2 and 3 are retired. `check` reports `stale-grounding` before schema validation under committed policy; uncommitted policy yields `fresh-without-grounding`. Without `--resolve`, `run` reports `GROUNDING_UNRESOLVED` with `recoverable-miss` when the plan digest matches and an element step needs grounding; a differing digest yields `missing`.
+
+`run --resolve` starts with an empty cache and can persist v4 under the existing write-back conditions. `generate` on an unchanged fresh plan replaces a retired cache with empty v4 grounding. `heal` reports `FS_IO_ERROR` until you regenerate with `ambercast run --resolve --update-cache`. Versions 1 and unknown versions remain invalid in `check` and cache misses in `run`.
 
 ## Rationale {#rationale}
 
@@ -2816,6 +2928,8 @@ Implementations MUST serialize the descriptor with [Canonical JSON](/ambercast/s
 A fingerprint mismatch MUST be treated as a miss, never as evidence that the old element is safe to replay. This follows the implemented version gate and mismatch invalidation. [src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/schema.ts#L215) [src/core/ir/fingerprint.ts:39](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L39)
 
 `hit`, `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, and `snapshot-invalid` are distinct resolution outcomes. An absent or malformed tree is `element-not-found`; more than one normalized role/name match is `ambiguous-match`; an old or differing hash is `fingerprint-mismatch`. [src/core/ir/fingerprint.ts:347](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L347), [src/core/ir/fingerprint.ts:388](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L388) An unpaired surrogate produces no fingerprint at generation and `element-not-found` at resolution. [src/core/ir/fingerprint.ts:181](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/fingerprint.ts#L181)
+
+An empty-name reference matches only nodes whose normalized name is empty.
 
 ## Quote matching {#quote-matching}
 
@@ -2861,7 +2975,7 @@ This section is the canonical owner of `check` status derivation. Reference page
 | CHK-03 | `fresh-without-grounding` | Plan is fresh; companion is not valid; repository policy is `uncommitted`. | pass |
 | CHK-04 | `missing-grounding` | Plan is fresh; companion inspection is `missing`; policy requires committed grounding. | fail |
 | CHK-05 | `invalid-grounding` | Plan is fresh; companion inspection is `invalid` (JSON/schema/canonical coverage failure). | fail |
-| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest` or retired grounding `schemaVersion: 2`, checked before companion schema-shape validation). | fail |
+| CHK-06 | `stale-grounding` | Plan is fresh; companion inspection is `stale` (another `planDigest` or retired grounding `schemaVersion: 2` or `3`, checked before companion schema-shape validation). | fail |
 | CHK-07 | `missing-plan` | A selected test has no plan artifact. | fail |
 | CHK-08 | `orphaned-plan` | An in-scope plan inverse-maps to a test path that does not exist. | fail |
 | CHK-09 | `orphaned-grounding` | An in-scope grounding artifact inverse-maps to a path for which no corresponding test prompt exists. | fail |
@@ -2945,17 +3059,19 @@ The sink policy parses and normalizes origins at runtime; an absent configured e
 
 ## Literal-secret rejection {#literal-secret-rejection}
 
-This section is the canonical owner of literal-secret detector semantics. Reference pages MUST only summarize the detector boundary for their local purpose and link here. Before persistence or report serialization, generation MUST inspect every provider-derived JSON string and object key, including `generatorMeta` and ambiguities, using lexical-key and array-index traversal order. For each string value or object key, an embedded `{{secrets.` marker (SEC-17) MUST be rejected before the four primitive detectors below are checked; among those, the first match in the fixed order below MUST be rejected. [src/usecases/generator-secret-policy.ts:162-232](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/generator-secret-policy.ts#L162-L232)
+This section is the canonical owner of literal-secret detector semantics. Reference pages MUST only summarize the detector boundary for their local purpose and link here. Before persistence or report serialization, generation MUST inspect every provider-derived JSON string and object key, including `generatorMeta`, `ambiguities`, and `assumptions`, using lexical-key and array-index traversal order. For each string value or object key, an embedded `{{secrets.` marker (SEC-17) MUST be rejected before the four primitive detectors below are checked; among those, the first match in the fixed order below MUST be rejected. [src/usecases/generator-secret-policy.ts:162-250](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/generator-secret-policy.ts#L162-L250)
+
+An `assumptions` item that matches secret detection MUST become `An assumption was omitted because it looked like a secret.`. Generation MUST continue with that replacement. [repo:src/usecases/generate.ts]
 
 | id | detector | matching value | exception | classified failure |
 | --- | --- | --- | --- | --- |
 | SEC-01 | `credential-prefix-sk` | begins `sk-` | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
 | SEC-02 | `credential-prefix-ghp` | begins `ghp_` | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
 | SEC-03 | `credential-prefix-aws-access-key` | begins `AKIA` | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-04 | `high-entropy-token` | token-shaped (at least 32 UTF-16 code units, no whitespace, every character in `[A-Za-z0-9+/=_.-]`) and Shannon entropy at least 4.0 bits, with frequency keys iterated as Unicode code points but each probability denominator using the UTF-16 code-unit length | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only; also exempt at a `steps[<index>].url`, `steps[<index>].pattern`, or `targets[<key>].baseUrl` value position | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-04 | `high-entropy-token` | token-shaped (at least 32 UTF-16 code units, no whitespace, every character in `[A-Za-z0-9+/=_.-]`) and Shannon entropy at least 4.0 bits, with frequency keys iterated as Unicode code points but each probability denominator using the UTF-16 code-unit length | a valid whole-value `SecretRef` in a string value or object key; `source.inputsDigest` only; also exempt at a `steps[<index>].url`, `steps[<index>].pattern`, or `targets[<key>].baseUrl` value position; also exempt at a `steps[<index>].id`, `steps[<index>].confirms[<index>]`, or `steps[<index>].instructionCoverage[<index>].id` value position when the value is a readable slug (matches the step-id grammar, has at least two hyphen-separated segments, each segment is `[a-z]+`, `[0-9]{1,3}`, or `[a-z]{1,4}[0-9]{1,3}`, and at least two segments are `[a-z]+`); object keys and other positions are not exempt | `SECRET_LITERAL_REJECTED`, exit `2` |
 | SEC-17 | `embedded-secret-reference` | a string value or object key, other than a valid whole-value `SecretRef`, containing the `{{secrets.` marker | `source.inputsDigest` only | `SECRET_LITERAL_REJECTED`, exit `2` |
 
-A valid whole-value `SecretRef` exempts a string value or object key from every detector in this section; every other key is passed to the detector before its value is traversed. The rejection diagnostic MUST contain only detector and redacted JSON-like path; it MUST NOT retain the detected literal, and a detected object key uses `[redacted-key]`. [src/usecases/generator-secret-policy.ts:182-193](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/generator-secret-policy.ts#L182-L193) [src/usecases/generator-secret-policy.ts:210-232](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/generator-secret-policy.ts#L210-L232) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/errors/exit-codes.ts#L31)
+A valid whole-value `SecretRef` exempts a string value or object key from every detector in this section; every other key is passed to the detector before its value is traversed. The rejection diagnostic MUST contain only detector and redacted JSON-like path; it MUST NOT retain the detected literal, and a detected object key uses `[redacted-key]`. [src/usecases/generator-secret-policy.ts:182-193](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/generator-secret-policy.ts#L182-L193) [src/usecases/generator-secret-policy.ts:220-250](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/generator-secret-policy.ts#L220-L250) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/errors/exit-codes.ts#L31)
 
 ## Boundary-specific secrecy requirements {#boundary-specific-secrecy}
 
@@ -3059,6 +3175,11 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| The provider response adds optional `assumptions`; `ambiguities` means only unresolved target assignment. The producer fingerprint changes, making existing plans stale. | repo:src/core/ir/schema.ts, repo:src/core/ai/plan-producer-bundle.ts | Regenerate plans and rebuild grounding using [Re-ground after a producer change](/ambercast/how-to/upgrade/#reground-after-producer-change). |
+| report 3.10 → 3.11 adds `generator-assumption` warnings and optional `warnings` only on `healed` rows for accepted Stage 3 assumptions. Assumptions do not stop generate or heal. Single-target provider ambiguities become retryable `AI_RESPONSE_INVALID` with exit 3; unresolved multi-target assignment remains `PROMPT_AMBIGUOUS` with exit 2. | repo:src/report/schema.ts, repo:src/usecases/generate.ts, repo:src/usecases/heal.ts | Closed-union consumers MUST use the 3.11 schema. See [Upgrade between versions](/ambercast/how-to/upgrade/#reground-after-producer-change). |
+| CLI `--strict` and MCP generate input `strict` are removed. | repo:src/core/cli/manifest.ts, repo:src/adapters/mcp/tool-schemas.ts | Remove both from calls. `generate --strict` is an unknown option with exit 2; MCP rejects `strict`. See [Upgrade between versions](/ambercast/how-to/upgrade/#reground-after-producer-change). |
+| The generator's confirms instruction no longer tells the provider to exclude earlier actions. It lists earlier click, press, fill, fill-secret, or capture steps whose intended effects the verified state evidences, so fills that precede a submit can be confirmed and persisted. The producer bundle fingerprint changes. Plan 5, Grounding 4, and report 3.10 are unchanged. | repo:src/core/ai/prompt-envelope.ts | Every plan generated by an earlier release is stale. Run `ambercast generate`, then `ambercast run --resolve --update-cache`. Regeneration replaces the grounding with an empty one, so every element step is bound again. A step without a verbatim quote calls AI once. Then confirm that a plain `ambercast run` passes with zero AI calls. Always commit the plan, and commit the grounding with it only when `grounding.repositoryPolicy` is `committed`; keep it local when the policy is `uncommitted`. |
+| Grounding v3 → v4 lets an element entry's locator carry an empty accessible name for an element that has none (unique by role). v2 and v3 are retired: check reports stale-grounding, run without --resolve fails with GROUNDING_UNRESOLVED, and heal fails until grounding is regenerated. | repo:src/core/ir/schema.ts | Run ambercast run --resolve --update-cache to regenerate grounding; AI steps re-execute. generate on an unchanged plan replaces a v2 or v3 grounding with an empty v4 grounding. An older ambercast cannot read v4 grounding, and its generate replaces v4 grounding with an empty v3 one. On rollback, regenerate grounding with the older version; unnamed-element bindings cannot recover because that version rejects empty names. Do not use mixed ambercast versions with the same grounding. |
 | report 3.9 → 3.10 adds `CASE_ABORTED` (environment, case-scope, exit 3, `{reason, stepId}` details) and `PROMPT_AMBIGUOUS` (usage, case-scope, exit 2, `{ambiguities}` details). Every `run` CaseAbort, agentic target-rejection, and unclassified-exception row now carries a matching case error instead of none; `heal` surfaces its Stage 3 and final-replay failures as case errors for every kind (not only agentic). A generate or heal Stage 3 ambiguous-prompt failure becomes `PROMPT_AMBIGUOUS` (exit 2) instead of an uncoded crash (exit 3). | repo:src/report/schema.ts, repo:src/usecases/run.ts, repo:src/usecases/heal-report.ts, repo:src/usecases/generate.ts | Report consumers MUST accept the current `3.10` contract, including `CASE_ABORTED` and `PROMPT_AMBIGUOUS` with their case-scoped details. This additive report change requires no Plan or grounding regeneration. `heal` reports more `errors` per case and more rows as `errored` in `summary`; a test asserting empty `errors` for these rows must account for the new case errors. A test relying on the prior uncoded exit-3 crash for an ambiguous prompt must expect exit 2 and a result row instead. [repo:src/report/schema.ts] |
 | report 3.8 → 3.9 adds four confirmation issue codes to `AiResponseIssueCode` and `AGENTIC_STEP_FAILED` to case-scoped environment errors. In the same release, AI-directed assert and trace replay pass/fail judgment adopt deadline-bearing polling. | [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/schema.ts#L57), repo:src/usecases/run.ts | Report consumers MUST accept the current `3.9` contract, including `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate` on `AiResponseIssueCode`, plus `AGENTIC_STEP_FAILED` with its case-scoped details. This additive report change requires no Plan or grounding regeneration. Tests relying on a single failed observation from AI-directed assert or trace replay must account for polling through the deadline. [src/report/schema.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/report/schema.ts#L57) |
 | Deadline-bearing polling (the eight `run.ts` call sites: first-binding stage 1, the four plan assert loops (including the `text-visible` / `url-matches` browser-check path), the AI-directed assert tool, and the two trace replay pass/fail judgments (events and verification)) always takes one more observation after the wait that reaches the deadline, and that observation is judged as the final result even if the real timer fires after the deadline. Element-assert `expected` text omits the role segment when no `roleHint` is present. | repo:src/usecases/run.ts | No Plan, grounding, or report regeneration is required. A test relying on the previous stale pre-deadline sample (or the double-space `expected` text without a role hint) must update its expectation. |
@@ -3189,51 +3310,111 @@ Links: [Healing model](/ambercast/explanation/healing-model/#three-stages), [Hea
 # Healing model
 Source: https://kotarotsubaki.github.io/ambercast/explanation/healing-model/
 
-Healing in ambercast operates through bounded escalation and explicit human control. Before repair work starts, healing evaluates target isolation and environment settings to determine whether an attempt is permitted to run.
+When you change your app's UI, a previously passing test can suddenly fail. A moved element or a changed button label is a typical cause.
 
-## A safe precondition {#safe-precondition}
+ambercast's healing feature investigates the cause of a failure automatically and tries to repair the test. It never runs unbounded: every run has a time budget, and writing to a file always waits for your confirmation first.
 
-A selected target must resolve with `healReplayIsolation: "idempotent"`; healing against a non-idempotent target is rejected before browser or provider work starts. The configuration boundary permits `idempotent` or `stateful`, but loading supplies the conservative `stateful` default.
+## Safe precondition {#safe-precondition}
 
-In automated test runs, a real heal attempt is refused in CI unless `ci.heal` is enabled. List mode bypasses that refusal because it has no primary effect.
+Healing accesses your running app and tries different fixes to find one that works. If the app doesn't reset to the same state no matter how many times you access it, repeated attempts risk piling up data or corrupting the app's state.
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [Configuration](/ambercast/reference/configuration/#targets), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#heal-refusal)
+ambercast therefore refuses to heal unless your config declares the target with `healReplayIsolation: "idempotent"` — safe to replay repeatedly. It stops before it opens a browser or calls an AI provider. Omit the declaration, and it defaults to the safer `stateful` value — state changes on each replay — where healing still refuses to run.
+
+In CI, nobody watches the result as it happens, so healing doesn't run unless you enable the `ci.heal` setting. The mode that only lists what it could fix makes no real change to your app, so it runs without that restriction.
+
+Related: [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [Configuration](/ambercast/reference/configuration/#targets), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#heal-refusal)
 
 ## Three-stage escalation {#three-stages}
 
-When responding to test drift, healing moves in order from cached evidence to broader regeneration. Healing first measures a fail-closed replay baseline, then attempts a resolution-enabled measurement only when that baseline has a failure.
+Healing first replays the test the normal way, without calling an AI provider, to confirm the failure actually reproduces. If it doesn't reproduce, healing stops there and makes no repair. Only a reproduced failure moves on to the three stages below.
 
-When that baseline fails, repair escalates across three stages:
+<div class="heal-stages">
+<style>
+.heal-stages {
+  --ground: #FAF6F0; --surface: #FFFDFA; --line: #E2D9CC; --text: #27211C; --muted: #766B60;
+  --amber: #A65C1F; --amber-soft: #FCF5EB; --verdigris: #2E7D5B; --verdigris-soft: rgba(46, 125, 91, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .heal-stages {
+    --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+    --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+  }
+}
+:root[data-theme="dark"] .heal-stages {
+  --ground: #181310; --surface: #27211C; --line: #3B332C; --text: #F1EBE2; --muted: #9E9184;
+  --amber: #DB9140; --amber-soft: rgba(219,145,64,.14); --verdigris: #7FC8A9; --verdigris-soft: rgba(127,200,169,.12);
+}
+.heal-stages { margin: 1.5rem 0; }
+.heal-stages figure { margin: 0 auto; max-width: 560px; display: grid; }
+.heal-stages .node { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); display: grid; gap: 8px; }
+.heal-stages .node.stage { border-color: var(--amber); }
+.heal-stages .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.heal-stages .num { font: 600 11.5px/1 ui-monospace, "JetBrains Mono", monospace; letter-spacing: .08em; color: var(--muted); }
+.heal-stages .stage .num { color: var(--amber); }
+.heal-stages h3 { margin: 0; font: 700 16px/1.35 system-ui, "Noto Sans JP", sans-serif; letter-spacing: -.01em; color: var(--text); }
+.heal-stages p { margin: 0; color: var(--text); }
+.heal-stages .chip { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 ui-monospace, monospace; letter-spacing: .04em; padding: 5px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.heal-stages .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.heal-stages .chip.ai { color: var(--amber); background: var(--amber-soft); }
+.heal-stages .chip.replay { color: var(--verdigris); background: var(--verdigris-soft); }
+.heal-stages .scope { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+.heal-stages .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.heal-stages .fill { height: 100%; background: var(--amber); }
+.heal-stages .scope span { font: 500 11px/1.3 ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
+.heal-stages .aside { font-size: 13px; color: var(--muted); }
+.heal-stages .link { display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 10px; padding-left: 18px; min-height: 56px; }
+.heal-stages .link svg { width: 28px; height: 44px; color: var(--muted); }
+.heal-stages .link.up svg { color: var(--amber); }
+.heal-stages .link span { font-size: 13px; color: var(--muted); }
+.heal-stages .link b { color: var(--text); font-weight: 700; }
+@media (max-width: 420px) { .heal-stages .scope { grid-template-columns: 1fr; gap: 6px; } }
+</style>
+<figure aria-label="heal's three-stage escalation. A failure at the baseline replay moves to stage 1; if stage 1's failure point doesn't advance, move to stage 2; if a failure remains before the deadline, move to stage 3.">
 
-Stage 1 attempts grounding repair at the first failing frontier; advancing the frontier records either element regrounding or AI retracing.
+<div class="node"><div class="top"><span class="num">BASELINE</span><span class="chip replay">No AI calls</span></div><h3>Replay the baseline fail-closed</h3><p class="aside">No failure means healing ends without a repair</p></div>
 
-Stage 2 attempts a structured single-step/tail repair only if Stage 1 did not advance the failure frontier.
+<div class="link" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>On a failure</b>, re-measure with resolution enabled</span></div>
 
-Stage 3 attempts full-plan repair only when a failure remains and the case did not stop at its deadline.
+<div class="node stage"><div class="top"><span class="num">STAGE 1</span><span class="chip ai">May call AI</span></div><h3>Fix the grounding</h3><div class="scope"><div class="track"><div class="fill" style="width:22%"></div></div><span>the first failed point</span></div><p>Healing re-locates the element at the failed point. If the point advances, it logs the fix as either re-grounding the element or an AI re-trace.</p></div>
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#repair-model), [Steps](/ambercast/spec/steps/), [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff)
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>If the failed point doesn't advance</b></span></div>
 
-## Budgets bound incremental repair {#repair-budgets}
+<div class="node stage"><div class="top"><span class="num">STAGE 2</span><span class="chip ai">May call AI</span></div><h3>Fix one step or the rest</h3><div class="scope"><div class="track"><div class="fill" style="width:55%"></div></div><span>a single step or the tail</span></div><p>Healing fixes the one failed step, or that step and every step after it together.</p></div>
 
-Explicit budgets restrict the scope of repair attempts so work remains bounded.
+<div class="link up" aria-hidden="true"><svg viewBox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span><b>If a failure remains before the deadline</b></span></div>
 
-The configuration key `heal.maxStepRepairs` is an optional positive integer configuration value. When a healing case runs, it creates its dispatch budget with `maxStepRepairs` or `Infinity` when the value is unset.
+<div class="node stage"><div class="top"><span class="num">STAGE 3</span><span class="chip ai">May call AI</span></div><h3>Rebuild the whole plan</h3><div class="scope"><div class="track"><div class="fill" style="width:100%"></div></div><span>the whole plan</span></div><p>Healing resolves an AI executor, calls generate, and rebuilds the whole plan.</p></div>
 
-Time limits run concurrently with dispatch limits. The setting `heal.caseTimeoutMs` is a positive integer and establishes a case-wide admission deadline before the baseline replay. The timeout prevents new repair phases or dispatches from starting; it does not interrupt in-flight work or invalidate an already-produced commit.
+</figure>
+</div>
 
-Links: [Configuration](/ambercast/reference/configuration/#heal), [ambercast heal](/ambercast/reference/cli/heal/#limits)
+Healing tries the lightest fix first and escalates only when needed, to avoid unnecessary AI calls and cost.
 
-## Confirmation separates measurement from writes {#confirmation-and-writes}
+Related: [ambercast heal](/ambercast/reference/cli/heal/#repair-model), [Steps](/ambercast/spec/steps/), [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff)
 
-Proposed repairs remain reviewable because ambercast separates measurement from writes. Each case accumulates candidate artifacts in a private overlay; the returned commit capability is the only route to real artifact writes.
+## Budgets that limit repair count and time {#repair-budgets}
 
-Confirmation happens after measurement but before the first commit, so the prompt can describe pending files and repair kinds without a write preceding consent.
+You can set two kinds of limits so healing doesn't keep trying forever.
 
-Command-line flags define how this boundary operates across interactive and automated environments:
+- `heal.maxStepRepairs`: the limit on AI dispatches during stage 1 and stage 2 repair, charged at dispatch time. Stage 3 still calls AI but doesn't count against this limit. Set it as a positive integer; omit it and there is no limit.
+- `heal.caseTimeoutMs`: the time limit, in milliseconds, for the whole healing run. ambercast fixes this deadline before the first replay starts. Past the deadline, it starts no new repair, but it doesn't force-stop work already in progress or discard a repair already produced.
 
-`--dry-run` never prompts or commits; `--yes` is pre-authorization for the confirmation boundary, not a substitute for an agent's user authorization. Without `--yes`, a non-interactive caller receives a configuration error instead of an implicit write.
+Related: [Configuration](/ambercast/reference/configuration/#heal), [ambercast heal](/ambercast/reference/cli/heal/#limits)
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#confirmation), [Operating contract](/ambercast/agents/operating-contract/#command-contract), [Review generated diffs](/ambercast/how-to/review-generated-diffs/)
+## Always confirm before writing {#confirmation-and-writes}
+
+Finding a repair doesn't change any project file yet. Healing holds each candidate repair in a temporary location, and only writes it to the real file after you review and approve it.
+
+This lets you see exactly which file changes, and how, before the write happens.
+
+:::caution
+Passing `--dry-run` skips the confirmation prompt and never commits a Plan or Grounding change, but a replay attempt can still write evidence under the runs directory. `--yes` pre-authorizes the CLI's confirmation prompt only; it isn't your own review and approval of the change.
+
+When an agent runs ambercast without `--yes` and without a way to confirm interactively, ambercast stops with an error instead of writing silently.
+
+:::
+
+Related: [ambercast heal](/ambercast/reference/cli/heal/#confirmation), [Operating contract](/ambercast/agents/operating-contract/#command-contract), [Review generated diffs](/ambercast/how-to/review-generated-diffs/)
 
 ---
 
@@ -3583,11 +3764,12 @@ This page outlines published machine-readable resources and the rules governing 
 | [`schemas/plan.v5.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json) | available |
 | [`schemas/grounding.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json) | available |
 | [`schemas/grounding.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json) | available |
+| [`schemas/grounding.v4.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json) | available |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | available |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | available |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | available |
 
-`schemas/plan.v2.schema.json`, `schemas/plan.v3.schema.json`, `schemas/plan.v4.schema.json`, and `schemas/grounding.v2.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v5 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
+`schemas/plan.v2.schema.json`, `schemas/plan.v3.schema.json`, `schemas/plan.v4.schema.json`, `schemas/grounding.v2.schema.json`, and `schemas/grounding.v3.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v5 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
 
 Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
 

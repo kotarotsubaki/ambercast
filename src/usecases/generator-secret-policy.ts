@@ -12,7 +12,7 @@
  * committed plan by {@link assertSecretUsesAllowed}.
  */
 import type { PlanDocument, SecretName, SecretRef, StepId } from '#core/ir/schema.js';
-import { SecretRef as SecretRefSchema } from '#core/ir/schema.js';
+import { SecretRef as SecretRefSchema, STEP_ID_PATTERN } from '#core/ir/schema.js';
 import { secretNameFor } from '#core/ir/secret-ref.js';
 import { SecretLiteralRejectedError } from '#core/errors/secret-literal-rejected-error.js';
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
@@ -205,6 +205,16 @@ export function detectSecretLiteral(value: string): CredentialShapeDetector | un
  * exemption compares a parallel array of raw path segments rather than the
  * rendered dot/bracket path so a `targets` key containing a literal `.` or `[`
  * cannot be confused with a deeper or shallower path by string matching.
+ *
+ * For #543, a readable slug is also exempt from `high-entropy-token` only at
+ * `steps[<index>].id`, `steps[<index>].confirms[<index>]`, or
+ * `steps[<index>].instructionCoverage[<index>].id`. It must follow the step ID
+ * grammar, contain at least two hyphen-separated segments, use only alphabetic
+ * segments, one-to-three-digit numbers, or segments of one to four letters
+ * followed by one to three digits, and contain at least two wholly alphabetic
+ * words. This keeps realistic multiword IDs from being mistaken for credentials without
+ * exempting object keys or values at any other position; prefix and embedded
+ * secret-reference detectors still apply at these ID positions.
  */
 export function assertNoLiteralSecrets(value: unknown): void {
   const visit = (nextValue: unknown, path: string, segments: readonly (string | number)[]): void => {
@@ -213,7 +223,7 @@ export function assertNoLiteralSecrets(value: unknown): void {
       const detector: WalkSecretDetector | undefined = nextValue.includes('{{secrets.')
         ? 'embedded-secret-reference'
         : detectSecretLiteral(nextValue);
-      if (detector !== undefined && !(detector === 'high-entropy-token' && isHighEntropyTokenExempt(segments))) {
+      if (detector !== undefined && !(detector === 'high-entropy-token' && (isHighEntropyTokenExempt(segments) || (isContractIdPath(segments) && isReadableSlug(nextValue))))) {
         throw new SecretLiteralRejectedError('The generated plan contains a literal secret.', { detector, path });
       }
       return;
@@ -244,4 +254,42 @@ function isHighEntropyTokenExempt(segments: readonly (string | number)[]): boole
   const [root, middle, leaf] = segments;
   if (root === 'steps' && typeof middle === 'number') return leaf === 'url' || leaf === 'pattern';
   return root === 'targets' && typeof middle === 'string' && leaf === 'baseUrl';
+}
+
+const READABLE_SLUG_SEGMENT = /^(?:[a-z]+|[0-9]{1,3}|[a-z]{1,4}[0-9]{1,3})$/;
+const WORD_SEGMENT = /^[a-z]+$/;
+
+/**
+ * Recognizes the readable step IDs that can resemble high-entropy tokens in
+ * issue #543, including multiword kebab-case IDs such as
+ * `verify-uploaded-xlsx-backup-json-download-works`.
+ *
+ * This pure string check decides only whether the value has the shape of a
+ * readable sequence of words, with bounded numeric parts. The value walk must
+ * combine that result with the separate contract-path check, so a
+ * readable string alone never changes secret detection elsewhere.
+ */
+function isReadableSlug(value: string): boolean {
+  if (!STEP_ID_PATTERN.test(value)) return false;
+  const segments = value.split('-');
+  return segments.length >= 2
+    && segments.every((segment) => READABLE_SLUG_SEGMENT.test(segment))
+    && segments.filter((segment) => WORD_SEGMENT.test(segment)).length >= 2;
+}
+
+/**
+ * Restricts the readable-slug exception from issue #543 to the three fields
+ * whose values are contract IDs, where realistic multiword IDs can otherwise
+ * be mistaken for high-entropy secrets.
+ *
+ * This check uses raw path segments only, keeping position separate from the
+ * value's shape and avoiding ambiguity in rendered paths. The value walk alone
+ * must combine both checks before granting the high-entropy exception.
+ */
+function isContractIdPath(segments: readonly (string | number)[]): boolean {
+  const [root, step, field, index, leaf] = segments;
+  if (root !== 'steps' || typeof step !== 'number') return false;
+  if (segments.length === 3) return field === 'id';
+  if (segments.length === 4) return field === 'confirms' && typeof index === 'number';
+  return segments.length === 5 && field === 'instructionCoverage' && typeof index === 'number' && leaf === 'id';
 }

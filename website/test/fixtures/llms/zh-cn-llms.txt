@@ -8,7 +8,7 @@
 - [工作原理](https://kotarotsubaki.github.io/ambercast/zh-cn/how-it-works/): 以 login.test.md 为例，用 3 个文件和 generate、run、heal 3 个命令追踪从生成到修复的全过程。
 
 ## TUTORIALS
-- [5 分钟完成您的首个测试](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/): 引导您生成并运行首个 ambercast 测试。
+- [5 分钟内完成第一个测试](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/): 初始化项目后生成、重放并确认第一个生成测试，5 分钟内完成这篇教程。
 - [阅读您的首个 plan 与 grounding](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/review-your-first-plan/): 学习如何定位测试生成的 plan 与 grounding 文件，并检查其新鲜度。
 - [UI 变更后的测试自愈](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/repair-your-first-drift/): 在一次性练习应用中，安全地自愈并验证因定位器变更而失败的既有测试用例。
 - [在 GitHub Actions 中运行 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/github-actions/): 在 GitHub Actions 工作流中运行 ambercast 的规范操作流程。
@@ -18,7 +18,7 @@
 - [管理机密](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/): 安全地批准生成的机密名称，并从环境变量解析其值。
 - [配置目标环境](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/configure-targets/): 配置 ambercast 测试运行的目标环境，包括基础 URL、自愈重放隔离及密钥注入源。
 - [选择 AI 提供商](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/choose-ai-provider/): 配置 ambercast 使用固定的 AI 提供商或使用自动探测。
-- [选择要运行的测试](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/): 介绍如何指定测试文件路径、使用模式过滤用例以及配置用例发现规则。
+- [选择要运行的测试](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/): 按路径、模式过滤或配置排除，选择要运行的测试 prompt 的 4 种方法。
 - [控制 grounding 回写](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/control-grounding-writeback/): 配置本地开发与 CI 环境中变更后的 grounding 缓存回写策略。
 - [审查生成的 diff](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/review-generated-diffs/): 按照实用的审查顺序，依次检查测试提示词以及派生的 plan 与 grounding 伴生文件变更。
 - [在 Git 中管理构件](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/): 指导您在 Git 中管理 ambercast 生成的测试计划、grounding 伴生文件和运行目录。
@@ -70,7 +70,7 @@
 ## EXPLANATION
 - [计划生命周期与新鲜度](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecycle/): 解释计划产物的出处与新鲜度判定机制，帮助您判断某个产物是否可以安全重放。
 - [重放与 grounding](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-grounding/): 解释重放路径及其安全边界。
-- [自愈模型](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/healing-model/): 解释受限递进与人工控制如何规范自愈行为。
+- [自愈模型](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/healing-model/): 说明界面变化导致测试失败时，ambercast 会自动修复到什么程度，以及什么时候交给人工判断。
 - [信任与安全](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/trust-and-security/): 阐释 ambercast 的信任边界与故障安全设计考量。
 - [CI 中的确定性](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/): 解释 CI 行为背后的信任边界。
 - [ambercast 的设计模型对比](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/comparison/): 对比 ambercast 与代码生成、录制测试及直接驱动型 Agent 的核心设计模型。

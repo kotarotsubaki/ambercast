@@ -9,7 +9,7 @@ ambercast が出力するすべての構造化フィールドを定義します�
 
 | フィールド | 型および制約 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.10` |
+| `schemaVersion` | リテラル `3.11` |
 | `command` | `generate`、`run`、`check`、`heal`、または `review` |
 | `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
 | `durationMs` | 非負整数 |
@@ -40,6 +40,18 @@ ambercast が出力するすべての構造化フィールドを定義します�
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
+AI プロバイダーの応答は任意の文字列配列 `assumptions` に、プロンプトが明示していない仮定を列挙する。`generate` は空白だけの項目を除き、`generated` と `would-generate` の `warnings` に `{ kind: 'generator-assumption', message }` を加える。仮定は `generate` や `heal` を止めない。
+
+画面では結果行の直後に `  warning: <message>` を表示する。秘匿値の検査に当たった項目は `An assumption was omitted because it looked like a secret.` に置き換える。
+
+仮定は計画に保存しない。fresh な計画の再実行では `skipped-fresh` となり、仮定の警告は出ない。`--force` で再生成すると再び確認できるが、結果は非決定的である。
+
+`generated` と `would-generate` の `ambiguities` は常に `[]` である。プロバイダーの `ambiguities` は、ステップのターゲットを割り当てられない場合だけを意味する。
+
+単一ターゲットの要求に空でない `ambiguities` を返すと、ambercast は `AI_RESPONSE_INVALID` として再試行する。再試行後も不正なら終了コードは 3 である。複数ターゲットで割り当てが決まらない場合は、従来どおり `PROMPT_AMBIGUOUS` と終了コード 2 になる。
+
+閉じた union として警告を検証する利用者には、report 3.11 のスキーマが必要である。
+
 ## run コマンドの結果 {#run-results}
 
 `RunResult` の各ブランチは厳格（strict）です。
@@ -64,6 +76,8 @@ ambercast が出力するすべての構造化フィールドを定義します�
 ## heal コマンドの結果 {#heal-results}
 
 `HealResult` において、`completed` の各ブランチはすべて `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、および `explanation` を必須とし、`aiCalls` は任意です。
+
+Stage 3 で採用した候補の `assumptions` は、`healed` 行だけの任意フィールド `warnings` に `generator-assumption` として現れる。他の heal 結果には `warnings` を含めない。仮定は Stage 3 を失敗にしない。
 
 | repairOutcome | 許可される application | 許可される stopReason |
 | --- | --- | --- |
@@ -140,19 +154,19 @@ action と capture のステップでは、ローカル検証後に `binding: { 
 現行スキーマ版に固定されるのは書き込み側のみです。viewer は 3.x のレポートをすべて寛容に読み取ります。
 
 ```json
-{"schemaVersion":"3.10","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.10","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 
 ```json
-{"schemaVersion":"3.10","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ```json
-{"schemaVersion":"3.10","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換性リンク {#report-persistence}

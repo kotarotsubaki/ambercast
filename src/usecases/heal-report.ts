@@ -21,10 +21,11 @@ import type { HealCaseOutcome, HealOptions, HealOutcome } from './heal.js';
  * `no-artifact-change`, preserving its explicit unresolved evidence without
  * exposing a commit capability (SPEC-C3-2).
  */
-export interface SettledHealCaseOutcome extends HealCaseOutcome {
+// Settlement preserves warning ownership independently of application facts.
+export type SettledHealCaseOutcome = HealCaseOutcome & {
   readonly application: HealApplication;
   readonly stopReason: HealStopReason;
-}
+};
 
 /**
  * A heal batch whose measured cases have all been settled for report output.
@@ -125,6 +126,8 @@ export function buildHealReport(input: HealReportInput): HealReportOutput {
     // The case-scoped budget supplies aiCalls once for all nested replay and
     // generation work, so this projection must pass it through without adding
     // nested outcome counters a second time.
+    // Heal owns assumption filtering and healed-only typing; this boundary
+    // preserves that evidence independently of application policy.
     ...outcome.results.map(({
       baselineFirstFailureIndex: _baseline,
       finalFirstFailureIndex: _final,

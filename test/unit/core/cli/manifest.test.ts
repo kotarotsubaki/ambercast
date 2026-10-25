@@ -27,6 +27,15 @@ const fixtureUsageManifest: VersionlessCliManifest = {
 };
 
 describe('CLI manifest', () => {
+  it('TEST-8 removes strict from the live manifest, help, and captured contracts', () => {
+    const generate = CLI_MANIFEST.commands.find((command) => command.name === 'generate');
+    expect(generate).toBeDefined();
+    expect(generate!.flags.map((flag) => flag.name)).toContain('force');
+    expect(generate!.flags.map((flag) => flag.name)).not.toContain('strict');
+    expect(renderUsage(CLI_MANIFEST)).not.toContain('--strict');
+    expect(readFileSync(new URL('cli-manifest.json', fixtureDirectory), 'utf8')).not.toMatch(/strict/);
+    expect(readFileSync(new URL('cli-usage.txt', fixtureDirectory), 'utf8')).not.toMatch(/strict/);
+  });
   it('composes sentinel versions without changing the static declaration', () => {
     const before = structuredClone(CLI_MANIFEST);
     const first = createCliManifest('9.9.9-test');
@@ -235,7 +244,6 @@ describe('CLI manifest', () => {
       {
         name: 'generate',
         flags: [
-          { name: 'strict', alias: null },
           { name: 'force', alias: null },
           { name: 'dry-run', alias: null },
           { name: 'target', alias: null },

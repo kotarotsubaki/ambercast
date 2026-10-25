@@ -117,7 +117,7 @@ describe('hand-authored trace replay against real Chromium', () => {
       // hand. Relative navigation keeps replay on the local fixture origin,
       // where a real browser verifies the DOM without an AI adapter.
       const grounding = GroundingDocument.parse({
-        schemaVersion: 3,
+        schemaVersion: 4,
         planDigest: computePlanDigest(plan),
         entries: {
           'verify-hand-authored-trace': {

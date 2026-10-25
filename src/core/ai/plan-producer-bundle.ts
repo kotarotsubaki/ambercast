@@ -139,12 +139,15 @@ export function planProducerBundleFingerprint(): string {
 export function liveProducerBundleInputs(): PlanProducerBundleInputs {
   return {
     generatorPromptTemplate: GENERATOR_PROMPT_TEMPLATE,
-    // The fixed branch texts are fingerprint inputs even though Target names are runtime values.
+    // The two target-instruction branches mirror generate.ts with runtime
+    // interpolations as placeholders. The architecture coverage test enforces
+    // the match so freshness describes the instructions actually sent to
+    // providers.
     generatorTaskInstruction: JSON.stringify([
       GENERATE_PLAN_TASK_INSTRUCTION,
       '${…} ${…}',
-      '${…} Assign target: ${…} to every step. Do not report target ambiguity.',
-      '${…} Assign a target name to every step using the prompt and context.targets. If a step does not identify a target, use context.defaultTarget when provided; otherwise list that step in ambiguities.',
+      '${…} Assign target: ${…} to every step. Leave ambiguities empty. In assumptions, list each assumption the plan depends on that the prompt does not state, such as an inferred page path or URL. Never put secret values or secret references in assumptions.',
+      '${…} Assign a target name to every step using the prompt and context.targets. If a step does not identify a target, use context.defaultTarget when provided. List a step in ambiguities only when its target still cannot be determined; the steps may then be empty. In assumptions, list each other assumption the plan depends on that the prompt does not state, such as an inferred page path or URL. Never put secret values or secret references in assumptions.',
     ]),
     generatedPlanResponseSchema: typedJsonSchema(GeneratedPlanResponseRequest) as unknown as JsonValueT,
     generatedPlanResponseLocalContract: typedJsonSchema(GeneratedPlanResponseForPolicy) as unknown as JsonValueT,

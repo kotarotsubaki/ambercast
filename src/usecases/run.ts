@@ -34,6 +34,9 @@ import {
   rawGroundingHasCoverageClaim,
 } from '#core/ir/grounding-coverage-claim.js';
 import {
+  isRetiredGroundingSchemaVersion,
+} from '#core/ir/schema.js';
+import {
   ACTION_GROUNDING_MODE,
   groundingRecoveryModeForStep,
 } from '#core/ir/grounding-recovery-mode.js';
@@ -50,7 +53,7 @@ import {
 import {
   GROUNDING_SCHEMA_VERSION,
   PLAN_SCHEMA_VERSION,
-  ElementBindingProposal,
+  ElementBindingProposalResponse,
   GroundingDocument,
   PlanDocument,
   TraceAction,
@@ -65,6 +68,7 @@ import {
   type GroundingEntry,
   type GroundingDocument as GroundingDocumentType,
   type GroundingDocumentWithCoverageStorage,
+  type GroundingElementLocator,
   type InstructionCoveredPlanDocument,
   type JsonValueT,
   type PlanDocument as PlanDocumentType,
@@ -154,7 +158,7 @@ type DispatchOutcome =
  * SPEC-R5 transitions a locally verified SPEC-R4 stage-3 first binding from
  * candidate to acted after the operation succeeds, then to confirmed when
  * every step listing that action in `confirms` passes. A SPEC-R2 hit against
- * an existing v3 entry enters directly at acted, with no candidate stage and
+ * an existing v4 entry enters directly at acted, with no candidate stage and
  * zero AI calls. `grounding` reports that fast path; `quoted-match` and
  * `ai-proposed` report fresh SPEC-R4 stage-1 and stage-2 bindings. This
  * transient and StepResult-facing vocabulary is wider than the persisted
@@ -166,11 +170,13 @@ type DispatchOutcome =
  * SPEC-R6 forbids acting without candidate (except the fast-path acted entry),
  * persisting an acted-only state, and retrying an operation after its action
  * failed within the same run.
+ * The transient locator uses GroundingElementLocator so an observed unnamed
+ * candidate can reach confirmation without widening plan or trace references.
  */
 type BindingState =
-  | { readonly stage: 'candidate'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
-  | { readonly stage: 'acted'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
-  | { readonly stage: 'confirmed'; readonly locator: AccessibilityElementRef; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number };
+  | { readonly stage: 'candidate'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
+  | { readonly stage: 'acted'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
+  | { readonly stage: 'confirmed'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number };
 
 /**
  * Carries a materialized secret fill through the private run dispatcher.
@@ -677,8 +683,34 @@ export function isRetiredPlanVersion(value: unknown): boolean {
   return value === PLAN_SCHEMA_VERSION - 1;
 }
 
-function isRetiredGroundingVersion(value: unknown): boolean {
-  return value === GROUNDING_SCHEMA_VERSION - 1;
+/**
+ * Produces canonical grounding text whose parsed representation satisfies the
+ * current grounding schema before it is eligible for persistence.
+ *
+ * @param grounding - The in-memory grounding document to verify for write-back.
+ * @returns Canonical artifact text after re-parsing and schema validation.
+ * @throws {@link IntegrityViolationError} when the serialized document fails
+ * the grounding schema, with the message "The grounding cache does not satisfy
+ * the grounding schema."
+ * @throws Canonicalization errors propagate unchanged rather than being
+ * classified as schema integrity failures.
+ * @remarks
+ * The run write boundary calls this after its secret-disclosure check and only
+ * when write-back is allowed. Validation failure prevents the storage call,
+ * preserving existing disk bytes without rolling back completed browser actions.
+ * At that boundary, a schema integrity failure makes the case an error with
+ * INTEGRITY_VIOLATION even if it previously failed. A canonicalization failure
+ * becomes FsIoError only for a previously passed case; other case classifications
+ * remain unchanged. Retrying unchanged invalid input reproduces the failure.
+ * This contract protects run write-back; heal and generate writes retain their
+ * own persistence paths.
+ */
+export function serializePersistableGrounding(grounding: GroundingDocument): string {
+  const text = toCanonicalArtifactText(grounding as unknown as JsonValueT);
+  if (!GroundingDocument.safeParse(JSON.parse(text)).success) {
+    throw new IntegrityViolationError('The grounding cache does not satisfy the grounding schema.');
+  }
+  return text;
 }
 
 /**
@@ -798,7 +830,7 @@ async function readUsableGrounding(
     const sourceText = await storage.readText(groundingPath);
     try {
       const raw: unknown = JSON.parse(sourceText);
-      if (typeof raw === 'object' && raw !== null && 'schemaVersion' in raw && isRetiredGroundingVersion(raw.schemaVersion)
+      if (typeof raw === 'object' && raw !== null && 'schemaVersion' in raw && isRetiredGroundingSchemaVersion(raw.schemaVersion)
         && 'planDigest' in raw && raw.planDigest === empty.planDigest) onRetiredVersion?.();
     } catch {
       // Malformed grounding remains a recoverable cache miss.
@@ -2740,14 +2772,16 @@ async function executeAiStep(
  *    accessibilityTree }`, where `excerpt` is re-extracted source-span text.
  *    Redact it with `redactJsonStrings`, then check immediately before send
  *    with `jsonContainsResolvedSecret`; a match aborts as the existing
- *    `secret-contaminated` CaseAbort (exit 3). The `ElementBindingProposal`
- *    response is discriminated by `outcome`: `none` throws
+ *    `secret-contaminated` CaseAbort (exit 3). The
+ *    `ElementBindingProposalResponse` carries one `ElementBindingProposal`
+ *    under `proposal`, discriminated by `outcome`: `none` throws
  *    `GroundingUnresolvedError` reason `no-candidate`, and `ambiguous` uses
  *    reason `ambiguous`. Never ask again. Provider failures and `aiTimeoutMs`
  *    timeouts retain the current AI error classification via `callAiExecutor`.
- *    This proposal replaces the old `{ confirmed: boolean }` call and uses
- *    the same AI dispatch path, `ai-call` / `ai-result` events, and heal AI
- *    dispatch accounting.
+ *    The request and its response share the same `ElementBindingProposalResponse`
+ *    wrapper, so the proposal is unwrapped once validation succeeds, before the
+ *    local-matching checks below. It uses the same AI dispatch path, `ai-call` /
+ *    `ai-result` events, and heal AI dispatch accounting as other AI steps.
  * 3. Verify locally against the selected stage-1 snapshot, or the original
  *    unredacted source snapshot for stage 2. Accept an AI proposal only when
  *    `matchQuotedCandidates(tree, { text: name, roleHint: role })` returns
@@ -2853,10 +2887,13 @@ async function groundedTarget(
     if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
     const executor = await context.resolveAiExecutor();
     const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
-    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. Return one ElementBindingProposal outcome.'), responseSchema: typedJsonSchema(ElementBindingProposal), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
+    // The binding task permits an unnamed-element answer without inventing a
+    // name. It is outside the fingerprinted plan-producer bundle, so this
+    // instruction change does not invalidate existing plans.
+    const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. If that element has no accessible name, return its role with an empty name (""). Return one ElementBindingProposal outcome. Put it under the "proposal" key.'), responseSchema: typedJsonSchema(ElementBindingProposalResponse), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
     const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request), (durationMs) => { aiProposalMs = durationMs; });
-    if (result.data.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
-    const matches = matchQuotedCandidates(lastValidCapture.tree as AccessibilityNode, { text: result.data.name, roleHint: result.data.role });
+    if (result.data.proposal.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.proposal.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
+    const matches = matchQuotedCandidates(lastValidCapture.tree as AccessibilityNode, { text: result.data.proposal.name, roleHint: result.data.proposal.role });
     if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected' });
     candidate = matches[0];
     provenance = 'ai-proposed';
@@ -4423,7 +4460,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
 
         await deps.storage.writeText(
           groundingPath,
-          toCanonicalArtifactText(grounding as unknown as JsonValueT),
+          serializePersistableGrounding(grounding),
         );
       } catch (error) {
         if (error instanceof IntegrityViolationError) {

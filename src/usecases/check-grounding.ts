@@ -3,7 +3,7 @@ import {
   isGroundingCanonicalForClaim,
   rawGroundingHasCoverageClaim,
 } from '#core/ir/grounding-coverage-claim.js';
-import { GroundingDocument, RETIRED_GROUNDING_SCHEMA_VERSION, type PlanDocument } from '#core/ir/schema.js';
+import { GroundingDocument, isRetiredGroundingSchemaVersion, type PlanDocument } from '#core/ir/schema.js';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 
 /*
@@ -17,7 +17,7 @@ import type { ReadStorageAdapter } from '#ports/storage.js';
 /**
  * `missing` denotes an absent companion, `invalid` content that cannot be
  * parsed or satisfy the grounding schema, a coverage-bearing document whose
- * bytes are not its canonical serialization, `stale` a version 2 companion or
+ * bytes are not its canonical serialization, `stale` a retired v2/v3 companion or
  * a valid document for another plan, and `valid` a matching companion.
  *
  * @remarks
@@ -42,8 +42,10 @@ export type GroundingInspection =
  * Parsing, provenance, and conditional canonicality classification need no
  * storage capability. Healing can therefore validate one retained snapshot,
  * while the exported inspector retains its existing read-only storage contract
- * and behavior. A version 2 companion is stale before schema parsing, as is a
- * current companion whose plan digest does not match.
+ * and behavior. The shared retirement predicate classifies v2/v3 companions
+ * as stale before schema validation, rather than conflating retirement with
+ * malformed content. A current companion whose plan digest does not match
+ * is also stale.
  */
 export function inspectGroundingArtifactText(text: string, plan: PlanDocument): GroundingInspection {
   let parsed: unknown;
@@ -53,7 +55,7 @@ export function inspectGroundingArtifactText(text: string, plan: PlanDocument): 
     return { kind: 'invalid' };
   }
 
-  if (typeof parsed === 'object' && parsed !== null && 'schemaVersion' in parsed && parsed.schemaVersion === RETIRED_GROUNDING_SCHEMA_VERSION) {
+  if (typeof parsed === 'object' && parsed !== null && 'schemaVersion' in parsed && isRetiredGroundingSchemaVersion(parsed.schemaVersion)) {
     return { kind: 'stale' };
   }
 

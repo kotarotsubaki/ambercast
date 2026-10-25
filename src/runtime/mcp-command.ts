@@ -458,7 +458,6 @@ async function serveMcpCommand(input: RunMcpCommandInput): Promise<number> {
       try {
         return await runGenerateCommand({
           ...normalizeCommonMcpInput(inputArgs),
-          strict: inputArgs.strict ?? false,
           force: inputArgs.force ?? false,
           dryRun: inputArgs.dryRun ?? false,
           cwd: sessionRoot, stderr: input.stderr, list: false, signal,

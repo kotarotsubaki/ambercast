@@ -1,4 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { PassThrough } from 'node:stream';
+import { createMcpServer } from '#adapters/mcp/server.js';
+import { createSystemClock } from '#adapters/system/system-clock.js';
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { describe, expect, it } from 'vitest';
 import { executeAgentic } from '#adapters/ai/agentic/agentic-executor.js';
@@ -85,6 +89,31 @@ type LatchCase = {
 };
 
 describe('startAgenticMcpServer', () => {
+  it.each([true, false])('TEST-8 rejects removed strict=%s at the generate MCP boundary', async (strict) => {
+    let calls = 0;
+    const success = async () => ({ exitCode: 0, envelope: { summary: 'ok' } });
+    const server = createMcpServer({
+      sessionRoot: '/workspace', version: '0.6.0', stderr: new PassThrough(),
+      generate: async () => { calls += 1; return success(); },
+      run: success, check: success, healPreview: success,
+    }, { clock: createSystemClock() });
+    const client = new Client({ name: 'strict-removal-test', version: '1.0.0' });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+      const tools = await client.listTools();
+      expect(tools.tools.map((tool) => tool.name)).toContain('ambercast_generate');
+      const result = await client.callTool({ name: 'ambercast_generate', arguments: { strict } });
+      expect(result.isError).toBe(true);
+      expect(calls).toBe(0);
+      const recovered = await client.callTool({ name: 'ambercast_generate', arguments: {} });
+      expect(recovered.isError).toBe(false);
+      expect(calls).toBe(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
   it('binds strictly to loopback and closes idempotently', async () => {
     const { controller } = createController();
     const server = await startAgenticMcpServer(controller);
@@ -485,8 +514,8 @@ describe('startAgenticMcpServer', () => {
     await server.close();
   });
 
-  it('keeps the producer-bundle fingerprint at the v5 baseline', () => {
-    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58');
+  it('keeps the producer-bundle fingerprint at the #600 baseline', () => {
+    expect(computePlanProducerBundleFingerprint(liveProducerBundleInputs())).toBe('2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020');
   });
 
   it('projects a terminal schema latch into the case report without attempts', async () => {

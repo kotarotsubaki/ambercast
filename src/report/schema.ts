@@ -52,10 +52,10 @@ const UiCapability = z.enum([
 /**
  * Version shared by every structured report envelope.
  *
- * Version 3.10 adds CASE_ABORTED and PROMPT_AMBIGUOUS so every run, heal, and
- * generate failure path retains a coded, diagnosable case error.
+ * Version 3.11 adds generator-assumption warnings to generation results and
+ * healed results; consumers validating a closed warning union must accept them.
  */
-export const REPORT_SCHEMA_VERSION = '3.10' as const;
+export const REPORT_SCHEMA_VERSION = '3.11' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -797,11 +797,37 @@ export const RepairTraceEntry = z.discriminatedUnion('stage', [
 ]);
 export type RepairTraceEntry = z.infer<typeof RepairTraceEntry>;
 
+/**
+ * A non-fatal assumption reported by the plan generator.
+ *
+ * The message is provider-written free text that the report keeps as-is after
+ * generation's blank-item filtering and secret inspection (a secret-like item
+ * is replaced with an omission notice); human terminal rendering escapes
+ * control characters, while JSON and MCP output keep the text unmodified.
+ * Assumptions are not stored in the plan and are
+ * absent on fresh re-runs that reuse it. Empty messages and extra keys fail
+ * validation.
+ *
+ * @remarks
+ * Generation owns filtering; the non-empty schema constraint is defensive.
+ */
+export const GeneratorAssumptionWarning = z.strictObject({
+  kind: z.literal('generator-assumption'),
+  message: z.string().min(1),
+});
+/** A generator assumption carried by a generation or adopted repair result. */
+export type GeneratorAssumptionWarning = z.infer<typeof GeneratorAssumptionWarning>;
+
 const CompletedHealResult = z.discriminatedUnion('repairOutcome', [
+  // Only this branch accepts optional generator-assumption warnings because
+  // Stage 3 adoption requires full-plan replay and occurs only on the healed
+  // path. Heal's candidate filter and outcome type own that restriction; this
+  // schema defensively rejects other warning kinds and warnings on other paths.
   z.strictObject({
     ...ResultIdentityFields,
     status: z.literal('completed'),
     repairOutcome: z.literal('healed'),
+    warnings: z.array(GeneratorAssumptionWarning).optional(),
     application: HealedOrPartiallyHealedApplication,
     stopReason: z.enum(['settled', 'attempt-limit', 'deadline']),
     ...ExecutedResultFields,
@@ -948,7 +974,11 @@ export type SecretWarning = z.infer<typeof SecretWarning>;
 
 /** Non-fatal plan-generation warnings, including unconfirmed action steps. */
 export const ActionUnconfirmedWarning = z.strictObject({ kind: z.literal('action-unconfirmed'), stepId: StepId });
-export const GenerateWarning = z.discriminatedUnion('kind', [...SecretWarning.options, ActionUnconfirmedWarning]);
+// The union includes GeneratorAssumptionWarning so a plan dependency can be
+// reported without failing generation. Generation owns blank-item filtering,
+// secret inspection, and retention from only the successful or previewed attempt;
+// this schema provides the defensive report boundary.
+export const GenerateWarning = z.discriminatedUnion('kind', [...SecretWarning.options, ActionUnconfirmedWarning, GeneratorAssumptionWarning]);
 export type GenerateWarning = z.infer<typeof GenerateWarning>;
 
 /**
@@ -977,7 +1007,7 @@ const GenerateSecret = z.strictObject({
  * `ambiguities` because no newly generated provider response exists; listed
  * and failed results also omit
  * `planFile`. Generated and `would-generate` results retain both, with an empty
- * ambiguity list when the provider supplied none. Ambiguities are restricted to
+ * ambiguity list that generation always emits empty. Ambiguities are restricted to
  * JSON values so every report remains serializable across CLI and MCP
  * boundaries. Generated branches include resolved secret rows and optional
  * naming warnings; only dry-run skipped-fresh reconstructs those rows,
@@ -992,6 +1022,9 @@ export const GenerateResult = z.discriminatedUnion('status', [
     planFile: NonWhitespaceString,
     status: z.literal('generated'),
     dryRun: z.literal(false),
+    // This compatibility field retains its JSON-value array contract while
+    // generation always emits an empty list; unresolved targets fail generation
+    // and other plan dependencies belong in warnings.
     ambiguities: z.array(z.json()),
     secrets: z.array(GenerateSecret),
     warnings: z.array(GenerateWarning).optional(),
@@ -1004,6 +1037,8 @@ export const GenerateResult = z.discriminatedUnion('status', [
     planFile: NonWhitespaceString,
     status: z.literal('would-generate'),
     dryRun: z.literal(true),
+    // Previewed generation preserves the same compatibility field and emits
+    // an empty list, with plan dependencies reported separately as warnings.
     ambiguities: z.array(z.json()),
     secrets: z.array(GenerateSecret),
     warnings: z.array(GenerateWarning).optional(),

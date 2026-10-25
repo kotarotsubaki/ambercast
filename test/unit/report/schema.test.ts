@@ -12,6 +12,7 @@ import {
   INSTRUCTION_COVERAGE_ISSUE_CODES,
   CheckResult,
   GenerateResult,
+  GenerateWarning,
   HealResult,
   ListedHealResult,
   Observed,
@@ -131,7 +132,56 @@ const CASE_FS_IO_ERROR = {
   caseId: 'login-succeeds',
 };
 
-describe('TEST-20 report schema 3.10', () => {
+describe('TEST-5 generator assumption report contract (SPEC-5)', () => {
+  const warning = { kind: 'generator-assumption', message: 'A' };
+
+  it('pins report 3.11 at the documented source line 58', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+    const source = readFileSync(new URL('../../../src/report/schema.ts', import.meta.url), 'utf8');
+    expect(source.split('\n')[57]).toBe("export const REPORT_SCHEMA_VERSION = '3.11' as const;");
+  });
+
+  it.each([
+    ['ordinary', 'A'], ['padded', '  A  '], ['whitespace', '\n'], ['long', 'A'.repeat(100_000)],
+  ])('accepts verbatim nonempty %s assumption message', (_name, message) => {
+    expectAccepted(GenerateWarning, { ...warning, message });
+    expectAccepted(GenerateResult, { ...GENERATE_RESULT, warnings: [{ ...warning, message }] });
+  });
+
+  it.each([
+    ['empty message', { ...warning, message: '' }],
+    ['extra key', { ...warning, extra: true }],
+    ['wrong kind', { ...warning, kind: 'unknown-assumption' }],
+    ['non-string message', { ...warning, message: 1 }],
+    ['missing message', { kind: 'generator-assumption' }],
+  ])('rejects %s after accepting the warning variant', (_name, invalid) => {
+    expectAccepted(GenerateWarning, warning);
+    expectRejected(GenerateWarning, invalid);
+  });
+
+  it('accepts only assumption warnings on healed results, retaining order and duplicates', () => {
+    expectAccepted(HealResult, HEAL_RESULT);
+    expectAccepted(HealResult, { ...HEAL_RESULT, warnings: [] });
+    const warnings = [warning, { ...warning, message: 'B' }, warning];
+    const parsed = HealResult.parse({ ...HEAL_RESULT, warnings });
+    expect(parsed).toHaveProperty('warnings', warnings);
+    expectRejected(HealResult, { ...HEAL_RESULT, warnings: [{ kind: 'action-unconfirmed', stepId: 'click' }] });
+    expectRejected(HealResult, { ...HEAL_RESULT, warnings: [warning, { kind: 'action-unconfirmed', stepId: 'click' }] });
+  });
+
+  it.each([
+    ['partially-healed', { ...HEAL_RESULT, repairOutcome: 'partially-healed' }],
+    ['unresolved', { ...HEAL_RESULT, repairOutcome: 'unresolved', application: 'no-artifact-change' }],
+    ['no-changes-needed', { ...HEAL_RESULT, repairOutcome: 'no-changes-needed', application: 'no-artifact-change' }],
+    ['not-passing', { ...HEAL_RESULT, repairOutcome: 'unresolved', application: 'no-artifact-change', repairTrace: [{ stage: 'stage3', outcome: 'not-passing', firstFailureIndex: 0 }] }],
+  ])('rejects warnings on %s only after proving the base row is valid', (_name, row) => {
+    expectAccepted(HealResult, row);
+    expectRejected(HealResult, { ...row, warnings: [warning] });
+    expectRejected(HealResult, { ...row, warnings: [] });
+  });
+});
+
+describe('TEST-20 report schema 3.11', () => {
   const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
   const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
   const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
@@ -155,23 +205,23 @@ describe('TEST-20 report schema 3.10', () => {
     expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
   });
 
-  it('pins the shared report version to 3.10', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
-    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.10' }));
+  it('pins the shared report version to 3.11', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.11' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.9' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
   });
 });
 
 describe('TEST-V1 report-only version change', () => {
-  it('keeps the Plan and Grounding schema versions and producer contract unchanged', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
+  it('pins Plan and Grounding schema versions while preserving the producer contract', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
-    expect(GROUNDING_SCHEMA_VERSION).toBe(3);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
     expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
     // Pins the producer-input fingerprints so this test fails if either changes; update only with a deliberate plan-producer change.
-    expect(promptTemplateFingerprint()).toBe('41cbe77e7b967242094b421f8b278e1ea6083e0d5ce30bf3c8ba9ebc33ba17d5');
-    expect(planProducerBundleFingerprint()).toBe('58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58');
+    expect(promptTemplateFingerprint()).toBe('90af9b1b05b4b37057cdf8b2c52e24998474bc79c6c402482f7d137248f8e535');
+    expect(planProducerBundleFingerprint()).toBe('2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020');
     const prompt = readFileSync(new URL('../../fixtures/issue-518-v5.test.md', import.meta.url), 'utf8');
     const fixture = JSON.parse(readFileSync(new URL('../../fixtures/issue-518-v5.ambercast.plan.json', import.meta.url), 'utf8')) as {
       source: { inputsDigest: string }; targets: Record<string, { surface: 'web'; baseUrl: string }>;
@@ -200,7 +250,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.10',
+    schemaVersion: '3.11',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -431,11 +481,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.10', () => {
+  it('requires schema version 3.11', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.10' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.11' });
   });
 });
 
@@ -443,8 +493,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.10', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
+  it('exports schema version 3.11', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -995,7 +1045,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.10');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
   });
 
   it.each(generateBranches)(

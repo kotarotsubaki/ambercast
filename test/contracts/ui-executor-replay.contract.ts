@@ -68,7 +68,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
           { id: 'see-ready', target: 'app', kind: 'assert', check: 'text-visible', text: harness.readyText, timeoutMs: 5000, confirms: ['click-submit'] },
         ],
       };
-      const grounding: GroundingDocument = { schemaVersion: 3, planDigest: computePlanDigest(plan), entries: {} };
+      const grounding: GroundingDocument = { schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} };
       await storage.writeText(file, prompt);
       await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as JsonValueT));
       await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText(grounding as JsonValueT));
@@ -81,7 +81,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
           runId: '2026-09-24T000000Z-550e8400-e29b-41d4-a716-446655440000',
           uiExecutor: createUiExecutorResolver({ headed: false, factories: { playwright: factorySpy } }),
           secrets: createFakeSecretsProvider(new Map()),
-          resolveAiExecutor: async () => createFakeAiExecutor({ execute: () => ({ data: { outcome: 'found', role: harness.element.role, name: harness.element.name }, raw: JSON.stringify({ outcome: 'found', role: harness.element.role, name: harness.element.name }) }) }),
+          resolveAiExecutor: async () => createFakeAiExecutor({ execute: () => ({ data: { proposal: { outcome: 'found', role: harness.element.role, name: harness.element.name } }, raw: JSON.stringify({ proposal: { outcome: 'found', role: harness.element.role, name: harness.element.name } }) }) }),
           events: events.sink, discoverTestFiles: async () => [file], isCI: false,
           config, allocateCallId: createCallIdAllocator(),
         };

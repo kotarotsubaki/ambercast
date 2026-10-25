@@ -2,7 +2,7 @@
 
 ## Shared types {#shared-types}
 
-All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [repo:src/core/ir/schema.ts:165] [repo:src/core/ir/schema.ts:183] Regexes are quoted verbatim from the runtime authority.
+All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [repo:src/core/ir/schema.ts:165] [repo:src/core/ir/schema.ts:254] Regexes are quoted verbatim from the runtime authority.
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -10,9 +10,12 @@ All other chapters MUST use these definitions rather than restating their shapes
 |  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts |
 |  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | repo:src/core/ir/schema.ts:168 |
 |  | `locale` | string | optional | min length 1 | Authored BCP-47-shaped locale tag, canonicalized by the config loader before this point. | repo:src/core/ir/schema.ts:210 |
-| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | repo:src/core/ir/schema.ts:183 |
-|  | `role` | string | required | min 1 | Exact accessibility role. | repo:src/core/ir/schema.ts:185 |
-|  | `name` | string | required | min 1 | Accessible name. | repo:src/core/ir/schema.ts:186 |
+| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | repo:src/core/ir/schema.ts:254 |
+|  | `role` | string | required | min 1 | Exact accessibility role. | repo:src/core/ir/schema.ts:256 |
+|  | `name` | string | required | min 1 | Accessible name. | repo:src/core/ir/schema.ts:257 |
+| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | repo:src/core/ir/schema.ts:276 |
+|  | `role` | string | required | min 1 | Exact accessibility role. | repo:src/core/ir/schema.ts:278 |
+|  | `name` | string | required | may be empty | An empty string denotes an element without an accessible name and matches only nodes whose normalized name is empty. | repo:src/core/ir/schema.ts:279 |
 | `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | Literal quoted excerpt text. | repo:src/core/ir/schema.ts:359 |
 |  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the quoted excerpt. | repo:src/core/ir/schema.ts:360 |
 | `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | Source-backed natural-language element description. | repo:src/core/ir/schema.ts:367 |

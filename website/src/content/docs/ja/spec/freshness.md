@@ -26,7 +26,7 @@ description: "`inputsDigest` は、正確にこれら5つのメンバー（`norm
 | CHK-03 | `fresh-without-grounding` | プランが fresh であり、コンパニオンが有効ではなく、リポジトリポリシーが `uncommitted` である。 | pass |
 | CHK-04 | `missing-grounding` | プランが fresh であり、コンパニオン検査が `missing` であり、ポリシーがコミット済みグラウンディングを要求している。 | fail |
 | CHK-05 | `invalid-grounding` | プランが fresh であり、コンパニオン検査が `invalid` である（JSON／スキーマ／正規形式カバレッジの失敗）。 | fail |
-| CHK-06 | `stale-grounding` | プランが fresh であり、コンパニオン検査が `stale` である（別の `planDigest`、またはコンパニオン自身のスキーマ形状検証より先に確認される廃止済みの Grounding `schemaVersion: 2`）。 | fail |
+| CHK-06 | `stale-grounding` | プランが fresh であり、コンパニオン検査が `stale` である（別の `planDigest`、またはコンパニオン自身のスキーマ形状検証より先に確認される廃止済みの Grounding `schemaVersion: 2` または `3`）。 | fail |
 | CHK-07 | `missing-plan` | 選択されたテストにプランアーティファクトが存在しない。 | fail |
 | CHK-08 | `orphaned-plan` | スコープ内のプランが、存在しないテストパスへと逆マッピングされる。 | fail |
 | CHK-09 | `orphaned-grounding` | スコープ内のグラウンディングアーティファクトが、対応するテストプロンプトが存在しないパスへと逆マッピングされる。 | fail |

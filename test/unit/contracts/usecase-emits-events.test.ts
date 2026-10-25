@@ -30,7 +30,6 @@ const TARGETS = { web: { baseUrl: 'https://example.test', executor: { kind: 'pla
 const GENERATED_RESPONSE: GeneratedPlanResponse = { steps: [], ambiguities: [] };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [TEST_PATH],
-  strict: false,
   force: false,
   maxAttempts: 1,
   dryRun: false,
@@ -90,7 +89,7 @@ registerUsecaseEmitsEventsContract([
         steps: [{ id: 'navigate-home', kind: 'action', action: 'navigate', target: 'web', url: '/' }],
       });
       const grounding: GroundingDocument = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         planDigest: computePlanDigest(plan),
         entries: {},
       };

@@ -16,6 +16,8 @@ A fingerprint mismatch MUST be treated as a miss, never as evidence that the old
 
 `hit`, `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, and `snapshot-invalid` are distinct resolution outcomes. An absent or malformed tree is `element-not-found`; more than one normalized role/name match is `ambiguous-match`; an old or differing hash is `fingerprint-mismatch`. [repo:src/core/ir/fingerprint.ts:347,388] An unpaired surrogate produces no fingerprint at generation and `element-not-found` at resolution. [repo:src/core/ir/fingerprint.ts:181]
 
+An empty-name reference matches only nodes whose normalized name is empty.
+
 ## Quote matching {#quote-matching}
 
 `matchQuotedCandidates(tree, {text, roleHint?})` makes one linear accessibility-tree walk from the synthetic root's children, in fingerprint matching order. It applies `normalizeName` (NFC, whitespace-run collapse, trim) to both literal query text and node names, compares an optional role hint exactly, and never interpolates `{{run.x}}`-shaped strings. It returns ordered `{role, name}` pairs or `{kind: 'snapshot-invalid'}` for an invalid tree. [repo:src/core/ir/fingerprint.ts:110-129]

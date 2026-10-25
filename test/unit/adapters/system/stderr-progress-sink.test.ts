@@ -418,7 +418,6 @@ describe('createStderrProgressSink()', () => {
       },
     }, {
       files: [],
-      strict: false,
       force: false,
       maxAttempts: 1,
       dryRun: false,

@@ -3,14 +3,13 @@ title: ambercast generate
 description: 详细参考 ambercast generate 的命令行参数、AI 提供商调用逻辑、伴生产物映射及退出状态。
 ---
 
-`ambercast generate` 命令用于根据提示词生成测试执行计划与伴生文件。您可以直接指定字面提示词路径，或在缺省时由命令执行自动发现；同时支持通过参数配置严格模式、强制生成、预览运行、AI 提供商覆盖以及输出格式。
+`ambercast generate` 命令用于根据提示词生成测试执行计划与伴生文件。您可以直接指定字面提示词路径，或在缺省时由命令执行自动发现；同时支持通过参数配置强制生成、预览运行、AI 提供商覆盖以及输出格式。
 
 ## 命令行参数 {#flags}
 
 | 参数 | 取值类型 | 效果 | 默认值 |
 | --- | --- | --- | --- |
 | files | path[] | 字面提示词路径；缺省时执行自动发现 | discovery |
-| --strict | boolean | 严格生成策略 | false |
 | --force | boolean | 强制执行生成 | false |
 | --dry-run | boolean | 预览：仅在需要生成时返回 `would-generate`；未过期的 Plan 返回 `skipped-fresh`；两种结果均不写入产物 | false |
 | --target | name | 选择目标 | omitted |

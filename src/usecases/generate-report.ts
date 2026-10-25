@@ -72,8 +72,8 @@ interface GenerateReportContext {
   /** Elapsed command duration already measured by runtime composition. */
   readonly durationMs: number;
 
-  /** Generation options whose strict, dry-run, and zero-match policy affect reporting. */
-  readonly options: Pick<GenerateOptions, 'strict' | 'dryRun' | 'allowEmpty' | 'list'>;
+  /** Generation options whose dry-run and zero-match policy affect reporting. */
+  readonly options: Pick<GenerateOptions, 'dryRun' | 'allowEmpty' | 'list'>;
 }
 
 /**
@@ -133,9 +133,9 @@ export interface GenerateReportOutput {
  * completed batch, this builder contributes every applicable
  * code to `selectExitCode()`: failures contribute their classified code or the
  * generic exit-3 fallback when malformed input supplies no classification, and
- * ambiguous prompts fail as `PROMPT_AMBIGUOUS` with exit 2 regardless of strict mode;
- * the separate strict-ambiguity path contributes exit 1. The shared 2, 3, 4, 1, 5, 0 order then
- * selects the highest-priority condition across the batch, independent of
+ * ambiguous prompts fail as `PROMPT_AMBIGUOUS` with exit 2. The shared
+ * selector ranks all candidates, including zero-match and interruption codes,
+ * and selects the highest-priority condition across the batch, independent of
  * file order.
  *
  * When the completed outcome is interrupted, the builder appends exactly one
@@ -179,14 +179,6 @@ export function buildGenerateReport(input: GenerateReportInput): GenerateReportO
   if (interrupted) errors.push(reportError(new InterruptedError(), { scope: 'run' }));
   const failed = outcome.results.filter((result) => result.status === 'failed');
   const candidates: ExitCode[] = failed.map<ExitCode>((result) => result.error?.exitCode ?? 3);
-  const hasStrictAmbiguities = input.options.strict && outcome.results.some((result) => (
-    (result.status === 'generated' || result.status === 'would-generate')
-    && (result.ambiguities?.length ?? 0) > 0
-  ));
-
-  if (hasStrictAmbiguities) {
-    candidates.push(1);
-  }
   if (outcome.noTestsFound && !input.options.allowEmpty && !input.options.list) {
     candidates.push(5);
   }

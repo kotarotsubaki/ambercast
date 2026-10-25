@@ -25,7 +25,7 @@ function validGrounding(
   overrides: Partial<GroundingDocumentType> = {},
 ): GroundingDocumentType {
   return GroundingDocument.parse({
-    schemaVersion: 3,
+    schemaVersion: 4,
     planDigest: computePlanDigest(plan),
     entries: {},
     ...overrides,

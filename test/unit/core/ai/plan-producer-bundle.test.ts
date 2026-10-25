@@ -38,11 +38,18 @@ describe('plan producer bundle', () => {
     expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('Never guess or infer an element\'s accessible role or name');
     expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('exact literal text appearing inside quotation marks');
     expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('as an ai step instead');
-    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toContain('list only the actions that produced the exact state');
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE.endsWith("When setting confirms on an assertion or ai step, list only earlier click, press, fill, fill-secret, or capture steps whose intended effects are evidenced by the exact state it verifies. Do not exclude a step solely because it precedes a submit or another action. Include preceding fill and fill-secret steps when the verified outcome provides evidence for their intended effects; for example, a state that shows the result of signing in as the entered user evidences both the username and the password inputs, while a state that any signed-in session would show, such as a sign-out button, evidences neither. Do not infer confirmation from temporal order or general workflow dependency alone, and exclude steps whose effects the check does not verify.")).toBe(true);
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).not.toContain('exclude earlier actions');
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).not.toContain('list only the actions that produced the exact state');
     expect(GENERATOR_SECRET_POLICY_TEMPLATE).toContain('"intent":');
     expect(GENERATOR_SECRET_POLICY_TEMPLATE).toContain('"startAnchor":');
     // V4 producer bundle fingerprint, before the v5 element-intent contract.
     expect(planProducerBundleFingerprint()).not.toBe('2f5046995ee6207a945716030a97de787fb9baefb72fcea8bf51c4c857bdc5be');
+    expect(planProducerBundleFingerprint()).not.toBe('58cb77887f52dcc20567a07d833fac28775ff41f0a57040408c7495dc9dc7c58');
+  });
+  it('TEST-2 preserves the three existing intent rules before the #598 evidence policy', () => {
+    const existingRules = "Never guess or infer an element's accessible role or name from prior knowledge of the application; express what you observe about the element only as a source-backed intent with a description, optional roleHint, anchor coordinates, and optional literal quote, never as a resolved role/name locator. Set quote only to the exact literal text appearing inside quotation marks in the prompt itself; never paraphrase, translate, or infer it, and omit quote entirely when the prompt does not quote the relevant UI text verbatim. Express an element-visible, text-equals, or element-count assertion whose target has no verbatim quoted text in the prompt as an ai step instead.";
+    expect(GENERATOR_ELEMENT_INTENT_POLICY_TEMPLATE).toBe(existingRules + ' ' + "When setting confirms on an assertion or ai step, list only earlier click, press, fill, fill-secret, or capture steps whose intended effects are evidenced by the exact state it verifies. Do not exclude a step solely because it precedes a submit or another action. Include preceding fill and fill-secret steps when the verified outcome provides evidence for their intended effects; for example, a state that shows the result of signing in as the entered user evidences both the username and the password inputs, while a state that any signed-in session would show, such as a sign-out button, evidences neither. Do not infer confirmation from temporal order or general workflow dependency alone, and exclude steps whose effects the check does not verify.");
   });
   it('returns deterministic lowercase SHA-256 hex for deep-equal inputs', () => {
     expect(computePlanProducerBundleFingerprint(createInputs())).toMatch(/^[0-9a-f]{64}$/);

@@ -2141,7 +2141,7 @@ class ProjectConfigurationContractTests(unittest.TestCase):
             {
                 "enabled": True,
                 "max_concurrent_threads_per_session": 8,
-                "default_subagent_model": "gpt-6-sol",
+                "default_subagent_model": "gpt-6.1-sol",
                 "default_subagent_reasoning_effort": "low",
                 "interrupt_message": True,
             },
@@ -2157,12 +2157,12 @@ class ProjectConfigurationContractTests(unittest.TestCase):
 
     def test_standalone_roles_are_unique_and_match_model_matrix(self) -> None:
         expected = {
-            "ambercast-plan-reviewer.toml": ("ambercast_plan_reviewer", "gpt-6-sol", "high", "read-only"),
-            "ambercast-worker.toml": ("ambercast_worker", "gpt-6-sol", "high", "workspace-write"),
+            "ambercast-plan-reviewer.toml": ("ambercast_plan_reviewer", "gpt-6.1-sol", "high", "read-only"),
+            "ambercast-worker.toml": ("ambercast_worker", "gpt-6.1-sol", "high", "workspace-write"),
             "review-mapper.toml": ("review_mapper", "gpt-6-luna", "low", "read-only"),
-            "correctness-reviewer.toml": ("correctness_reviewer", "gpt-6-sol", "high", "read-only"),
-            "test-reviewer.toml": ("test_reviewer", "gpt-6-sol", "high", "read-only"),
-            "security-reviewer.toml": ("security_reviewer", "gpt-6-sol", "high", "read-only"),
+            "correctness-reviewer.toml": ("correctness_reviewer", "gpt-6.1-sol", "high", "read-only"),
+            "test-reviewer.toml": ("test_reviewer", "gpt-6.1-sol", "high", "read-only"),
+            "security-reviewer.toml": ("security_reviewer", "gpt-6.1-sol", "high", "read-only"),
         }
         files = sorted((REPO_ROOT / ".codex/agents").glob("*.toml"))
         self.assertEqual({path.name for path in files}, set(expected))
@@ -3066,29 +3066,38 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
         normalized = tuple(
             line.rstrip() for line in text.splitlines() if line.strip()
         )
-        self.assertEqual(
+        # `.claude/worktrees/` (managed worktree receptacle) is optional so the
+        # contract holds both before and after it is added; no other drift passes.
+        worktrees = (".claude/worktrees/",)
+        self.assertIn(
             normalized,
-            (
-                "node_modules/", "dist/", "*.tgz",
-                "# local AI agent state (shared Claude/Codex config is committed)",
-                ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
-                ".claude/impl/", ".claude/impl-archive/", "CLAUDE.local.md",
-                "# product runtime artifacts (run results, screenshots — see AGENTS.md)",
-                ".runs/", ".env", ".env.*", "!.env.example", "coverage/", ".DS_Store",
+            tuple(
+                (
+                    "node_modules/", "dist/", "*.tgz",
+                    "# local AI agent state (shared Claude/Codex config is committed)",
+                    ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
+                    ".claude/impl/", ".claude/impl-archive/", *extra, "CLAUDE.local.md",
+                    "# product runtime artifacts (run results, screenshots — see AGENTS.md)",
+                    ".runs/", ".env", ".env.*", "!.env.example", "coverage/", ".DS_Store",
+                )
+                for extra in ((), worktrees)
             ),
         )
         active = [
             line for line in text.splitlines()
             if line and not line.lstrip().startswith("#")
         ]
-        self.assertEqual(
+        self.assertIn(
             active,
             [
-                "node_modules/", "dist/", "*.tgz",
-                ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
-                ".claude/impl/", ".claude/impl-archive/", "CLAUDE.local.md",
-                ".runs/", ".env", ".env.*",
-                "!.env.example", "coverage/", ".DS_Store",
+                [
+                    "node_modules/", "dist/", "*.tgz",
+                    ".claude/settings.local.json", ".claude/logs/", ".claude/todos/",
+                    ".claude/impl/", ".claude/impl-archive/", *extra, "CLAUDE.local.md",
+                    ".runs/", ".env", ".env.*",
+                    "!.env.example", "coverage/", ".DS_Store",
+                ]
+                for extra in ((), worktrees)
             ],
         )
 

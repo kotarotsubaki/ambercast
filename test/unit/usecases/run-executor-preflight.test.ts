@@ -99,7 +99,7 @@ async function scenario(cases: readonly {
       intentDigest: computeIntentDigest({ stepKind: 'action', operation: step.action as 'click' | 'fill-secret', intent: step.intent as ElementIntent }),
       provenance: 'ai-proposed',
     }]));
-    const grounding = { schemaVersion: 3, planDigest: computePlanDigest(plan as never), entries: { ...elementEntries, ...item.groundingEntries } };
+    const grounding = { schemaVersion: 4, planDigest: computePlanDigest(plan as never), entries: { ...elementEntries, ...item.groundingEntries } };
     await storage.writeText(item.file, PROMPT);
     await storage.writeText(layout.planPathFor(item.file), toCanonicalArtifactText(plan as unknown as JsonValueT));
     await storage.writeText(layout.groundingPathFor(item.file), toCanonicalArtifactText(grounding as JsonValueT));
@@ -258,7 +258,7 @@ describe('run executor preflight', () => {
     await storage.writeText(file, PROMPT);
     await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as unknown as JsonValueT));
     await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText({
-      schemaVersion: 3, planDigest: computePlanDigest(plan as never), entries: {},
+      schemaVersion: 4, planDigest: computePlanDigest(plan as never), entries: {},
     } as JsonValueT));
     const executor = createFakeUiExecutor(() => session('A'));
     const deps: RunDeps = {

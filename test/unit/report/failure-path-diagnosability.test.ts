@@ -214,7 +214,7 @@ async function runClick(options: { resolve?: boolean; launchFailure?: boolean; i
   return runReport(await run(deps, { ...RUN_OPTIONS, resolve: options.resolve ?? options.invalidSnapshot ?? false }));
 }
 
-async function generateFailure(kind: 'unavailable' | 'invalid' | 'ambiguous'): Promise<RouteResult> {
+async function generateFailure(kind: 'unavailable' | 'invalid' | 'ambiguous' | 'ambiguity-single-target'): Promise<RouteResult> {
   const ambiguities = ['Unclear target Alpha', 'Unclear target Beta'];
   const scenario = createGenerateScenario({ resolveAiExecutor: async () => createFakeAiExecutor({
     execute: async () => {
@@ -222,7 +222,10 @@ async function generateFailure(kind: 'unavailable' | 'invalid' | 'ambiguous'): P
       if (kind === 'invalid') throw new AiResponseInvalidError('Invalid response.');
       return { data: { steps: [], ambiguities }, raw: '{}' };
     },
-  }) });
+  }) }, kind === 'ambiguous' ? { targets: {
+    admin: { surface: 'web', baseUrl: 'https://admin.example.test', description: 'Administration console' },
+    shop: { surface: 'web', baseUrl: 'https://shop.example.test', description: 'Customer storefront' },
+  }, defaultTarget: undefined } : {});
   await writeGeneratePrompt(scenario.recordingStorage.storage);
   return generateReport(await generate(scenario.deps, GENERATE_OPTIONS));
 }
@@ -289,7 +292,7 @@ const EXPECTED_ROUTE_IDS = [
   'run/assertion-failed', 'run/blank-actual/text-equals', 'run/blank-actual/text-visible',
   'run/blank-actual/url-matches', 'run/agentic-declared-failure', 'run/grounding-unresolved',
   'run/browser-launch-failed', 'generate/ai-executor-unavailable', 'generate/ai-response-invalid',
-  'generate/prompt-ambiguous', 'heal/stage3/ai-response-invalid', 'heal/stage3/prompt-ambiguous',
+  'generate/prompt-ambiguous', 'generate/ambiguity-single-target', 'heal/stage3/ai-response-invalid', 'heal/stage3/prompt-ambiguous', 'heal/stage3/ambiguity-single-target',
   'heal/final-replay/case-abort', 'heal/final-replay/target-rejection',
   'heal/final-replay/unclassified', 'heal/final-replay/agentic-declared-failure',
   'heal/final-replay/grounding-unresolved',
@@ -308,17 +311,35 @@ function healCandidate() {
 }
 
 function healStage2OrStage3(request: { readonly context?: unknown }, stage3: unknown) {
+  if (request.context !== null && typeof request.context === 'object' && 'accessibilityTree' in request.context) {
+    return { data: { proposal: { outcome: 'ambiguous' } }, raw: '{"proposal":{"outcome":"ambiguous"}}' };
+  }
   const frontier = (request.context as { trustedInputs?: { frontier?: unknown } } | undefined)?.trustedInputs?.frontier;
   return { data: frontier === undefined ? stage3 : { steps: [{ id: 'wrong-id', kind: 'action', target: 'web', action: 'navigate', url: '/ignored' }], ambiguities: [] }, raw: '{}' };
 }
 
-async function healStage3(kind: 'invalid' | 'ambiguous'): Promise<RouteResult> {
+async function healStage3(kind: 'invalid' | 'ambiguous' | 'ambiguity-single-target'): Promise<RouteResult> {
   const executor = createFakeAiExecutor({ execute: async (request) => healStage2OrStage3(request,
     kind === 'invalid' ? { steps: 'not-an-array', ambiguities: [] }
       : { steps: [], ambiguities: ['Unclear target Alpha', 'Unclear target Beta'] }),
   });
-  const scenario = await createHealScenario({ grounding: {}, aiExecutor: executor });
-  return healReport((await heal(scenario.deps, HEAL_OPTIONS)).outcome);
+  const scenario = await createHealScenario({ grounding: {}, aiExecutor: executor,
+    ...(kind !== 'ambiguous' ? {} : {
+      targets: { web: { surface: 'web' as const, baseUrl: 'https://example.test' }, shop: { surface: 'web' as const, baseUrl: 'https://shop.example.test' } },
+      defaultTarget: undefined,
+      steps: [
+        Step.parse({ id: 'click-submit', kind: 'action', target: 'web', action: 'click', intent: { description: 'Submit', roleHint: 'button', sourceSpan: { startLine: 3, startColumn: 8, endLine: 3, endColumn: 14 } } }),
+        Step.parse({ id: 'shop', kind: 'action', target: 'shop', action: 'navigate', url: '/' }),
+      ],
+    }),
+  });
+  const result = await heal(scenario.deps, HEAL_OPTIONS);
+  expect(result.outcome.results[0]?.repairTrace).toContainEqual(expect.objectContaining({ stage: 'stage3' }));
+  const requests = executor.structuredRequests.filter((request) => request.prompt.includes('Assign '));
+  expect(requests).toHaveLength(1);
+  expect(Object.keys((requests[0]?.context as { targets: object }).targets)).toEqual(kind === 'ambiguous' ? ['web', 'shop'] : ['web']);
+  if (kind === 'ambiguous') expect(requests[0]?.context).not.toHaveProperty('defaultTarget');
+  return healReport(result.outcome);
 }
 
 async function healFinal(kind: 'case-abort' | 'target-rejection' | 'unclassified' | 'agentic-declared-failure' | 'grounding-unresolved'): Promise<RouteResult> {
@@ -373,8 +394,10 @@ const FAILURE_PATH_ROWS: readonly RouteRow[] = [
   { id: 'generate/ai-executor-unavailable', run: () => generateFailure('unavailable'), expectCode: 'AI_EXECUTOR_UNAVAILABLE', expectExit: 3 },
   { id: 'generate/ai-response-invalid', run: () => generateFailure('invalid'), expectCode: 'AI_RESPONSE_INVALID', expectExit: 3 },
   { id: 'generate/prompt-ambiguous', run: () => generateFailure('ambiguous'), expectCode: 'PROMPT_AMBIGUOUS', expectDetails: { ambiguities: 2 }, expectExit: 2 },
+  { id: 'generate/ambiguity-single-target', run: () => generateFailure('ambiguity-single-target'), expectCode: 'AI_RESPONSE_INVALID', expectExit: 3 },
   { id: 'heal/stage3/ai-response-invalid', run: () => healStage3('invalid'), expectCode: 'AI_RESPONSE_INVALID', expectExit: 3 },
   { id: 'heal/stage3/prompt-ambiguous', run: () => healStage3('ambiguous'), expectCode: 'PROMPT_AMBIGUOUS', expectDetails: { ambiguities: 2 }, expectExit: 2 },
+  { id: 'heal/stage3/ambiguity-single-target', run: () => healStage3('ambiguity-single-target'), expectCode: 'AI_RESPONSE_INVALID', expectDetails: { issues: [{ code: 'schema-mismatch', path: ['ambiguities'] }] }, expectExit: 3 },
   { id: 'heal/final-replay/case-abort', run: () => healFinal('case-abort'), expectCode: 'CASE_ABORTED', expectExit: 1 },
   { id: 'heal/final-replay/target-rejection', run: () => healFinal('target-rejection'), expectCode: 'AGENTIC_STEP_FAILED', expectExit: 1 },
   { id: 'heal/final-replay/unclassified', run: () => healFinal('unclassified'), expectCode: 'UNEXPECTED_CRASH', expectExit: 1 },
@@ -406,9 +429,9 @@ describe('failure-path report projection', () => {
     }
   });
 
-  it('contains exactly the 30 fixed route IDs in both directions', () => {
+  it('contains exactly the 32 fixed route IDs in both directions', () => {
     const actual = FAILURE_PATH_ROWS.map(({ id }) => id);
-    expect(actual).toHaveLength(30);
+    expect(actual).toHaveLength(32);
     expect(new Set(actual).size).toBe(actual.length);
     expect(new Set(actual)).toEqual(new Set(EXPECTED_ROUTE_IDS));
     expect(new Set(EXPECTED_ROUTE_IDS)).toEqual(new Set(actual));
@@ -439,6 +462,9 @@ describe('failure-path report projection', () => {
       expect(result.steps?.[0]?.expected?.trim()).not.toBe('');
       expect(typeof result.steps?.[0]?.actual).toBe('string');
       expect(result.steps?.[0]?.actual?.trim()).not.toBe('');
+    }
+    if (id === 'generate/ambiguity-single-target') {
+      expect(matchingErrors[0]).toMatchObject({ details: { issues: [{ code: 'schema-mismatch', path: ['ambiguities'] }] } });
     }
     if (id === 'run/blank-actual/text-equals') expect(result.steps?.[0]?.actual).toBe('The element text was empty.');
     if (id === 'run/blank-actual/text-visible' || id === 'run/blank-actual/url-matches') expect(result.steps?.[0]?.actual).toBe(BLANK_ACTUAL);

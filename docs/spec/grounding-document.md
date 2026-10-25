@@ -6,7 +6,7 @@
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `3` | Grounding format version. | repo:src/core/ir/schema.ts:73,1663 |
+| `schemaVersion` | integer | required | literal `4` | Grounding format version. | repo:src/core/ir/schema.ts:74,1663 |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the associated plan. | repo:src/core/ir/schema.ts:35,1369 |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | Cached step grounding keyed by ID. | repo:src/core/ir/schema.ts:1370 |
 
@@ -14,11 +14,11 @@
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV3` | `kind` | string | required | literal `element` | Element-entry discriminator. | repo:src/core/ir/schema.ts:1362 |
-|  | `locator` | `AccessibilityElementRef` | required | [[spec/value-types#shared-types]] | Observed locator bound to the intent. | repo:src/core/ir/schema.ts:1363 |
-|  | `fingerprint` | `Fingerprint` | required | [[spec/fingerprint#algorithm]] | Accessibility-neighborhood evidence. | repo:src/core/ir/schema.ts:1364 |
-|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | repo:src/core/ir/schema.ts:1365 |
-|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | repo:src/core/ir/schema.ts:1366 |
+| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element-entry discriminator. | repo:src/core/ir/schema.ts:1442 |
+|  | `locator` | `GroundingElementLocator` | required | [[spec/value-types#shared-types]] | Observed locator bound to the intent. | repo:src/core/ir/schema.ts:1444 |
+|  | `fingerprint` | `Fingerprint` | required | [[spec/fingerprint#algorithm]] | Accessibility-neighborhood evidence. | repo:src/core/ir/schema.ts:1445 |
+|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | repo:src/core/ir/schema.ts:1446 |
+|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | repo:src/core/ir/schema.ts:1447 |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI-entry discriminator. | repo:src/core/ir/schema.ts:1114 |
 |  | `trace` | `TraceRecord` | required | strict trace | Replayable successful trace. | repo:src/core/ir/schema.ts:1116 |
 
@@ -59,7 +59,7 @@ This illustrative `planDigest` refers to the complete Plan example in [[spec/pla
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -76,6 +76,10 @@ After successful replay of an existing trace, an implementation MUST leave that 
 An element entry MUST be written or overwritten only when its binding reaches `confirmed`: at least one step must name that element step in its own non-empty committed `confirms` list, and every such step must pass in the same case. For an `element-visible` confirming assertion, a pass counts as a valid confirmation basis only when exactly one candidate matches; a pass with multiple matches does not confirm the binding. An `acted`-only binding is discarded at write-back and never persisted. [repo:src/usecases/run.ts:147-160] [repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
 
 For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [repo:src/usecases/run.ts:896] [repo:src/usecases/run.ts:1075]
+
+Grounding versions 2 and 3 are retired. `check` reports `stale-grounding` before schema validation under committed policy; uncommitted policy yields `fresh-without-grounding`. Without `--resolve`, `run` reports `GROUNDING_UNRESOLVED` with `recoverable-miss` when the plan digest matches and an element step needs grounding; a differing digest yields `missing`.
+
+`run --resolve` starts with an empty cache and can persist v4 under the existing write-back conditions. `generate` on an unchanged fresh plan replaces a retired cache with empty v4 grounding. `heal` reports `FS_IO_ERROR` until you regenerate with `ambercast run --resolve --update-cache`. Versions 1 and unknown versions remain invalid in `check` and cache misses in `run`.
 
 ## Rationale {#rationale}
 

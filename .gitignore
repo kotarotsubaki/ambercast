@@ -8,6 +8,7 @@ dist/
 .claude/todos/
 .claude/impl/
 .claude/impl-archive/
+.claude/worktrees/
 CLAUDE.local.md
 
 # product runtime artifacts (run results, screenshots — see AGENTS.md)

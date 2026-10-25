@@ -77,7 +77,6 @@ const PASSWORD_QUOTED_INTENT = { ...PASSWORD_INTENT, sourceSpan: { startLine: 4,
 const RUN_OPTIONS: RunOptions = { files: [], resolve: true, updateCache: false, allowEmpty: false, list: false, stale: 'fail' };
 const GENERATE_OPTIONS: GenerateOptions = {
   files: [],
-  strict: false,
   force: false,
   maxAttempts: 1,
   dryRun: false,
@@ -182,7 +181,7 @@ async function seedFreshArtifacts(
   const plan = await createFreshPlan(storage, testPath, steps);
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding: GroundingDocument = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     planDigest: computePlanDigest(plan),
     entries,
   };
@@ -869,7 +868,7 @@ describe('run secret sinks', () => {
       const { schemaPath, outputPath } = commandPaths(call.args);
       fingerprintSchemaPath = schemaPath;
       fingerprintSchema = await readFile(schemaPath, 'utf8');
-      await writeFile(outputPath, JSON.stringify({ outcome: 'found', role: 'button', name: 'Submit' }));
+      await writeFile(outputPath, JSON.stringify({ proposal: { outcome: 'found', role: 'button', name: 'Submit' } }));
       return { outcome: 'exited', stdout: '', stderr: '', exitCode: 0 };
     }]);
     const runExecutor = createCodexCliExecutor({ run: runRunner.run });

@@ -53,6 +53,9 @@ describe('parseProseTree', () => {
 });
 
 describe('extractTextBlocks', () => {
+  it('skips a paragraph containing only inline code', () => {
+    expect(extract('`x`').textBlocks).toEqual([]);
+  });
   it.each([
     ['code', 'Before.\n\n```\nFENCED_SECRET\n```\n\nAfter.', 'FENCED_SECRET', false],
     ['inlineCode', 'Before `INLINE_SECRET` after.', 'INLINE_SECRET', false],
@@ -159,6 +162,31 @@ describe('extractTextBlocks', () => {
     const offset = block.joinedText.indexOf('second');
     expect(offset).toBeGreaterThan(0);
     expect(block.lineMap.filter((entry) => entry.offset <= offset).at(-1)?.line).toBe(2);
+  });
+  it.each([
+    ['one inline code', '运行 `ambercast run` 后查看结果。', '运行 code 后查看结果。', '运行  后查看结果。', false],
+    ['multiple inline codes', '运行 `x` 后使用 `y`。', '运行 code 后使用 code。', '运行  后使用 。', false],
+    ['punctuation immediately after code', '运行 `x`。', '运行 code。', '运行 。', false],
+    ['soft wrap', '运行 `x`\n后查看结果。', '运行 code后查看结果。', '运行 后查看结果。', false],
+    ['inline code in a link', '运行 [命令 `x`](https://example.com) 后查看。', '运行 命令 code 后查看。', '运行 命令  后查看。', false],
+    ['inline code in emphasis', '运行 *命令 `x`* 后查看。', '运行 命令 code 后查看。', '运行 命令  后查看。', false],
+    ['inline code in MDX text element', '运行 <em>命令 `x`</em> 后查看。', '运行 命令 code 后查看。', '运行 命令  后查看。', true],
+  ] as const)('builds zhlint text for %s without changing joined text', (_name, markdown, zhlintText, joinedText, isMdx) => {
+    const block = extract(markdown, isMdx).textBlocks[0];
+    expect(block.zhlintText).toBe(zhlintText);
+    expect(block.joinedText).toBe(joinedText);
+    expect(text(markdown, isMdx)).toBe(joinedText);
+  });
+  it('uses the first text segment line for an ordinary paragraph', () => {
+    const block = extract('---\ntitle: X\n---\n\n## Heading\n\n运行 `x`。').textBlocks.at(-1)!;
+    expect(block.startLine).toBe(7);
+    expect(block.startLine).toBe(block.segments[0]?.line);
+  });
+  it('uses the paragraph start when inline code precedes text on a soft-wrapped line', () => {
+    const block = extract('---\ntitle: X\n---\n\n## Heading\n\n`x`\n运行结果。').textBlocks.at(-1)!;
+    expect(block.startLine).toBe(7);
+    expect(block.segments[0]?.line).toBe(8);
+    expect(block.zhlintText).toBe('code运行结果。');
   });
 });
 

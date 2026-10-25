@@ -58,6 +58,7 @@ Structure:
 - Quote the literal UI text naming each element you act on or check, using straight double quotes or your prompt's local quotation marks. This gives `generate` a concrete text anchor when it first finds the element.
 - Put an exact display requirement in its own assert sentence, with the expected text quoted. Text quoted in an action sentence helps find the element to act on; it does not assert what the next screen displays.
 - Quote text in a success criterion that appears only after the action; text already visible before it, such as the clicked link or button name, cannot confirm the screen changed.
+- Read `generator-assumption` warnings in generate results to decide whether to edit the prompt.
 - If `generate` warns `action-unconfirmed`, no assertion or agentic step confirms that action. Its element binding cannot be cached, so every later `run` of that step needs `--resolve`. When the UI offers something meaningful to check, add a verification sentence after the action.
 - Write data preparation as user actions inside the prompt (create the record through the UI before checking it).
 - One file per user story. Put unrelated flows in separate files.
@@ -127,8 +128,8 @@ Take the exit code from the process exit status. It is not inside the JSON envel
 | --- | --- | --- |
 | 0 | Success | Continue. |
 | 1 | The command's own outcome is negative: a replayed expectation did not hold (run), or a repair stayed unresolved, was only partially healed, or was declined (heal) | Apply the triage rules below. |
-| 2 | Usage or configuration error: bad flags, invalid config, an unresolved secret or target; also an ambiguous prompt reported as `PROMPT_AMBIGUOUS`, regardless of `--strict` (generate, heal) | If stdout has no JSON, the flags were rejected before parsing; read the usage text on stderr and fix the command. If there is JSON, follow `errors[].code` and fix the config or the environment variables. |
-| 3 | Environment error: browser launch failed, AI provider unavailable, file I/O failure, interrupted | Start the app, install Chromium, or authenticate the provider CLI, then retry. |
+| 2 | Usage or configuration error: bad flags, invalid config, an unresolved secret or target; also an ambiguous prompt reported as `PROMPT_AMBIGUOUS` (generate, heal) | If stdout has no JSON, the flags were rejected before parsing; read the usage text on stderr and fix the command. If there is JSON, follow `errors[].code` and fix the config or the environment variables. |
+| 3 | Environment error: browser launch failed, AI provider unavailable, file I/O failure, interrupted; with exactly one target, a provider response with non-empty `ambiguities` yields `AI_RESPONSE_INVALID` (generate retries it) | Start the app, install Chromium, or authenticate the provider CLI, then retry. |
 | 4 | The plan or grounding cannot be trusted: missing, stale, or no longer matching the prompt | Inspect `errors[].code`: for `MISSING_PLAN`, `STALE_PLAN`, or `INTEGRITY_VIOLATION`, run `npx ambercast generate <name>.test.md` for that prompt. For `GROUNDING_UNRESOLVED`, run `ambercast run --resolve <name>.test.md` to allow AI resolution for grounding misses. Running the test again does not help. |
 | 5 | The selection matched zero prompts | Check the path, `testDir`, `testMatch`, and `testIgnore`. Exclusions win over inclusions. |
 

@@ -13,7 +13,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts', 'website/test/**/*.test.ts', 'src/**/*.test.ts'],
-    exclude: ['test/contract-ai/**', 'test/contract-browser/**'],
+    exclude: ['test/contract-ai/**', 'test/contract-browser/**', 'test/verification/**'],
     // TypeScript compiler and dependency-cruiser tests can contend for CPU on CI runners.
     testTimeout: 30_000,
   },

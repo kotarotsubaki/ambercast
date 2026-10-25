@@ -60,13 +60,14 @@ describe('claude-code-cli smoke contract', () => {
     })).resolves.toMatchObject({ data: { ok: true } });
   });
 
-  it('accepts the wrapped element binding schema through the live provider', async (context) => {
+  it('Issue #583 TEST-7 returns a validated element-binding proposal for the Save button question', async (context) => {
     if (!available) context.skip('The Claude CLI is unavailable for the opt-in live smoke check.');
     const executor = createClaudeCodeCliExecutor({ run: createSpawnCommandRunner({ env: process.env }) });
-    await expect(executor.execute({
-      prompt: 'Return exactly {"proposal":{"outcome":"none"}}.',
+    const result = await executor.execute({
+      prompt: 'Accessibility tree: [button "Save"] [textbox (no name)] [link "Home"]. Which element is the Save button? Answer under "proposal".',
       responseSchema: typedJsonSchema(ElementBindingProposalResponse),
-    })).resolves.toMatchObject({ data: { proposal: { outcome: 'none' } } });
+    });
+    expect(['found', 'none', 'ambiguous']).toContain(result.data.proposal.outcome);
   });
 
   it('Issue #598 TEST-11 P passes at least six of nine independent generations', async (context) => {

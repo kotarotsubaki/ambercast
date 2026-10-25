@@ -16,7 +16,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 export const MEMOS_IMAGE = 'neosmemo/memos:0.31.0';
 export const MEMOS_VERSION = '0.31.0';
 export const HOST = '127.0.0.1';
-// ponytail: A fixed loopback endpoint preserves the committed plan's inputsDigest;
+// A fixed loopback endpoint preserves the committed plan's inputsDigest;
 // concurrent instances require a separate port/freshness design.
 export const PORT = 5230;
 export const BASE_URL = 'http://127.0.0.1:5230';
@@ -24,7 +24,48 @@ export const ADMIN_USERNAME = 'verifier';
 export const LABEL = 'ambercast-verify=memos';
 export const NAME_PREFIX = 'ambercast-verify-memos-';
 export const READY = { timeoutMs: 30000, intervalMs: 200, requestTimeoutMs: 1000, logTail: 40 };
-export const TIMEOUTS = { docker: 60000, pull: 300000, pack: 300000, replay: 120000, judge: 120000, generate: 900000, resolve: 900000 };
+export const TIMEOUTS = { docker: 60000, pull: 300000, pack: 300000, replay: 120000, judge: 120000, generate: 900000, resolve: 900000, heal: 900000 };
+
+export const HEAL_SELECTOR = '[role="menuitem"]';
+export const HEAL_FROM = 'Settings';
+export const HEAL_TO = 'Control panel';
+
+/**
+ * Raw JavaScript for changing the settings entry's label on each page load.
+ * @remarks Memos embeds additionalScript as the body of a plain script element;
+ * document.body exists when it runs, including on the authentication page and
+ * after reload. No script tags belong in this value. Replacement is restricted
+ * to elements matching HEAL_SELECTOR so assertions elsewhere keep their names.
+ * Observation covers lazy menus and attribute rewrites without requiring a new
+ * child to appear. Replacements are idempotent so observer notifications cannot
+ * sustain a mutation loop. Only one label in one read-only case is changed.
+ */
+export const HEAL_LABEL_SCRIPT = `(() => {
+  const selector = ${JSON.stringify(HEAL_SELECTOR)};
+  const from = ${JSON.stringify(HEAL_FROM)};
+  const to = ${JSON.stringify(HEAL_TO)};
+  function replaceText(node) {
+    if (node.nodeType === 3 && node.textContent.trim() === from) node.textContent = to;
+    for (const child of node.childNodes) replaceText(child);
+  }
+  function replace() {
+    for (const element of document.querySelectorAll(selector)) {
+      replaceText(element);
+      for (const attribute of ['aria-label', 'title']) {
+        if (element.getAttribute(attribute) === from) element.setAttribute(attribute, to);
+      }
+    }
+  }
+  function initialize() {
+    replace();
+    new MutationObserver(replace).observe(document.body, {
+      childList: true, subtree: true, characterData: true, attributes: true,
+      attributeFilter: ['aria-label', 'title'],
+    });
+  }
+  if (document.body) initialize();
+  else document.addEventListener('DOMContentLoaded', initialize, { once: true });
+})();`;
 
 /** A failure attributed to a verification stage for final reporting.
  * @param stage - Public stage name.
@@ -45,6 +86,19 @@ export class RunnerError extends Error {
   constructor(message) {
     super(message);
     this.name = 'RunnerError';
+  }
+}
+
+/**
+ * Reports a process group whose termination could not be confirmed.
+ * @remarks The caller assigns the verification stage; this error carries only
+ * process identity so a Docker adapter cannot misattribute a lifecycle failure.
+ */
+export class TerminationUnconfirmedError extends Error {
+  /** @param {number} pgid - Process group requiring manual termination. */
+  constructor(pgid) {
+    super(`process group ${pgid} not confirmed terminated`);
+    this.pgid = pgid;
   }
 }
 
@@ -89,13 +143,19 @@ export function createExec(runProcessImpl = runProcess) {
  * queries return parsed values and lifecycle commands resolve on success.
  * @throws RunnerError for unsuccessful operations; an absent image is false
  * and removing a nonexistent container succeeds.
+ * @throws TerminationUnconfirmedError when an executor reports unconfirmed
+ * termination; this takes precedence over status and absent-container evidence.
  * @remarks Named, labeled containers allow cleanup even after an ambiguous
  * client failure. Host ownership permits data removal on Linux; disabling rate
  * limiting through the environment avoids ENTRYPOINT argument assumptions.
  */
 export function createDockerRunner(exec) {
+  function assertTerminationConfirmed(result) {
+    if (result.termination === 'unconfirmed') throw new TerminationUnconfirmedError(result.pgid);
+  }
   async function call(method, args, options, absent = false) {
     const result = await exec(args, { timeoutMs: TIMEOUTS.docker, ...options });
+    assertTerminationConfirmed(result);
     if (result.status !== 0 && !(absent && /No such container/i.test(result.stderr))) {
       throw new RunnerError(`${method}: ${result.stderr.split('\n')[0]}`);
     }
@@ -104,7 +164,9 @@ export function createDockerRunner(exec) {
   return {
     async checkDaemon(options) { await call('checkDaemon', ['info'], options); },
     async hasImage(image, options) {
-      return (await exec(['image', 'inspect', image], { timeoutMs: TIMEOUTS.docker, ...options })).status === 0;
+      const result = await exec(['image', 'inspect', image], { timeoutMs: TIMEOUTS.docker, ...options });
+      assertTerminationConfirmed(result);
+      return result.status === 0;
     },
     async pullImage(image, options) { await call('pullImage', ['pull', image], { timeoutMs: TIMEOUTS.pull, ...options }); },
     async startContainer({ runId, name, data, uid, gid }, options) {
@@ -116,6 +178,7 @@ export function createDockerRunner(exec) {
     },
     async isRunning(name, options) {
       const result = await exec(['inspect', '-f', '{{.State.Running}}', name], { timeoutMs: TIMEOUTS.docker, ...options });
+      assertTerminationConfirmed(result);
       return result.status === 0 && result.stdout.trim() === 'true';
     },
     async inspectEnv(name, options) {
@@ -176,7 +239,7 @@ export async function assertPortFree(port, host = HOST, listen = undefined) {
  * preexisting names and mkdir EEXIST are collisions, not permission to reuse.
  * Recheck the destination immediately before rename to avoid replacing an
  * existing empty directory on POSIX; clean our temporary root before retrying.
- * ponytail: The check does not eliminate TOCTOU. The residual collision risk
+ * The check does not eliminate TOCTOU. The residual collision risk
  * with a 32-bit random ID is accepted because portable Node lacks RENAME_NOREPLACE.
  */
 export function createRunRoot(tmpRoot, randomBytes, fns = undefined) {
@@ -210,15 +273,19 @@ export function createRunRoot(tmpRoot, randomBytes, fns = undefined) {
 }
 
 /**
- * Replaces occurrences of the run password with a disclosure-safe marker.
+ * Replaces occurrences of supplied secrets with a disclosure-safe marker.
  * @param text - Complete text to sanitize before harness output.
- * @param password - Run password whose literal occurrences must be hidden.
+ * @param secrets - Variadic secret values; empty strings, undefined and nonstrings
+ * are ignored so missing credentials cannot insert markers between characters.
  * @returns Sanitized text; producer artifacts remain untouched for judging.
  * @remarks Streaming callers must retain a carry-over suffix before invoking
  * this replacement so a secret split across chunks cannot escape detection.
  */
-export function redact(text, password) {
-  return text.split(password).join('[redacted]');
+export function redact(text, ...secrets) {
+  for (const secret of secrets) {
+    if (typeof secret === 'string' && secret.length > 0) text = text.split(secret).join('[redacted]');
+  }
+  return text;
 }
 
 /**
@@ -347,6 +414,79 @@ export async function bootstrapAdmin(opts) {
 }
 
 /**
+ * Signs in as the administrator and returns the accessToken.
+ * @param opts - fetch, baseUrl, username, password and optional signal.
+ * @returns A promise containing the nonempty accessToken from the response.
+ * @throws HarnessError at heal for HTTP or network failures, using only method,
+ * path and status or network-error, never bodies or fetch exception messages.
+ * @remarks Tokens remain in memory and are redacted from output, never placed in argv,
+ * files or credentials.json. Restoration signs in again because a heal may
+ * outlast the observed approximately fifteen-minute token lifetime.
+ */
+export async function signInAdmin(opts) {
+  const result = await request(opts, 'POST', '/api/v1/auth/signin', {
+    passwordCredentials: { username: opts.username, password: opts.password },
+  });
+  if (typeof result?.accessToken !== 'string' || result.accessToken.length === 0) {
+    throw new HarnessError('heal', 'POST /api/v1/auth/signin -> 200');
+  }
+  return result.accessToken;
+}
+
+/**
+ * Reads the GENERAL instance setting using an administrator bearer token.
+ * @param opts - fetch, baseUrl, token and optional signal.
+ * @returns The unmodified setting response; the restoration caller treats an
+ * absent additionalScript as an empty string.
+ * @throws HarnessError at heal with method/path/status or network-error only.
+ * @remarks Keeping the full snapshot allows restoration to detect unintended changes
+ * to other settings through deep JSON equality after normalizing the script.
+ */
+export async function getGeneralSetting(opts) {
+  return request(opts, 'GET', '/api/v1/instance/settings/GENERAL');
+}
+
+/**
+ * Replaces only the GENERAL setting's additionalScript.
+ * @param opts - fetch, baseUrl, token, value (raw JavaScript) and optional signal.
+ * @returns A promise resolving after an HTTP 200 response.
+ * @throws HarnessError at heal with method/path/status or network-error only;
+ * request/response bodies, tokens and fetch exception messages are excluded.
+ * @remarks The field mask preserves other settings. Requests are not retried:
+ * an ambiguous mutation is handled by the caller's single restoration.
+ * Diagnostics identify the path without its updateMask query.
+ */
+export async function patchAdditionalScript(opts) {
+  await request(opts, 'PATCH', '/api/v1/instance/settings/GENERAL', {
+    name: 'instance/settings/GENERAL', generalSetting: { additionalScript: opts.value },
+  }, '?updateMask=additionalScript');
+}
+
+// Keep diagnostics independent of credential-bearing bodies and transport errors.
+async function request({ fetch, baseUrl = BASE_URL, token, signal }, method, path, body, query = '') {
+  let response;
+  try {
+    response = await fetch(baseUrl + path + query, {
+      method,
+      headers: {
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(token === undefined || path === '/api/v1/auth/signin' ? {} : { Authorization: `Bearer ${token}` }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]),
+    });
+  } catch {
+    throw new HarnessError('heal', `${method} ${path} -> network-error`);
+  }
+  if (response.status !== 200) throw new HarnessError('heal', `${method} ${path} -> ${response.status}`);
+  try {
+    return await response.json();
+  } catch {
+    throw new HarnessError('heal', `${method} ${path} -> network-error`);
+  }
+}
+
+/**
  * Maps a consented logical secret name to the CLI secret environment convention.
  * @param name - Logical name from secrets.allow.
  * @returns An AMBERCAST_SECRET_ name with dots replaced by underscores and uppercase letters.
@@ -436,7 +576,7 @@ export function createTeardown() {
  * ten minutes; temporary roots require age over a minute and missing/dead ownership.
  * Reap a fixture lock only for a dead pid and reread its contents immediately
  * before unlinking; a changed pid belongs to another acquirer and must be preserved.
- * ponytail: The lock recheck narrows TOCTOU but is not an OS-level lock guarantee.
+ * The lock recheck narrows TOCTOU but is not an OS-level lock guarantee.
  */
 export async function reapStale(opts) {
   const { runner, tmpRoot, lockPath, isPidAlive = defaultIsPidAlive, rm = fs.rmSync,
@@ -518,7 +658,7 @@ export async function reapStale(opts) {
  * @returns 'dead' only for ESRCH, 'live' for success or EPERM, and 'unknown' for
  * every other thrown value, including non-Error values.
  * @remarks Unknown is never authority to delete another run's resources.
- * ponytail: PID reuse and EPERM can retain stale resources by appearing live;
+ * PID reuse and EPERM can retain stale resources by appearing live;
  * accepting leftovers is safer than deleting a possibly live owner's resources.
  */
 export function defaultIsPidAlive(pid) {
@@ -533,6 +673,16 @@ export function defaultIsPidAlive(pid) {
 }
 
 /**
+ * @typedef {object} ProcessResult
+ * @property {number | null} status - Child exit status, or null on termination.
+ * @property {string} stdout - Captured standard output.
+ * @property {string} stderr - Captured standard error.
+ * @property {string | null} signal - Exit or termination signal.
+ * @property {'none' | 'confirmed' | 'unconfirmed'} termination - Group termination evidence.
+ * @property {number} pgid - Detached child's process group identity.
+ */
+
+/**
  * Runs a child in a detached process group with shared timeout/cancellation handling.
  * @param command - Executable path or name.
  * @param args - Argument vector, never containing the password.
@@ -542,16 +692,21 @@ export function defaultIsPidAlive(pid) {
  *   harness's own stderr); `'resolve'` additionally requires `password` (the
  *   secret string to redact). `'generate'` runs before any password exists, so
  *   it forwards its captured stdout verbatim.
- * @returns status, stdout, stderr and signal; nonzero exits remain results for the caller.
+ * @returns {Promise<ProcessResult>} A process result with status, stdout, stderr, signal,
+ *   termination ('none' | 'confirmed' | 'unconfirmed'), and pgid (child.pid).
+ *   Nonzero exits remain results for the caller.
  * @throws Propagates process launch failures.
  * @remarks On abort/timeout, send group SIGTERM immediately and poll for ESRCH
  * every 100 ms for at most five seconds. If unconfirmed, send group SIGKILL and
  * poll for another five seconds. If still unconfirmed, emit one redacted warning
- * and resolve with signal SIGKILL rather than hanging the harness.
- * ponytail: This is a best-effort cleanup bound, not a guarantee that a stuck
+ * and resolve with signal SIGKILL rather than hanging the harness. Termination
+ * is 'none' if cancellation was never attempted, 'confirmed' only after
+ * observing ESRCH following SIGTERM or SIGKILL, and 'unconfirmed' if neither
+ * bounded wait confirms absence. Child exit alone does not confirm group death.
+ * This is a best-effort cleanup bound, not a guarantee that a stuck
  * process group cannot outlive the harness.
- * `'generate'` inherits stdin and stderr (consent needs a real TTY on both ends
- * per SPEC-2's 2026-10-11 revision) and only captures/forwards stdout.
+ * `'generate'` inherits stdin and stderr because consent needs a real TTY on
+ * both ends, and only captures/forwards stdout.
  * `'resolve'` inherits stdin but captures and forwards both stdout and stderr,
  * detecting passwords both within each stream and across arrival-order
  * boundaries before forwarding in arrival order. Captured report data (the raw bytes
@@ -564,11 +719,13 @@ export async function runProcess(command, args, opts = {}) {
     const child = spawn(command, args, { cwd: opts.cwd, env: opts.env, detached: true,
       stdio: mode === 'inherit-stderr' || mode === 'generate' ? ['inherit', 'pipe', 'inherit']
         : mode === 'resolve' ? ['inherit', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
+    const pgid = child.pid;
     let stdout = '';
     let stderr = '';
     let status = null;
     let exitSignal = null;
     let terminating = false;
+    let termination = 'none';
     let settled = false;
     let timer;
     // Stream-local and arrival-order views share character references, so
@@ -631,7 +788,7 @@ export async function runProcess(command, args, opts = {}) {
       settled = true;
       cleanup();
       if (forwarding && opts.onStderrChunk) forward(true);
-      resolve({ status: terminating ? null : status, stdout, stderr, signal });
+      resolve({ status: terminating ? null : status, stdout, stderr, signal, termination, pgid });
     }
     function send(signal) {
       try { process.kill(-child.pid, signal); } catch (error) {
@@ -654,12 +811,20 @@ export async function runProcess(command, args, opts = {}) {
       terminating = true;
       cleanup();
       send('SIGTERM');
-      if (await gone()) { finish('SIGTERM'); return; }
-      send('SIGKILL');
-      if (!(await gone())) {
-        const warning = 'warning: process group termination could not be confirmed after SIGKILL\n';
-        process.stderr.write(opts.password ? redact(warning, opts.password) : warning);
+      if (await gone()) {
+        termination = 'confirmed';
+        finish('SIGTERM');
+        return;
       }
+      send('SIGKILL');
+      if (await gone()) {
+        termination = 'confirmed';
+        finish('SIGKILL');
+        return;
+      }
+      termination = 'unconfirmed';
+      const warning = 'warning: process group termination could not be confirmed after SIGKILL\n';
+      process.stderr.write(opts.password ? redact(warning, opts.password) : warning);
       finish('SIGKILL');
     }
     child.once('error', error => {

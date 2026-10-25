@@ -321,6 +321,8 @@ describe('release workflows', () => {
       }
     }
     const checkout = splitStepsIntoBlocks(getScannableJobLines(releaseWorkflow, 'recover'))[0];
+    const setupNode = splitStepsIntoBlocks(getScannableJobLines(releaseWorkflow, 'recover')).find((step) => normalizeStep(step).startsWith('uses:actions/setup-node@'));
+    expect(setupNode).toContain('          node-version: 24.22.1');
     expect(checkout).toEqual(expect.arrayContaining([
       '          fetch-depth: 0', '          fetch-tags: true', '          persist-credentials: false',
     ]));
@@ -437,7 +439,7 @@ describe('release workflows', () => {
     expect(checkout).toContain('          persist-credentials: false');
     expect(checkout).toContain('          ref: ${{ inputs.ref }}');
     expect(setupNode).toEqual(expect.arrayContaining([
-      '          node-version: 24.18.1', '          cache: npm', '          cache-dependency-path: website/package-lock.json',
+      '          node-version: 24.22.1', '          cache: npm', '          cache-dependency-path: website/package-lock.json',
     ]));
     expect(upload).toContain('          path: website/dist');
     expect(upload?.some((line) => /^\s+name:/.test(line))).toBe(false);
@@ -543,7 +545,7 @@ describe('release workflows', () => {
         with:
           # Node 24 LTS bundles npm >= 11.5.1, the minimum for OIDC trusted
           # publishing, so no separate npm upgrade step is needed.
-          node-version: 24.18.1
+          node-version: 24.22.1
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build

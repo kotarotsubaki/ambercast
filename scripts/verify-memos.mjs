@@ -62,6 +62,7 @@ const plan = id => `tests/ambercast/${id}.ambercast.plan.json`;
 const grounding = id => `tests/ambercast/${id}.ambercast.grounding.json`;
 const isMarked = c => c.knownIssue !== undefined;
 const REGENERATE = 'npm run verify:memos -- --regenerate (real AI provider, local only)';
+const REGENERATE_ONE = id => `npm run verify:memos -- --regenerate --case ${id}`;
 
 /**
  * Checks the case inventory against the copied project configuration.
@@ -165,7 +166,8 @@ function assertResolvedBindings(report, prompts) {
  * @returns Validated options for verification, regeneration or cleanup, including
  * `cases`: the selected case ids in CASES order (every unmarked case without --case).
  * @throws A usage error for unknown/duplicate flags, missing values, positional
- * arguments, invalid providers, unknown/duplicate/known-failure case ids or
+ * arguments, invalid providers, unknown/duplicate case ids (known-failure ids
+ * too, except for --regenerate), more than one --case with --regenerate or
  * incompatible combinations.
  * @remarks This is the sole owner of argument meaning; pack-install retains
  * responsibility for the tarball's dirty-state policy.
@@ -174,12 +176,16 @@ function assertResolvedBindings(report, prompts) {
  * rejects a repeated value. The selection narrows what is replayed and never
  * widens it, so a missing fixture is never absorbed by shrinking the set on the
  * caller's behalf: only an explicit --case does that. --heal-check needs the heal
- * case selected because the heal protocol replays it; --regenerate with --case is
- * refused because publishing a subset would leave a mixed-generation fixture.
+ * case selected because the heal protocol replays it. --regenerate takes at most
+ * one --case, which may be a knownIssue-marked case (a fixture for it is what
+ * removes the mark); only that case's files are ever published, so the fixture
+ * never becomes a mix of generations. --plan reuses a candidate plan and is
+ * accepted only together with --regenerate and exactly one --case; any other use
+ * is a usage error.
  */
 export function parseArgs(argv) {
-  const options = { manifest: undefined, ai: undefined, allowDirty: false, keep: false, regenerate: false, clean: false, healCheck: false, published: undefined };
-  const keys = { '--manifest': 'manifest', '--ai': 'ai', '--allow-dirty': 'allowDirty', '--keep': 'keep', '--regenerate': 'regenerate', '--clean': 'clean', '--heal-check': 'healCheck', '--published': 'published' };
+  const options = { manifest: undefined, ai: undefined, allowDirty: false, keep: false, regenerate: false, clean: false, healCheck: false, published: undefined, plan: undefined, regenerateCase: undefined };
+  const keys = { '--manifest': 'manifest', '--plan': 'plan', '--ai': 'ai', '--allow-dirty': 'allowDirty', '--keep': 'keep', '--regenerate': 'regenerate', '--clean': 'clean', '--heal-check': 'healCheck', '--published': 'published' };
   const seen = new Set();
   const chosen = [];
   const selectable = CASES.filter(c => !isMarked(c));
@@ -187,14 +193,14 @@ export function parseArgs(argv) {
     const flag = argv[i];
     if (flag === '--case') {
       const value = argv[++i];
-      if (!value || value.startsWith('--') || chosen.includes(value) || !selectable.some(c => c.id === value)) throw new Error(`invalid value: ${flag}`);
+      if (!value || value.startsWith('--') || chosen.includes(value)) throw new Error(`invalid value: ${flag}`);
       chosen.push(value);
       seen.add(flag);
       continue;
     }
     if (!Object.hasOwn(keys, flag) || seen.has(flag)) throw new Error(`invalid argument: ${flag}`);
     seen.add(flag);
-    if (['--manifest', '--ai', '--published'].includes(flag)) {
+    if (['--manifest', '--ai', '--published', '--plan'].includes(flag)) {
       const value = argv[++i];
       if (!value || value.startsWith('--')) throw new Error(`missing value: ${flag}`);
       options[keys[flag]] = value;
@@ -202,13 +208,16 @@ export function parseArgs(argv) {
   }
   if ((options.clean && seen.size !== 1) || (options.ai && !options.regenerate)
     || (options.ai && !['claude', 'codex'].includes(options.ai)) || (options.allowDirty && options.manifest)
-    || (options.healCheck && options.regenerate) || (chosen.length && options.regenerate)
+    || (options.healCheck && options.regenerate) || (options.regenerate && chosen.length > 1)
+    || (options.plan && !(options.regenerate && chosen.length === 1))
+    || chosen.some(id => !(options.regenerate ? CASES : selectable).some(c => c.id === id))
     || (options.healCheck && chosen.length && !chosen.includes(HEAL_CASE))
     || (options.published && (options.manifest || options.allowDirty || options.regenerate
       || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?$/.test(options.published)))) {
     throw new Error('incompatible arguments');
   }
-  options.cases = selectable.filter(c => !chosen.length || chosen.includes(c.id)).map(c => c.id);
+  if (options.regenerate && chosen.length) options.regenerateCase = chosen[0];
+  options.cases = (options.regenerateCase ? CASES : selectable).filter(c => !chosen.length || chosen.includes(c.id)).map(c => c.id);
   return options;
 }
 
@@ -239,7 +248,15 @@ export function parseArgs(argv) {
  * consent to any alternative name and fail if that scope changes. Inherited
  * terminal streams preserve interactive consent, while resolution captures and
  * redacts output once credentials exist. Successful acceptance gates publication;
- * partial publication requires full regeneration.
+ * partial publication requires full regeneration, or, for a one-case regeneration
+ * (`--regenerate --case <id>`), repeating the same command.
+ *
+ * A one-case regeneration publishes only the target's plan and grounding. The
+ * unmarked earlier cases are replayed in the same resolve run as context, so the
+ * target is resolved on the page state the whole-set replay will present, and must
+ * come through AI-free and byte-identical or nothing is published. A run that fails
+ * after generating keeps the candidate plan outside the run root so resolve can be
+ * retried with `--plan` without paying for another generation.
  *
  * Fixture copying and retention of the original heal plan/cache share one lock,
  * making the retained bytes the restoration authority even if fixtures change
@@ -279,7 +296,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   }
   let options;
   try { options = parseArgs(argv); } catch {
-    deps.stderr.write('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--ai claude|codex]] | --clean\n');
+    deps.stderr.write('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--case <id> [--plan <path>]] [--ai claude|codex]] | --clean\n');
     return 2;
   }
   const abort = new AbortController();
@@ -293,12 +310,25 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   // One selection drives every file set, command and judge input below, so a
   // stage can never cover a different set of cases than the one the pass line names.
   // The case table itself is still validated whole (assertCaseTable).
-  const selected = CASES.filter(c => options.cases.includes(c.id));
   const marked = CASES.filter(isMarked);
+  // A one-case regeneration replays the unmarked cases before the target (the
+  // context) in the same run, because a fixture case's grounding fingerprints
+  // depend on the memos earlier cases left on the page; later cases cannot affect
+  // the target's page state and are not run. Only the target's two files are published.
+  const only = CASES.find(c => c.id === options.regenerateCase);
+  const context = only ? CASES.slice(0, CASES.indexOf(only)).filter(c => !isMarked(c)) : [];
+  const selected = only ? [...context, only] : CASES.filter(c => options.cases.includes(c.id));
   const allPrompts = selected.map(c => prompt(c.id));
-  const copyFiles = options.regenerate ? [CONFIG, ...allPrompts]
-    : [CONFIG, ...selected.flatMap(c => [prompt(c.id), plan(c.id), grounding(c.id)])];
-  const PUBLISH_FILES = [CONFIG, ...selected.map(c => plan(c.id)), ...selected.map(c => grounding(c.id))];
+  const caseFiles = c => [prompt(c.id), plan(c.id), grounding(c.id)];
+  const copyFiles = only ? [CONFIG, ...context.flatMap(caseFiles), prompt(only.id)]
+    : options.regenerate ? [CONFIG, ...allPrompts]
+      : [CONFIG, ...selected.flatMap(caseFiles)];
+  const PUBLISH_FILES = only ? [plan(only.id), grounding(only.id)]
+    : [CONFIG, ...selected.map(c => plan(c.id)), ...selected.map(c => grounding(c.id))];
+  const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+  // Fixture bytes as copied: the baseline for "the context did not change" and "the fixture did not move under us".
+  const copiedHashes = new Map();
+  let generated = false, planInUse = false, candidatePath, settingsEntryId;
   const published = [];
   const unconfirmed = new Map(); // pgid -> { stage } for first-stage evidence
   /**
@@ -536,6 +566,75 @@ export async function main(argv, platform = process.platform, deps = createDeps(
     requireSuccess(result);
   }
 
+  /**
+   * Fails when the resolve run touched the context cases of a one-case regeneration.
+   * @param report - Parsed resolve report, already shape-checked by assertResolvedBindings.
+   * @throws {Error} When a context case called the AI or re-bound a step (provenance other
+   * than grounding), or when its plan or grounding bytes differ from the fixture copy.
+   * @remarks A context that no longer matches the page would silently be re-resolved here
+   * and change fixtures this run never publishes. Provenance is read as well as aiCalls
+   * because a quoted-match re-binding changes the grounding without calling the AI;
+   * navigate and ai steps carry no binding and are not counted. The check runs after
+   * resolve, so a mismatched context may already have spent AI calls (reported in the reason).
+   */
+  function assertContextUntouched(report) {
+    for (const c of context) {
+      const row = report.results.find(entry => entry.file === prompt(c.id));
+      const rebound = row.steps.filter(step => step?.binding && step.binding.provenance !== 'grounding').map(step => step.id);
+      if (rebound.length || row.aiCalls !== 0) {
+        throw new Error(`context case ${c.id} was re-resolved: ${rebound.join(',')}; aiCalls=${row.aiCalls}`);
+      }
+    }
+    for (const c of context) {
+      for (const file of [plan(c.id), grounding(c.id)]) {
+        if (sha256(fs.readFileSync(join(root.projectDir, file))) !== copiedHashes.get(file)) {
+          throw new Error(`context case ${c.id} changed: ${file}; if the canonical format changed, regenerate it with --regenerate --case ${c.id}`);
+        }
+      }
+    }
+  }
+  /**
+   * Gate for the heal case of a one-case regeneration, before its plan is published.
+   * @throws {Error} For a plan that is not read-only, a settings entry that is not exactly
+   * one unquoted click, or a defined HEAL_STEP_ID that names another step.
+   * @returns The detected settings-entry step id when HEAL_STEP_ID is still undefined
+   * (so the caller can tell the maintainer which id to set), otherwise undefined.
+   */
+  function assertHealPlan() {
+    const healPlan = JSON.parse(fs.readFileSync(join(root.projectDir, plan(HEAL_CASE)), 'utf8'));
+    assertReadOnlyHealPlan(healPlan, secretName);
+    const entries = healPlan.steps.filter(step => step.action === 'click' && !step.intent?.quote);
+    if (entries.length !== 1) throw new Error(`expected exactly one click without a quote in the heal plan, found ${entries.length}`);
+    const defined = deps.healStepId ?? HEAL_STEP_ID;
+    if (defined && defined !== entries[0].id) throw new Error(`HEAL_STEP_ID ${defined} not found; update the constant to ${entries[0].id}`);
+    return defined ? undefined : entries[0].id;
+  }
+  /**
+   * Keeps a failed one-case generation's plan so the expensive part can be retried.
+   * @remarks Runs after the failure is known and before teardown deletes the run root.
+   * The directory lives outside the run root and outside --clean's reach on purpose:
+   * the plan is the only thing a failed run leaves worth keeping, so the directory name
+   * must never start with the run-root prefix that --clean and the unit-test helper sweep.
+   * The plan holds only secret references, but it goes through redaction as a last defence. A save failure
+   * never changes the run's reason.
+   */
+  function saveCandidatePlan() {
+    const dir = join(deps.tmpRoot, 'ambercast-memos-candidate-plans');
+    try {
+      try { fs.mkdirSync(dir, { mode: 0o700 }); } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+        const stat = fs.lstatSync(dir);
+        if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700
+          || (process.getuid && stat.uid !== process.getuid())) throw new Error(`unsafe directory ${dir}`);
+      }
+      const file = join(dir, `${only.id}-${root.runId}.ambercast.plan.json`);
+      fs.writeFileSync(file, safe(fs.readFileSync(join(root.projectDir, plan(only.id)), 'utf8')), { flag: 'wx', mode: 0o600 });
+      candidatePath = file;
+    } catch (error) {
+      err(`verify-memos: candidate plan not saved: ${message(error)}\n`);
+    }
+  }
+
   try {
     await step('preflight', () => deps.runner.checkDaemon(dockerOptions()), false);
     if (options.clean) {
@@ -548,16 +647,23 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         }
       }, false);
       await step('preflight', () => {
-        for (const c of marked) {
+        // The target of a one-case regeneration is rebuilt from scratch, so a leftover
+        // (even half-published) fixture for it must not block the retry that fixes it.
+        for (const c of marked.filter(c => c !== only)) {
           if ([plan(c.id), grounding(c.id)].some(file => fs.existsSync(join(fixture, file)))) {
             throw new Error(`known failure ${c.id} (#${c.knownIssue}) has a fixture; remove knownIssue from CASES`);
           }
         }
         for (const file of copyFiles) {
           if (!fs.existsSync(join(fixture, file))) {
+            const owner = context.find(c => file === plan(c.id) || file === grounding(c.id));
             throw new Error(`missing fixture ${file}; ${file === CONFIG || allPrompts.includes(file)
-              ? 'git checkout -- test/verification/memos/fixture' : REGENERATE}`);
+              ? 'git checkout -- test/verification/memos/fixture'
+              : owner ? `regenerate earlier cases first: ${REGENERATE_ONE(owner.id)}` : REGENERATE}`);
           }
+        }
+        if (options.plan) {
+          try { fs.readFileSync(resolve(process.cwd(), options.plan)); } catch { throw new Error(`cannot read --plan ${options.plan}`); }
         }
       }, false);
       await step('preflight', () => reapStale({ runner: staleRunner, tmpRoot: deps.tmpRoot, lockPath }), false);
@@ -612,11 +718,29 @@ export async function main(argv, platform = process.platform, deps = createDeps(
             const destination = join(root.projectDir, file);
             fs.mkdirSync(dirname(destination), { recursive: true });
             fs.copyFileSync(join(fixture, file), destination);
+            if (only) copiedHashes.set(file, sha256(fs.readFileSync(join(fixture, file))));
+          }
+          if (options.plan) {
+            planInUse = true;
+            const destination = join(root.projectDir, plan(only.id));
+            fs.mkdirSync(dirname(destination), { recursive: true });
+            fs.copyFileSync(resolve(process.cwd(), options.plan), destination);
           }
           assertCaseTable(JSON.parse(fs.readFileSync(join(root.projectDir, CONFIG), 'utf8')));
           if (options.healCheck) originalHealFiles = [plan(HEAL_CASE), grounding(HEAL_CASE)].map(file => fs.readFileSync(join(root.projectDir, file)));
         });
         secretName = readConsent();
+        if (only && context.length) {
+          // Fail fast on a stale context, before any AI spend or container start.
+          const result = await child(ambercast(), ['check', '--json', ...context.map(c => prompt(c.id))], root.projectDir, TIMEOUTS.replay);
+          let rows = [];
+          try { rows = JSON.parse(result.stdout).results; } catch { /* A context case without a row is reported as not fresh below. */ }
+          const stale = context.find(c => rows.find(row => row?.file === prompt(c.id))?.status !== 'fresh');
+          if (stale) {
+            const status = rows.find(row => row?.file === prompt(stale.id))?.status ?? exitReason(result);
+            throw new Error(`context case ${stale.id} is not fresh (${status}); regenerate earlier cases first: ${REGENERATE_ONE(stale.id)}`);
+          }
+        }
         if (!options.regenerate) {
           const result = await child(ambercast(), ['check', '--json', ...allPrompts], root.projectDir, TIMEOUTS.replay);
           if (result.status !== 0) {
@@ -634,16 +758,38 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         // generate runs before any password or container exists:
         // consent needs a real stdin/stderr, and no
         // secret can leak through generate's output at this point.
-        for (const target of new Set(selected.map(c => c.target))) await step('fixture', async () => {
-          const targetPrompts = selected.filter(c => c.target === target).map(c => prompt(c.id));
+        // A one-case run generates only its target: the context is the committed fixture, never regenerated.
+        const generating = only ? [only] : selected;
+        for (const target of options.plan ? [] : new Set(generating.map(c => c.target))) await step('fixture', async () => {
+          const targetPrompts = generating.filter(c => c.target === target).map(c => prompt(c.id));
           const result = await child(ambercast(), ['generate', '--target', target, ...targetPrompts, ...(options.ai ? ['--ai', options.ai] : [])],
             root.projectDir, TIMEOUTS.generate * targetPrompts.length, {}, {
               stdio: 'generate', onStderrChunk: chunk => err(chunk),
             });
           requireSuccess(result);
+          // Only the one-case candidate-plan save reads this flag; whole-set runs keep no candidate.
+          generated = only !== undefined;
         });
         if (readConsent() !== secretName) throw new Error('secrets.allow must retain the committed consent name');
-        await step('fixture', () => assertCoverage(root.projectDir, selected.map(c => c.id)), false);
+        if (only) await step('fixture', async () => {
+          // Generate may rewrite the config to settle the consent name. A one-case run
+          // never publishes the config, so a changed config would be silently dropped.
+          if (sha256(fs.readFileSync(join(root.projectDir, CONFIG))) !== copiedHashes.get(CONFIG)) throw new Error('config changed by generate');
+          assertCoverage(root.projectDir, [only.id]);
+          // --plan can carry in a plan generated for another case; every step and the declaration must name the case's target.
+          const targets = JSON.parse(fs.readFileSync(join(root.projectDir, plan(only.id)), 'utf8'));
+          const names = new Set([...Object.keys(targets.targets ?? {}), ...(targets.steps ?? []).map(step => step.target)]);
+          if (Object.keys(targets.targets ?? {}).length !== 1 || names.size !== 1 || !names.has(only.target)) {
+            throw new Error(`plan target does not match the case: ${[...names].join(',')}`);
+          }
+          if (options.plan) {
+            const result = await child(ambercast(), ['check', '--json', prompt(only.id)], root.projectDir, TIMEOUTS.replay);
+            let status;
+            try { status = JSON.parse(result.stdout).results.find(row => row?.file === prompt(only.id))?.status; } catch { /* Unreadable output is reported below. */ }
+            if (status !== 'missing-grounding') throw new Error(`--plan does not match the prompt: ${status ?? exitReason(result)}`);
+          }
+        }, false);
+        else await step('fixture', () => assertCoverage(root.projectDir, selected.map(c => c.id)), false);
       }
       password = generateAdminPassword(deps.randomBytes);
       await startInstance();
@@ -653,10 +799,15 @@ export async function main(argv, platform = process.platform, deps = createDeps(
             ...(options.ai ? ['--ai', options.ai] : [])], root.projectDir, TIMEOUTS.resolve * selected.length, secrets(), {
               stdio: 'resolve', password, onStderrChunk: chunk => err(chunk),
             });
+          let resolved;
+          try { resolved = JSON.parse(result.stdout); } catch { resolved = undefined; }
+          // A failed resolve still leaves its report: the step that failed is the evidence for the retry.
+          if (only && resolved !== undefined) fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
           requireSuccess(result);
-          try { JSON.parse(result.stdout); } catch { throw new Error('non-json stdout'); }
-          fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
-          assertResolvedBindings(JSON.parse(result.stdout), allPrompts);
+          if (resolved === undefined) throw new Error('non-json stdout');
+          if (!only) fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
+          assertResolvedBindings(resolved, allPrompts);
+          if (only) assertContextUntouched(resolved);
           await deps.runner.removeContainer(root.containerName, dockerOptions());
           interrupted();
           // Deleting and immediately re-mounting the same host bind-mount
@@ -688,7 +839,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           const row = Array.isArray(report?.results) ? report.results.find(row => row?.status !== 'passed') : undefined;
           let reason = `${exitReason(result)}${first?.code ? ` ${first.code}` : ''}${first?.message ? ` ${first.message}` : ''}${row?.status ? ` ${row.status}` : ''}`;
           if (row?.id) reason += ` ${row.id}`;
-          if (result.status === 4) reason += `; ${REGENERATE}`;
+          if (result.status === 4) reason += `; ${only && options.regenerate ? REGENERATE_ONE(only.id) : REGENERATE}`;
           try { await judge('disclosure-only'); } catch (error) {
             noteUnconfirmed(error);
             if (error instanceof TerminationUnconfirmedError) {
@@ -703,9 +854,16 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       await step('judge', () => judge('full'));
       if (options.healCheck) await step('heal', healCheck);
       if (options.regenerate) {
-        await step('fixture', () => assertReadOnlyHealPlan(JSON.parse(fs.readFileSync(join(root.projectDir, plan(HEAL_CASE)), 'utf8')), secretName), false);
+        if (!only) await step('fixture', () => assertReadOnlyHealPlan(JSON.parse(fs.readFileSync(join(root.projectDir, plan(HEAL_CASE)), 'utf8')), secretName), false);
+        else if (only.id === HEAL_CASE) await step('fixture', () => { settingsEntryId = assertHealPlan(); }, false);
         publishAttempted = true;
         await step('fixture', () => withLock(() => {
+          // Only the target's two files are written, so everything the run depended on must be exactly what it copied.
+          for (const [file, hash] of copiedHashes) {
+            let now;
+            try { now = sha256(fs.readFileSync(join(fixture, file))); } catch { now = undefined; }
+            if (now !== hash) throw new Error(`fixture changed during regeneration: ${file}`);
+          }
           const ownedTemps = new Set();
           publishing = true;
           try {
@@ -750,6 +908,8 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   if (publishAttempted) {
     await new Promise(resolve => setImmediate(() => setImmediate(resolve)));
   }
+  const fullyPublished = only !== undefined && published.length === PUBLISH_FILES.length;
+  if (generated && (failure || sigExit !== null) && !fullyPublished) saveCandidatePlan();
   try {
     if (options.keep && !restoreFailed && sigExit === null && root) {
       if (password) fs.writeFileSync(join(root.runRoot, 'credentials.json'),
@@ -779,6 +939,12 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   } catch (error) { teardownError = error; }
   finally {
     for (const [name, handler] of Object.entries(handlers)) signals.off(name, handler);
+  }
+  /** One-case publication leaves later cases unverified and may leave a stale knownIssue mark behind. */
+  function publishedNotices() {
+    if (settingsEntryId) err(`verify-memos: settings-entry step id: ${settingsEntryId}; set HEAL_STEP_ID\n`);
+    err('verify-memos: later cases were not replayed; run npm run verify:memos to verify the whole set\n');
+    if (isMarked(only)) err(`verify-memos: ${only.id} is marked knownIssue #${only.knownIssue}; remove the mark in the same change\n`);
   }
   function formatReason(body, tail = '') {
     const sanitize = text => safe(text).replace(/[\u0000-\u001f\u007f]/g, char =>
@@ -825,16 +991,20 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       + (restoreFailed && options.keep ? '; --keep not honored: restore failed' : '');
     const reason = formatReason(reasonBody, tail);
     if (publishAttempted) err(`verify-memos: published files: ${published.join(', ') || 'none'}\n`);
+    if (fullyPublished) publishedNotices();
+    const candidate = fullyPublished ? undefined : candidatePath ?? (planInUse ? resolve(process.cwd(), options.plan) : undefined);
+    if (candidate) err(`verify-memos: candidate plan: ${candidate}; retry resolve with --regenerate --case ${only.id} --plan ${candidate}\n`);
     if (options.clean) err(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}\n`);
     else out(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}\n`);
     return sigExit ?? 1;
   }
   if (publishAttempted) err(`verify-memos: published files: ${published.join(', ') || 'none'}\n`);
+  if (fullyPublished) publishedNotices();
   // A pass that covers fewer cases than the default selection must not read as a
   // whole-set pass, and marked cases are named every time because they are never
-  // verified. Order is fixed: cases, known, heal tail.
-  const partial = selected.length !== CASES.length - marked.length;
-  const tail = `${partial ? ` cases=${selected.map(c => c.id).join(',')}` : ''}${marked.length ? ` known=${marked.map(c => `${c.id}#${c.knownIssue}`).join(',')}` : ''}`;
+  // verified. Order is fixed: cases, known, regenerated, heal tail.
+  const partial = only !== undefined || selected.length !== CASES.length - marked.length;
+  const tail = `${partial && !only ? ` cases=${selected.map(c => c.id).join(',')}` : ''}${marked.length ? ` known=${marked.map(c => `${c.id}#${c.knownIssue}`).join(',')}` : ''}${only ? ` regenerated=${only.id}` : ''}`;
   if (!options.clean) out(`verify-memos: ${partial ? 'PASS-PARTIAL' : 'PASS'} aiCalls=${aiCalls} ${options.published ? `package=ambercast@${options.published}` : `sha=${manifest.sha.slice(0, 12)}${manifest.dirty ? '-dirty' : ''}`} memos=${MEMOS_VERSION}${tail}${options.healCheck ? ` heal=healed healAiCalls=${healAiCalls}` : ''}\n`);
   return 0;
 }

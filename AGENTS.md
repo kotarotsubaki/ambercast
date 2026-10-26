@@ -144,7 +144,7 @@ Implementation tasks run in a **linked worktree per issue** by default; working 
 - `node scripts/pack-install.mjs pack [--out-dir <dir>] [--allow-dirty]` — build and
   pack this checkout into a commit-keyed archive and manifest for downstream checks
 - `node scripts/pack-install.mjs install <project-dir> [--manifest <path>] [--out-dir <dir>] [--pm npm|pnpm]` — install a packed archive into another project and verify its version and lockfile integrity
-- `npm run verify:memos` — run the local Memos middle-layer verification (Docker required): the full scenario set by zero-AI replay; `--case <id>` (repeatable) replays only the named cases and ends with `PASS-PARTIAL` when that is fewer than the default set, `--heal-check` adds a heal round trip and calls the AI provider, and `--published <version>` checks a published package; see CONTRIBUTING.md's Release checklist
+- `npm run verify:memos` — run the local Memos middle-layer verification (Docker required): the full scenario set by zero-AI replay; `--case <id>` (repeatable) replays only the named cases and ends with `PASS-PARTIAL` when that is fewer than the default set, `--heal-check` adds a heal round trip and calls the AI provider, `--regenerate --case <id> [--plan <path>]` rebuilds one case's plan and grounding (or only re-resolves a saved candidate plan) and ends with `PASS-PARTIAL`, and `--published <version>` checks a published package; see CONTRIBUTING.md's Release checklist
 - `npm run test:verification:memos` — run the opt-in verification test suite (`test/verification/**`), excluded from `npm test`
 
 Keep this file updated as the implementation grows.

@@ -57,7 +57,7 @@ describe.skipIf(process.platform === 'win32')('verify-memos real publication sig
           'memos-readonly': { baseUrl: 'http://127.0.0.1:5230', locale: 'en-US', healReplayIsolation: 'idempotent' },
           'memos-ja': { baseUrl: 'http://127.0.0.1:5230', locale: 'ja-JP' },
         }, secrets: { allow: ['password'] }, generated: 'config' });
-      expect.soft(fs.readFileSync(join(fixture, plan), 'utf8')).toBe('{"generated":"plan"}\n');
+      expect.soft(fs.readFileSync(join(fixture, plan), 'utf8')).toBe('{"generated":"plan","steps":[]}\n');
       expect.soft(fs.readFileSync(join(fixture, grounding), 'utf8')).toBe('{"generated":"grounding"}\n');
       expect.soft(fs.existsSync(join(fixture, '.lock'))).toBe(false);
       expect.soft(stdout).toContain(mode === 'external' ? 'PUBLISH_START\n' : 'RAISED\n');

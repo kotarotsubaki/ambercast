@@ -528,6 +528,35 @@ export function summarizeAiCalls(report) {
 }
 
 /**
+ * Identifies operations without confirming steps before resolve spends AI calls.
+ * This pure inspection of plan JSON uses no AI, browser, Docker or network and
+ * leaves the plan unchanged. It unions every step's confirms value only when
+ * that value is an array, regardless of the confirming step's kind, then returns
+ * ids absent from that union for capture steps and action steps whose action is
+ * not navigate, preserving plan order. Other missing step fields are not
+ * validated here; schema validation belongs to ambercast check and run.
+ *
+ * The rule mirrors actionUnconfirmedWarnings in src/usecases/generate.ts, the
+ * source of truth; keep this rule in sync when that implementation changes.
+ * The harness is installed from a tarball and cannot import src/ directly.
+ * Coverage is necessary, not sufficient: resolve must still establish valid
+ * confirmation evidence, followed by AI-free replay.
+ * @param plan - Parsed plan to inspect.
+ * @returns Unconfirmed operation ids in plan order.
+ * @throws {Error} With message 'plan has no steps' when plan is not an object
+ * (including null) or plan.steps is not an array.
+ */
+export function unconfirmedSteps(plan) {
+  if (plan === null || typeof plan !== 'object' || !Array.isArray(plan.steps)) {
+    throw new Error('plan has no steps');
+  }
+  const confirmed = new Set(plan.steps.flatMap(step => Array.isArray(step?.confirms) ? step.confirms : []));
+  return plan.steps.filter(step => (step?.kind === 'capture'
+    || (step?.kind === 'action' && step.action !== 'navigate')) && !confirmed.has(step.id))
+    .map(step => step.id);
+}
+
+/**
  * Creates a cleanup registry that attempts all callbacks once in reverse registration order.
  * @returns defer(label, fn) and runAll(), which resolves to an aggregated
  * HarnessError or null; subsequent runAll calls are no-ops.

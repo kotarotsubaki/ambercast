@@ -10,6 +10,50 @@ import { assertPortFree, bootstrapAdmin, BootstrapError, buildChildEnv, buildPro
 
 const roots: string[] = [];
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
+import { unconfirmedSteps } from '../../../scripts/lib/memos-harness.mjs';
+
+describe('plan confirms coverage', () => {
+  it('TEST-CNF-1 covers every action', () => {
+    expect(unconfirmedSteps({ steps: [
+      { id: 'open', kind: 'action', action: 'navigate' },
+      { id: 'click', kind: 'action', action: 'click' },
+      { id: 'verify', kind: 'assert', confirms: ['click'] },
+    ] })).toEqual([]);
+    expect(unconfirmedSteps({ steps: [] })).toEqual([]);
+  });
+  it('TEST-CNF-2 returns only uncovered operations in plan order', () => {
+    expect(unconfirmedSteps({ steps: [
+      { id: 'open', kind: 'action', action: 'navigate' },
+      { id: 'click', kind: 'action', action: 'click' },
+      { id: 'press', kind: 'action', action: 'press' },
+      { id: 'fill', kind: 'action', action: 'fill' },
+      { id: 'secret', kind: 'action', action: 'fill-secret' },
+      { id: 'capture', kind: 'capture' },
+      { id: 'verify', kind: 'assert', confirms: ['press', 'fill', 'secret'] },
+      { id: 'ai', kind: 'ai' },
+    ] })).toEqual(['click', 'capture']);
+  });
+  it('TEST-CNF-3 detects a click after the final assertion', () => {
+    expect(unconfirmedSteps({ steps: [
+      { id: 'first', kind: 'action', action: 'click' },
+      { id: 'verify', kind: 'assert', confirms: ['first'] },
+      { id: 'last', kind: 'action', action: 'click' },
+    ] })).toEqual(['last']);
+  });
+  it('TEST-CNF-4 unions ai confirms and ignores empty, absent and non-array confirms', () => {
+    expect(unconfirmedSteps({ steps: [
+      { id: 'covered', kind: 'action', action: 'click' },
+      { id: 'uncovered', kind: 'capture' },
+      { id: 'ai', kind: 'ai', confirms: ['covered'] },
+      { kind: 'assert', confirms: [] }, { kind: 'assert' },
+      { kind: 'assert', confirms: 'uncovered' },
+    ] })).toEqual(['uncovered']);
+  });
+  it.each([null, {}, { steps: {} }, undefined, 1, 'plan'])('TEST-CNF-5 rejects a plan without steps (%j)', plan => {
+    expect(() => unconfirmedSteps(plan)).toThrow(new Error('plan has no steps'));
+  });
+});
+// @ts-expect-error The production ESM script is deliberately untyped JavaScript.
 import { signInAdmin, getGeneralSetting, patchAdditionalScript, redact, HEAL_LABEL_SCRIPT, HEAL_SELECTOR, HEAL_FROM, HEAL_TO } from '../../../scripts/lib/memos-harness.mjs';
 
 describe('instance settings API', () => {

@@ -6,6 +6,9 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, test, vi } from 'vitest';
 
 const root = new URL('../../../', import.meta.url);
+// @ts-expect-error The production ESM script is deliberately untyped JavaScript.
+import { unconfirmedSteps } from '../../../scripts/lib/memos-harness.mjs';
+
 const fixture = new URL('test/verification/memos/fixture/', root);
 const expectedCases = [
   { id: 'memos-sign-in-create-memo', target: 'memos' },
@@ -25,6 +28,26 @@ const generatedFixtureCount = generatedFixtureFiles.filter(file => existsSync(fi
 // are absent, run when complete, and fail on partial presence so missing coverage
 // cannot silently pass. Handwritten IR cannot substitute for generation.
 const generatedFixturesAbsent = generatedFixtureCount === 0;
+describe('committed confirms coverage', () => {
+  for (const { id } of expectedCases) {
+    it.skipIf(generatedFixturesAbsent && id !== 'memos-sign-in-create-memo')(`TEST-CNF-11 covers operations in ${id}`, () => {
+      expect(unconfirmedSteps(fixturePlan(id))).toEqual([]);
+    });
+  }
+  it('TEST-CNF-12 documents the confirms check in the regenerate paragraph', () => {
+    const paragraphs = readFileSync(new URL('CONTRIBUTING.md', root), 'utf8').split(/\n\s*\n/);
+    const paragraph = paragraphs.find(text => text.includes('regenerate the fixture') && text.includes('--regenerate'));
+    expect(paragraph).toBeDefined();
+    expect(paragraph).toContain('confirms');
+    const sentence = paragraph?.split(/(?<=[.!?])\s+/).find(text => text.includes('confirms'));
+    expect(sentence).toBeDefined();
+    expect(sentence).toMatch(/before.*resolve/i);
+    expect(sentence).toMatch(/without calling the AI|no AI/i);
+    expect(sentence).toMatch(/stop/i);
+    expect(sentence).toMatch(/action/i);
+    expect(sentence).toMatch(/capture or non-navigation action has no confirming step/i);
+  });
+});
 const signIn = 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the "Save" button is displayed. Then assert that the text "verifier" is displayed.';
 const originalPrompt = `# Sign in to Memos and create a memo
 

@@ -842,7 +842,7 @@ describe('parseArgs', () => {
   ])('TEST-544-1 rejects invalid combinations before any side effect (%s)', async (...argv) => {
     const f = createFakeDeps({});
     expect(await run(f, argv)).toBe(2);
-    expect(f.err()).toContain('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--ai claude|codex]] | --clean');
+    expect(f.err()).toContain('verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--case <id> [--plan <path>]] [--ai claude|codex]] | --clean');
     expect(f.out()).toBe(''); expect(f.runnerCalls).toEqual([]); expect(f.processCalls).toEqual([]);
     expect(f.fetchCalls).toEqual([]); expect(f.roots()).toEqual([]);
   });
@@ -881,7 +881,7 @@ describe('parseArgs', () => {
   });
 });
 
-const selUsage = 'verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--ai claude|codex]] | --clean';
+const selUsage = 'verify-memos.mjs [--manifest <path> | --published <version>] [--allow-dirty] [--keep] [--case <id>]... [--heal-check] [--regenerate [--case <id> [--plan <path>]] [--ai claude|codex]] | --clean';
 const [signInId, editId, , , tagId] = caseIds as [string, string, string, string, string];
 const healId = caseIds[healIndex]!;
 const passLine = (tail: string, head = 'PASS') => `verify-memos: ${head} aiCalls=0 sha=${sha.slice(0, 12)} memos=0.31.0${tail}`;
@@ -907,7 +907,6 @@ describe('parseArgs case selection', () => {
   it.each([
     [['--case', 'memos-unknown']], [['--case', '']], [['--case', '--keep']], [['--case']], [[`--case=${signInId}`]],
     [['--case', signInId, '--case', signInId]], [['--clean', '--case', signInId]], [['--case', signInId, '--case', tagId, '--clean']],
-    [['--regenerate', '--case', signInId]], [['--case', signInId, '--regenerate']],
     [['--heal-check', '--case', signInId]], [['--case', 'positional-extra', signInId]],
   ])('TEST-SEL-3 rejects invalid selections with the exact usage text and no side effect (%j)', async argv => {
     const f: Fake = createFakeDeps(); expect(await run(f, argv)).toBe(2);
@@ -979,6 +978,447 @@ describe('main case selection', () => {
     const order = f.events.filter(e => ['replay', 'judge', 'heal-dry-run', 'heal-apply'].includes(e));
     expect(order.slice(0, 3)).toEqual(['replay', 'judge', 'replay']);
     expect(order.indexOf('heal-dry-run')).toBeGreaterThan(2);
+  });
+});
+
+// One-case regeneration (#636). The target is the third case; the context is the two cases before it.
+const oneIdx = 2;
+const oneId = caseIds[oneIdx]!;
+const oneTarget = caseTable[oneIdx]!.target;
+const oneContext = caseIds.slice(0, oneIdx);
+const oneArgv = ['--regenerate', '--case', oneId];
+const candidateDir = (f: Fake) => join(f.tmpRoot, 'ambercast-memos-candidate-plans');
+type ResolveEnvelope = { results: { file: string; aiCalls: number; steps: Record<string, unknown>[] }[] };
+/** Fake process: context rows resolve AI-free, the target row calls the AI, and `mutate` may rewrite any result. */
+function oneProcess(getFake: () => Fake, mutate?: (call: ProcessCall, out: ProcessResult, resolved?: ResolveEnvelope) => ProcessResult | Promise<ProcessResult>) {
+  return async (call: ProcessCall) => {
+    const success = await getFake().successfulProcess(call);
+    let out = success, envelope: ResolveEnvelope | undefined;
+    if (call.kind === 'resolve') {
+      envelope = JSON.parse(success.stdout) as ResolveEnvelope;
+      for (const row of envelope.results) row.aiCalls = row.file === call.argv.at(-1) ? 9 : 0;
+      out = result(0, JSON.stringify(envelope));
+    }
+    return mutate ? mutate(call, out, envelope) : out;
+  };
+}
+function oneFake(mutate?: Parameters<typeof oneProcess>[1], overrides: Overrides = {}) {
+  const f: Fake = createFakeDeps({ fixtureCases: oneContext, ...overrides, runProcess: oneProcess(() => f, mutate) });
+  return f;
+}
+const withResolved = (change: (envelope: ResolveEnvelope) => void, status = 0) => (call: ProcessCall, out: ProcessResult, envelope?: ResolveEnvelope) => {
+  if (call.kind !== 'resolve' || !envelope) return out;
+  change(envelope);
+  return result(status, JSON.stringify(envelope));
+};
+const publishedRenames = (f: Fake) => vi.mocked(fs.renameSync).mock.calls
+  .map(([, dest]) => relative(f.fixture, String(dest))).filter(p => publications.includes(p));
+function changedFiles(before: Record<string, string>, after: Record<string, string>) {
+  return Object.keys({ ...before, ...after }).filter(file => before[file] !== after[file]).sort();
+}
+function writeCandidate(f: Fake, text: string) {
+  const path = join(f.tmpRoot, 'candidate.ambercast.plan.json');
+  fs.writeFileSync(path, text); return path;
+}
+const missingGroundingCheck = (call: ProcessCall, out: ProcessResult) => call.kind === 'check' && call.argv.slice(3).join() === prompts[oneIdx]
+  ? result(4, JSON.stringify({ results: [{ file: prompts[oneIdx], status: 'missing-grounding' }] })) : out;
+
+describe('main one-case regeneration', () => {
+  it.each([
+    [['--regenerate', '--case', signInId, '--case', editId]], [['--plan', 'p']], [['--case', oneId, '--plan', 'p']],
+    [['--regenerate', '--plan', 'p']], [[...oneArgv, '--plan']], [[...oneArgv, '--plan', '--keep']],
+    [[...oneArgv, '--heal-check']], [[...oneArgv, '--clean']], [[...oneArgv, '--published', '1.0.0']],
+    [['--regenerate', '--case', 'memos-unknown']], [[...oneArgv, '--plan', 'p', '--plan', 'q']],
+  ])('TEST-ONE-1 rejects invalid combinations with the usage text and no side effect (%j)', async argv => {
+    const f: Fake = createFakeDeps(); expect(await run(f, argv)).toBe(2);
+    expect(f.err()).toBe(`${selUsage}\n`); untouched(f);
+  });
+  it('TEST-ONE-1 accepts --case and --plan with --regenerate and --ai', () => {
+    expect(parseArgs([...oneArgv, '--plan', 'p', '--ai', 'codex'])).toMatchObject({ regenerate: true, regenerateCase: oneId, plan: 'p', ai: 'codex', cases: [oneId] });
+    expect(parseArgs(['--case', oneId, '--regenerate']).regenerateCase).toBe(oneId);
+  });
+  it('TEST-ONE-1 accepts a knownIssue case only for regeneration', async () => {
+    await withMarks({ 1: 632 }, async () => {
+      expect(parseArgs(['--regenerate', '--case', editId]).regenerateCase).toBe(editId);
+      expect(() => parseArgs(['--case', editId])).toThrow();
+    });
+  });
+  it('TEST-ONE-2 copies only the config, the context triples and the target prompt, and checks only the context', async () => {
+    const f = oneFake();
+    // A leftover pair for the target must be neither required nor copied.
+    write(join(f.fixture, plans[oneIdx]!), 'stale target plan'); write(join(f.fixture, groundings[oneIdx]!), 'stale target grounding');
+    expect(await run(f, oneArgv)).toBe(0);
+    const copied = vi.mocked(fs.copyFileSync).mock.calls.map(([from]) => relative(f.fixture, String(from))).filter(p => !p.startsWith('..'));
+    const expected = [files[0], ...oneContext.flatMap((_, i) => [prompts[i], plans[i], groundings[i]]), prompts[oneIdx]];
+    expect(copied.sort()).toEqual([...expected].sort());
+    expect(f.calls('check')[0]!.argv.slice(1)).toEqual(['check', '--json', ...prompts.slice(0, oneIdx)]);
+  });
+  it('TEST-ONE-3 names the owner of a missing context file and starts nothing', async () => {
+    const f = oneFake();
+    fs.unlinkSync(join(f.fixture, groundings[1]!));
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'preflight');
+    expect(last(f)).toContain(`missing fixture ${groundings[1]}; regenerate earlier cases first: npm run verify:memos -- --regenerate --case ${editId}`);
+    expect(f.starts).toEqual([]); expect(f.calls('generate')).toEqual([]); expect(f.calls('pack')).toEqual([]);
+  });
+  it('TEST-ONE-4 skips the context check when the target is the first case', async () => {
+    const f = oneFake(undefined, { fixtureCases: [] });
+    expect(await run(f, ['--regenerate', '--case', signInId])).toBe(0);
+    expect(f.calls('check')).toEqual([]);
+    expect(f.calls('resolve')[0]!.argv.slice(5)).toEqual([prompts[0]]);
+  });
+  it('TEST-ONE-5 sends a stale context case back to its own regeneration', async () => {
+    const f = oneFake((call, out) => call.kind === 'check'
+      ? result(4, JSON.stringify({ results: oneContext.map((id, i) => ({ file: prompts[i], status: i === 1 ? 'stale' : 'fresh' })) })) : out);
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'fixture');
+    expect(last(f)).toContain(`regenerate earlier cases first: npm run verify:memos -- --regenerate --case ${editId}`);
+    expect(f.starts).toEqual([]); expect(f.calls('generate')).toEqual([]);
+  });
+  it.each([['a missing row', [{ file: prompts[1], status: 'fresh' }]], ['unreadable output', undefined]])('TEST-ONE-5 treats %s as a stale context', async (_name, rows) => {
+    const f = oneFake((call, out) => call.kind === 'check' ? result(4, rows ? JSON.stringify({ results: rows }) : 'not json') : out);
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'fixture');
+    expect(last(f)).toContain(`regenerate earlier cases first: npm run verify:memos -- --regenerate --case ${signInId}`);
+    expect(f.starts).toEqual([]);
+  });
+  it('TEST-ONE-2 still fails preflight for another case marked knownIssue that has a fixture', async () => {
+    await withMarks({ 4: 632 }, async () => {
+      const f = oneFake(undefined, { fixtureCases: [...oneContext, tagId] });
+      expect(await run(f, oneArgv)).toBe(1); fail(f, 'preflight');
+      expect(last(f)).toContain(`known failure ${tagId} (#632) has a fixture`);
+    });
+  });
+  it('TEST-ONE-6 generates only the target once and inspects only its plan for coverage', async () => {
+    const f = oneFake();
+    write(join(f.fixture, plans[0]!), JSON.stringify({ steps: [{ id: 'uncovered', kind: 'capture' }] }));
+    expect(await run(f, oneArgv)).toBe(0);
+    expect(f.calls('generate')).toHaveLength(1);
+    expectCommand(f.calls('generate')[0]!, ['generate', '--target', oneTarget, prompts[oneIdx]!], 900_000);
+  });
+  it('TEST-ONE-6 fails on an uncovered target plan, naming only the target', async () => {
+    const f = oneFake((call, out) => {
+      if (call.kind === 'generate') write(join(call.opts.cwd, plans[oneIdx]!), JSON.stringify({ steps: [{ id: 'loose', kind: 'capture' }] }));
+      return out;
+    });
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'fixture');
+    expect(last(f)).toContain(`unconfirmed steps: ${oneId}=loose`);
+    expect(f.starts).toEqual([]);
+  });
+  it('TEST-ONE-7 resolves a carried-in plan without generating and publishes its bytes', async () => {
+    const f = oneFake((call, out) => {
+      if (call.kind === 'resolve') {
+        expect(fs.existsSync(join(call.opts.cwd, groundings[oneIdx]!))).toBe(false);
+        write(join(call.opts.cwd, groundings[oneIdx]!), JSON.stringify({ resolved: true }));
+      }
+      return missingGroundingCheck(call, out);
+    });
+    const text = JSON.stringify(navigationPlan(caseTable[oneIdx]!, true));
+    const path = writeCandidate(f, text), before = snapshot(f.fixture);
+    expect(await run(f, [...oneArgv, '--plan', path])).toBe(0);
+    expect(f.calls('generate')).toEqual([]);
+    const after = snapshot(f.fixture);
+    expect(changedFiles(before, after)).toEqual([groundings[oneIdx]!, plans[oneIdx]!].sort());
+    expect(fs.readFileSync(join(f.fixture, plans[oneIdx]!), 'utf8')).toBe(text);
+    expect(fs.readFileSync(join(f.fixture, groundings[oneIdx]!), 'utf8')).toBe(JSON.stringify({ resolved: true }));
+  });
+  it.each(['stale', 'fresh-without-grounding'])('TEST-ONE-8 rejects a --plan that does not match the prompt (%s)', async status => {
+    const f = oneFake((call, out) => call.kind === 'check' && call.argv.slice(3).join() === prompts[oneIdx]
+      ? result(4, JSON.stringify({ results: [{ file: prompts[oneIdx], status }] })) : out);
+    const path = writeCandidate(f, JSON.stringify(navigationPlan(caseTable[oneIdx]!, true)));
+    expect(await run(f, [...oneArgv, '--plan', path])).toBe(1); fail(f, 'fixture');
+    expect(last(f)).toContain(`--plan does not match the prompt: ${status}`);
+    expect(f.calls('resolve')).toEqual([]); expect(f.starts).toEqual([]);
+  });
+  it('TEST-ONE-8 rejects an unreadable --plan during preflight', async () => {
+    const f = oneFake();
+    expect(await run(f, [...oneArgv, '--plan', join(f.tmpRoot, 'absent.json')])).toBe(1); fail(f, 'preflight');
+    expect(last(f)).toContain('cannot read --plan'); expect(f.starts).toEqual([]); expect(f.calls('pack')).toEqual([]);
+  });
+  it('TEST-ONE-8c rejects a --plan written for another target', async () => {
+    const f = oneFake(missingGroundingCheck);
+    const path = writeCandidate(f, JSON.stringify(readOnlyPlan()));
+    expect(await run(f, [...oneArgv, '--plan', path])).toBe(1); fail(f, 'fixture');
+    expect(last(f)).toContain('plan target does not match the case');
+    expect(f.calls('resolve')).toEqual([]); expect(publishedRenames(f)).toEqual([]);
+  });
+  it('TEST-ONE-8c applies the target check to a generated plan too', async () => {
+    const f = oneFake((call, out) => {
+      if (call.kind === 'generate') write(join(call.opts.cwd, plans[oneIdx]!), JSON.stringify(readOnlyPlan()));
+      return out;
+    });
+    expect(await run(f, oneArgv)).toBe(1);
+    expect(last(f)).toContain('plan target does not match the case'); expect(f.starts).toEqual([]);
+  });
+  it('TEST-ONE-8b refuses a config rewritten by generate before any container starts', async () => {
+    const f = oneFake((call, out) => {
+      if (call.kind === 'generate') {
+        const path = join(call.opts.cwd, files[0]), config = JSON.parse(fs.readFileSync(path, 'utf8'));
+        write(path, JSON.stringify({ ...config, heal: { maxStepRepairs: 3 } }));
+      }
+      return out;
+    });
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'fixture');
+    expect(last(f)).toContain('config changed by generate'); expect(f.starts).toEqual([]);
+  });
+  it('TEST-ONE-9 resolves the context and the target in one run', async () => {
+    const f = oneFake();
+    expect(await run(f, oneArgv)).toBe(0);
+    expect(f.calls('resolve')).toHaveLength(1);
+    expectCommand(f.calls('resolve')[0]!, ['run', '--resolve', '--update-cache', '--json', ...prompts.slice(0, oneIdx + 1)], 900_000 * 3);
+  });
+  it.each([
+    ['quoted-match binding', (e: ResolveEnvelope) => { e.results[0]!.steps = [{ id: 'click-a', binding: { provenance: 'quoted-match', confirmed: true } }]; }],
+    ['AI calls', (e: ResolveEnvelope) => { e.results[0]!.steps = [{ id: 'click-a', binding: { provenance: 'grounding', confirmed: true } }]; e.results[0]!.aiCalls = 2; }],
+  ])('TEST-ONE-10 fails a context case that was re-resolved (%s)', async (_name, change) => {
+    const f = oneFake(withResolved(change));
+    const before = snapshot(f.fixture);
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'replay');
+    expect(last(f)).toContain(`context case ${signInId} was re-resolved`);
+    expect(f.starts).toHaveLength(1); expect(f.calls('replay')).toEqual([]); expect(snapshot(f.fixture)).toEqual(before);
+  });
+  it('TEST-ONE-10 reports the offending step and the AI call count', async () => {
+    const f = oneFake(withResolved(e => { e.results[0]!.steps = [{ id: 'click-a', binding: { provenance: 'quoted-match', confirmed: true } }]; e.results[0]!.aiCalls = 0; }));
+    await run(f, oneArgv);
+    expect(f.err()).toContain(`context case ${signInId} was re-resolved: click-a; aiCalls=0`);
+  });
+  it('TEST-ONE-10b does not count navigate and ai steps as bindings', async () => {
+    const f = oneFake(withResolved(e => {
+      e.results[0]!.steps = [{ id: 'open', kind: 'action', action: 'navigate', status: 'passed' }, { id: 'ask', kind: 'ai', status: 'passed' },
+        { id: 'click-a', binding: { provenance: 'grounding', confirmed: true } }];
+    }));
+    expect(await run(f, oneArgv)).toBe(0);
+  });
+  it('TEST-ONE-10c keeps the resolve report of a failed resolve and fails the replay stage', async () => {
+    const f = oneFake(withResolved(() => {}, 4));
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'replay');
+    expect(vi.mocked(fs.writeFileSync).mock.calls.some(([path]) => String(path).endsWith('resolve-report.json'))).toBe(true);
+    expect(publishedRenames(f)).toEqual([]);
+  });
+  it('TEST-ONE-11 fails when resolve rewrites a context grounding', async () => {
+    const f = oneFake((call, out) => {
+      if (call.kind === 'resolve') write(join(call.opts.cwd, groundings[0]!), JSON.stringify({ rewritten: true }));
+      return out;
+    });
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'replay');
+    expect(last(f)).toContain(`context case ${signInId} changed: ${groundings[0]}`);
+    expect(last(f)).toContain(`--regenerate --case ${signInId}`); expect(publishedRenames(f)).toEqual([]);
+  });
+  it('TEST-ONE-11 also catches a rewritten context plan', async () => {
+    const f = oneFake((call, out) => {
+      if (call.kind === 'resolve') write(join(call.opts.cwd, plans[1]!), JSON.stringify({ rewritten: true }));
+      return out;
+    });
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'replay');
+    expect(last(f)).toContain(`context case ${editId} changed: ${plans[1]}`);
+  });
+  it('TEST-ONE-10c stores the failed resolve stdout verbatim', async () => {
+    const f = oneFake(withResolved(() => {}, 4));
+    await run(f, oneArgv);
+    const saved = vi.mocked(fs.writeFileSync).mock.calls.find(([path]) => String(path).endsWith('resolve-report.json'));
+    expect(JSON.parse(String(saved![1])).results).toHaveLength(3);
+  });
+  it('TEST-ONE-12 replays and judges the context and the target', async () => {
+    const f = oneFake();
+    expect(await run(f, oneArgv)).toBe(0);
+    expectCommand(f.calls('replay')[0]!, ['run', '--json', '--no-color', ...prompts.slice(0, oneIdx + 1)], 120_000 * 3);
+    const judge = fullJudges(f)[0]!, cwd = f.calls('replay')[0]!.opts.cwd;
+    expect(judge.opts.env.AMBERCAST_VERIFY_MEMOS_EXPECTED_CASES).toBe('3');
+    expect(JSON.parse(judge.opts.env.AMBERCAST_VERIFY_MEMOS_ARTIFACT_ROOTS!)).toEqual([join(cwd, 'tests/ambercast/.runs'),
+      ...plans.slice(0, 3).map(p => join(cwd, p)), ...groundings.slice(0, 3).map(p => join(cwd, p))]);
+  });
+  describe('heal case', () => {
+    const healFixture = caseIds.slice(0, healIndex);
+    type LoosePlan = { steps: { id?: string; intent?: { quote?: string; description?: string }; confirms?: string[]; [key: string]: unknown }[] };
+    const heal = (mutatePlan?: (p: LoosePlan) => void) => oneFake((call, out) => {
+      if (call.kind === 'generate' && mutatePlan) {
+        const path = join(call.opts.cwd, healPlan), parsed = JSON.parse(fs.readFileSync(path, 'utf8'));
+        mutatePlan(parsed); write(path, JSON.stringify(parsed));
+      }
+      return out;
+    }, { fixtureCases: healFixture });
+    const argv = ['--regenerate', '--case', healId];
+    it('publishes a read-only plan with one unquoted settings entry and names no step when HEAL_STEP_ID is defined', async () => {
+      const f = heal();
+      expect(await run(f, argv)).toBe(0); expect(f.err()).not.toContain('settings-entry step id');
+    });
+    it('TEST-ONE-13 rejects a plan that is not read-only', async () => {
+      const f = heal(p => { p.steps.push({ id: 'write', kind: 'action', action: 'fill', target: 'memos-readonly', value: 'x' }, { id: 'ok', kind: 'assert', target: 'memos-readonly', confirms: ['write'] }); });
+      expect(await run(f, argv)).toBe(1); fail(f, 'fixture', '0'); expect(last(f)).toContain('plan is not read-only'); expect(publishedRenames(f)).toEqual([]);
+    });
+    it('TEST-ONE-13 rejects zero unquoted clicks', async () => {
+      const f = heal(p => { p.steps[2]!.intent!.quote = 'Open settings'; });
+      expect(await run(f, argv)).toBe(1); fail(f, 'fixture', '0'); expect(publishedRenames(f)).toEqual([]);
+    });
+    it('TEST-ONE-13 rejects two unquoted clicks', async () => {
+      const f = heal(p => { p.steps.splice(3, 0, { id: 'second', kind: 'action', action: 'click', target: 'memos-readonly', intent: { description: 'x' } }); p.steps.at(-1)!.confirms!.push('second'); });
+      expect(await run(f, argv)).toBe(1); fail(f, 'fixture', '0'); expect(publishedRenames(f)).toEqual([]);
+    });
+    it('TEST-ONE-13 rejects a defined HEAL_STEP_ID that the plan does not contain', async () => {
+      const f = heal(); (f.deps as { healStepId?: string }).healStepId = 'other-step';
+      expect(await run(f, argv)).toBe(1); fail(f, 'fixture', '0');
+      expect(last(f)).toContain('HEAL_STEP_ID other-step not found; update the constant to settings-entry'); expect(publishedRenames(f)).toEqual([]);
+    });
+    it('TEST-ONE-13 publishes and prints the detected id when HEAL_STEP_ID is undefined', async () => {
+      const f = heal(); (f.deps as { healStepId?: string | undefined }).healStepId = undefined;
+      expect(await run(f, argv)).toBe(0);
+      expect(f.err()).toContain('verify-memos: settings-entry step id: settings-entry; set HEAL_STEP_ID');
+      expect(publishedRenames(f)).toEqual([healPlan, healGrounding]);
+    });
+  });
+  it('TEST-ONE-14 publishes only the target plan then grounding and reminds about later cases', async () => {
+    const f = oneFake(), before = snapshot(f.fixture);
+    expect(await run(f, oneArgv)).toBe(0);
+    expect(publishedRenames(f)).toEqual([plans[oneIdx], groundings[oneIdx]]);
+    expect(changedFiles(before, snapshot(f.fixture))).toEqual([groundings[oneIdx]!, plans[oneIdx]!].sort());
+    expect(f.err()).toContain(`verify-memos: published files: ${plans[oneIdx]}, ${groundings[oneIdx]}`);
+    expect(f.err().split('\n').filter(l => l === 'verify-memos: later cases were not replayed; run npm run verify:memos to verify the whole set')).toHaveLength(1);
+  });
+  it('TEST-ONE-15 counts a failed second rename out of two', async () => {
+    const f = oneFake(), actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+    let attempted = 0;
+    vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+      if (publications.some(p => String(destination) === join(f.fixture, p)) && ++attempted === 2) throw new Error('rename failed');
+      return actual.renameSync(source, destination);
+    });
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'fixture', '0');
+    expect(last(f)).toContain('; published files: 1 of 2');
+    expect(Object.keys(snapshot(f.fixture)).filter(p => p.includes('.tmp-'))).toEqual([]);
+  });
+  it('TEST-ONE-15b retries a target that is marked knownIssue and half published', async () => {
+    await withMarks({ [oneIdx]: 632 }, async () => {
+      const f = oneFake();
+      write(join(f.fixture, plans[oneIdx]!), JSON.stringify(navigationPlan(caseTable[oneIdx]!)));
+      expect(await run(f, oneArgv)).toBe(0);
+      expect(publishedRenames(f)).toEqual([plans[oneIdx], groundings[oneIdx]]);
+    });
+  });
+  it.each([['grounding', groundings[0]!], ['target prompt', prompts[oneIdx]!], ['config', files[0]], ['context plan', plans[1]!], ['context prompt', prompts[1]!]])('TEST-ONE-16 does not publish when the fixture %s changes during the run', async (_name, file) => {
+    const f = oneFake((call, out) => {
+      if (call.kind === 'judge' && call.opts.env.AMBERCAST_VERIFY_MEMOS_MODE === 'full') write(join(f.fixture, file), 'moved under us');
+      return out;
+    });
+    expect(await run(f, oneArgv)).toBe(1); fail(f, 'fixture', '0');
+    expect(last(f)).toContain(`fixture changed during regeneration: ${file}`);
+    expect(publishedRenames(f)).toEqual([]);
+    expect(fs.existsSync(join(f.fixture, plans[oneIdx]!))).toBe(false);
+  });
+  it('TEST-ONE-17 ends with a partial pass naming the regenerated case', async () => {
+    const f = oneFake();
+    expect(await run(f, oneArgv)).toBe(0);
+    expect(last(f)).toBe(passLine(` regenerated=${oneId}`, 'PASS-PARTIAL'));
+  });
+  it('TEST-ONE-24 names a knownIssue target on the pass line and warns to remove the mark', async () => {
+    await withMarks({ [oneIdx]: 632 }, async () => {
+      const f = oneFake();
+      expect(await run(f, oneArgv)).toBe(0);
+      expect(last(f)).toBe(passLine(` known=${oneId}#632 regenerated=${oneId}`, 'PASS-PARTIAL'));
+      expect(f.err().trimEnd().split('\n').at(-1)).toBe(`verify-memos: ${oneId} is marked knownIssue #632; remove the mark in the same change`);
+    });
+  });
+  it('TEST-ONE-23 leaves a marked earlier case out of the context', async () => {
+    await withMarks({ 1: 632 }, async () => {
+      const f = oneFake(undefined, { fixtureCases: [signInId] });
+      expect(await run(f, oneArgv)).toBe(0);
+      expect(f.calls('check')[0]!.argv.slice(3)).toEqual([prompts[0]]);
+      expect(f.calls('resolve')[0]!.argv.slice(5)).toEqual([prompts[0], prompts[oneIdx]]);
+    });
+  });
+  describe('candidate plan', () => {
+    const files = (f: Fake) => fs.existsSync(candidateDir(f)) ? fs.readdirSync(candidateDir(f)) : [];
+    it('TEST-ONE-18 keeps the generated plan after a failed resolve, owner-only, and guides the retry', async () => {
+      const f = oneFake(withResolved(() => {}, 4));
+      expect(await run(f, oneArgv)).toBe(1);
+      const name = `${oneId}-${f.starts[0]!.runId}.ambercast.plan.json`, path = join(candidateDir(f), name);
+      expect(files(f)).toEqual([name]);
+      expect(fs.statSync(candidateDir(f)).mode & 0o777).toBe(0o700); expect(fs.statSync(path).mode & 0o777).toBe(0o600);
+      expect(fs.readFileSync(path, 'utf8')).toBe(JSON.stringify(navigationPlan(caseTable[oneIdx]!, true)));
+      const lines = f.err().trimEnd().split('\n');
+      expect(lines.at(-1)).toBe(`verify-memos: candidate plan: ${path}; retry resolve with --regenerate --case ${oneId} --plan ${path}`);
+    });
+    it('TEST-ONE-18 keeps the plan after a failed publication and lists published files before the candidate line', async () => {
+      const f = oneFake(), actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      let attempted = 0;
+      vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+        if (publications.some(p => String(destination) === join(f.fixture, p)) && ++attempted === 2) throw new Error('rename failed');
+        return actual.renameSync(source, destination);
+      });
+      expect(await run(f, oneArgv)).toBe(1);
+      const lines = f.err().trimEnd().split('\n');
+      const published = lines.findIndex(l => l.startsWith('verify-memos: published files:')), candidate = lines.findIndex(l => l.startsWith('verify-memos: candidate plan:'));
+      expect(published).toBeGreaterThan(-1); expect(candidate).toBeGreaterThan(published);
+      expect(files(f)).toHaveLength(1);
+    });
+    it('TEST-ONE-18 reuses an existing owner-only directory and refuses an open one', async () => {
+      const reuse = oneFake(withResolved(() => {}, 4));
+      fs.mkdirSync(candidateDir(reuse), { mode: 0o700 });
+      expect(await run(reuse, oneArgv)).toBe(1); expect(files(reuse)).toHaveLength(1);
+      const open = oneFake(withResolved(() => {}, 4));
+      fs.mkdirSync(candidateDir(open)); fs.chmodSync(candidateDir(open), 0o755);
+      expect(await run(open, oneArgv)).toBe(1);
+      expect(files(open)).toEqual([]); expect(open.err()).toContain('candidate plan not saved: unsafe directory');
+    });
+    it('TEST-ONE-18 refuses a symlinked directory and still saves with --keep', async () => {
+      const link = oneFake(withResolved(() => {}, 4));
+      fs.mkdirSync(join(link.tmpRoot, 'elsewhere'), { mode: 0o700 }); fs.symlinkSync(join(link.tmpRoot, 'elsewhere'), candidateDir(link));
+      expect(await run(link, oneArgv)).toBe(1);
+      expect(fs.readdirSync(join(link.tmpRoot, 'elsewhere'))).toEqual([]); expect(link.err()).toContain('candidate plan not saved');
+      const keep = oneFake(withResolved(() => {}, 4));
+      expect(await run(keep, [...oneArgv, '--keep'])).toBe(1); expect(files(keep)).toHaveLength(1);
+    });
+    it('TEST-ONE-18 redacts secrets from the saved plan', async () => {
+      // The password exists only after generation, so the leak is simulated in a plan and the failure comes from resolve.
+      const f = oneFake((call, out, resolved) => {
+        if (call.kind === 'generate') write(join(call.opts.cwd, plans[oneIdx]!), JSON.stringify({ ...navigationPlan(caseTable[oneIdx]!, true), note: password }));
+        return call.kind === 'resolve' && resolved ? result(4, out.stdout) : out;
+      });
+      expect(await run(f, oneArgv)).toBe(1);
+      expect(fs.readFileSync(join(candidateDir(f), files(f)[0]!), 'utf8')).not.toContain(password);
+    });
+    it('TEST-ONE-18 keeps the plan after a coverage failure', async () => {
+      const f = oneFake((call, out) => {
+        if (call.kind === 'generate') write(join(call.opts.cwd, plans[oneIdx]!), JSON.stringify({ steps: [{ id: 'loose', kind: 'capture' }] }));
+        return out;
+      });
+      expect(await run(f, oneArgv)).toBe(1);
+      expect(files(f)).toHaveLength(1); expect(f.err()).toContain('candidate plan:');
+    });
+    it('TEST-ONE-18 keeps nothing after a generate failure', async () => {
+      const f = oneFake((call, out) => call.kind === 'generate' ? result(1, '', 'rejected') : out);
+      expect(await run(f, oneArgv)).toBe(1);
+      expect(fs.existsSync(candidateDir(f))).toBe(false); expect(f.err()).not.toContain('candidate plan');
+    });
+    it('TEST-ONE-18 points a failed --plan run at the same path without saving a new copy', async () => {
+      const f = oneFake((call, out, resolved) => call.kind === 'resolve' && resolved ? result(4, out.stdout) : missingGroundingCheck(call, out));
+      const path = writeCandidate(f, JSON.stringify(navigationPlan(caseTable[oneIdx]!, true)));
+      expect(await run(f, [...oneArgv, '--plan', path])).toBe(1);
+      expect(fs.existsSync(candidateDir(f))).toBe(false);
+      expect(f.err().trimEnd().split('\n').at(-1)).toBe(`verify-memos: candidate plan: ${path}; retry resolve with --regenerate --case ${oneId} --plan ${path}`);
+    });
+    it('TEST-ONE-18 keeps nothing when only the teardown fails after both files were published', async () => {
+      let removals = 0;
+      const f = oneFake(undefined, { runner: { removeContainer: async () => { if (++removals > 1) throw new Error('rm failed'); } } });
+      expect(await run(f, oneArgv)).toBe(1);
+      expect(publishedRenames(f)).toEqual([plans[oneIdx], groundings[oneIdx]]);
+      expect(fs.existsSync(candidateDir(f))).toBe(false);
+    });
+    it('TEST-ONE-18 reports an unwritable target without changing the failure reason', async () => {
+      const f = oneFake(withResolved(() => {}, 4));
+      fs.writeFileSync(candidateDir(f), 'not a directory');
+      expect(await run(f, oneArgv)).toBe(1); fail(f, 'replay');
+      expect(f.err()).toContain('verify-memos: candidate plan not saved:');
+      expect(f.err()).not.toMatch(/candidate plan: /);
+    });
+    it('TEST-ONE-19 keeps the plan and cleans up after SIGINT during resolve', async () => {
+      const f = oneFake((call, out) => { if (call.kind === 'resolve') f.signals.emit('SIGINT'); return out; });
+      expect(await run(f, oneArgv)).toBe(130);
+      expect(last(f)).toMatch(/aiCalls=n\/a$/); expect(files(f)).toHaveLength(1); cleaned(f);
+    });
+  });
+  it('TEST-ONE-22 leaves a failed whole-set run without a candidate plan', async () => {
+    const f: Fake = createFakeDeps({ runProcess: async call => {
+      const success = await f.successfulProcess(call);
+      return call.kind === 'resolve' ? result(4, success.stdout) : success;
+    } });
+    expect(await run(f, ['--regenerate'])).toBe(1);
+    expect(fs.existsSync(candidateDir(f))).toBe(false); expect(f.err()).not.toContain('candidate plan');
   });
 });
 

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -19,18 +19,32 @@ const expectedCases = [
   { id: 'memos-settings-dialog', target: 'memos-readonly' },
   { id: 'memos-ja-locale', target: 'memos-ja' },
 ];
-const generatedFixtureFiles = expectedCases.slice(1).flatMap(({ id }) =>
-  ['.ambercast.plan.json', '.ambercast.grounding.json'].map(suffix =>
-    new URL(`tests/ambercast/${id}${suffix}`, fixture)),
-);
-const generatedFixtureCount = generatedFixtureFiles.filter(file => existsSync(file)).length;
-// Generated artifacts (#624) are checked as a complete set: skip only when all
-// are absent, run when complete, and fail on partial presence so missing coverage
-// cannot silently pass. Handwritten IR cannot substitute for generation.
-const generatedFixturesAbsent = generatedFixtureCount === 0;
+const planSuffixes = ['.ambercast.plan.json', '.ambercast.grounding.json'];
+/**
+ * Describes a fixture directory whose generated artifacts do not form per-case
+ * pairs. A case's plan and grounding exist together or not at all, so a one-case
+ * regeneration (#636) may leave other cases ungenerated; a lone file is always a
+ * defect, and so is a missing sign-in pair, which is the one smoke case that must
+ * never disappear into a skip (unless it is marked as a known failure).
+ */
+function fixturePairProblems(dir: URL, marked: readonly string[] = []): string[] {
+  const problems: string[] = [];
+  for (const { id } of expectedCases) {
+    const present = planSuffixes.filter(suffix => existsSync(new URL(`tests/ambercast/${id}${suffix}`, dir)));
+    if (present.length === 1) problems.push(`${id}: only ${present[0]} exists`);
+    if (present.length === 0 && id === 'memos-sign-in-create-memo' && !marked.includes(id)) problems.push(`${id}: pair is required`);
+  }
+  return problems;
+}
+const markedIds = ((await harnessExports()).CASES as { id: string; knownIssue?: number }[])
+  .filter(c => c.knownIssue !== undefined).map(c => c.id);
+const pairPresent = (id: string) => planSuffixes.every(suffix => existsSync(new URL(`tests/ambercast/${id}${suffix}`, fixture)));
+// A case without its generated pair is skipped, except the sign-in smoke whose
+// pair stays required; handwritten IR cannot substitute for generation.
+const skipCase = (id: string) => !pairPresent(id) && (id !== 'memos-sign-in-create-memo' || markedIds.includes(id));
 describe('committed confirms coverage', () => {
   for (const { id } of expectedCases) {
-    it.skipIf(generatedFixturesAbsent && id !== 'memos-sign-in-create-memo')(`TEST-CNF-11 covers operations in ${id}`, () => {
+    it.skipIf(skipCase(id))(`TEST-CNF-11 covers operations in ${id}`, () => {
       expect(unconfirmedSteps(fixturePlan(id))).toEqual([]);
     });
   }
@@ -204,8 +218,42 @@ describe('memos verification wiring', () => {
     expect(readFileSync(new URL('AGENTS.md', root), 'utf8')).toContain('--case');
   });
 
-  it('TEST-544-4 keeps generated fixtures entirely absent or complete', () => {
-    expect([0, 12]).toContain(generatedFixtureCount);
+  it('TEST-544-4 keeps each case\'s generated plan and grounding together', () => {
+    expect(fixturePairProblems(fixture, markedIds)).toEqual([]);
+  });
+
+  describe('TEST-ONE-20 per-case pair rule', () => {
+    const dirs: URL[] = [];
+    const fixtureWith = (files: string[]) => {
+      const dir = mkdtempSync(join(tmpdir(), 'memos-pairs-'));
+      temporaryRoots.push(dir);
+      const url = pathToFileURL(`${dir}/`);
+      mkdirSync(new URL('tests/ambercast/', url), { recursive: true });
+      for (const file of files) writeFileSync(new URL(`tests/ambercast/${file}`, url), '{}');
+      dirs.push(url);
+      return url;
+    };
+    const pair = (id: string) => planSuffixes.map(suffix => `${id}${suffix}`);
+    it('accepts a sign-in pair with one more case and no other case', () => {
+      expect(fixturePairProblems(fixtureWith([...pair('memos-sign-in-create-memo'), ...pair('memos-edit-memo')]))).toEqual([]);
+    });
+    it('rejects a case with only its plan', () => {
+      expect(fixturePairProblems(fixtureWith([...pair('memos-sign-in-create-memo'), 'memos-edit-memo.ambercast.plan.json'])))
+        .toEqual(['memos-edit-memo: only .ambercast.plan.json exists']);
+    });
+    it('rejects a fixture without the sign-in pair unless the case is marked', () => {
+      const dir = fixtureWith(pair('memos-edit-memo'));
+      expect(fixturePairProblems(dir)).toEqual(['memos-sign-in-create-memo: pair is required']);
+      expect(fixturePairProblems(dir, ['memos-sign-in-create-memo'])).toEqual([]);
+    });
+  });
+
+  it('TEST-ONE-21 documents --regenerate --case and --plan in CONTRIBUTING.md and AGENTS.md', () => {
+    const contributing = readFileSync(new URL('CONTRIBUTING.md', root), 'utf8');
+    for (const text of ['--regenerate --case <id>', '--plan <path>', 'earlier cases', 'only that case']) {
+      expect(contributing, text).toContain(text);
+    }
+    expect(readFileSync(new URL('AGENTS.md', root), 'utf8')).toContain('--regenerate --case');
   });
 
   it.each(expectedCases)('TEST-544-4 commits the prompt for $id', ({ id }) => {
@@ -214,7 +262,7 @@ describe('memos verification wiring', () => {
   });
 
   for (const { id } of expectedCases) {
-    it.skipIf(generatedFixturesAbsent && id !== 'memos-sign-in-create-memo')(`TEST-544-4 commits plan and grounding for ${id}`, () => {
+    it.skipIf(skipCase(id))(`TEST-544-4 commits plan and grounding for ${id}`, () => {
       for (const suffix of ['.ambercast.plan.json', '.ambercast.grounding.json']) {
         const file = new URL(`tests/ambercast/${id}${suffix}`, fixture);
         expect.soft(existsSync(file), file.pathname).toBe(true);
@@ -292,12 +340,12 @@ describe('memos verification wiring', () => {
   });
 
   for (const { id, target } of expectedCases) {
-    it.skipIf(generatedFixturesAbsent && id !== 'memos-sign-in-create-memo')(`TEST-544-5 uses only target ${target} in the plan for ${id}`, () => {
+    it.skipIf(skipCase(id))(`TEST-544-5 uses only target ${target} in the plan for ${id}`, () => {
       expect([...new Set(fixturePlan(id).steps.map(step => step.target))]).toEqual([target]);
     });
   }
 
-  it.skipIf(generatedFixturesAbsent)('TEST-544-5 limits settings-dialog inputs to the username and allowed password', () => {
+  it.skipIf(!pairPresent('memos-settings-dialog'))('TEST-544-5 limits settings-dialog inputs to the username and allowed password', () => {
     const config = JSON.parse(fixtureText('ambercast.config.json'));
     expect(config.secrets.allow).toHaveLength(1);
     const inputs = fixturePlan('memos-settings-dialog').steps
@@ -310,7 +358,7 @@ describe('memos verification wiring', () => {
       .toBe(`{{secrets.${config.secrets.allow[0]}}}`);
   });
 
-  it.skipIf(generatedFixturesAbsent)('TEST-544-5 identifies exactly one unquoted settings-entry click by HEAL_STEP_ID', async () => {
+  it.skipIf(!pairPresent('memos-settings-dialog'))('TEST-544-5 identifies exactly one unquoted settings-entry click by HEAL_STEP_ID', async () => {
     const { HEAL_STEP_ID } = await harnessExports();
     expect(HEAL_STEP_ID).toBeTypeOf('string');
     expect(HEAL_STEP_ID).not.toBe('');

@@ -1,0 +1,90 @@
+{
+  "entries": {
+    "click-save": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "0e90cdba83d2fae86e85a5c19ffa2d78267b11db4fade702efa5f4f217e92bfe"
+      },
+      "intentDigest": "a2b4babe794db8b05b5bdfae101e748e0dcce082fa6e2d1c68abe5eda00dfcf2",
+      "kind": "element",
+      "locator": {
+        "name": "Save",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-sign-in": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "3216f02a2bd4aebe457b7c25d6a8be79f1fcedc2f701d6ad4db0b4615f6d94e0"
+      },
+      "intentDigest": "02041dbff4a945efc205294887f04406a0464815637ff283e7f4db0a4be4d8e7",
+      "kind": "element",
+      "locator": {
+        "name": "Sign in",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-tag": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "af6c1695dced618a43abdb411ee2ac6868f013b43aba71d09f7d73d5aedab0d5"
+      },
+      "intentDigest": "f598d49ab0efd4d7505462e843197288fcd6a2a3359c2a9a0c26c489d2b65e6e",
+      "kind": "element",
+      "locator": {
+        "name": "#ambercasttag, 1 memos",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-memo": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "37158f5623311a6cae9424551667e5be5276a32b37010cb90eaefeca264aec55"
+      },
+      "intentDigest": "ab6b2838707c7c04df7d094f317c9993e8fcca4a274cec376b106c5b588896ef",
+      "kind": "element",
+      "locator": {
+        "name": "",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-password": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "5ddd8e6bb92aff820daac95456998be29d4ea9d7cc94a4543d9e31e3cbecd52a"
+      },
+      "intentDigest": "07d5713e386862849c6c5ad1a4cc4f46be700da201a7e3beb3456559d283281a",
+      "kind": "element",
+      "locator": {
+        "name": "Password",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-username": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "f34378aac0c5e319f78db6becf67f1636d116c38dca19b7b00860b37d10e85d0"
+      },
+      "intentDigest": "8146a9133a99a7fadcf02a00eecc19cbce0b8e484e91bff96abcf89e23020006",
+      "kind": "element",
+      "locator": {
+        "name": "Username",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    }
+  },
+  "planDigest": "21c3ae1fdc2fe6acde6dcc9c94e3ef3a55181d6e3d068da5915cbe6fe8336615",
+  "schemaVersion": 4
+}

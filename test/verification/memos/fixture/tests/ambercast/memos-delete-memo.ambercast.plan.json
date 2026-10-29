@@ -1,0 +1,353 @@
+{
+  "generatorMeta": {
+    "planProducerBundle": {
+      "components": {
+        "elementIntentPolicyRevision": 1,
+        "generatedPlanResponseLocalContract": "c531ed095c2b3b48760bea36e6ee566438c5da5f95a8f120d104ab0ec6417ccc",
+        "generatedPlanResponseSchema": "0f7cf68f9f6b1c5244273b99cecbcc2a4b9d03f8d7c470592c725d7217bd2c64",
+        "generatorPromptTemplate": "35ffade719a6bd62db243d57fa76c10ca83f7df17da82d92b8e7250b433429c5",
+        "generatorSecretPolicyRevision": 5,
+        "generatorTaskInstruction": "730ab212ad679bc42a03e56a6cc5f9247d586b0dbdda4e5fa14f4996c1a50180",
+        "instructionCoveragePolicyRevision": 3
+      },
+      "fingerprint": "2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020"
+    }
+  },
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "05ab4dad68e6ff562dfca4cea274caeafd7ec2361346a629bc1c8dedbddd8eec"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "id": "open-sign-in",
+      "kind": "action",
+      "target": "memos",
+      "url": "http://127.0.0.1:5230/auth"
+    },
+    {
+      "action": "fill",
+      "id": "fill-username",
+      "intent": {
+        "description": "Username input on the sign-in page",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 53,
+          "endLine": 3,
+          "startColumn": 34,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "verifier"
+    },
+    {
+      "action": "fill-secret",
+      "id": "fill-password",
+      "intent": {
+        "description": "Password input on the sign-in page",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 76,
+          "endLine": 3,
+          "startColumn": 62,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "secretRef": "{{secrets.password}}",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-sign-in",
+      "intent": {
+        "description": "Sign in button",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 98,
+          "endLine": 3,
+          "startColumn": 89,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-sign-in"
+      ],
+      "id": "assert-save-button-visible",
+      "intent": {
+        "description": "Save button is displayed",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 121,
+            "endLine": 3,
+            "startColumn": 117,
+            "startLine": 3
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 129,
+          "endLine": 3,
+          "startColumn": 116,
+          "startLine": 3
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-username",
+        "fill-password",
+        "click-sign-in"
+      ],
+      "id": "assert-username-visible",
+      "kind": "assert",
+      "target": "memos",
+      "text": "verifier"
+    },
+    {
+      "action": "fill",
+      "id": "fill-memo-editor",
+      "intent": {
+        "description": "Memo editor input",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 52,
+          "endLine": 4,
+          "startColumn": 1,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "ambercast delete target"
+    },
+    {
+      "action": "click",
+      "id": "click-save-memo",
+      "intent": {
+        "description": "Save button of the memo editor",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 69,
+          "endLine": 4,
+          "startColumn": 63,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-memo-editor",
+        "click-save-memo"
+      ],
+      "id": "assert-memo-in-list",
+      "kind": "assert",
+      "target": "memos",
+      "text": "ambercast delete target"
+    },
+    {
+      "action": "click",
+      "id": "click-sidebar-search",
+      "intent": {
+        "description": "Search button in the sidebar",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 39,
+          "endLine": 5,
+          "startColumn": 11,
+          "startLine": 5
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "action": "fill",
+      "id": "fill-search-box",
+      "intent": {
+        "description": "Search box input",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 91,
+          "endLine": 5,
+          "startColumn": 41,
+          "startLine": 5
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "ambercast delete target"
+    },
+    {
+      "action": "press",
+      "id": "press-enter-search",
+      "intent": {
+        "description": "Submit the search by pressing Enter in the search box",
+        "sourceSpan": {
+          "endColumn": 107,
+          "endLine": 5,
+          "startColumn": 96,
+          "startLine": 5
+        }
+      },
+      "key": "Enter",
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "click-sidebar-search",
+        "fill-search-box",
+        "press-enter-search"
+      ],
+      "id": "assert-memo-in-search-results",
+      "kind": "assert",
+      "target": "memos",
+      "text": "ambercast delete target"
+    },
+    {
+      "action": "click",
+      "id": "click-memo-menu",
+      "intent": {
+        "description": "Menu button of the only memo in the list",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 31,
+          "endLine": 6,
+          "startColumn": 10,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-more",
+      "intent": {
+        "description": "More menu item",
+        "roleHint": "menuitem",
+        "sourceSpan": {
+          "endColumn": 61,
+          "endLine": 6,
+          "startColumn": 55,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-memo-menu",
+        "click-more"
+      ],
+      "id": "assert-delete-menu-item-visible",
+      "intent": {
+        "description": "Delete menu item is displayed",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 86,
+            "endLine": 6,
+            "startColumn": 80,
+            "startLine": 6
+          },
+          "text": "Delete"
+        },
+        "roleHint": "menuitem",
+        "sourceSpan": {
+          "endColumn": 97,
+          "endLine": 6,
+          "startColumn": 79,
+          "startLine": 6
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-delete-menu-item",
+      "intent": {
+        "description": "Delete menu item",
+        "roleHint": "menuitem",
+        "sourceSpan": {
+          "endColumn": 127,
+          "endLine": 6,
+          "startColumn": 119,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-confirm-delete",
+      "intent": {
+        "description": "Delete confirmation button in the confirmation dialog",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 153,
+          "endLine": 6,
+          "startColumn": 132,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-count",
+      "confirms": [
+        "click-delete-menu-item",
+        "click-confirm-delete"
+      ],
+      "count": 0,
+      "id": "assert-memo-text-gone",
+      "intent": {
+        "description": "No element displaying the deleted memo text remains",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 200,
+            "endLine": 6,
+            "startColumn": 177,
+            "startLine": 6
+          },
+          "text": "ambercast delete target"
+        },
+        "sourceSpan": {
+          "endColumn": 224,
+          "endLine": 6,
+          "startColumn": 176,
+          "startLine": 6
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    }
+  ],
+  "targets": {
+    "memos": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "en-US",
+      "surface": "web"
+    }
+  }
+}

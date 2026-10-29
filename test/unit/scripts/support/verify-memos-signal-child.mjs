@@ -4,6 +4,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { dirname, join } from 'node:path';
 import { CASES } from '../../../../scripts/verify-memos.mjs';
 
+// The simulated fixture publishes every case, so shipped knownIssue marks would be rejected.
+for (const c of CASES) delete c.knownIssue;
+
 const [tmpRoot, mode, keep] = process.argv.slice(2);
 const repoRoot = join(tmpRoot, 'repo');
 const fixture = join(repoRoot, 'test/verification/memos/fixture');

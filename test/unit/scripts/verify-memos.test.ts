@@ -28,6 +28,10 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 const configFile = 'ambercast.config.json';
 const caseTable = CASES as readonly { id: string; target: string }[];
+// The suite models an unmarked table; withMarks re-applies marks per test.
+const shippedMarks = caseTable.filter(c => (c as { knownIssue?: unknown }).knownIssue !== undefined)
+  .map(c => ({ id: c.id, issue: (c as unknown as { knownIssue: number }).knownIssue }));
+for (const c of caseTable) delete (c as { knownIssue?: unknown }).knownIssue;
 const caseIds = caseTable.map(c => c.id);
 const prompts = caseTable.map(c => `tests/ambercast/${c.id}.test.md`);
 const plans = prompts.map(p => p.replace('.test.md', '.ambercast.plan.json'));
@@ -2923,5 +2927,22 @@ describe('main', () => {
       expect(f.starts).toHaveLength(1); expect(f.containers.size).toBe(0); expect(f.roots()).toEqual([]);
       expect(snapshot(f.fixture)).toEqual(before);
     });
+  });
+});
+
+describe('shipped known-failure marks', () => {
+  const committed = (id: string) => ['plan', 'grounding'].some(kind =>
+    fs.existsSync(new URL(`../../verification/memos/fixture/tests/ambercast/${id}.ambercast.${kind}.json`, import.meta.url)));
+
+  it('marks only valid issue numbers and never the heal case', () => {
+    for (const { id, issue } of shippedMarks) {
+      expect(Number.isSafeInteger(issue) && issue >= 1, id).toBe(true);
+      expect(id).not.toBe('memos-settings-dialog');
+    }
+    expect(shippedMarks.length).toBeLessThan(caseTable.length);
+  });
+
+  it('commits no fixture for a marked case', () => {
+    for (const { id } of shippedMarks) expect(committed(id), id).toBe(false);
   });
 });

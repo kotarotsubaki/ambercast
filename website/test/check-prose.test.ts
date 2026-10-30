@@ -209,6 +209,25 @@ describe('issue 655 changed-page git integration', () => {
     const p = changed(f); expect(p.status, p.stderr).toBe(1);
     expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ page: 'reference/a', rule: 'no-thematic-break', line: 3 }), expect.objectContaining({ page: 'reference/z', rule: 'heading-depth', line: 1 })]);
   }, 60_000);
+  it('ignores inherited repository-location variables when reporting a new error', () => {
+    const f = changedFixture();
+    put(f, path('reference/x'), '#### New\n');
+    const baseline = changed(f);
+    expect(baseline.status, baseline.stderr).toBe(1);
+    expect(jsonLines(baseline.stdout)).toEqual([expect.objectContaining({
+      page: 'reference/x', locale: 'en', rule: 'heading-depth', severity: 'error', line: 1,
+    })]);
+    const polluted = spawnSync(process.execPath, [fileURLToPath(script), '--changed', '--base', 'main'], {
+      cwd: f.website, encoding: 'utf8', env: {
+        ...fixtureEnv(f), GIT_DIR: '.git',
+        GIT_WORK_TREE: join(f.root, '..', 'outside-work-tree'),
+        GIT_INDEX_FILE: join(f.root, '..', 'outside-index'),
+      },
+    });
+    expect(polluted.status, polluted.stderr).toBe(baseline.status);
+    expect(polluted.stdout).toBe(baseline.stdout);
+    expect(polluted.stderr).toBe(baseline.stderr);
+  }, 60_000);
   it('prints a new warning and exits zero', () => {
     const f = changedFixture(); put(f, path('reference/x'), `${Array(21).fill('word').join(' ')}.\n`);
     const p = changed(f); expect(p.status, p.stderr).toBe(0); expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ rule: 'sentence-length', severity: 'warning' })]);

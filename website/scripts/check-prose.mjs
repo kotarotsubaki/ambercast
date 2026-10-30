@@ -44,8 +44,13 @@ function firstLine(message) {
 }
 
 function git(repoRoot, args, code = 'tool-failure') {
+  // Inherited repository locations can redirect Git away from the requested cwd.
+  const env = { ...process.env };
+  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_PREFIX',
+    'GIT_CEILING_DIRECTORIES']) delete env[key];
   const result = spawnSync('git', ['-c', 'core.quotepath=false', ...args], {
-    cwd: repoRoot, encoding: 'utf8', maxBuffer: MAX_CHILD_OUTPUT,
+    cwd: repoRoot, encoding: 'utf8', maxBuffer: MAX_CHILD_OUTPUT, env,
   });
   if (result.error || result.status !== 0) {
     throw tagged(code, firstLine(result.error?.message) || firstLine(result.stderr) || 'git failed');

@@ -1,9 +1,11 @@
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkProse, main } from '../scripts/check-prose.mjs';
-import { createDocsFixture, runEntryPoint } from './cli-fixture.ts';
+import { createDocsFixture } from './cli-fixture.ts';
 
 const script = new URL('../scripts/check-prose.mjs', import.meta.url);
 const docs = 'website/src/content/docs';
@@ -18,7 +20,13 @@ function fixture(pages: string[] = [], files: Record<string, string> = {}, chang
   const f = createDocsFixture({ [configPath]: JSON.stringify(c), ...files }); fixtures.push(f); return f;
 }
 const input = (f: ReturnType<typeof fixture>, r = runners(), report = false) => ({ docsRoot: join(f.root, docs), configPath: join(f.root, configPath), report, runners: r });
-const cli = (f: ReturnType<typeof fixture>, args: string[] = []) => runEntryPoint(script, f.website, args);
+function fixtureEnv(f: ReturnType<typeof fixture>) {
+  const globalConfig = join(f.root, 'empty-git-config');
+  writeFileSync(globalConfig, '');
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  return { ...env, GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_NOSYSTEM: '1', HOME: f.root };
+}
+const cli = (f: ReturnType<typeof fixture>, args: string[] = []) => spawnSync(process.execPath, [fileURLToPath(script), ...args], { cwd: f.website, encoding: 'utf8', env: fixtureEnv(f) });
 const realWebsite = fileURLToPath(new URL('../', import.meta.url));
 function enableRealTools(f: ReturnType<typeof fixture>) {
   writeFileSync(join(f.website, '.textlintrc.json'), readFileSync(join(realWebsite, '.textlintrc.json')));
@@ -47,6 +55,309 @@ async function scan(slug: string, body: string, locale = 'en', change: (c: any) 
 }
 const only = (list: any[], name: string) => list.filter((v) => v.rule === name);
 const anchors = '## Prerequisites {#prerequisites}\n## Steps {#steps}\n## Verification {#verification}\n## Next steps {#next-steps}\n';
+
+const locales = ['en', 'ja', 'zh-cn'];
+const translated = (slug: string, body = '# X\n') => Object.fromEntries(locales.map((locale) => [path(slug, locale), body]));
+const jsonLines = (stdout: string) => stdout.trim() ? stdout.trim().split('\n').map((line) => JSON.parse(line)) : [];
+function put(f: ReturnType<typeof fixture>, relative: string, body: string) {
+  mkdirSync(join(f.root, relative, '..'), { recursive: true });
+  writeFileSync(join(f.root, relative), body);
+}
+function gitFixture(f: ReturnType<typeof fixture>, ...args: string[]) {
+  const result = spawnSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgSign=false', '-c', 'core.hooksPath=', ...args], { cwd: f.root, encoding: 'utf8', env: fixtureEnv(f) });
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout.trim();
+}
+function commitFixture(f: ReturnType<typeof fixture>) {
+  gitFixture(f, 'add', '-A'); gitFixture(f, 'commit', '-m', 'Fixture');
+}
+function changedFixture(files: Record<string, string> = translated('reference/x'), change: (c: any) => void = () => {}) {
+  const f = fixture([], { 'package.json': '{"version":"0.1.0"}', 'docs/spec/.gitkeep': '', '.gitignore': 'website/node_modules/\nwebsite/src/content/docs/spec/\n', ...files }, change);
+  enableRealTools(f);
+  gitFixture(f, 'init', '--template=', '-b', 'main'); commitFixture(f); gitFixture(f, 'checkout', '-b', 'work');
+  return f;
+}
+const changed = (f: ReturnType<typeof fixture>, extra: string[] = []) => cli(f, ['--changed', '--base', 'main', ...extra]);
+function changedSuccess(p: ReturnType<typeof cli>, count = 1, removed = 0) {
+  expect(p.status, p.stderr).toBe(0); expect(p.stdout).toBe('');
+  expect(p.stderr).toBe(`check-prose: checked ${count} changed page(s) since main${removed ? `, ${removed} removed` : ''}\n`);
+}
+
+describe('issue 655 explicit page selection', () => {
+  it('overrides configured pages, maps md/mdx locales, and ignores errors outside selection', async () => {
+    const f = fixture(['reference/bad'], { [path('reference/bad')]: '#### Broken\n', ...translated('reference/x'), [path('reference/y', 'en', 'mdx')]: '# Y\n', [path('reference/y', 'ja')]: '# Y\n', [path('reference/y', 'zh-cn', 'mdx')]: '# Y\n' });
+    const r = runners();
+    expect((await checkProse({ ...input(f, r), pages: ['reference/y', 'reference/x', 'reference/x'] })).violations).toEqual([]);
+    expect(r.textlint).toHaveBeenCalledTimes(2);
+    enableRealTools(f);
+    expect(cli(f, ['--page', 'reference/y', '--page', 'reference/x', '--page', 'reference/x'])).toMatchObject({ status: 0, stdout: '', stderr: '' });
+  }, 60_000);
+  it('bypasses the empty-config short circuit and reports a missing locale once', async () => {
+    const files = translated('reference/x'); delete files[path('reference/x', 'ja')];
+    const f = fixture([], files);
+    expect((await checkProse({ ...input(f), pages: ['reference/x', 'reference/x'] })).violations).toEqual([expect.objectContaining({ page: 'reference/x', locale: 'ja', rule: 'page-missing', severity: 'error' })]);
+    enableRealTools(f); const p = cli(f, ['--page', 'reference/x', '--page', 'reference/x']);
+    expect(p.status).toBe(1); expect(jsonLines(p.stdout)).toHaveLength(1);
+  }, 60_000);
+  it('rejects an unknown page before calling a runner', async () => {
+    const f = fixture([], translated('reference/x')); const r = runners(); r.textlint.mockRejectedValue(new Error('late failure'));
+    await expect(checkProse({ ...input(f, r), pages: ['reference/x', 'reference/unknown'] })).rejects.toMatchObject({ code: 'page-unknown' });
+    expect(r.textlint).not.toHaveBeenCalled(); exit2(f, 'page-unknown', ['--page', 'reference/unknown']);
+  });
+  it.each(['ja/reference/x', 'reference/x.md', '/reference/x', 'reference/x/', 'reference//x', 'other/x', ''])('rejects invalid page %j', async (slug) => {
+    const f = fixture(); await expect(checkProse({ ...input(f), pages: [slug] })).rejects.toMatchObject({ code: 'page-invalid' });
+    exit2(f, 'page-invalid', ['--page', slug]);
+  });
+  it.each([null, 'reference/x', [42]])('rejects malformed API pages %j', async (pages) => {
+    await expect(checkProse({ ...input(fixture()), pages })).rejects.toMatchObject({ code: 'page-invalid' });
+  });
+  it.each([['error', 31, 1], ['warning', 21, 0]] as const)('returns %s findings with exit %s', (_severity, length, status) => {
+    const f = fixture([], { ...translated('reference/x'), [path('reference/x')]: `${Array(length).fill('word').join(' ')}.\n` }); enableRealTools(f);
+    const p = cli(f, ['--page', 'reference/x']); expect(p.status, p.stderr).toBe(status);
+    expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ page: 'reference/x', severity: _severity, rule: 'sentence-length' })]);
+  }, 60_000);
+  it('keeps stdout empty when a selected page runner fails', () => {
+    const f = fixture([], translated('reference/x')); enableRealTools(f); writeFileSync(join(f.website, '.textlintrc.json'), '{');
+    exit2(f, 'tool-failure', ['--page', 'reference/x']);
+  }, 60_000);
+  it('rejects a nonexistent textlint rule without stdout', () => {
+    const f = fixture([], translated('reference/x')); enableRealTools(f);
+    writeFileSync(join(f.website, '.textlintrc.json'), JSON.stringify({ rules: { 'missing-issue-655-rule': true } }));
+    exit2(f, 'tool-failure', ['--page', 'reference/x']);
+  }, 60_000);
+  it('preserves commented textlint configuration syntax and runs the real preset', () => {
+    const f = fixture([], { ...translated('reference/x'), [path('reference/x', 'ja')]: '# X\n\nこれはテストです。\n\nこれは正しい。\n' });
+    enableRealTools(f);
+    const config = readFileSync(join(f.website, '.textlintrc.json'), 'utf8');
+    writeFileSync(join(f.website, '.textlintrc.json'), `// Accepted textlint configuration syntax\n${config}`);
+    const p = cli(f, ['--page', 'reference/x']);
+    expect(p.status, p.stderr).toBe(1);
+    expect(jsonLines(p.stdout)).toContainEqual(expect.objectContaining({ rule: expect.stringMatching(/^textlint:.*no-mix-dearu-desumasu/) }));
+  }, 60_000);
+  it.each([
+    ['--page'], ['--page', '--changed'], ['--report', '--page', 'reference/x'], ['--base', 'main'], ['--unknown'],
+    ['--page', 'reference/x', '--changed'], ['--report', '--changed'], ['--report', '--report'], ['--changed', '--changed'],
+    ['--changed', '--base', 'main', '--base', 'main'], ['--changed', '--base'], ['--changed', '--base', ''], ['--changed', '--base', '-main'],
+  ])('rejects usage %j', (...args) => { exit2(fixture(), 'usage', args); });
+  it('preserves plain JSONL and report bytes from the existing API renderer', async () => {
+    const f = fixture(['reference/x'], { ...translated('reference/x'), [path('reference/x')]: '#### Deep\n' }); enableRealTools(f);
+    const plain = cli(f); const table = cli(f, ['--report']);
+    expect(plain).toMatchObject({ status: 1, stderr: '', stdout: '{"check":"prose","locale":"en","line":1,"rule":"heading-depth","severity":"error","expected":"<= 3","actual":"4","page":"reference/x"}\n' });
+    const header = '| group | locale | heading-depth | h3-count | required-anchors | banned-term | callout-count | related-linkcard-only | sentence-length | paragraph-sentences | page-length | passive-density | no-thematic-break | textlint | zhlint | page-missing | total |';
+    const separator = '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |';
+    const zero = '0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0';
+    const one = '1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1';
+    const rows = ['start-here', 'tutorials', 'how-to', 'explanation', 'reference', 'spec', 'agents'].flatMap((group) => locales.map((locale) => `| ${group} | ${locale} | ${group === 'reference' && locale === 'en' ? one : zero} |`));
+    expect(table).toMatchObject({ status: 0, stderr: '', stdout: `${[header, separator, ...rows].join('\n')}\n` });
+  }, 60_000);
+});
+
+describe('issue 655 changed-page git integration', () => {
+  it.each(['head', 'base'])('rejects a symlink in the %s documentation tree', (side) => {
+    const f = changedFixture();
+    const link = 'website/src/content/docs/reference/link.txt';
+    symlinkSync(join(f.root, path('reference/x')), join(f.root, link));
+    if (side === 'base') {
+      gitFixture(f, 'checkout', 'main'); commitFixture(f); gitFixture(f, 'checkout', 'work');
+      gitFixture(f, 'merge', '--ff-only', 'main');
+      rmSync(join(f.root, link));
+    }
+    put(f, path('reference/x'), '# Edited\n');
+    const p = changed(f);
+    expect(p.status, p.stderr).toBe(2); expect(p.stdout).toBe('');
+    expect(p.stderr).toMatch(/^check-prose: io-failure: [^\n]+\n$/);
+    expect(p.stderr).toContain(link);
+  }, 60_000);
+  it('checks changed pages when the tracked docs archive exceeds several MiB', () => {
+    const f = changedFixture({
+      ...translated('reference/x'),
+      [path('reference/large')]: `<!-- ${'x'.repeat(4 * 1024 * 1024)} -->\n`,
+    });
+    put(f, path('reference/x'), '#### New\n');
+    const p = changed(f);
+    expect(p.status, p.stderr).toBe(1);
+    expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({
+      page: 'reference/x', locale: 'en', rule: 'heading-depth', severity: 'error',
+    })]);
+    expect(p.stderr).toBe('check-prose: checked 1 changed page(s) since main\n');
+  }, 60_000);
+  it('prints only the no-change summary for an unrelated file', () => {
+    const f = changedFixture(); put(f, 'README.md', 'Unrelated.\n');
+    expect(changed(f)).toMatchObject({ status: 0, stdout: '', stderr: 'check-prose: no changed documentation pages since main\n' });
+  }, 60_000);
+  it.each(['committed', 'staged', 'unstaged', 'untracked'])('selects %s changes', (source) => {
+    const f = changedFixture(source === 'untracked' ? translated('reference/other') : translated('reference/x'));
+    if (source === 'untracked') for (const [file, body] of Object.entries(translated('reference/x'))) put(f, file, body);
+    put(f, path('reference/x'), '#### New\n');
+    if (source === 'committed') commitFixture(f);
+    if (source === 'staged') gitFixture(f, 'add', path('reference/x'));
+    const p = changed(f); expect(p.status, p.stderr).toBe(1);
+    expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ page: 'reference/x', locale: 'en', rule: 'heading-depth' })]);
+    expect(p.stderr).toBe('check-prose: checked 1 changed page(s) since main\n');
+  }, 60_000);
+  it('uses the merge base when main has later documentation commits', () => {
+    const f = changedFixture(); gitFixture(f, 'checkout', 'main'); put(f, path('reference/base-only'), '#### Bad\n'); commitFixture(f);
+    gitFixture(f, 'checkout', 'work'); put(f, path('reference/x'), '# X\n\nEdited.\n'); commitFixture(f); changedSuccess(changed(f));
+  }, 60_000);
+  it('cancels old errors despite shifted lines and ignores an unrelated broken page', () => {
+    const f = changedFixture({ ...translated('reference/x'), [path('reference/x')]: '#### Old\n', ...translated('reference/unrelated', '#### Bad\n') });
+    put(f, path('reference/x'), '\n\n#### Old\n'); changedSuccess(changed(f));
+  }, 60_000);
+  it('prints only the new error in comparator order', () => {
+    const f = changedFixture({ ...translated('reference/z'), ...translated('reference/a'), [path('reference/a')]: '#### Old\n' });
+    put(f, path('reference/z'), '#### New\n'); put(f, path('reference/a'), '#### Old\n\n---\n');
+    const p = changed(f); expect(p.status, p.stderr).toBe(1);
+    expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ page: 'reference/a', rule: 'no-thematic-break', line: 3 }), expect.objectContaining({ page: 'reference/z', rule: 'heading-depth', line: 1 })]);
+  }, 60_000);
+  it('ignores inherited repository-location variables when reporting a new error', () => {
+    const f = changedFixture();
+    put(f, path('reference/x'), '#### New\n');
+    const baseline = changed(f);
+    expect(baseline.status, baseline.stderr).toBe(1);
+    expect(jsonLines(baseline.stdout)).toEqual([expect.objectContaining({
+      page: 'reference/x', locale: 'en', rule: 'heading-depth', severity: 'error', line: 1,
+    })]);
+    const polluted = spawnSync(process.execPath, [fileURLToPath(script), '--changed', '--base', 'main'], {
+      cwd: f.website, encoding: 'utf8', env: {
+        ...fixtureEnv(f), GIT_DIR: '.git',
+        GIT_WORK_TREE: join(f.root, '..', 'outside-work-tree'),
+        GIT_INDEX_FILE: join(f.root, '..', 'outside-index'),
+      },
+    });
+    expect(polluted.status, polluted.stderr).toBe(baseline.status);
+    expect(polluted.stdout).toBe(baseline.stdout);
+    expect(polluted.stderr).toBe(baseline.stderr);
+  }, 60_000);
+  it('prints a new warning and exits zero', () => {
+    const f = changedFixture(); put(f, path('reference/x'), `${Array(21).fill('word').join(' ')}.\n`);
+    const p = changed(f); expect(p.status, p.stderr).toBe(0); expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ rule: 'sentence-length', severity: 'warning' })]);
+  }, 60_000);
+  it('compares all locales of an unchanged-content rename with their predecessors', () => {
+    const f = changedFixture(translated('reference/old', '#### Existing\n'));
+    for (const locale of locales) { put(f, path('reference/new', locale), '#### Existing\n'); rmSync(join(f.root, path('reference/old', locale))); }
+    gitFixture(f, 'add', '-A'); changedSuccess(changed(f), 1, 1);
+  }, 60_000);
+  it('reports the missing source variant after a one-locale rename', () => {
+    const files = { ...translated('reference/old'), ...translated('reference/new') }; delete files[path('reference/new')];
+    const f = changedFixture(files);
+    renameSync(join(f.root, path('reference/old')), join(f.root, path('reference/new'))); gitFixture(f, 'add', '-A');
+    const p = changed(f); expect(p.status, p.stderr).toBe(1);
+    expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ page: 'reference/old', locale: 'en', rule: 'page-missing' })]);
+  }, 60_000);
+  it('keeps separate English and existing destination Japanese baselines on rename', () => {
+    const f = changedFixture({
+      [path('reference/a')]: '# A\n\n#### Existing English\n',
+      [path('reference/b', 'ja')]: '# B\n\n---\n',
+      [path('reference/b', 'zh-cn')]: '# B\n',
+    });
+    renameSync(join(f.root, path('reference/a')), join(f.root, path('reference/b')));
+    gitFixture(f, 'add', '-A');
+    changedSuccess(changed(f), 1, 1);
+  }, 60_000);
+  it('compares converging locale renames only with their own source findings', () => {
+    const en = '# A\n\n#### Existing English\n';
+    const ja = '# C\n\n---\n';
+    const f = changedFixture({
+      [path('reference/a')]: en,
+      [path('reference/c', 'ja')]: ja,
+      [path('reference/d', 'zh-cn')]: '# D\n',
+    });
+    renameSync(join(f.root, path('reference/a')), join(f.root, path('reference/d')));
+    renameSync(join(f.root, path('reference/c', 'ja')), join(f.root, path('reference/d', 'ja')));
+    // Stage exact renames before adding the new finding so detection is unambiguous.
+    gitFixture(f, 'add', '-A');
+    put(f, path('reference/d', 'ja'), `${ja}\n#### New Japanese\n`);
+    const p = changed(f);
+    expect(p.status, p.stderr).toBe(1);
+    expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ page: 'reference/d', locale: 'ja', rule: 'heading-depth', line: 5, severity: 'error' })]);
+    expect(p.stderr).toBe('check-prose: checked 1 changed page(s) since main, 2 removed\n');
+  }, 60_000);
+  it('uses head sentence limits for both trees and excludes untouched pages', () => {
+    const sentence = `${Array(25).fill('word').join(' ')}.\n`;
+    const f = changedFixture({ ...translated('reference/touched'), ...translated('reference/untouched'), [path('reference/touched')]: sentence, [path('reference/untouched')]: sentence }, (c) => {
+      c.limits.sentence.en = { warn: 30, error: 40 };
+    });
+    const config = JSON.parse(readFileSync(join(f.root, configPath), 'utf8'));
+    config.limits.sentence.en = { warn: 10, error: 20 };
+    put(f, configPath, JSON.stringify(config));
+    put(f, path('reference/touched'), `# Touched\n\n${sentence}`);
+    changedSuccess(changed(f));
+  }, 60_000);
+  it('counts complete page deletion as removed', () => {
+    const f = changedFixture(); for (const locale of locales) rmSync(join(f.root, path('reference/x', locale)));
+    changedSuccess(changed(f), 0, 1);
+  }, 60_000);
+  it('reports a newly deleted translation', () => {
+    const f = changedFixture(); rmSync(join(f.root, path('reference/x', 'ja')));
+    const p = changed(f); expect(p.status, p.stderr).toBe(1); expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ locale: 'ja', rule: 'page-missing' })]);
+  }, 60_000);
+  it('does not report a translation already missing at base', () => {
+    const files = translated('reference/x'); delete files[path('reference/x', 'ja')]; const f = changedFixture(files);
+    put(f, path('reference/x'), '# Changed\n'); changedSuccess(changed(f));
+  }, 60_000);
+  it('requires every finding of a newly added translation to be clean', () => {
+    const files = translated('reference/x'); delete files[path('reference/x', 'ja')]; const f = changedFixture(files);
+    put(f, path('reference/x', 'ja'), '#### Added\n');
+    const p = changed(f); expect(p.status, p.stderr).toBe(1); expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ locale: 'ja', rule: 'heading-depth' })]);
+  }, 60_000);
+  it('maps a spec source edit to the generated English page', () => {
+    const f = changedFixture({ 'docs/spec/chapter.md': '# Chapter\n\nBrief.\n', [path('spec/chapter', 'ja')]: '# X\n', [path('spec/chapter', 'zh-cn')]: '# X\n' });
+    put(f, 'docs/spec/chapter.md', '# Chapter\n\nBrief.\n\n#### Deep\n');
+    const p = changed(f); expect(p.status, p.stderr).toBe(1); expect(jsonLines(p.stdout)).toEqual([expect.objectContaining({ page: 'spec/chapter', locale: 'en', rule: 'heading-depth' })]);
+  }, 60_000);
+  it('gives byte-identical spec-deletion results with clean and stale generated output', () => {
+    const f = changedFixture({ 'docs/spec/chapter.md': '# Chapter\n\nBrief.\n', [path('spec/chapter', 'ja')]: '# X\n', [path('spec/chapter', 'zh-cn')]: '# X\n' });
+    rmSync(join(f.root, 'docs/spec/chapter.md')); const clean = changed(f);
+    put(f, path('spec/chapter'), '# Stale\n\n#### Ignored\n'); const warm = changed(f);
+    expect(warm).toMatchObject({ status: clean.status, stdout: clean.stdout, stderr: clean.stderr });
+    expect(clean.status, clean.stderr).toBe(1); expect(jsonLines(clean.stdout)).toEqual([expect.objectContaining({ page: 'spec/chapter', locale: 'en', rule: 'page-missing' })]);
+  }, 60_000);
+  it('rejects an invalid base spec chapter even when head fixes it', () => {
+    const f = changedFixture({ 'docs/spec/chapter.md': 'Missing H1.\n', [path('spec/chapter', 'ja')]: '# X\n', [path('spec/chapter', 'zh-cn')]: '# X\n' });
+    put(f, 'docs/spec/chapter.md', '# Chapter\n\nBrief.\n'); exit2(f, 'spec-sync-failure', ['--changed', '--base', 'main']);
+  }, 60_000);
+  it('rejects an unresolvable base without stdout', () => { exit2(changedFixture(), 'base-unresolved', ['--changed', '--base', 'nonexistent-ref']); }, 60_000);
+  it('accepts base before changed and defaults to origin/main', () => {
+    const f = changedFixture(); gitFixture(f, 'update-ref', 'refs/remotes/origin/main', 'main'); put(f, path('reference/x'), '# Edited\n');
+    changedSuccess(cli(f, ['--base', 'main', '--changed']));
+    expect(cli(f, ['--changed'])).toMatchObject({ status: 0, stdout: '', stderr: 'check-prose: checked 1 changed page(s) since origin/main\n' });
+  }, 60_000);
+  it('rejects preview residue in the real docs root', () => {
+    const f = changedFixture(); put(f, path('preview-blocks', 'en', 'mdx'), '# Preview\n'); exit2(f, 'preview-residue', ['--changed', '--base', 'main']);
+  }, 60_000);
+  it('discards earlier findings when a later real textlint runner fails', () => {
+    const f = changedFixture({ ...translated('reference/a'), ...translated('reference/z') });
+    // A local test rule uses the real textlint loader and runner; its marker proves
+    // that the failure occurs on z, after all variants of a were inspected.
+    const marker = join(f.root, 'late-rule-invoked');
+    const rule = join(f.root, 'late-rule.cjs');
+    put(f, 'late-rule.cjs', `const fs = require('node:fs'); module.exports = function (context) { return { Document(node) { if (context.getSource(node).includes('LATE_FAILURE')) { fs.writeFileSync(${JSON.stringify(marker)}, 'z'); throw new Error('late fixture failure'); } } }; };\n`);
+    writeFileSync(join(f.website, '.textlintrc.json'), JSON.stringify({ rules: { [rule]: true } }));
+    put(f, path('reference/a'), '#### Earlier finding\n'); put(f, path('reference/z', 'ja'), '# LATE_FAILURE\n');
+    exit2(f, 'tool-failure', ['--changed', '--base', 'main']);
+    expect(readFileSync(marker, 'utf8')).toBe('z');
+  }, 60_000);
+  it.each([false, true])('removes temporary trees after a %s failing run', (fail) => {
+    const f = changedFixture(fail ? { 'docs/spec/chapter.md': 'Invalid base.\n', [path('spec/chapter', 'ja')]: '# X\n' } : translated('reference/x'));
+    put(f, fail ? 'docs/spec/chapter.md' : path('reference/x'), fail ? '# Chapter\n\nBrief.\n' : '# Edited\n');
+    const temporaryRoot = mkdtempSync(join(tmpdir(), 'prose-cleanup-test-'));
+    try {
+      const p = spawnSync(process.execPath, [fileURLToPath(script), '--changed', '--base', 'main'], { cwd: f.website, encoding: 'utf8', env: { ...fixtureEnv(f), TMPDIR: temporaryRoot, TMP: temporaryRoot, TEMP: temporaryRoot } });
+      expect(p.status, p.stderr).toBe(fail ? 2 : 0); expect(p.stdout).toBe('');
+      if (fail) expect(p.stderr).toMatch(/^check-prose: spec-sync-failure: \S[^\n]*\n$/);
+      expect(readdirSync(temporaryRoot)).toEqual([]);
+    } finally { rmSync(temporaryRoot, { recursive: true, force: true }); }
+  }, 60_000);
+  it('fails without stdout when the configured materialization temp root does not exist', () => {
+    const f = changedFixture();
+    put(f, path('reference/x'), '# Edited\n');
+    const temporaryRoot = join(f.root, 'nonexistent-temp-root');
+    const p = spawnSync(process.execPath, [fileURLToPath(script), '--changed', '--base', 'main'], { cwd: f.website, encoding: 'utf8', env: { ...fixtureEnv(f), TMPDIR: temporaryRoot, TMP: temporaryRoot, TEMP: temporaryRoot } });
+    expect(p.status, p.stderr).toBe(2);
+    expect(p.stdout).toBe('');
+    expect(p.stderr).toMatch(/^check-prose: io-failure: \S[^\n]*\n$/);
+  }, 60_000);
+});
 
 describe('TEST-1 configuration', () => {
   it('short-circuits empty pages without output', async () => { const f = fixture(); expect(await checkProse(input(f))).toEqual({ violations: [], report: null }); expect(cli(f)).toMatchObject({ status: 0, stdout: '' }); });
@@ -235,6 +546,10 @@ describe('TEST-8/9 tool merge', () => {
 });
 
 describe('TEST-10/11 report and wiring', () => {
+  it('wires the changed-page gate without a separate generation step', () => {
+    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
+    expect(pkg.scripts['check:changed']).toBe('node scripts/check-prose.mjs --changed');
+  });
   it('reports the entire corpus with zero rows despite empty pages', async () => {
     const groups = ['start-here', 'tutorials', 'how-to', 'explanation', 'reference', 'spec', 'agents'];
     const files = Object.fromEntries(groups.flatMap((group) => ['en', 'ja', 'zh-cn'].map((locale) => [path(group === 'start-here' ? 'introduction' : `${group}/x`, locale), '# X\n'])));

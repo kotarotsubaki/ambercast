@@ -21,7 +21,23 @@ const referencesDir = join(skillDir, 'references');
 const agentsPath = fileURLToPath(new URL('../../AGENTS.md', import.meta.url));
 const symlinkPath = fileURLToPath(new URL('../../.claude/skills/docs-writing', import.meta.url));
 
-const REQUIRED_HEADINGS = ['Sentence rules', 'Tone (da-dearu)', 'Page skeletons and required anchors', 'Limits', 'Blocks', 'Diagrams', 'Terminology', 'Three-locale workflow', 'Moving details', 'Self-check'];
+const REQUIRED_HEADINGS = ['Workflow', 'Sentence rules', 'Tone (da-dearu)', 'Page skeletons and required anchors', 'Limits', 'Blocks', 'Diagrams', 'Terminology', 'Three-locale workflow', 'Moving details', 'Self-check'];
+const repoFile = (path: string) => fileURLToPath(new URL(`../../${path}`, import.meta.url));
+
+function section(markdown: string, heading: string): string {
+  const lines = markdown.split('\n');
+  const start = lines.findIndex((line) => line === `## ${heading}`);
+  expect(start, `Missing section: ${heading}`).toBeGreaterThanOrEqual(0);
+  const next = lines.findIndex((line, index) => index > start && line.startsWith('## '));
+  return lines.slice(start + 1, next < 0 ? undefined : next).join('\n');
+}
+
+function tools(value: unknown): string[] {
+  const entries = typeof value === 'string' ? value.split(',').map((entry) => entry.trim()) : value;
+  expect(Array.isArray(entries)).toBe(true);
+  expect((entries as unknown[]).every((entry) => typeof entry === 'string')).toBe(true);
+  return [...new Set(entries as string[])].sort();
+}
 
 /** Splits a leading `---`-delimited frontmatter block from the rest of a Markdown file, matching
  * the same leading-block convention `scripts/lib/frontmatter.mjs` uses elsewhere in this
@@ -103,7 +119,7 @@ function tempGitRoot(): string {
 }
 
 describe('docs-writing skill frontmatter and section order', () => {
-  it('declares name: docs-writing, a non-empty description, and the ten required sections in order', () => {
+  it('declares name: docs-writing, a non-empty description, and the required sections in order', () => {
     const markdown = readFileSync(skillPath, 'utf8');
     const { frontmatter, body } = splitFrontmatter(markdown);
     expect(frontmatter.name).toBe('docs-writing');
@@ -137,8 +153,8 @@ describe('docs-writing skill limits are referenced, never duplicated', () => {
 });
 
 describe('docs-writing skill reference set', () => {
-  it('contains exactly blocks.mdx and the three new style files', () => {
-    expect(readdirSync(referencesDir).sort()).toEqual(['blocks.mdx', 'style-en.md', 'style-ja.md', 'style-zh.md']);
+  it('contains exactly blocks.mdx, the three style files, and workflow.md', () => {
+    expect(readdirSync(referencesDir).sort()).toEqual(['blocks.mdx', 'style-en.md', 'style-ja.md', 'style-zh.md', 'workflow.md']);
   });
 
   it('style-ja.md attributes humanizer-ja and carries at least twenty table rows', () => {
@@ -171,6 +187,79 @@ describe('docs-writing skill reference set', () => {
     expect(body).toContain('style-ja.md');
     expect(body).toContain('style-en.md');
     expect(body).toContain('style-zh.md');
+    expect(body).toContain('workflow.md');
+  });
+});
+
+describe('docs-writing workflow contracts', () => {
+  it('links the Workflow section to its procedure and names the blocking and report checks in Self-check', () => {
+    const { body } = splitFrontmatter(readFileSync(skillPath, 'utf8'));
+    expect(section(body, 'Workflow')).toMatch(/\[[^\]]+\]\(references\/workflow\.md\)/);
+    const selfCheck = section(body, 'Self-check');
+    for (const command of ['check:changed', '--page', '--report']) expect(selfCheck).toContain(command);
+  });
+
+  it('gives the workflow sections in order without restating numeric prose limits', () => {
+    const workflow = readFileSync(join(referencesDir, 'workflow.md'), 'utf8');
+    expect(extractH2Headings(workflow)).toEqual(['Brief', 'Drafting', 'Review and revision', 'Three locales', 'Light path', 'Generated pages', 'Check commands and exit codes']);
+    for (const name of ['docs-fact-reviewer', 'docs-reader', 'npm run check:changed', '--page']) expect(workflow).toContain(name);
+    expect(workflow).not.toMatch(/\b\d+(?:\.\d+)?\s+(?:words?|characters?|sentences?|headings?|callouts?)\b/i);
+  });
+
+  it('limits the entry rule to docs paths and a short six-bullet skill pointer', () => {
+    const { frontmatter, body } = splitFrontmatter(readFileSync(repoFile('.claude/rules/docs-writing.md'), 'utf8'));
+    expect(Object.keys(frontmatter)).toEqual(['paths']);
+    expect(Array.isArray(frontmatter.paths)).toBe(true);
+    expect([...new Set(frontmatter.paths as string[])].sort()).toEqual(['docs/spec/**/*.md', 'website/src/content/docs/**/*.md', 'website/src/content/docs/**/*.mdx']);
+    for (const path of frontmatter.paths as string[]) expect(path).toMatch(/^(?:website\/src\/content\/docs\/|docs\/spec\/)/);
+    expect(body).toContain('.agents/skills/docs-writing/SKILL.md');
+    expect(body.split('\n').filter((line) => line.trim()).length).toBeLessThanOrEqual(15);
+    expect(body.split('\n').filter((line) => /^[-*+] /.test(line))).toHaveLength(6);
+    const scopeNote = body.split('\n').find((line) => /plans/i.test(line) && /PR bodies/i.test(line) && /code comments/i.test(line));
+    expect(scopeNote).toBeDefined();
+    expect(scopeNote).not.toMatch(/^\s*[-*+] /);
+  });
+
+  it.each([
+    { name: 'docs-fact-reviewer', allowedKeys: ['description', 'name', 'tools'], allowedTools: ['Glob', 'Grep', 'Read'] },
+    { name: 'docs-reader', allowedKeys: ['description', 'name', 'omitClaudeMd', 'tools'], allowedTools: ['Read'] },
+  ])('keeps $name parseable and read-only with an explicit frontmatter allowlist', ({ name, allowedKeys, allowedTools }) => {
+    const { frontmatter } = splitFrontmatter(readFileSync(repoFile(`.claude/agents/${name}.md`), 'utf8'));
+    expect(Object.keys(frontmatter).sort()).toEqual(allowedKeys);
+    expect(frontmatter.name).toBe(name);
+    expect(typeof frontmatter.description).toBe('string');
+    expect((frontmatter.description as string).trim().length).toBeGreaterThan(0);
+    expect(tools(frontmatter.tools)).toEqual(allowedTools);
+    for (const forbidden of ['model', 'effort', 'memory', 'skills', 'permissionMode', 'mcpServers', 'hooks', 'isolation', 'background']) expect(frontmatter).not.toHaveProperty(forbidden);
+    for (const forbidden of ['Agent', 'Bash', 'Edit', 'Write']) expect(tools(frontmatter.tools)).not.toContain(forbidden);
+    if (name === 'docs-reader') expect(frontmatter.omitClaudeMd).toBe(true);
+  });
+
+  it('requires evidence-bearing findings and explicitly marked unverifiable claims from the fact reviewer', () => {
+    const { body } = splitFrontmatter(readFileSync(repoFile('.claude/agents/docs-fact-reviewer.md'), 'utf8'));
+    for (const field of ['location', 'problem', 'evidence', 'direction']) expect(body).toMatch(new RegExp(`\\b${field}\\b`, 'i'));
+    expect(body).toMatch(/unverifiable[^.!?\n]*(?:mark|label)|(?:mark|label)[^.!?\n]*unverifiable/i);
+  });
+
+  it('gives the reader a bundle and prohibits reporting unperformed commands or browser actions', () => {
+    const { body } = splitFrontmatter(readFileSync(repoFile('.claude/agents/docs-reader.md'), 'utf8'));
+    expect(body).toMatch(/\bbundle\b/i);
+    const statement = body.split(/(?<=[.!?])\s+|\n/).find((sentence) => /never (claim|report)/i.test(sentence) && /command/i.test(sentence) && /browser/i.test(sentence));
+    expect(statement).toBeDefined();
+    expect(statement).toMatch(/(?:did not|not actually|have not|has not|unperformed|never performed)/i);
+  });
+
+  it.each([
+    '.agents/skills/docs-writing/SKILL.md',
+    '.agents/skills/docs-writing/references/workflow.md',
+    '.claude/rules/docs-writing.md',
+    '.claude/agents/docs-fact-reviewer.md',
+    '.claude/agents/docs-reader.md',
+    '.claude/CLAUDE.md',
+  ])('keeps model and effort selection out of %s', (path) => {
+    const markdown = readFileSync(repoFile(path), 'utf8');
+    expect(markdown).not.toMatch(/^\s*(?:model|effort)\s*:/im);
+    expect(markdown).not.toMatch(/\b(opus|sonnet|haiku|fable|gpt-\d)/i);
   });
 });
 
@@ -214,6 +303,7 @@ describe('workflow-control-surface path classifier', () => {
     expect(isWorkflowControlPath('.claude/skills/docs-writing')).toBe(false);
     expect(isWorkflowControlPath('AGENTS.md')).toBe(false);
     expect(isWorkflowControlPath('website/test/docs-skill.test.ts')).toBe(false);
+    for (const path of ['.claude/rules/docs-writing.md', '.claude/agents/docs-fact-reviewer.md', '.claude/agents/docs-reader.md', '.agents/skills/docs-writing/references/workflow.md', 'website/scripts/lib/changed-pages.mjs']) expect(isWorkflowControlPath(path)).toBe(false);
   });
 
   // This synthetic diff mirrors layer 3's own file set, not the real #500 layer-3 commit

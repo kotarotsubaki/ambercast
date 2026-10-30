@@ -5,6 +5,10 @@ description: Write and rewrite ambercast documentation-site body pages (en/ja/zh
 
 # Docs Writing
 
+## Workflow
+
+For new pages and structural rewrites, follow [the writing workflow](references/workflow.md): brief, drafting, fact review and reader check, bounded revision, and three locales. Typo-level fixes take its light path.
+
 ## Sentence rules
 
 Write one claim per sentence. Use active voice and name the actor — you, ambercast, the AI provider, or CI — instead of hiding it behind a passive construction; state a system's own result as a status rather than as something an unnamed agent did to it. Keep a paragraph to a few sentences; when a paragraph needs a further point, use a list or a table instead of extending it. Never use an internal implementation term in body prose — use only the commands, flags, filenames, and error codes a reader actually types or sees. Avoid vague pointers without a stated referent, parenthetical asides, double negatives, exaggerated claims, bold-label-plus-colon lists, and forced three-item groupings. `website/scripts/lib/prose-text.mjs` and `check-prose.mjs` mechanically enforce the countable parts of this (sentence length, paragraph length, passive-voice ratio); this section states the rest, which a machine check cannot.
@@ -47,4 +51,4 @@ A detail removed from a Tutorial or How-to page during a rewrite must already ex
 
 ## Self-check
 
-Before calling a draft done, run two commands from `website/`: `npm run check`, the full chained check covering parity, reference accuracy, claim accuracy, prose rules, and diagram freshness; and `node scripts/check-prose.mjs --report`, which prints the per-page prose table so a borderline page's exact numbers are visible even when the overall run is green.
+Run checks from `website/`. `npm run check` chains parity, reference, claims, prose for only the pages listed in `prose-lint.json`, and diagram presence, orphan, and alt checks that never compare SVG content. `npm run check:changed` is the blocking gate for touched pages and fails on prose errors only when they are new relative to the base. `node scripts/check-prose.mjs --page <slug>` fails on every error on the named pages. `node scripts/check-prose.mjs --report` prints the aggregate table and never fails on findings; command failures still fail as described in the workflow reference. No machine check judges meaning, facts, or reader usefulness: those require the fact review and reader check.

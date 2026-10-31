@@ -737,6 +737,63 @@ def parse_toml(text: str) -> dict:
     return root
 
 
+def step6_and_step7_wording_violations(canonical: str, rule: str, guard: str) -> list[str]:
+    """Return human-readable violations, or an empty list when the wording agrees.
+
+    The rule names .claude/hooks/guard_phase.py rather than duplicating its
+    path predicate. That hook blocks test edits, creation included, until
+    step08_docs_review=done, so the wording must keep test files and their
+    comments at step 9 and leave the unsettled #552 case outside the rule.
+
+    Exact clauses are checked together with a forbidden-placement pattern
+    because clause presence alone accepts wording that preserves the required
+    words but adds a contradicting sentence. Single lines are extracted because
+    the numbered steps have no blank lines between them; paragraph extraction
+    would combine the list. A missing line is reported rather than raised.
+    The gate check is a tripwire; gate behavior is pinned by
+    .claude/hooks/test_guard_phase.py.
+    """
+    violations = []
+    requirements = (
+        (canonical, "6. **Scaffold**", (
+            "Create every new non-test file the plan says will exist",
+            "any path `.claude/hooks/guard_phase.py` gates as a test edit",
+            "is not scaffolded here",
+            "until `step08_docs_review=done`, so the file is created at step 9",
+        )),
+        (canonical, "7. **Docs first**", (
+            "Write ALL comments/JSDoc in non-test files before any logic",
+            "Comments in test files, including a new test file's header, are written at step 9",
+            "#552",
+        )),
+        (canonical, "9. **Tests**", ("Create the plan's new test files",)),
+        (rule, "- The per-issue state file", (
+            "step 6 applies only if the plan creates a new non-test file",
+            "step 7 only if the change adds or alters a design comment outside test files",
+            "are written at step 9, because that hook blocks test edits, creation included, until `step08_docs_review=done`",
+            "still a violation",
+            "#552",
+        )),
+    )
+    for text, prefix, clauses in requirements:
+        line = next((line for line in text.splitlines() if line.startswith(prefix)), None)
+        if line is None:
+            violations.append(f"Missing line: {prefix}")
+            continue
+        for clause in clauses:
+            if clause not in line:
+                violations.append(f"{prefix}: missing required clause {clause!r}")
+        if prefix == "6. **Scaffold**" and "Create every file the plan says will exist" in line:
+            violations.append(f"{prefix}: still requires scaffolding every planned file")
+        if prefix != "9. **Tests**":
+            for sentence in re.split(r"(?<!e\.g)(?<!i\.e)\.(?:\s+|$)", line, flags=re.IGNORECASE):
+                if re.search(r"(?<!non-)\btest files?\b(?:(?!\b(?:non-)?test files?\b)[^;])*?\bat step [678]\b", sentence, re.IGNORECASE):
+                    violations.append(f"{prefix}: places test files before step 9: {sentence}")
+    if 'if in_tests and not done("step08_docs_review"):' not in guard:
+        violations.append("Missing test-edit gate: step08_docs_review conditional")
+    return violations
+
+
 class DigestHelperTests(unittest.TestCase):
     class CountingStringIO(io.StringIO):
         def __init__(self) -> None:
@@ -3134,6 +3191,61 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
 
         bullet_line = next(line for line in self.rule.splitlines() if line.startswith("- User-facing docs are a deliverable"))
         self.assertIn("User-facing docs are a deliverable", bullet_line)
+
+    def test_step6_and_step7_leave_test_files_to_step9_like_the_phase_gate(self) -> None:
+        """Keep the step 6/7 scope aligned with the phase gate.
+
+        In-memory variants of the repository's texts prove that the helper
+        rejects contradicting or missing wording without flagging non-test-file
+        placement.
+        """
+        guard = (REPO_ROOT / ".claude/hooks/guard_phase.py").read_text(encoding="utf-8")
+        with self.subTest(case="repository texts"):
+            violations = step6_and_step7_wording_violations(self.canonical, self.rule, guard)
+            self.assertEqual(violations, [], "Workflow wording violations:\n" + "\n".join(violations))
+
+        step6 = next((line for line in self.canonical.splitlines() if line.startswith("6. **Scaffold**")), None)
+        step7 = next((line for line in self.canonical.splitlines() if line.startswith("7. **Docs first**")), None)
+        bullet = next((line for line in self.rule.splitlines() if line.startswith("- The per-issue state file")), None)
+        self.assertIsNotNone(step6, "Missing step 6 line for counterexamples")
+        self.assertIsNotNone(step7, "Missing step 7 line for counterexamples")
+        self.assertIsNotNone(bullet, "Missing per-issue state-file bullet for counterexamples")
+        inverted_step6 = step6.replace("is not scaffolded here", "is scaffolded here")
+        contradictory_step7 = step7 + " Comments in test files are written at step 7."
+        old_step6 = "6. **Scaffold** — Create every file the plan says will exist, as empty skeletons (exports, types, signatures — no logic)."
+        cases = (
+            ("a: invert scaffolding exclusion", self.canonical.replace(step6, inverted_step6), self.rule, guard),
+            ("b: contradictory test-file comments", self.canonical.replace(step7, contradictory_step7), self.rule, guard),
+            ("c: restore old scaffolding sentence", self.canonical.replace(step6, old_step6), self.rule, guard),
+            ("d: remove rule #552 exclusion", self.canonical, self.rule.replace(bullet, bullet.replace("#552", "")), guard),
+            ("e: remove gate conditional", self.canonical, self.rule, guard.replace('if in_tests and not done("step08_docs_review"):', "")),
+            ("f: delete step 6 line", self.canonical.replace(step6, ""), self.rule, guard),
+        )
+        for case, canonical, rule, mutated_guard in cases:
+            with self.subTest(case=case):
+                if case.startswith(("a:", "b:")):
+                    self.assertNotEqual(canonical, self.canonical, f"Counterexample {case} must change the repository text")
+                self.assertTrue(
+                    step6_and_step7_wording_violations(canonical, rule, mutated_guard),
+                    f"Counterexample {case} must produce a wording violation",
+                )
+
+        baseline = step6_and_step7_wording_violations(self.canonical, self.rule, guard)
+        with self.subTest(case="g: abbreviation in contradictory test-file comments"):
+            mutated = self.canonical.replace(step7, step7 + " Comments in test files, e.g. Headers, are written at step 7.")
+            violations = step6_and_step7_wording_violations(mutated, self.rule, guard)
+            self.assertGreater(len(violations), len(baseline))
+            extra = violations.copy()
+            for violation in baseline:
+                extra.remove(violation)
+            self.assertTrue(any("places test files before step 9" in violation for violation in extra))
+        for case, sentence in (
+            ("h: non-test-file comments", " Comments in non-test files are written at step 7."),
+            ("i: separate test and non-test placement", " Test files are created at step 9, while non-test files are scaffolded at step 6."),
+        ):
+            with self.subTest(case=case):
+                mutated = self.canonical.replace(step7, step7 + sentence)
+                self.assertEqual(step6_and_step7_wording_violations(mutated, self.rule, guard), baseline)
 
 
 class PackageAndCiContractTests(unittest.TestCase):

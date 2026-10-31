@@ -794,6 +794,37 @@ def step6_and_step7_wording_violations(canonical: str, rule: str, guard: str) ->
     return violations
 
 
+def stop_step_reminder_violations(steps: list[tuple[str, str]]) -> list[str]:
+    """Return human-readable violations, or an empty list when the reminders agree.
+
+    Each relevant key requires exact equality with its reviewed reminder: a
+    short fixed reminder has no legitimate paraphrase. Required words alone
+    accept contradicting text, as the neighbouring wording helper explains
+    for longer prose.
+
+    These reminders feed the Stop hook's block reason and the watchdog's
+    stale-flow message, so they must agree with SKILL.md steps 6, 7 and 9.
+    The test-file definition belongs to .claude/hooks/guard_phase.py rather
+    than a duplicate predicate here. A missing key is reported rather than
+    raised; keys outside these three steps are not inspected.
+    """
+    expected = {
+        "step06_scaffold": "create empty skeletons for every new non-test file",
+        "step07_docs": "write all non-test comments/JSDoc before any logic",
+        "step09_tests": "create the new test files and implement the failing suite",
+    }
+    actual = dict(steps)
+    violations = []
+    for key, reminder in expected.items():
+        if key not in actual:
+            violations.append(f"{key}: missing required reminder {reminder!r}")
+        elif actual[key] != reminder:
+            violations.append(
+                f"{key}: expected {reminder!r}, got {actual[key]!r}"
+            )
+    return violations
+
+
 class DigestHelperTests(unittest.TestCase):
     class CountingStringIO(io.StringIO):
         def __init__(self) -> None:
@@ -3246,6 +3277,66 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
             with self.subTest(case=case):
                 mutated = self.canonical.replace(step7, step7 + sentence)
                 self.assertEqual(step6_and_step7_wording_violations(mutated, self.rule, guard), baseline)
+
+    def test_stop_hook_step_reminders_match_the_non_test_scaffold_rule(self) -> None:
+        """Keep the Stop reminders aligned with the non-test scaffold rule.
+
+        The helper is exercised on an independent in-memory fixture of the
+        reviewed reminders, which must yield no violation, so that each single
+        mutation is shown to be detected on its own whatever the repository
+        holds. The mutations cover a restored earlier reminder for each of the
+        three steps, text appended to the step 6 or step 7 reminder that pulls
+        test files back into those steps, a step 9 reminder that stops asking
+        for new test files or for a failing suite, and the removal of each of
+        the three keys; every one must yield at least one violation.
+
+        The repository check loads STEPS from the shared
+        .claude/hooks/guard_stop.py and requires no violation. It is a separate
+        subtest so that a mismatch in the repository text and a loss of the
+        helper's detection power are reported independently.
+        """
+        with self.subTest("helper cases"):
+            fixture = [
+                ("step06_scaffold", "create empty skeletons for every new non-test file"),
+                ("step07_docs", "write all non-test comments/JSDoc before any logic"),
+                ("step09_tests", "create the new test files and implement the failing suite"),
+            ]
+            self.assertEqual(stop_step_reminder_violations(fixture), [])
+            mutations = [
+                ("a", "step06_scaffold", "create empty skeletons for every planned file"),
+                ("b", "step07_docs", "write all comments/JSDoc before any logic"),
+                ("c", "step09_tests", "implement the failing test suite"),
+                ("d", "step06_scaffold", fixture[0][1] + " and scaffold test files too"),
+                ("e", "step07_docs", fixture[1][1] + " including comments in test files"),
+                ("f", "step09_tests", "do not create test files; implement a passing suite"),
+                ("g", "step09_tests", fixture[2][1].replace("failing ", "")),
+                ("h", "step06_scaffold", None),
+                ("i", "step07_docs", None),
+                ("j", "step09_tests", None),
+            ]
+            for label, target, replacement in mutations:
+                with self.subTest(mutation=label):
+                    mutated = [
+                        (key, replacement if key == target else reminder)
+                        for key, reminder in fixture
+                        if key != target or replacement is not None
+                    ]
+                    self.assertTrue(
+                        stop_step_reminder_violations(mutated),
+                        f"Mutation ({label}) must violate the reviewed reminders",
+                    )
+        with self.subTest("repository"):
+            path = REPO_ROOT / ".claude/hooks/guard_stop.py"
+            spec = importlib.util.spec_from_file_location("contract_shared_guard_stop", path)
+            assert spec is not None and spec.loader is not None
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            violations = stop_step_reminder_violations(module.STEPS)
+            self.assertEqual(
+                violations, [],
+                "Shared Stop hook reminders differ from the reviewed contract:\n"
+                + "\n".join(violations),
+            )
 
 
 class PackageAndCiContractTests(unittest.TestCase):

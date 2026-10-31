@@ -95,6 +95,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # check:changed needs full history to resolve the merge base with the
+          # pull request's base branch. A depth-1 clone cannot resolve it, so the
+          # checker fails with exit 2 rather than passing.
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # Same Node as website-build.yml, which builds and deploys the site, so
@@ -113,6 +117,11 @@ jobs:
       - run: npm run sync
         working-directory: website
       - run: npm run check
+        working-directory: website
+      # The blocking prose gate checks pages this pull request touches and fails
+      # only on errors new relative to the merge base, so existing violations on
+      # a touched page do not block a small fix.
+      - run: npm run check:changed -- --base "origin/${GITHUB_BASE_REF}"
         working-directory: website
       - run: npm run build
         working-directory: website

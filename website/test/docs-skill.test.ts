@@ -191,7 +191,39 @@ describe('docs-writing skill reference set', () => {
   });
 });
 
+function describesCiGate(text: string): boolean {
+  return !text.includes('pending a separate workflow change') && text.split(/[.!?]+(?:\s+|$)|\n\s*\n/).some((sentence) =>
+    /\bCI\s+`website`\s+job\s+runs\s+`npm run check:changed`/.test(sentence)
+    && /\bpull requests?\b/i.test(sentence)
+    && !/\b(?:not|never|will|pending|planned)\b|n['’]t\b/i.test(sentence));
+}
+
 describe('docs-writing workflow contracts', () => {
+  it('documents CI running the changed-prose check', () => {
+    const workflow = readFileSync(join(referencesDir, 'workflow.md'), 'utf8');
+    expect(describesCiGate(workflow)).toBe(true);
+  });
+
+  it('rejects deleting only the pending CI sentence', () => {
+    const fixture = 'Run it locally before finishing. Mechanical checks cannot judge meaning, facts, or reader usefulness; use the reviews above.';
+    expect(describesCiGate(fixture)).toBe(false);
+  });
+
+  it.each([
+    'The CI `website` job does not run `npm run check:changed` on pull requests.',
+    'The CI `website` job will run `npm run check:changed` on pull requests.',
+    'The CI `website` job never runs `npm run check:changed` on pull requests.',
+    "The CI `website` job doesn't run `npm run check:changed` on pull requests.",
+    'The CI `website` job runs `npm run check:changed` on pull requests as planned work.',
+    'The CI `website` job runs `npm run check:changed` on pull requests, pending implementation.',
+  ])('rejects a negated or planned CI statement: %s', (fixture) => {
+    expect(describesCiGate(fixture)).toBe(false);
+  });
+
+  it('accepts a paragraph describing the CI website gate', () => {
+    expect(describesCiGate('The CI `website` job runs `npm run check:changed` on every pull request against its base branch.')).toBe(true);
+  });
+
   it('links the Workflow section to its procedure and names the blocking and report checks in Self-check', () => {
     const { body } = splitFrontmatter(readFileSync(skillPath, 'utf8'));
     expect(section(body, 'Workflow')).toMatch(/\[[^\]]+\]\(references\/workflow\.md\)/);

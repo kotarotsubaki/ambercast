@@ -49,4 +49,4 @@ Run these commands from `website/`. Prose checker warnings never fail. For direc
 | `node scripts/check-prose.mjs --page <slug>` | Repeatable; locale-independent slug without extension; checks named pages in all locales and emits JSONL | No errors | Any error on named pages | Cannot complete as described above |
 | `node scripts/check-prose.mjs --report` | Aggregate Markdown table for every page | Always for completed reports, regardless of findings | Never | Cannot complete as described above |
 
-CI wiring of `check:changed` is pending a separate workflow change. Run it locally before finishing. Mechanical checks cannot judge meaning, facts, or reader usefulness; use the reviews above.
+The CI `website` job runs `npm run check:changed` on every pull request against the pull request's base branch. Still run it locally before finishing so a failure shows up before you push. Mechanical checks cannot judge meaning, facts, or reader usefulness; use the reviews above.

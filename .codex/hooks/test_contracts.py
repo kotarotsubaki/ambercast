@@ -740,36 +740,18 @@ def parse_toml(text: str) -> dict:
 def step6_and_step7_wording_violations(canonical: str, rule: str, guard: str) -> list[str]:
     """Return human-readable violations, or an empty list when the wording agrees.
 
-    Steps 6, 7, and 9 in .claude/skills/implement/SKILL.md and the state-file
-    bullet in .claude/rules/implementation-flow.md must agree with the test-edit
-    gate in .claude/hooks/guard_phase.py. The rule names the hook rather than
-    duplicating the hook's path predicate. The hook blocks test edits, creation
-    included, until step08_docs_review=done.
+    The rule names .claude/hooks/guard_phase.py rather than duplicating its
+    path predicate. That hook blocks test edits, creation included, until
+    step08_docs_review=done, so the wording must keep test files and their
+    comments at step 9 and leave the unsettled #552 case outside the rule.
 
-    The step 6 line limits scaffolding to new non-test files and names
-    .claude/hooks/guard_phase.py as the definition of a test file. It excludes
-    new test files from scaffolding there and places their creation at step 9
-    because of the step08_docs_review gate, without the former sentence that
-    required scaffolding every planned file. The step 7 line limits docs-first
-    work to non-test files, places test-file comments, including new-file
-    headers, at step 9, and keeps the unsettled #552 case outside this rule.
-    The step 9 line requires creation of the plan's new test files.
-
-    The state-file bullet independently limits step 6 to new non-test files
-    and step 7 to design-comment changes outside test files. It places new test
-    files and test-file comments at step 9 because the hook gates test edits,
-    including creation, on step08_docs_review completion, retains the #552
-    exclusion, and still treats skipping a step with existing subject matter
-    as a violation. No sentence in the step 6 line, step 7 line, or rule bullet
-    may place test files at step 6, 7, or 8.
-
-    Exact clauses and a forbidden-sentence pattern check these relations on
-    individually extracted lines: the numbered steps have no blank lines
-    between them, so paragraph extraction would combine the whole list. A
-    missing line is a violation rather than an exception. The guard text must
-    retain the conditional that blocks test edits before step08_docs_review
-    completion. This check is only a tripwire, since gate behavior is pinned
-    by .claude/hooks/test_guard_phase.py.
+    Exact clauses are checked together with a forbidden-placement pattern
+    because clause presence alone accepts wording that preserves the required
+    words but adds a contradicting sentence. Single lines are extracted because
+    the numbered steps have no blank lines between them; paragraph extraction
+    would combine the list. A missing line is reported rather than raised.
+    The gate check is a tripwire; gate behavior is pinned by
+    .claude/hooks/test_guard_phase.py.
     """
     violations = []
     requirements = (
@@ -3213,18 +3195,9 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
     def test_step6_and_step7_leave_test_files_to_step9_like_the_phase_gate(self) -> None:
         """Keep the step 6/7 scope aligned with the phase gate.
 
-        The repository's texts yield no violations. Each of six independent
-        in-memory counterexamples derived from those texts yields at least one:
-        inverting step 6's exclusion of scaffolding new test files there;
-        adding a contradictory step 7 sentence that places test-file comments
-        at step 7 while preserving every required clause; restoring the old
-        step 6 sentence requiring every planned file to be scaffolded;
-        dropping #552 from the rule bullet; removing the gate line from the
-        hook text; and deleting the step 6 line. These counterexamples ensure
-        required wording cannot hide a contradiction or a missing constraint.
-        A seventh counterexample keeps e.g. inside a forbidden sentence.
-        Two positive controls allow non-test-file placement and prevent its
-        placement from being attributed to an earlier test-file mention.
+        In-memory variants of the repository's texts prove that the helper
+        rejects contradicting or missing wording without flagging non-test-file
+        placement.
         """
         guard = (REPO_ROOT / ".claude/hooks/guard_phase.py").read_text(encoding="utf-8")
         with self.subTest(case="repository texts"):

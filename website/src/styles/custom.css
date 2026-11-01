@@ -73,3 +73,31 @@
 .intro-cycle-return-glyph-narrow{display:none}
 /* Below 26rem the grid collapses to a single sequential column, so it is `heal`→`artifacts` that stops being adjacent (heal is now the last node, several rows below artifacts) while `run`→`heal` becomes a normal adjacent step again; the two edges swap which one needs the spanning treatment. The rail's own two ticks (offsets measured the same way as the desktop corner, against the built page) close the row/column gap on each end so the vertical line actually touches `artifacts`'s and `heal`'s edges rather than running past them at a distance. */
 @media (max-width:26rem){.intro-cycle-flow{grid-template-columns:1fr minmax(4.5rem,.35fr);grid-template-areas:"prompt intro-cycle-gap-narrow" "prompt-to-generate intro-cycle-gap-narrow" "generate intro-cycle-gap-narrow" "generate-to-artifacts intro-cycle-gap-narrow" "artifacts heal-to-artifacts" "artifacts-to-run heal-to-artifacts" "run heal-to-artifacts" "run-to-heal heal-to-artifacts" "heal heal-to-artifacts"}.intro-cycle-return{min-height:0;padding:0;align-items:center;justify-content:center;text-align:center}.intro-cycle-return::before,.intro-cycle-return::after{content:none}.intro-cycle-return-glyph-wide{display:none}.intro-cycle-return-glyph-narrow{display:inline}.intro-cycle-return-at-narrow{position:relative;display:flex;align-items:center;justify-content:center;text-align:left;border-inline-start:1px solid var(--sl-color-gray-3);padding-inline-start:.5rem;align-self:stretch}.intro-cycle-return-at-narrow::before{content:"";position:absolute;top:1rem;left:-1rem;width:1rem;height:1px;background:var(--sl-color-gray-3)}.intro-cycle-return-at-narrow::after{content:"";position:absolute;bottom:0;left:-1rem;width:1rem;height:1px;background:var(--sl-color-gray-3)}}[data-theme="dark"] .ac-diagram-light{display:none}[data-theme="light"] .ac-diagram-dark{display:none}
+
+/* `ac-flow` is the shared flow diagram that pages write as plain HTML, so the same markup renders in `.md` and `.mdx` and page bodies carry no <style> that would leak into llms-full. Its colors are page-independent tokens: light values on :root, dark values on [data-theme="dark"], following Starlight's theme switch rather than the OS preference so a reader's explicit choice always wins. The token values are the approved healing diagram's palette carried over unchanged, including the alpha of its translucent chip fills, so moving the styles out of the page changes no color. Modifiers live on the element whose geometry they decide: a meter's length modifier sits on the meter and sizes its fill, and the stage modifier on a link selects the accent arrow. Starlight's sibling spacing between the figure's children is kept on purpose (it is the rhythm of the approved diagram); only paragraph margins inside a node are reset. */
+:root{--ac-flow-surface:#FFFDFA;--ac-flow-line:#E2D9CC;--ac-flow-text:#27211C;--ac-flow-muted:#766B60;--ac-flow-amber:#A65C1F;--ac-flow-amber-soft:#FCF5EB;--ac-flow-verdigris:#2E7D5B;--ac-flow-verdigris-soft:rgba(46, 125, 91, .08)}
+[data-theme="dark"]{--ac-flow-surface:#27211C;--ac-flow-line:#3B332C;--ac-flow-text:#F1EBE2;--ac-flow-muted:#9E9184;--ac-flow-amber:#DB9140;--ac-flow-amber-soft:rgba(219,145,64,.14);--ac-flow-verdigris:#7FC8A9;--ac-flow-verdigris-soft:rgba(127,200,169,.12)}
+.ac-flow{margin:1.5rem auto;max-width:560px;display:grid}
+.ac-flow .ac-flow-node{border:1px solid var(--ac-flow-line);border-radius:12px;padding:14px 16px;background:var(--ac-flow-surface);color:var(--ac-flow-text);display:grid;gap:8px;min-width:0}
+.ac-flow .ac-flow-stage{border-color:var(--ac-flow-amber)}
+.ac-flow .ac-flow-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px}
+.ac-flow .ac-flow-num{font:600 11.5px/1 ui-monospace,"JetBrains Mono",monospace;letter-spacing:.08em;color:var(--ac-flow-muted)}
+.ac-flow .ac-flow-stage .ac-flow-num{color:var(--ac-flow-amber)}
+.ac-flow p{margin:0;color:var(--ac-flow-text)}
+.ac-flow .ac-flow-title{font:700 16px/1.35 system-ui,"Noto Sans JP",sans-serif;letter-spacing:-.01em}
+.ac-flow .ac-flow-chip{display:inline-flex;align-items:center;gap:6px;font:500 11px/1 ui-monospace,monospace;letter-spacing:.04em;padding:5px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.ac-flow .ac-flow-chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.ac-flow .ac-flow-chip-ai{color:var(--ac-flow-amber);background:var(--ac-flow-amber-soft)}
+.ac-flow .ac-flow-chip-replay{color:var(--ac-flow-verdigris);background:var(--ac-flow-verdigris-soft)}
+.ac-flow .ac-flow-meter{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px}
+.ac-flow .ac-flow-track{height:6px;border-radius:3px;background:var(--ac-flow-line);overflow:hidden}
+.ac-flow .ac-flow-fill{height:100%;background:var(--ac-flow-amber)}
+.ac-flow .ac-flow-meter-s .ac-flow-fill{width:22%}.ac-flow .ac-flow-meter-m .ac-flow-fill{width:55%}.ac-flow .ac-flow-meter-l .ac-flow-fill{width:100%}
+.ac-flow .ac-flow-meter span{font:500 11px/1.3 ui-monospace,monospace;color:var(--ac-flow-muted);white-space:nowrap}
+.ac-flow .ac-flow-note{font-size:13px;color:var(--ac-flow-muted)}
+.ac-flow .ac-flow-link{display:grid;grid-template-columns:28px 1fr;align-items:center;gap:10px;padding-left:18px;min-height:56px}
+.ac-flow .ac-flow-link svg{width:28px;height:44px;color:var(--ac-flow-muted)}
+.ac-flow .ac-flow-link-stage svg{color:var(--ac-flow-amber)}
+.ac-flow .ac-flow-cond{font-size:13px;color:var(--ac-flow-muted)}
+.ac-flow .ac-flow-cond b{color:var(--ac-flow-text);font-weight:700}
+@media (max-width:420px){.ac-flow .ac-flow-meter{grid-template-columns:1fr;gap:6px}}

@@ -251,7 +251,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast generate tests/ambercast/find-page.test.md
    ```
 
-   成功すると次の状態になる。副作用と終了コードの全体は[ambercast generate](/ambercast/ja/reference/cli/generate/#side-effects)にある。
+   成功すると次の状態になる。副作用の全体と終了コードへの案内は[ambercast generate](/ambercast/ja/reference/cli/generate/#side-effects)にある。
 
    - 終了コード`0`、結果ステータス`generated`
    - 生成されたプロンプトの隣に、計画（plan）とグラウンディング（grounding）の2つの派生ファイルが書き出される（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)）
@@ -3396,9 +3396,9 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 失敗が再現したら、解決を有効にして計測し直す。計測し直して全てのstepが通れば、修復せずに終わる。失敗が残り、修復を始められるときだけ、次の3段階に進む。
 
-<figure class="ac-flow" aria-label="healの3段階エスカレーション。基準の再生で失敗が無ければ修復せずに終わる。失敗があれば、解決を有効にして計測し直す。計測し直して全てのstepが通れば修復せずに終わる。失敗が残り修復を始められるなら、段階1で最初に失敗した地点のグラウンディングを直す。失敗した地点が進まなかったら、段階2で単一stepかtailを直す。失敗が残り、期限前なら、段階3で計画全体を作り直す。期限を過ぎたら新しい修復は始めない。計画とグラウンディングへの書き込みは確認の後だけ行う。">
+<figure class="ac-flow" aria-label="healの3段階エスカレーション。基準の再生で失敗が無ければ修復せずに終わる。失敗があれば、解決を有効にして計測し直し、失敗が残り修復を始められるときだけ進む。計測し直して全てのstepが通れば修復せずに終わる。段階1では最初に失敗した地点のグラウンディングを直す。失敗した地点が進まなかったら、段階2で単一stepかtailを直す。失敗が残り、期限前なら、段階3で計画全体を作り直す。期限を過ぎたら新しい修復は始めない。計画とグラウンディングへの書き込みは確認の後だけ行う。">
 <div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">BASELINE</span><span class="ac-flow-chip ac-flow-chip-replay">AIを呼ばない</span></div><p class="ac-flow-title">基準をフェイルクローズで再生する</p><p class="ac-flow-note">失敗が無ければ修復せずに終わる</p></div>
-<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>失敗があれば</b>、解決を有効にして計測し直す</span></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>失敗があれば</b>、解決を有効にして計測し直し、失敗が残り修復を始められるときだけ進む</span></div>
 <div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">STAGE 1</span><span class="ac-flow-chip ac-flow-chip-ai">AIを呼びうる</span></div><p class="ac-flow-title">グラウンディングを直す</p><div class="ac-flow-meter ac-flow-meter-s"><div class="ac-flow-track"><div class="ac-flow-fill"></div></div><span>最初に失敗した地点</span></div><p class="ac-flow-body">失敗した地点の要素をつかみ直す。地点が先へ進めば、要素の再グラウンディングかAIによる再追跡として記録する。</p></div>
 <div class="ac-flow-link ac-flow-link-stage"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>失敗した地点が進まなかったら</b></span></div>
 <div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">STAGE 2</span><span class="ac-flow-chip ac-flow-chip-ai">AIを呼びうる</span></div><p class="ac-flow-title">1 stepか以降を直す</p><div class="ac-flow-meter ac-flow-meter-m"><div class="ac-flow-track"><div class="ac-flow-fill"></div></div><span>単一stepまたはtail</span></div><p class="ac-flow-body">失敗したstepを1つ、またはそこから後ろ（tail）をまとめて直す。</p></div>
@@ -3421,7 +3421,7 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 ## 計画とグラウンディングへの書き込みは確認の後 {#confirmation-and-writes}
 
-ヒーリングが修復案を見つけても、その時点ではまだ計画とグラウンディングのファイルは変わらない。見つかった修正案はいったん一時的な置き場に溜められ、ユーザーが内容を確認して承認した後にだけ、実際のファイルへ書き込まれる。
+ヒーリングが修復案を見つけても、その時点ではまだ計画とグラウンディングのファイルは変わらない。見つかった修正案はいったん一時的な置き場に溜められ、CLIの確認プロンプトに答えた後か、`--yes`で事前に承認した後にだけ、実際のファイルへ書き込まれる。確認する前に、提案された変更をレビューする。
 
 この仕組みにより、どのファイルがどう変わるかを、書き込みが起きるより前に確認できる。
 

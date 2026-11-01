@@ -251,7 +251,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast generate tests/ambercast/find-page.test.md
    ```
 
-   成功后得到以下结果。全部副作用与退出码见 [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#side-effects)。
+   成功后得到以下结果。全部副作用及退出码的说明入口见 [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#side-effects)。
 
    - 退出码 `0`，结果状态为 `generated`
    - 在生成的 prompt 旁写入执行计划和定位缓存两个派生文件 ([文件布局](/ambercast/zh-cn/reference/file-layout/#companions))
@@ -3341,9 +3341,9 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 
 失败重现后，自愈会启用解析并重新测量。重新测量后所有 step 都通过时，自愈直接结束，不做修复。只有仍有失败且可以开始修复时，才会进入以下三个阶段。
 
-<figure class="ac-flow" aria-label="heal 的三段式递进。基线回放没有失败时，自愈直接结束，不做修复。出现失败后，启用解析并重新测量；重新测量后所有 step 都通过时，同样不做修复。仍有失败且可以开始修复时，阶段 1 修复最初失败位置的定位缓存。失败点未推进时，阶段 2 修复单个 step 或尾部。仍有失败且未超期限时，阶段 3 重建整份执行计划；超过期限后不再开始新的修复。执行计划和定位缓存只在确认后写入。">
+<figure class="ac-flow" aria-label="heal 的三段式递进。基线回放没有失败时，自愈直接结束，不做修复。出现失败后，启用解析并重新测量，仅在仍有失败且可以开始修复时继续。重新测量后所有 step 都通过时，同样不做修复。阶段 1 修复最初失败位置的定位缓存。失败点未推进时，阶段 2 修复单个 step 或尾部。仍有失败且未超期限时，阶段 3 重建整份执行计划；超过期限后不再开始新的修复。执行计划和定位缓存只在确认后写入。">
 <div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">BASELINE</span><span class="ac-flow-chip ac-flow-chip-replay">不调用 AI</span></div><p class="ac-flow-title">按失败关闭的方式回放基线</p><p class="ac-flow-note">没有失败则自愈直接结束，不做修复</p></div>
-<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>出现失败后</b>，启用解析并重新测量</span></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>出现失败后</b>，启用解析并重新测量，仅在仍有失败且可以开始修复时继续</span></div>
 <div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">STAGE 1</span><span class="ac-flow-chip ac-flow-chip-ai">可能调用 AI</span></div><p class="ac-flow-title">修复定位缓存</p><div class="ac-flow-meter ac-flow-meter-s"><div class="ac-flow-track"><div class="ac-flow-fill"></div></div><span>最初失败的位置</span></div><p class="ac-flow-body">自愈重新定位失败点的元素。位置推进后，记为重新建立定位缓存或 AI 重新追踪。</p></div>
 <div class="ac-flow-link ac-flow-link-stage"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>失败点未推进时</b></span></div>
 <div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">STAGE 2</span><span class="ac-flow-chip ac-flow-chip-ai">可能调用 AI</span></div><p class="ac-flow-title">修复单个 step 或其后全部</p><div class="ac-flow-meter ac-flow-meter-m"><div class="ac-flow-track"><div class="ac-flow-fill"></div></div><span>单个 step 或尾部</span></div><p class="ac-flow-body">自愈修复失败的那个 step，或连同其后的全部 step 一起修复。</p></div>
@@ -3366,7 +3366,7 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 
 ## 执行计划和定位缓存在确认后写入 {#confirmation-and-writes}
 
-自愈找到修复方案后，执行计划和定位缓存文件此时仍未改动。方案会先存入临时位置，只有在用户查看并批准后，才会写入实际文件。
+自愈找到修复方案后，执行计划和定位缓存文件此时仍未改动。方案会先存入临时位置，只有在回答 CLI 的确认提示后，或通过 `--yes` 预先批准后，才会写入实际文件。确认之前，请先审查提议的改动。
 
 这样一来，写入发生之前就能确认哪个文件会如何改变。
 

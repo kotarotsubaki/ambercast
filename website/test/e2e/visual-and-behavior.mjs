@@ -1595,6 +1595,250 @@ async function assertIssue297IntroFigures(browser) {
   }
 }
 
+const AC_FLOW_PAGES = ['explanation/healing-model'];
+const AC_FLOW_LOCALES = ['', 'ja/', 'zh-cn/'];
+const AC_FLOW_CLASSES = ['ac-flow', 'ac-flow-node', 'ac-flow-stage', 'ac-flow-head', 'ac-flow-num', 'ac-flow-chip', 'ac-flow-chip-replay', 'ac-flow-chip-ai', 'ac-flow-title', 'ac-flow-meter', 'ac-flow-meter-s', 'ac-flow-meter-m', 'ac-flow-meter-l', 'ac-flow-track', 'ac-flow-fill', 'ac-flow-body', 'ac-flow-note', 'ac-flow-link', 'ac-flow-link-stage', 'ac-flow-cond'];
+
+function assertFlowSourceGrammar(source) {
+  const slice = source.match(/<figure class="ac-flow"[\s\S]*?<\/figure>/)?.[0];
+  assert.ok(slice, 'A source must contain its ac-flow figure.');
+  assert.doesNotMatch(slice, /\r?\n[\t ]*\r?\n/);
+  assert.ok(!slice.includes('{'));
+  const stack = [];
+  const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+  let end = 0;
+  for (const match of slice.matchAll(/<\/?([a-z][a-z0-9-]*)(?:\s+[a-z][a-z0-9-]*="[^"<{]*")*\s*\/?>/g)) {
+    assert.ok(!slice.slice(end, match.index).includes('<'), 'Every < must start a lowercase tag with quoted attributes.');
+    const [tag, name] = match;
+    if (tag.startsWith('</')) {
+      assert.equal(tag, `</${name}>`);
+      assert.equal(stack.pop(), name);
+    } else if (tag.endsWith('/>')) {
+      assert.ok(stack.includes('svg'), 'Self-closing tags belong inside SVG.');
+      assert.ok(new Set(['svg', 'path', 'line', 'polyline', 'polygon', 'circle', 'rect', 'ellipse', 'g', 'use', 'defs', 'symbol', 'text', 'tspan', 'title', 'desc', 'marker', 'mask', 'pattern', 'image', 'view', 'switch', 'a', 'style', 'script', 'filter', 'stop']).has(name), 'Self-closing tags must be SVG elements.');
+    }
+    else if (!voidTags.has(name)) stack.push(name);
+    end = match.index + tag.length;
+  }
+  assert.ok(!slice.slice(end).includes('<'));
+  assert.deepEqual(stack, []);
+}
+
+function assertFlowStaticSources() {
+  assert.throws(() => assertFlowSourceGrammar('<figure class="ac-flow" aria-label="Control"><svg aria-hidden="true"><div /></svg></figure>'), /Self-closing tags must be SVG elements/);
+  const css = readFileSync(new URL('../../src/styles/custom.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const name of AC_FLOW_CLASSES) assert.match(css, new RegExp(`\\.${name}(?![\\w-])[^{}]*\\{`), `Missing CSS rule for ${name}`);
+  // Balance nested rules so an inner closing brace cannot hide a later flow rule.
+  for (const match of css.matchAll(/@media\s*\([^)]*prefers-color-scheme[^)]*\)[^{]*\{/g)) {
+    let depth = 1;
+    let end = match.index + match[0].length;
+    const start = end;
+    while (end < css.length && depth) {
+      if (css[end] === '{') depth++;
+      if (css[end] === '}') depth--;
+      end++;
+    }
+    assert.ok(!css.slice(start, end).includes('ac-flow'), 'Flow colors must follow data-theme.');
+  }
+  for (const slug of AC_FLOW_PAGES) for (const locale of AC_FLOW_LOCALES) {
+    const source = readFileSync(new URL(`../../src/content/docs/${locale}${slug}.md`, import.meta.url), 'utf8');
+    assert.ok(!source.includes('<style'), `${locale}${slug} embeds styles.`);
+    assert.ok(!source.includes(' style='), `${locale}${slug} has an inline style.`);
+    assertFlowSourceGrammar(source);
+  }
+}
+
+async function assertFlowDistPages() {
+  const root = resolve(WEBSITE_DIRECTORY, 'dist');
+  const scan = async (directory) => (await Promise.all((await readdir(directory, { withFileTypes: true })).map(async (entry) => {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) return scan(path);
+    return entry.isFile() && entry.name.endsWith('.html') && readFileSync(path, 'utf8').includes('class="ac-flow"') ? [path.slice(root.length + 1)] : [];
+  }))).flat();
+  const expected = AC_FLOW_PAGES.flatMap((slug) => AC_FLOW_LOCALES.map((locale) => `${locale}${slug}/index.html`));
+  assert.deepEqual((await scan(root)).sort(), expected.sort(), 'The diagram inventory must match every built locale.');
+}
+
+async function assertFlowStructure(browser) {
+  for (const slug of AC_FLOW_PAGES) {
+    const counts = [];
+    for (const locale of AC_FLOW_LOCALES) {
+      const context = await browser.newContext();
+      try {
+        const page = await context.newPage();
+        await page.goto(pageUrl(`/${locale}${slug}/`), { waitUntil: 'networkidle' });
+        assert.equal(await page.locator('figure.ac-flow').count(), 1);
+        const result = await page.locator('figure.ac-flow').evaluate((figure, allowed) => {
+          const errors = [];
+          const check = (value, message) => { if (!value) errors.push(message); };
+          const has = (element, name) => element?.classList.contains(name);
+          const children = (element) => [...element.childNodes].flatMap((child) => {
+            if (child.nodeType === Node.TEXT_NODE && !child.textContent.trim()) return [];
+            if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'P' && !child.className) return children(child);
+            return [child];
+          });
+          const norm = (value) => (value ?? '').replace(/\s+/g, ' ').trim();
+          check(figure.className === 'ac-flow', 'figure class');
+          check(!figure.hasAttribute('role'), 'role');
+          check(!figure.hasAttribute('style') && !figure.querySelector('[style]'), 'style');
+          check(!figure.querySelector('h1,h2,h3,h4,h5,h6,figure'), 'heading or nested figure');
+          const label = norm(figure.getAttribute('aria-label'));
+          check(Boolean(label), 'empty label');
+          for (const element of [figure, ...figure.querySelectorAll('*')]) {
+            for (const name of element.classList) {
+              check(allowed.includes(name), `unknown class ${name}`);
+              const tag = name === 'ac-flow' ? 'FIGURE' : ['ac-flow-num', 'ac-flow-chip', 'ac-flow-chip-replay', 'ac-flow-chip-ai', 'ac-flow-cond'].includes(name) ? 'SPAN' : ['ac-flow-title', 'ac-flow-body', 'ac-flow-note'].includes(name) ? 'P' : 'DIV';
+              check(element.tagName === tag, `element for ${name}`);
+            }
+          }
+          for (const condition of figure.querySelectorAll('.ac-flow-cond')) {
+            check(!condition.closest('[aria-hidden="true"]'), 'hidden condition');
+            check(label.includes(norm(condition.textContent)), 'label missing condition');
+          }
+          const parts = children(figure);
+          check(parts.length >= 3 && parts.length % 2 === 1, 'node/link alternation length');
+          parts.forEach((part, index) => {
+            check(part.tagName === 'DIV', 'node/link element');
+            if (index % 2) {
+              check(has(part, 'ac-flow-link'), 'link class');
+              check([...part.classList ?? []].every((name) => ['ac-flow-link', 'ac-flow-link-stage'].includes(name)), 'link modifiers');
+              check(part.querySelectorAll('.ac-flow-cond').length === 1, 'condition count');
+              const arrows = [...part.querySelectorAll('svg')];
+              check(arrows.length > 0 && arrows.every((svg) => svg.getAttribute('aria-hidden') === 'true'), 'decorative arrow');
+              check(has(part, 'ac-flow-link-stage') === (has(parts[index - 1], 'ac-flow-stage') && has(parts[index + 1], 'ac-flow-stage')), 'stage-to-stage modifier');
+              return;
+            }
+            check(has(part, 'ac-flow-node'), 'node class');
+            check([...part.classList ?? []].every((name) => ['ac-flow-node', 'ac-flow-stage'].includes(name)), 'node modifiers');
+            const inner = children(part);
+            const order = ['ac-flow-head', 'ac-flow-title', 'ac-flow-meter', 'ac-flow-body', 'ac-flow-note'];
+            const positions = inner.map((child) => order.findIndex((name) => has(child, name)));
+            check(positions[0] === 0 && positions[1] === 1 && positions.every((position, i) => position >= 0 && (!i || position > positions[i - 1])), 'node child order');
+            check(inner[0]?.tagName === 'DIV' && inner[1]?.tagName === 'P', 'head/title elements');
+            const head = inner[0] ? children(inner[0]) : [];
+            check(head.length >= 1 && head.length <= 2 && head[0]?.tagName === 'SPAN' && has(head[0], 'ac-flow-num'), 'number label');
+            if (head[1]) check(head[1].tagName === 'SPAN' && has(head[1], 'ac-flow-chip') && ['ac-flow-chip-replay', 'ac-flow-chip-ai'].filter((name) => has(head[1], name)).length === 1, 'chip');
+            for (const child of inner.slice(2)) {
+              if (!has(child, 'ac-flow-meter')) { check(child.tagName === 'P', 'body/note element'); continue; }
+              check(child.tagName === 'DIV' && ['s', 'm', 'l'].filter((size) => has(child, `ac-flow-meter-${size}`)).length === 1, 'meter modifier');
+              const meter = children(child);
+              const track = meter[0] ? children(meter[0]) : [];
+              check(meter.length === 2 && meter[0]?.tagName === 'DIV' && meter[0]?.className === 'ac-flow-track' && meter[1]?.tagName === 'SPAN', 'meter children');
+              check(track.length === 1 && track[0]?.tagName === 'DIV' && track[0]?.className === 'ac-flow-fill', 'track fill');
+            }
+          });
+          return { errors, counts: ['ac-flow-node', 'ac-flow-link', 'ac-flow-chip'].map((name) => figure.querySelectorAll(`.${name}`).length) };
+        }, AC_FLOW_CLASSES);
+        assert.deepEqual(result.errors, [], `${locale}${slug} violates flow structure.`);
+        counts.push(result.counts);
+      } finally { await context.close(); }
+    }
+    assert.deepEqual(counts, counts.map(() => counts[0]), `${slug} counts must agree across locales.`);
+  }
+}
+
+function flowPalette(theme) {
+  const css = readFileSync(new URL('../../src/styles/custom.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const palette = {};
+  for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const matches = theme === 'light' ? selector.trim() === ':root' : /^\[data-theme=["']dark["']\]$/.test(selector.trim());
+    if (matches) for (const [, name, value] of body.matchAll(/(--ac-flow-[\w-]+)\s*:\s*([^;{}]+)/g)) palette[name] = value.trim();
+  }
+  for (const name of ['surface', 'line', 'text', 'muted', 'verdigris-soft', 'verdigris', 'amber-soft', 'amber']) assert.ok(palette[`--ac-flow-${name}`], `Missing ${theme} ${name}`);
+  return palette;
+}
+
+async function assertFlowColors(browser) {
+  const approved = {
+    light: { surface: '#FFFDFA', line: '#E2D9CC', text: '#27211C', muted: '#766B60', amber: '#A65C1F', 'amber-soft': '#FCF5EB', verdigris: '#2E7D5B', 'verdigris-soft': 'rgba(46, 125, 91, .08)' },
+    dark: { surface: '#27211C', line: '#3B332C', text: '#F1EBE2', muted: '#9E9184', amber: '#DB9140', 'amber-soft': 'rgba(219,145,64,.14)', verdigris: '#7FC8A9', 'verdigris-soft': 'rgba(127,200,169,.12)' },
+  };
+  for (const theme of ['light', 'dark']) {
+    const palette = flowPalette(theme);
+    for (const slug of AC_FLOW_PAGES) for (const locale of AC_FLOW_LOCALES) {
+      const context = await browser.newContext({ colorScheme: theme === 'light' ? 'dark' : 'light' });
+      try {
+        const page = await context.newPage();
+        await page.goto(pageUrl(`/${locale}${slug}/`), { waitUntil: 'networkidle' });
+        await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+        const tokenComparisons = await page.evaluate(({ tokens, expected }) => {
+          const probe = document.createElement('span');
+          document.body.append(probe);
+          const canonical = (value) => {
+            probe.style.color = '';
+            if (!CSS.supports('color', value)) throw new Error(`Invalid palette color: ${value}`);
+            probe.style.color = value;
+            return getComputedStyle(probe).color;
+          };
+          const results = Object.entries(expected).map(([name, value]) => ({ name, actual: canonical(tokens[`--ac-flow-${name}`]), expected: canonical(value) }));
+          probe.remove();
+          return results;
+        }, { tokens: palette, expected: approved[theme] });
+        for (const token of tokenComparisons) assert.equal(token.actual, token.expected, `${theme} approved ${token.name}`);
+        const comparisons = await page.evaluate((tokens) => {
+          const probe = document.createElement('span');
+          document.body.append(probe);
+          const canonical = (name) => { probe.style.color = ''; probe.style.color = tokens[`--ac-flow-${name}`]; return getComputedStyle(probe).color; };
+          const results = [
+            ['.ac-flow-node:not(.ac-flow-stage)', 'surface', 'text'],
+            ['.ac-flow-stage', 'surface', 'text'],
+            ['.ac-flow-chip-replay', 'verdigris-soft', 'verdigris'],
+            ['.ac-flow-chip-ai', 'amber-soft', 'amber'],
+          ].map(([selector, background, foreground]) => {
+            const element = document.querySelector(`figure.ac-flow ${selector}`);
+            const style = element && getComputedStyle(element);
+            return { selector, actual: style ? [style.backgroundColor, style.color] : null, expected: [canonical(background), canonical(foreground)] };
+          });
+          for (const link of document.querySelectorAll('figure.ac-flow .ac-flow-link')) {
+            const token = link.classList.contains('ac-flow-link-stage') ? 'amber' : 'muted';
+            for (const svg of link.querySelectorAll('svg')) results.push({ selector: `${link.className} svg`, actual: getComputedStyle(svg).color, expected: canonical(token) });
+          }
+          probe.remove();
+          return results;
+        }, palette);
+        for (const comparison of comparisons) assert.deepEqual(comparison.actual, comparison.expected, `${locale}${slug} ${theme} ${comparison.selector}`);
+      } finally { await context.close(); }
+    }
+  }
+}
+
+async function assertFlowLayout(browser) {
+  for (const slug of AC_FLOW_PAGES) for (const locale of AC_FLOW_LOCALES) for (const width of [1440, 390]) for (const theme of ['light', 'dark']) {
+    const context = await browser.newContext({ viewport: { width, height: 1100 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(pageUrl(`/${locale}${slug}/`), { waitUntil: 'networkidle' });
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      await waitForFonts(page);
+      const geometry = await page.evaluate(() => {
+        const figure = document.querySelector('figure.ac-flow');
+        return {
+          nodes: [...figure.querySelectorAll('.ac-flow-node')].map((node) => { const rect = node.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom }; }),
+          figureWidth: figure.getBoundingClientRect().width,
+          contentWidth: document.querySelector('.sl-markdown-content').getBoundingClientRect().width,
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+          meters: [...figure.querySelectorAll('.ac-flow-meter')].map((meter) => ({
+            size: ['s', 'm', 'l'].find((size) => meter.classList.contains(`ac-flow-meter-${size}`)),
+            track: meter.querySelector('.ac-flow-track').getBoundingClientRect().width,
+            fill: meter.querySelector('.ac-flow-fill').getBoundingClientRect().width,
+          })),
+        };
+      });
+      const label = `${locale}${slug} ${width}px ${theme}`;
+      assert.ok(geometry.nodes.length >= 2, `${label} needs nodes.`);
+      geometry.nodes.forEach((node, index) => { if (index) assert.ok(node.top >= geometry.nodes[index - 1].bottom, `${label} node order`); });
+      assert.ok(geometry.figureWidth <= geometry.contentWidth + 1, `${label} figure width`);
+      assert.ok(geometry.scrollWidth <= geometry.clientWidth, `${label} horizontal overflow`);
+      assert.deepEqual([...new Set(geometry.meters.map((meter) => meter.size))].sort(), ['l', 'm', 's'], `${label} meter sizes`);
+      for (const meter of geometry.meters) {
+        assert.ok(meter.track > 0, `${label} ${meter.size} visible track`);
+        assert.ok(Math.abs(meter.fill / meter.track - { s: 0.22, m: 0.55, l: 1 }[meter.size]) <= 0.01, `${label} ${meter.size} fill ratio`);
+      }
+    } finally { await context.close(); }
+  }
+}
+
 async function assertNoResidualWikilinks() {
   const distDirectory = resolve(WEBSITE_DIRECTORY, 'dist');
   const findHtmlFiles = async (directory) => {
@@ -1805,6 +2049,11 @@ async function main() {
     await assertDocumentColumnSymmetry(browser);
     await assertIssue295DocumentationContracts(browser);
     await assertIssue297IntroFigures(browser);
+    assertFlowStaticSources();
+    await assertFlowDistPages();
+    await assertFlowStructure(browser);
+    await assertFlowColors(browser);
+    await assertFlowLayout(browser);
     await assertNoResidualWikilinks();
     await assertIssue298LlmsArtifacts(browser);
     await assertIssue298MachineReadableResourceLinks(browser);

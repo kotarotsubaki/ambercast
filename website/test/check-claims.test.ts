@@ -165,6 +165,92 @@ describe('site links', () => {
   });
 });
 
+describe('href attributes', () => {
+  const path = 'website/src/content/docs/example.mdx';
+  const target = { 'website/src/content/docs/existing.md': '# Existing\n\n## Anchor\n' };
+  const links = async (source: string) => {
+    const f = fixture('', { ...target, [path]: source });
+    return (await checkClaims({ repoRoot: f.root })).filter((entry) => entry.rule.startsWith('link-'));
+  };
+
+  it.each([
+    ['double quotes', '<LinkCard href="/ambercast/no-such/" />', 'link-missing-page'],
+    ['single quotes', "<LinkCard href='/ambercast/no-such/' />", 'link-missing-page'],
+    ['missing fragment', '<a href="/ambercast/existing/#absent">link</a>', 'link-missing-fragment'],
+    ['missing artifact', '<a href="/ambercast/absent.json">link</a>', 'link-missing-artifact'],
+    ['whitespace around equals', '<a href = "/ambercast/no-such/">link</a>', 'link-missing-page'],
+    ['absolute site URL', '<a href="https://kotarotsubaki.github.io/ambercast/no-such/">link</a>', 'link-missing-page'],
+    ['another attribute value', '<a title=\'href="/ambercast/no-such/"\'>link</a>', 'link-missing-page'],
+    ['frontmatter', '---\nexample: href="/ambercast/no-such/"\n---\nText', 'link-missing-page'],
+    ['inline code', '`<a href="/ambercast/no-such/">link</a>`', 'link-missing-page'],
+  ])('detects %s', async (_label, source, rule) => {
+    expect((await links(source)).map((entry) => entry.rule)).toEqual([rule]);
+  });
+
+  it.each([
+    ['valid anchor', '<a href="/ambercast/existing/#anchor">link</a>'],
+    ['fence', '```html\n<a href="/ambercast/no-such/">\n```'],
+    ['comment', '<!-- <a href="/ambercast/no-such/"> -->'],
+    ['expression', '<LinkCard href={x} />'],
+    ['external URL', '<a href="https://example.com/">link</a>'],
+    ['uppercase', '<a HREF="/ambercast/no-such/">link</a>'],
+    ['multiline value', '<a href="/ambercast/no-\nsuch/">link</a>'],
+    ['multiline assignment', '<a href=\n"/ambercast/no-such/">link</a>'],
+    ['data attribute', '<a data-href="/ambercast/no-such/">link</a>'],
+    ['namespace attribute', '<a xlink:href="/ambercast/no-such/">link</a>'],
+    ['dotted name', '<a foo.href="/ambercast/no-such/">link</a>'],
+  ])('ignores %s', async (_label, source) => {
+    expect(await links(source)).toEqual([]);
+  });
+
+  it.each(['/ambercast/', '/ambercast/#'])('matches Markdown resolution for %s', async (url) => {
+    expect(await links(`<a href="${url}">link</a>`)).toEqual(await links(`[link](${url})`));
+  });
+
+  it('keeps entity references verbatim in actual', async () => {
+    const findings = await links('<a href="/ambercast/no-such/?a=1&amp;b=2">link</a>');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.actual).toBe('/ambercast/no-such/?a=1&amp;b=2');
+  });
+
+  it('orders mixed findings by column and counts both links', async () => {
+    const findings = await links('[page](/ambercast/no-such/) <a href="/ambercast/absent.json">artifact</a>');
+    expect(findings.map((entry) => entry.rule)).toEqual(['link-missing-page', 'link-missing-artifact']);
+    expect(checkClaims.lastCounts.links).toBe(2);
+  });
+  it.each([
+    ['href, Markdown', '<a href="/ambercast/absent.json">artifact</a> [page](/ambercast/no-such/)', ['/ambercast/absent.json', '/ambercast/no-such/'], ['link-missing-artifact', 'link-missing-page']],
+    ['Markdown, href, Markdown', '[page](/ambercast/no-such/) <a href="/ambercast/existing/#absent">fragment</a> [artifact](/ambercast/absent.json)', ['/ambercast/no-such/', '/ambercast/existing/#absent', '/ambercast/absent.json'], ['link-missing-page', 'link-missing-fragment', 'link-missing-artifact']],
+    ['href, Markdown, href', '<a href="/ambercast/absent.json">artifact</a> [fragment](/ambercast/existing/#absent) <a href="/ambercast/no-such/">page</a>', ['/ambercast/absent.json', '/ambercast/existing/#absent', '/ambercast/no-such/'], ['link-missing-artifact', 'link-missing-fragment', 'link-missing-page']],
+  ])('orders %s findings by source column', async (_label, source, urls, rules) => {
+    const findings = await links(source as string);
+    expect(findings.map((entry) => entry.actual)).toEqual(urls);
+    expect(findings.map((entry) => entry.rule)).toEqual(rules);
+    expect(checkClaims.lastCounts.links).toBe(urls.length);
+  });
+
+  it('suppresses only the matching rule, path, and claim hash', async () => {
+    const source = '<LinkCard href="/ambercast/no-such/" />';
+    const entry = { scope: 'hard', rule: 'link-missing-page', path, claimHash: claimHash(normalizeClaimLine(source)), reason: 'Legacy link', owner: 'docs', removeWhen: 'Link corrected' };
+    for (const override of [{}, { rule: 'link-missing-artifact' }, { path: 'README.md' }, { claimHash: '0000000000000000' }]) {
+      const f = fixture('', { [path]: source, 'website/docs-audit-allowlist.json': JSON.stringify([{ ...entry, ...override }]) });
+      const findings = await checkClaims({ repoRoot: f.root });
+      expect(findings.filter((finding) => finding.rule === 'link-missing-page')).toHaveLength(Object.keys(override).length ? 1 : 0);
+    }
+  });
+
+  it('includes href occurrences in CLI stderr link counts', () => {
+    const f = fixture('[link](/ambercast/no-such/) <a href="/ambercast/absent.json">link</a>');
+    const result = run(f.root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/scanned 1 source files, 2 links/);
+  });
+
+  it('reports no findings across the real repository', async () => {
+    expect(await checkClaims({ repoRoot: fileURLToPath(new URL('../../', import.meta.url)) })).toEqual([]);
+  });
+});
+
 describe('allowlist and CLI contract', () => {
   const stale = 'only `generate`, `run`, `check`, and `heal`';
   const entry = () => ({ scope: 'hard', rule: 'command-enumeration', path: 'README.md', claimHash: claimHash(normalizeClaimLine(stale)), reason: 'temporary legacy text', owner: 'docs', removeWhen: 'the prose is updated' });

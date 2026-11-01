@@ -112,9 +112,12 @@ UIの変化に対するhealと、テストの意味の変更は別に扱う。
 
 </details>
 
-```mermaid alt="テストプロンプトからplanとgroundingを生成し、replayへ進む流れ"
-flowchart LR
-  P[test prompt] --> I[plan]
-  I --> G[grounding]
-  G --> R[replay]
-```
+<figure class="ac-flow" aria-label="テストプロンプトからplanとgroundingを作り、replayへ進む流れ。プロンプトをgenerateするとplanができる。stepの要素を初めて解決するとgroundingに残る。groundingがそろえばAIを呼ばずにreplayする。">
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">PROMPT</span></div><p class="ac-flow-title">テストプロンプト</p><p class="ac-flow-note">意図を記述する原本</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>プロンプトをgenerateすると</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">PLAN</span><span class="ac-flow-chip ac-flow-chip-ai">AIを呼びうる</span></div><p class="ac-flow-title">plan</p><p class="ac-flow-body">レビューしてコミットする実行手順。</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>stepの要素を初めて解決すると</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">GROUNDING</span></div><p class="ac-flow-title">grounding</p><p class="ac-flow-body">UI要素への対応を保持する。</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>groundingがそろえば</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">AIを呼ばない</span></div><p class="ac-flow-title">replay</p><p class="ac-flow-body">planとgroundingだけで実行する。</p></div>
+</figure>

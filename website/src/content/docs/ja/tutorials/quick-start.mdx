@@ -55,10 +55,10 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast generate tests/ambercast/find-page.test.md
    ```
 
-   成功すると次の状態になる。
+   成功すると次の状態になる。副作用の全体と終了コードへの案内は[ambercast generate](/ambercast/ja/reference/cli/generate/#side-effects)にある。
 
    - 終了コード`0`、結果ステータス`generated`
-   - 生成されたプロンプトの隣に、計画（plan）とグラウンディング（grounding）の2つの派生ファイルが書き出される
+   - 生成されたプロンプトの隣に、計画（plan）とグラウンディング（grounding）の2つの派生ファイルが書き出される（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)）
 
    セットアッププロンプト（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使うエージェントは、サーバーが既に起動していると想定する。依頼が無い限り自分では起動しない。
 
@@ -68,7 +68,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast run --resolve tests/ambercast/find-page.test.md
    ```
 
-   成功すると次の状態になる。
+   `--resolve`を付けると、グラウンディングが見つからないstepでAIによる解決を使う（[ambercast run](/ambercast/ja/reference/cli/run/#resolve)）。成功すると次の状態になる。
 
    - 終了コード`0`
    - 設定したrunsディレクトリの下に、呼び出しごとの`report.json`を作成する
@@ -81,7 +81,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
    追跡済みの変更ファイルはすべて`git diff -- <path>`でレビューする。未追跡のprompt・計画・グラウンディングの各パスは、内容全体を確認するか`git diff --no-index /dev/null <path>`を実行する。
 
-   レビュー後、人が3つのファイルをコミットする。初期化で作成された`ambercast.config.json`等も、通常どおり別途レビューしてコミットする。
+   レビュー後は人が3つのファイルをコミットするのが既定で、エージェントは変更一式を示し、会話の中で明示の依頼を受けてからコミットする。CLIのフラグや`--yes`はその依頼に当たらない（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）。初期化で作成された`ambercast.config.json`等も、通常どおり別途レビューしてコミットする。
 
 </Steps>
 

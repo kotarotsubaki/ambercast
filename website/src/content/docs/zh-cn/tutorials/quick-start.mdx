@@ -55,10 +55,10 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast generate tests/ambercast/find-page.test.md
    ```
 
-   成功后得到：
+   成功后得到以下结果。全部副作用及退出码的说明入口见 [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#side-effects)。
 
    - 退出码 `0`，结果状态为 `generated`
-   - 在生成的 prompt 旁写入执行计划和定位缓存两个派生文件
+   - 在生成的 prompt 旁写入执行计划和定位缓存两个派生文件 ([文件布局](/ambercast/zh-cn/reference/file-layout/#companions))
 
    使用设置提示词 ([Agent 设置](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)) 的 agent 会假定服务已在运行，未经请求不会自行启动服务。
 
@@ -68,7 +68,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast run --resolve tests/ambercast/find-page.test.md
    ```
 
-   成功后得到：
+   加上 `--resolve` 后，缺少定位缓存的 step 会使用 AI 解析 ([ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve))。成功后得到：
 
    - 退出码 `0`
    - 在配置的 runs 目录下，为本次调用写入一份 `report.json`
@@ -81,7 +81,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
    对每个已跟踪的改动文件运行 `git diff -- <path>` 进行检查。对未跟踪的 prompt、执行计划、定位缓存路径，检查其完整内容，或运行 `git diff --no-index /dev/null <path>`。
 
-   检查完成后，由人工提交这三个文件。`init` 创建的 `ambercast.config.json` 等文件也要单独检查并提交，方式与提交其他改动相同。
+   默认由人工在检查后提交这三个文件；由 agent 提交时，agent 会展示完整的变更集，并且只在对话中收到明确请求后才提交。任何 CLI 标志或 `--yes` 都不算该请求 ([设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt))。`init` 创建的 `ambercast.config.json` 等文件也要单独检查并提交，方式与提交其他改动相同。
 
 </Steps>
 

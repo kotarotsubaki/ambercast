@@ -1,0 +1,58 @@
+---
+title: 貢献ガイド
+description: Issue、フォーク、3 つの検査、プルリクエストの順で変更を提出し、脆弱性を報告する手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+外部のコントリビューターは、Issue を立て、フォークしてブランチを作る。3 つの検査を通したら、プルリクエストを出す。
+
+## 前提条件 \{#prerequisites}
+
+パッケージには、`npm test`、`npm run typecheck`、`npm run lint` のスクリプトが宣言されている。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## Issue を立てる \{#open-issue}
+
+   問題か提案を説明する Issue を立てる。
+
+2. ## フォークしてブランチを作る \{#fork-and-branch}
+
+   リポジトリをフォークし、作業用のブランチを作る。
+
+3. ## 3 つの検査を実行する \{#run-checks}
+
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   ```
+
+4. ## プルリクエストを出す \{#open-pull-request}
+
+   Conventional Commit 形式のタイトルでプルリクエストを出し、レビューの会話をすべて解決する。
+
+</Steps>
+
+## 脆弱性の報告 \{#report-vulnerability}
+
+脆弱性は、公開の Issue ではなく GitHub Security Advisories で報告する。バージョン、再現手順、影響を書いた非公開の報告を送る。方針は[セキュリティポリシー](/ambercast/ja/reference/security-policy/)にある。
+
+## メンテナーとエージェントの進め方 \{#maintainer-workflow}
+
+`AGENTS.md` と `.claude/` は、メンテナーの AI エージェントによる自動化を説明するもので、外部のコントリビューターの前提条件ではない。外部のプルリクエストの検査は CI で動く。
+
+メンテナーやリポジトリのエージェントは、挙動を変えるときのテストの順序を含め、`AGENTS.md` の開発ワークフローに従う。
+
+## 確認 \{#verification}
+
+3 つのコマンドが終了コード `0` で終わる。失敗が残るなら、引き継ぐ前にその内容を記録する。プルリクエストが開いていることも確かめる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="セキュリティポリシー" href="/ambercast/ja/reference/security-policy/" description="脆弱性の報告方法と対応方針を確かめる。" />
+
+<LinkCard title="変更履歴" href="/ambercast/ja/reference/changelog/" description="リリースごとの変更を確かめる。" />

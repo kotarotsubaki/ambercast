@@ -1,0 +1,84 @@
+---
+title: バージョン間のアップグレード
+description: ambercast を更新し、古くなった計画を再生成して、依存関係とまとめてコミットする手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+更新の前に BREAKING の項目を読み、更新の後は `check` の結果に従って計画（plan）を再生成する。
+
+## 前提条件 \{#prerequisites}
+
+プロデューサーのフィンガープリントを変える BREAKING の項目を持つリリースは、既存の計画を `stale` にし、再生成を求める。例は 0.2.0 の項目で、`inputsDigest` への影響が書かれている。詳細は[変更履歴](/ambercast/ja/reference/changelog/#release-020)にある。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 破壊的変更を読む \{#read-breaking}
+
+   依存関係を変える前に、更新先のリリースの BREAKING の項目を読む。
+
+2. ## 更新して check を実行する \{#upgrade-and-check}
+
+   プロジェクトのパッケージマネージャーで ambercast を更新してから、`check` を実行する。`check` はレポートを返し、信頼できない検出があると終了コード `4` を選ぶ。
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+3. ## 古くなった計画を再生成する \{#regenerate-stale}
+
+   `check` が終了コード `4` で終わったら、`generate` を実行して、計画とグラウンディングの差分を読む。読み方は[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+   ```bash
+   npx ambercast generate
+   ```
+
+4. ## まとめてコミットする \{#commit-together}
+
+   依存関係と、受け入れたコンパニオンの変更をまとめてコミットする。その後で `check` を再実行して、最終的な状態を確かめる。
+
+</Steps>
+
+## シークレットグラントの移行 \{#migrate-secret-grants}
+
+Plan v2 用に作ったプロンプトには、旧形式のシークレットのグラント行が残っていることがある。旧構文は拒否されるので、その場で移行せず、グラント行をすべて削除する。
+
+```markdown
+@ambercast-secret {{secrets.password}}
+```
+
+次に `npx ambercast generate --force <file>` を実行し、新しい同意の確認に答える。CI などの非対話環境では、先にレビュー済みの名前を `secrets.allow` に足す。再生成した計画は、v3 の同意と許可リストのモデルを使う。
+
+## プロデューサー変更後の再グラウンディング \{#reground-after-producer-change}
+
+ジェネレーターの指示や応答契約が変わるとプロデューサーのフィンガープリントも変わり、以前の計画は `stale` になる。計画を再生成するとグラウンディングは空に置き換わるため、以下の手順ですべての要素ステップを束縛し直す。Plan 5 と Grounding 4 は変わらない。
+
+report 3.11 は `generator-assumption` の警告と、`healed` 行の任意の `warnings` を追加する。閉じた union を検証する利用者は report のスキーマを更新する。
+
+CLI の `--strict` と MCP の `strict` 引数は削除された。呼び出しから両者を取り除く。`ambercast generate --strict` は未知のオプションとして終了コード 2 になり、MCP は `strict` を入力検証で拒否する。
+
+1. `npx ambercast check --json` を実行し、対象の計画が `stale` と報告されることを確かめる。
+2. `stale` の計画ごとに `npx ambercast generate <file>` を実行する。差分を見て、入力の効果を示す assert の `confirms` にその入力が入ったことを確かめる。
+   - generate がある入力について `action-unconfirmed` の警告を出したら、手順 3 へ進まない。
+   - 通常の run はその入力で `GROUNDING_UNRESOLVED` になる。
+   - サインイン後のユーザー名のように、その入力の効果を示す assert を足し、手順 2 をやり直す。
+3. 手元で `npx ambercast run --resolve --update-cache <file>` を実行する。再生成の直後はグラウンディングが空なので、逐語の引用がない要素ステップごとに ambercast が AI を 1 回呼ぶ。CI は既定でグラウンディングを保存しない。
+4. `npx ambercast check` で計画が `fresh` であることを確かめる。続けて `npx ambercast run <file>` を実行し、pass することと、レポートの `aiCalls` が 0 であることを確かめる。計画は常にコミットする。グラウンディングは `grounding.repositoryPolicy` が `committed` のときだけ計画と一緒にコミットし、`uncommitted` なら手元に置く。
+
+## 確認 \{#verification}
+
+再生成を受け入れた後で、`npx ambercast check` が終了コード `0` で終わる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="変更履歴" href="/ambercast/ja/reference/changelog/" description="リリースごとの BREAKING の項目を読む。" />
+
+<LinkCard title="鮮度とダイジェスト" href="/ambercast/ja/spec/freshness/" description="計画が stale になる条件を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の状態と終了コードを確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の結果と終了コードを確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="再生成された計画とグラウンディングを、コミットの前に読む。" />

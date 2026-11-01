@@ -45,6 +45,8 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 
 `--resolve` 会显式启用 AI 解析路径。未传入时，定位缓存未命中会失败关闭，而不会分发提供商。
 
+在默认的本地写回下，经过解析的运行可能保存重新解析出的指纹并通过。
+
 ## 定位缓存写回 {#grounding-write-back}
 
 仅当解析后的写回门禁允许时，`run` 才会写入发生变更的定位缓存。`--update-cache` 是该门禁的显式输入之一：在 CI 环境中与 `ci.updateGroundingCache` 组合判定，在本地环境中与 `localWriteBack` 配置组合判定。有关本地与 CI 环境下的所有判定条件，请参见[配置](/ambercast/zh-cn/reference/configuration/#grounding)。

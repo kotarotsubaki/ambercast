@@ -28,6 +28,8 @@ Forward mappings accept only an in-`testDir` path ending exactly in `.test.md` w
 | Heal screenshot | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | The shared capture path writes eligible failed-step evidence into the attempt-scoped case directory. | Same as the invocation directory. |
 | Run report | `<runsDir>/<runId>/report.json` | Only `run` writes the finalized batch envelope after execution; a failed atomic write changes `reportPersistence`. | Same as the invocation directory. |
 
+A screenshot is best effort: a capture or storage failure also omits it.
+
 `runsDir` is independently configured and defaults to `tests/ambercast/.runs`; it is not derived by the layout resolver from `testDir`.
 
 A `runId` must match `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`, preventing separators, dot segments, and empty IDs.

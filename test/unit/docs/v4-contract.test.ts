@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +17,24 @@ const expected = JSON.parse(readFileSync(new URL('../../fixtures/docs-v4-expecta
 };
 const spec = (name: string) => readFileSync(new URL(`../../../docs/spec/${name}.md`, import.meta.url), 'utf8');
 const reference = (name: string) => readFileSync(new URL(`../../../website/src/content/docs/reference/${name}.md`, import.meta.url), 'utf8');
-const localizedDoc = (locale: string, name: string) => readFileSync(new URL(`../../../website/src/content/docs/${locale}${name}.md`, import.meta.url), 'utf8');
+const docsRoot = fileURLToPath(new URL('../../../website/src/content/docs/', import.meta.url));
+
+/**
+ * Reads a localized docs page from whichever of `.md` / `.mdx` exists. The
+ * public route resolves to exactly one source document, so finding both or
+ * neither is an error rather than a silent pick.
+ */
+function readLocalizedDoc(root: string, locale: string, name: string): string {
+  const present = ['md', 'mdx'].map((extension) => join(root, `${locale}${name}.${extension}`)).filter(existsSync);
+  if (present.length !== 1) throw new Error(`Expected one source for ${locale}${name}, found ${present.length}`);
+  return readFileSync(present[0]!, 'utf8');
+}
+const localizedDoc = (locale: string, name: string) => readLocalizedDoc(docsRoot, locale, name);
+
+/** First single-line `json` fence of a page; a fence inside a `<Steps>` item is indented, so leading whitespace is allowed. */
+function firstJsonFenceLine(page: string): string | undefined {
+  return /^[ \t]*```json\n[ \t]*([^\n]+)\n[ \t]*```/m.exec(page)?.[1];
+}
 
 function trackedMatches(pattern: string, paths: readonly string[]): string[] {
   const result = spawnSync('git', ['grep', '-l', pattern, '--', ...paths], {
@@ -177,7 +196,7 @@ describe('TEST-21 v4 documentation golden expectations', () => {
       const howTo = localizedDoc(locale, 'how-to/configure-targets');
       const tutorial = localizedDoc(locale, 'tutorials/repair-your-first-drift');
       const inlineExample = howTo.match(/`(\{"\$schema":.+?\})`/)?.[1];
-      const fencedExample = tutorial.match(/```json\n([^\n]+)\n```/)?.[1];
+      const fencedExample = firstJsonFenceLine(tutorial);
       expect(inlineExample, locale).toBeDefined();
       expect(fencedExample, locale).toBeDefined();
       for (const example of [inlineExample, fencedExample]) {
@@ -191,5 +210,47 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     }
     expect(spec('freshness')).toContain('config `executor`');
     expect(spec('changelog')).toContain('TP2');
+  });
+});
+
+describe('localized docs page source', () => {
+  const withRoot = (files: Record<string, string>, run: (root: string) => void) => {
+    const root = mkdtempSync(join(tmpdir(), 'ambercast-docs-source-'));
+    try {
+      for (const [path, content] of Object.entries(files)) {
+        mkdirSync(join(root, path, '..'), { recursive: true });
+        writeFileSync(join(root, path), content);
+      }
+      run(root);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  };
+
+  it('reads an MDX-only page', () => {
+    withRoot({ 'ja/tutorials/page.mdx': 'MDX source' }, (root) => {
+      expect(readLocalizedDoc(root, 'ja/', 'tutorials/page')).toBe('MDX source');
+    });
+  });
+
+  it('reads a Markdown-only page', () => {
+    withRoot({ 'tutorials/page.md': 'MD source' }, (root) => {
+      expect(readLocalizedDoc(root, '', 'tutorials/page')).toBe('MD source');
+    });
+  });
+
+  it.each([
+    { files: {}, found: 0 },
+    { files: { 'tutorials/page.md': 'a', 'tutorials/page.mdx': 'b' }, found: 2 },
+  ])('rejects a page with $found sources', ({ files, found }) => {
+    withRoot(files, (root) => {
+      expect(() => readLocalizedDoc(root, '', 'tutorials/page')).toThrow(`Expected one source for tutorials/page, found ${found}`);
+    });
+  });
+
+  it('finds a json fence at column zero and one indented inside a Steps item', () => {
+    expect(firstJsonFenceLine('```json\n{"a":1}\n```')).toBe('{"a":1}');
+    expect(firstJsonFenceLine('<Steps>\n\n1. ## Edit \\{#edit}\n\n   ```json\n   {"a":1}\n   ```\n\n</Steps>')?.trim()).toBe('{"a":1}');
+    expect(firstJsonFenceLine('no fence here')).toBeUndefined();
   });
 });

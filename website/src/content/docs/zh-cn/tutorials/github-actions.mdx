@@ -1,0 +1,51 @@
+---
+title: 在 GitHub Actions 中运行 ambercast
+description: 给已经在运行的 GitHub Actions 作业加上两行，让 run 只在 check 通过后才开始。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+先运行 `check`、再运行 `run` 的顺序，在其他 CI 服务上同样适用。
+
+## 前提条件 \{#prerequisites}
+
+- prompt、执行计划和定位缓存都已提交，并且全部是新鲜的。
+- `run` 开始时，配置的 `baseUrl` 上的应用已经在运行。
+- 作业已经完成检出代码、安装 Node 和依赖、安装 Chromium，以及所需提供商的认证。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 添加命令 \{#add-commands}
+
+   在上述准备步骤之后，按此顺序添加下面两行。
+
+   ```yaml
+   - run: npx ambercast check
+   - run: npx ambercast run
+   ```
+
+   `check` 是只读的独立命令。只有 `check` 以退出码 `0` 结束后，shell 才会启动 `run`。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/) 和 [ambercast run](/ambercast/zh-cn/reference/cli/run/)。
+
+2. ## 保持写回关闭 \{#keep-write-back-off}
+
+   不要添加 `--update-cache`。CI 默认 `ci.updateGroundingCache: false`，所以除非您的配置把它设为 `true`，作业不会写回定位缓存。具体条件见[控制定位缓存写回](/ambercast/zh-cn/how-to/control-grounding-writeback/)。
+
+3. ## 提交工作流 \{#commit-workflow}
+
+   由人工提交并推送工作流。agent 会展示工作流的差异，并且只在对话中收到明确请求后才提交或推送，详见[设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)。这条策略与 CLI 的行为无关。
+
+</Steps>
+
+## 验证 \{#verification}
+
+- 作业只在 `check` 以退出码 `0` 结束后才进入 `run`。
+- 产物过期或不可信时，`check` 以退出码 `4` 结束，作业在 `run` 之前停止。见[退出码](/ambercast/zh-cn/reference/exit-codes/)。
+- 作业没有启用定位缓存写回。
+
+## 下一步 \{#next-steps}
+
+接下来在其他 CI 服务上运行同样的顺序。
+
+<LinkCard title="在其他 CI 平台上运行" href="/ambercast/zh-cn/how-to/run-on-other-ci/" description="把先 check、后 run 的顺序迁移到其他 CI 服务。" />

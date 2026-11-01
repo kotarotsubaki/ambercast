@@ -1,0 +1,51 @@
+---
+title: GitHub Actions で ambercast を実行する
+description: すでに動いている GitHub Actions のジョブに、check が通ったときだけ run へ進む2行を足す。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+`check` を先に、`run` を後に実行する構成は、他の CI サービスでもそのまま使える。
+
+## 前提条件 \{#prerequisites}
+
+- プロンプト、計画（plan）、グラウンディングがコミット済みで、どれも fresh である。
+- `run` を始める時点で、設定した `baseUrl` のアプリケーションが起動している。
+- ジョブが、チェックアウト、Node と依存関係のインストール、Chromium のインストール、必要なプロバイダーの認証を済ませている。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## コマンドを足す \{#add-commands}
+
+   前提条件の処理の後ろに、次の2行を同じ順で足す。
+
+   ```yaml
+   - run: npx ambercast check
+   - run: npx ambercast run
+   ```
+
+   `check` は読み取りだけを行う別のコマンドである。シェルは `check` が終了コード `0` で終わったときだけ `run` を始める。コマンドの詳細は [ambercast check](/ambercast/ja/reference/cli/check/) と [ambercast run](/ambercast/ja/reference/cli/run/) にある。
+
+2. ## 書き戻しを有効にしない \{#keep-write-back-off}
+
+   `--update-cache` は付けない。CI の既定は `ci.updateGroundingCache: false` なので、設定で `true` にしない限り、ジョブはグラウンディングを書き戻さない。書き戻しの条件は[グラウンディングの書き戻しを制御する](/ambercast/ja/how-to/control-grounding-writeback/)で確かめられる。
+
+3. ## ワークフローをコミットする \{#commit-workflow}
+
+   人がワークフローをコミットしてプッシュする。エージェントはワークフローの差分を示し、会話で明示の依頼を受けてからコミットやプッシュを行う（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）。この方針は CLI の動作とは別である。
+
+</Steps>
+
+## 確認 \{#verification}
+
+- ジョブは、`check` が終了コード `0` で終わった後にだけ `run` へ進む。
+- 成果物が古い、または信頼できないとき、`check` は終了コード `4` で終わり、ジョブは `run` の前で止まる。終了コードの一覧は[終了コード](/ambercast/ja/reference/exit-codes/)にある。
+- ジョブはグラウンディングの書き戻しを有効にしていない。
+
+## 次のステップ \{#next-steps}
+
+次は、GitHub Actions 以外の CI サービスで同じ順序を実行する。
+
+<LinkCard title="他のCIプラットフォームでの実行" href="/ambercast/ja/how-to/run-on-other-ci/" description="check を先に、run を後に実行する構成を他の CI サービスへ移す。" />

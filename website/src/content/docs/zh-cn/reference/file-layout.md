@@ -29,6 +29,7 @@ Ambercast 依据规范的路径运算规则管理测试 prompt 及其伴生文�
 | 修复截图 | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | 共享捕获路径将符合条件的失败步骤证据写入该尝试范围内的用例目录中。 | 与调用目录相同。 |
 | 运行报告 | `<runsDir>/<runId>/report.json` | 仅 `run` 会在执行后写入最终的批处理封套；原子写入失败会改变 `reportPersistence`。 | 与调用目录相同。 |
 
+- 截图是尽力而为的：截图捕获或存储失败时，也会省略截图。
 - `runsDir` 是独立配置的，默认值为 `tests/ambercast/.runs`；它并非由布局解析器从 `testDir` 派生得出。
 - `runId` 必须匹配 `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`，从而防止路径分隔符、点分路径段以及空 ID。
 - 仅 `run` 会持久化保存 `report.json`；generate、check 与 heal 仅返回封套，不执行此布局写入。

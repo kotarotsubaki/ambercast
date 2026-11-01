@@ -1,0 +1,50 @@
+---
+title: Reading your first plan and grounding
+description: Find the plan and grounding files ambercast generated, and read their freshness from a check result.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+This tutorial continues [Your first test in 5 minutes](/ambercast/tutorials/quick-start/).
+
+## Prerequisites \{#prerequisites}
+
+- You finished the quick start. You generated the plan and the grounding from the sample `tests/ambercast/find-page.test.md` and replayed it.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Open the plan \{#open-plan}
+
+   Open `tests/ambercast/find-page.ambercast.plan.json`. Read `schemaVersion`, `source.inputsDigest`, and `steps`.
+
+   ambercast derives this path by replacing the `.test.md` suffix of the prompt with `.ambercast.plan.json`. The [Plan document](/ambercast/spec/plan-document/) describes the structure, and [File layout](/ambercast/reference/file-layout/) describes where files live.
+
+2. ## Open the grounding \{#open-grounding}
+
+   Open `tests/ambercast/find-page.ambercast.grounding.json`. Read `schemaVersion`, `planDigest`, and `entries`.
+
+   ambercast derives this path from the same prompt, with the `.ambercast.grounding.json` suffix. The [Grounding document](/ambercast/spec/grounding-document/) describes the structure.
+
+3. ## Check freshness \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/find-page.test.md --json
+   ```
+
+   `check` prints a report that includes the freshness result. A fresh result has the status `fresh` or `fresh-without-grounding`.
+
+</Steps>
+
+## Verification \{#verification}
+
+- You can say that the plan and the grounding sit beside the prompt.
+- The status is `fresh`. `fresh-without-grounding` appears only when `grounding.repositoryPolicy` is `uncommitted`, so the quick-start default gives `fresh`.
+- `check` exits `0` only when the whole report has no failure, case error, or interruption. A fresh case does not guarantee that, because `check` also scans companion files for orphans. See [ambercast check](/ambercast/reference/cli/check/) and [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+
+## Next steps \{#next-steps}
+
+Next, repair a test that a UI change broke.
+
+<LinkCard title="Healing a test after a UI change" href="/ambercast/tutorials/repair-your-first-drift/" description="Change the practice app's UI and repair the test that fails." />

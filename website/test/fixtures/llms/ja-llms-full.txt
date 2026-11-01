@@ -296,106 +296,215 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 ---
 
-# 最初の plan と grounding の読み込み
+# 最初の計画とグラウンディングを読む
 Source: https://kotarotsubaki.github.io/ambercast/ja/tutorials/review-your-first-plan/
 
-テストプロンプトに対応する plan および grounding のファイル配置を確認し、`npx ambercast check` を使ってその freshness を検証する手順を学びます。リゾルバーがどのように各成果物のパスを導出するのか、そして check コマンドがどのようなレポートを出力するのかを順に見ていきましょう。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 手順 {#steps}
+このチュートリアルは[5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)の続きである。
 
-1. `tests/ambercast/sign-in.ambercast.plan.json` を開き、`schemaVersion`、`source.inputsDigest`、および `steps` を確認します。リゾルバーは、プロンプトの正確な `.test.md` サフィックスを置き換えることでこのパスを導出します。
-2. `tests/ambercast/sign-in.ambercast.grounding.json` を開き、その `schemaVersion`、`planDigest`、および `entries` を確認します。リゾルバーは、同一のプロンプトからペアとなる grounding のパスを導出します。
-3. `npx ambercast check tests/ambercast/sign-in.test.md --json` を実行します。check はレポートエンベロープを生成します。fresh な結果のステータスは `fresh` または `fresh-without-grounding` になります。
+## 前提条件 \{#prerequisites}
 
-## 完了状態 {#completion-state}
+- 5分で動かす最初のテストを終えている。サンプルの `tests/ambercast/find-page.test.md` から計画（plan）とグラウンディングを生成し、再生まで済ませてある。
 
-- このコマンドは、レポート全体に failure、case error、または interruption が一切ない場合にのみ `0` で終了します。選択されたケースが fresh であること単体ではこれを保証しません。check は orphan findings がないかコンパニオン成果物もスキャンするためです。JSON レポートには freshness の結果が出力されます。
+## 手順 \{#steps}
 
-## 関連情報
+<Steps>
 
-- [計画ドキュメント](/ambercast/ja/spec/plan-document/)
-- [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)
-- [ファイルレイアウト](/ambercast/ja/reference/file-layout/)
-- [ambercast check](/ambercast/ja/reference/cli/check/)
-- [生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)
+1. ## 計画を開く \{#open-plan}
+
+   `tests/ambercast/find-page.ambercast.plan.json` を開く。読むのは、`schemaVersion`、`source.inputsDigest`、`steps` の3つである。
+
+   このパスは、プロンプトの末尾の `.test.md` を `.ambercast.plan.json` に置き換えて決まる。構造は[計画ドキュメント](/ambercast/ja/spec/plan-document/)、置き場所は[ファイルレイアウト](/ambercast/ja/reference/file-layout/)で確かめられる。
+
+2. ## グラウンディングを開く \{#open-grounding}
+
+   `tests/ambercast/find-page.ambercast.grounding.json` を開く。読むのは、`schemaVersion`、`planDigest`、`entries` である。
+
+   同じプロンプトの `.test.md` を `.ambercast.grounding.json` に置き換えて、このパスが決まる。構造は[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)にある。
+
+3. ## 鮮度を確かめる \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/find-page.test.md --json
+   ```
+
+   `check` は、鮮度の結果を含むレポートを出力する。fresh の結果は、ステータスが `fresh` か `fresh-without-grounding` になる。
+
+</Steps>
+
+## 確認 \{#verification}
+
+- 計画とグラウンディングが、プロンプトと同じディレクトリにあると説明できる。
+- ステータスが `fresh` になっている。`fresh-without-grounding` が出るのは `grounding.repositoryPolicy` が `uncommitted` のときだけで、5分で動かす最初のテストの既定では `fresh` になる。
+- `check` は、レポート全体に失敗・ケースのエラー・中断が無いときだけ終了コード `0` で終わる。選択したケースが fresh でも、`check` は成果物のうち対応する相手の無いものも調べるため、終了コードが `0` にならないことがある。結果の読み方は [ambercast check](/ambercast/ja/reference/cli/check/) と[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+## 次のステップ \{#next-steps}
+
+次は、UI の変更で壊れたテストを修復する。
+
+<LinkCard title="UI変更後にテストを修復する" href="/ambercast/ja/tutorials/repair-your-first-drift/" description="練習用アプリのUIを変えて、失敗したテストを修復する。" />
 
 ---
 
 # UI変更後にテストを修復する
 Source: https://kotarotsubaki.github.io/ambercast/ja/tutorials/repair-your-first-drift/
 
-本チュートリアルでは、すでに生成済みのテストが存在する、使い捨ての練習用アプリケーションを前提として進めます。デフォルトのステートフルなターゲットは修復できません。設定およびコマンドの仕様についての詳細は、[設定](/ambercast/ja/reference/configuration/) および [ambercast heal](/ambercast/ja/reference/cli/heal/) を参照してください。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 手順 {#steps}
+練習用アプリの UI をロケーターに影響する形で変え、失敗を再現してから修復する。
 
-作業スコープとして、既存の設定を維持し、選択したターゲットの `healReplayIsolation` キーのみを変更します。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、およびすべての `secretSinkOrigins` は変更しないでください。ターゲットの追加、削除、名前変更、その他の編集も行ってはいけません。指定された `targets` レコードはデフォルト設定を置き換えます。ターゲット名とその定義は `inputsDigest` の計算対象となりますが、`healReplayIsolation` は意図的にそのダイジェスト契約の対象外とされています。
+## 前提条件 \{#prerequisites}
 
-1. `ambercast.config.json` において、選択した既存ターゲットのエントリを編集し、`healReplayIsolation` のみを `"idempotent"` に変更します。設定ファイルが存在しないデフォルトターゲットの場合、同等の維持設定は次のとおりです。
+- 自由に変更してよい、使い捨ての練習用アプリケーションがある。
+- そのアプリに対して、現在通るテストが生成済みである。例は[5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)のサンプルである。
+- 修復するには、計画が参照するすべてのターゲットで `healReplayIsolation` が `idempotent` でなければならない。組み込みの `web-user` と未設定の値は `stateful` で、修復できない。詳細は[設定](/ambercast/ja/reference/configuration/)と [ambercast heal](/ambercast/ja/reference/cli/heal/) にある。
 
-```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
-```
+## 手順 \{#steps}
 
-ターゲット名およびダイジェストに参加する定義が変更されていないため、既存の Plan の鮮度（freshness）は保たれます。変更されるのはライブ修復ポリシーのみです。このファイルは `RawConfig` で必須とされている `$schema` を満たしており、Schema URL は公開されている設定用 Schema URL です。
+<Steps>
 
-2. 失敗する実行を行う前に、runs ディレクトリの保持ポリシーと承認された閲覧者を確認します。完了した `run` はそのディレクトリに `report.json` を保存しようとし、失敗時のスクリーンショットを保存する場合があるためです（ベストエフォートであり、シークレット検出時、キャプチャ失敗時、またはストレージ書き込み失敗時には省略されます）。確認後、ロケーターに影響を与える UI の変更を行い、`npx ambercast run tests/ambercast/<name>.test.md` を実行します。修復を試みる前に、テストが失敗した結果を確認してください。
+1. ## ターゲットを idempotent にする \{#set-idempotent}
 
-既定のフェイルクローズ動作は、グラウンディングのミスが発生した際に AI による再グラウンディングを行わずにテストを失敗させます。これにより、明示的な修復承認を得る前にバージョン管理されたグラウンディングが上書きされるのを防ぎます。ライブでの再グラウンディングを意図する場合にだけ `--resolve` を指定してください。既定の `grounding.localWriteBack: "auto"` では、再解決されたフィンガープリントが永続化され、実行が成功する可能性があります。
+   `init` が作った `ambercast.config.json` を開き、選択したターゲットに `"healReplayIsolation": "idempotent"` を1つ足す。ファイルの `$schema` はそのまま残す。
 
-3. `npx ambercast heal --dry-run tests/ambercast/<name>.test.md` を実行し、dry-run レポートを確認します（runs ディレクトリの保持ポリシーと閲覧者はステップ2で確認済みです）。
+   変えるのはこのキーだけである。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、`secretSinkOrigins` は変えず、ターゲットの追加・削除・改名もしない。`targets` は既定のターゲットを置き換える（[設定](/ambercast/ja/reference/configuration/#file-selection)）。
 
-バッファされた Plan および Grounding の書き込みが未適用のままである場合、レポートには完了した修復が `preview-only` として記録されます。このレポートは候補パッチのバイト列を公開しないため、このステップは書き込み前の diff レビューではなく、承認可否を判断するためのものです。ただし、各リプレイは試行ごとの専用子ディレクトリを使用し、失敗時のスクリーンショットは隔離された証拠としてそこに保存される可能性があるため、dry-run は一切書き込みを行わないプレビューではない点に留意してください。
+   設定ファイルが無いプロジェクトでは、次の1行をファイル全体として書く。設定ファイルには `$schema` が必須で、その URL は[公開済みの設定スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata)を指す。
 
-4. 人間による明示的な承認を得た上で、実行経路を選択します。対話型ターミナルで人間が実行する場合は `npx ambercast heal tests/ambercast/<name>.test.md` を実行し、ambercast の CLI 確認プロンプトに応答します。エージェントやその他の非対話型呼び出し元が実行する場合は、その明示的な承認が会話内に現れた後にのみ `npx ambercast heal --yes tests/ambercast/<name>.test.md` を実行します。
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+   ```
 
-`--yes` は CLI の確認プロンプトのみを事前承認するものであり、エージェントによるファイル書き込みに対する人間の承認の代わりになることは決してありません（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt) も参照してください）。
+   `healReplayIsolation` は `inputsDigest` に入らないため、既存の計画（plan）は fresh のままである（[設定](/ambercast/ja/reference/configuration/#targets)）。
 
-5. `npx ambercast check tests/ambercast/<name>.test.md` を実行します。
+2. ## 失敗を再現する \{#reproduce-failure}
 
-修復されたテストケースが最新状態（fresh）で完了したことは、終了コード `0` で確認できます。終了コードが `0` 以外の場合は、[stale（古くなった状態）のアーティファクトの復旧](/ambercast/ja/how-to/recover-stale-artifacts/) を参照して対処してください。
+   失敗する実行の前に、runs ディレクトリの保持ポリシーと、そこを読める人を確認する。完了した `run` はそこへ `report.json` を書こうとし、失敗のスクリーンショットを残すことがある。スクリーンショットが省かれる条件は[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)にある。
 
-6. 実際の修復が完了したら、`git status --short` を実行します。スコープに含まれる変更されたすべての追跡対象ファイル（設定ファイル、ロケーター変更の影響を受けた UI ファイル、Plan、Grounding）について `git diff -- <path>` を表示します。スコープに含まれる未追跡ファイルについては、その全内容を表示するか、`git diff --no-index /dev/null <path>` を表示します。この完全な変更セットを提示した上で処理を停止してください。コミットは、会話内で明示的に要求された場合にのみ行います。変更の revert は、対象ファイルを確認し、明示的な承認を受け取った後にのみ行います。
+   続けて、ロケーターに影響する UI の変更を加えて、テストを実行する。`<name>` は、`find-page` のようなプロンプトのファイル名に置き換える。
 
-エージェントのデフォルト動作は diff の提示であり、コミットは要求があった場合にのみ許可されます。必要な確認と承認の境界を設けることで、エージェントが推測によって既存の変更を破棄することを防ぎます（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt) および [生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/#steps) を参照してください）。
+   ```bash
+   npx ambercast run tests/ambercast/<name>.test.md
+   ```
 
-スコープに関する注意: 引数を指定しない `npx ambercast heal` は、設定されたテストディレクトリ、一致（match）ルール、除外（ignore）ルールに合致するすべてのテストを検出します。これは、個別に承認された「検出された全テストの修復」操作でのみ使用してください。本チュートリアルで修復対象とするのは、指定された単一の `.test.md` です。
+   修復の前に、失敗した結果を確かめる。既定ではグラウンディングのミスは AI を呼ばずに失敗し、コミット済みのグラウンディングは書き換わらない。
 
-## 完了状態 {#completion-state}
+   `--resolve` は、ライブの再解決が目的のときだけ付ける。既定のローカル書き戻しでは、再解決した指紋を保存して、ドリフトを示さないまま実行が通る場合もある（[ambercast run](/ambercast/ja/reference/cli/run/#resolve)）。
 
-- 選択されたターゲット（ステップ1の未設定時の例では `web-user`）が明示的に `idempotent` に設定されていること。変更前の `web-user` 向け組み込みテンプレートは `stateful` であり、設定された `targets` マップはそのテンプレートを置き換えます。
-- 受け入れられた修復が最新状態になった後、`check` が終了コード `0` で終了すること。
+3. ## 修復を試す \{#preview-repair}
 
-関連リンク: [設定](/ambercast/ja/reference/configuration/), [ambercast heal](/ambercast/ja/reference/cli/heal/), [ambercast check](/ambercast/ja/reference/cli/check/), [生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/), [stale（古くなった状態）のアーティファクトの復旧](/ambercast/ja/how-to/recover-stale-artifacts/)
+   ```bash
+   npx ambercast heal --dry-run tests/ambercast/<name>.test.md
+   ```
+
+   完了した修復は `preview-only` と記録され、計画とグラウンディングの書き込みは適用されない。レポートに候補のパッチは出ないので、この手順は差分のレビューではなく、承認の判断に使う。
+
+   `--dry-run` でも試行ごとの証拠は書かれ、失敗のスクリーンショットも残りうる。書き込みの無いプレビューではない（[ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions)）。
+
+4. ## 修復を適用する \{#apply-repair}
+
+   人の明示の承認を得てから実行する。人は対話端末で次のコマンドを実行し、CLI の確認に答える。
+
+   ```bash
+   npx ambercast heal tests/ambercast/<name>.test.md
+   ```
+
+   エージェントなど非対話の呼び出し元は、その承認が会話に現れた後でだけ、`--yes` を付けて実行する。
+
+   ```bash
+   npx ambercast heal --yes tests/ambercast/<name>.test.md
+   ```
+
+   `--yes` が事前に許可するのは CLI の確認だけで、エージェントの書き込みに対する人の承認の代わりにはならない（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）。
+
+5. ## 鮮度を確かめる \{#check-fresh}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   終了コード `0` は、修復したケースが fresh であることを示す。`0` 以外のときは[古くなった成果物の復旧](/ambercast/ja/how-to/recover-stale-artifacts/)に進む。詳細は [ambercast check](/ambercast/ja/reference/cli/check/) にある。
+
+6. ## 変更を確認してコミットする \{#review-commit}
+
+   手順4で修復を適用した後に、次のコマンドを実行する。
+
+   ```bash
+   git status --short
+   ```
+
+   対象の追跡済みファイル（設定、変更した UI のファイル、計画、グラウンディング）は `git diff -- <path>` で示す。未追跡のファイルは、内容全体か `git diff --no-index /dev/null <path>` で示す。変更一式を示したら、そこで止まる。
+
+   コミットは、会話で明示の依頼があったときだけ行う。取り消しは、対象のファイルを確認し、明示の承認を得てからだけ行う。エージェントの既定は差分の提示で、推測で既存の変更を捨てる事故を防ぐ（[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)）。
+
+</Steps>
+
+引数を付けない `npx ambercast heal` は、設定したテストディレクトリ・マッチ規則・無視規則に一致する全テストを探す。このチュートリアルが修復するのは、名前を指定した1つの `.test.md` である。引数なしの形は、全テストの修復として別途承認を得たときだけ使う（[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)）。
+
+## 確認 \{#verification}
+
+- 選択したターゲットが `idempotent` になっている。
+- 失敗していたケースが修復され、`npx ambercast check` が終了コード `0` で終わる。
+- 変更一式を示し、コミットの依頼を待っている。
+
+## 次のステップ \{#next-steps}
+
+次は、コミット済みの成果物に対して `check` の後に `run` を実行する CI ジョブを作る。
+
+<LinkCard title="GitHub Actions で ambercast を実行する" href="/ambercast/ja/tutorials/github-actions/" description="check が通ったときだけ run へ進むジョブを作る。" />
 
 ---
 
 # GitHub Actions で ambercast を実行する
 Source: https://kotarotsubaki.github.io/ambercast/ja/tutorials/github-actions/
 
-GitHub Actions のワークフローで ambercast を実行するための、移植性の高い標準的な手順です。チェックアウトや Node・依存関係のインストール、Chromium のセットアップ、必要なプロバイダー認証を済ませたジョブに対して、`npx ambercast check` と `npx ambercast run` を順次実行する構成を整えます。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 手順 {#steps}
+`check` を先に、`run` を後に実行する構成は、他の CI サービスでもそのまま使える。
 
-1. チェックアウト、Node および依存関係のインストール、Chromium のインストール、そして必要なプロバイダー認証の完了後に、以下のジョブコマンドを追加します。
+## 前提条件 \{#prerequisites}
 
-```yaml
-- run: npx ambercast check
-- run: npx ambercast run
-```
+- プロンプト、計画（plan）、グラウンディングがコミット済みで、どれも fresh である。
+- `run` を始める時点で、設定した `baseUrl` のアプリケーションが起動している。
+- ジョブが、チェックアウト、Node と依存関係のインストール、Chromium のインストール、必要なプロバイダーの認証を済ませている。
 
-`check` は読み取り専用の選択オプションを備えた独立したコマンドです。シェルが `check` から終了コード `0` を受け取った後にのみ、`run` がディスパッチされる動作を確認できます。
+## 手順 \{#steps}
 
-2. `--update-cache` は追加しないでください。
-既定の CI 構成では `updateGroundingCache: false` に設定されていることが確認できます。
+<Steps>
 
-3. ワークフローのコミットとプッシュは人間が行ってください。エージェントはワークフローの差分を提示し、会話の中で明示的な要求があった場合にのみコミットまたはプッシュを実行します。
-stale（古くなった状態）または信頼できないアーティファクトが存在する場合、終了コード `4` が返されて `run` の手前でジョブが停止することが確認できます。なお、エージェントのコミット／プッシュに関するポリシーは、CLI の動作とは独立しています。
+1. ## コマンドを足す \{#add-commands}
 
-## 完了状態 {#completion-state}
+   前提条件の処理の後ろに、次の2行を同じ順で足す。
 
-- ジョブは `check` が終了コード `0` で終了した後にのみ `run` に到達し、グラウンディングの書き戻し（grounding write-back）にはオプトインしていません。
+   ```yaml
+   - run: npx ambercast check
+   - run: npx ambercast run
+   ```
 
-関連情報: [他のCIプラットフォームでの実行](/ambercast/ja/how-to/run-on-other-ci/), [グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/), [ambercast check](/ambercast/ja/reference/cli/check/), [ambercast run](/ambercast/ja/reference/cli/run/), [終了コード](/ambercast/ja/reference/exit-codes/)
+   `check` は読み取りだけを行う別のコマンドである。シェルは `check` が終了コード `0` で終わったときだけ `run` を始める。コマンドの詳細は [ambercast check](/ambercast/ja/reference/cli/check/) と [ambercast run](/ambercast/ja/reference/cli/run/) にある。
+
+2. ## 書き戻しを有効にしない \{#keep-write-back-off}
+
+   `--update-cache` は付けない。CI の既定は `ci.updateGroundingCache: false` なので、設定で `true` にしない限り、ジョブはグラウンディングを書き戻さない。書き戻しの条件は[グラウンディングの書き戻しを制御する](/ambercast/ja/how-to/control-grounding-writeback/)で確かめられる。
+
+3. ## ワークフローをコミットする \{#commit-workflow}
+
+   人がワークフローをコミットしてプッシュする。エージェントはワークフローの差分を示し、会話で明示の依頼を受けてからコミットやプッシュを行う（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）。この方針は CLI の動作とは別である。
+
+</Steps>
+
+## 確認 \{#verification}
+
+- ジョブは、`check` が終了コード `0` で終わった後にだけ `run` へ進む。
+- 成果物が古い、または信頼できないとき、`check` は終了コード `4` で終わり、ジョブは `run` の前で止まる。終了コードの一覧は[終了コード](/ambercast/ja/reference/exit-codes/)にある。
+- ジョブはグラウンディングの書き戻しを有効にしていない。
+
+## 次のステップ \{#next-steps}
+
+次は、GitHub Actions 以外の CI サービスで同じ順序を実行する。
+
+<LinkCard title="他のCIプラットフォームでの実行" href="/ambercast/ja/how-to/run-on-other-ci/" description="check を先に、run を後に実行する構成を他の CI サービスへ移す。" />
 
 ---
 
@@ -1485,6 +1594,8 @@ Ambercastにおけるパス計算、成果物の生成タイミング、およ�
 | ヒールスクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | 共有キャプチャパスが、対象となる失敗したステップのエビデンスを試行スコープのケースディレクトリ内に書き込みます。 | 呼び出しディレクトリと同様です。 |
 | 実行レポート | `<runsDir>/<runId>/report.json` | 実行完了後に `run` のみが確定したバッチエンベロープを書き込みます。アトミック書き込みに失敗すると `reportPersistence` が変化します。 | 呼び出しディレクトリと同様です。 |
 
+スクリーンショットはベストエフォートで、キャプチャや保存に失敗した場合も省略される。
+
 `runsDir` は独立して設定され、既定値は `tests/ambercast/.runs` です。レイアウト解決処理によって `testDir` から導出されることはありません。
 
 `runId` は `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$` に一致する必要があり、区切り文字、ドットセグメント、および空のIDを排除します。
@@ -2146,6 +2257,8 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 ## 不足しているグラウンディングを解決する {#resolve}
 
 `--resolve` は AI 解決パスを明示的に有効化する。指定しない場合、グラウンディングミスはプロバイダーをディスパッチせずにフェイルクローズする。
+
+既定のローカル書き戻しでは、解決した実行が再解決した指紋を保存して通ることがある。
 
 ## グラウンディングの書き戻し {#grounding-write-back}
 

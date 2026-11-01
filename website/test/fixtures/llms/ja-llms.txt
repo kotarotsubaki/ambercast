@@ -9,9 +9,9 @@
 
 ## TUTORIALS
 - [5分で動かす最初のテスト](https://kotarotsubaki.github.io/ambercast/ja/tutorials/quick-start/): プロジェクトの初期化から生成・再生・確認まで、最初の生成テストを5分で動かすチュートリアル。
-- [最初の plan と grounding の読み込み](https://kotarotsubaki.github.io/ambercast/ja/tutorials/review-your-first-plan/): テストプロンプトから解決される plan と grounding のファイル配置を確認し、freshness を検証します。
-- [UI変更後にテストを修復する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/repair-your-first-drift/): UI変更によって失敗したテストに対し、ターゲットのhealReplayIsolationを設定して安全に修復する手順を学びます。
-- [GitHub Actions で ambercast を実行する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/github-actions/): GitHub Actions の CI ワークフローで ambercast を実行するための、移植性の高い標準的な手順を解説します。
+- [最初の計画とグラウンディングを読む](https://kotarotsubaki.github.io/ambercast/ja/tutorials/review-your-first-plan/): 生成された計画とグラウンディングの置き場所を確かめ、check の結果から鮮度を読み取る。
+- [UI変更後にテストを修復する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/repair-your-first-drift/): 使い捨ての練習用アプリで UI を変えて、失敗したテストを idempotent なターゲットで修復する。
+- [GitHub Actions で ambercast を実行する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/github-actions/): すでに動いている GitHub Actions のジョブに、check が通ったときだけ run へ進む2行を足す。
 
 ## HOW-TO GUIDES
 - [効果的なプロンプトの作成](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/): レビューしやすく焦点の定まったテストプロンプトを作成し、ドライランで検証する手順を説明します。

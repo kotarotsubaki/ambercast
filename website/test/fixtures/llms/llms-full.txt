@@ -299,101 +299,212 @@ Next, learn how to write prompts.
 # Reading your first plan and grounding
 Source: https://kotarotsubaki.github.io/ambercast/tutorials/review-your-first-plan/
 
-Building on [Your first test in 5 minutes](/ambercast/tutorials/quick-start/), this tutorial walks you through locating the companion files ambercast creates for a test prompt and checking their freshness.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Steps {#steps}
+This tutorial continues [Your first test in 5 minutes](/ambercast/tutorials/quick-start/).
 
-1. Open `tests/ambercast/sign-in.ambercast.plan.json` and read `schemaVersion`, `source.inputsDigest`, and `steps`. Notice the path structure: the resolver derives it from the prompt by replacing the exact `.test.md` suffix.
+## Prerequisites \{#prerequisites}
 
-2. Open `tests/ambercast/sign-in.ambercast.grounding.json` and examine its `schemaVersion`, `planDigest`, and `entries`. As with the plan, the resolver derives the paired grounding path from that same prompt.
+- You finished the quick start. You generated the plan and the grounding from the sample `tests/ambercast/find-page.test.md` and replayed it.
 
-3. Run `npx ambercast check tests/ambercast/sign-in.test.md --json`. Check produces a report envelope where a fresh result has status `fresh` or `fresh-without-grounding`.
+## Steps \{#steps}
 
-## Completion state {#completion-state}
+<Steps>
 
-The command exits `0` only when the whole report has no failure, case error, or interruption; a selected fresh case does not by itself guarantee it because check also scans companion artifacts for orphan findings. The JSON report exposes the freshness result.
+1. ## Open the plan \{#open-plan}
 
-Links: [Plan document](/ambercast/spec/plan-document/), [Grounding document](/ambercast/spec/grounding-document/), [File layout](/ambercast/reference/file-layout/), [ambercast check](/ambercast/reference/cli/check/), [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+   Open `tests/ambercast/find-page.ambercast.plan.json`. Read `schemaVersion`, `source.inputsDigest`, and `steps`.
+
+   ambercast derives this path by replacing the `.test.md` suffix of the prompt with `.ambercast.plan.json`. The [Plan document](/ambercast/spec/plan-document/) describes the structure, and [File layout](/ambercast/reference/file-layout/) describes where files live.
+
+2. ## Open the grounding \{#open-grounding}
+
+   Open `tests/ambercast/find-page.ambercast.grounding.json`. Read `schemaVersion`, `planDigest`, and `entries`.
+
+   ambercast derives this path from the same prompt, with the `.ambercast.grounding.json` suffix. The [Grounding document](/ambercast/spec/grounding-document/) describes the structure.
+
+3. ## Check freshness \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/find-page.test.md --json
+   ```
+
+   `check` prints a report that includes the freshness result. A fresh result has the status `fresh` or `fresh-without-grounding`.
+
+</Steps>
+
+## Verification \{#verification}
+
+- You can say that the plan and the grounding sit beside the prompt.
+- The status is `fresh`. `fresh-without-grounding` appears only when `grounding.repositoryPolicy` is `uncommitted`, so the quick-start default gives `fresh`.
+- `check` exits `0` only when the whole report has no failure, case error, or interruption. A fresh case does not guarantee that, because `check` also scans companion files for orphans. See [ambercast check](/ambercast/reference/cli/check/) and [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+
+## Next steps \{#next-steps}
+
+Next, repair a test that a UI change broke.
+
+<LinkCard title="Healing a test after a UI change" href="/ambercast/tutorials/repair-your-first-drift/" description="Change the practice app's UI and repair the test that fails." />
 
 ---
 
 # Healing a test after a UI change
 Source: https://kotarotsubaki.github.io/ambercast/tutorials/repair-your-first-drift/
 
-This tutorial walks you through repairing an existing generated test on a disposable practice application after a locator-affecting UI change. Unmodified built-in targets default to stateful, which cannot heal; you will explicitly configure your target for idempotent replay isolation, verify the failure, preview the repair, and apply the healed artifacts.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Steps {#steps}
+You will change a practice app's UI in a way that affects locators, reproduce the failure, and repair it.
 
-Preserve your existing configuration and change only the selected target's `healReplayIsolation` key. Keep its target name, `baseUrl`, `executor` (including `executor.browser`), and any `secretSinkOrigins` unchanged; do not add, remove, rename, or otherwise edit a target. A supplied `targets` record replaces the defaults, target names and definitions participate in `inputsDigest`, and `healReplayIsolation` is deliberately outside that digest contract.
+## Prerequisites \{#prerequisites}
 
-1. In `ambercast.config.json`, edit the existing selected target entry so that only `healReplayIsolation` becomes `"idempotent"`. For the unconfigured default target, the equivalent preservation is:
+- You have a disposable practice application that you may change freely.
+- A generated test for that application passes today. The sample from [Your first test in 5 minutes](/ambercast/tutorials/quick-start/) works.
+- Heal requires every target that the plan references to set `healReplayIsolation` to `idempotent`. The built-in `web-user` target and an unset key default to `stateful`, which cannot heal. See [Configuration](/ambercast/reference/configuration/) and [ambercast heal](/ambercast/reference/cli/heal/).
 
-```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
-```
+## Steps \{#steps}
 
-The existing Plan remains fresh because its target name and digest-participating definition are unchanged; only its live healing policy changes. The file meets `RawConfig`'s required `$schema`, and the Schema URL is the published configuration Schema URL.
+<Steps>
 
-2. Before the failing run, confirm the retention policy and the authorized readers of the runs directory, because a completed `run` attempts to persist `report.json` there and may persist a failure screenshot (best effort: omitted on secret detection, capture or storage failure). Then make a locator-affecting UI change and run `npx ambercast run tests/ambercast/<name>.test.md`; observe the failed result before attempting repair.
+1. ## Make the target idempotent \{#set-idempotent}
 
-The default fail-closed behavior turns a grounding miss into a failure instead of an AI re-grounding, so the versioned grounding is not rewritten before the explicit heal approval. Pass `--resolve` only when live re-grounding is intentional; with the default `grounding.localWriteBack: "auto"`, it can persist a re-resolved fingerprint and the run can pass.
+   Open the `ambercast.config.json` that `init` created. Add `"healReplayIsolation": "idempotent"` to the selected target, and keep the file's existing `$schema`.
 
-3. Run `npx ambercast heal --dry-run tests/ambercast/<name>.test.md` and inspect the dry-run report (the runs-directory retention and readers were confirmed in step 2).
+   Change only that key. Keep the target name, `baseUrl`, `executor` (including `executor.browser`), and any `secretSinkOrigins`, and do not add, remove, or rename a target. A `targets` record replaces the default targets ([Configuration](/ambercast/reference/configuration/#file-selection)).
 
-In the output, the report records a completed repair as `preview-only` when buffered plan and grounding writes remain unapplied. It does not expose candidate patch bytes, making this step an approval decision rather than a pre-write diff review. Each replay uses an attempt-specific child directory, however, and failure screenshots can still be persisted as contained evidence there, so dry-run is not a no-write preview.
+   A project with no configuration file writes this single line as the whole file. Every configuration file needs `$schema`, and its URL is the [published configuration schema](/ambercast/reference/json-schemas/#publication-metadata).
 
-4. Obtain explicit human approval, then choose the execution path: a human at an interactive terminal runs `npx ambercast heal tests/ambercast/<name>.test.md` and answers ambercast's CLI confirmation; an agent or other non-interactive caller runs `npx ambercast heal --yes tests/ambercast/<name>.test.md` only after that explicit approval appears in the conversation.
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+   ```
 
-Passing `--yes` pre-authorizes only the CLI confirmation and never substitutes for human approval of an agent's write.
+   Target names and definitions feed `inputsDigest`, but `healReplayIsolation` resolves live and stays outside it. Your existing plan therefore stays fresh ([Configuration](/ambercast/reference/configuration/#targets)).
 
-5. Run `npx ambercast check tests/ambercast/<name>.test.md`.
+2. ## Reproduce the failure \{#reproduce-failure}
 
-An exit code of `0` is the observable fresh completion of the repaired case; otherwise use [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/).
+   Before the failing run, confirm the retention policy of the runs directory and who can read it. A completed `run` attempts to write `report.json` there and may keep a failure screenshot. [File layout](/ambercast/reference/file-layout/#run-artifacts) lists when the screenshot is omitted.
 
-6. After the real heal, run `git status --short`. For every changed tracked in-scope file—the configuration, the locator-affecting UI file, Plan, and Grounding—show `git diff -- <path>`; for every untracked in-scope file, show its full contents or `git diff --no-index /dev/null <path>`. Present that complete change set and stop. Commit only when the conversation explicitly asks for it. Revert only after confirming the target files and receiving explicit approval.
+   Then make a locator-affecting UI change and run the test. Replace `<name>` with your prompt's file name, such as `find-page`.
 
-The agent default is diff presentation, permitting commits only on request; the required confirmation and approval boundaries prevent an agent from discarding existing changes by inference.
+   ```bash
+   npx ambercast run tests/ambercast/<name>.test.md
+   ```
 
-The no-argument form `npx ambercast heal` discovers every test matching the configured test directory, match, and ignore rules. Use it only in a separately approved all-discovered-tests repair operation; this tutorial heals one named `.test.md`.
+   Observe the failure before you repair anything. By default, a grounding miss fails without calling AI, so the committed grounding stays unchanged.
 
-## Completion state {#completion-state}
+   Pass `--resolve` only when you want live re-grounding. With the default local write-back, it can save a re-resolved fingerprint, and the run can pass without showing the drift ([ambercast run](/ambercast/reference/cli/run/#resolve)).
 
-- The selected target (`web-user` in the no-config example shown in step 1) is explicitly `idempotent`; the unmodified built-in template for `web-user` is `stateful`, and a configured `targets` map replaces that template.
-- `check` exits `0` after the accepted repair is fresh.
+3. ## Preview the repair \{#preview-repair}
 
-Links: [Configuration](/ambercast/reference/configuration/), [ambercast heal](/ambercast/reference/cli/heal/), [ambercast check](/ambercast/reference/cli/check/), [Review generated diffs](/ambercast/how-to/review-generated-diffs/), [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/).
+   ```bash
+   npx ambercast heal --dry-run tests/ambercast/<name>.test.md
+   ```
+
+   The report records a completed repair as `preview-only`, and the plan and grounding writes stay unapplied. The report shows no candidate patch, so this step is an approval decision, not a diff review.
+
+   `--dry-run` still writes attempt evidence, and failure screenshots can remain. It is not a no-write preview ([ambercast heal](/ambercast/reference/cli/heal/#preconditions)).
+
+4. ## Apply the repair \{#apply-repair}
+
+   Get explicit human approval first. A human at an interactive terminal runs this command and answers the CLI confirmation.
+
+   ```bash
+   npx ambercast heal tests/ambercast/<name>.test.md
+   ```
+
+   An agent or other non-interactive caller adds `--yes` only after that approval appears in the conversation.
+
+   ```bash
+   npx ambercast heal --yes tests/ambercast/<name>.test.md
+   ```
+
+   `--yes` only pre-authorizes the CLI confirmation. It never replaces human approval of an agent's write ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)).
+
+5. ## Check freshness \{#check-fresh}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   Exit code `0` shows the repaired case is fresh. Otherwise follow [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/). See [ambercast check](/ambercast/reference/cli/check/) for details.
+
+6. ## Review and commit the changes \{#review-commit}
+
+   After the applied heal in step 4, run this command.
+
+   ```bash
+   git status --short
+   ```
+
+   For each changed tracked file in scope (the configuration, the changed UI file, the plan, and the grounding), show `git diff -- <path>`. For each untracked file, show its full contents or `git diff --no-index /dev/null <path>`. Present the change set and stop.
+
+   Commit only when the conversation asks for it. Revert only after you confirm the target files and get explicit approval. The agent default is to present the diff, which keeps an agent from discarding existing changes by inference ([Review generated diffs](/ambercast/how-to/review-generated-diffs/)).
+
+</Steps>
+
+The no-argument `npx ambercast heal` discovers every test that matches the configured test directory, match rules, and ignore rules. This tutorial heals one named `.test.md`. Use the no-argument form only in a separately approved all-tests repair ([ambercast heal](/ambercast/reference/cli/heal/#flags)).
+
+## Verification \{#verification}
+
+- The selected target is `idempotent`.
+- The failing case is repaired, and `npx ambercast check` exits `0`.
+- You presented the change set and are waiting for a commit request.
+
+## Next steps \{#next-steps}
+
+Next, add a CI job that runs `check` and then `run` on committed artifacts.
+
+<LinkCard title="Running ambercast in GitHub Actions" href="/ambercast/tutorials/github-actions/" description="Build a job that runs only after check passes." />
 
 ---
 
 # Running ambercast in GitHub Actions
 Source: https://kotarotsubaki.github.io/ambercast/tutorials/github-actions/
 
-This tutorial guides you through setting up ambercast in GitHub Actions using a portable sequence. You will configure your workflow job to run `npx ambercast check` followed by `npx ambercast run`, dispatching test execution only after the shell sees exit `0` from `check`.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Steps {#steps}
+The sequence of `check` first and `run` second also works on other CI services.
 
-1. Add these job commands after checkout, Node/dependency installation, Chromium installation, and any required provider authentication:
+## Prerequisites \{#prerequisites}
 
-```yaml
-- run: npx ambercast check
-- run: npx ambercast run
-```
+- Your prompts, plans, and grounding files are committed, and all of them are fresh.
+- The application at the configured `baseUrl` is running when `run` starts.
+- The job already checks out the code, installs Node and dependencies, installs Chromium, and authenticates any provider it needs.
 
-`check` is a distinct command with read-only selection options. Once the job runs, you will observe that `run` is dispatched only after the shell sees exit `0` from `check`.
+## Steps \{#steps}
 
-2. Do not add `--update-cache`.
+<Steps>
 
-Default CI configuration has `updateGroundingCache: false`. During the run, you will observe that the workflow executes with `updateGroundingCache: false` by default.
+1. ## Add the commands \{#add-commands}
 
-3. Have a human commit and push the workflow. An agent presents the workflow diff and commits or pushes only after an explicit request in the conversation (see [Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)).
+   Add these two lines after those setup steps, in this order.
 
-This agent commit/push policy is separate from CLI behavior. When an artifact is stale or untrustworthy, you will observe exit `4`, which stops the job before `run`.
+   ```yaml
+   - run: npx ambercast check
+   - run: npx ambercast run
+   ```
 
-## Completion state {#completion-state}
+   `check` is a separate command that only reads. The shell starts `run` only after `check` exits `0`. See [ambercast check](/ambercast/reference/cli/check/) and [ambercast run](/ambercast/reference/cli/run/) for details.
 
-- The job reaches `run` only after `check` exits `0`; it has not opted into grounding write-back.
+2. ## Keep write-back off \{#keep-write-back-off}
 
-Links: [Run on other CI platforms](/ambercast/how-to/run-on-other-ci/), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/), [ambercast check](/ambercast/reference/cli/check/), [ambercast run](/ambercast/reference/cli/run/), [Exit codes](/ambercast/reference/exit-codes/).
+   Do not add `--update-cache`. CI defaults to `ci.updateGroundingCache: false`, so the job does not write grounding back unless your configuration sets it to `true`. [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/) lists the conditions.
+
+3. ## Commit the workflow \{#commit-workflow}
+
+   A human commits and pushes the workflow. An agent presents the workflow diff and commits or pushes only after an explicit request in the conversation ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)). This policy is separate from CLI behavior.
+
+</Steps>
+
+## Verification \{#verification}
+
+- The job reaches `run` only after `check` exits `0`.
+- When an artifact is stale or untrustworthy, `check` exits `4` and the job stops before `run`. See [Exit codes](/ambercast/reference/exit-codes/).
+- The job has not enabled grounding write-back.
+
+## Next steps \{#next-steps}
+
+Next, run the same sequence on another CI service.
+
+<LinkCard title="Run on other CI platforms" href="/ambercast/how-to/run-on-other-ci/" description="Move the check-then-run sequence to another CI service." />
 
 ---
 
@@ -1446,6 +1557,8 @@ Forward mappings accept only an in-`testDir` path ending exactly in `.test.md` w
 | Heal screenshot | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | The shared capture path writes eligible failed-step evidence into the attempt-scoped case directory. | Same as the invocation directory. |
 | Run report | `<runsDir>/<runId>/report.json` | Only `run` writes the finalized batch envelope after execution; a failed atomic write changes `reportPersistence`. | Same as the invocation directory. |
 
+A screenshot is best effort: a capture or storage failure also omits it.
+
 `runsDir` is independently configured and defaults to `tests/ambercast/.runs`; it is not derived by the layout resolver from `testDir`.
 
 A `runId` must match `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`, preventing separators, dot segments, and empty IDs.
@@ -2087,6 +2200,8 @@ The runtime rejects `--stale=regenerate` before configuration or file I/O. Durin
 ## Resolve missing grounding {#resolve}
 
 `--resolve` opts into the AI resolution path. Without it, a grounding miss fails closed instead of dispatching a provider.
+
+With the default local write-back, a resolved run can persist a re-resolved fingerprint and pass.
 
 ## Grounding write-back {#grounding-write-back}
 

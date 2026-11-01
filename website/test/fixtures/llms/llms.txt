@@ -9,9 +9,9 @@
 
 ## TUTORIALS
 - [Your first test in 5 minutes](https://kotarotsubaki.github.io/ambercast/tutorials/quick-start/): Initialize a project, then generate, replay, and confirm your first generated test in this tutorial.
-- [Reading your first plan and grounding](https://kotarotsubaki.github.io/ambercast/tutorials/review-your-first-plan/): Learn how to locate generated plan and grounding files and check their freshness.
-- [Healing a test after a UI change](https://kotarotsubaki.github.io/ambercast/tutorials/repair-your-first-drift/): Repair an existing ambercast test on a disposable practice application after a locator-affecting UI change by configuring idempotent replay isolation.
-- [Running ambercast in GitHub Actions](https://kotarotsubaki.github.io/ambercast/tutorials/github-actions/): Set up a portable GitHub Actions workflow to run ambercast with check and run commands.
+- [Reading your first plan and grounding](https://kotarotsubaki.github.io/ambercast/tutorials/review-your-first-plan/): Find the plan and grounding files ambercast generated, and read their freshness from a check result.
+- [Healing a test after a UI change](https://kotarotsubaki.github.io/ambercast/tutorials/repair-your-first-drift/): Change the UI of a disposable practice app, then repair the failing test with an idempotent target.
+- [Running ambercast in GitHub Actions](https://kotarotsubaki.github.io/ambercast/tutorials/github-actions/): Add two lines to a working GitHub Actions job so that run starts only after check passes.
 
 ## HOW-TO GUIDES
 - [Write effective prompts](https://kotarotsubaki.github.io/ambercast/how-to/write-effective-prompts/): Author focused test prompts with clear outcomes and verify plan generation with a dry run.

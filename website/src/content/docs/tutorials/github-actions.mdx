@@ -1,0 +1,51 @@
+---
+title: Running ambercast in GitHub Actions
+description: Add two lines to a working GitHub Actions job so that run starts only after check passes.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+The sequence of `check` first and `run` second also works on other CI services.
+
+## Prerequisites \{#prerequisites}
+
+- Your prompts, plans, and grounding files are committed, and all of them are fresh.
+- The application at the configured `baseUrl` is running when `run` starts.
+- The job already checks out the code, installs Node and dependencies, installs Chromium, and authenticates any provider it needs.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Add the commands \{#add-commands}
+
+   Add these two lines after those setup steps, in this order.
+
+   ```yaml
+   - run: npx ambercast check
+   - run: npx ambercast run
+   ```
+
+   `check` is a separate command that only reads. The shell starts `run` only after `check` exits `0`. See [ambercast check](/ambercast/reference/cli/check/) and [ambercast run](/ambercast/reference/cli/run/) for details.
+
+2. ## Keep write-back off \{#keep-write-back-off}
+
+   Do not add `--update-cache`. CI defaults to `ci.updateGroundingCache: false`, so the job does not write grounding back unless your configuration sets it to `true`. [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/) lists the conditions.
+
+3. ## Commit the workflow \{#commit-workflow}
+
+   A human commits and pushes the workflow. An agent presents the workflow diff and commits or pushes only after an explicit request in the conversation ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)). This policy is separate from CLI behavior.
+
+</Steps>
+
+## Verification \{#verification}
+
+- The job reaches `run` only after `check` exits `0`.
+- When an artifact is stale or untrustworthy, `check` exits `4` and the job stops before `run`. See [Exit codes](/ambercast/reference/exit-codes/).
+- The job has not enabled grounding write-back.
+
+## Next steps \{#next-steps}
+
+Next, run the same sequence on another CI service.
+
+<LinkCard title="Run on other CI platforms" href="/ambercast/how-to/run-on-other-ci/" description="Move the check-then-run sequence to another CI service." />

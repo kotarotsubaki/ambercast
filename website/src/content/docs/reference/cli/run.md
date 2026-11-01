@@ -43,6 +43,8 @@ The runtime rejects `--stale=regenerate` before configuration or file I/O. Durin
 
 `--resolve` opts into the AI resolution path. Without it, a grounding miss fails closed instead of dispatching a provider.
 
+With the default local write-back, a resolved run can persist a re-resolved fingerprint and pass.
+
 ## Grounding write-back {#grounding-write-back}
 
 `run` writes changed grounding only when the resolved write-back gate permits it. `--update-cache` is one explicit input to that gate: it combines with `ci.updateGroundingCache` in CI, and with the `localWriteBack` setting locally. See [Configuration](/ambercast/reference/configuration/#grounding) for every local and CI condition.

@@ -43,6 +43,8 @@ description: ambercast run コマンドのフラグ、再生パス、明示的�
 
 `--resolve` は AI 解決パスを明示的に有効化する。指定しない場合、グラウンディングミスはプロバイダーをディスパッチせずにフェイルクローズする。
 
+既定のローカル書き戻しでは、解決した実行が再解決した指紋を保存して通ることがある。
+
 ## グラウンディングの書き戻し {#grounding-write-back}
 
 `run` は、解決された書き戻しゲートが許可した場合にのみ変更後のグラウンディングを書き込む。`--update-cache` はこのゲートへの明示的な入力の1つであり、CI環境では`ci.updateGroundingCache`との組み合わせで、ローカル環境では`localWriteBack`の設定と組み合わせて判定される。ローカル環境と CI 環境の全条件は [設定](/ambercast/ja/reference/configuration/#grounding) を参照する。

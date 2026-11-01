@@ -296,110 +296,214 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 ---
 
-# 阅读您的首个 plan 与 grounding
+# 阅读您的首个执行计划与定位缓存
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/review-your-first-plan/
 
-本教程以 [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/) 为基础。在接下来的内容中，您将了解由测试提示词派生的 plan 与 grounding 文件的具体存放位置，并学习如何检查它们的新鲜度。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 操作步骤 {#steps}
+本教程接续 [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)。
 
-1. 打开 `tests/ambercast/sign-in.ambercast.plan.json`，阅读 `schemaVersion`、`source.inputsDigest` 与 `steps`。解析器通过精确替换 prompt 的 `.test.md` 后缀来派生该 plan 文件路径。
-2. 打开 `tests/ambercast/sign-in.ambercast.grounding.json`，阅读其 `schemaVersion`、`planDigest` 与 `entries`。解析器同样从同一个 prompt 派生出这一配对的 grounding 路径。
-3. 运行 `npx ambercast check tests/ambercast/sign-in.test.md --json`。check 会生成一个报告封套（report envelope）；处于新鲜状态的结果其状态为 `fresh` 或 `fresh-without-grounding`。
+## 前提条件 \{#prerequisites}
 
-## 完成状态 {#completion-state}
+- 您已完成快速入门：根据示例 `tests/ambercast/find-page.test.md` 生成了执行计划和定位缓存，并回放过一次。
 
-- 该命令仅在整份报告没有 failure、case error 或 interruption 时才会以退出码 `0` 退出；选中的新鲜用例本身并不能保证退出码为 `0`，因为 check 还会扫描伴生文件是否存在孤立发现项（orphan findings）。JSON 报告会展示该新鲜度结果。
+## 操作步骤 \{#steps}
 
-相关链接：[计划文档](/ambercast/zh-cn/spec/plan-document/)、[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)、[文件布局](/ambercast/zh-cn/reference/file-layout/)、[ambercast check](/ambercast/zh-cn/reference/cli/check/)、[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+<Steps>
+
+1. ## 打开执行计划 \{#open-plan}
+
+   打开 `tests/ambercast/find-page.ambercast.plan.json`，读取三个顶层字段：`schemaVersion`、`source.inputsDigest` 和 `steps`。
+
+   这个路径由 prompt 的 `.test.md` 后缀替换为 `.ambercast.plan.json` 得到。结构见[执行计划文档](/ambercast/zh-cn/spec/plan-document/)，文件位置见[文件布局](/ambercast/zh-cn/reference/file-layout/)。
+
+2. ## 打开定位缓存 \{#open-grounding}
+
+   打开 `tests/ambercast/find-page.ambercast.grounding.json`，读取 `schemaVersion`、`planDigest` 和 `entries`。
+
+   这个路径同样由同一个 prompt 得到，后缀为 `.ambercast.grounding.json`。结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
+
+3. ## 检查新鲜度 \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/find-page.test.md --json
+   ```
+
+   `check` 会输出包含新鲜度结果的报告。新鲜的结果状态为 `fresh` 或 `fresh-without-grounding`。
+
+</Steps>
+
+## 验证 \{#verification}
+
+- 您能说出执行计划和定位缓存都位于 prompt 旁边。
+- 状态为 `fresh`。只有 `grounding.repositoryPolicy` 为 `uncommitted` 时才会出现 `fresh-without-grounding`，所以快速入门的默认配置得到的是 `fresh`。
+- 只有整份报告没有失败、用例错误和中断时，`check` 才以退出码 `0` 结束。用例新鲜并不能保证这一点，因为 `check` 还会扫描伴生文件中的孤立项。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/) 和[审阅生成的差异](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+## 下一步 \{#next-steps}
+
+接下来修复一个因 UI 变更而失败的测试。
+
+<LinkCard title="UI 变更后的测试自愈" href="/ambercast/zh-cn/tutorials/repair-your-first-drift/" description="修改练习应用的 UI，并修复失败的测试。" />
 
 ---
 
 # UI 变更后的测试自愈
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/repair-your-first-drift/
 
-当界面调整导致元素定位失效时，ambercast 可以通过自愈流程重新建立元素对应关系。假设您正在一个已生成既有测试用例的一次性练习应用中操作，本教程将带您完成单个测试用例的安全自愈。请注意，默认的具状态（stateful）目标无法执行自愈；关于配置与命令契约的权威定义，请参阅 [配置](/ambercast/zh-cn/reference/configuration/) 与 [ambercast heal](/ambercast/zh-cn/reference/cli/heal/)。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 步骤 {#steps}
+您将以影响定位器的方式修改练习应用的 UI，复现失败，然后修复它。
 
-> [!IMPORTANT]
-> **写入范围**：请严格保留现有配置，仅修改所选 target 的 `healReplayIsolation` 键。请保持其 target 名称、`baseUrl`、`executor`（包括 `executor.browser`） 以及任何 `secretSinkOrigins` 原样不变；切勿新增、删除、重命名或编辑其他 target。一旦显式提供 `targets` 记录，它将整体替换内置默认值；target 的名称与定义会参与 `inputsDigest` 计算，而 `healReplayIsolation` 经专门设计独立于该摘要契约之外。
+## 前提条件 \{#prerequisites}
 
-1. 在 `ambercast.config.json` 中，编辑现有的所选 target 条目，仅将其 `healReplayIsolation` 修改为 `"idempotent"`。对于未显式配置的默认 target，等效的保留配置如下：
+- 您有一个可以随意修改的一次性练习应用。
+- 该应用已有一个当前能通过的生成测试，例如 [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)中的示例。
+- 目标的 `healReplayIsolation` 必须是 `idempotent`，才能执行自愈。内置的 `web-user` 目标以及未设置该键时，默认值是 `stateful`，无法自愈。
 
-```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
-```
+## 操作步骤 \{#steps}
 
-→ **预期现象**：由于 target 名称以及参与摘要计算的定义均未改动，现有的 Plan 依然保持新鲜（fresh）；改变的仅是其实时自愈策略。该文件符合 `RawConfig` 必需的 `$schema` 要求，且使用的 Schema URL 为已发布的官方配置 Schema URL。
+<Steps>
 
-2. 在触发失败运行之前，请确认 runs 目录的保留策略（retention policy）以及授权读取者。一次完整的 `run` 执行会尝试向该目录持久化写入 `report.json`，并可能写入失败截图（尽力而为：在检测到机密信息、截图捕获失败或存储写入失败时将被忽略）。接着，进行一项会影响定位器的 UI 变更，并运行 `npx ambercast run tests/ambercast/<name>.test.md`。在尝试修复之前，观察并确认测试已失败。
+1. ## 让目标成为 idempotent \{#set-idempotent}
 
-→ **预期现象**：默认的失败关闭行为会将定位匹配缺失（grounding miss）直接判定为失败，而不是触发 AI 重新定位。这样可以确保在获得显式自愈批准之前，受版本控制的 grounding 不会被提前重写。只有有意进行实时重新定位时才传入 `--resolve`；默认的 `grounding.localWriteBack: "auto"` 会持久化重新解析后的指纹，且运行可能直接通过。
+   打开 `init` 创建的 `ambercast.config.json`，在选中的目标中添加 `"healReplayIsolation": "idempotent"`，并保留文件中原有的 `$schema`。
 
-3. 运行 dry-run 模式以生成并检查报告（runs 目录的保留策略与读取权限已在步骤 2 中确认）：
+   只改这一个键。目标名称、`baseUrl`、包含 `executor.browser` 的 `executor` 和 `secretSinkOrigins` 都保持不变，也不要新增、删除或重命名目标。提供 `targets` 记录会替换默认目标，详见[配置](/ambercast/zh-cn/reference/configuration/#file-selection)。
 
+   没有配置文件的项目，把下面这一行整体写成文件内容。每个配置文件都必须有 `$schema`，其 URL 是[已发布的配置 schema](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
 
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+   ```
 
-→ **预期现象**：当缓冲的 plan 与 grounding 写入尚未实际应用时，报告会将本次完成的修复状态标记为 `preview-only`；该报告不会输出候选补丁的原始字节，因此这一步是一次批准决策，而非写入前的 diff 审查。需要注意的是，每次重放都会使用一个专属的尝试子目录，失败截图仍可能作为独立的取证数据保存在其中，因此 `ambercast heal --dry-run` 并不是完全无写入的预览。
+   目标名称和定义会进入 `inputsDigest`，而 `healReplayIsolation` 在运行时解析，不在其中。因此现有的执行计划仍然是新鲜的，详见[配置](/ambercast/zh-cn/reference/configuration/#targets)。
 
-4. 获得人类的显式批准后，选择对应的执行路径：
-   - 若您处于交互式终端，请运行 `npx ambercast heal tests/ambercast/<name>.test.md` 并响应 CLI 的交互确认提示；
-   - 若由 Agent 或其他非交互式调用方执行，必须在显式批准明确出现在对话中之后，方可运行 `npx ambercast heal --yes tests/ambercast/<name>.test.md`。
+2. ## 复现失败 \{#reproduce-failure}
 
-→ **预期现象**：`--yes` 参数仅用于预先授权 CLI 的交互确认，绝不能替代人类对 Agent 写入行为的批准。详情请参阅 [设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)。
+   在运行失败的测试之前，先确认 runs 目录的保留策略以及谁可以读取它。完成的 `run` 会尝试在其中写入 `report.json`，还可能保留失败截图。截图在哪些情况下会被省略，见[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)。
 
-5. 验证测试的新鲜状态：
+   然后做一处影响定位器的 UI 变更，并运行测试。请把 `<name>` 换成您的 prompt 文件名，例如 `find-page`。
 
+   ```bash
+   npx ambercast run tests/ambercast/<name>.test.md
+   ```
 
+   修复之前，先确认测试确实失败。默认情况下，定位缓存未命中会直接失败而不调用 AI，所以已提交的定位缓存不会改变。
 
-→ **预期现象**：`ambercast check` 退出代码为 `0`，即表明修复后的用例已处于可观察的新鲜完成状态；若退出代码非 0，请参阅 [恢复 stale（已过期）产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/)。
+   只有需要实时重新定位时才加 `--resolve`。在默认的本地写回下，它可能保存重新解析出的指纹，运行也可能在不暴露漂移的情况下通过，详见 [ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)。
 
-6. 实际自愈执行完毕后，运行 `git status --short`。针对每一个受版本控制且在作用域内的变更文件（配置文件、影响定位器的 UI 文件、Plan 以及 Grounding），运行 `git diff -- <path>` 进行展示；对于每一个未受版本控制的作用域内文件，展示其完整内容或通过 `git diff --no-index /dev/null <path>` 展示。展示完整的变更集后停止操作。只有在对话中明确提出要求时才执行提交（commit）。只有在确认目标文件并获得显式批准后才执行撤销（revert）。
+3. ## 试运行修复 \{#preview-repair}
 
-→ **预期现象**：默认只进行 diff 展示，且仅在显式请求时才允许提交；这一明确的确认与批准边界可防止 Agent 仅凭推断擅自丢弃既有变更。请参考 [设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt) 与 [审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/#steps)。
+   ```bash
+   npx ambercast heal --dry-run tests/ambercast/<name>.test.md
+   ```
 
-> [!NOTE]
-> **范围说明**：不带参数的命令形式 `npx ambercast heal` 会发现所有符合测试目录、匹配规则及忽略规则的测试。请仅在经过单独批准的全量修复操作中使用该形式；本教程仅针对单个指定的 `.test.md` 进行自愈。
+   报告会把完成的修复记录为 `preview-only`，执行计划和定位缓存的写入保持未应用。报告不显示候选补丁，所以这一步是批准决定，而不是差异审阅。
 
-## 完成状态 {#completion-state}
+   `--dry-run` 仍会写入尝试证据，失败截图也可能保留，它不是零写入的预览，详见 [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)。
 
-- 所选 target（在步骤 1 的无额外配置示例中为 `web-user`）已显式设为 `idempotent`；未修改的内置模板中 `web-user` 默认为 `stateful`，显式配置的 `targets` 映射表已替换该内置模板。
-- 在接受修复且测试保持新鲜后，`ambercast check` 正常退出且退出代码为 `0`。
+4. ## 应用修复 \{#apply-repair}
 
-相关参考：[配置](/ambercast/zh-cn/reference/configuration/)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/)、[ambercast check](/ambercast/zh-cn/reference/cli/check/)、[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)、[恢复 stale（已过期）产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/)。
+   先取得人工的明确批准。人工在交互式终端中运行下面的命令，并回答 CLI 的确认提示。
+
+   ```bash
+   npx ambercast heal tests/ambercast/<name>.test.md
+   ```
+
+   agent 或其他非交互调用方，只有在该批准出现在对话中之后，才加上 `--yes` 运行。
+
+   ```bash
+   npx ambercast heal --yes tests/ambercast/<name>.test.md
+   ```
+
+   `--yes` 只是预先授权 CLI 的确认，绝不能代替人工对 agent 写入的批准，详见[设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)。
+
+5. ## 检查新鲜度 \{#check-fresh}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   退出码 `0` 表示修复后的用例是新鲜的。否则按[恢复过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/)处理。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/)。
+
+6. ## 检查并提交改动 \{#review-commit}
+
+   在第 4 步应用修复之后，运行下面的命令。
+
+   ```bash
+   git status --short
+   ```
+
+   范围内的已跟踪文件包括配置、改动的 UI 文件、执行计划和定位缓存。对其中每个改动的文件，展示 `git diff -- <path>`。对每个未跟踪的文件，展示完整内容或 `git diff --no-index /dev/null <path>`。展示完整的变更集后停下。
+
+   只有对话中明确要求时才提交。只有确认目标文件并获得明确批准后才回退。agent 的默认做法是展示差异，这能避免 agent 凭推断丢弃已有改动，详见[审阅生成的差异](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+</Steps>
+
+不带参数的 `npx ambercast heal` 会发现所有匹配已配置的测试目录、匹配规则和忽略规则的测试。本教程只修复一个指定的 `.test.md`。不带参数的形式只在另行批准的全量测试修复中使用，详见 [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)。
+
+## 验证 \{#verification}
+
+- 选中的目标是 `idempotent`。
+- 失败的用例已修复，`npx ambercast check` 以退出码 `0` 结束。
+- 您已展示变更集，并在等待提交请求。
+
+## 下一步 \{#next-steps}
+
+接下来把同样的顺序放进 CI。
+
+<LinkCard title="在 GitHub Actions 中运行 ambercast" href="/ambercast/zh-cn/tutorials/github-actions/" description="构建一个只在 check 通过后才运行的作业。" />
 
 ---
 
 # 在 GitHub Actions 中运行 ambercast
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/github-actions/
 
-本文介绍在 GitHub Actions 中运行 ambercast 的规范操作流程。在完成代码检出、依赖安装与运行环境配置后，您可以在 CI 工作流中依次配置并执行测试命令。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 操作步骤 {#steps}
+先运行 `check`、再运行 `run` 的顺序，在其他 CI 服务上同样适用。
 
-1. 在代码检出、Node 及依赖安装、Chromium 安装以及完成所需的提供商认证之后，向作业中添加以下命令：
+## 前提条件 \{#prerequisites}
 
-```yaml
-- run: npx ambercast check
-- run: npx ambercast run
-```
+- prompt、执行计划和定位缓存都已提交，并且全部是新鲜的。
+- 作业已经完成检出代码、安装 Node 和依赖、安装 Chromium，以及所需提供商的认证。
 
-`check` 是一个具有只读选择选项的独立命令；shell 仅在看到 `check` 返回退出码 `0` 后才会分发 `run`。
+## 操作步骤 \{#steps}
 
-2. 请勿添加 `--update-cache`。
+<Steps>
 
-默认的 CI 配置中 `updateGroundingCache: false`。
+1. ## 添加命令 \{#add-commands}
 
-3. 请由人工提交并推送工作流。智能体若参与，需先展示工作流 diff，且仅在对话中收到明确请求后才可执行提交或推送。
+   在上述准备步骤之后，按此顺序添加下面两行。
 
-`stale`（已过期）或不可信的工件会返回退出码 `4`，这会在 `run` 之前停止作业；智能体的提交与推送策略与 CLI 行为相互独立。
+   ```yaml
+   - run: npx ambercast check
+   - run: npx ambercast run
+   ```
 
-## 完成状态 {#completion-state}
+   `check` 是只读的独立命令。只有 `check` 以退出码 `0` 结束后，shell 才会启动 `run`。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/) 和 [ambercast run](/ambercast/zh-cn/reference/cli/run/)。
 
-- 作业仅在 `check` 退出码为 `0` 后才会进入 `run`；该作业未选择加入 grounding 回写。
+2. ## 保持写回关闭 \{#keep-write-back-off}
 
-相关链接：[在其他 CI 平台上运行](/ambercast/zh-cn/how-to/run-on-other-ci/), [控制 grounding 回写](/ambercast/zh-cn/how-to/control-grounding-writeback/), [ambercast check](/ambercast/zh-cn/reference/cli/check/), [ambercast run](/ambercast/zh-cn/reference/cli/run/), [退出码](/ambercast/zh-cn/reference/exit-codes/)。
+   不要添加 `--update-cache`。CI 默认 `ci.updateGroundingCache: false`，所以除非您的配置把它设为 `true`，作业不会写回定位缓存。具体条件见[控制定位缓存写回](/ambercast/zh-cn/how-to/control-grounding-writeback/)。
+
+3. ## 提交工作流 \{#commit-workflow}
+
+   由人工提交并推送工作流。agent 会展示工作流的差异，并且只在对话中收到明确请求后才提交或推送，详见[设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)。这条策略与 CLI 的行为无关。
+
+</Steps>
+
+## 验证 \{#verification}
+
+- 作业只在 `check` 以退出码 `0` 结束后才进入 `run`。
+- 产物过期或不可信时，`check` 以退出码 `4` 结束，作业在 `run` 之前停止。见[退出码](/ambercast/zh-cn/reference/exit-codes/)。
+- 作业没有启用定位缓存写回。
+
+## 下一步 \{#next-steps}
+
+接下来在其他 CI 服务上运行同样的顺序。
+
+<LinkCard title="在其他 CI 平台上运行" href="/ambercast/zh-cn/how-to/run-on-other-ci/" description="把先 check、后 run 的顺序迁移到其他 CI 服务。" />
 
 ---
 
@@ -1459,6 +1563,7 @@ Ambercast 依据规范的路径运算规则管理测试 prompt 及其伴生文�
 | 修复截图 | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | 共享捕获路径将符合条件的失败步骤证据写入该尝试范围内的用例目录中。 | 与调用目录相同。 |
 | 运行报告 | `<runsDir>/<runId>/report.json` | 仅 `run` 会在执行后写入最终的批处理封套；原子写入失败会改变 `reportPersistence`。 | 与调用目录相同。 |
 
+- 截图是尽力而为的：截图捕获或存储失败时，也会省略截图。
 - `runsDir` 是独立配置的，默认值为 `tests/ambercast/.runs`；它并非由布局解析器从 `testDir` 派生得出。
 - `runId` 必须匹配 `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`，从而防止路径分隔符、点分路径段以及空 ID。
 - 仅 `run` 会持久化保存 `report.json`；generate、check 与 heal 仅返回封套，不执行此布局写入。
@@ -2093,6 +2198,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 ## 解析缺失的定位缓存 {#resolve}
 
 `--resolve` 会显式启用 AI 解析路径。未传入时，定位缓存未命中会失败关闭，而不会分发提供商。
+
+在默认的本地写回下，经过解析的运行可能保存重新解析出的指纹并通过。
 
 ## 定位缓存写回 {#grounding-write-back}
 

@@ -9,9 +9,9 @@
 
 ## TUTORIALS
 - [5 分钟内完成第一个测试](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/quick-start/): 初始化项目后生成、重放并确认第一个生成测试，5 分钟内完成这篇教程。
-- [阅读您的首个 plan 与 grounding](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/review-your-first-plan/): 学习如何定位测试生成的 plan 与 grounding 文件，并检查其新鲜度。
-- [UI 变更后的测试自愈](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/repair-your-first-drift/): 在一次性练习应用中，安全地自愈并验证因定位器变更而失败的既有测试用例。
-- [在 GitHub Actions 中运行 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/github-actions/): 在 GitHub Actions 工作流中运行 ambercast 的规范操作流程。
+- [阅读您的首个执行计划与定位缓存](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/review-your-first-plan/): 找到 ambercast 生成的执行计划和定位缓存文件，并从 check 的结果中读出新鲜度。
+- [UI 变更后的测试自愈](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/repair-your-first-drift/): 修改一个一次性练习应用的 UI，再用 idempotent 目标修复失败的测试。
+- [在 GitHub Actions 中运行 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/github-actions/): 给已经在运行的 GitHub Actions 作业加上两行，让 run 只在 check 通过后才开始。
 
 ## HOW-TO GUIDES
 - [编写高效的 Prompt](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/): 掌握编写清晰、聚焦的测试用例 Prompt 的推荐做法，并通过预检安全验证生成流程。

@@ -1,0 +1,50 @@
+---
+title: 阅读您的首个执行计划与定位缓存
+description: 找到 ambercast 生成的执行计划和定位缓存文件，并从 check 的结果中读出新鲜度。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+本教程接续 [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)。
+
+## 前提条件 \{#prerequisites}
+
+- 您已完成快速入门：根据示例 `tests/ambercast/find-page.test.md` 生成了执行计划和定位缓存，并回放过一次。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 打开执行计划 \{#open-plan}
+
+   打开 `tests/ambercast/find-page.ambercast.plan.json`，读取三个顶层字段：`schemaVersion`、`source.inputsDigest` 和 `steps`。
+
+   这个路径由 prompt 的 `.test.md` 后缀替换为 `.ambercast.plan.json` 得到。结构见[执行计划文档](/ambercast/zh-cn/spec/plan-document/)，文件位置见[文件布局](/ambercast/zh-cn/reference/file-layout/)。
+
+2. ## 打开定位缓存 \{#open-grounding}
+
+   打开 `tests/ambercast/find-page.ambercast.grounding.json`，读取 `schemaVersion`、`planDigest` 和 `entries`。
+
+   这个路径同样由同一个 prompt 得到，后缀为 `.ambercast.grounding.json`。结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
+
+3. ## 检查新鲜度 \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/find-page.test.md --json
+   ```
+
+   `check` 会输出包含新鲜度结果的报告。新鲜的结果状态为 `fresh` 或 `fresh-without-grounding`。
+
+</Steps>
+
+## 验证 \{#verification}
+
+- 您能说出执行计划和定位缓存都位于 prompt 旁边。
+- 状态为 `fresh`。只有 `grounding.repositoryPolicy` 为 `uncommitted` 时才会出现 `fresh-without-grounding`，所以快速入门的默认配置得到的是 `fresh`。
+- 只有整份报告没有失败、用例错误和中断时，`check` 才以退出码 `0` 结束。用例新鲜并不能保证这一点，因为 `check` 还会扫描伴生文件中的孤立项。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/) 和[审阅生成的差异](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+## 下一步 \{#next-steps}
+
+接下来修复一个因 UI 变更而失败的测试。
+
+<LinkCard title="UI 变更后的测试自愈" href="/ambercast/zh-cn/tutorials/repair-your-first-drift/" description="修改练习应用的 UI，并修复失败的测试。" />

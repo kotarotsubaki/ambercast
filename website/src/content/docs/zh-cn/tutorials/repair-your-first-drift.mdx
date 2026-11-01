@@ -1,0 +1,108 @@
+---
+title: UI 变更后的测试自愈
+description: 修改一个一次性练习应用的 UI，再用 idempotent 目标修复失败的测试。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+您将以影响定位器的方式修改练习应用的 UI，复现失败，然后修复它。
+
+## 前提条件 \{#prerequisites}
+
+- 您有一个可以随意修改的一次性练习应用。
+- 该应用已有一个当前能通过的生成测试，例如 [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)中的示例。
+- 目标的 `healReplayIsolation` 必须是 `idempotent`，才能执行自愈。内置的 `web-user` 目标以及未设置该键时，默认值是 `stateful`，无法自愈。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 让目标成为 idempotent \{#set-idempotent}
+
+   打开 `init` 创建的 `ambercast.config.json`，在选中的目标中添加 `"healReplayIsolation": "idempotent"`，并保留文件中原有的 `$schema`。
+
+   只改这一个键。目标名称、`baseUrl`、包含 `executor.browser` 的 `executor` 和 `secretSinkOrigins` 都保持不变，也不要新增、删除或重命名目标。提供 `targets` 记录会替换默认目标，详见[配置](/ambercast/zh-cn/reference/configuration/#file-selection)。
+
+   没有配置文件的项目，把下面这一行整体写成文件内容。每个配置文件都必须有 `$schema`，其 URL 是[已发布的配置 schema](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+   ```
+
+   目标名称和定义会进入 `inputsDigest`，而 `healReplayIsolation` 在运行时解析，不在其中。因此现有的执行计划仍然是新鲜的，详见[配置](/ambercast/zh-cn/reference/configuration/#targets)。
+
+2. ## 复现失败 \{#reproduce-failure}
+
+   在运行失败的测试之前，先确认 runs 目录的保留策略以及谁可以读取它。完成的 `run` 会尝试在其中写入 `report.json`，还可能保留失败截图。截图在哪些情况下会被省略，见[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)。
+
+   然后做一处影响定位器的 UI 变更，并运行测试。请把 `<name>` 换成您的 prompt 文件名，例如 `find-page`。
+
+   ```bash
+   npx ambercast run tests/ambercast/<name>.test.md
+   ```
+
+   修复之前，先确认测试确实失败。默认情况下，定位缓存未命中会直接失败而不调用 AI，所以已提交的定位缓存不会改变。
+
+   只有需要实时重新定位时才加 `--resolve`。在默认的本地写回下，它可能保存重新解析出的指纹，运行也可能在不暴露漂移的情况下通过，详见 [ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)。
+
+3. ## 试运行修复 \{#preview-repair}
+
+   ```bash
+   npx ambercast heal --dry-run tests/ambercast/<name>.test.md
+   ```
+
+   报告会把完成的修复记录为 `preview-only`，执行计划和定位缓存的写入保持未应用。报告不显示候选补丁，所以这一步是批准决定，而不是差异审阅。
+
+   `--dry-run` 仍会写入尝试证据，失败截图也可能保留，它不是零写入的预览，详见 [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)。
+
+4. ## 应用修复 \{#apply-repair}
+
+   先取得人工的明确批准。人工在交互式终端中运行下面的命令，并回答 CLI 的确认提示。
+
+   ```bash
+   npx ambercast heal tests/ambercast/<name>.test.md
+   ```
+
+   agent 或其他非交互调用方，只有在该批准出现在对话中之后，才加上 `--yes` 运行。
+
+   ```bash
+   npx ambercast heal --yes tests/ambercast/<name>.test.md
+   ```
+
+   `--yes` 只是预先授权 CLI 的确认，绝不能代替人工对 agent 写入的批准，详见[设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)。
+
+5. ## 检查新鲜度 \{#check-fresh}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   退出码 `0` 表示修复后的用例是新鲜的。否则按[恢复过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/)处理。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/)。
+
+6. ## 检查并提交改动 \{#review-commit}
+
+   在第 4 步应用修复之后，运行下面的命令。
+
+   ```bash
+   git status --short
+   ```
+
+   范围内的已跟踪文件包括配置、改动的 UI 文件、执行计划和定位缓存。对其中每个改动的文件，展示 `git diff -- <path>`。对每个未跟踪的文件，展示完整内容或 `git diff --no-index /dev/null <path>`。展示完整的变更集后停下。
+
+   只有对话中明确要求时才提交。只有确认目标文件并获得明确批准后才回退。agent 的默认做法是展示差异，这能避免 agent 凭推断丢弃已有改动，详见[审阅生成的差异](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+</Steps>
+
+不带参数的 `npx ambercast heal` 会发现所有匹配已配置的测试目录、匹配规则和忽略规则的测试。本教程只修复一个指定的 `.test.md`。不带参数的形式只在另行批准的全量测试修复中使用，详见 [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)。
+
+## 验证 \{#verification}
+
+- 选中的目标是 `idempotent`。
+- 失败的用例已修复，`npx ambercast check` 以退出码 `0` 结束。
+- 您已展示变更集，并在等待提交请求。
+
+## 下一步 \{#next-steps}
+
+接下来把同样的顺序放进 CI。
+
+<LinkCard title="在 GitHub Actions 中运行 ambercast" href="/ambercast/zh-cn/tutorials/github-actions/" description="构建一个只在 check 通过后才运行的作业。" />

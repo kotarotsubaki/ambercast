@@ -33,9 +33,9 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 2. ## 失敗を再現する \{#reproduce-failure}
 
-   失敗する実行の前に、runs ディレクトリの保持ポリシーと、そこを読める人を確認する。完了した `run` はそこへ `report.json` を書き、失敗のスクリーンショットを残すことがある（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)）。
+   失敗する実行の前に、runs ディレクトリの保持ポリシーと、そこを読める人を確認する。完了した `run` はそこへ `report.json` を書こうとし、失敗のスクリーンショットを残すことがある。スクリーンショットが省かれる条件は[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)にある。
 
-   続けて、ロケーターに影響する UI の変更を加えて、テストを実行する。
+   続けて、ロケーターに影響する UI の変更を加えて、テストを実行する。`<name>` は、`find-page` のようなプロンプトのファイル名に置き換える。
 
    ```bash
    npx ambercast run tests/ambercast/<name>.test.md
@@ -81,6 +81,8 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 6. ## 変更を確認してコミットする \{#review-commit}
 
+   手順4で修復を適用した後に、次のコマンドを実行する。
+
    ```bash
    git status --short
    ```
@@ -91,10 +93,11 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 </Steps>
 
-引数を付けない `npx ambercast heal` は、一致する全テストを対象にする。全テストの修復として別途承認を得たときだけ使う（[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)）。
+引数を付けない `npx ambercast heal` は、設定したテストディレクトリ・マッチ規則・無視規則に一致する全テストを探す。このチュートリアルが修復するのは、名前を指定した1つの `.test.md` である。引数なしの形は、全テストの修復として別途承認を得たときだけ使う（[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)）。
 
 ## 確認 \{#verification}
 
+- 選択したターゲットが `idempotent` になっている。
 - 失敗していたケースが修復され、`npx ambercast check` が終了コード `0` で終わる。
 - 変更一式を示し、コミットの依頼を待っている。
 

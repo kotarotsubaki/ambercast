@@ -11,7 +11,7 @@ You will change a practice app's UI in a way that affects locators, reproduce th
 
 - You have a disposable practice application that you may change freely.
 - A generated test for that application passes today. The sample from [Your first test in 5 minutes](/ambercast/tutorials/quick-start/) works.
-- The target must set `healReplayIsolation` to `idempotent` before heal can run. The built-in `web-user` target and an unset key default to `stateful`, which cannot heal.
+- Heal requires every target that the plan references to set `healReplayIsolation` to `idempotent`. The built-in `web-user` target and an unset key default to `stateful`, which cannot heal. See [Configuration](/ambercast/reference/configuration/) and [ambercast heal](/ambercast/reference/cli/heal/).
 
 ## Steps \{#steps}
 

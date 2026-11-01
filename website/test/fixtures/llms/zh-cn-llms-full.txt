@@ -358,7 +358,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 - 您有一个可以随意修改的一次性练习应用。
 - 该应用已有一个当前能通过的生成测试，例如 [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)中的示例。
-- 目标的 `healReplayIsolation` 必须是 `idempotent`，才能执行自愈。内置的 `web-user` 目标以及未设置该键时，默认值是 `stateful`，无法自愈。
+- 自愈要求执行计划引用的每个目标都把 `healReplayIsolation` 设为 `idempotent`。内置的 `web-user` 目标以及未设置该键时，默认值是 `stateful`，无法自愈。详见[配置](/ambercast/zh-cn/reference/configuration/)和 [ambercast heal](/ambercast/zh-cn/reference/cli/heal/)。
 
 ## 操作步骤 \{#steps}
 

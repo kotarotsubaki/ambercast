@@ -11,7 +11,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 - 自由に変更してよい、使い捨ての練習用アプリケーションがある。
 - そのアプリに対して、現在通るテストが生成済みである。例は[5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)のサンプルである。
-- 修復するには、対象ターゲットの `healReplayIsolation` が `idempotent` でなければならない。組み込みの `web-user` と未設定の値は `stateful` で、修復できない。
+- 修復するには、計画が参照するすべてのターゲットで `healReplayIsolation` が `idempotent` でなければならない。組み込みの `web-user` と未設定の値は `stateful` で、修復できない。詳細は[設定](/ambercast/ja/reference/configuration/)と [ambercast heal](/ambercast/ja/reference/cli/heal/) にある。
 
 ## 手順 \{#steps}
 
@@ -43,7 +43,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
    修復の前に、失敗した結果を確かめる。既定ではグラウンディングのミスは AI を呼ばずに失敗し、コミット済みのグラウンディングは書き換わらない。
 
-   `--resolve` は、ライブの再解決が目的のときだけ付ける。既定のローカル書き戻しでは再解決した指紋が保存されるため、ドリフトを示さずに実行が通ることもある（[ambercast run](/ambercast/ja/reference/cli/run/#resolve)）。
+   `--resolve` は、ライブの再解決が目的のときだけ付ける。既定のローカル書き戻しでは、再解決した指紋を保存して、ドリフトを示さないまま実行が通る場合もある（[ambercast run](/ambercast/ja/reference/cli/run/#resolve)）。
 
 3. ## 修復を試す \{#preview-repair}
 

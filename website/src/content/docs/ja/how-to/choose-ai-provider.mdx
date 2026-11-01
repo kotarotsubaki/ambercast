@@ -1,0 +1,54 @@
+---
+title: AIプロバイダーの選択
+description: 設定でプロバイダーを固定する方法と、auto に任せる方法、コマンドで 1 回だけ上書きする方法。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+次の 3 つから選ぶ。再現できる実行には設定で固定し、可用性を優先するなら auto に任せ、1 回だけなら `--ai` で上書きする。
+
+## 前提条件 \{#prerequisites}
+
+`ai.provider` には `claude`、`codex`、`auto` を指定できる。指定しなければ `auto` になる。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 設定でプロバイダーを固定する \{#pin-provider}
+
+   `ambercast.config.json` に次の設定を書く。`$schema` は公開されている設定スキーマの URL である。Codex を使うなら、`claude` を `codex` に替える。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","ai":{"provider":"claude"}}
+   ```
+
+   優先順位は高い順に、`--ai`、環境変数 `AMBERCAST_AI_PROVIDER`、設定ファイルである。固定が効くのは、どちらの上書きも無いときだけである。
+
+2. ## 可用性を優先して auto に任せる \{#use-auto}
+
+   どちらの上書きも無いときに、1 つに固定するより可用性を優先するなら、`ai.provider` を省く。`auto` は Claude を先に、次に Codex を調べ、最初に使えたプロバイダーを選ぶ。
+
+3. ## コマンドで 1 回だけ上書きする \{#override-once}
+
+   ```bash
+   npx ambercast generate --ai codex
+   ```
+
+   プロンプトのパスを渡さないと、`generate` は見つけたプロンプトをすべて選ぶ。1 つに絞るには、`npx ambercast generate tests/ambercast/checkout.test.md --ai codex` のようにパスを足す。
+
+   `--ai` に指定できるのは `claude` と `codex` である。ほかの値を渡すと、コマンドは終了コード `2` で終わる。
+
+</Steps>
+
+## 確認 \{#verification}
+
+`npx ambercast generate --list` で確かめられるのは、プロンプトの選択だけである。このコマンドはプロバイダーを解決する前に戻る。プロバイダーを確かめるには、新規・stale・`--force` のいずれかで生成し、AI の実行まで進める。
+
+## 関連情報 \{#related}
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="ai.provider を含む設定キーを確かめる。" />
+
+<LinkCard title="環境変数" href="/ambercast/ja/reference/environment-variables/" description="AMBERCAST_AI_PROVIDER の働きを確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の全フラグと AI の呼び出しを確かめる。" />

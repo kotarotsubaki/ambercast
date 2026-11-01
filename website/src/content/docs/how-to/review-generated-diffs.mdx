@@ -1,0 +1,62 @@
+---
+title: Review generated diffs
+description: After generate or heal, list every changed file and read the prompt, plan, and grounding in order.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+List every changed file, read the prompt, then the plan, then the grounding, and finish with `check`.
+
+## Prerequisites \{#prerequisites}
+
+The resolver maps a prompt to its plan and grounding companions by fixed suffixes: `<name>.ambercast.plan.json` and `<name>.ambercast.grounding.json`.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## List the changed files \{#list-changes}
+
+   ```bash
+   git status --short
+   ```
+
+   For every untracked prompt, plan, or grounding path, read its full contents or run `git diff --no-index /dev/null <path>`. For changed tracked files, run `git diff -- <path>`, or `git diff HEAD -- <path>` when the file is staged. This fixes the complete candidate file set before you review meaning.
+
+2. ## Review the prompt \{#review-prompt}
+
+   Read `tests/ambercast/<name>.test.md` and state the intended user outcome. Prompt normalization changes only one leading BOM and the newline representation.
+
+3. ## Review the plan \{#review-plan}
+
+   Read `tests/ambercast/<name>.ambercast.plan.json` and compare the generated steps to that outcome. The plan is a separate derived companion.
+
+4. ## Review the grounding \{#review-grounding}
+
+   Read `tests/ambercast/<name>.ambercast.grounding.json` and tell a resolution change from an intent change. The grounding is a separate derived companion. With `grounding.repositoryPolicy` set to `uncommitted`, there may be no grounding file; skip this step then.
+
+5. ## Check freshness \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   `check` has no write, browser, or provider capability.
+
+</Steps>
+
+## Verification \{#verification}
+
+`check` exits `0` only after the accepted pair is fresh. With the `uncommitted` policy and no grounding file, it reports `fresh-without-grounding` and also exits `0`.
+
+## Related \{#related}
+
+<LinkCard title="Plan document" href="/ambercast/spec/plan-document/" description="See the structure of a plan." />
+
+<LinkCard title="Grounding document" href="/ambercast/spec/grounding-document/" description="See the structure of a grounding file." />
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See every check flag and result." />
+
+<LinkCard title="File layout" href="/ambercast/reference/file-layout/" description="See where companion files live." />
+
+<LinkCard title="Upgrade between versions" href="/ambercast/how-to/upgrade/" description="See how to handle plans after a version upgrade." />

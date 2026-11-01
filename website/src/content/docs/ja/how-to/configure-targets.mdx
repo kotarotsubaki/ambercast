@@ -1,0 +1,58 @@
+---
+title: ターゲットの設定
+description: 設定ファイルにターゲットを書き、修復の分離・要素の待ち時間・シークレットの送信先を足す手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+2 つのターゲットと既定のターゲットを書き、必要なキーだけを足して、設定が読み込めることを確かめる。
+
+## 前提条件 \{#prerequisites}
+
+設定ファイルがあるなら、文字列の `$schema` を必ず含める。`listed` の行を見るには、ディスカバリーに一致するプロンプトが 1 つ以上要る。`init` のサンプルでよい。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## ターゲットを書く \{#write-targets}
+
+   次の設定を書く。`$schema` は公開されている設定スキーマの URL で、この形が受け入れられる。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}
+   ```
+
+2. ## 修復のための分離を設定する \{#set-heal-isolation}
+
+   使い捨てのターゲットにだけ、`"healReplayIsolation":"idempotent"` を足す。値は `idempotent` と `stateful` で、既定は `stateful` である。
+
+3. ## 要素を待つ時間を設定する \{#set-resolve-timeout}
+
+   ターゲットに `"resolveTimeoutMs":<ms>` を足すと、解決のときに要素が現れるのを待つ時間が決まる。既定は `5000` で、指定できる範囲は `0`〜`60000` である。
+
+4. ## シークレットの送信先を許可する \{#allow-secret-origins}
+
+   シークレットを `baseUrl` と別のオリジンに入力するなら、`"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}` を足す。各シークレット参照に、許可するオリジンの配列を対応させる。設定した対応は既定のポリシー（`baseUrl` のオリジン）を置き換え、各オリジンは正規化される。
+
+</Steps>
+
+## 確認 \{#verification}
+
+```bash
+npx ambercast check --list
+```
+
+設定を読み込んで検証し、見つけたプロンプトごとに `listed` の行を出して、終了コード `0` で終わる。成果物は検査しない。プロンプトが無ければ、行を出さずに終了コード `0` で終わる。設定が不正なら、`CONFIG_INVALID` で終了コード `2` になる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="設定ファイルの全キーと選び方を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の全フラグと結果を確かめる。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/ja/reference/cli/heal/" description="修復の分離が使われる heal コマンドを確かめる。" />
+
+<LinkCard title="計画におけるシークレット" href="/ambercast/ja/spec/secrets/" description="シークレットの送信先を決める規則を確かめる。" />
+
+<LinkCard title="UI変更後にテストを修復する" href="/ambercast/ja/tutorials/repair-your-first-drift/" description="練習用アプリで、ドリフトした計画を修復する流れを試す。" />

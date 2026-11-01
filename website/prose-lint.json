@@ -1,5 +1,5 @@
 {
-  "pages": ["explanation/healing-model", "how-to/select-tests", "reference/cli/run", "tutorials/github-actions", "tutorials/quick-start", "tutorials/repair-your-first-drift", "tutorials/review-your-first-plan"],
+  "pages": ["explanation/healing-model","how-to/choose-ai-provider","how-to/configure-targets","how-to/control-grounding-writeback","how-to/manage-secrets","how-to/review-generated-diffs","how-to/select-tests","how-to/write-effective-prompts","reference/cli/run","tutorials/github-actions","tutorials/quick-start","tutorials/repair-your-first-drift","tutorials/review-your-first-plan"],
   "limits": {
     "h3Max": 5,
     "calloutMax": 2,

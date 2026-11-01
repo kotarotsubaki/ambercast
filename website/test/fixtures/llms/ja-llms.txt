@@ -14,13 +14,13 @@
 - [GitHub Actions で ambercast を実行する](https://kotarotsubaki.github.io/ambercast/ja/tutorials/github-actions/): すでに動いている GitHub Actions のジョブに、check が通ったときだけ run へ進む2行を足す。
 
 ## HOW-TO GUIDES
-- [効果的なプロンプトの作成](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/): レビューしやすく焦点の定まったテストプロンプトを作成し、ドライランで検証する手順を説明します。
-- [シークレットの管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/): 生成されたシークレット名を安全に承認し、その値を環境変数から解決する方法を説明します。
-- [ターゲットの設定](https://kotarotsubaki.github.io/ambercast/ja/how-to/configure-targets/): ambercastの設定ファイルでターゲット環境、自己修復のリプレイ分離、およびシークレット送信先オリジンを構成します。
-- [AIプロバイダーの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/choose-ai-provider/): ambercast.config.json、環境変数、または --ai オプションを使用してAIプロバイダーを選択・指定する手順を説明します。
+- [効果的なプロンプトの作成](https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/): 焦点の定まったテストプロンプトを書き、--dry-run で生成結果を確かめてから生成する手順。
+- [シークレットの管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/): 生成が提案したシークレット名を承認し、その値を環境変数から渡す手順。
+- [ターゲットの設定](https://kotarotsubaki.github.io/ambercast/ja/how-to/configure-targets/): 設定ファイルにターゲットを書き、修復の分離・要素の待ち時間・シークレットの送信先を足す手順。
+- [AIプロバイダーの選択](https://kotarotsubaki.github.io/ambercast/ja/how-to/choose-ai-provider/): 設定でプロバイダーを固定する方法と、auto に任せる方法、コマンドで 1 回だけ上書きする方法。
 - [実行するテストを選ぶ](https://kotarotsubaki.github.io/ambercast/ja/how-to/select-tests/): パス指定・パターンフィルタ・設定ファイルによる除外で、実行するテストプロンプトを選ぶ4つの方法。
-- [グラウンディングのライトバック制御](https://kotarotsubaki.github.io/ambercast/ja/how-to/control-grounding-writeback/): ローカル環境やCI環境において、テスト実行後に変更されたグラウンディングキャッシュを書き戻す動作を制御する手順を説明します。
-- [生成された差分のレビュー](https://kotarotsubaki.github.io/ambercast/ja/how-to/review-generated-diffs/): 生成された差分を実践的な順序でレビューし、整合性を検証する手順を説明します。
+- [グラウンディングのライトバック制御](https://kotarotsubaki.github.io/ambercast/ja/how-to/control-grounding-writeback/): 変更されたグラウンディングを、ローカルと CI で書き戻すかどうかを設定で決める手順。
+- [生成された差分のレビュー](https://kotarotsubaki.github.io/ambercast/ja/how-to/review-generated-diffs/): generate や heal の後に、変わったファイルを一覧し、プロンプト・計画・グラウンディングの順に読む手順。
 - [Gitでの成果物の管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/): ambercast の成果物をリポジトリポリシーや実行ディレクトリの設定に合わせて Git でバージョン管理する手順を説明します。
 - [他のCIプラットフォームでの実行](https://kotarotsubaki.github.io/ambercast/ja/how-to/run-on-other-ci/): GitLab CIや汎用ランナー環境でambercastを実行するためのポータブルなCI設定手順です。
 - [stale（古くなった状態）のアーティファクトの復旧](https://kotarotsubaki.github.io/ambercast/ja/how-to/recover-stale-artifacts/): check のステータスに応じたアーティファクトの復旧手順と期待される結果を説明します。

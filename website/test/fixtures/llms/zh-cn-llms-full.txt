@@ -511,67 +511,113 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 # 编写高效的 Prompt
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/
 
-编写高质量的 Prompt 能让测试用例在团队审查时清晰明了，也能帮助生成结构严谨、执行确定的测试计划。本指南提供编写测试 Prompt 的推荐实践以及首轮生成前的验证流程。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前置条件 {#prerequisites}
+每个用户结果写一个 Prompt，生成之前先预览结果。
 
-Prompt 文件名必须严格以 `.test.md` 结尾，才能建立有效的伴生映射。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+Prompt 文件名必须严格以 `.test.md` 结尾。ambercast 通过这个后缀，把执行计划和定位缓存的伴生文件对应到 Prompt。
 
-1. **创建测试文件**：创建 `tests/ambercast/checkout.test.md`，在文件中包含一个 H1 标题、用例所需的前置准备（setup），并在每个句子中表达一个可观察到的结果（observable outcome）。这些约定属于便于代码审查的编写建议，并非解析器的语法限制。
+## 操作步骤 \{#steps}
 
-   成功条件应描述到达页面后可见的标题、消息或元素，而不能只说明已到达某个 URL。
+<Steps>
 
-   > …I reach the dashboard and see the heading "Welcome back".
-2. **确认页面确实切换**：在操作的成功条件中引用仅在操作后的页面上出现的文字。操作前就已可见的文字（例如刚点击的链接或按钮名称）无法证明页面发生了切换。
+1. ## 写出要确认的结果 \{#write-outcome}
 
-   > 反例：点击页眉中的“登录”链接后，看到“登录”。
-   > 正例：点击页眉中的“登录”链接后，看到“使用邮箱继续”按钮。
-3. **保持用例聚焦**：若存在不相关的用户预期结果，请拆分至独立的 `<name>.test.md` 文件中。
-4. **处理机密**：不要在提示词中放入机密值、机密引用或旧版授权行。生成发现所需机密名称时，请通过同意提示审查它，或预先填充 `secrets.allow`；详见[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)。
-5. **运行生成预检**：
+   创建 `tests/ambercast/checkout.test.md`，写一个 H1、用例需要的前置准备，每句只写一个可观察的结果。这些是便于聚焦审查的建议，不是解析器的语法。
 
-   有效的预览结果其状态为 `would-generate` 且 `dryRun: true`；预检过程不会声明已提交磁盘写入。
+   成功条件应写出到达页面后可见的标题、消息或元素，只写到达某个 URL 并不够。
 
-## 结果验证 {#verification}
+   > …我进入仪表盘，并看到标题 “欢迎回来”。
 
-审查预检（dry-run）的输出信息，确认无误后去除 `--dry-run` 执行正式生成：
+2. ## 引用操作之后才出现的文字 \{#quote-new-text}
 
+   在操作的成功条件里，引用只在操作之后的页面上出现的文字。操作之前就已可见的文字无法证明页面发生了切换，例如刚点击的链接或按钮名称。
 
+   > 反例：我点击页眉中的 “登录” 链接，并看到 “登录”。
+   > 正例：我点击页眉中的 “登录” 链接，并看到 “使用邮箱继续” 按钮。
 
-执行成功时，进程退出码应为 `0`，并输出状态为 `generated` 的生成结果。
+3. ## 按结果拆分文件 \{#split-outcomes}
 
-## 相关文档 {#related}
+   把互不相关的用户结果放进各自的 `<name>.test.md`，每个用例就能保持聚焦。
 
-- [提示词文件格式](/ambercast/zh-cn/reference/prompt-format/)
-- [计划中的机密](/ambercast/zh-cn/spec/secrets/)
-- [ambercast generate](/ambercast/zh-cn/reference/cli/generate/)
-- [计划文档](/ambercast/zh-cn/spec/plan-document/)
-- [审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)
+4. ## 不要在 Prompt 里写机密 \{#keep-secrets-out}
+
+   Prompt 里只写结果，不写机密值、机密引用或旧版授权行。生成发现所需机密名称时，在同意提示中审查它，或预先加入 `secrets.allow`。详见[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)。
+
+5. ## 预览生成 \{#preview-generation}
+
+   ```bash
+   npx ambercast generate tests/ambercast/checkout.test.md --dry-run
+   ```
+
+   对需要生成的 Prompt，结果的状态为 `would-generate`，并带有 `dryRun: true`。不会写入任何产物。要查看 `dryRun` 字段，请加上 `--json`。
+
+</Steps>
+
+## 验证 \{#verification}
+
+审查预览结果，然后去掉 `--dry-run`，运行同一条命令。
+
+```bash
+npx ambercast generate tests/ambercast/checkout.test.md
+```
+
+成功时退出码为 `0`，结果为 `generated`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="Prompt 文件格式" href="/ambercast/zh-cn/reference/prompt-format/" description="了解文件识别规则和用例的读取方式。" />
+
+<LinkCard title="执行计划中的机密" href="/ambercast/zh-cn/spec/secrets/" description="了解执行计划如何只通过引用处理机密。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的全部标志和结果。" />
+
+<LinkCard title="执行计划文档" href="/ambercast/zh-cn/spec/plan-document/" description="了解生成的执行计划的结构。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="生成之后，依次审查 Prompt、执行计划和定位缓存的 diff。" />
 
 ---
 
 # 管理机密
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/
 
-Ambercast 在生成 Plan 时发现候选机密名称。你可通过交互式同意提示批准这些名称，或为非交互式使用预先填充配置许可列表；机密值始终保留在提示词和产物之外。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+不要在 Prompt 里写机密，批准提出的名称，并通过环境变量传入值。
 
-- 不需要已有的 `ambercast.config.json` 文件。当已批准的同意需要持久化许可列表而配置文件不存在时，Ambercast 会自动创建该文件。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+不需要已有的 `ambercast.config.json`。已批准的同意需要保存许可列表而文件不存在时，ambercast 会创建该文件。
 
-1. 在提示词中描述用户结果，不要包含授权行或机密值。
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 不带机密地编写 Prompt \{#write-prompt}
+
+   只写用户结果，不写授权行，也不写机密值。生成的执行计划只包含 `{{secrets.*}}` 引用，机密检测器在其中发现字面机密的生成 JSON 会被拒绝。
 
    ```markdown
    # Sign in
 
    Sign in as the configured test user and verify that the dashboard heading is visible.
    ```
-2. 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。生成首先创建候选 Plan，并列出任何新提出的机密名称。在交互式终端中，逐一审查名称，只批准适用于该测试的名称。
-3. 对于 CI 或其他非交互环境，请在生成前添加已审查的名称：
+
+2. ## 审查并批准名称 \{#review-names}
+
+   ```bash
+   npx ambercast generate tests/ambercast/<name>.test.md
+   ```
+
+   把 `<name>` 替换为你的 Prompt 文件名，这里和后面的回放命令都一样。直接运行时，shell 会把 `<name>` 当作重定向。
+
+   生成先构建候选执行计划，并列出新提出的机密名称。在交互式终端中，逐个审查名称，只批准适用于该测试的名称。
+
+3. ## 在非交互环境中预先批准名称 \{#preapprove-names}
+
+   仅在 CI 或其他非交互环境中，才在步骤 2 运行 `generate` 之前，先加入已审查的名称。
 
    ```json
    {
@@ -580,86 +626,155 @@ Ambercast 在生成 Plan 时发现候选机密名称。你可通过交互式同�
    }
    ```
 
-   空的 `secrets.allow` 要求逐个同意名称。值 `"*"` 会无需逐名审查地接受 AI 提出的任何名称；它会移除批准边界，只有在理解这一点时才应使用。如果它已经是 `"*"`，批准同意不会写入许可列表更新。
+   `secrets.allow` 为空时，每个名称都需要同意。值 `"*"` 会不经逐个审查，接受 AI 提出的任何名称。它会取消批准边界，只有在接受这一点时才使用。若它已经是 `"*"`，批准同意不会写入许可列表更新。
 
-   记录已批准的名称时，Ambercast 会执行排他更新，然后在合并前重新读取并验证当前磁盘上的配置；不会覆盖在运行早期取得的配置快照。现有 `secrets.allow` 名称会去重并保留原有顺序。新批准的名称会先去重、排除已存在的名称，再按字母顺序排序并追加。
-4. 仅在命令环境中设置相应的值。运行时，`{{secrets.a.b}}` 从 `AMBERCAST_SECRET_A_B` 解析：点号变为下划线，各段转为大写。若填充操作不在 `baseUrl`，请按照 [配置目标环境](/ambercast/zh-cn/how-to/configure-targets/) 配置额外源。
+   记录已批准的名称时，ambercast 执行排他更新，并重新读取、验证当前文件。现有名称会去重并保持原有顺序；尚未存在的新名称会去重、排序后追加到末尾。
 
-## 验证 {#verification}
+4. ## 在环境中设置值 \{#set-values}
 
-- 在同意或添加许可列表条目后，生成会持久化 Plan；新接受的名称也会记录在 `secrets.allow` 中。
-- 对于一次生成批次，Ambercast 会将所有新批准的名称一次性提交到许可列表，然后才写入任何候选项的 Plan 或 Grounding 文件。这些是独立操作，而非一个事务：如果在许可列表提交成功后发生中断或失败，即使部分或全部候选项的 Plan 和 Grounding 文件尚未写入，许可列表更新仍会保留在磁盘上。这是已知且可接受的状态：`secrets.allow` 可能领先于实际生成的产物。重新运行 `generate` 即可恢复；它会继续使用已经在许可列表中的名称。
-- 若拒绝同意，或在非交互式终端中无法请求同意，生成会以 `SECRET_CONSENT_REQUIRED` 失败，且不会写入候选产物。将已审查的名称添加到 `secrets.allow` 后重新生成。
-- 在命令环境中仍保留所需的 `AMBERCAST_SECRET_<NAME>` 变量，在安全目标上运行 `npx ambercast run --resolve tests/ambercast/<name>.test.md`。只有实时源通过 sink-policy 检查后，`fill-secret` 才会解析该命名变量。
+   只在命令环境中设置值。`{{secrets.a.b}}` 从 `AMBERCAST_SECRET_A_B` 解析：点号变为下划线，各段转为大写。
 
-## 相关链接 {#related}
+   若填充发生在 `baseUrl` 之外，请按[配置目标环境](/ambercast/zh-cn/how-to/configure-targets/)允许额外的源。
 
-链接：[计划中的机密](/ambercast/zh-cn/spec/secrets/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)、[配置](/ambercast/zh-cn/reference/configuration/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)。
+</Steps>
+
+## 验证 \{#verification}
+
+- 同意或许可列表条目生效后，生成会写入执行计划，并把新批准的名称记录到 `secrets.allow`。
+- 许可列表的提交与执行计划、定位缓存的写入是相互独立的操作。一次生成中批准的全部名称，会在写入任何候选文件之前一次性提交。如果提交之后生成被中断或失败，`secrets.allow` 可能领先于产物。重新运行 `generate`，即可用已允许的名称恢复。
+- 若拒绝同意，或在非交互式终端中无法请求同意，生成会以 `SECRET_CONSENT_REQUIRED` 失败，且不写入任何候选产物。把已审查的名称加入 `secrets.allow`，然后重新运行。
+
+在命令环境中保留所需的 `AMBERCAST_SECRET_<NAME>` 变量，对安全的目标进行回放。
+
+```bash
+npx ambercast run --resolve tests/ambercast/<name>.test.md
+```
+
+只有实时源通过 sink-policy 检查后，`fill-secret` 才会解析其变量。
+
+## 相关链接 \{#related}
+
+<LinkCard title="执行计划中的机密" href="/ambercast/zh-cn/spec/secrets/" description="了解执行计划如何引用机密，以及为何拒绝字面值。" />
+
+<LinkCard title="环境变量" href="/ambercast/zh-cn/reference/environment-variables/" description="了解 AMBERCAST_SECRET_ 变量名的推导方式。" />
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解包括 secrets.allow 在内的配置键。" />
+
+<LinkCard title="错误代码" href="/ambercast/zh-cn/reference/error-codes/" description="了解包括 SECRET_CONSENT_REQUIRED 在内的全部错误代码。" />
 
 ---
 
 # 配置目标环境
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/configure-targets/
 
-您可以通过配置文件定义测试运行的目标环境（targets）。若项目中存在配置文件，必须指定字符串类型的 `$schema`。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+写出两个目标和一个默认目标，只在需要时添加可选键，并确认文件能够加载。
 
-- 若存在配置文件，必须包含字符串类型的 `$schema`。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+配置文件一旦存在，就必须包含字符串类型的 `$schema`。要看到 `listed` 行，至少要有一个 Prompt 匹配发现规则，`init` 生成的示例即可。
 
-1. 写入 `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}`。这是已发布的配置 Schema URL；`targets` 与 `defaultTarget` 符合受支持的配置结构。
-2. 仅向一次性目标环境添加 `"healReplayIsolation":"idempotent"`。受支持的隔离值为 `idempotent` 与 `stateful`；`healReplayIsolation` 的默认值为 `stateful`。
-3. 在目标上设置 `"resolveTimeoutMs":<ms>`，以便在解析期间等待元素出现。默认值为 `5000`；可接受的范围为 `0` 至 `60000`。
-4. 当密钥可能需要在 `baseUrl` 之外填入时，添加 `"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}`。`secretSinkOrigins` 会将每个密钥引用映射至其允许的源数组；配置该映射将替换默认的源策略（基于 `baseUrl` 的源），且每个源都会进行规范化。
+## 操作步骤 \{#steps}
 
-## 验证 {#verification}
+<Steps>
 
-- 运行 `npx ambercast check --target staging --list`；预期退出码为 `0` 并输出 `listed` 结果，且无需检查工件。
+1. ## 写出目标 \{#write-targets}
 
-## 相关链接 {#related}
+   写入下面的配置。它的 `$schema` 是已发布的配置 Schema URL，这个结构会被接受。
 
-链接：[配置](/ambercast/zh-cn/reference/configuration/)、[ambercast check](/ambercast/zh-cn/reference/cli/check/)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/)、[计划中的机密](/ambercast/zh-cn/spec/secrets/)、[UI 变更后的测试自愈](/ambercast/zh-cn/tutorials/repair-your-first-drift/)。
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}
+   ```
+
+2. ## 设置修复隔离 \{#set-heal-isolation}
+
+   只对一次性目标添加 `"healReplayIsolation":"idempotent"`。可用的值为 `idempotent` 和 `stateful`，默认值为 `stateful`。
+
+3. ## 设置元素等待时间 \{#set-resolve-timeout}
+
+   在目标上添加 `"resolveTimeoutMs":<ms>`，可设置解析时等待元素出现的时长。默认值为 `5000`，可接受的范围为 `0` 到 `60000`。
+
+4. ## 允许机密的发送源 \{#allow-secret-origins}
+
+   当机密可能在 `baseUrl` 之外填入时，添加 `"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}`。它把每个机密引用映射到允许的源。配置的映射会替换默认策略，也就是 `baseUrl` 的源，且每个源都会被规范化。
+
+</Steps>
+
+## 验证 \{#verification}
+
+```bash
+npx ambercast check --list
+```
+
+该命令加载并验证配置，然后以退出码 `0` 结束，并为每个发现的 Prompt 输出一行 `listed`。它不检查任何产物。没有 Prompt 时，命令同样以退出码 `0` 结束，不输出行。文件无效时，命令以 `CONFIG_INVALID` 失败，退出码为 `2`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解全部配置键和配置文件的选择方式。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的全部标志和结果。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/zh-cn/reference/cli/heal/" description="了解使用回放隔离的 heal 命令。" />
+
+<LinkCard title="执行计划中的机密" href="/ambercast/zh-cn/spec/secrets/" description="了解决定机密可在何处填入的规则。" />
+
+<LinkCard title="UI 变更后的测试自愈" href="/ambercast/zh-cn/tutorials/repair-your-first-drift/" description="在练习应用中尝试修复发生漂移的执行计划。" />
 
 ---
 
 # 选择 AI 提供商
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/choose-ai-provider/
 
-ambercast 允许您根据对结果复现性或可用性的不同需求，选择 `claude`、`codex` 作为固定的 AI 提供商，或者使用 `auto` 模式进行探测。您可以通过配置文件指定默认项，也可以借助环境变量与命令行选项随时进行覆盖。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+三选一：需要可复现的运行时在配置中固定提供商，更看重可用性时交给 `auto`，只想改一次时用 `--ai` 覆盖。
 
-配置项 `ai.provider` 接受 `claude`、`codex` 或 `auto`，其默认值为 `auto`。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+`ai.provider` 接受 `claude`、`codex` 或 `auto`。不设置时，默认值为 `auto`。
 
-1. 在既未设置 `AMBERCAST_AI_PROVIDER` 也未传入 `--ai` 的情况下，在 `ambercast.config.json` 中配置如下内容，以固定使用可复现的提供商；若当前可用的是 Codex，可将 `claude` 替换为 `codex`：
+## 操作步骤 \{#steps}
 
-```bash
-npx ambercast generate --ai codex
-```
+<Steps>
 
-   该 URL 为官方发布的配置 Schema 地址。环境变量的优先级高于配置文件，而 `--ai` 命令行选项则会覆盖已解析的配置。
+1. ## 在配置中固定提供商 \{#pin-provider}
 
-2. 在未设置上述任何覆盖项时，若相比固定单一提供商更看重可用性，您可以省略 `ai.provider` 配置项以使用 `auto`。解析流程会先探测 Claude，再探测 Codex，并返回第一个可用的提供商。
+   把下面的内容写入 `ambercast.config.json`。它的 `$schema` 是已发布的配置 Schema URL。若可用的是 Codex，把 `claude` 替换为 `codex`。
 
-3. 运行带有 `--ai` 选项的生成命令：
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","ai":{"provider":"claude"}}
+   ```
 
+   优先级从高到低依次为 `--ai`、`AMBERCAST_AI_PROVIDER`、配置文件。只有前两者都未设置时，固定才会生效。
 
+2. ## 交给 auto 以保证可用性 \{#use-auto}
 
-   命令行覆盖仅接受 `claude` 与 `codex`；若传入无效的提供商文本，程序将退出并返回状态码 `2`。
+   两种覆盖都未设置，且更看重可用性而不是固定某个提供商时，省略 `ai.provider`。`auto` 先探测 Claude，再探测 Codex，使用第一个可用的提供商。
 
-## 验证 {#verification}
+3. ## 用命令只覆盖一次 \{#override-once}
 
-运行 `npx ambercast generate --list` 仅用于确认 prompt 的选取，该命令会在解析提供商之前直接返回。若要验证实际选取的提供商，请执行一次全新的生成、针对已过期内容的生成，或添加 `--force` 选项执行生成，以确保流程进入实际的 AI 执行阶段。
+   ```bash
+   npx ambercast generate --ai codex
+   ```
 
-## 相关参考 {#related}
+   不带 Prompt 路径时，`generate` 会选中发现的所有 Prompt。要限制为一个，请像 `npx ambercast generate tests/ambercast/checkout.test.md --ai codex` 这样加上路径。
 
-- [配置](/ambercast/zh-cn/reference/configuration/)
-- [环境变量](/ambercast/zh-cn/reference/environment-variables/)
-- [ambercast generate](/ambercast/zh-cn/reference/cli/generate/)
+   `--ai` 接受 `claude` 和 `codex`。传入其他值时，命令以退出码 `2` 结束。
+
+</Steps>
+
+## 验证 \{#verification}
+
+`npx ambercast generate --list` 只能确认 Prompt 的选取，因为它在解析提供商之前就已返回。要验证提供商，请运行全新、过期或带 `--force` 的生成，让流程进入 AI 执行。
+
+## 相关链接 \{#related}
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解包括 ai.provider 在内的配置键。" />
+
+<LinkCard title="环境变量" href="/ambercast/zh-cn/reference/environment-variables/" description="了解 AMBERCAST_AI_PROVIDER 的作用。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的全部标志，以及何时调用 AI。" />
 
 ---
 
@@ -727,94 +842,131 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ---
 
-# 控制 grounding 回写
+# 控制定位缓存回写
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/control-grounding-writeback/
 
-在运行测试后，您可以根据团队工作流控制变更后的 grounding 缓存如何回写至磁盘。本文提供面向不同持久化目标的配置步骤；完整的规范矩阵与运行时行为请参阅 [配置](/ambercast/zh-cn/reference/configuration/) 与 [ambercast run](/ambercast/zh-cn/reference/cli/run/)。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前置条件 {#prerequisites}
+选择本地如何保存变更后的定位缓存，并在 CI 中保持关闭回写。
 
-在调整配置之前，请确认以下配置项及其取值要求：
+## 前置条件 \{#prerequisites}
 
-- `grounding.localWriteBack` 接受 `auto` 或 `explicit`。
-- `ci.updateGroundingCache` 为布尔值（boolean）。
+`grounding.localWriteBack` 接受 `auto` 或 `explicit`。`ci.updateGroundingCache` 是布尔值。
 
-## 操作步骤 {#steps}
+## 操作步骤 \{#steps}
 
-### 1. 配置本地自动持久化
+<Steps>
 
-若希望在本地执行测试时自动持久化变更后的 grounding 缓存，请设置配置：
+1. ## 确认本地默认行为 \{#keep-local-default}
 
-```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"localWriteBack":"auto"}}
-```
+   在本地，变更后的定位缓存会自动回写。这是默认行为，与下面的配置含义相同。它的 `$schema` 是已发布的配置 Schema URL。
 
-这是官方发布的配置 Schema URL，且 `auto` 是本地环境的默认姿态。
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"localWriteBack":"auto"}}
+   ```
 
-### 2. 配置审查优先的本地持久化
+2. ## 审查后再回写 \{#review-before-writing}
 
-若需要在本地采用审查优先（review-first）的工作流，请将 `localWriteBack` 设置为 `explicit`，并在确认需要持久化缓存时执行：
+   想先查看 diff 再保留，就把下面的键添加到有效的配置文件中。
 
-```json
-{
-  "grounding": {
-    "localWriteBack": "explicit"
-  }
-}
-```
+   ```json
+   {
+     "grounding": {
+       "localWriteBack": "explicit"
+     }
+   }
+   ```
 
-CLI 解析器会将该显式回写请求直接传递给运行时。
+   使用 `explicit` 时，本地运行只在传入 `--update-cache` 时才会写入。
 
-### 3. 配置 CI 环境
+   ```bash
+   npx ambercast run --update-cache tests/ambercast/<name>.test.md
+   ```
 
-在 CI 环境中，请保持 `ci.updateGroundingCache` 为 `false`，且不要传入 `--update-cache` 标志。CI 默认不主动启用回写（no write-back opt-in）。
+3. ## 在 CI 中保持关闭回写 \{#keep-ci-off}
 
-## 验证 {#verification}
+   保持 `ci.updateGroundingCache` 为 false，也不要传入 `--update-cache`。CI 默认不回写。在 CI 中，只有传入 `--update-cache` 或 `ci.updateGroundingCache: true` 时才会回写，且 `localWriteBack` 会被忽略。全部条件见 [run 的回写门禁](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)。
 
-运行以下命令验证执行结果与缓存状态：
+</Steps>
 
-```bash
-npx ambercast run --update-cache tests/ambercast/<name>.test.md
-```
-
-预期仅在测试批次通过（passed batch）时退出码为 `0`。在提交代码之前，请检查变更后的 grounding diff。
-
-## 相关参考 {#related}
-
-- [配置](/ambercast/zh-cn/reference/configuration/)
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/)
-- [审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)
+## 验证 \{#verification}
 
 ```bash
 npx ambercast run --json tests/ambercast/<name>.test.md
 ```
+
+只有整批全部通过时，退出码才为 `0`。提交之前先检查定位缓存的 diff，方法见[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+## 相关链接 \{#related}
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解定位缓存和 CI 的配置键。" />
+
+<LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解包括 --update-cache 在内的 run 全部标志。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="提交之前，先审查回写产生的 diff。" />
 
 ---
 
 # 审查生成的 diff
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/review-generated-diffs/
 
-本文向您介绍审查生成 diff 的实用审查顺序。解析器会将提示词映射为具有固定后缀的 plan 与 grounding 伴生文件。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+列出所有变更文件，依次审查 Prompt、执行计划和定位缓存，最后运行 `check`。
 
-- 解析器会将提示词映射为具有固定后缀的 plan 与 grounding 伴生文件。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+解析器通过固定后缀，把 Prompt 对应到它的执行计划和定位缓存伴生文件：`<name>.ambercast.plan.json` 与 `<name>.ambercast.grounding.json`。
 
-1. 首先运行 `git status --short`。针对其中显示的每个未跟踪的提示词、plan 或 grounding 路径，检查其完整内容或运行 `git diff --no-index /dev/null <path>`；对于发生变更的受跟踪文件，使用 `git diff -- <path>`。此操作会在语义审查之前确立完整的候选文件集。
-2. 审查 `tests/ambercast/<name>.test.md`，并在审查中说明预期的用户结果。提示词规范化除单个 BOM 和换行符表示外，会保留其余全部内容。
-3. 审查 `tests/ambercast/<name>.ambercast.plan.json`，将生成的步骤与该预期结果进行比对。plan 是一个单独的派生伴生文件。
-4. 审查 `tests/ambercast/<name>.ambercast.grounding.json`，区分解析变更与意图变更。grounding 是一个单独的派生伴生文件。
-5. 运行 `npx ambercast check tests/ambercast/<name>.test.md`。check 不具备写入、浏览器或提供商能力。
+## 操作步骤 \{#steps}
 
-## 验证 {#verification}
+<Steps>
 
-- 预期仅在被接受的配对为 fresh（非 `stale`（已过期））后，check 的退出码才为 `0`。
+1. ## 列出变更的文件 \{#list-changes}
 
-## 相关链接 {#related}
+   ```bash
+   git status --short
+   ```
 
-链接：[计划文档](/ambercast/zh-cn/spec/plan-document/)，[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)，[ambercast check](/ambercast/zh-cn/reference/cli/check/)，[文件布局](/ambercast/zh-cn/reference/file-layout/)，[在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)。
+   对每个未跟踪的 Prompt、执行计划或定位缓存路径，检查其完整内容，或运行 `git diff --no-index /dev/null <path>`。对已跟踪且发生变更的文件，运行 `git diff -- <path>`；文件已暂存时，运行 `git diff HEAD -- <path>`。这样在审查含义之前，就能确定完整的候选文件集。
+
+2. ## 审查 Prompt \{#review-prompt}
+
+   阅读 `tests/ambercast/<name>.test.md`，说明预期的用户结果。Prompt 规范化只会改变开头的一个 BOM 和换行符的表示。
+
+3. ## 审查执行计划 \{#review-plan}
+
+   阅读 `tests/ambercast/<name>.ambercast.plan.json`，把生成的步骤与该结果比对。执行计划是单独的派生伴生文件。
+
+4. ## 审查定位缓存 \{#review-grounding}
+
+   阅读 `tests/ambercast/<name>.ambercast.grounding.json`，区分解析变化与意图变化。定位缓存也是单独的派生伴生文件。当 `grounding.repositoryPolicy` 为 `uncommitted` 时，可能没有定位缓存文件，此时跳过这一步。
+
+5. ## 检查新鲜度 \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   `check` 不具备写入、浏览器或提供商能力。
+
+</Steps>
+
+## 验证 \{#verification}
+
+只有被接受的这一对文件为 fresh 时，`check` 的退出码才为 `0`。在 `uncommitted` 策略下没有定位缓存文件时，它会报告 `fresh-without-grounding`，退出码同样为 `0`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="执行计划文档" href="/ambercast/zh-cn/spec/plan-document/" description="了解执行计划的结构。" />
+
+<LinkCard title="定位缓存文档" href="/ambercast/zh-cn/spec/grounding-document/" description="了解定位缓存文件的结构。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的全部标志和结果。" />
+
+<LinkCard title="文件布局" href="/ambercast/zh-cn/reference/file-layout/" description="了解伴生文件的存放位置。" />
+
+<LinkCard title="在不同版本间升级" href="/ambercast/zh-cn/how-to/upgrade/" description="了解版本升级之后如何处理执行计划。" />
 
 ---
 

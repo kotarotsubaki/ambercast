@@ -1,0 +1,71 @@
+---
+title: 効果的なプロンプトの作成
+description: 焦点の定まったテストプロンプトを書き、--dry-run で生成結果を確かめてから生成する手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+ユーザー成果ごとにプロンプトを書き、生成の前に結果をプレビューする。
+
+## 前提条件 \{#prerequisites}
+
+プロンプトのファイル名は、末尾が `.test.md` でなければならない。この接尾辞から、計画（plan）とグラウンディングのコンパニオンファイルが決まる。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 確かめる結果を書く \{#write-outcome}
+
+   `tests/ambercast/checkout.test.md` を作り、H1 を 1 つ、ケースに必要な準備、1 文につき 1 つの観測できる結果を書く。これらはレビューで焦点を保つための推奨であり、パーサーの構文ではない。
+
+   成功条件には、URL に着いたことだけでなく、到達先で見える見出し・メッセージ・要素を書く。
+
+   > …ダッシュボードに着き、見出し「おかえりなさい」が表示される。
+
+2. ## 操作の後に現れる文言を引く \{#quote-new-text}
+
+   操作の成功条件には、操作の後の画面にだけ現れる文言を引く。操作の前から見えていた文言では、画面が切り替わったかを判別できない。クリックしたリンクやボタンの名前がその例である。
+
+   > 悪い例：ヘッダーの「ログイン」リンクをクリックすると、「ログイン」が表示される。
+   > 良い例：ヘッダーの「ログイン」リンクをクリックすると、「メールアドレスで続ける」ボタンが表示される。
+
+3. ## 結果ごとにファイルを分ける \{#split-outcomes}
+
+   関連しないユーザー成果は、別々の `<name>.test.md` に分ける。ケースごとに焦点が定まる。
+
+4. ## シークレットを書かない \{#keep-secrets-out}
+
+   プロンプトへ書くのは成果だけで、シークレットの値・参照・旧グラント行は書かない。生成が必要なシークレット名を見つけたら、同意プロンプトで確かめる。事前に許可する場合は `secrets.allow` へ入れる。手順は[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)にある。
+
+5. ## 生成を試す \{#preview-generation}
+
+   ```bash
+   npx ambercast generate tests/ambercast/checkout.test.md --dry-run
+   ```
+
+   生成が必要なプロンプトの結果は、ステータスが `would-generate` で、`dryRun: true` になる。成果物は書き込まれない。`dryRun` の値を見るには `--json` を足す。
+
+</Steps>
+
+## 確認 \{#verification}
+
+`--dry-run` の結果を確かめたら、同じコマンドを `--dry-run` なしで実行する。
+
+```bash
+npx ambercast generate tests/ambercast/checkout.test.md
+```
+
+成功すると、終了コード `0` で終わり、結果は `generated` になる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="プロンプトファイルのフォーマット" href="/ambercast/ja/reference/prompt-format/" description="ファイルの識別と、ケースの書き方の規則を確かめる。" />
+
+<LinkCard title="計画におけるシークレット" href="/ambercast/ja/spec/secrets/" description="シークレットを参照で扱う規則を確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の全フラグと結果を確かめる。" />
+
+<LinkCard title="計画ドキュメント" href="/ambercast/ja/spec/plan-document/" description="生成される計画の構造を確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="生成後に、プロンプト・計画・グラウンディングの差分を読む。" />

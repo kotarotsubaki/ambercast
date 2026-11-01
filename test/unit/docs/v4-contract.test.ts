@@ -195,18 +195,18 @@ describe('TEST-21 v4 documentation golden expectations', () => {
       expect(errorCodes, locale).toMatch(/^\| EXECUTOR_UNSUPPORTED \| usage \| case \| 2 \|/m);
       const howTo = localizedDoc(locale, 'how-to/configure-targets');
       const tutorial = localizedDoc(locale, 'tutorials/repair-your-first-drift');
-      const inlineExample = howTo.match(/`(\{"\$schema":.+?\})`/)?.[1];
+      const howToExample = firstJsonFenceLine(howTo);
       const fencedExample = firstJsonFenceLine(tutorial);
-      expect(inlineExample, locale).toBeDefined();
+      expect(howToExample, locale).toBeDefined();
       expect(fencedExample, locale).toBeDefined();
-      for (const example of [inlineExample, fencedExample]) {
+      for (const example of [howToExample, fencedExample]) {
         const parsed = JSON.parse(example!);
         expect(RawConfig.safeParse(parsed).success, locale).toBe(true);
         expect(parsed.targets?.staging?.browser, locale).toBeUndefined();
         expect(parsed.targets?.admin?.browser, locale).toBeUndefined();
         expect(parsed.targets?.['web-user']?.browser, locale).toBeUndefined();
       }
-      expect(inlineExample, locale).toContain('"executor":{"kind":"playwright","browser":"chromium"}');
+      expect(howToExample, locale).toContain('"executor":{"kind":"playwright","browser":"chromium"}');
     }
     expect(spec('freshness')).toContain('config `executor`');
     expect(spec('changelog')).toContain('TP2');
@@ -252,5 +252,10 @@ describe('localized docs page source', () => {
     expect(firstJsonFenceLine('```json\n{"a":1}\n```')).toBe('{"a":1}');
     expect(firstJsonFenceLine('<Steps>\n\n1. ## Edit \\{#edit}\n\n   ```json\n   {"a":1}\n   ```\n\n</Steps>')?.trim()).toBe('{"a":1}');
     expect(firstJsonFenceLine('no fence here')).toBeUndefined();
+  });
+
+  it('does not find a config example written as inline code or as a multi-line json fence', () => {
+    expect(firstJsonFenceLine('Write `{"$schema":"https://example.test/config.schema.json"}`.')).toBeUndefined();
+    expect(firstJsonFenceLine('```json\n{\n  "$schema": "https://example.test/config.schema.json"\n}\n```')).toBeUndefined();
   });
 });

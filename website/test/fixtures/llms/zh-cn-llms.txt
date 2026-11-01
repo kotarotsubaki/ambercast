@@ -14,13 +14,13 @@
 - [在 GitHub Actions 中运行 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/tutorials/github-actions/): 给已经在运行的 GitHub Actions 作业加上两行，让 run 只在 check 通过后才开始。
 
 ## HOW-TO GUIDES
-- [编写高效的 Prompt](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/): 掌握编写清晰、聚焦的测试用例 Prompt 的推荐做法，并通过预检安全验证生成流程。
-- [管理机密](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/): 安全地批准生成的机密名称，并从环境变量解析其值。
-- [配置目标环境](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/configure-targets/): 配置 ambercast 测试运行的目标环境，包括基础 URL、自愈重放隔离及密钥注入源。
-- [选择 AI 提供商](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/choose-ai-provider/): 配置 ambercast 使用固定的 AI 提供商或使用自动探测。
+- [编写高效的 Prompt](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/write-effective-prompts/): 编写聚焦的测试 Prompt，先用 --dry-run 预览生成结果，再正式生成。
+- [管理机密](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-secrets/): 批准生成时提出的机密名称，并通过环境变量传入它们的值。
+- [配置目标环境](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/configure-targets/): 在配置文件中写出目标，再按需添加修复隔离、元素等待时间和机密发送源。
+- [选择 AI 提供商](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/choose-ai-provider/): 在配置中固定提供商，交给 auto 自动选择，或只为单条命令覆盖提供商。
 - [选择要运行的测试](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/): 按路径、模式过滤或配置排除，选择要运行的测试 prompt 的 4 种方法。
-- [控制 grounding 回写](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/control-grounding-writeback/): 配置本地开发与 CI 环境中变更后的 grounding 缓存回写策略。
-- [审查生成的 diff](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/review-generated-diffs/): 按照实用的审查顺序，依次检查测试提示词以及派生的 plan 与 grounding 伴生文件变更。
+- [控制定位缓存回写](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/control-grounding-writeback/): 决定变更后的定位缓存在本地和 CI 中是否回写。
+- [审查生成的 diff](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/review-generated-diffs/): 在 generate 或 heal 之后，列出所有变更文件，并依次审查 Prompt、执行计划和定位缓存。
 - [在 Git 中管理构件](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/): 指导您在 Git 中管理 ambercast 生成的测试计划、grounding 伴生文件和运行目录。
 - [在其他 CI 平台上运行](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/run-on-other-ci/): 适用于 GitLab CI 与通用运行器的可移植 CI 配置方案。
 - [恢复 stale（已过期）产物](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/recover-stale-artifacts/): 查阅 check 状态至后续操作的对照表，以恢复处于 stale 或异常状态的产物。

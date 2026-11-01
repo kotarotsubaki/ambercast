@@ -1,0 +1,71 @@
+---
+title: Write effective prompts
+description: Write a focused test prompt, preview generation with --dry-run, and then generate.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Write one prompt per user outcome, and preview the result before you generate.
+
+## Prerequisites \{#prerequisites}
+
+A prompt file name must end in exactly `.test.md`. That suffix is how ambercast maps the plan and grounding companion files to the prompt.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Write the outcome to check \{#write-outcome}
+
+   Create `tests/ambercast/checkout.test.md` with one H1, the setup the case needs, and one observable outcome per sentence. These are recommendations for focused review, not parser syntax.
+
+   A success criterion should name something visible at the destination, such as a heading, message, or element. Reaching a URL alone is not enough.
+
+   > …I reach the dashboard and see the heading "Welcome back".
+
+2. ## Quote text that appears after the action \{#quote-new-text}
+
+   In an action's success criterion, quote text that appears on the screen only after the action. Text that was already visible before it, such as the name of the link or button you clicked, cannot show that the screen changed.
+
+   > Bad: I click the "Sign in" link in the header and see "Sign in".
+   > Good: I click the "Sign in" link in the header and see the "Continue with email" button.
+
+3. ## Split outcomes into separate files \{#split-outcomes}
+
+   Put unrelated user outcomes in separate `<name>.test.md` files. Each case then stays focused.
+
+4. ## Keep secrets out of the prompt \{#keep-secrets-out}
+
+   Write only the outcome in the prompt. Do not write secret values, secret references, or legacy grant lines. When generation finds a secret name it needs, review the name in the consent prompt, or add it to `secrets.allow` beforehand. See [Manage secrets](/ambercast/how-to/manage-secrets/).
+
+5. ## Preview generation \{#preview-generation}
+
+   ```bash
+   npx ambercast generate tests/ambercast/checkout.test.md --dry-run
+   ```
+
+   For a prompt that needs generation, the result has status `would-generate` and `dryRun: true`. No artifacts are written.
+
+</Steps>
+
+## Verification \{#verification}
+
+Review the dry-run result, then run the same command without `--dry-run`.
+
+```bash
+npx ambercast generate tests/ambercast/checkout.test.md
+```
+
+On success it exits `0` with a `generated` result.
+
+## Related \{#related}
+
+<LinkCard title="Prompt file format" href="/ambercast/reference/prompt-format/" description="See the file identity rule and how a case is read." />
+
+<LinkCard title="Secrets in plans" href="/ambercast/spec/secrets/" description="See how a plan refers to secrets by reference only." />
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See every generate flag and result." />
+
+<LinkCard title="Plan document" href="/ambercast/spec/plan-document/" description="See the structure of the generated plan." />
+
+<LinkCard title="Review generated diffs" href="/ambercast/how-to/review-generated-diffs/" description="Read the prompt, plan, and grounding diffs after generation." />

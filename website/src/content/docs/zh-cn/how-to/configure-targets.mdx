@@ -1,0 +1,58 @@
+---
+title: 配置目标环境
+description: 在配置文件中写出目标，再按需添加修复隔离、元素等待时间和机密发送源。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+写出两个目标和一个默认目标，只在需要时添加可选键，并确认文件能够加载。
+
+## 前置条件 \{#prerequisites}
+
+配置文件一旦存在，就必须包含字符串类型的 `$schema`。要看到 `listed` 行，至少要有一个 Prompt 匹配发现规则，`init` 生成的示例即可。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 写出目标 \{#write-targets}
+
+   写入下面的配置。它的 `$schema` 是已发布的配置 Schema URL，这个结构会被接受。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}
+   ```
+
+2. ## 设置修复隔离 \{#set-heal-isolation}
+
+   只对一次性目标添加 `"healReplayIsolation":"idempotent"`。可用的值为 `idempotent` 和 `stateful`，默认值为 `stateful`。
+
+3. ## 设置元素等待时间 \{#set-resolve-timeout}
+
+   在目标上添加 `"resolveTimeoutMs":<ms>`，可设置解析时等待元素出现的时长。默认值为 `5000`，可接受的范围为 `0` 到 `60000`。
+
+4. ## 允许机密的发送源 \{#allow-secret-origins}
+
+   当机密可能在 `baseUrl` 之外填入时，添加 `"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}`。它把每个机密引用映射到允许的源。配置的映射会替换默认策略，也就是 `baseUrl` 的源，且每个源都会被规范化。
+
+</Steps>
+
+## 验证 \{#verification}
+
+```bash
+npx ambercast check --list
+```
+
+该命令加载并验证配置，然后以退出码 `0` 结束，并为每个发现的 Prompt 输出一行 `listed`。它不检查任何产物。没有 Prompt 时，命令同样以退出码 `0` 结束，不输出行。文件无效时，命令以 `CONFIG_INVALID` 失败，退出码为 `2`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解全部配置键和配置文件的选择方式。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的全部标志和结果。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/zh-cn/reference/cli/heal/" description="了解使用回放隔离的 heal 命令。" />
+
+<LinkCard title="执行计划中的机密" href="/ambercast/zh-cn/spec/secrets/" description="了解决定机密可在何处填入的规则。" />
+
+<LinkCard title="UI 变更后的测试自愈" href="/ambercast/zh-cn/tutorials/repair-your-first-drift/" description="在练习应用中尝试修复发生漂移的执行计划。" />

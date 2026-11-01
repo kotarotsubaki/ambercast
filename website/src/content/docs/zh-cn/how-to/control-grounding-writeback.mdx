@@ -1,0 +1,64 @@
+---
+title: 控制定位缓存回写
+description: 决定变更后的定位缓存在本地和 CI 中是否回写。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+选择本地如何保存变更后的定位缓存，并在 CI 中保持关闭回写。
+
+## 前置条件 \{#prerequisites}
+
+`grounding.localWriteBack` 接受 `auto` 或 `explicit`。`ci.updateGroundingCache` 是布尔值。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 确认本地默认行为 \{#keep-local-default}
+
+   在本地，变更后的定位缓存会自动回写。这是默认行为，与下面的配置含义相同。它的 `$schema` 是已发布的配置 Schema URL。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"localWriteBack":"auto"}}
+   ```
+
+2. ## 审查后再回写 \{#review-before-writing}
+
+   想先查看 diff 再保留，就把下面的键添加到有效的配置文件中。
+
+   ```json
+   {
+     "grounding": {
+       "localWriteBack": "explicit"
+     }
+   }
+   ```
+
+   使用 `explicit` 时，本地运行只在传入 `--update-cache` 时才会写入。
+
+   ```bash
+   npx ambercast run --update-cache tests/ambercast/<name>.test.md
+   ```
+
+3. ## 在 CI 中保持关闭回写 \{#keep-ci-off}
+
+   保持 `ci.updateGroundingCache` 为 false，也不要传入 `--update-cache`。CI 默认不回写。在 CI 中，只有传入 `--update-cache` 或 `ci.updateGroundingCache: true` 时才会回写，且 `localWriteBack` 会被忽略。
+
+</Steps>
+
+## 验证 \{#verification}
+
+```bash
+npx ambercast run --json tests/ambercast/<name>.test.md
+```
+
+只有整批全部通过时，退出码才为 `0`。提交之前先检查定位缓存的 diff，方法见[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+## 相关链接 \{#related}
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解 grounding 和 ci 的配置键。" />
+
+<LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解包括 --update-cache 在内的 run 全部标志。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="提交之前，先审查回写产生的 diff。" />

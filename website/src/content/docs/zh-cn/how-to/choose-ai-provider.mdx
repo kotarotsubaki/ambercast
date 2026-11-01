@@ -1,0 +1,52 @@
+---
+title: 选择 AI 提供商
+description: 在配置中固定提供商，交给 auto 自动选择，或只为单条命令覆盖提供商。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+三选一：需要可复现的运行时在配置中固定提供商，更看重可用性时交给 `auto`，只想改一次时用 `--ai` 覆盖。
+
+## 前置条件 \{#prerequisites}
+
+`ai.provider` 接受 `claude`、`codex` 或 `auto`。不设置时，默认值为 `auto`。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 在配置中固定提供商 \{#pin-provider}
+
+   把下面的内容写入 `ambercast.config.json`。它的 `$schema` 是已发布的配置 Schema URL。若可用的是 Codex，把 `claude` 替换为 `codex`。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","ai":{"provider":"claude"}}
+   ```
+
+   优先级从高到低依次为 `--ai`、`AMBERCAST_AI_PROVIDER`、配置文件。只有前两者都未设置时，固定才会生效。
+
+2. ## 交给 auto 以保证可用性 \{#use-auto}
+
+   两种覆盖都未设置，且更看重可用性而不是固定某个提供商时，省略 `ai.provider`。`auto` 先探测 Claude，再探测 Codex，使用第一个可用的提供商。
+
+3. ## 用命令只覆盖一次 \{#override-once}
+
+   ```bash
+   npx ambercast generate --ai codex
+   ```
+
+   `--ai` 接受 `claude` 和 `codex`。传入其他值时，命令以退出码 `2` 结束。
+
+</Steps>
+
+## 验证 \{#verification}
+
+`npx ambercast generate --list` 只能确认 Prompt 的选取，因为它在解析提供商之前就已返回。要验证提供商，请运行全新、过期或带 `--force` 的生成，让流程进入 AI 执行。
+
+## 相关链接 \{#related}
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解包括 ai.provider 在内的配置键。" />
+
+<LinkCard title="环境变量" href="/ambercast/zh-cn/reference/environment-variables/" description="了解 AMBERCAST_AI_PROVIDER 的作用。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的全部标志，以及何时调用 AI。" />

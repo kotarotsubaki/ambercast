@@ -1,0 +1,71 @@
+---
+title: 编写高效的 Prompt
+description: 编写聚焦的测试 Prompt，先用 --dry-run 预览生成结果，再正式生成。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+每个用户结果写一个 Prompt，生成之前先预览结果。
+
+## 前置条件 \{#prerequisites}
+
+Prompt 文件名必须严格以 `.test.md` 结尾。ambercast 通过这个后缀，把执行计划和定位缓存的伴生文件对应到 Prompt。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 写出要确认的结果 \{#write-outcome}
+
+   创建 `tests/ambercast/checkout.test.md`，写一个 H1、用例需要的前置准备，每句只写一个可观察的结果。这些是便于聚焦审查的建议，不是解析器的语法。
+
+   成功条件应写出到达页面后可见的标题、消息或元素，只写到达某个 URL 并不够。
+
+   > …我进入仪表盘，并看到标题 “欢迎回来”。
+
+2. ## 引用操作之后才出现的文字 \{#quote-new-text}
+
+   在操作的成功条件里，引用只在操作之后的页面上出现的文字。操作之前就已可见的文字无法证明页面发生了切换，例如刚点击的链接或按钮名称。
+
+   > 反例：我点击页眉中的 “登录” 链接，并看到 “登录”。
+   > 正例：我点击页眉中的 “登录” 链接，并看到 “使用邮箱继续” 按钮。
+
+3. ## 按结果拆分文件 \{#split-outcomes}
+
+   把互不相关的用户结果放进各自的 `<name>.test.md`，每个用例就能保持聚焦。
+
+4. ## 不要在 Prompt 里写机密 \{#keep-secrets-out}
+
+   Prompt 里只写结果，不写机密值、机密引用或旧版授权行。生成发现所需机密名称时，在同意提示中审查它，或预先加入 `secrets.allow`。详见[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)。
+
+5. ## 预览生成 \{#preview-generation}
+
+   ```bash
+   npx ambercast generate tests/ambercast/checkout.test.md --dry-run
+   ```
+
+   对需要生成的 Prompt，结果的状态为 `would-generate`，并带有 `dryRun: true`。不会写入任何产物。
+
+</Steps>
+
+## 验证 \{#verification}
+
+审查预览结果，然后去掉 `--dry-run`，运行同一条命令。
+
+```bash
+npx ambercast generate tests/ambercast/checkout.test.md
+```
+
+成功时退出码为 `0`，结果为 `generated`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="Prompt 文件格式" href="/ambercast/zh-cn/reference/prompt-format/" description="了解文件识别规则和用例的读取方式。" />
+
+<LinkCard title="执行计划中的机密" href="/ambercast/zh-cn/spec/secrets/" description="了解执行计划如何只通过引用处理机密。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的全部标志和结果。" />
+
+<LinkCard title="执行计划文档" href="/ambercast/zh-cn/spec/plan-document/" description="了解生成的执行计划的结构。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="生成之后，依次审查 Prompt、执行计划和定位缓存的 diff。" />

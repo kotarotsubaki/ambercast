@@ -1,0 +1,52 @@
+---
+title: Choose an AI provider
+description: Pin a provider in configuration, let auto choose one, or override the provider for a single command.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Choose one of three ways: pin a provider for reproducible runs, let `auto` choose when availability matters more, or override the provider for one command.
+
+## Prerequisites \{#prerequisites}
+
+`ai.provider` accepts `claude`, `codex`, or `auto`. When you leave it unset, it defaults to `auto`.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Pin the provider in configuration \{#pin-provider}
+
+   Put this in `ambercast.config.json`. Its `$schema` is the published configuration schema URL. If Codex is your available choice, replace `claude` with `codex`.
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","ai":{"provider":"claude"}}
+   ```
+
+   Precedence, highest first: `--ai`, then `AMBERCAST_AI_PROVIDER`, then the file. The pin applies only when neither override is set.
+
+2. ## Let auto choose for availability \{#use-auto}
+
+   When neither override is set, omit `ai.provider` if availability matters more than a fixed provider. `auto` probes Claude first, then Codex, and uses the first one that is available.
+
+3. ## Override once from the command \{#override-once}
+
+   ```bash
+   npx ambercast generate --ai codex
+   ```
+
+   `--ai` accepts `claude` and `codex`. Any other value makes the command exit `2`.
+
+</Steps>
+
+## Verification \{#verification}
+
+`npx ambercast generate --list` only confirms prompt selection, because it returns before the provider is resolved. To verify the provider, run a new, stale, or `--force` generation that reaches AI execution.
+
+## Related \{#related}
+
+<LinkCard title="Configuration" href="/ambercast/reference/configuration/" description="See the configuration keys, including ai.provider." />
+
+<LinkCard title="Environment variables" href="/ambercast/reference/environment-variables/" description="See what AMBERCAST_AI_PROVIDER does." />
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See every generate flag and when AI is called." />

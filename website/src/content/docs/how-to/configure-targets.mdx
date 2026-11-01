@@ -1,0 +1,58 @@
+---
+title: Configure targets
+description: Write targets in the configuration file, then add heal isolation, an element wait, and secret sink origins.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Write two targets and a default target, add optional keys only where you need them, and confirm the file loads.
+
+## Prerequisites \{#prerequisites}
+
+A configuration file that exists must contain a string `$schema`. To see a `listed` row, at least one prompt must match discovery; the `init` sample works.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Write the targets \{#write-targets}
+
+   Write this configuration. Its `$schema` is the published configuration schema URL, and the shape is accepted.
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}
+   ```
+
+2. ## Set heal isolation \{#set-heal-isolation}
+
+   Add `"healReplayIsolation":"idempotent"` only to a disposable target. The accepted values are `idempotent` and `stateful`; the default is `stateful`.
+
+3. ## Set the element wait \{#set-resolve-timeout}
+
+   Add `"resolveTimeoutMs":<ms>` to a target to set how long resolution waits for an element to be present. The default is `5000`, and the accepted range is `0` to `60000`.
+
+4. ## Allow secret origins \{#allow-secret-origins}
+
+   When a secret may be filled away from `baseUrl`, add `"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}`. It maps each secret reference to its allowed origins. A configured mapping replaces the default policy, which is the `baseUrl` origin, and each origin is normalized.
+
+</Steps>
+
+## Verification \{#verification}
+
+```bash
+npx ambercast check --list
+```
+
+The command loads and validates the configuration, then exits `0` with a `listed` row for each discovered prompt. It inspects no artifacts. With no prompt it exits `0` with no rows. An invalid file fails with `CONFIG_INVALID` and exit `2`.
+
+## Related \{#related}
+
+<LinkCard title="Configuration" href="/ambercast/reference/configuration/" description="See every configuration key and how the file is selected." />
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See every check flag and result." />
+
+<LinkCard title="ambercast heal" href="/ambercast/reference/cli/heal/" description="See the heal command that uses replay isolation." />
+
+<LinkCard title="Secrets in plans" href="/ambercast/spec/secrets/" description="See the rules that decide where a secret may be filled." />
+
+<LinkCard title="Healing a test after a UI change" href="/ambercast/tutorials/repair-your-first-drift/" description="Try repairing a drifted plan in the practice app." />

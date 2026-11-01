@@ -1,0 +1,62 @@
+---
+title: 审查生成的 diff
+description: 在 generate 或 heal 之后，列出所有变更文件，并依次审查 Prompt、执行计划和定位缓存。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+列出所有变更文件，依次审查 Prompt、执行计划和定位缓存，最后运行 `check`。
+
+## 前置条件 \{#prerequisites}
+
+解析器通过固定后缀，把 Prompt 对应到它的执行计划和定位缓存伴生文件：`<name>.ambercast.plan.json` 与 `<name>.ambercast.grounding.json`。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 列出变更的文件 \{#list-changes}
+
+   ```bash
+   git status --short
+   ```
+
+   对每个未跟踪的 Prompt、执行计划或定位缓存路径，检查其完整内容，或运行 `git diff --no-index /dev/null <path>`。对已跟踪且发生变更的文件，运行 `git diff -- <path>`。这样在审查含义之前，就能确定完整的候选文件集。
+
+2. ## 审查 Prompt \{#review-prompt}
+
+   阅读 `tests/ambercast/<name>.test.md`，说明预期的用户结果。Prompt 规范化只会改变开头的一个 BOM 和换行符的表示。
+
+3. ## 审查执行计划 \{#review-plan}
+
+   阅读 `tests/ambercast/<name>.ambercast.plan.json`，把生成的步骤与该结果比对。执行计划是单独的派生伴生文件。
+
+4. ## 审查定位缓存 \{#review-grounding}
+
+   阅读 `tests/ambercast/<name>.ambercast.grounding.json`，区分解析变化与意图变化。定位缓存也是单独的派生伴生文件。
+
+5. ## 检查新鲜度 \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   `check` 不具备写入、浏览器或提供商能力。
+
+</Steps>
+
+## 验证 \{#verification}
+
+只有被接受的这一对文件为 fresh 时，`check` 的退出码才为 `0`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="执行计划文档" href="/ambercast/zh-cn/spec/plan-document/" description="了解执行计划的结构。" />
+
+<LinkCard title="定位缓存文档" href="/ambercast/zh-cn/spec/grounding-document/" description="了解定位缓存文件的结构。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的全部标志和结果。" />
+
+<LinkCard title="文件布局" href="/ambercast/zh-cn/reference/file-layout/" description="了解伴生文件的存放位置。" />
+
+<LinkCard title="在不同版本间升级" href="/ambercast/zh-cn/how-to/upgrade/" description="了解版本升级之后如何处理执行计划。" />

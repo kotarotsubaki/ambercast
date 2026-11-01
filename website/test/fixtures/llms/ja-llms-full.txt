@@ -511,67 +511,111 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 # 効果的なプロンプトの作成
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/write-effective-prompts/
 
-テストプロンプトを明確に構造化しておくことで、レビュー時の負担を減らし、意図通りのテストを正確に生成できます。ここでは、焦点を絞ったプロンプトファイルの記述方法と、ドライランによる生成内容の事前確認手順を説明します。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+ユーザー成果ごとにプロンプトを書き、生成の前に結果をプレビューする。
 
-プロンプトファイルは、関連ファイルの正確なマッピングを有効にするため、ファイル名の末尾が厳密に `.test.md` で終わっている必要があります。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+プロンプトのファイル名は、末尾が `.test.md` でなければならない。この接尾辞から、計画（plan）とグラウンディングのコンパニオンファイルが決まる。
 
-1. `tests/ambercast/checkout.test.md` を作成し、1つのH1、ケースに必要なセットアップ、そして1文につき1つの観測可能な結果を記述します。これらはパーサーの構文規則ではなく、レビュー時に焦点を明確に保つための推奨事項です。
+## 手順 \{#steps}
 
-   成功条件には、URLに到達したことだけでなく、到達先で確認できる見出し、メッセージ、要素を記述します。
+<Steps>
 
-   > …I reach the dashboard and see the heading "Welcome back".
-2. 操作の成功条件には、操作後の画面にだけ現れる文言を引用します。操作前から見えていた文言（クリックしたリンクやボタン自身の名前など）では、画面が切り替わったかを判別できません。
+1. ## 確かめる結果を書く \{#write-outcome}
+
+   `tests/ambercast/checkout.test.md` を作り、H1 を 1 つ、ケースに必要な準備、1 文につき 1 つの観測できる結果を書く。これらはレビューで焦点を保つための推奨であり、パーサーの構文ではない。
+
+   成功条件には、URL に着いたことだけでなく、到達先で見える見出し・メッセージ・要素を書く。
+
+   > …ダッシュボードに着き、見出し「おかえりなさい」が表示される。
+
+2. ## 操作の後に現れる文言を引く \{#quote-new-text}
+
+   操作の成功条件には、操作の後の画面にだけ現れる文言を引く。操作の前から見えていた文言では、画面が切り替わったかを判別できない。クリックしたリンクやボタンの名前がその例である。
 
    > 悪い例：ヘッダーの「ログイン」リンクをクリックすると、「ログイン」が表示される。
    > 良い例：ヘッダーの「ログイン」リンクをクリックすると、「メールアドレスで続ける」ボタンが表示される。
-3. 関連しないユーザー成果は、別々の `<name>.test.md` ファイルに分割します。テストケースごとに焦点を絞るため、ファイルを分ける構成が推奨されます。
-4. シークレット値、シークレット参照、旧グラント行をプロンプトに記述しないでください。生成で必要なシークレット名が検出された場合は、同意プロンプトでレビューするか、`secrets.allow` を事前に設定してください。詳細は[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)を参照してください。
-5. `--dry-run` フラグを指定して生成を実行し、結果をプレビューします。
 
-   有効なプレビュー結果では、ステータスが `would-generate` かつ `dryRun: true` となり、実際の書き込みはコミットされません。
+3. ## 結果ごとにファイルを分ける \{#split-outcomes}
 
-## 検証 {#verification}
+   関連しないユーザー成果は、別々の `<name>.test.md` に分ける。ケースごとに焦点が定まる。
 
-ドライランの結果を確認したら、`--dry-run` なしで生成コマンドを実行します。
+4. ## シークレットを書かない \{#keep-secrets-out}
 
+   プロンプトへ書くのは成果だけで、シークレットの値・参照・旧グラント行は書かない。生成が必要なシークレット名を見つけたら、同意プロンプトで確かめる。事前に許可する場合は `secrets.allow` へ入れる。手順は[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)にある。
 
+5. ## 生成を試す \{#preview-generation}
 
-生成が成功すると、結果に `generated` が表示され、終了コード `0` で完了します。
+   ```bash
+   npx ambercast generate tests/ambercast/checkout.test.md --dry-run
+   ```
 
-## 関連ドキュメント {#related}
+   生成が必要なプロンプトの結果は、ステータスが `would-generate` で、`dryRun: true` になる。成果物は書き込まれない。
 
-- [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/)
-- [プランにおけるシークレット](/ambercast/ja/spec/secrets/)
-- [ambercast generate](/ambercast/ja/reference/cli/generate/)
-- [計画ドキュメント](/ambercast/ja/spec/plan-document/)
-- [生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)
+</Steps>
+
+## 確認 \{#verification}
+
+`--dry-run` の結果を確かめたら、同じコマンドを `--dry-run` なしで実行する。
+
+```bash
+npx ambercast generate tests/ambercast/checkout.test.md
+```
+
+成功すると、終了コード `0` で終わり、結果は `generated` になる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="プロンプトファイルのフォーマット" href="/ambercast/ja/reference/prompt-format/" description="ファイルの識別と、ケースの書き方の規則を確かめる。" />
+
+<LinkCard title="計画におけるシークレット" href="/ambercast/ja/spec/secrets/" description="シークレットを参照で扱う規則を確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の全フラグと結果を確かめる。" />
+
+<LinkCard title="計画ドキュメント" href="/ambercast/ja/spec/plan-document/" description="生成される計画の構造を確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="生成後に、プロンプト・計画・グラウンディングの差分を読む。" />
 
 ---
 
 # シークレットの管理
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-secrets/
 
-ambercast はプランの生成中に候補となるシークレット名を検出します。対話式の同意プロンプトでその名前を承認するか、非対話的な利用では設定の許可リストへあらかじめ追加します。シークレット値はプロンプトと成果物の外部に保持されます。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+プロンプトにシークレットを書かず、提案された名前を承認して、値は環境変数から渡す。
 
-- 既存の `ambercast.config.json` ファイルは不要です。承認された同意によって許可リストを永続化する必要があり、設定済みのファイルが存在しない場合、ambercast が自動的に作成します。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+`ambercast.config.json` は、あらかじめ無くてよい。承認した同意で許可リストを残す必要があり、設定ファイルが無いときは、ambercast がそのファイルを作る。
 
-1. グラント行やシークレット値を含めずに、ユーザーの達成したい結果をプロンプトに記述します。
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## シークレットを書かずにプロンプトを書く \{#write-prompt}
+
+   プロンプトには、ユーザー成果だけを書く。グラント行もシークレットの値も書かない。生成した計画（plan）に入るのは `{{secrets.*}}` の参照だけで、シークレット検出器がリテラルのシークレットを見つけた生成 JSON は拒否される。
 
    ```markdown
    # Sign in
 
    Sign in as the configured test user and verify that the dashboard heading is visible.
    ```
-2. `npx ambercast generate tests/ambercast/<name>.test.md` を実行します。生成では最初に候補プランを作成し、新たに提案されたシークレット名を一覧表示します。対話式端末では名前ごとに確認し、このテストに適切な名前だけを承認します。
-3. CI または別の非対話環境では、生成前にレビュー済みの名前を追加します。
+
+2. ## 名前を確かめて承認する \{#review-names}
+
+   ```bash
+   npx ambercast generate tests/ambercast/<name>.test.md
+   ```
+
+   generate は、まず候補の計画を作り、新しく提案されたシークレット名を一覧にする。対話式の端末では名前を 1 つずつ確かめ、このテストに合うものだけを承認する。
+
+3. ## 非対話の環境では名前を先に許可する \{#preapprove-names}
+
+   CI など対話式でない環境だけは、手順 2 の `generate` を実行する前に、確かめた名前を許可リストへ入れる。
 
    ```json
    {
@@ -580,85 +624,153 @@ ambercast はプランの生成中に候補となるシークレット名を検�
    }
    ```
 
-   空の `secrets.allow` ではすべての名前に同意が必要です。値が `"*"` の場合、AI が提案した任意の名前を名前ごとのレビューなしに受け入れます。この値は承認境界を取り除くため、そのことを理解した場合にのみ使用してください。すでに `"*"` である場合、同意を承認しても許可リストは更新されません。
+   `secrets.allow` が空なら、すべての名前に同意が要る。`"*"` は、AI が提案したどの名前も 1 つずつ確かめずに受け入れる。承認の境界がなくなるため、そのことを理解した上でだけ使う。すでに `"*"` なら、同意を承認しても許可リストは更新されない。
 
-   承認した名前を記録するとき、ambercast は排他的更新を行い、その中で現在ディスクにある設定を読み直して検証してからマージします。以前に読み込んだ設定スナップショットを上書きすることはありません。既存の `secrets.allow` の名前は重複を除きつつ現在の順序を維持します。新たに承認された名前は重複を除き、既存の名前を除外し、残りをアルファベット順に並べて末尾に追加します。
-4. 対応する値はコマンド実行環境にのみ設定します。実行時、`{{secrets.a.b}}` は `AMBERCAST_SECRET_A_B` から解決されます。ドットはアンダースコアになり、セグメントは大文字になります。入力対象が `baseUrl` でない場合は、[ターゲットの設定](/ambercast/ja/how-to/configure-targets/) に従って追加のオリジンを設定します。
+   承認した名前を記録するとき、ambercast は排他的に更新する。現在の設定ファイルを読み直して検証してから、既存の名前は重複を除いて順序を保つ。まだ無い新しい名前は、重複を除き、並べ替えて末尾に足す。
 
-## 確認 {#verification}
+4. ## 値を環境変数に置く \{#set-values}
 
-- 同意を承認するか許可リスト項目を追加すると、生成はプランを永続化し、新しく承認された名前を `secrets.allow` に記録します。
-- 1 回の生成バッチでは、ambercast はすべての新たに承認された名前を許可リストへ一度だけコミットしてから、候補ごとのプランまたは Grounding ファイルを書き込みます。これらは 1 つのトランザクションではなく別々の操作です。そのため、許可リストのコミット後に中断または失敗すると、候補のプランおよび Grounding ファイルの一部またはすべてが書き込まれなくても、許可リストの更新はディスクに残ります。これは、`secrets.allow` が生成済み成果物より先行し得る、既知かつ受け入れられた状態です。`generate` を再実行すると、すでに許可リストにある名前を使って回復できます。
-- 同意を拒否した場合、または非対話端末で同意を要求できない場合、生成は `SECRET_CONSENT_REQUIRED` で失敗し、候補成果物を書き込みません。レビュー済みの名前を `secrets.allow` に追加してから、生成を再実行してください。
-- 必要な `AMBERCAST_SECRET_<NAME>` 変数をコマンド実行環境に保持したまま、安全なターゲットに対して `npx ambercast run --resolve tests/ambercast/<name>.test.md` を実行します。`fill-secret` は稼働中のオリジンがシンクポリシーチェックに合格した後にのみ、名前付き変数を解決します。
+   値は、コマンドを実行する環境にだけ置く。`{{secrets.a.b}}` は `AMBERCAST_SECRET_A_B` から解決され、ドットはアンダースコアに、各セグメントは大文字になる。
 
-## 関連情報 {#related}
+   入力先が `baseUrl` と別のオリジンなら、[ターゲットの設定](/ambercast/ja/how-to/configure-targets/)で追加のオリジンを許可する。
 
-リンク: [プランにおけるシークレット](/ambercast/ja/spec/secrets/)、[環境変数](/ambercast/ja/reference/environment-variables/)、[設定](/ambercast/ja/reference/configuration/)、[エラーコード](/ambercast/ja/reference/error-codes/)。
+</Steps>
+
+## 確認 \{#verification}
+
+- 同意か許可リストの項目があれば、生成は計画を書き込み、新しく承認した名前を `secrets.allow` に記録する。
+- 許可リストへの記録と、計画およびグラウンディングの書き込みは、別の操作である。1 回の生成で承認した名前は、どの候補のファイルよりも先に、まとめて 1 度だけ記録される。記録の後に中断や失敗が起きると、`secrets.allow` が成果物より先に進むことがある。`generate` を再実行すれば、許可済みの名前のまま回復して先へ進む。
+- 同意を断った場合や、非対話の端末で同意を求められない場合、生成は `SECRET_CONSENT_REQUIRED` で失敗し、候補の成果物を書き込まない。確かめた名前を `secrets.allow` に足してから、再実行する。
+
+必要な `AMBERCAST_SECRET_<NAME>` を環境に残したまま、安全なターゲットで再生する。
+
+```bash
+npx ambercast run --resolve tests/ambercast/<name>.test.md
+```
+
+`fill-secret` は、実際のオリジンがシンクポリシーの検査を通った後にだけ、その変数を解決する。
+
+## 関連情報 \{#related}
+
+<LinkCard title="計画におけるシークレット" href="/ambercast/ja/spec/secrets/" description="シークレットを参照で扱う規則と、リテラルを拒否する規則を確かめる。" />
+
+<LinkCard title="環境変数" href="/ambercast/ja/reference/environment-variables/" description="AMBERCAST_SECRET_ 変数の名前の決まり方を確かめる。" />
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="secrets.allow を含む設定キーを確かめる。" />
+
+<LinkCard title="エラーコード" href="/ambercast/ja/reference/error-codes/" description="SECRET_CONSENT_REQUIRED を含むエラーコードを確かめる。" />
 
 ---
 
 # ターゲットの設定
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/configure-targets/
 
-ambercastの設定ファイルにターゲット（targets）を定義し、各環境のベースURLやブラウザ、リプレイ分離設定、およびシークレットの送信先オリジンを構成します。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+2 つのターゲットと既定のターゲットを書き、必要なキーだけを足して、設定が読み込めることを確かめる。
 
-- 設定ファイルが存在する場合、文字列型の `$schema` が必須となります。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+設定ファイルがあるなら、文字列の `$schema` を必ず含める。`listed` の行を見るには、ディスカバリーに一致するプロンプトが 1 つ以上要る。`init` のサンプルでよい。
 
-1. `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}` を記述します。これは公開されている設定スキーマURLであり、`targets` および `defaultTarget` は受け入れられる設定形式を持ちます。
-2. 破棄可能なターゲットにのみ `"healReplayIsolation":"idempotent"` を追加します。受け入れられる分離設定の値は `idempotent` と `stateful` であり、`healReplayIsolation` の既定値は `stateful` です。
-3. 解決中に要素の出現を待機するには、ターゲットに `"resolveTimeoutMs":<ms>` を設定します。既定値は `5000` で、指定できる値の範囲は `0`〜`60000` です。
-4. シークレットが `baseUrl` 以外のオリジンに入力される可能性がある場合は、`"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}` を追加します。`secretSinkOrigins` は各シークレット参照を許可されたオリジンの配列へとマッピングします。設定されたマッピングは既定のオリジンポリシー（`baseUrl` のオリジン）を置き換え、各オリジンは正規化されます。
+## 手順 \{#steps}
 
-## 確認 {#verification}
+<Steps>
 
-- `npx ambercast check --target staging --list` を実行します。成果物の検査は行われず、終了コード `0` と `listed` の結果が返されることを確認します。
+1. ## ターゲットを書く \{#write-targets}
 
-## 関連情報 {#related}
+   次の設定を書く。`$schema` は公開されている設定スキーマの URL で、この形が受け入れられる。
 
-リンク: [設定](/ambercast/ja/reference/configuration/)、[ambercast check](/ambercast/ja/reference/cli/check/)、[ambercast heal](/ambercast/ja/reference/cli/heal/)、[プランにおけるシークレット](/ambercast/ja/spec/secrets/)、[UI変更後にテストを修復する](/ambercast/ja/tutorials/repair-your-first-drift/)
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"staging":{"baseUrl":"https://staging.example.test","executor":{"kind":"playwright","browser":"chromium"}},"admin":{"baseUrl":"https://admin.example.test"}},"defaultTarget":"staging"}
+   ```
+
+2. ## 修復のための分離を設定する \{#set-heal-isolation}
+
+   使い捨てのターゲットにだけ、`"healReplayIsolation":"idempotent"` を足す。値は `idempotent` と `stateful` で、既定は `stateful` である。
+
+3. ## 要素を待つ時間を設定する \{#set-resolve-timeout}
+
+   ターゲットに `"resolveTimeoutMs":<ms>` を足すと、解決のときに要素が現れるのを待つ時間が決まる。既定は `5000` で、指定できる範囲は `0`〜`60000` である。
+
+4. ## シークレットの送信先を許可する \{#allow-secret-origins}
+
+   シークレットを `baseUrl` と別のオリジンに入力するなら、`"secretSinkOrigins":{"{{secrets.password}}":["https://login.example.test","https://admin.example.test"]}` を足す。各シークレット参照に、許可するオリジンの配列を対応させる。設定した対応は既定のポリシー（`baseUrl` のオリジン）を置き換え、各オリジンは正規化される。
+
+</Steps>
+
+## 確認 \{#verification}
+
+```bash
+npx ambercast check --list
+```
+
+設定を読み込んで検証し、見つけたプロンプトごとに `listed` の行を出して、終了コード `0` で終わる。成果物は検査しない。プロンプトが無ければ、行を出さずに終了コード `0` で終わる。設定が不正なら、`CONFIG_INVALID` で終了コード `2` になる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="設定ファイルの全キーと選び方を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の全フラグと結果を確かめる。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/ja/reference/cli/heal/" description="修復の分離が使われる heal コマンドを確かめる。" />
+
+<LinkCard title="計画におけるシークレット" href="/ambercast/ja/spec/secrets/" description="シークレットの送信先を決める規則を確かめる。" />
+
+<LinkCard title="UI変更後にテストを修復する" href="/ambercast/ja/tutorials/repair-your-first-drift/" description="練習用アプリで、ドリフトした計画を修復する流れを試す。" />
 
 ---
 
 # AIプロバイダーの選択
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/choose-ai-provider/
 
-ambercast でテストプランを生成する際は、環境や再現性の要件に合わせて利用する AI プロバイダーを選択できます。設定ファイルによるプロバイダーの固定、フォールバックを考慮した自動検出、およびコマンドライン引数による一時的な上書きの手順を解説します。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+次の 3 つから選ぶ。再現できる実行には設定で固定し、可用性を優先するなら auto に任せ、1 回だけなら `--ai` で上書きする。
 
-設定の `ai.provider` に指定できる値は `claude`、`codex`、または `auto` です。未指定時のデフォルト値は `auto` に設定されています。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+`ai.provider` には `claude`、`codex`、`auto` を指定できる。指定しなければ `auto` になる。
 
-1. **設定ファイルでプロバイダーを固定する**  
-   環境変数 `AMBERCAST_AI_PROVIDER` や `--ai` による上書きを行わない場合、再現性を確保するために `ambercast.config.json` に設定を記述してプロバイダーを固定します。利用可能な選択肢に合わせて、以下のように `claude` を指定するか、`claude` の部分を `codex` に置き換えてください。
-```bash
-npx ambercast generate --ai codex
-```
-   これは公開されている設定スキーマの URL です。なお、環境設定は設定ファイルを上書きし、`--ai` オプションは解決された設定を上書きします。
+## 手順 \{#steps}
 
-2. **可用性を重視して `auto` を利用する**  
-   環境変数やオプションによる上書きを設定しておらず、固定のプロバイダーを選択することよりも可用性を優先したい場合は、`ai.provider` の指定を省略して `auto` を使用します。プロバイダー解決処理では Claude、続いて Codex の順にプローブが実行され、最初に利用可能と確認されたプロバイダーが返されます。
+<Steps>
 
-3. **コマンドライン引数でプロバイダーを上書きする**  
-   実行時にプロバイダーを切り替えたい場合は、`--ai` オプションを指定してコマンドを実行します。
+1. ## 設定でプロバイダーを固定する \{#pin-provider}
 
-   コマンドの上書き引数として受け付けられるのは `claude` と `codex` です。無効なプロバイダー文字列を指定した場合は終了コード `2` で終了します。
+   `ambercast.config.json` に次の設定を書く。`$schema` は公開されている設定スキーマの URL である。Codex を使うなら、`claude` を `codex` に替える。
 
-## 検証 {#verification}
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","ai":{"provider":"claude"}}
+   ```
 
-`npx ambercast generate --list` はプロンプトの選択を確認するためだけに使用してください。このコマンドはプロバイダー解決の前に処理を終了して結果を返します。実際に選択されたプロバイダーを検証するには、AI の実行まで到達する新規生成、stale な生成、または `--force` を指定した生成を実行してください。
+   優先順位は高い順に、`--ai`、環境変数 `AMBERCAST_AI_PROVIDER`、設定ファイルである。固定が効くのは、どちらの上書きも無いときだけである。
 
-## 関連情報 {#related}
+2. ## 可用性を優先して auto に任せる \{#use-auto}
 
-- [設定](/ambercast/ja/reference/configuration/)
-- [環境変数](/ambercast/ja/reference/environment-variables/)
-- [ambercast generate](/ambercast/ja/reference/cli/generate/)
+   どちらの上書きも無いときに、1 つに固定するより可用性を優先するなら、`ai.provider` を省く。`auto` は Claude を先に、次に Codex を調べ、最初に使えたプロバイダーを選ぶ。
+
+3. ## コマンドで 1 回だけ上書きする \{#override-once}
+
+   ```bash
+   npx ambercast generate --ai codex
+   ```
+
+   `--ai` に指定できるのは `claude` と `codex` である。ほかの値を渡すと、コマンドは終了コード `2` で終わる。
+
+</Steps>
+
+## 確認 \{#verification}
+
+`npx ambercast generate --list` で確かめられるのは、プロンプトの選択だけである。このコマンドはプロバイダーを解決する前に戻る。プロバイダーを確かめるには、新規・stale・`--force` のいずれかで生成し、AI の実行まで進める。
+
+## 関連情報 \{#related}
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="ai.provider を含む設定キーを確かめる。" />
+
+<LinkCard title="環境変数" href="/ambercast/ja/reference/environment-variables/" description="AMBERCAST_AI_PROVIDER の働きを確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の全フラグと AI の呼び出しを確かめる。" />
 
 ---
 
@@ -729,91 +841,128 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 # グラウンディングのライトバック制御
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/control-grounding-writeback/
 
-ambercast でテストを実行した際、変更されたグラウンディングキャッシュをファイルへ書き戻す（ライトバックする）動作は、設定や実行時オプションによって制御できます。開発フローに合わせて、ローカル環境での自動永続化、差分確認を重視する明示的な更新、そして意図しない書き換えを防ぐCI環境の運用まで、目的に応じた設定手順を説明します。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+ローカルでは書き戻しの方式を選び、CI では書き戻さない設定を保つ。
 
-設定を変更する前に、以下の設定値の取り扱いを確認してください。
+## 前提条件 \{#prerequisites}
 
-- `grounding.localWriteBack` には `auto` または `explicit` を指定します。
-- `ci.updateGroundingCache` は真偽値（boolean）を受け付けます。
+`grounding.localWriteBack` には `auto` か `explicit` を指定する。`ci.updateGroundingCache` は真偽値である。
 
-## 手順 {#steps}
+## 手順 \{#steps}
 
-### 1. ローカル環境で自動的に永続化する
+<Steps>
 
-ローカルでのテスト実行時にキャッシュを自動で書き戻すには、設定ファイルに以下を定義します。
+1. ## ローカルの既定の書き戻しを確かめる \{#keep-local-default}
 
-```json
-{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"localWriteBack":"auto"}}
-```
+   ローカルでは、変更されたグラウンディングが自動で書き戻される。これが既定で、次の設定と同じ意味である。`$schema` は公開されている設定スキーマの URL である。
 
-上記の `$schema` は公開されている設定スキーマの URL です。なお、ローカル環境におけるデフォルトの挙動はすでに `auto` になっています。
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"localWriteBack":"auto"}}
+   ```
 
-### 2. レビューを挟んで明示的に永続化する
+2. ## 確認してから書き戻す \{#review-before-writing}
 
-変更されたキャッシュの内容を確認してから書き戻したい場合は、`localWriteBack` を `explicit` に設定します。そのうえで、更新を適用したいタイミングでのみ `--update-cache` を付与して実行します。
+   差分を見てから残したいなら、有効な設定ファイルに次のキーを足す。
 
-```json
-{
-  "grounding": {
-    "localWriteBack": "explicit"
-  }
-}
-```
+   ```json
+   {
+     "grounding": {
+       "localWriteBack": "explicit"
+     }
+   }
+   ```
 
-CLI パーサーがこの明示的な要求を受け取り、ランタイムへと処理を引き渡します。
+   `explicit` では、`--update-cache` を付けたときだけ書き込まれる。
 
-### 3. CI環境で実行する
+   ```bash
+   npx ambercast run --update-cache tests/ambercast/<name>.test.md
+   ```
 
-CI環境では、`ci.updateGroundingCache` を `false` のまま維持し、実行時にも `--update-cache` を指定しません。CI環境のデフォルトでは、明示的にオプトインしない限り書き戻しは行われません。
+3. ## CI では書き戻さない \{#keep-ci-off}
 
-## 検証 {#verification}
+   `ci.updateGroundingCache` を false のままにして、`--update-cache` も付けない。CI の既定は、書き戻さない設定である。CI で書き戻すのは、`--update-cache` を付けたときか、`ci.updateGroundingCache` が true のときだけで、`localWriteBack` は無視される。
 
-意図した通りに実行されているかを検証するには、`--json` フラグを付けて実行します。
+</Steps>
 
-```bash
-npx ambercast run --update-cache tests/ambercast/<name>.test.md
-```
-
-終了コード `0` はテストバッチ全体が合格した場合にのみ返されます。コミットを作成する前に、変更されたグラウンディングの差分（diff）を確認してください。
-
-## 関連情報 {#related}
-
-- [設定](/ambercast/ja/reference/configuration/)
-- [ambercast run](/ambercast/ja/reference/cli/run/)
-- [生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)
+## 確認 \{#verification}
 
 ```bash
 npx ambercast run --json tests/ambercast/<name>.test.md
 ```
+
+終了コードが `0` になるのは、バッチ全体が合格したときだけである。コミットする前に、グラウンディングの差分を確かめる。差分の読み方は[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+## 関連情報 \{#related}
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="grounding と ci の設定キーを確かめる。" />
+
+<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="--update-cache を含む run の全フラグを確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="書き戻された差分を、コミットの前に読む。" />
 
 ---
 
 # 生成された差分のレビュー
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/review-generated-diffs/
 
-生成された差分を実践的な順序でレビューする手順です。リゾルバーはプロンプトに対して固定のサフィックスを持つ plan および grounding コンパニオンを対応付けます。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+変わったファイルをすべて一覧し、プロンプト、計画（plan）、グラウンディングの順に読んで、check で鮮度を確かめる。
 
-- リゾルバーは、プロンプトに対して固定のサフィックスを持つ plan および grounding コンパニオンを対応付けます。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+リゾルバーは、プロンプトから計画とグラウンディングのコンパニオンファイルを、固定の接尾辞で対応付ける。接尾辞は `<name>.ambercast.plan.json` と `<name>.ambercast.grounding.json` である。
 
-1. 最初に `git status --short` を実行します。そこに表示された未追跡のプロンプト、plan、または grounding の各パスについて、その全内容を確認するか `git diff --no-index /dev/null <path>` を実行してください。変更された追跡対象ファイルには `git diff -- <path>` を使用します。これにより、セマンティックなレビューを行う前に候補となる完全なファイルセットが確定します。
-2. `tests/ambercast/<name>.test.md` をレビューし、レビュー内で意図したユーザー結果を明記します。プロンプトの正規化では、1 つの BOM と改行表現以外のコンテンツが保持されます。
-3. `tests/ambercast/<name>.ambercast.plan.json` をレビューし、生成されたステップをその結果と比較します。plan は独立した派生コンパニオンです。
-4. `tests/ambercast/<name>.ambercast.grounding.json` をレビューし、解決（resolution）の変更と意図の変更を区別します。grounding は独立した派生コンパニオンです。
-5. `npx ambercast check tests/ambercast/<name>.test.md` を実行します。check には書き込み、ブラウザ、プロバイダーの機能はありません。
+## 手順 \{#steps}
 
-## 確認 {#verification}
+<Steps>
 
-- 受け入れられたペアが fresh な状態である場合にのみ、check の終了コードが `0` になることを確認します。
+1. ## 変更されたファイルを一覧する \{#list-changes}
 
-## 関連情報 {#related}
+   ```bash
+   git status --short
+   ```
 
-リンク: [計画ドキュメント](/ambercast/ja/spec/plan-document/)、[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)、[ambercast check](/ambercast/ja/reference/cli/check/)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/)、[バージョン間のアップグレード](/ambercast/ja/how-to/upgrade/)。
+   未追跡のプロンプト・計画・グラウンディングは、全内容を読むか、`git diff --no-index /dev/null <path>` で見る。追跡済みで変わったファイルは、`git diff -- <path>` で見る。意味を読む前に、候補のファイルがすべてそろう。
+
+2. ## プロンプトを確かめる \{#review-prompt}
+
+   `tests/ambercast/<name>.test.md` を読み、意図したユーザー成果を言葉にする。プロンプトの正規化で変わるのは、先頭の BOM 1 つと改行の表現だけである。
+
+3. ## 計画を確かめる \{#review-plan}
+
+   `tests/ambercast/<name>.ambercast.plan.json` を読み、生成されたステップを、その成果と見比べる。計画は、プロンプトから派生した別のコンパニオンファイルである。
+
+4. ## グラウンディングを確かめる \{#review-grounding}
+
+   `tests/ambercast/<name>.ambercast.grounding.json` を読み、解決の変更と意図の変更を見分ける。グラウンディングも、派生した別のコンパニオンファイルである。
+
+5. ## 鮮度を確かめる \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   `check` には、書き込みも、ブラウザも、プロバイダーの機能も無い。
+
+</Steps>
+
+## 確認 \{#verification}
+
+受け入れたペアが fresh になって初めて、`check` は終了コード `0` で終わる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="計画ドキュメント" href="/ambercast/ja/spec/plan-document/" description="計画の構造を確かめる。" />
+
+<LinkCard title="グラウンディングドキュメント" href="/ambercast/ja/spec/grounding-document/" description="グラウンディングの構造を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の全フラグと結果を確かめる。" />
+
+<LinkCard title="ファイルレイアウト" href="/ambercast/ja/reference/file-layout/" description="コンパニオンファイルの置き場所を確かめる。" />
+
+<LinkCard title="バージョン間のアップグレード" href="/ambercast/ja/how-to/upgrade/" description="版を上げた後の計画の扱いを確かめる。" />
 
 ---
 

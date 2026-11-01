@@ -5,7 +5,7 @@ description: 設定でプロバイダーを固定する方法と、auto に任�
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-再現できる実行にはプロバイダーを設定で固定し、可用性を優先するときは auto に任せる。
+次の 3 つから選ぶ。再現できる実行には設定で固定し、可用性を優先するなら auto に任せ、1 回だけなら `--ai` で上書きする。
 
 ## 前提条件 \{#prerequisites}
 
@@ -23,11 +23,11 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","ai":{"provider":"claude"}}
    ```
 
-   優先順位は次のとおりである。`--ai` が解決済みの設定を上書きし、環境変数 `AMBERCAST_AI_PROVIDER` が設定ファイルを上書きする。固定が効くのは、どちらの上書きも無いときだけである。
+   優先順位は高い順に、`--ai`、環境変数 `AMBERCAST_AI_PROVIDER`、設定ファイルである。固定が効くのは、どちらの上書きも無いときだけである。
 
 2. ## 可用性を優先して auto に任せる \{#use-auto}
 
-   1 つに固定するより可用性を優先するなら、`ai.provider` を省く。`auto` は Claude を先に、次に Codex を調べ、最初に使えたプロバイダーを選ぶ。
+   どちらの上書きも無いときに、1 つに固定するより可用性を優先するなら、`ai.provider` を省く。`auto` は Claude を先に、次に Codex を調べ、最初に使えたプロバイダーを選ぶ。
 
 3. ## コマンドで 1 回だけ上書きする \{#override-once}
 

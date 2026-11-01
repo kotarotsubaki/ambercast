@@ -1,0 +1,64 @@
+---
+title: Control grounding write-back
+description: Decide whether changed grounding is written back locally and in CI.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Choose how changed grounding is persisted locally, and keep write-back off in CI.
+
+## Prerequisites \{#prerequisites}
+
+`grounding.localWriteBack` accepts `auto` or `explicit`. `ci.updateGroundingCache` is a boolean.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Confirm the local default \{#keep-local-default}
+
+   Locally, changed grounding is written back automatically. This is the default and means the same as the configuration below. Its `$schema` is the published configuration schema URL.
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"localWriteBack":"auto"}}
+   ```
+
+2. ## Review before writing \{#review-before-writing}
+
+   To look at the diff before you keep it, add these keys to a valid configuration file.
+
+   ```json
+   {
+     "grounding": {
+       "localWriteBack": "explicit"
+     }
+   }
+   ```
+
+   With `explicit`, a local run writes only when you pass `--update-cache`.
+
+   ```bash
+   npx ambercast run --update-cache tests/ambercast/<name>.test.md
+   ```
+
+3. ## Keep write-back off in CI \{#keep-ci-off}
+
+   Leave `ci.updateGroundingCache` false and omit `--update-cache`. CI defaults to no write-back. In CI, write-back happens only with `--update-cache` or `ci.updateGroundingCache: true`, and `localWriteBack` is ignored.
+
+</Steps>
+
+## Verification \{#verification}
+
+```bash
+npx ambercast run --json tests/ambercast/<name>.test.md
+```
+
+The exit code is `0` only for a passed batch. Inspect the grounding diff before you commit it; [Review generated diffs](/ambercast/how-to/review-generated-diffs/) shows how.
+
+## Related \{#related}
+
+<LinkCard title="Configuration" href="/ambercast/reference/configuration/" description="See the grounding and ci configuration keys." />
+
+<LinkCard title="ambercast run" href="/ambercast/reference/cli/run/" description="See every run flag, including --update-cache." />
+
+<LinkCard title="Review generated diffs" href="/ambercast/how-to/review-generated-diffs/" description="Read the written-back diff before you commit it." />

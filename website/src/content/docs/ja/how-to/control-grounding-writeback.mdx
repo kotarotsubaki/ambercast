@@ -1,0 +1,64 @@
+---
+title: グラウンディングのライトバック制御
+description: 変更されたグラウンディングを、ローカルと CI で書き戻すかどうかを設定で決める手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+ローカルでは書き戻しの方式を選び、CI では書き戻さない設定を保つ。
+
+## 前提条件 \{#prerequisites}
+
+`grounding.localWriteBack` には `auto` か `explicit` を指定する。`ci.updateGroundingCache` は真偽値である。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## ローカルの既定の書き戻しを確かめる \{#keep-local-default}
+
+   ローカルでは、変更されたグラウンディングが自動で書き戻される。これが既定で、次の設定と同じ意味である。`$schema` は公開されている設定スキーマの URL である。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"localWriteBack":"auto"}}
+   ```
+
+2. ## 確認してから書き戻す \{#review-before-writing}
+
+   差分を見てから残したいなら、有効な設定ファイルに次のキーを足す。
+
+   ```json
+   {
+     "grounding": {
+       "localWriteBack": "explicit"
+     }
+   }
+   ```
+
+   `explicit` では、`--update-cache` を付けたときだけ書き込まれる。
+
+   ```bash
+   npx ambercast run --update-cache tests/ambercast/<name>.test.md
+   ```
+
+3. ## CI では書き戻さない \{#keep-ci-off}
+
+   `ci.updateGroundingCache` を false のままにして、`--update-cache` も付けない。CI の既定は、書き戻さない設定である。CI で書き戻すのは、`--update-cache` を付けたときか、`ci.updateGroundingCache` が true のときだけで、`localWriteBack` は無視される。
+
+</Steps>
+
+## 確認 \{#verification}
+
+```bash
+npx ambercast run --json tests/ambercast/<name>.test.md
+```
+
+終了コードが `0` になるのは、バッチ全体が合格したときだけである。コミットする前に、グラウンディングの差分を確かめる。差分の読み方は[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+## 関連情報 \{#related}
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="grounding と ci の設定キーを確かめる。" />
+
+<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="--update-cache を含む run の全フラグを確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="書き戻された差分を、コミットの前に読む。" />

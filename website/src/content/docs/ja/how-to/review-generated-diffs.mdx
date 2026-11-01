@@ -1,0 +1,62 @@
+---
+title: 生成された差分のレビュー
+description: generate や heal の後に、変わったファイルを一覧し、プロンプト・計画・グラウンディングの順に読む手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+変わったファイルをすべて一覧し、プロンプト、計画（plan）、グラウンディングの順に読んで、check で鮮度を確かめる。
+
+## 前提条件 \{#prerequisites}
+
+リゾルバーは、プロンプトから計画とグラウンディングのコンパニオンファイルを、固定の接尾辞で対応付ける。接尾辞は `<name>.ambercast.plan.json` と `<name>.ambercast.grounding.json` である。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 変更されたファイルを一覧する \{#list-changes}
+
+   ```bash
+   git status --short
+   ```
+
+   未追跡のプロンプト・計画・グラウンディングは、全内容を読むか、`git diff --no-index /dev/null <path>` で見る。追跡済みで変わったファイルは、`git diff -- <path>` で見る。意味を読む前に、候補のファイルがすべてそろう。
+
+2. ## プロンプトを確かめる \{#review-prompt}
+
+   `tests/ambercast/<name>.test.md` を読み、意図したユーザー成果を言葉にする。プロンプトの正規化で変わるのは、先頭の BOM 1 つと改行の表現だけである。
+
+3. ## 計画を確かめる \{#review-plan}
+
+   `tests/ambercast/<name>.ambercast.plan.json` を読み、生成されたステップを、その成果と見比べる。計画は、プロンプトから派生した別のコンパニオンファイルである。
+
+4. ## グラウンディングを確かめる \{#review-grounding}
+
+   `tests/ambercast/<name>.ambercast.grounding.json` を読み、解決の変更と意図の変更を見分ける。グラウンディングも、派生した別のコンパニオンファイルである。
+
+5. ## 鮮度を確かめる \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   `check` には、書き込みも、ブラウザも、プロバイダーの機能も無い。
+
+</Steps>
+
+## 確認 \{#verification}
+
+受け入れたペアが fresh になって初めて、`check` は終了コード `0` で終わる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="計画ドキュメント" href="/ambercast/ja/spec/plan-document/" description="計画の構造を確かめる。" />
+
+<LinkCard title="グラウンディングドキュメント" href="/ambercast/ja/spec/grounding-document/" description="グラウンディングの構造を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の全フラグと結果を確かめる。" />
+
+<LinkCard title="ファイルレイアウト" href="/ambercast/ja/reference/file-layout/" description="コンパニオンファイルの置き場所を確かめる。" />
+
+<LinkCard title="バージョン間のアップグレード" href="/ambercast/ja/how-to/upgrade/" description="版を上げた後の計画の扱いを確かめる。" />

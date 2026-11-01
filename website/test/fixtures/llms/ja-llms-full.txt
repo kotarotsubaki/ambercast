@@ -552,7 +552,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    npx ambercast generate tests/ambercast/checkout.test.md --dry-run
    ```
 
-   生成が必要なプロンプトの結果は、ステータスが `would-generate` で、`dryRun: true` になる。成果物は書き込まれない。
+   生成が必要なプロンプトの結果は、ステータスが `would-generate` で、`dryRun: true` になる。成果物は書き込まれない。`dryRun` の値を見るには `--json` を足す。
 
 </Steps>
 
@@ -610,6 +610,8 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    ```bash
    npx ambercast generate tests/ambercast/<name>.test.md
    ```
+
+   `<name>` は、ここでも後の再生のコマンドでも、自分のプロンプトのファイル名に置き換える。そのまま実行すると、シェルが `<name>` をリダイレクトとして読む。
 
    generate は、まず候補の計画を作り、新しく提案されたシークレット名を一覧にする。対話式の端末では名前を 1 つずつ確かめ、このテストに合うものだけを承認する。
 
@@ -755,6 +757,8 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    ```bash
    npx ambercast generate --ai codex
    ```
+
+   プロンプトのパスを渡さないと、`generate` は見つけたプロンプトをすべて選ぶ。1 つに絞るには、`npx ambercast generate tests/ambercast/checkout.test.md --ai codex` のようにパスを足す。
 
    `--ai` に指定できるのは `claude` と `codex` である。ほかの値を渡すと、コマンドは終了コード `2` で終わる。
 
@@ -924,7 +928,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    git status --short
    ```
 
-   未追跡のプロンプト・計画・グラウンディングは、全内容を読むか、`git diff --no-index /dev/null <path>` で見る。追跡済みで変わったファイルは、`git diff -- <path>` で見る。意味を読む前に、候補のファイルがすべてそろう。
+   未追跡のプロンプト・計画・グラウンディングは、全内容を読むか、`git diff --no-index /dev/null <path>` で見る。追跡済みで変わったファイルは、`git diff -- <path>` で見る。ステージ済みなら `git diff HEAD -- <path>` を使う。意味を読む前に、候補のファイルがすべてそろう。
 
 2. ## プロンプトを確かめる \{#review-prompt}
 
@@ -936,7 +940,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 4. ## グラウンディングを確かめる \{#review-grounding}
 
-   `tests/ambercast/<name>.ambercast.grounding.json` を読み、解決の変更と意図の変更を見分ける。グラウンディングも、派生した別のコンパニオンファイルである。
+   `tests/ambercast/<name>.ambercast.grounding.json` を読み、解決の変更と意図の変更を見分ける。グラウンディングも、派生した別のコンパニオンファイルである。`grounding.repositoryPolicy` を `uncommitted` にしていると、グラウンディングのファイルは無いことがある。その場合、この手順は飛ばす。
 
 5. ## 鮮度を確かめる \{#check-freshness}
 
@@ -950,7 +954,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ## 確認 \{#verification}
 
-受け入れたペアが fresh になって初めて、`check` は終了コード `0` で終わる。
+受け入れたペアが fresh になって初めて、`check` は終了コード `0` で終わる。`uncommitted` でグラウンディングのファイルが無いときは、`fresh-without-grounding` を返し、やはり終了コード `0` で終わる。
 
 ## 関連情報 \{#related}
 

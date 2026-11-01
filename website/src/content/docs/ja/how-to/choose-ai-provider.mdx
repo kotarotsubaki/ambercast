@@ -35,6 +35,8 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    npx ambercast generate --ai codex
    ```
 
+   プロンプトのパスを渡さないと、`generate` は見つけたプロンプトをすべて選ぶ。1 つに絞るには、`npx ambercast generate tests/ambercast/checkout.test.md --ai codex` のようにパスを足す。
+
    `--ai` に指定できるのは `claude` と `codex` である。ほかの値を渡すと、コマンドは終了コード `2` で終わる。
 
 </Steps>

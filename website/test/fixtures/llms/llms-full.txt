@@ -552,7 +552,7 @@ A prompt file name must end in exactly `.test.md`. That suffix is how ambercast 
    npx ambercast generate tests/ambercast/checkout.test.md --dry-run
    ```
 
-   For a prompt that needs generation, the result has status `would-generate` and `dryRun: true`. No artifacts are written.
+   For a prompt that needs generation, the result has status `would-generate` and `dryRun: true`. No artifacts are written. Add `--json` to see the `dryRun` field.
 
 </Steps>
 
@@ -610,6 +610,8 @@ You do not need an existing `ambercast.config.json`. When accepted consent has t
    ```bash
    npx ambercast generate tests/ambercast/<name>.test.md
    ```
+
+   Replace `<name>` with your prompt file name, here and in the replay command below. The shell reads a literal `<name>` as redirection.
 
    Generation first builds a candidate plan and lists any newly proposed secret names. In an interactive terminal, review each name and accept only the names that fit this test.
 
@@ -755,6 +757,8 @@ Choose one of three ways: pin a provider for reproducible runs, let `auto` choos
    ```bash
    npx ambercast generate --ai codex
    ```
+
+   Without a prompt path, `generate` selects every discovered prompt. To limit it to one, add a path, as in `npx ambercast generate tests/ambercast/checkout.test.md --ai codex`.
 
    `--ai` accepts `claude` and `codex`. Any other value makes the command exit `2`.
 
@@ -924,7 +928,7 @@ The resolver maps a prompt to its plan and grounding companions by fixed suffixe
    git status --short
    ```
 
-   For every untracked prompt, plan, or grounding path, read its full contents or run `git diff --no-index /dev/null <path>`. For changed tracked files, run `git diff -- <path>`. This fixes the complete candidate file set before you review meaning.
+   For every untracked prompt, plan, or grounding path, read its full contents or run `git diff --no-index /dev/null <path>`. For changed tracked files, run `git diff -- <path>`, or `git diff HEAD -- <path>` when the file is staged. This fixes the complete candidate file set before you review meaning.
 
 2. ## Review the prompt \{#review-prompt}
 
@@ -936,7 +940,7 @@ The resolver maps a prompt to its plan and grounding companions by fixed suffixe
 
 4. ## Review the grounding \{#review-grounding}
 
-   Read `tests/ambercast/<name>.ambercast.grounding.json` and tell a resolution change from an intent change. The grounding is a separate derived companion.
+   Read `tests/ambercast/<name>.ambercast.grounding.json` and tell a resolution change from an intent change. The grounding is a separate derived companion. With `grounding.repositoryPolicy` set to `uncommitted`, there may be no grounding file; skip this step then.
 
 5. ## Check freshness \{#check-freshness}
 
@@ -950,7 +954,7 @@ The resolver maps a prompt to its plan and grounding companions by fixed suffixe
 
 ## Verification \{#verification}
 
-`check` exits `0` only after the accepted pair is fresh.
+`check` exits `0` only after the accepted pair is fresh. With the `uncommitted` policy and no grounding file, it reports `fresh-without-grounding` and also exits `0`.
 
 ## Related \{#related}
 

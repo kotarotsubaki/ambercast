@@ -552,7 +552,7 @@ Prompt 文件名必须严格以 `.test.md` 结尾。ambercast 通过这个后缀
    npx ambercast generate tests/ambercast/checkout.test.md --dry-run
    ```
 
-   对需要生成的 Prompt，结果的状态为 `would-generate`，并带有 `dryRun: true`。不会写入任何产物。
+   对需要生成的 Prompt，结果的状态为 `would-generate`，并带有 `dryRun: true`。不会写入任何产物。要查看 `dryRun` 字段，请加上 `--json`。
 
 </Steps>
 
@@ -610,6 +610,8 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    ```bash
    npx ambercast generate tests/ambercast/<name>.test.md
    ```
+
+   把 `<name>` 替换为你的 Prompt 文件名，这里和后面的回放命令都一样。直接运行时，shell 会把 `<name>` 当作重定向。
 
    生成先构建候选执行计划，并列出新提出的机密名称。在交互式终端中，逐个审查名称，只批准适用于该测试的名称。
 
@@ -755,6 +757,8 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    ```bash
    npx ambercast generate --ai codex
    ```
+
+   不带 Prompt 路径时，`generate` 会选中发现的所有 Prompt。要限制为一个，请像 `npx ambercast generate tests/ambercast/checkout.test.md --ai codex` 这样加上路径。
 
    `--ai` 接受 `claude` 和 `codex`。传入其他值时，命令以退出码 `2` 结束。
 
@@ -924,7 +928,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    git status --short
    ```
 
-   对每个未跟踪的 Prompt、执行计划或定位缓存路径，检查其完整内容，或运行 `git diff --no-index /dev/null <path>`。对已跟踪且发生变更的文件，运行 `git diff -- <path>`。这样在审查含义之前，就能确定完整的候选文件集。
+   对每个未跟踪的 Prompt、执行计划或定位缓存路径，检查其完整内容，或运行 `git diff --no-index /dev/null <path>`。对已跟踪且发生变更的文件，运行 `git diff -- <path>`；文件已暂存时，运行 `git diff HEAD -- <path>`。这样在审查含义之前，就能确定完整的候选文件集。
 
 2. ## 审查 Prompt \{#review-prompt}
 
@@ -936,7 +940,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 4. ## 审查定位缓存 \{#review-grounding}
 
-   阅读 `tests/ambercast/<name>.ambercast.grounding.json`，区分解析变化与意图变化。定位缓存也是单独的派生伴生文件。
+   阅读 `tests/ambercast/<name>.ambercast.grounding.json`，区分解析变化与意图变化。定位缓存也是单独的派生伴生文件。当 `grounding.repositoryPolicy` 为 `uncommitted` 时，可能没有定位缓存文件，此时跳过这一步。
 
 5. ## 检查新鲜度 \{#check-freshness}
 
@@ -950,7 +954,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ## 验证 \{#verification}
 
-只有被接受的这一对文件为 fresh 时，`check` 的退出码才为 `0`。
+只有被接受的这一对文件为 fresh 时，`check` 的退出码才为 `0`。在 `uncommitted` 策略下没有定位缓存文件时，它会报告 `fresh-without-grounding`，退出码同样为 `0`。
 
 ## 相关链接 \{#related}
 

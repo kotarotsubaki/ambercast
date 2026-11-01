@@ -35,6 +35,8 @@ Choose one of three ways: pin a provider for reproducible runs, let `auto` choos
    npx ambercast generate --ai codex
    ```
 
+   Without a prompt path, `generate` selects every discovered prompt. To limit it to one, add a path, as in `npx ambercast generate tests/ambercast/checkout.test.md --ai codex`.
+
    `--ai` accepts `claude` and `codex`. Any other value makes the command exit `2`.
 
 </Steps>

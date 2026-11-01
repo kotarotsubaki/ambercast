@@ -35,6 +35,8 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    npx ambercast generate --ai codex
    ```
 
+   不带 Prompt 路径时，`generate` 会选中发现的所有 Prompt。要限制为一个，请像 `npx ambercast generate tests/ambercast/checkout.test.md --ai codex` 这样加上路径。
+
    `--ai` 接受 `claude` 和 `codex`。传入其他值时，命令以退出码 `2` 结束。
 
 </Steps>

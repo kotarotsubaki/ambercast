@@ -122,6 +122,20 @@ describe('cross-locale real-document integrity oracle', () => {
   }
 });
 
+describe('flow diagram styles stay out of llms-full', () => {
+  it.each(locales)('%s renders real documents without embedded styles', (locale) => {
+    const full = renderLlmsFullTxt(recordsFor(locale).filter((record) => record.status === 'available'));
+    expect(full.includes('<style'), `${locale} rendered llms-full embeds styles`).toBe(false);
+    expect(full.includes('--ac-flow-'), `${locale} rendered llms-full contains flow tokens`).toBe(false);
+  });
+
+  it.each(['llms-full.txt', 'ja-llms-full.txt', 'zh-cn-llms-full.txt'])('%s contains no style markup or flow tokens', (filename) => {
+    const full = readFileSync(new URL(`./fixtures/llms/${filename}`, import.meta.url), 'utf8');
+    expect(full.includes('<style'), `${filename} embeds styles`).toBe(false);
+    expect(full.includes('--ac-flow-'), `${filename} contains flow tokens`).toBe(false);
+  });
+});
+
 describe('buildPageUrl', () => {
   it('uses no locale prefix for English and a locale prefix for Japanese and Simplified Chinese', () => {
     expect(buildPageUrl('en', 'agents/overview')).toBe('https://kotarotsubaki.github.io/ambercast/agents/overview/');

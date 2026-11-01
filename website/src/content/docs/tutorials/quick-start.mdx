@@ -55,10 +55,10 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast generate tests/ambercast/find-page.test.md
    ```
 
-   Success leaves you with:
+   Success leaves you with the following. [ambercast generate](/ambercast/reference/cli/generate/#side-effects) lists every side effect and exit code.
 
    - exit code `0`, result status `generated`
-   - two derived files, plan and grounding, written beside the generated prompt
+   - two derived files, plan and grounding, written beside the generated prompt ([File layout](/ambercast/reference/file-layout/#companions))
 
    An agent using the setup prompt ([Agent setup](/ambercast/agents/setup-prompt/#copy-paste-prompt)) assumes the server is already running and does not start it without a request.
 
@@ -68,7 +68,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    npx ambercast run --resolve tests/ambercast/find-page.test.md
    ```
 
-   Success leaves you with:
+   With `--resolve`, a step without grounding uses AI resolution ([ambercast run](/ambercast/reference/cli/run/#resolve)). Success leaves you with:
 
    - exit code `0`
    - a per-invocation `report.json` written under the configured runs directory
@@ -81,7 +81,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
    Review every tracked, changed file with `git diff -- <path>`. For an untracked prompt, plan, or grounding path, inspect its full contents or run `git diff --no-index /dev/null <path>`.
 
-   After review, a human commits the three files. Also review and commit the files `init` created, such as `ambercast.config.json`, separately, the same way you commit any other change.
+   By default, a human commits the three files after review; an agent presents the complete change set and commits only after an explicit request in the conversation. Neither a CLI flag nor `--yes` is that request ([Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt)). Also review and commit the files `init` created, such as `ambercast.config.json`, separately, the same way you commit any other change.
 
 </Steps>
 

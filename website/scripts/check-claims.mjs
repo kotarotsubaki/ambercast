@@ -9,6 +9,16 @@ import { LLMS_OUTPUT_PATHS } from './lib/llms.mjs';
 
 const separator = /^(?:[\s,、，]*(?:(?:and\/or|and|or|および|及び|と|和|与|以及|或)[\s,、，]*)?)$/i;
 const linkPattern = /\]\(((?:\/ambercast\/|https:\/\/kotarotsubaki\.github\.io\/ambercast\/)[^\s)]*)\)/g;
+// A LinkCard or raw <a> carries its destination in an attribute, which Markdown link
+// syntax never sees. The pattern accepts only a standalone lowercase `href`:
+// the name must follow whitespace, a quote, or the line start, so `data-href`,
+// `xlink:href`, and `foo.href` stay out while an `href="…"` written inside another
+// attribute's quoted value still counts — the scan is lexical, like linkPattern, not an
+// HTML parse. The value is the quoted string verbatim (no entity decoding), so a
+// diagnostic shows exactly what the author typed. JSX expressions (`href={…}`) and
+// external origins never match; a value split across lines is out of reach of the
+// line-based scan by design.
+const hrefPattern = /(?<![^\s"'])href\s*=\s*(?:"((?:\/ambercast\/|https:\/\/kotarotsubaki\.github\.io\/ambercast\/)[^"]*)"|'((?:\/ambercast\/|https:\/\/kotarotsubaki\.github\.io\/ambercast\/)[^']*)')/g;
 const required = ['rule', 'path', 'claimHash', 'scope', 'reason', 'owner', 'removeWhen'];
 const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
 const START_TAG_PATTERN = /<[A-Za-z][-A-Za-z0-9]*(?:\s+[A-Za-z_:][-A-Za-z0-9_:.]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>/g;
@@ -146,7 +156,13 @@ function enumerations(line, vocabulary, locale) {
  * Only a marked token set differing from available commands
  * violates command-enumeration; expected and actual are sorted sets.
  *
- * The same masked lines yield local and canonical absolute site links. The
+ * The same masked lines yield local and canonical absolute site links, from both
+ * Markdown link syntax and `href` attribute values; each occurrence counts once
+ * toward the link total and goes through the same resolver, so a LinkCard and a
+ * Markdown link to the same destination always receive the same verdict. Within one
+ * line, link findings are ordered by the column where each occurrence starts, which
+ * keeps a mixed line's diagnostics in reading order; findings without a column
+ * (enumerations) precede them. The
  * resolver splits at the first unescaped hash, strips a trailing page slash, treats a
  * dotted final segment as an artifact under public/ or a declared llms output, and
  * otherwise resolves spec pages or the first existing Markdown/MDX page candidate.
@@ -175,7 +191,7 @@ export async function checkClaims({ repoRoot } = {}) {
   const findings = [];
   const anchorsCache = new Map();
   let links = 0;
-  const add = (page, line, rule, expected, actual, hash) => findings.push({ check: 'claims', page, line, rule, expected, actual, claimHash: hash });
+  const add = (page, line, rule, expected, actual, hash, column) => findings.push({ check: 'claims', page, line, rule, expected, actual, claimHash: hash, column });
   if (!sources.length) add('', 0, 'corpus-empty', 'at least one source', 'none', '');
   const commands = new Set(capabilities.commands);
   const vocabulary = new Set([...capabilities.commands, ...capabilities.planned]);
@@ -191,10 +207,14 @@ export async function checkClaims({ repoRoot } = {}) {
       for (const tokens of enumerations(line, vocabulary, locale)) {
         if (tokens.join(',') !== [...commands].sort().join(',')) add(path, index + 1, 'command-enumeration', [...commands].sort().join(', '), tokens.join(', '), hash);
       }
-      for (const match of line.matchAll(linkPattern)) {
+      const occurrences = [
+        ...[...line.matchAll(linkPattern)].map((match) => ({ column: match.index, url: match[1] })),
+        ...[...line.matchAll(hrefPattern)].map((match) => ({ column: match.index, url: match[1] ?? match[2] })),
+      ].sort((a, b) => a.column - b.column);
+      for (const { column, url } of occurrences) {
         links += 1;
-        const rule = await resolveLink(repoRoot, match[1], anchorsCache);
-        if (rule) add(path, index + 1, rule, 'resolvable link', match[1], hash);
+        const rule = await resolveLink(repoRoot, url, anchorsCache);
+        if (rule) add(path, index + 1, rule, 'resolvable link', url, hash, column);
       }
     }
   }
@@ -217,7 +237,8 @@ export async function checkClaims({ repoRoot } = {}) {
       kept.push({ check: 'claims', page: entry.path, line: 0, rule: 'allowlist-stale', expected: entry.rule, actual: entry.claimHash });
     }
   }
-  return kept.map(({ claimHash: _hash, ...finding }) => finding).sort((a, b) => a.page.localeCompare(b.page) || a.line - b.line || a.rule.localeCompare(b.rule));
+  return kept.sort((a, b) => a.page.localeCompare(b.page) || a.line - b.line || (a.column ?? -1) - (b.column ?? -1) || a.rule.localeCompare(b.rule))
+    .map(({ claimHash: _hash, column: _column, ...finding }) => finding);
 }
 
 /**

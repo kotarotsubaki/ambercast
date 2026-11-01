@@ -881,7 +881,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 3. ## CI では書き戻さない \{#keep-ci-off}
 
-   `ci.updateGroundingCache` を false のままにして、`--update-cache` も付けない。CI の既定は、書き戻さない設定である。CI で書き戻すのは、`--update-cache` を付けたときか、`ci.updateGroundingCache` が true のときだけで、`localWriteBack` は無視される。
+   `ci.updateGroundingCache` を false のままにして、`--update-cache` も付けない。CI の既定は、書き戻さない設定である。CI で書き戻すのは、`--update-cache` を付けたときか、`ci.updateGroundingCache` が true のときだけで、`localWriteBack` は無視される。全条件は [run の書き戻しゲート](/ambercast/ja/reference/cli/run/#grounding-write-back)にある。
 
 </Steps>
 
@@ -895,7 +895,7 @@ npx ambercast run --json tests/ambercast/<name>.test.md
 
 ## 関連情報 \{#related}
 
-<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="grounding と ci の設定キーを確かめる。" />
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="グラウンディングと CI の設定キーを確かめる。" />
 
 <LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="--update-cache を含む run の全フラグを確かめる。" />
 

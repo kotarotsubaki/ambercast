@@ -43,7 +43,7 @@ Choose how changed grounding is persisted locally, and keep write-back off in CI
 
 3. ## Keep write-back off in CI \{#keep-ci-off}
 
-   Leave `ci.updateGroundingCache` false and omit `--update-cache`. CI defaults to no write-back. In CI, write-back happens only with `--update-cache` or `ci.updateGroundingCache: true`, and `localWriteBack` is ignored.
+   Leave `ci.updateGroundingCache` false and omit `--update-cache`. CI defaults to no write-back. In CI, write-back happens only with `--update-cache` or `ci.updateGroundingCache: true`, and `localWriteBack` is ignored. [How `run` gates write-back](/ambercast/reference/cli/run/#grounding-write-back) lists every condition.
 
 </Steps>
 

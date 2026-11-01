@@ -639,7 +639,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 ## 验证 \{#verification}
 
 - 同意或许可列表条目生效后，生成会写入执行计划，并把新批准的名称记录到 `secrets.allow`。
-- 许可列表的提交与执行计划、定位缓存的写入是相互独立的操作。一次生成中批准的全部名称，会在写入任何候选文件之前一次性提交。如果提交之后生成被中断，`secrets.allow` 可能领先于产物。重新运行 `generate`，即可用已允许的名称恢复。
+- 许可列表的提交与执行计划、定位缓存的写入是相互独立的操作。一次生成中批准的全部名称，会在写入任何候选文件之前一次性提交。如果提交之后生成被中断或失败，`secrets.allow` 可能领先于产物。重新运行 `generate`，即可用已允许的名称恢复。
 - 若拒绝同意，或在非交互式终端中无法请求同意，生成会以 `SECRET_CONSENT_REQUIRED` 失败，且不写入任何候选产物。把已审查的名称加入 `secrets.allow`，然后重新运行。
 
 在命令环境中保留所需的 `AMBERCAST_SECRET_<NAME>` 变量，对安全的目标进行回放。
@@ -881,7 +881,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 3. ## 在 CI 中保持关闭回写 \{#keep-ci-off}
 
-   保持 `ci.updateGroundingCache` 为 false，也不要传入 `--update-cache`。CI 默认不回写。在 CI 中，只有传入 `--update-cache` 或 `ci.updateGroundingCache: true` 时才会回写，且 `localWriteBack` 会被忽略。
+   保持 `ci.updateGroundingCache` 为 false，也不要传入 `--update-cache`。CI 默认不回写。在 CI 中，只有传入 `--update-cache` 或 `ci.updateGroundingCache: true` 时才会回写，且 `localWriteBack` 会被忽略。全部条件见 [run 的回写门禁](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)。
 
 </Steps>
 
@@ -895,7 +895,7 @@ npx ambercast run --json tests/ambercast/<name>.test.md
 
 ## 相关链接 \{#related}
 
-<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解 grounding 和 ci 的配置键。" />
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解定位缓存和 CI 的配置键。" />
 
 <LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解包括 --update-cache 在内的 run 全部标志。" />
 

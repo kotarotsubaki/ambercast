@@ -43,7 +43,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 3. ## 在 CI 中保持关闭回写 \{#keep-ci-off}
 
-   保持 `ci.updateGroundingCache` 为 false，也不要传入 `--update-cache`。CI 默认不回写。在 CI 中，只有传入 `--update-cache` 或 `ci.updateGroundingCache: true` 时才会回写，且 `localWriteBack` 会被忽略。
+   保持 `ci.updateGroundingCache` 为 false，也不要传入 `--update-cache`。CI 默认不回写。在 CI 中，只有传入 `--update-cache` 或 `ci.updateGroundingCache: true` 时才会回写，且 `localWriteBack` 会被忽略。全部条件见 [run 的回写门禁](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)。
 
 </Steps>
 
@@ -57,7 +57,7 @@ npx ambercast run --json tests/ambercast/<name>.test.md
 
 ## 相关链接 \{#related}
 
-<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解 grounding 和 ci 的配置键。" />
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解定位缓存和 CI 的配置键。" />
 
 <LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解包括 --update-cache 在内的 run 全部标志。" />
 

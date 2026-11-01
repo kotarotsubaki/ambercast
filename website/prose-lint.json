@@ -1,5 +1,5 @@
 {
-  "pages": ["explanation/healing-model", "how-to/select-tests", "reference/cli/run", "tutorials/quick-start"],
+  "pages": ["explanation/healing-model", "how-to/select-tests", "reference/cli/run", "tutorials/github-actions", "tutorials/quick-start", "tutorials/repair-your-first-drift", "tutorials/review-your-first-plan"],
   "limits": {
     "h3Max": 5,
     "calloutMax": 2,

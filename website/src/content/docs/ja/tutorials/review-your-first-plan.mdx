@@ -1,0 +1,50 @@
+---
+title: 最初の計画とグラウンディングを読む
+description: 生成された計画とグラウンディングの置き場所を確かめ、check の結果から鮮度を読み取る。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+このチュートリアルは[5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)の続きである。
+
+## 前提条件 \{#prerequisites}
+
+- 5分で動かす最初のテストを終えている。サンプルの `tests/ambercast/find-page.test.md` から計画（plan）とグラウンディングを生成し、再生まで済ませてある。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 計画を開く \{#open-plan}
+
+   `tests/ambercast/find-page.ambercast.plan.json` を開く。読むのは、最上位の `schemaVersion`、`source.inputsDigest`、`steps` の3つである。
+
+   このパスは、プロンプトの末尾の `.test.md` を `.ambercast.plan.json` に置き換えて決まる。構造は[計画ドキュメント](/ambercast/ja/spec/plan-document/)、置き場所は[ファイルレイアウト](/ambercast/ja/reference/file-layout/)で確かめられる。
+
+2. ## グラウンディングを開く \{#open-grounding}
+
+   `tests/ambercast/find-page.ambercast.grounding.json` を開く。読むのは、`schemaVersion`、`planDigest`、`entries` である。
+
+   同じプロンプトの `.test.md` を `.ambercast.grounding.json` に置き換えて、このパスが決まる。構造は[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)にある。
+
+3. ## 鮮度を確かめる \{#check-freshness}
+
+   ```bash
+   npx ambercast check tests/ambercast/find-page.test.md --json
+   ```
+
+   `check` は、鮮度の結果を含むレポートを出力する。fresh の結果は、ステータスが `fresh` か `fresh-without-grounding` になる。
+
+</Steps>
+
+## 確認 \{#verification}
+
+- 計画とグラウンディングが、プロンプトと同じディレクトリにあると説明できる。
+- ステータスが `fresh` になっている。`fresh-without-grounding` が出るのは `grounding.repositoryPolicy` が `uncommitted` のときだけで、5分で動かす最初のテストの既定では `fresh` になる。
+- `check` は、レポート全体に失敗・ケースのエラー・中断が無いときだけ終了コード `0` で終わる。選択したケースが fresh でも、`check` は成果物のうち対応する相手の無いものも調べるため、終了コードが `0` にならないことがある。結果の読み方は [ambercast check](/ambercast/ja/reference/cli/check/) と[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+## 次のステップ \{#next-steps}
+
+次は、UI の変更で壊れたテストを修復する。
+
+<LinkCard title="UI変更後にテストを修復する" href="/ambercast/ja/tutorials/repair-your-first-drift/" description="練習用アプリのUIを変えて、失敗したテストを修復する。" />

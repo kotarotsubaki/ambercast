@@ -1,0 +1,105 @@
+---
+title: UI変更後にテストを修復する
+description: 使い捨ての練習用アプリで UI を変えて、失敗したテストを idempotent なターゲットで修復する。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+練習用アプリの UI をロケーターに影響する形で変え、失敗を再現してから修復する。
+
+## 前提条件 \{#prerequisites}
+
+- 自由に変更してよい、使い捨ての練習用アプリケーションがある。
+- そのアプリに対して、現在通るテストが生成済みである。例は[5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)のサンプルである。
+- 修復するには、対象ターゲットの `healReplayIsolation` が `idempotent` でなければならない。組み込みの `web-user` と未設定の値は `stateful` で、修復できない。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## ターゲットを idempotent にする \{#set-idempotent}
+
+   `init` が作った `ambercast.config.json` を開き、選択したターゲットに `"healReplayIsolation": "idempotent"` を1つ足す。ファイルの `$schema` はそのまま残す。
+
+   変えるのはこのキーだけである。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、`secretSinkOrigins` は変えず、ターゲットの追加・削除・改名もしない。`targets` を指定すると既定のターゲットを置き換える点は、[設定](/ambercast/ja/reference/configuration/#file-selection)にある。
+
+   設定ファイルが無いプロジェクトでは、次の1行をファイル全体として書く。設定ファイルには `$schema` が必須で、その URL は[公開済みの設定スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata)を指す。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
+   ```
+
+   ターゲット名と定義は `inputsDigest` に入るが、`healReplayIsolation` は実行時に解決されて入らない。そのため既存の計画（plan）は fresh のままである（[設定](/ambercast/ja/reference/configuration/#targets)）。
+
+2. ## 失敗を再現する \{#reproduce-failure}
+
+   失敗する実行の前に、runs ディレクトリの保持ポリシーと、そこを読める人を確認する。完了した `run` はそこへ `report.json` を書き、失敗のスクリーンショットを残すことがある（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)）。
+
+   続けて、ロケーターに影響する UI の変更を加えて、テストを実行する。
+
+   ```bash
+   npx ambercast run tests/ambercast/<name>.test.md
+   ```
+
+   修復の前に、失敗した結果を確かめる。既定ではグラウンディングのミスは AI を呼ばずに失敗し、コミット済みのグラウンディングは書き換わらない。
+
+   `--resolve` は、ライブの再解決が目的のときだけ付ける。既定のローカル書き戻しでは再解決した指紋が保存されるため、ドリフトを示さずに実行が通ることもある（[ambercast run](/ambercast/ja/reference/cli/run/#resolve)）。
+
+3. ## 修復を試す \{#preview-repair}
+
+   ```bash
+   npx ambercast heal --dry-run tests/ambercast/<name>.test.md
+   ```
+
+   完了した修復は `preview-only` と記録され、計画とグラウンディングの書き込みは適用されない。レポートに候補のパッチは出ないので、この手順は差分のレビューではなく、承認の判断に使う。
+
+   `--dry-run` でも試行ごとの証拠は書かれ、失敗のスクリーンショットも残りうる。書き込みの無いプレビューではない（[ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions)）。
+
+4. ## 修復を適用する \{#apply-repair}
+
+   人の明示の承認を得てから実行する。人は対話端末で次のコマンドを実行し、CLI の確認に答える。
+
+   ```bash
+   npx ambercast heal tests/ambercast/<name>.test.md
+   ```
+
+   エージェントなど非対話の呼び出し元は、その承認が会話に現れた後でだけ、`--yes` を付けて実行する。
+
+   ```bash
+   npx ambercast heal --yes tests/ambercast/<name>.test.md
+   ```
+
+   `--yes` が事前に許可するのは CLI の確認だけで、エージェントの書き込みに対する人の承認の代わりにはならない（[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）。
+
+5. ## 鮮度を確かめる \{#check-fresh}
+
+   ```bash
+   npx ambercast check tests/ambercast/<name>.test.md
+   ```
+
+   終了コード `0` は、修復したケースが fresh であることを示す。`0` 以外のときは[古くなった成果物の復旧](/ambercast/ja/how-to/recover-stale-artifacts/)に進む。詳細は [ambercast check](/ambercast/ja/reference/cli/check/) にある。
+
+6. ## 変更を確認してコミットする \{#review-commit}
+
+   ```bash
+   git status --short
+   ```
+
+   対象の追跡済みファイル（設定、変更した UI のファイル、計画、グラウンディング）は `git diff -- <path>` で示す。未追跡のファイルは、内容全体か `git diff --no-index /dev/null <path>` で示す。変更一式を示したら、そこで止まる。
+
+   コミットは、会話で明示の依頼があったときだけ行う。取り消しは、対象のファイルを確認し、明示の承認を得てからだけ行う。エージェントの既定は差分の提示で、推測で既存の変更を捨てる事故を防ぐ（[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)）。
+
+</Steps>
+
+引数を付けない `npx ambercast heal` は、一致する全テストを対象にする。全テストの修復として別途承認を得たときだけ使う（[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)）。
+
+## 確認 \{#verification}
+
+- 失敗していたケースが修復され、`npx ambercast check` が終了コード `0` で終わる。
+- 変更一式を示し、コミットの依頼を待っている。
+
+## 次のステップ \{#next-steps}
+
+次は、この順序を CI に載せる。
+
+<LinkCard title="GitHub Actions で ambercast を実行する" href="/ambercast/ja/tutorials/github-actions/" description="check が通ったときだけ run へ進むジョブを作る。" />

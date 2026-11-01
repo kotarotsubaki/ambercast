@@ -313,7 +313,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 1. ## 計画を開く \{#open-plan}
 
-   `tests/ambercast/find-page.ambercast.plan.json` を開く。読むのは、最上位の `schemaVersion`、`source.inputsDigest`、`steps` の3つである。
+   `tests/ambercast/find-page.ambercast.plan.json` を開く。読むのは、`schemaVersion`、`source.inputsDigest`、`steps` の3つである。
 
    このパスは、プロンプトの末尾の `.test.md` を `.ambercast.plan.json` に置き換えて決まる。構造は[計画ドキュメント](/ambercast/ja/spec/plan-document/)、置き場所は[ファイルレイアウト](/ambercast/ja/reference/file-layout/)で確かめられる。
 
@@ -368,7 +368,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
    `init` が作った `ambercast.config.json` を開き、選択したターゲットに `"healReplayIsolation": "idempotent"` を1つ足す。ファイルの `$schema` はそのまま残す。
 
-   変えるのはこのキーだけである。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、`secretSinkOrigins` は変えず、ターゲットの追加・削除・改名もしない。`targets` を指定すると既定のターゲットを置き換える点は、[設定](/ambercast/ja/reference/configuration/#file-selection)にある。
+   変えるのはこのキーだけである。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、`secretSinkOrigins` は変えず、ターゲットの追加・削除・改名もしない。`targets` は既定のターゲットを置き換える（[設定](/ambercast/ja/reference/configuration/#file-selection)）。
 
    設定ファイルが無いプロジェクトでは、次の1行をファイル全体として書く。設定ファイルには `$schema` が必須で、その URL は[公開済みの設定スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata)を指す。
 
@@ -376,7 +376,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
    ```
 
-   ターゲット名と定義は `inputsDigest` に入るが、`healReplayIsolation` は実行時に解決されて入らない。そのため既存の計画（plan）は fresh のままである（[設定](/ambercast/ja/reference/configuration/#targets)）。
+   `healReplayIsolation` は `inputsDigest` に入らないため、既存の計画（plan）は fresh のままである（[設定](/ambercast/ja/reference/configuration/#targets)）。
 
 2. ## 失敗を再現する \{#reproduce-failure}
 
@@ -450,7 +450,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ## 次のステップ \{#next-steps}
 
-次は、この順序を CI に載せる。
+次は、コミット済みの成果物に対して `check` の後に `run` を実行する CI ジョブを作る。
 
 <LinkCard title="GitHub Actions で ambercast を実行する" href="/ambercast/ja/tutorials/github-actions/" description="check が通ったときだけ run へ進むジョブを作る。" />
 
@@ -466,6 +466,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 ## 前提条件 \{#prerequisites}
 
 - プロンプト、計画（plan）、グラウンディングがコミット済みで、どれも fresh である。
+- `run` を始める時点で、設定した `baseUrl` のアプリケーションが起動している。
 - ジョブが、チェックアウト、Node と依存関係のインストール、Chromium のインストール、必要なプロバイダーの認証を済ませている。
 
 ## 手順 \{#steps}

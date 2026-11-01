@@ -313,7 +313,7 @@ This tutorial continues [Your first test in 5 minutes](/ambercast/tutorials/quic
 
 1. ## Open the plan \{#open-plan}
 
-   Open `tests/ambercast/find-page.ambercast.plan.json`. Read three top-level fields: `schemaVersion`, `source.inputsDigest`, and `steps`.
+   Open `tests/ambercast/find-page.ambercast.plan.json`. Read `schemaVersion`, `source.inputsDigest`, and `steps`.
 
    ambercast derives this path by replacing the `.test.md` suffix of the prompt with `.ambercast.plan.json`. The [Plan document](/ambercast/spec/plan-document/) describes the structure, and [File layout](/ambercast/reference/file-layout/) describes where files live.
 
@@ -450,7 +450,7 @@ The no-argument `npx ambercast heal` discovers every test that matches the confi
 
 ## Next steps \{#next-steps}
 
-Next, put the same sequence into CI.
+Next, add a CI job that runs `check` and then `run` on committed artifacts.
 
 <LinkCard title="Running ambercast in GitHub Actions" href="/ambercast/tutorials/github-actions/" description="Build a job that runs only after check passes." />
 
@@ -466,6 +466,7 @@ The sequence of `check` first and `run` second also works on other CI services.
 ## Prerequisites \{#prerequisites}
 
 - Your prompts, plans, and grounding files are committed, and all of them are fresh.
+- The application at the configured `baseUrl` is running when `run` starts.
 - The job already checks out the code, installs Node and dependencies, installs Chromium, and authenticates any provider it needs.
 
 ## Steps \{#steps}

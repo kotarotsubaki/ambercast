@@ -21,7 +21,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
    `init` が作った `ambercast.config.json` を開き、選択したターゲットに `"healReplayIsolation": "idempotent"` を1つ足す。ファイルの `$schema` はそのまま残す。
 
-   変えるのはこのキーだけである。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、`secretSinkOrigins` は変えず、ターゲットの追加・削除・改名もしない。`targets` を指定すると既定のターゲットを置き換える点は、[設定](/ambercast/ja/reference/configuration/#file-selection)にある。
+   変えるのはこのキーだけである。ターゲット名、`baseUrl`、`executor`（`executor.browser` を含む）、`secretSinkOrigins` は変えず、ターゲットの追加・削除・改名もしない。`targets` は既定のターゲットを置き換える（[設定](/ambercast/ja/reference/configuration/#file-selection)）。
 
    設定ファイルが無いプロジェクトでは、次の1行をファイル全体として書く。設定ファイルには `$schema` が必須で、その URL は[公開済みの設定スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata)を指す。
 
@@ -29,7 +29,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
    {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","targets":{"web-user":{"baseUrl":"http://localhost:3000","healReplayIsolation":"idempotent"}},"defaultTarget":"web-user"}
    ```
 
-   ターゲット名と定義は `inputsDigest` に入るが、`healReplayIsolation` は実行時に解決されて入らない。そのため既存の計画（plan）は fresh のままである（[設定](/ambercast/ja/reference/configuration/#targets)）。
+   `healReplayIsolation` は `inputsDigest` に入らないため、既存の計画（plan）は fresh のままである（[設定](/ambercast/ja/reference/configuration/#targets)）。
 
 2. ## 失敗を再現する \{#reproduce-failure}
 
@@ -103,6 +103,6 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ## 次のステップ \{#next-steps}
 
-次は、この順序を CI に載せる。
+次は、コミット済みの成果物に対して `check` の後に `run` を実行する CI ジョブを作る。
 
 <LinkCard title="GitHub Actions で ambercast を実行する" href="/ambercast/ja/tutorials/github-actions/" description="check が通ったときだけ run へ進むジョブを作る。" />

@@ -1403,356 +1403,394 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 # 配置
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/
 
-本页定义了配置键及其解析逻辑。当存在配置文件时，系统依据明确的优先级解析配置键与目标定义。
+ambercast 由一个配置文件和内置默认值构成配置。本页介绍它如何选择文件、目标的设置，以及所有配置键。
 
 ## 文件选择 {#file-selection}
 
-- 若存在配置文件，则该文件必须包含 `$schema`；所有其他已声明的键均为可选。
-- 文件的选择优先级依次为：命令行参数 `--config`（仅适用于 generate 与 check）、环境变量 `AMBERCAST_CONFIG`、祖先目录中的 `ambercast.config.json`，最后为内置默认值。
-- 若显式指定的配置文件路径不存在，系统将直接报错，而不会回退至发现机制或默认值。
-- 自行提供的 `targets` 对象会直接替换默认目标，而不是与其进行深度合并；若在该替换中省略 `defaultTarget`，则会清除默认目标。
+存在的配置文件必须包含 `$schema`。其他已声明的键都是可选的。
+
+ambercast 按下面的顺序选择文件：
+
+1. 命令的 `--config` 值。`generate`、`check` 和 `view` 接受它，`run`、`heal`、`init` 和 `mcp` 不接受。参见[命令与参数对照表](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix)。
+2. 环境变量 `AMBERCAST_CONFIG`，详见[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration)。
+3. 上级目录中的 `ambercast.config.json`。
+4. 内置默认值。
+
+显式指定的路径不存在时会报错，不会回退到自动查找或默认值。
+
+你提供的 `targets` 对象会替换默认目标，而不是与它合并。替换时如果省略 `defaultTarget`，默认目标就被清除。
 
 ## 目标 {#targets}
 
-目标配置提供浏览器目的地；其 `healReplayIsolation` 设置在 heal 之前、`resolveTimeoutMs` 设置在元素解析之前分别完成实时解析，二者均不是 Plan 或 inputs-digest 字段。
+目标提供一个 Web 界面和一个浏览器目的地。ambercast 在 heal 之前和元素解析之前，实时解析 `healReplayIsolation` 和 `resolveTimeoutMs`。它们不是执行计划的字段，也不会进入 `inputsDigest`。
 
-加载配置时，`src/config/load.ts` 使用 `Intl.getCanonicalLocales` 规范化所写的 `locale`，若结果恰好只有一项，便保存该值。例如，`"ja-jp"` 会变为 `"ja-JP"`。导致 `RangeError` 的值、空字符串或非字符串值均会在问题路径 `targets.<name>.locale` 处以 `CONFIG_INVALID`（退出码 2）被拒绝。规范化后的值会进入 Plan 的目标定义和运行时的 Playwright 浏览器上下文（`newContext({ baseURL, locale })`），影响该目标页面的 `navigator.language` 以及首次请求的 `Accept-Language` 请求头。
+加载文件时，ambercast 用 `Intl.getCanonicalLocales` 规范化写下的 `locale`。例如 `"ja-jp"` 会变成 `"ja-JP"`。抛出 `RangeError` 的值、空字符串和非字符串值，会在问题路径 `targets.<name>.locale` 处以 `CONFIG_INVALID` 失败，退出码为 2。
 
-此设置的作用范围止于 `Accept-Language`、`navigator.language` 和 Intl 解析。它不会控制时区或应用侧的语言 Cookie、偏好设置，也不会规定其与这些机制之间的优先级。
+规范化后的 locale 会进入执行计划中的目标定义和 Playwright 浏览器上下文。它会影响该目标页面的 `navigator.language`，以及第一个请求的 `Accept-Language` 头。
+
+这个设置的作用到此为止。它不设置时区、应用侧的语言 Cookie 或应用侧的偏好，也不规定与这些机制之间的优先顺序。
 
 ## 配置键列表 {#key-table}
 
 | 键路径 | 类型 | 默认值 | 约束 | 使用方 |
 | --- | --- | --- | --- | --- |
-| `$schema` | string | — | 配置文件存在时必填 | loader |
-| `testDir` | string | `tests/ambercast` | 解析为绝对布局路径 | generate、run、check、heal 发现/布局 |
-| `runsDir` | string | `tests/ambercast/.runs` | 解析为绝对布局路径 | run 报告/证据；heal 包含的写入 |
-| `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器；每个模式必须以 `.test.md` 结尾，否则加载配置会以 `CONFIG_INVALID` 失败 | generate、run、check、heal 发现 |
-| `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含匹配后排除 | generate、run、check、heal 发现 |
-| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空数组要求所有 secret 名称都需同意；`"*"` 允许所有名称且无需同意（不推荐）；非空数组仅允许其中列出的名称 | generate、run、heal |
-| `targets.<name>.baseUrl` | string | `web-user` 上的 `http://localhost:3000` | 替换整个 target 记录 | generate、run、check、heal 目标选择 |
-| `targets.<name>.surface` | `web` | absent | TP1 仅支持 `web` | generate 与 Plan 目标定义 |
-| `targets.<name>.description` | string | 无 | 可选的生成上下文 | generate |
-| `targets.<name>.executor.kind` | `playwright` | `playwright` | 运行时 UI executor 类型；不计入 Plan 摘要 | run、heal 的 executor 配置 |
-| `targets.<name>.executor.browser` | `chromium` | `chromium` | 运行时浏览器；不计入 Plan 摘要 | run、heal 的 executor 配置 |
-| `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | 缺省 secret 条目时仅允许 `baseUrl`；空数组将在所有位置拒绝该 secret；非空数组替换该默认值 | generate、run、heal 的 secret 接收方策略；check（新鲜度） |
-| `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal 要求所选目标必须为 `idempotent` | heal |
-| `targets.<name>.locale` | string | absent | 通过 `Intl.getCanonicalLocales` 规范化；规范化失败的值为 `CONFIG_INVALID` | generate 与 Plan 目标定义；run 的浏览器上下文 |
-| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
-| `defaultTarget` | string | `web-user` | 必须解析为一个目标 | generate、run、check、heal 目标选择 |
-| `ai.provider` | `claude|codex|auto` | `auto` | CLI/环境变量可覆盖 | generate；run 兜底；heal |
-| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；绝不用于 heal Stage 3 |
-| `ai.timeoutMs` | positive integer | `600000` | 正数 | generate；run 兜底；heal |
-| `viewer.port` | integer | `4600` | 1–65535；起始候选端口，可被 `--port` 覆盖 | view |
-| `ci.heal` | boolean | `false` | 在 CI 中选择开启非 list 的 heal | heal |
-| `ci.updateGroundingCache` | boolean | `false` | CI 回写选择启用项 | run |
-| `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | 有限取值集合 | check |
-| `grounding.localWriteBack` | `auto|explicit` | `auto` | 在 CI 中被忽略 | run |
-| `heal.maxStepRepairs` | positive integer | absent | 仅限制向真实提供商发起的增量分发次数 | heal |
-| `heal.caseTimeoutMs` | positive integer | `300000` | 用例准入截止时间 | heal |
+| `$schema` | string | — | 存在配置文件时必填 | 加载器 |
+| `testDir` | string | `tests/ambercast` | 解析为绝对的布局路径 | generate、run、check、heal（发现与布局） |
+| `runsDir` | string | `tests/ambercast/.runs` | 解析为绝对的布局路径 | run（报告与证据）；heal（受限写入） |
+| `testMatch` | string[] | `["**/*.test.md"]` | 受限的 `*`/`**` 匹配器。每个模式都必须以 `.test.md` 结尾，否则加载会以 `CONFIG_INVALID` 失败 | generate、run、check、heal（发现） |
+| `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 在包含匹配之后排除 | generate、run、check、heal（发现） |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空数组表示每个机密名称都需要同意。`"*"` 不经同意就允许所有名称（不推荐）。非空数组只允许其中列出的名称 | generate、run、heal |
+| `targets.<name>.baseUrl` | string | `web-user` 上为 `http://localhost:3000` | 你写的每个目标都必须有；是不含字面量 `{{secrets.` 的 http(s) URL。替换整个目标记录 | generate（输入）；run、check、heal（执行计划引用的目标） |
+| `targets.<name>.surface` | `web` | — | TP1 中只有 `web`。这个可选字段在使用时解析为 `web`，而不是通过 schema 默认值 | generate；执行计划中的目标定义 |
+| `targets.<name>.description` | string | — | 可选的生成上下文 | generate |
+| `targets.<name>.executor.kind` | `playwright` | `playwright` | 实时 UI 执行器的类型；不计入执行计划摘要 | run、heal（执行器组装） |
+| `targets.<name>.executor.browser` | `chromium` | `chromium` | 实时执行器使用的浏览器；不计入执行计划摘要 | run、heal（执行器组装） |
+| `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | — | 没有某个机密的条目时，只允许 `baseUrl`。空数组表示该机密在所有位置都被拒绝。非空数组会替换这个默认值。每个来源的格式为 `scheme://host[:port]`，端口为 1–65535，不能带路径、查询、片段、通配符、用户信息或字面量 `{{secrets.` | generate、run、heal（机密落点策略）；check（新鲜度） |
+| `targets.<name>.healReplayIsolation` | `idempotent\|stateful` | `stateful` | heal 要求执行计划引用的每个目标都是 `idempotent` | heal |
+| `targets.<name>.locale` | string | — | 通过 `Intl.getCanonicalLocales` 规范化。规范化失败的值会触发 `CONFIG_INVALID` | generate；执行计划中的目标定义；run（浏览器上下文） |
+| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run、heal |
+| `defaultTarget` | string | `web-user` | 必须能解析为某个目标。提示词没有指明某个步骤的目标时，生成器使用它 | generate |
+| `ai.provider` | `claude\|codex\|auto` | `auto` | 命令行参数或环境变量可以覆盖它 | generate；run（回退）；heal |
+| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5；每个文件的生成尝试次数 | 仅 generate；不用于 heal 的第 3 阶段 |
+| `ai.timeoutMs` | positive integer | `600000` | 正数 | generate；run（回退）；heal |
+| `viewer.port` | integer | `4600` | 1–65535；起始候选端口，会被 `--port` 覆盖 | view |
+| `ci.heal` | boolean | `false` | 在 CI 中选择启用非列表模式的 heal | heal |
+| `ci.updateGroundingCache` | boolean | `false` | 在 CI 中选择启用缓存回写 | run |
+| `grounding.repositoryPolicy` | `committed\|uncommitted` | `committed` | 有限的取值集合 | check |
+| `grounding.localWriteBack` | `auto\|explicit` | `auto` | 在 CI 中被忽略 | run |
+| `heal.maxStepRepairs` | positive integer | — | 只限制增量的真实提供方调度 | heal |
+| `heal.caseTimeoutMs` | positive integer | `300000` | 用例准入期限 | heal |
+
+`testMatch` 和 `testIgnore` 的模式遵循[模式语言](/ambercast/zh-cn/reference/discovery-patterns/#pattern-language)。
 
 ## 机密同意 {#secret-consent}
 
-`secrets.allow` 是生成时发现的逻辑机密名称的持久许可列表。`generate` 会为列表之外的名称请求交互式批准，并将已接受的名称合并到配置文件中。在 CI 或其他非交互环境中，请预先填入已审查的名称。
+`secrets.allow` 是持久的允许列表，保存生成过程中发现的逻辑机密名称。`generate` 会就列表之外的名称向你确认，并把你接受的名称合并进文件。在 CI 等无法交互的环境中，请事先把已审核的名称填入列表。
 
-`"*"` 会绕过逐名同意并接受 AI 提出的任意名称。它是高风险的逃生出口，不是更安全的默认值；仅当确实希望不经审查地接受任意提议名称时才使用。
+`"*"` 会跳过逐个名称的同意，接受 AI 提出的任何名称。它不是更安全的默认值，而是高风险的逃生口。只有在你确实打算不经审核就接受任意提议的名称时才使用。
 
 ## AI 配置 {#ai}
 
-`ai.maxGenerateAttempts`：当本地验证器拒绝响应时，generate 针对每个提示词允许的提供商最大尝试次数。取值范围为 1 至 5，默认值为 2。绝不用于 heal 修复。
+`ai.maxGenerateAttempts` 是 `generate` 为一个提示词向提供方请求的最多次数，包含首次请求。只有本地校验拒绝响应时，才会再次尝试。范围是 1 到 5，默认值为 2。它不适用于 heal 的修复。
 
-`ai.timeoutMs`：单次提供商分发的截止时间（毫秒）。适用于 generate、run 和 heal 的每次分发。heal 用例截止时间仅是准入边界，因此已准入的分发仍可继续运行，最长不超过此值。默认值为 600000。
+`ai.timeoutMs` 是一次提供方调度的期限，单位为毫秒，默认值为 600000。它适用于每一次 generate、run 和 heal 的调度。heal 的用例期限只决定是否准入，所以已准入的调度仍可运行到这个值。
 
-## 自愈配置 {#heal}
+## heal 配置 {#heal}
 
-`heal.maxStepRepairs` 用于控制向真实提供商发起的增量分发次数，而 `heal.caseTimeoutMs` 则确立整个用例的准入截止时间。
+`heal.maxStepRepairs` 限制增量的真实提供方调度次数。`heal.caseTimeoutMs` 是整个用例的准入期限。
 
-## Grounding 回写 {#grounding}
+## 定位缓存回写 {#grounding}
 
-| 环境 | 解析后的策略 | grounding 写入时机 |
+| 环境 | 生效的策略 | 定位缓存写入的条件 |
 | --- | --- | --- |
-| 本地 | `localWriteBack: auto` | grounding 结果发生变更后自动写入 |
+| 本地 | `localWriteBack: auto` | 定位结果发生变化时 |
 | 本地 | `localWriteBack: explicit` | 传入 `--update-cache` 时 |
-| CI | `localWriteBack` 被忽略 | 传入 `--update-cache` 或 `ci.updateGroundingCache: true` 时 |
+| CI | 忽略 `localWriteBack` | 传入 `--update-cache`，或 `ci.updateGroundingCache: true` 时 |
 
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix)、[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#pattern-language)、[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)。
+命令的行为见 [ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)。
+
+## 另请参阅 {#see-also}
+
+- [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-flag-matrix)
+- [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#pattern-language)
+- [环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration)
+- [ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 
 ---
 
 # 提示词文件格式
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/prompt-format/
 
-Ambercast 测试提示词以自然语言定义端到端测试用例。本参考说明布局解析器和解析器所强制执行的精确文件标识规则、源规范化转换与机密引用模式。
+测试提示词是一个 Markdown 文件，用自然语言描述一个端到端测试用例。本页列出提示词文件的规则：哪些文件算提示词、ambercast 如何规范化它们，以及如何处理机密。
 
-## 文件标识 {#file-identity}
+## 文件识别 {#file-identity}
 
-提示词文件的识别依赖于布局解析器约定的确切后缀契约：
-
-| 条件 | 强制执行结果 |
+| 条件 | 结果 |
 | --- | --- |
-| 路径位于 `testDir` 内，以 `.test.md` 结尾，且后缀前包含非空名称 | 布局解析器可以推导出 plan、grounding 与 case 路径 |
-| 路径位于 `testDir` 外部、具有其他后缀，或是纯文件名 `.test.md` | 正向布局解析拒绝该路径并抛出 `RangeError` |
+| 路径位于 `testDir` 内，以 `.test.md` 结尾，且后缀前有非空的名称。 | 布局据此推导执行计划、定位缓存和用例的路径。 |
+| 路径在 `testDir` 之外、后缀不同，或文件名只有 `.test.md`。 | 命令以 `PROMPT_PATH_INVALID`（退出码 2）停止。 |
 
-哪些路径会被纳入发现范围由 `testMatch` 与 `testIgnore` 控制；`.test.md` 是解析器的确切源文件后缀契约，并非通用的 Markdown 解析规则。
+该错误的 `details.reason` 为 `outside-test-dir`、`not-test-md` 或 `no-name`。`--list` 不做资格校验，因此不会产生这个错误。错误的契约见[报告](/ambercast/zh-cn/reference/reports/#errors)。
+
+发现哪些文件由 `testMatch` 和 `testIgnore` 控制。后缀 `.test.md` 是布局要求的精确条件，不是通用的 Markdown 规则。模式的细节见[发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection)。
 
 ## 规范化 {#normalization}
 
-提取前，测试提示词源会经过严格的规范化：
+ambercast 先规范化提示词，再从中提取内容。
 
-| 操作 | 精确规则 |
+| 操作 | 规则 |
 | --- | --- |
-| 前导 BOM | 最多移除一个前导 U+FEFF；保留第二个前导 U+FEFF 以及出现在其他任何位置的 U+FEFF。 |
-| 行尾换行符 | 将每个 CRLF 和单独的 CR 转换为一个 LF。 |
-| 其余所有内容 | 完整保留：不执行修剪（trimming）、空白折叠、重新排序、重新措辞或任何其他转换。 |
+| 开头的 BOM | 最多移除一个开头的 U+FEFF。第二个开头的 U+FEFF 和其他位置的 U+FEFF 都保留。 |
+| 换行符 | 把每个 CRLF 和单独的 CR 转换为一个 LF。 |
+| 其余所有内容 | 原样保留。ambercast 不裁剪、不合并空白、不重排，也不改写。 |
 
 ## 机密引用 {#secret-references}
 
-`SecretRef` 是在同意拟议的机密名称后，由 `generate` 写入已提交 Plan 的 `secretRef` 字段的语法；人类绝不会在提示词本身中写入此语法（参见下文的[旧版机密语法](#legacy-secret-syntax)——包含此语法的提示词会被拒绝）。
+你同意某个建议的机密名称后，`generate` 会把形如 `{{secrets.name}}` 的机密引用写入执行计划的 `secretRef` 字段。提示词中不能出现机密引用。代码片段和代码块之外含有 `{{secrets.` 的提示词，会以 `SECRET_SYNTAX_REJECTED` 被拒绝，见[旧版机密语法](#legacy-secret-syntax)。
 
-机密引用用于识别模式字段中的凭据槽位：
-
-| 符号 | 原生实现 | 含义 |
+| 符号 | 定义 | 含义 |
 | --- | --- | --- |
-| `SECRET_REF_SOURCE` | `\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}` | `secrets.` 之后由一个或多个以点分隔的 ASCII 字母数字/下划线分段组成。 |
-| `SECRET_REF_PATTERN` | `new RegExp(\`^${SECRET_REF_SOURCE}$\`)` | 承载机密的模式字段仅接受该引用作为其完整值。 |
+| `SECRET_REF_SOURCE` | `\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}` | `secrets.` 之后是一段或多段用点号分隔、由 ASCII 字母、数字和下划线组成的片段。 |
+| `SECRET_REF_PATTERN` | 两端锚定的 `SECRET_REF_SOURCE` | 承载机密的字段只接受整个值恰好是一个引用的情况。 |
 
-合法的机密引用形如 `{{secrets.name}}`。`SecretRef` 不接受外围文字（surrounding prose）；通过 `SECRET_REF_PATTERN` 的全值锚定，确保承载机密的字段始终明确无歧义。
+前后不能附带其他文字。有效的引用必须占满整个字段值。
 
 ## 旧版机密语法 {#legacy-secret-syntax}
 
-旧版提示词可能包含如下授权行：
+早期的提示词可以包含这样的授权行：
 
 ```markdown
 @ambercast-secret {{secrets.password}}
 ```
 
-此语法不再被接受。请删除每一行此类语法，然后遵循[迁移机密授权](/ambercast/zh-cn/how-to/upgrade/#migrate-secret-grants)；有关当前的同意和许可列表模型，请参阅[计划中的机密](/ambercast/zh-cn/spec/secrets/)。
+ambercast 不再接受这种语法。请删除所有这样的行，然后按[迁移机密授权](/ambercast/zh-cn/how-to/upgrade/#migrate-secret-grants)操作。当前的同意与允许列表机制见[执行计划中的机密](/ambercast/zh-cn/spec/secrets/)。
 
-## 终端断言与指令覆盖 {#terminal-assertions-and-instruction-coverage}
+## 终点断言与指令覆盖 {#terminal-assertions-and-instruction-coverage}
 
-每个终端成功断言都必须由其指令覆盖。仅到达 URL 不是终端证明；请描述在目标页面可见的标题、消息或元素。
+每条终点成功断言都必须被对应的指令覆盖。仅仅到达某个 URL 不能算证明。请写出在目的页面上可见的标题、消息或元素。
 
-> …I reach the dashboard and see the heading "Welcome back".
+> `…I reach the dashboard and see the heading "Welcome back".`
 
-## 明文机密拒绝 {#literal-secret-rejection}
+## 字面量机密的拒绝 {#literal-secret-rejection}
 
-提示词格式在生成计划阶段对明文机密执行严格的拒绝机制，规范的检测器契约详见 [计划中的机密](/ambercast/zh-cn/spec/secrets/#literal-secret-rejection)。
+在持久化或序列化报告之前，ambercast 会按字面量机密策略检查生成的或来自提供方的 JSON。检测到的值会以 `SECRET_LITERAL_REJECTED` 被拒绝，字面量不会保留在诊断信息中。
 
-在持久化或报告序列化之前，生成器/提供商派生的 JSON 会经受明文机密策略（literal-secret policy）检查；一旦检测到匹配值，将产生 `SecretLiteralRejectedError`，且诊断信息中不会保留该明文字面量。该生成计划策略不会仅仅因为提示词的任意正文中包含类似凭据的文本而将其拒绝。
+该策略不会因为提示词文字看起来像凭据就拒绝提示词。检测器的契约见[执行计划中的机密](/ambercast/zh-cn/spec/secrets/#literal-secret-rejection)。
 
-相关链接：
+## 另请参阅 {#see-also}
+
 - [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection)
 - [环境变量](/ambercast/zh-cn/reference/environment-variables/#secrets)
-- [编写高效的 Prompt](/ambercast/zh-cn/how-to/write-effective-prompts/)
+- [编写有效的提示词](/ambercast/zh-cn/how-to/write-effective-prompts/)
 - [管理机密](/ambercast/zh-cn/how-to/manage-secrets/)
-- [计划中的机密](/ambercast/zh-cn/spec/secrets/)
+- [执行计划中的机密](/ambercast/zh-cn/spec/secrets/)
 
 ---
 
 # 发现模式
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/discovery-patterns/
 
-本文档定义 ambercast 中通过配置进行测试发现的匹配与排序规则。发现匹配器使用专用的模式语言，仅包含两种通配符标记，并在路径边界进行完整锚定。
+ambercast 用 `testMatch` 和 `testIgnore` 的模式匹配相对于 `testDir` 的路径。模式语言只有 `*` 和 `**` 两个通配符。
 
 ## 模式语言 {#pattern-language}
 
-| 语法 | 精确含义 |
+语法只包含下面的通配符。其他字符一律按字面处理。
+
+| 语法 | 含义 |
 | --- | --- |
-| `*` | 单个路径段内除 `/` 之外的零个或多个字符（`[^/]*`）。 |
-| `**/` | 零个或多个完整路径段，包含空路径段（`(?:.*/)?`）。 |
-| 后面不接 `/` 的 `**` | 零个或多个任意字符，包含 `/`（`.*`）。 |
-| 其他字符 | 字面文本；正则表达式元字符均被转义。字符类、大括号、extglob 以及其他通用 glob 语法均无特殊含义。 |
-| 整个模式 | 匹配使用 `^` 和 `$` 进行边界锚定；子字符串不计入匹配。 |
+| `*` | 在一个路径段内，匹配零个或多个 `/` 以外的字符（`[^/]*`）。 |
+| `**/` | 匹配零个或多个完整的路径段，可以一个也没有（`(?:.*/)?`）。 |
+| 后面不带 `/` 的 `**` | 匹配零个或多个任意字符，包括 `/`（`.*`）。 |
+| 其他所有字符 | 按字面处理。字符类、花括号、extglob 等 glob 语法没有特殊含义。 |
+| 整个模式 | 两端锚定。只匹配子串不算匹配。 |
 
-实现中的语法仅包含 `*` 和 `**` 这两个通配符标记；其余所有字符均为字面文本。
+## 选择 {#selection}
 
-## 选择机制 {#selection}
-
-| 阶段 | 约定 |
+| 阶段 | 规则 |
 | --- | --- |
-| 包含 | 路径必须至少匹配一个 `testMatch` 模式。空的 `testMatch` 不选择任何内容。 |
-| 排除 | 匹配任何 `testIgnore` 的路径均会被排除，即使其同时匹配了 `testMatch`。 |
-| 路径形式 | 匹配器接收相对于 `testDir` 的 `/` 分隔 POSIX 路径，从不接收绝对路径。 |
-| 排序 | 发现流程会跳过非文件条目，对选中的路径进行去重，并返回字典序排序结果。 |
-| 根目录缺失 | `testDir` 缺失时返回空的选择结果；其他目录读取失败会转化为 `FsIoError`。 |
+| 包含 | 路径必须匹配至少一个 `testMatch` 模式。`testMatch` 为空时什么也不选。 |
+| 排除 | 匹配任一 `testIgnore` 模式的路径会被排除，即使它也匹配 `testMatch`。 |
+| 路径形式 | 匹配器收到的是相对于 `testDir`、以 `/` 分隔的 POSIX 路径，不会收到绝对路径。 |
+| 顺序 | 发现过程会跳过非文件、去除重复项，并按字典序排序。 |
+| 缺失的根目录 | `testDir` 不存在时，选择为空。其他读取失败会变成 `FsIoError`，并报告为 `FS_IO_ERROR`。 |
 
-选定路径的排序是提供给下游使用场景的稳定执行顺序。
+排序后的顺序就是各命令使用的稳定执行顺序。
 
-仅用于显式执行而不参与常规发现的 prompt，应通过 `testIgnore` 排除，并使用其字面路径运行。`--list` 有意不对任何选择执行资格验证，无论其为字面路径还是发现结果。
+如果想让某个提示词不参与常规发现，又能单独运行，就用 `testIgnore` 排除它，再传入它的字面路径。`--list` 不会对任何选择做资格校验。
 
-## 默认配置 {#defaults}
+## 默认值 {#defaults}
 
-| 配置项 | 默认模式 |
+默认情况下，ambercast 包含 `.test.md` 提示词，并排除运行目录和两种配套文件的后缀。
+
+| 键 | 默认模式 |
 | --- | --- |
 | `testMatch` | `["**/*.test.md"]` |
 | `testIgnore` | `["**/.runs/**", "**/*.ambercast.plan.json", "**/*.ambercast.grounding.json"]` |
 
-默认配置首先包含 `.test.md` 提示词，随后排除运行目录以及两种伴生文件后缀。
+## 示例 {#worked-examples}
 
-## 示例解析 {#worked-examples}
-
-| 模式 / 配置 | 候选路径 | 结果 | 原因 |
+| 模式或配置 | 候选路径 | 结果 | 原因 |
 | --- | --- | --- | --- |
-| `**/*.test.md` | `login.test.md` | 匹配 | `**/` 可跨越零个路径段。 |
-| `**/*.test.md` | `nested/checkout.test.md` | 匹配 | `**/` 跨越父级路径段。 |
-| `ui/*.test.md` | `ui/auth/login.test.md` | 不匹配 | `*` 无法跨越 `/`。 |
-| `login.test.md` | `login.test.md.bak` | 不匹配 | 必须完整匹配整个路径。 |
-| 包含 `**/*.test.md`；忽略 `**/.runs/**` | `nested/.runs/cached.test.md` | 不匹配 | 在包含之后，`testIgnore` 生效并予以排除。 |
-| `{login,nested}/*.test.md` | `login/login.test.md` | 不匹配 | 大括号被视为字面量，不表示交替匹配。 |
+| `**/*.test.md` | `login.test.md` | 匹配 | `**/` 可以跨越零个路径段。 |
+| `**/*.test.md` | `nested/checkout.test.md` | 匹配 | `**/` 跨越了父级路径段。 |
+| `ui/*.test.md` | `ui/auth/login.test.md` | 不匹配 | `*` 不能跨越 `/`。 |
+| `login.test.md` | `login.test.md.bak` | 不匹配 | 整个路径都必须匹配。 |
+| 包含 `**/*.test.md`，忽略 `**/.runs/**` | `nested/.runs/cached.test.md` | 不匹配 | 包含之后，`testIgnore` 优先。 |
+| `{login,nested}/*.test.md` | `login/login.test.md` | 不匹配 | 花括号按字面处理，不是备选展开。 |
 
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#key-table)、[文件布局](/ambercast/zh-cn/reference/file-layout/#companions)、[选择要运行的测试](/ambercast/zh-cn/how-to/select-tests/)。
+## 另请参阅 {#see-also}
+
+- [配置](/ambercast/zh-cn/reference/configuration/#key-table)
+- [文件布局](/ambercast/zh-cn/reference/file-layout/#companions)
+- [选择要运行的测试](/ambercast/zh-cn/how-to/select-tests/)
 
 ---
 
 # 报告
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/
 
-ambercast 的所有结构化输出均通过统一的信封（Envelope）与命令专属的结果结构呈现。公开报告 Schema 中的所有对象均采用严格模式，拒绝任何未知字段。
+每个命令都可以输出一份 JSON 报告，其中包含运行元数据、汇总、错误和各命令专属的结果。
 
 ## 信封 {#envelope}
+
+公开报告 schema 中的所有对象都是严格的，会拒绝未知字段。schema 定义了 `review` 分支，但 CLI 中没有 `review` 命令。
 
 | 字段 | 类型与约定 |
 | --- | --- |
 | `schemaVersion` | 字面量 `3.11` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
-| `startedAt` | UTC 格式字符串（`YYYY-MM-DDTHH:mm:ssZ`） |
+| `startedAt` | 格式为 `YYYY-MM-DDTHH:mm:ssZ` 的 UTC 字符串 |
 | `durationMs` | 非负整数 |
-| `summary` | 严格由 `total`、`passed`、`failed`、`errored`、`skipped` 组成的非负整数对象 |
+| `summary` | 严格对象，包含非负整数 `total`、`passed`、`failed`、`errored`、`skipped` |
 | `errors` | `ReportError` 数组 |
-| `results` | 特定命令的结果数组 |
-| `reportPersistence` | 仅限 `run`：`persisted`、`failed` 或 `not-attempted` |
+| `results` | 各命令专属的结果数组 |
+| `reportPersistence` | 仅 `run`：`persisted`、`failed` 或 `not-attempted` |
 
-公开报告 Schema 中的对象均为严格模式，拒绝任何未知字段。`review` 分支已在 Schema 中定义，但当前已实现的 CLI 中尚未提供 `review` 命令。
+## 结果形状 {#result-shapes}
 
-## 结果形态 {#result-shapes}
+`results` 数组取决于命令。接下来的各节列出每个分支，包括只在 schema 中定义的分支。
 
-信封中的 `results` 数组根据具体命令而异；下文列出了已实现以及仅在 Schema 中定义的各个分支。
+## generate 的结果 {#generate-results}
 
-## Generate 结果 {#generate-results}
+`GenerateResult` 的每个分支都是严格的。所列的可选字段是该分支允许的仅有的额外字段。
 
-`GenerateResult` 的每个分支均为严格模式。下表所列可选指标仅允许出现在对应分支中。
-
-| 状态 | 必需字段 | 可选字段 | 禁止出现的分支字段 |
+| 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
 | `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
 | `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
-| `skipped-fresh`（`dryRun: true`） | `id`, `file`, `planFile`, `dryRun: true`, `secrets` | `durationMs`, `aiCalls`, `warnings` | `ambiguities` |
-| `skipped-fresh`（`dryRun: false`） | `id`, `file`, `planFile`, `dryRun: false` | `durationMs`, `aiCalls` | `ambiguities`, `secrets`, `warnings` |
+| `skipped-fresh` (`dryRun: true`) | `id`, `file`, `planFile`, `dryRun: true`, `secrets` | `durationMs`, `aiCalls`, `warnings` | `ambiguities` |
+| `skipped-fresh` (`dryRun: false`) | `id`, `file`, `planFile`, `dryRun: false` | `durationMs`, `aiCalls` | `ambiguities`, `secrets`, `warnings` |
 | `listed` | `id`, `file`, `dryRun: false` | — | `planFile`, `ambiguities`, `durationMs`, `aiCalls` |
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
-AI provider 可在可选的字符串数组 `assumptions` 中列出提示词未明确说明的假设。`generate` 排除纯空白条目，将其余假设作为 `{ kind: 'generator-assumption', message }` 加入 `generated` 和 `would-generate` 结果的 `warnings`。假设不会阻止 `generate` 或 `heal`。
+AI 提供方可以在可选的字符串数组 `assumptions` 中列出提示词没有写明的假设。在 `generated` 和 `would-generate` 的结果中，`generate` 会把每条非空白的假设作为 `{ kind: 'generator-assumption', message }` 加入 `warnings`。假设不会让 `generate` 或 `heal` 停止。
 
-终端在结果行之后显示 `  warning: <message>`。ambercast 将命中机密检测的条目替换为 `An assumption was omitted because it looked like a secret.`。
+面向人的输出会在结果行之后立即打印 `  warning: <message>`。假设命中机密检测时，ambercast 会把它替换为 `An assumption was omitted because it looked like a secret.`。
 
-ambercast 不会将假设保存到执行计划中。再次运行仍为 fresh 的执行计划会返回 `skipped-fresh`，不显示假设警告。使用 `--force` 重新生成可再次查看假设，但重新生成的结果不确定。
+ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再次运行，会返回不带假设警告的 `skipped-fresh`。传入 `--force` 可以重新生成并再次看到假设。重新生成具有不确定性。
 
-`generated` 和 `would-generate` 结果的 `ambiguities` 始终为 `[]`。provider 的 `ambiguities` 仅表示无法为步骤分配目标。
+在 `generated` 和 `would-generate` 的结果中，`ambiguities` 始终为 `[]`。提供方返回的 `ambiguities` 只表示某个步骤的目标无法确定。
 
-单目标请求的响应若含非空 `ambiguities`，ambercast 会以 `AI_RESPONSE_INVALID` 重试。重试耗尽后退出码为 3。多目标分配未解决时仍产生 `PROMPT_AMBIGUOUS`，退出码为 2。
+只有一个目标时，ambercast 会把带非空 `ambiguities` 的响应按 `AI_RESPONSE_INVALID` 重试，重试用尽后退出码为 3。涉及多个目标的分配仍未解决时，仍会产生 `PROMPT_AMBIGUOUS`，退出码为 2。
 
-将警告类型作为封闭 union 验证的使用者需要 report 3.11 的 Schema。
+把警告类别当作封闭联合类型来校验的使用方，需要使用报告 3.11 的 schema。
 
-## Run 结果 {#run-results}
+## run 的结果 {#run-results}
 
-`RunResult` 的每个分支均为严格模式。
+`RunResult` 的每个分支都是严格的。
 
-| 状态 | 必需字段 | 可选字段 | 禁止出现的分支字段 |
+| 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
-## Check 结果 {#check-results}
+## check 的结果 {#check-results}
 
-`CheckResult` 的每个分支均为严格模式。
+`CheckResult` 的每个分支都是严格的。
 
-| 状态 | 必需字段 | 可选字段 | 禁止出现的分支字段 |
+| 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
-| `fresh`, `stale`（已过期）, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
+| `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
 | `listed` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 | `skipped` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 
-## Heal 结果 {#heal-results}
+## heal 的结果 {#heal-results}
 
-`HealResult` 的每个已完成分支均要求具备 `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps` 和 `explanation`；`aiCalls` 为可选字段。
+`HealResult` 中每个已完成的分支都必须包含 `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、`sessions` 和 `explanation`。`aiCalls` 是可选的。
 
-只有 `healed` 行可包含可选字段 `warnings`，其中的 `generator-assumption` 来自 Stage 3 接受的候选项的 `assumptions`。其他 heal 结果禁止 `warnings`。假设不会使 Stage 3 失败。
+只有 `healed` 行可以带可选的 `warnings`，其中是被接受的第 3 阶段候选的 `assumptions` 所产生的 `generator-assumption` 条目。其他 heal 结果禁止出现 `warnings`。假设不会让第 3 阶段失败。
 
-| `repairOutcome` | 允许的 application | 允许的 stopReason |
+| repairOutcome | 允许的 application | 允许的 stopReason |
 | --- | --- | --- |
 | `healed` | `applied`, `preview-only`, `declined`, `not-applied-interrupted`, `apply-failed`, `partially-applied` | `settled`, `attempt-limit`, `deadline` |
 | `partially-healed` | `applied`, `preview-only`, `declined`, `not-applied-interrupted`, `apply-failed`, `partially-applied` | `settled`, `attempt-limit`, `deadline` |
 | `unresolved` | `no-artifact-change`, `not-eligible` | `settled`, `attempt-limit`, `deadline` |
 | `no-changes-needed` | `no-artifact-change` | `settled` |
-| `listed` | 仅限标识字段：`id`, `file`, `status` | 禁止字段：`application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
-| `skipped` | 仅限标识字段：`id`, `file`, `status` | 禁止字段：`application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
+| `listed` | 仅标识：`id`、`file`、`status` | 禁止：`application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
+| `skipped` | 仅标识：`id`、`file`、`status` | 禁止：`application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
 
-当 Stage 3 因逻辑机密名称集合变化而拒绝完整 Plan 候选项时，完成的结果为 `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`。这是硬拒绝：不会提交任何工件，用户必须在获得同意后重新生成，而不能悄然重新归属候选项。
+第 3 阶段因逻辑机密名称集合发生变化而拒绝整份执行计划候选时，已完成的结果带有 `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`。这是硬性拒绝。不会提交任何产物，你必须经同意重新生成，而不是悄悄重新归属候选。
 
-所有 completed 分支还可以包含可选的诊断数组 `repairTrace`，它按顺序投影该案例的 Stage 1、Stage 2 和 Stage 3 尝试及结果。Stage 1 条目为 `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`；Stage 2 条目为 `{ stage: "stage2", stepId, outcome: "accepted" }` 或 `{ stage: "stage2", stepId, outcome: "rejected", reason }`（`reason` 为以下之一：`provider-error`、`response-shape`、`id-mismatch`、`secret-name-invalid`、`coverage-invalid`、`obligation-mismatch`、`literal-secret`、`no-advance`）；Stage 3 条目为 `{ stage: "stage3", outcome: "accepted" }`、`{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`、`{ stage: "stage3", outcome: "failed", code? }` 或 `{ stage: "stage3", outcome: "secret-set-rejected" }`。每个条目都采用严格结构，不允许属于其他 stage 或 outcome 的字段。
+每个已完成的分支还可以带有 `repairTrace`，它是按顺序排列的诊断数组，记录该用例第 1、2、3 阶段的尝试。每个条目都是严格的，不允许出现其他阶段或其他结果的字段。
 
-admission-denied 阶段不会添加 `repairTrace` 条目，仅通过该案例的 `stopReason: "attempt-limit" | "deadline"` 体现。被中断（interrupted）的工作完全不会产生 completed 结果，而是报告为 `skipped`，因此既没有 `repairTrace` 条目，也没有 `stopReason`。
+| 阶段 | 结果 | 其他字段 |
+| --- | --- | --- |
+| `stage1` | `accepted`, `no-advance` | `stepId` |
+| `stage1` | `not-eligible` | `stepId`, `reason`，取值为 `frontier-out-of-range`, `mode-none`, `trace-current`, `no-confirming-step`, `no-confirms` 之一 |
+| `stage2` | `accepted` | `stepId` |
+| `stage2` | `rejected` | `stepId`, `reason`，取值为 `provider-error`, `response-shape`, `id-mismatch`, `secret-name-invalid`, `coverage-invalid`, `obligation-mismatch`, `literal-secret`, `no-advance`, `intent-invalid` 之一 |
+| `stage3` | `accepted` | — |
+| `stage3` | `not-passing` | `firstFailureIndex` |
+| `stage3` | `failed` | 可选的 `code` |
+| `stage3` | `secret-set-rejected` | — |
+
+被准入拒绝的阶段不会添加 `repairTrace` 条目，只会通过该用例的 `stopReason: "attempt-limit"` 或 `"deadline"` 体现。被中断的工作不会产生已完成的结果，而是报告为 `skipped`，因此既没有 `repairTrace` 条目，也没有 `stopReason`。
 
 ## 结果状态 {#result-statuses}
 
-共享的步骤（step）与审查（review）结果结构。
+步骤结果和评审结果共用下面这些分支。
 
 | 分支 | 必需字段 | 可选字段 |
 | --- | --- | --- |
-| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable`（仅 capture 可有）、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
-| `observed` | `note`: 固定为 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
+| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable`（仅 capture）、`kind: assertion/environment`、`expected`、`actual`、`screenshot`、`screenshotOmitted: secret-detected`、`observed`、`binding` |
+| `observed` | `note`：固定的 `OBSERVED_NOTE`，以及 `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
-| `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+| `review skipped` | `id`, `file`, `status: skipped` | — |
 
-action 和 capture 步骤经过本地验证后，可包含 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非负整数, aiProposalMs?: 非负整数 }`。对于 `grounding`，`confirmed` 始终为 `true`（该绑定来自之前运行中已确认的 entry，并不表示本次运行写入了该 entry）；对于 `quoted-match` 和 `ai-proposed`，它表示测试用例结束时的值。仅在相应阶段执行后才会出现耗时字段。更早发生的绑定失败则通过测试用例错误报告。
+经过本地验证后，操作步骤或捕获步骤可以带有 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`。对于 `grounding`，`confirmed` 始终为 `true`，因为这个绑定来自早先某次运行中已确认的条目，并不表示该条目是在本次运行中写入的。对于 `quoted-match` 和 `ai-proposed`，它是用例结束时的值。只有对应的阶段运行过，才会出现耗时字段。更早发生的绑定失败会改为报告用例错误。
 
-## Review 关注事项 {#review-concerns}
+每个已执行的 run 结果和每个已完成的 heal 结果，都为执行计划中的每个目标提供一个 `sessions` 条目。每个值为 `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`，其中 `state` 为 `not-opened`、`closed` 或 `close-failed`。`not-opened` 表示该目标的启动没有返回会话，包括执行在其第一个步骤之前就停止的情况。关闭失败不会改变用例状态。
 
-`ReviewConcern` 结构包含以下字段：
+## 评审关注点 {#review-concerns}
+
+评审把发现的问题作为针对执行计划的关注点报告出来。
 
 | 字段 | 类型 |
 | --- | --- |
-| `stepId` | `string` |
-| `concern` | `string` |
-| `suggestion` | `string` |
+| `stepId` | string |
+| `concern` | string |
+| `suggestion` | string |
 
 ## 错误 {#errors}
 
-报告错误是严格对象，其作用域为整个命令运行或特定测试用例。每个条目均包含 `scope`、`kind`、`code` 和 `message`；每个代码均可选 `hint`，case 作用域的条目还包含非空白的 `caseId`。`details` 可选，且仅可用于以下十五个代码。凡显示 `attempts`，其类型均为 `Array<{ attempt: 1–5 的整数, code: ReportErrorCode }>`；`SecretRef` 使用 `{{secrets.<identifier>(.<identifier>)*}}` 语法。
+报告错误是一个严格对象，作用域为整个运行或单个用例。每个条目都有 `scope`、`kind`、`code` 和 `message`。`hint` 对所有代码都是可选的，用例作用域的条目还有一个非空白的 `caseId`。`details` 是可选的，只存在于下面的十五个代码上。
 
-| 代码 | 可选的 `details` 形状 |
+出现 `attempts` 时，其类型为 `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`。`SecretRef` 的语法为 `{{secrets.<identifier>(.<identifier>)*}}`。
+
+| 错误代码 | 可选的 `details` 形状 |
 | --- | --- |
-| `AGENTIC_STEP_FAILED` | 仅限 case 作用域：`{ stepId: 非空白字符串, actions: 非负整数, assertions: 非负整数, passedAssertions: 非负整数, failedAssertions: 非负整数, targetRejections: 非负整数, lastFailedAssertion?: { check: "text-visible"、"element-visible"、"text-equals"、"url-matches" 或 "element-count"; expected: 字符串 } }`；计数描述已完成的工具调用。 |
-| `CASE_ABORTED` | 仅限 case 作用域：`{ reason: "run-reference-invalid"、"run-value-missing"、"secret-fill-incomplete"、"agentic-no-terminal-evidence"、"agentic-coverage-inexact"、"agentic-proof-invalid"、"grounding-secret-contaminated" 或 "grounding-snapshot-invalid"; stepId: string }`；`reason` 为八个预定义值之一。 |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任一 instruction-coverage、element-intent 或 confirms issue code（`confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`）、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected" 或 "secret-conflicting-target-names"（后两者始终带有 stepId）; path: Array<string 或非负整数>; stepId?: StepId }>, attempts?: ... }` |
-| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token 或 embedded-secret-reference; path: 非空白字符串; attempts?: ... }` |
-| `SECRET_ENV_VAR_COLLISION` | `{ envVar: 非空白字符串, refs: SecretRef[] }` |
-| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required"、"declined" 或 "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 非空白字符串, reason: 非空白字符串 }> }` |
-| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正整数, column: 正整数, kind: "grant-line" 或 "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" 或 "launch-failed"; engine: 非空白字符串 }` |
-| `EXECUTOR_UNSUPPORTED` | `{ target: 非空白字符串, executor: 非空白字符串, reason: "surface-mismatch" 或 "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 非空白字符串 } }` |
-| `PROMPT_AMBIGUOUS` | 仅限 case 作用域：`{ ambiguities: 大于或等于 1 的整数 }`。 |
+| `AGENTIC_STEP_FAILED` | `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible" \| "element-visible" \| "text-equals" \| "url-matches" \| "element-count", expected: string } }` 仅用例作用域。计数描述已完成的工具调用。 |
+| `CASE_ABORTED` | `{ reason: "run-reference-invalid" \| "run-value-missing" \| "secret-fill-incomplete" \| "agentic-no-terminal-evidence" \| "agentic-coverage-inexact" \| "agentic-proof-invalid" \| "grounding-secret-contaminated" \| "grounding-snapshot-invalid", stepId: string }` 仅用例作用域。`reason` 有八个已定义的取值。 |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: instruction-coverage, element-intent, or confirms issue code \| "text-equals-self-quote" \| "invalid-json" \| "schema-mismatch" \| "secret-allowed-name-not-projected" \| "secret-conflicting-target-names", path: Array<string or non-negative integer>, stepId?: StepId }>, attempts?: ... }` `confirms` 类问题代码为 `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action` 和 `confirms-duplicate`。最后两个非 `confirms` 问题代码始终带有 `stepId`。 |
+| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk \| credential-prefix-ghp \| credential-prefix-aws-access-key \| high-entropy-token \| embedded-secret-reference, path: non-whitespace string, attempts?: ... }` |
+| `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` `refs` 至少有两个条目。 |
+| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required" \| "declined" \| "not-interactive", secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: string }> }` 内层的 `reason` 可以是任意字符串。 |
+| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" \| "reference" }> }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" \| "launch-failed", engine: non-whitespace string }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" \| "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
+| `PROMPT_AMBIGUOUS` | `{ ambiguities: integer at least 1 }` 仅用例作用域。 |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
-| `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError" 或 "TimeoutError" } }` |
-| `FS_IO_ERROR` | 仅限 case 作用域：`{ partiallyWritten: Array<"plan" 或 "grounding"> }` |
-| `PROMPT_PATH_INVALID` | `{ path: 非空白字符串, reason: "outside-test-dir"、"not-test-md" 或 "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing"、"recoverable-miss"、"no-candidate"、"ambiguous"、"proposal-rejected" 或 "candidate-changed" }`；对于 element step，`missing` 表示没有 grounding 条目，`recoverable-miss` 表示已有条目与当前页面不匹配。 |
+| `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
+| `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` 仅用例作用域。 |
+| `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。 |
 
-对于 `generated` 与 `would-generate` 结果，`secrets` 标识已解析的候选机密使用；dry run 的 `skipped-fresh` 结果也会包含该字段。可选的 `warnings` 会记录非致命警告，包括高风险的 `secrets.allow: "*"` 配置以及表示 action 尚未确认的 `{ kind: "action-unconfirmed", stepId }`。这些字段使同意相关输出可被观测，而不会暴露机密值。
+在 `generated` 和 `would-generate` 的结果中，`secrets` 列出 ambercast 已解析的候选机密用途，dry-run 的 `skipped-fresh` 结果也包含它。可选的 `warnings` 记录五种非致命的策略警告：`secret-name-reused-across-targets`、`secret-target-changed`、`allowed-names-truncated`、`action-unconfirmed` 和 `generator-assumption`。其中 `action-unconfirmed` 带有 `stepId`。这些字段让与同意相关的输出可以被观察，同时不暴露机密值。高风险的 `"*"` 设置见[机密同意](/ambercast/zh-cn/reference/configuration/#secret-consent)。
 
 ## 报告持久化 {#persistence}
 
-仅 `run` 命令会尝试进行持久化。写入路径为 `runsDir/runId/report.json`，通过对最终确定的持久化信封执行 `JSON.stringify` 写入。
+只有 `run` 会持久化报告。它用 `JSON.stringify` 序列化最终确定的信封，写入 `runsDir/runId/report.json`。
 
-`reportPersistence` 字段记录持久化结果：
-- `persisted`：成功写入，且磁盘中的 JSON 内容与返回的信封完全一致。
-- `failed`：写入失败，且未留下可见的部分写入内容。
-- `not-attempted`：从未尝试写入，包括在得出执行结果前命令即已失败的情况。
+`reportPersistence` 属性记录写入的结果：
 
-只有写入方会固定使用当前的 schema 版本；查看器会宽松地读取任意 3.x 版本的报告。
+- `persisted`：写入成功，且磁盘上的 JSON 与返回的信封一致。
+- `failed`：写入失败，且看不到部分内容。
+- `not-attempted`：没有尝试写入，包括命令在得出结果之前就失败的情况。
+
+只有写入方固定在当前的 schema 版本，查看器会宽松地读取任何 3.x 报告。下面的示例各展示一个命令的信封。
 
 ```json
 {"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
@@ -1767,63 +1805,88 @@ action 和 capture 步骤经过本地验证后，可包含 `binding: { provenanc
 {"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
-## 持久化兼容性链接 {#report-persistence}
+## 持久化兼容锚点 {#report-persistence}
 
-本节作为向后兼容保留的历史锚点，关于报告持久化的完整说明请参阅 [报告](/ambercast/zh-cn/reference/reports/#persistence)。
+本节用于保留旧锚点。内容见[报告持久化](/ambercast/zh-cn/reference/reports/#persistence)。
 
-相关链接：[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary)、[退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)、[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#report-and-exits)。
+## 另请参阅 {#see-also}
+
+- [错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary)
+- [退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)
+- [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)
+- [ambercast run](/ambercast/zh-cn/reference/cli/run/#report-and-exits)
 
 ---
 
 # 错误代码
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/error-codes/
 
-ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整的错误代码参考规范，明确列出各错误代码对应的类别、作用域、进程退出码以及具体的触发条件，供您在排查测试运行与分析报告时查阅。
+ambercast 用一组固定的错误代码报告运行级和用例级的失败。在这里可以查到某个代码的含义，以及它对应的退出码。
 
 ## 错误代码词汇表 {#code-vocabulary}
+
+使用错误和环境错误各有独立的词汇表。`SECRET_GRANT_UNATTRIBUTABLE` 是旧版的例外。它只为兼容早期版本的报告而留在报告代码 schema 中，当前没有任何错误类别或报告分支会产生它。
 
 | 错误代码 | 类别 | 作用域 | 退出码 | 触发条件 |
 | --- | --- | --- | --- | --- |
 | CONFIG_INVALID | usage | run/case | 2 | 配置无效 |
-| PROMPT_PATH_INVALID | usage | run only | 2 | 所选 prompt 路径不符合资格 |
-| SECRET_UNRESOLVED | usage | run/case | 2 | 未解析的 secret |
+| PROMPT_PATH_INVALID | usage | run only | 2 | 所选提示词路径不符合要求 |
+| SECRET_UNRESOLVED | usage | run/case | 2 | 机密未解析 |
 | TARGET_UNRESOLVED | usage | run/case | 2 | 目标无法解析 |
-| EXECUTOR_UNSUPPORTED | usage | case | 2 | executor 缺少 Plan 所需的能力或 surface |
-| PROMPT_AMBIGUOUS | usage | case | 2 | 生成的响应仍有未解决的 Target 歧义 |
-| MISSING_PLAN | usage | run/case | 4 | 缺失 plan |
-| STALE_PLAN | usage | run/case | 4 | plan 已过期（`stale`） |
-| INTEGRITY_VIOLATION | usage | run/case | 4 | 制品完整性校验失败 |
-| GROUNDING_UNRESOLVED | usage | case | 4 | 未传入 `--resolve` 时 ai step 或 element step 的 grounding 未命中 |
-| SECRET_LITERAL_REJECTED | usage | run/case | 2 | 字面量 secret 被拒绝 |
-| SECRET_GRANT_UNATTRIBUTABLE | legacy | 不会生成 | — | 为与早期工具版本生成的报告保持向后兼容而保留在报告 schema 中；当前的 `generate`、`run`、`heal` 或 `check` 不会生成该代码 |
-| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 两个 secret 投影到同一个环境变量名 |
-| SECRET_CONSENT_REQUIRED | usage | case | 2 | secret 名称不在允许列表中 |
-| SECRET_SYNTAX_REJECTED | usage | case | 2 | 发现旧版 grant 行或 `{{secrets.*}}` 引用 |
+| EXECUTOR_UNSUPPORTED | usage | case | 2 | 执行器缺少执行计划所需的能力或界面 |
+| PROMPT_AMBIGUOUS | usage | case | 2 | 生成的响应仍有未解决的目标歧义 |
+| MISSING_PLAN | usage | run/case | 4 | 缺少执行计划 |
+| STALE_PLAN | usage | run/case | 4 | 执行计划已过期 |
+| INTEGRITY_VIOLATION | usage | run/case | 4 | 产物完整性校验失败 |
+| GROUNDING_UNRESOLVED | usage | case | 4 | 未传入 `--resolve` 时，ai 步骤或元素步骤的定位缓存未命中；另有四种原因即使传入 `--resolve` 也会出现 |
+| SECRET_LITERAL_REJECTED | usage | run/case | 2 | 字面量机密被拒绝 |
+| SECRET_GRANT_UNATTRIBUTABLE | legacy | not producible | — | 为兼容早期工具版本生成的报告而保留在报告 schema 中；当前的 `generate`、`run`、`heal` 和 `check` 不会产生它 |
+| SECRET_ENV_VAR_COLLISION | usage | case | 2 | 两个机密对应到同一个环境变量名 |
+| SECRET_CONSENT_REQUIRED | usage | case | 2 | 需要对机密给出同意 |
+| SECRET_SYNTAX_REJECTED | usage | case | 2 | 旧版机密语法被拒绝 |
 | BROWSER_LAUNCH_FAILED | environment | run/case | 3 | 浏览器启动失败 |
-| AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | 提供商不可用 |
-| AI_RESPONSE_INVALID | environment | run/case | 3 | 提供商响应无效 |
-| AGENTIC_STEP_FAILED | environment | case | 3 | AI 引导的交互声明失败 |
-| CASE_ABORTED | environment | case | 3 | case 因调用方可纠正或环境方面的原因在步骤中途终止 |
+| AI_EXECUTOR_UNAVAILABLE | environment | run/case | 3 | AI 提供方不可用 |
+| AI_RESPONSE_INVALID | environment | run/case | 3 | AI 提供方的响应无效 |
+| AGENTIC_STEP_FAILED | environment | case | 3 | AI 主导的交互宣告失败 |
+| CASE_ABORTED | environment | case | 3 | 用例因调用方可纠正或环境方面的原因在步骤中途终止 |
 | FS_IO_ERROR | environment | run/case | 3 | 文件系统操作失败 |
 | UNEXPECTED_CRASH | environment | run/case | 3 | 未分类的崩溃 |
-| INTERRUPTED | environment | 仅限 run | 3 | 批处理取消 |
+| INTERRUPTED | environment | run only | 3 | 批量任务被取消 |
 
-使用错误（usage）与环境错误（environment）拥有相互独立的报告词汇表。`SECRET_GRANT_UNATTRIBUTABLE` 是一个旧版例外：它仅为与早期工具版本生成的报告保持向后兼容而保留在报告代码 schema 中，但没有当前的 `ErrorKind` 或报告错误分支。
+### AI 响应问题代码 {#ai-response-issue-codes}
 
-### AI 响应 issue code {#ai-response-issue-codes}
+生成的 `confirms` 引用未通过校验时，下列 `AiResponseIssueCode` 值可能出现在 `AI_RESPONSE_INVALID` 的重试和报告问题中。`confirms-unsorted` 仅供内部使用，不会出现在重试反馈中。
 
-生成的 `confirms` 引用未通过验证时，下列 `AiResponseIssueCode` 可出现在 `AI_RESPONSE_INVALID` 的重试记录和报告 issue 中。`confirms-unsorted` 仅供内部使用，不会出现在重试反馈中。
-
-| code | 条件 |
+| 错误代码 | 条件 |
 | --- | --- |
 | `confirms-unknown-step` | 引用的步骤 ID 未知 |
-| `confirms-not-earlier` | 引用自身或后续步骤 |
-| `confirms-not-action` | 引用的步骤不是符合条件的操作或 capture |
-| `confirms-duplicate` | 步骤 ID 重复 |
+| `confirms-not-earlier` | 引用的是当前步骤或之后的步骤 |
+| `confirms-not-action` | 引用的步骤不是符合条件的操作或捕获 |
+| `confirms-duplicate` | 引用的步骤 ID 重复 |
 
-在 case 作用域下，`FS_IO_ERROR` 可包含 `details.partiallyWritten`，用于记录 `plan` 和/或 `grounding`。存在时，`AI_RESPONSE_INVALID` 的 details 包含规范化 issue 及可选重试记录；`SECRET_LITERAL_REJECTED` 的 details 包含检测器、路径及可选尝试记录；`SECRET_ENV_VAR_COLLISION` 的 details 包含发生冲突的 `envVar` 以及冲突的 secret 引用列表；`SECRET_CONSENT_REQUIRED` 的 details 包含原因（`consent-required`、`declined` 或 `not-interactive`）以及每个未解决 secret 的名称、step id、env var 和原因；`SECRET_SYNTAX_REJECTED` 的 details 包含旧版语法出现位置的列表（行号、列号，以及是 grant 行还是引用）；`AI_EXECUTOR_UNAVAILABLE` 的 details 包含可选尝试记录；`BROWSER_LAUNCH_FAILED` 的 details 包含一个封闭的补救原因（`executable-missing` 或 `launch-failed`）与已解析的引擎名称（固定的补救提示是报告顶层的 `hint` 字段，不包含在 details 中）；`AGENTIC_STEP_FAILED` 的 details 包含 step ID、已完成工具调用的计数，以及可选的最后一次失败断言；`UNEXPECTED_CRASH` 的 details 包含白名单内的 cause 名称。`CASE_ABORTED` 的 details 包含封闭枚举的终止原因和 step ID；`PROMPT_AMBIGUOUS` 的 details 包含未解决歧义的数量。完整的按代码契约请参阅 [报告](/ambercast/zh-cn/reference/reports/#errors)。
+## 各代码的 details {#details}
 
-## 相关链接
+只有下列代码带有 `details`。每个代码的完整契约见[报告](/ambercast/zh-cn/reference/reports/#errors)。
+
+| 错误代码 | `details` 内容 |
+| --- | --- |
+| `FS_IO_ERROR` | 在用例作用域下，可包含 `details.partiallyWritten`，其中有 `plan` 和（或）`grounding`。 |
+| `AI_RESPONSE_INVALID` | 规范化后的问题，以及可选的重试记录。 |
+| `SECRET_LITERAL_REJECTED` | 检测器、路径，以及可选的尝试记录。 |
+| `SECRET_ENV_VAR_COLLISION` | 发生冲突的 `envVar`，以及冲突的机密引用列表。 |
+| `SECRET_CONSENT_REQUIRED` | 原因（`consent-required`、`declined` 或 `not-interactive`），以及未解决的机密列表，每项包含名称、步骤 ID、环境变量和原因。 |
+| `SECRET_SYNTAX_REJECTED` | 每处被拒绝的旧版语法：行号、列号，以及它是授权行还是引用。 |
+| `AI_EXECUTOR_UNAVAILABLE` | 可选的尝试记录。 |
+| `BROWSER_LAUNCH_FAILED` | 封闭的补救原因（`executable-missing` 或 `launch-failed`），以及解析出的引擎名称。固定的补救提示在报告顶层的 `hint` 字段中，不属于 `details`。 |
+| `AGENTIC_STEP_FAILED` | 步骤 ID、已完成的工具调用计数，以及可选的最后一次失败的断言。 |
+| `CASE_ABORTED` | 封闭的终止原因和步骤 ID。 |
+| `PROMPT_AMBIGUOUS` | 未解决歧义的数量。 |
+| `UNEXPECTED_CRASH` | 白名单内的原因名称。 |
+| `EXECUTOR_UNSUPPORTED` | 目标、执行器、原因（`surface-mismatch` 或 `capability-missing`）、缺少的能力，以及可选的界面。 |
+| `PROMPT_PATH_INVALID` | 路径和原因（`outside-test-dir`、`not-test-md` 或 `no-name`）。 |
+| `GROUNDING_UNRESOLVED` | 步骤 ID 和原因（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected` 或 `candidate-changed`）。 |
+
+## 另请参阅 {#see-also}
 
 - [报告](/ambercast/zh-cn/reference/reports/#errors)
 - [退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)
@@ -1834,74 +1897,93 @@ ambercast 拥有统一且稳定的错误代码体系。本文档定义了完整�
 # 退出码
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/
 
-ambercast 向系统环境提供面向机器的进程退出状态码。本参考页面定义了各个退出码的具体含义及多退出码聚合时的优先级规则。
+CI 和脚本通过退出码判断运行如何结束。ambercast 使用 0 到 5 共六个退出码，每个都有优先级。
 
 ## 退出码表 {#exit-code-table}
 
-| 退出码 | 含义 | 优先级 |
+| 退出码 | 含义 | 优先级（越小越优先） |
 | --- | --- | --- |
-| 0 | 成功或无候选对象 | 5 |
-| 1 | 命令领域负向结果 | 3 |
+| 0 | 成功，或没有候选 | 5 |
+| 1 | 命令层面的否定结果 | 3 |
 | 2 | 使用或配置错误 | 0 |
 | 3 | 环境错误 | 1 |
-| 4 | 不可信的计划或 grounding 制件 | 2 |
-| 5 | 空选择集 | 4 |
+| 4 | 不可信的执行计划或定位缓存产物 | 2 |
+| 5 | 选择集为空 | 4 |
 
-例如，[`PROMPT_PATH_INVALID`](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) 是以退出代码 2 结束的使用错误。
+例如，[`PROMPT_PATH_INVALID`](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) 是使用错误，退出码为 2。
 
 ## 聚合优先级 {#aggregation-priority}
 
-优先级数值较小者胜出，确立了 2 > 3 > 4 > 1 > 5 > 0 的优先级规则。退出码的选择独立于遍历顺序；在没有候选对象时返回 0。
+一个命令有多个结果时，优先级数值最小的退出码胜出。顺序为 2 > 3 > 4 > 1 > 5 > 0。
 
-## 优先级兼容链接 {#priority}
+结果与遍历顺序无关。没有候选时返回 0。
 
-本节保留用于兼容旧版锚点，请参阅 [退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
+## 优先级兼容锚点 {#priority}
 
-相关链接：[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary)、[报告](/ambercast/zh-cn/reference/reports/#envelope)、[常见故障排查](/ambercast/zh-cn/how-to/troubleshoot/)
+本节用于保留旧锚点。内容见[聚合优先级](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
+
+## 另请参阅 {#see-also}
+
+- [错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary)
+- [报告](/ambercast/zh-cn/reference/reports/#envelope)
+- [常见故障排查](/ambercast/zh-cn/how-to/troubleshoot/)
 
 ---
 
 # 环境变量
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/environment-variables/
 
-Ambercast 在运行时会读取特定的系统环境变量，用于确定配置路径、解析 AI 提供商、在密钥提供商边界解析变量引用以及判定 CI 策略状态，并在派生 AI 提供商子进程时执行明确的环境变量过滤规则。
+ambercast 通过环境变量获取配置文件路径、AI 提供方、机密值和 CI 判定。启动 AI 提供方子进程之前，它会先过滤环境。
 
-## 配置与提供商 {#configuration}
+## 配置与提供方 {#configuration}
 
-| 环境变量 | Ambercast 读取位置 | 作用 | 优先级与边缘情况 |
+| 变量 | 读取时机 | 作用 | 优先级与边界情况 |
 | --- | --- | --- | --- |
-| `AMBERCAST_CONFIG` | `readConfigEnvironment()` → `configPathOverride` | 选择显式配置文件路径。 | 命令行的 `--config` 值优先级最高；其次是此环境变量；接着是祖先目录发现；最后是默认值。空值视作不存在；其他值均予以保留。 |
-| `AMBERCAST_AI_PROVIDER` | `readConfigEnvironment()` → `aiProviderRaw` | 在校验为 `claude`、`codex` 或 `auto` 后，替换配置或默认的 `ai.provider`。 | `--ai` 优先级最高；其次是此环境变量；接着是配置中的 `ai.provider`；最后是默认值 `auto`。空值视作不存在；非空且不受支持的值视为无效。 |
-| `AMBERCAST_SECRET_*` | `createEnvSecretsProvider().resolve()` | 在密钥提供商边界解析具体的 `{{secrets.*}}` 引用。 | 点号转换为下划线且各分段转为大写：`{{secrets.a.b}}` 映射为 `AMBERCAST_SECRET_A_B`；缺失的键返回 `undefined`。此映射为非单射，因此类似 `a.b` 与 `a_b` 的引用不得同时使用。 |
-| `CI` | `createProcessEnvironmentInfo().isCI()` | 提供运行时命令所消费的 CI 策略布尔值。 | 仅在已定义、非空且值不严格等于全小写 `false` 时处于激活状态；`FALSE`、`0` 与空白字符均判定为激活。 |
-| `AMBERCAST_DEBUG` | `main.ts` 中的 bare catch；`stderr-progress-sink.ts` 中 run 的进度输出端 | 将崩溃原因的消息和堆栈输出到 stderr。 | 还会将 run 中未分类案例异常的分类名称、已脱敏消息和堆栈输出到 stderr；这些诊断可能包含源自请求的敏感文本。未设置、为空、严格等于 `0` 或严格等于 `false` 时不激活；其他情况均激活。比较区分大小写且不裁剪空白字符。 有子进程诊断信息时，还会输出 `child process: exit <n>` 或 `child process: signal <name>`，以及后接正文（或 `(empty)`）的 `child stderr:`。这些新增行也可能包含源自请求的敏感文本。 |
+| `AMBERCAST_CONFIG` | 查找配置文件时 | 指定配置文件路径。 | 命令的 `--config` 优先级最高。其次是此变量，然后是向上级目录查找，最后是默认值。空值视为未设置，其他值按原样使用。 |
+| `AMBERCAST_AI_PROVIDER` | 确定 AI 提供方时 | 用 `claude`、`codex` 或 `auto` 替换配置中的 `ai.provider`。 | `--ai` 优先级最高。其次是此变量，然后是配置中的 `ai.provider`，最后是默认值 `auto`。空值视为未设置。这三个值之外的非空值无效。 |
+| `AMBERCAST_SECRET_*` | `{{secrets.*}}` 引用需要取值时 | 提供一个机密引用的值。 | 点号变为下划线，每一段转为大写，因此 `{{secrets.a.b}}` 读取 `AMBERCAST_SECRET_A_B`。变量缺失时，机密保持未解析。已存在的空变量属于已解析的值。 |
+| `CI` | 命令应用 CI 策略时 | 启用 CI 策略。 | 变量已定义、非空且不是小写的 `false` 时，策略生效。`FALSE`、`0` 和空白字符都使策略保持生效。判断区分大小写，也不去除空白。 |
+| `AMBERCAST_DEBUG` | CLI 崩溃时、`run` 输出进度时、MCP 服务器处理崩溃的任务或 heal 应用时 | 向 stderr 输出诊断信息。 | 未设置、为空、恰好为 `0` 或恰好为 `false` 时不生效，其他值都会使其生效。判断区分大小写，也不去除空白。 |
 
-提供商解析会在已加载的提供商之前优先应用命令行的 `--ai` 覆盖参数；非 `auto` 的值无需探测即可直接返回，而 `auto` 则会先探测 `claude`，再探测 `codex`。
+机密引用与 `AMBERCAST_SECRET_*` 之间不是一一对应。不要同时使用 `a.b` 和 `a_b` 这类引用。
 
-每次自动提供商探测都有独立的 8,000 ms 可用性截止时间。
+### AMBERCAST_DEBUG 的输出 {#debug-output}
 
-## 密钥与 CI {#secrets}
+`AMBERCAST_DEBUG` 生效时，ambercast 向 stderr 输出以下诊断信息：
 
-| 拦截的环境变量类别 | 是否传递给 AI 提供商子进程？ | 具体规则 |
+- CLI 崩溃的原因消息和堆栈。
+- `run` 中未能分类的用例异常的名称、已脱敏的消息和堆栈。
+- MCP 服务器中崩溃的任务或 heal 应用的原因消息和堆栈。
+- 存在子进程诊断时，输出 `child process: exit <n>` 或 `child process: signal <name>`，随后是 `child stderr:` 和正文，正文为空时写作 `(empty)`。
+
+这些诊断信息可能包含来自请求的敏感文本。
+
+### 提供方的解析 {#provider-resolution}
+
+提供方解析先应用 `--ai`。`auto` 之外的值直接返回，不做探测。取 `auto` 时，ambercast 先探测 `claude`，再探测 `codex`。每次探测的时限为 8,000 ms。
+
+## 机密与 CI {#secrets}
+
+| 被过滤的变量类别 | 是否传给 AI 提供方子进程 | 规则 |
 | --- | --- | --- |
-| `AMBERCAST_SECRET_*` | 否 | 在每次调用子进程前以不区分大小写的方式移除该命名空间。 |
-| `AMBERCAST_ENV_*` | 否 | 使用相同的不区分大小写的拒绝规则移除该命名空间。 |
+| `AMBERCAST_SECRET_*` | 否 | 每次启动子进程之前，ambercast 都会不区分大小写地移除这个命名空间。 |
+| `AMBERCAST_ENV_*` | 否 | 按同样的不区分大小写规则移除这个命名空间。 |
 
-环境适配器在解析 `CI` 时不会忽略大小写，也不会对其执行空白字符修剪。
+## 提供方子进程的环境 {#provider-child-environment}
 
-已存在但值为空的 `AMBERCAST_SECRET_<NAME>` 仍会被视为解析出的有效值；仅当计算得出的键完全缺失时才会返回 `undefined`。
-
-## 提供商子进程环境 {#provider-child-environment}
-
-| 传递的环境变量类别 | 是否传递给 AI 提供商子进程？ | 规则 |
+| 会传递的变量类别 | 是否传给 AI 提供方子进程 | 规则 |
 | --- | --- | --- |
-| 未匹配 `/^AMBERCAST_(SECRET|ENV)_/i` 的传入键 | 是 | 执行器会对注入的环境进行浅拷贝，仅移除被拒绝的键，并将结果作为 `spawn(...).env` 传入；因此常规的运行时/提供商变量以及 `AMBERCAST_CONFIG`、`AMBERCAST_AI_PROVIDER` 和 `CI` 若存在均会传递。 |
+| 不匹配 `/^AMBERCAST_(SECRET\|ENV)_/i` 的键 | 是 | 运行器复制环境，只移除被拒绝的键，再把结果传给子进程。 |
 
-过滤机制采用拒绝列表而非固定的允许列表，因此实现层面对特定提供商的身份验证环境变量名称不做穷尽承诺。
+这个过滤器是拒绝列表，不是允许列表。它返回浅拷贝，父进程的环境保持不变。只要设置了 `AMBERCAST_CONFIG`、`AMBERCAST_AI_PROVIDER` 和 `CI`，它们就会原样传递，普通运行时变量和提供方变量也一样。ambercast 不对提供方认证变量的名称作任何保证。
 
-过滤过程会返回一个副本，父进程环境保持不变。
+## 另请参阅 {#see-also}
 
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection)、[ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#flags)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)、[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization)。
+- [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
+- [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags)
+- [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)
+- [提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#normalization)
 
 ---
 

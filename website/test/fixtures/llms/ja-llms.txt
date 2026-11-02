@@ -29,13 +29,13 @@
 - [貢献ガイド](https://kotarotsubaki.github.io/ambercast/ja/how-to/contribute/): Issue、フォーク、3 つの検査、プルリクエストの順で変更を提出し、脆弱性を報告する手順。
 
 ## REFERENCE
-- [設定](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/): ambercast の設定キーと設定解決に関する仕様です。
-- [プロンプトファイルのフォーマット](https://kotarotsubaki.github.io/ambercast/ja/reference/prompt-format/): テストプロンプトファイルの厳密なファイル識別、正規化規則、およびシークレット参照構文を説明します。
-- [ディスカバリーパターン](https://kotarotsubaki.github.io/ambercast/ja/reference/discovery-patterns/): 設定されたテスト検出パターンの構文規則、選択仕様、デフォルト値、および評価例を定義します。
-- [レポート](https://kotarotsubaki.github.io/ambercast/ja/reference/reports/): ambercast が出力する構造化レポートのスキーマおよび各コマンド固有の結果形式に関するリファレンスです。
-- [エラーコード](https://kotarotsubaki.github.io/ambercast/ja/reference/error-codes/): ambercastのエラーコード体系、種別、スコープ、および終了コードのリファレンスです。
-- [終了コード](https://kotarotsubaki.github.io/ambercast/ja/reference/exit-codes/): ambercast がプロセス終了ステータスとして返す終了コードと、その集約優先順位のリファレンスです。
-- [環境変数](https://kotarotsubaki.github.io/ambercast/ja/reference/environment-variables/): Ambercastが読み取る環境変数と、AIプロバイダーの子プロセスに対するフィルタリング境界のリファレンスです。
+- [設定](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/): ambercast の設定キー、既定値、設定ファイルを選ぶ規則を示すリファレンス。
+- [プロンプトファイルのフォーマット](https://kotarotsubaki.github.io/ambercast/ja/reference/prompt-format/): ambercast がどのファイルをテストプロンプトとして扱うか、どう正規化するか、シークレット参照をどう扱うかを示すリファレンス。
+- [ディスカバリーパターン](https://kotarotsubaki.github.io/ambercast/ja/reference/discovery-patterns/): ambercast がどのテストプロンプトを検出するかを決める、パターンの文法、選択の段階、既定値、順序を示すリファレンス。
+- [レポート](https://kotarotsubaki.github.io/ambercast/ja/reference/reports/): ambercast の構造化 JSON レポートのエンベロープ、コマンドごとの結果の形、エラーの詳細、永続化の規則を示すリファレンス。
+- [エラーコード](https://kotarotsubaki.github.io/ambercast/ja/reference/error-codes/): 安定したエラーコードの種別・スコープ・終了コードと、各コードの details に入る内容を示すリファレンス。
+- [終了コード](https://kotarotsubaki.github.io/ambercast/ja/reference/exit-codes/): ambercast が返すプロセスの終了コードと、複数の結果を 1 つにまとめるときの優先順位を示すリファレンス。
+- [環境変数](https://kotarotsubaki.github.io/ambercast/ja/reference/environment-variables/): ambercast が読む環境変数と、AI プロバイダーの子プロセスに渡さない変数を示すリファレンス。
 - [ファイルレイアウト](https://kotarotsubaki.github.io/ambercast/ja/reference/file-layout/): パス計算、成果物の生成タイミング、および実装に基づくリポジトリポリシーを定義します。
 - [JSON スキーマ](https://kotarotsubaki.github.io/ambercast/ja/reference/json-schemas/): Ambercast におけるスキーマ再構築時の公開規約を定義し、現在生成されている JSON Schema アーティファクトの一覧を提示します。
 - [互換性と再生成](https://kotarotsubaki.github.io/ambercast/ja/reference/compatibility/): ambercast におけるアーティファクト形式のバージョン互換性と、変更に伴う再生成の要件について定義します。

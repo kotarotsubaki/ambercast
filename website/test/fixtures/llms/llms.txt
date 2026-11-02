@@ -29,13 +29,13 @@
 - [Contribute](https://kotarotsubaki.github.io/ambercast/how-to/contribute/): Submit a change by issue, fork, three checks, and pull request, or report a vulnerability.
 
 ## REFERENCE
-- [Configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/): Configuration keys and resolution rules for ambercast.
-- [Prompt file format](https://kotarotsubaki.github.io/ambercast/reference/prompt-format/): Exact file identity, normalization rules, and secret reference syntax for ambercast test prompts.
-- [Discovery patterns](https://kotarotsubaki.github.io/ambercast/reference/discovery-patterns/): Configured test file discovery matching rules, pattern grammar, and ordering.
-- [Reports](https://kotarotsubaki.github.io/ambercast/reference/reports/): Reference for ambercast structured report schemas, envelope properties, command result shapes, and error structures.
-- [Error codes](https://kotarotsubaki.github.io/ambercast/reference/error-codes/): Reference vocabulary of stable error codes, execution scopes, and exit codes for ambercast.
-- [Exit codes](https://kotarotsubaki.github.io/ambercast/reference/exit-codes/): Process exit codes and aggregation priority for machine-facing status in ambercast.
-- [Environment variables](https://kotarotsubaki.github.io/ambercast/reference/environment-variables/): Exhaustive reference of environment variables read by Ambercast and the filtering boundary for AI-provider child processes.
+- [Configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/): Configuration keys, defaults, and the rules for choosing a configuration file in ambercast.
+- [Prompt file format](https://kotarotsubaki.github.io/ambercast/reference/prompt-format/): Which files ambercast treats as test prompts, how it normalizes them, and how prompts and plans handle secret references.
+- [Discovery patterns](https://kotarotsubaki.github.io/ambercast/reference/discovery-patterns/): Pattern grammar, selection stages, defaults, and ordering that decide which test prompts ambercast discovers.
+- [Reports](https://kotarotsubaki.github.io/ambercast/reference/reports/): Report envelope, per-command result shapes, error details, and persistence rules for ambercast structured JSON reports.
+- [Error codes](https://kotarotsubaki.github.io/ambercast/reference/error-codes/): Stable error codes with their kind, scope, and exit code, and what each code's details contain.
+- [Exit codes](https://kotarotsubaki.github.io/ambercast/reference/exit-codes/): Process exit codes that ambercast returns, and the priority order that combines several outcomes into one code.
+- [Environment variables](https://kotarotsubaki.github.io/ambercast/reference/environment-variables/): Environment variables that ambercast reads, and the variables it withholds from AI-provider child processes.
 - [File layout](https://kotarotsubaki.github.io/ambercast/reference/file-layout/): Reference for Ambercast path arithmetic, artifact producers, timing, and implementation-backed repository policies.
 - [JSON Schemas](https://kotarotsubaki.github.io/ambercast/reference/json-schemas/): Publication contract and inventory of generated JSON Schemas for Ambercast configuration, plan, grounding, and report artifacts.
 - [Compatibility](https://kotarotsubaki.github.io/ambercast/reference/compatibility/): Artifact-format compatibility across package versions and regeneration rules for plans, groundings, and reports.

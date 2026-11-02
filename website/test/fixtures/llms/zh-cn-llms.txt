@@ -29,13 +29,13 @@
 - [参与贡献](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/contribute/): 通过 issue、fork、三项检查和 Pull Request 提交变更，或报告安全漏洞。
 
 ## REFERENCE
-- [配置](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/): 本页定义了配置键及其解析逻辑。
-- [提示词文件格式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/prompt-format/): 说明 ambercast 测试提示词文件的精确文件标识、规范化规则和机密引用语法。
-- [发现模式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/discovery-patterns/): 定义 ambercast 测试发现中的配置匹配规则与路径排序约定。
-- [报告](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/): ambercast 结构化输出字段与结果 Schema 的完整规范参考。
-- [错误代码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/error-codes/): ambercast 稳定错误代码词汇表、作用域、退出码及触发条件的完整参考。
-- [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/): ambercast 面向机器的进程状态退出码定义与聚合优先级参考。
-- [环境变量](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/environment-variables/): Ambercast 所读取环境数据的详尽参考，以及向 AI 提供商子进程传递变量时的过滤边界。
+- [配置](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/): ambercast 的配置键、默认值，以及选择配置文件的规则。
+- [提示词文件格式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/prompt-format/): ambercast 把哪些文件当作测试提示词、如何规范化它们，以及如何处理机密引用。
+- [发现模式](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/discovery-patterns/): 决定 ambercast 发现哪些测试提示词的模式语法、选择阶段、默认值和排序。
+- [报告](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/): ambercast 结构化 JSON 报告的信封、各命令的结果形状、错误详情和持久化规则。
+- [错误代码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/error-codes/): 稳定的错误代码及其类别、作用域和退出码，以及每个代码的 details 包含的内容。
+- [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/): ambercast 返回的进程退出码，以及把多个结果合并为一个退出码时的优先级。
+- [环境变量](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/environment-variables/): ambercast 读取的环境变量，以及不会传给 AI 提供方子进程的变量。
 - [文件布局](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/file-layout/): 详细定义 Ambercast 的路径运算规则、产物写入方、生成时机以及基于实现的仓库提交策略。
 - [JSON Schema 规范](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/json-schemas/): 规范重新构建时的发布约定，并梳理当前生成的 JSON Schema 产物与结构约束边界。
 - [兼容性](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/compatibility/): 说明产物格式的兼容性与重新生成要求。

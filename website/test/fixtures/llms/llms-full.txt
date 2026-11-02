@@ -1501,7 +1501,7 @@ See [ambercast run](/ambercast/reference/cli/run/#grounding-write-back) for the 
 # Prompt file format
 Source: https://kotarotsubaki.github.io/ambercast/reference/prompt-format/
 
-A test prompt is a Markdown file that describes one end-to-end test case in natural language. This page lists the rules for prompt files: which files count as prompts, how ambercast normalizes them, and how secrets are handled.
+A test prompt is a Markdown file that describes one end-to-end test case in natural language.
 
 ## File identity {#file-identity}
 

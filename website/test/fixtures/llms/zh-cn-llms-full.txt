@@ -1501,7 +1501,7 @@ ambercast 按下面的顺序选择文件：
 # 提示词文件格式
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/prompt-format/
 
-测试提示词是一个 Markdown 文件，用自然语言描述一个端到端测试用例。本页列出提示词文件的规则：哪些文件算提示词、ambercast 如何规范化它们，以及如何处理机密。
+测试提示词是一个 Markdown 文件，用自然语言描述一个端到端测试用例。
 
 ## 文件识别 {#file-identity}
 

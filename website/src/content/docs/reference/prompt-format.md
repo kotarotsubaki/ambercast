@@ -3,7 +3,7 @@ title: Prompt file format
 description: Which files ambercast treats as test prompts, how it normalizes them, and how prompts and plans handle secret references.
 ---
 
-A test prompt is a Markdown file that describes one end-to-end test case in natural language. This page lists the rules for prompt files: which files count as prompts, how ambercast normalizes them, and how secrets are handled.
+A test prompt is a Markdown file that describes one end-to-end test case in natural language.
 
 ## File identity {#file-identity}
 

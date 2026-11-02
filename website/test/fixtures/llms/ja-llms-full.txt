@@ -1501,7 +1501,7 @@ ambercast は、次の順でファイルを選ぶ。
 # プロンプトファイルのフォーマット
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/prompt-format/
 
-テストプロンプトは、1 つのエンドツーエンドのテストケースを自然言語で書いた Markdown ファイルである。このページは、プロンプトファイルの規則をまとめる。どのファイルがプロンプトか、ambercast がどう正規化するか、シークレットをどう扱うかを示す。
+テストプロンプトは、1 つのエンドツーエンドのテストケースを自然言語で書いた Markdown ファイルである。
 
 ## ファイルの識別 {#file-identity}
 

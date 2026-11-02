@@ -36,12 +36,12 @@
 - [Error codes](https://kotarotsubaki.github.io/ambercast/reference/error-codes/): Stable error codes with their kind, scope, and exit code, and what each code's details contain.
 - [Exit codes](https://kotarotsubaki.github.io/ambercast/reference/exit-codes/): Process exit codes that ambercast returns, and the priority order that combines several outcomes into one code.
 - [Environment variables](https://kotarotsubaki.github.io/ambercast/reference/environment-variables/): Environment variables that ambercast reads, and the variables it withholds from AI-provider child processes.
-- [File layout](https://kotarotsubaki.github.io/ambercast/reference/file-layout/): Reference for Ambercast path arithmetic, artifact producers, timing, and implementation-backed repository policies.
-- [JSON Schemas](https://kotarotsubaki.github.io/ambercast/reference/json-schemas/): Publication contract and inventory of generated JSON Schemas for Ambercast configuration, plan, grounding, and report artifacts.
-- [Compatibility](https://kotarotsubaki.github.io/ambercast/reference/compatibility/): Artifact-format compatibility across package versions and regeneration rules for plans, groundings, and reports.
+- [File layout](https://kotarotsubaki.github.io/ambercast/reference/file-layout/): Reference for the paths Ambercast derives for companion files and run artifacts, who writes each one, and when.
+- [JSON Schemas](https://kotarotsubaki.github.io/ambercast/reference/json-schemas/): Publication metadata, generated files, and structural limits of the JSON Schemas for Ambercast configuration, plan, grounding, and report documents.
+- [Compatibility](https://kotarotsubaki.github.io/ambercast/reference/compatibility/): Artifact-format compatibility across package versions, and the changes that require you to regenerate a Plan, Grounding, or report.
 - [Changelog](https://kotarotsubaki.github.io/ambercast/reference/changelog/): User-visible product behavior and public-contract changes across ambercast releases, with breaking changes listed first.
-- [Security policy](https://kotarotsubaki.github.io/ambercast/reference/security-policy/): Supported versions and vulnerability reporting procedures for ambercast.
-- [Glossary](https://kotarotsubaki.github.io/ambercast/reference/glossary/): Normative site-wide terminology and index of literal translation-invariant tokens for Ambercast.
+- [Security policy](https://kotarotsubaki.github.io/ambercast/reference/security-policy/): Which ambercast versions receive security fixes, and how to report a vulnerability privately.
+- [Glossary](https://kotarotsubaki.github.io/ambercast/reference/glossary/): The normative site-wide terms of Ambercast and the index of literal tokens that translators keep verbatim.
 - [MCP Tools](https://kotarotsubaki.github.io/ambercast/reference/mcp-tools/): Tool contracts, inputs, results, and errors for ambercast MCP workflows.
 
 ### CLI

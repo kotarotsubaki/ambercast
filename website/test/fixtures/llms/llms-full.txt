@@ -2033,42 +2033,41 @@ The filter is a deny-list, not an allow-list. It returns a shallow copy and leav
 # File layout
 Source: https://kotarotsubaki.github.io/ambercast/reference/file-layout/
 
-Ambercast defines path arithmetic, artifact producers, timing, and implementation-backed repository policies for test prompts, companion files, and execution outputs.
+Ambercast resolves every companion and run path from the test directory and the runs directory. This page lists each derived path, its writer and timing, and the commit policy the implementation encodes.
 
 ## Companions {#companions}
 
 | Input path | Derived path | Rule |
 | --- | --- | --- |
-| `<testDir>/<dirs>/<name>.test.md` | `<testDir>/<dirs>/<name>.ambercast.plan.json` | Replace only the terminal `.test.md`; preserve other dots in `<name>`. |
+| `<testDir>/<dirs>/<name>.test.md` | `<testDir>/<dirs>/<name>.ambercast.plan.json` | Replace only the terminal `.test.md`. Preserve other dots in `<name>`. |
 | `<testDir>/<dirs>/<name>.test.md` | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | Use the same adjacent terminal-suffix transform. |
 
-Forward mappings accept only an in-`testDir` path ending exactly in `.test.md` with a nonempty name; invalid caller input raises `RangeError`. Inverse mappings recognize only exact in-tree plan or grounding suffixes and otherwise return `undefined`.
+Forward mappings accept only an in-`testDir` path ending exactly in `.test.md` with a nonempty name. Invalid caller input raises `RangeError`. Inverse mappings recognize only exact in-tree plan or grounding suffixes and otherwise return `undefined`.
 
 ## Run artifacts {#run-artifacts}
 
 | Artifact | Exact path | Writer / timing | Implementation-backed commit policy |
 | --- | --- | --- | --- |
-| Prompt | `<testDir>/<dirs>/<name>.test.md` | User-authored input; Ambercast reads it. | No Git decision is encoded; Git procedure is owned by how-to/manage-artifacts-in-git. |
-| Plan companion | `<testDir>/<dirs>/<name>.ambercast.plan.json` | Generate writes a newly generated plan; heal may replace it only after an authorized settlement. | Runtime treats it as a committed input, but performs no Git operation. |
-| Grounding companion | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | Generate creates/repairs it; run may write changed grounding under write-back policy; heal may replace it after settlement. | `grounding.repositoryPolicy` is `committed` by default and may be set to `uncommitted`; Ambercast itself performs no Git operation. |
-| Invocation directory | `<runsDir>/<runId>/` | Run and heal use one invocation identity for case evidence; run IDs are timestamp-plus-UUID safe segments. | No repository policy exists for this directory; Git procedure is owned by how-to/manage-artifacts-in-git. |
-| Case directory | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | Run provides this directory to evidence capture for the case. | Same as the invocation directory. |
-| Run screenshot | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | Run writes it for an eligible failed live-browser step; secret detection may omit it. | Same as the invocation directory. |
-| Heal attempt directory | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | Heal allocates a positive ordinal per attempt and confines that attempt's evidence/overlay under it. | Same as the invocation directory. |
+| Prompt | `<testDir>/<dirs>/<name>.test.md` | You write it. Ambercast reads it. | No repository decision is encoded. The procedure is in [Manage artifacts in git](/ambercast/how-to/manage-artifacts-in-git/). |
+| Plan companion | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` writes a newly generated Plan. `heal` may replace it only after an authorized settlement. | The runtime treats it as a committed input. It performs no repository operation. |
+| Grounding companion | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | `generate` creates or repairs it. `run` may write changed Grounding under the write-back policy. `heal` may replace it after settlement. | `grounding.repositoryPolicy` is `committed` by default and may be `uncommitted`. Ambercast performs no repository operation. |
+| Invocation directory | `<runsDir>/<runId>/` | `run` and `heal` use one invocation identity for case evidence. Run IDs are timestamp-plus-UUID safe segments. | The runtime has no repository policy for this directory. `ambercast init` appends `tests/ambercast/.runs/` to `.gitignore` for the default `runsDir`. The procedure is in [Manage artifacts in git](/ambercast/how-to/manage-artifacts-in-git/). |
+| Case directory | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | `run` provides this directory to evidence capture for the case. | Same as the invocation directory. |
+| Run screenshot | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | `run` writes it for an eligible failed live-browser step. Secret detection may omit it. | Same as the invocation directory. |
+| Heal attempt directory | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | `heal` allocates a positive ordinal per attempt. It confines that attempt's evidence and overlay under this directory. | Same as the invocation directory. |
 | Heal screenshot | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | The shared capture path writes eligible failed-step evidence into the attempt-scoped case directory. | Same as the invocation directory. |
-| Run report | `<runsDir>/<runId>/report.json` | Only `run` writes the finalized batch envelope after execution; a failed atomic write changes `reportPersistence`. | Same as the invocation directory. |
+| Run report | `<runsDir>/<runId>/report.json` | `run` writes the finalized batch envelope after execution. [`ambercast view`](/ambercast/reference/cli/view/) reads it. A failed atomic write changes `reportPersistence`. | Same as the invocation directory. |
 
-A screenshot is best effort: a capture or storage failure also omits it.
+A screenshot is best effort. A capture or storage failure also omits it.
 
-`runsDir` is independently configured and defaults to `tests/ambercast/.runs`; it is not derived by the layout resolver from `testDir`.
+`runsDir` is configured independently and defaults to `tests/ambercast/.runs`. The layout resolver does not derive it from `testDir`.
 
-A `runId` must match `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`, preventing separators, dot segments, and empty IDs.
+A `runId` must match `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`. The pattern prevents separators, dot segments, and empty IDs.
 
-Only `run` persists `report.json`; generate, check, and heal return envelopes without this layout write.
+`report.json` is written by `run`. The other reporting commands return their envelope without writing it.
 
-### Related
+## See also {#see-also}
 
-Links:
 - [Configuration](/ambercast/reference/configuration/#key-table)
 - [Reports](/ambercast/reference/reports/#persistence)
 - [Prompt file format](/ambercast/reference/prompt-format/#file-identity)
@@ -2080,27 +2079,32 @@ Links:
 # JSON Schemas
 Source: https://kotarotsubaki.github.io/ambercast/reference/json-schemas/
 
-Ambercast defines JSON Schema draft 2020-12 specifications for validating configuration files, intermediate representation documents (plans and grounding caches), and execution reports. This reference details the published metadata contract, the current inventory of generated schema files, structural validation boundaries, and report schema generation status.
+Ambercast publishes JSON Schema draft 2020-12 files that validate configuration files, plan documents, grounding caches, and reports. This page lists the published metadata, the generated files, and what the schemas cannot express.
 
 ## Publication metadata {#publication-metadata}
 
-Ambercast publishes these metadata and byte-identical files to the site and npm.
+Four schemas describe the current contracts on `main`. A schema version newer than the latest release appears in [Compatibility](/ambercast/reference/compatibility/#compatibility-table) once it ships.
 
 | artifact | public path and `$id` | version | `title` | `description` | scope | state |
 | --- | --- | --- | --- | --- | --- | --- |
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | unversioned; config has no `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | A present configuration document. | available |
-| plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v2 snapshot retained for consumers of the retired contract. | available |
-| plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v3 snapshot retained for consumers of the retired contract. | available |
-| plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v4 snapshot retained for consumers of the retired contract. | available |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed current `PlanDocument`, including targets and steps. | available |
-| grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v2 snapshot retained for consumers of the retired contract. | available |
-| grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v3 snapshot retained for consumers of the retired contract. | available |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.11"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
-Each `$id` equals its public-path URL; byte-identical schema files are published to the site and the npm `schemas/` export.
+Five frozen snapshots remain for consumers of retired contracts. The site publishes them from committed files, and the npm package does not export them.
 
-The current Astro configuration sets `site` to the `https://kotarotsubaki.github.io` host with base `/ambercast`; the publication URLs above use that host.
+| artifact | public path and `$id` | version | `title` | `description` | scope | state |
+| --- | --- | --- | --- | --- | --- | --- |
+| plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v2 snapshot retained for consumers of the retired contract. | available |
+| plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v3 snapshot retained for consumers of the retired contract. | available |
+| plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v4 snapshot retained for consumers of the retired contract. | available |
+| grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v2 snapshot retained for consumers of the retired contract. | available |
+| grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v3 snapshot retained for consumers of the retired contract. | available |
+
+Each `$id` equals its public-path URL. The site serves the four current schemas as byte-identical copies of the files in `dist/schema/`. The npm package exports those four as `ambercast/schema/<name>.json`.
+
+The Astro configuration sets `site` to the `https://kotarotsubaki.github.io` host with base `/ambercast`. The publication URLs above use that host.
 
 ## Generated artifacts {#generated-artifacts}
 
@@ -2111,30 +2115,36 @@ The current Astro configuration sets `site` to the `https://kotarotsubaki.github
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.11. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-Running `npm run build` compiles the package and then runs `node dist/schema-gen.js`, which creates the schema directory recursively and writes exactly the four files above.
+`npm run build` compiles the package and then runs `node dist/schema-gen.js`. That script creates the schema directory recursively and writes the four schema files above. It also writes manifest files under `dist/manifest/`.
 
-The checked generated files declare JSON Schema draft 2020-12 through `$schema`; each also declares the `$id` shown in the publication metadata.
-
-For specifications defining the underlying structure of these documents, see [Plan document](/ambercast/spec/plan-document/), [Grounding document](/ambercast/spec/grounding-document/), and [Configuration](/ambercast/reference/configuration/#key-table).
+The checked generated files declare JSON Schema draft 2020-12 through `$schema`. Each also declares the `$id` shown in the publication metadata.
 
 ## Structural boundary {#structural-boundary}
 
-Plan, Grounding, config, and report JSON Schemas are derived from Zod rather than maintained as separate handwritten definitions.
+Plan, grounding, config, and report JSON Schemas are derived from Zod. They are not maintained as separate handwritten definitions.
 
-Duplicate Plan step IDs are a Zod-only semantic refinement because JSON Schema 2020-12 cannot express projected-field uniqueness across array items.
+Duplicate plan step IDs are a Zod-only semantic refinement. JSON Schema 2020-12 cannot express uniqueness of a projected field across array items.
 
-Validating only the generated Plan JSON Schema does not establish duplicate-step-ID uniqueness; [Conformance](/ambercast/spec/conformance/) documents the combined boundary.
+Validating only the generated plan JSON Schema does not establish duplicate-step-ID uniqueness. [Conformance](/ambercast/spec/conformance/) documents the combined boundary.
 
 ## Report schema {#report-schema}
 
-`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results, including Report `schemaVersion` 3.11, required step Target identity, and the session inventory on executed run and completed heal results. For the complete runtime report envelope structure, see [Reports](/ambercast/reference/reports/#envelope).
+`report.schema.json` is generated alongside the other schemas and exported as `ambercast/schema/report.json` → `./dist/schema/report.schema.json`. It validates the structured report envelope and its command-specific results. That coverage includes Report `schemaVersion` 3.11, required step Target identity, and the session inventory on executed run and completed heal results.
+
+## See also {#see-also}
+
+- [Plan document](/ambercast/spec/plan-document/)
+- [Grounding document](/ambercast/spec/grounding-document/)
+- [Configuration](/ambercast/reference/configuration/#key-table)
+- [Conformance](/ambercast/spec/conformance/)
+- [Reports](/ambercast/reference/reports/#envelope)
 
 ---
 
 # Compatibility
 Source: https://kotarotsubaki.github.io/ambercast/reference/compatibility/
 
-Ambercast defines artifact-format compatibility and regeneration boundaries across package releases using explicit schema versions, element fingerprint tags, and cryptographic digests. This reference details artifact compatibility across releases and the conditions under which you must regenerate your Plan, Grounding, or report files.
+Each release pins schema versions and an element fingerprint tag. The tables below show which pinned versions each release uses and which changes force regeneration.
 
 ## Compatibility table {#compatibility-table}
 
@@ -2147,11 +2157,19 @@ Ambercast defines artifact-format compatibility and regeneration boundaries acro
 | `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
 | `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 
-Rows list 0.1.0, 0.2.0, each release that changed the Plan or Grounding schema version, and every release from 0.8.0 on.
+Rows list 0.1.0, 0.2.0, each release that changed the Plan or Grounding schema version, and every release from 0.8.0 on. Schema versions on `main` after the latest release appear in this table when they are released. See [JSON Schemas](/ambercast/reference/json-schemas/#publication-metadata) for the schemas currently published.
 
 In version 0.2.0, the provider request contract changed without incrementing the Plan schema version. That change updated `producerBundleFingerprint` and altered every prompt's `inputsDigest`, making 0.1.0 plans stale (see [Changelog](/ambercast/reference/changelog/#release-020)).
 
-Plans with schema versions 1 and 2 are never migrated in place. `generate` treats either as non-fresh and regenerates a current Plan; `check` read-only reports it as `stale`; `run` and `heal` reject it with `INTEGRITY_VIOLATION` (exit code 4). Plan v3 replaces the v2 secret-grant provenance model with consent and `secrets.allow`. Plan v4 is likewise never migrated in place and receives the same non-fresh, `stale`, and `INTEGRITY_VIOLATION` treatment. Plan v5 replaces v4 element references with source-backed intent and adds `confirms`; Grounding v3 replaces v2 bare-fingerprint entries with locator, fingerprint, intentDigest, and provenance; for step-by-step upgrade procedures, refer to [Upgrade between versions](/ambercast/how-to/upgrade/).
+Schema changes are never migrated in place. Each transition has its own rule:
+
+- Plan v1 and v2: `generate` treats either as non-fresh and regenerates a current Plan. `check` reports it read-only as `stale`. `run` and `heal` reject it with `INTEGRITY_VIOLATION` (exit code 4).
+- Plan v3: it replaces the v2 secret-grant provenance model with consent and `secrets.allow`.
+- Plan v4: it is not migrated in place and receives the same non-fresh, `stale`, and `INTEGRITY_VIOLATION` treatment.
+- Plan v5: it replaces v4 element references with source-backed intent and adds `confirms`.
+- Grounding v3: it replaces v2 bare-fingerprint entries with locator, fingerprint, intentDigest, and provenance.
+
+For step-by-step upgrade procedures, refer to [Upgrade between versions](/ambercast/how-to/upgrade/).
 
 ## Regeneration boundary {#regeneration-boundary}
 
@@ -2160,31 +2178,122 @@ Plans with schema versions 1 and 2 are never migrated in place. `generate` treat
 | Normalized prompt, Plan schema version, generator-template fingerprint, producer-bundle fingerprint, or named target definitions | `inputsDigest` and Plan freshness | Regenerate the Plan. Replay-relevant Plan content separately governs the resulting Grounding binding. |
 | Replay-relevant Plan content | `planDigest` recorded by Grounding | Regenerate or replace Grounding; `generatorMeta` alone does not enter `planDigest`. |
 | Accepted element fingerprint algorithm or preimage | Existing element-grounding entries | In `run`, an unusable source is a cache miss when it is absent, invalid JSON, stale provenance, or fails strict parsing without a coverage claim. Once a current-provenance source makes a coverage claim, its structural or canonical failure is an integrity failure and does not fall back. In `check`, grounding inspection classifies JSON/schema failure and a claimed non-canonical source as `invalid` and a stale `planDigest` as `stale`; the public report status is derived per repository policy in [Freshness and digests](/ambercast/spec/freshness/#freshness-consequences). |
-| Report schema version or field contract | Structured-output consumers and persisted run reports | Update consumers for the emitted report contract; 3.5 adds the secret-policy error details, generate secret-use/warning fields, and heal Stage 3 rejection details. |
+| Report schema version or field contract | Structured-output consumers and persisted run reports | Update consumers for the emitted report contract. The [Changelog](/ambercast/reference/changelog/) lists what each report version changed. |
 | Plan, Grounding, config, or report Zod schema | Published npm schema artifacts | Run the package build so the four JSON Schemas are regenerated from their Zod sources. |
 
-The `inputsDigest` hashes exactly the five declared inputs—the normalized prompt, the Plan schema version, the generator-template fingerprint, the producer-bundle fingerprint, and named target definitions—through canonical JSON and SHA-256.
+The `inputsDigest` hashes exactly five declared inputs through canonical JSON and SHA-256. They are the normalized prompt, the Plan schema version, the generator-template fingerprint, the producer-bundle fingerprint, and the named target definitions.
 
 Grounding freshness is a direct equality check between its recorded `planDigest` and the digest computed for your candidate Plan.
 
-For status terminology used during inspection, see [ambercast check](/ambercast/reference/cli/check/#status-vocabulary). For underlying freshness semantics and version history, consult [Freshness and digests](/ambercast/spec/freshness/) and [Specification changelog](/ambercast/spec/changelog/).
+## See also {#see-also}
+
+- [Changelog](/ambercast/reference/changelog/#release-020)
+- [Upgrade between versions](/ambercast/how-to/upgrade/)
+- [ambercast check](/ambercast/reference/cli/check/#status-vocabulary)
+- [Freshness and digests](/ambercast/spec/freshness/)
+- [Freshness consequences](/ambercast/spec/freshness/#freshness-consequences)
+- [Specification changelog](/ambercast/spec/changelog/)
 
 ---
 
 # Changelog
 Source: https://kotarotsubaki.github.io/ambercast/reference/changelog/
 
-This reference tracks user-visible product behavior and public-contract changes across ambercast releases, ordering breaking changes before fixes.
+This page lists product behavior and public-contract entries only. It leaves out repository architecture scanners, agent hooks, worktree lifecycle, lint configuration, CI, tests, the documentation site, and project workflow.
 
-## Release 0.5.0 {#release-050}
+Releases 0.3.0 and 0.3.1 have no section because they have no product entries. Release 0.4.0 has no section because it made existing Plans stale through three producer-bundle revisions. Those revisions are `generatorSecretPolicy` 2 → 3 → 4 and `instructionCoveragePolicy` 1 → 2, so Plans from earlier releases are regenerated with `ambercast generate`. The repository's `CHANGELOG.md` also lists the other entries of those releases.
 
-Release date: 2026-09-15.
+## Release 0.9.0 {#release-090}
+
+Release date: 2026-10-08. Report schema 3.10.
 
 | Class | User-visible entry |
 | --- | --- |
-| BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model; Plan v2 is not migrated in place. |
+| BREAKING | Report schema 3.10 adds the case-scoped error codes `CASE_ABORTED` (with `reason` and `stepId`) and `PROMPT_AMBIGUOUS` (with `ambiguities`). A `generate` or `heal` failure caused by an ambiguous prompt exits 2 with `PROMPT_AMBIGUOUS` instead of exiting 3 with a run-scoped `UNEXPECTED_CRASH`. Run rows that used to end without an error code carry `CASE_ABORTED`, `AGENTIC_STEP_FAILED`, or a case-scoped `UNEXPECTED_CRASH`. `heal` reports Stage 3 and final-replay failures as case errors, so the summary counts those rows as errored, and exit codes are unchanged. `ambercast view` shows error hints and details. |
+| Feature | Every failure path yields a coded, diagnosable report error. |
 
-Version 0.5.0 has one declared breaking change.
+Version 0.9.0 has one declared breaking change.
+
+## Release 0.8.0 {#release-080}
+
+Release date: 2026-10-06. Report schema 3.9.
+
+| Class | User-visible entry |
+| --- | --- |
+| Feature | Report schema 3.9 adds `AGENTIC_STEP_FAILED` to case-scoped environment errors. It also adds the confirmation issue codes `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate` to `AiResponseIssueCode`. |
+| Fix | `generate` checks provider step IDs for secret literals before building diagnostics. |
+| Fix | `generate` drops `confirms` references on `navigate` steps and reports violations by code. |
+| Fix | `run` always reports `confirmed: true` for a binding from a confirmed grounding entry. |
+| Fix | The runner classifies agentic step failures and polls AI-directed asserts until the deadline. |
+
+Version 0.8.0 declares no breaking change.
+
+## Release 0.7.0 {#release-070}
+
+Release date: 2026-10-02. Report schema 3.8.
+
+| Class | User-visible entry |
+| --- | --- |
+| BREAKING | Plan v3 → v4 adds required step Target names and removes Plan browser selection. Regenerate v3 Plans. |
+| BREAKING | Plan v4 → v5 adds source-backed `intent` and `confirms` and Target-scoped `locale`. Grounding v2 → v3 replaces bare fingerprints with locator, fingerprint, intent digest, and provenance. Regenerate v4 Plans and their Grounding. |
+| BREAKING | Target configuration moves from `targets.<name>.browser` to `targets.<name>.executor`, and the loader rejects the old key. The report gains `EXECUTOR_UNSUPPORTED` and `sessions[name].executor`. |
+| BREAKING | The UI executor kind vocabulary is unified. An element step's grounding miss without `--resolve` reports `GROUNDING_UNRESOLVED` with exit 4 instead of exit 3 without a code. |
+| Feature | Report schema moves to 3.8. Version 3.7 adds step Target names and per-Target sessions, and 3.8 adds heal Stage 1 `binding` diagnostics. |
+| Feature | `ambercast init` scaffolds the configuration, a sample prompt, `.gitignore`, and `AGENTS.md`. |
+| Feature | `ambercast view` is a read-only local viewer for `.runs` reports. |
+| Feature | `targets.<name>.locale` sets the locale of browser contexts. |
+| Feature | A UI executor abstraction adds capability preflight. |
+| Feature | Heal Stage 1 rebinds element intents through `confirms`. |
+| Feature | Element intent, quote matching, and intent digest primitives are added. |
+| Feature | Plan IR v4 carries a per-step Target and one session per Target. |
+| Feature | The MCP stdio server is added. |
+| Feature | The MCP job model adds `ambercast_job_status` and `ambercast_job_cancel`. |
+| Feature | The MCP heal apply takes two steps, with token issuance and elicitation. |
+| Feature | Runtime event fan-out serves MCP, and heal preparation has two phases. |
+| Fix | `init` adds a browser to the scaffolded configuration, plans BOM-safely, and aborts before applying on failure. |
+| Fix | The MCP server emits `AMBERCAST_DEBUG` diagnostics for failed jobs and heal apply crashes. |
+| Fix | The MCP server waits for heal apply confirmation and in-flight tool responses during shutdown. |
+| Fix | The MCP server writes a stderr line when a progress notification fails to send. |
+| Fix | Reports keep generation issue details in `AI_RESPONSE_INVALID`. |
+| Fix | `run` recovers agentic target-resolution failures with diagnostics. |
+| Fix | `run` takes the final poll sample at the deadline for assertions and binding. |
+| Fix | `view` reads run reports from every 3.x schema version leniently. |
+| Fix | `view` rejects default-port and non-authority `Host` headers and escapes `runId` in attributes. |
+| Fix | `view` keeps screenshots and long text from overflowing the step table. |
+| Fix | `view` applies the design system's dark tokens, status badges in the step table, and zero-omitted totals. |
+
+Version 0.7.0 has four declared breaking changes.
+
+## Release 0.6.0 {#release-060}
+
+Release date: 2026-09-18. Report schema 3.6.
+
+| Class | User-visible entry |
+| --- | --- |
+| BREAKING | Agentic MCP tool calls that fail schema validation no longer latch `INTEGRITY_VIOLATION` on the first mismatch. Up to 3 consecutive rejections per case return a structured result with the remaining budget. The 4th ends the case with `AI_RESPONSE_INVALID` (kind `environment`, exit 3) instead of `INTEGRITY_VIOLATION` (kind `usage`, exit 4). This change does not move the report schema version. |
+| Feature | Report schema 3.6 adds the optional `repairTrace` diagnostic to completed heal results, and dry-run and apply produce the same result. |
+| Feature | `run` waits for element presence before resolution. |
+
+Version 0.6.0 has one declared breaking change.
+
+## Release 0.5.0 {#release-050}
+
+Release date: 2026-09-15. Report schema 3.5.
+
+| Class | User-visible entry |
+| --- | --- |
+| BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model. Plan v2 is not migrated in place. Report schema 3.5 adds the secret-policy error codes `SECRET_ENV_VAR_COLLISION`, `SECRET_CONSENT_REQUIRED`, and `SECRET_SYNTAX_REJECTED`, the optional `GROUNDING_UNRESOLVED` details, and the optional `GenerateResult` `secrets` and `warnings` fields. The legacy `@ambercast-secret` grant line and `{{secrets.*}}` prompt syntax are rejected with exit 2. |
+| BREAKING | Existing Plans become stale and are regenerated with `ambercast generate --force`. Instruction-coverage criteria carry `startAnchor`, `startColumn`, `endAnchor`, and `endColumn`, and the `instructionCoveragePolicy` revision moves from 2 to 3. |
+| BREAKING | `generate` stops at a consent gate for every newly detected secret name. An interactive terminal asks `y / N / i`, and any other run exits 2 and lists the unallowed names. Consenting appends the names to `secrets.allow`. |
+| BREAKING | `run` resolves grounding misses with AI only with `--resolve`. `--cache-only` is removed and exits 2. `GROUNDING_UNRESOLVED` maps to exit 4. |
+| Feature | `run` gains an agentic executor over an in-process MCP server. |
+| Feature | Instruction coverage matches by anchor IDs. |
+| Feature | Heal Stages 2 and 3 run under the allowlist model with secret-set invariance. |
+| Feature | Secret naming is deterministic, and the allowlist is verified. |
+| Fix | `generate` retries a provider response rejected for an embedded secret reference. |
+| Fix | `BROWSER_LAUNCH_FAILED` is classified with a hint and details (report schema 3.4). |
+
+Version 0.5.0 has four declared breaking changes.
 
 ## Release 0.2.0 {#release-020}
 
@@ -2275,13 +2384,11 @@ Release date: 2026-09-03.
 | Fix | Exit aggregation uses `2 > 3 > 4 > 1 > 5 > 0`. |
 | Fix | Generate wires its event sink, strips `$schema` from Claude CLI requests, and fixes run step-start timing. |
 
-This release section excludes changelog entries that only change repository architecture scanners, agent hooks, worktree lifecycle, lint configuration, or project workflow; it does not silently omit product behavior or public-contract entries.
 
-## Related
+## See also {#see-also}
 
-Links:
-- [Compatibility](/ambercast/reference/compatibility/#compatibility-table)
-- [Compatibility](/ambercast/reference/compatibility/#regeneration-boundary)
+- [Compatibility table](/ambercast/reference/compatibility/#compatibility-table)
+- [Regeneration boundary](/ambercast/reference/compatibility/#regeneration-boundary)
 - [Upgrade between versions](/ambercast/how-to/upgrade/)
 - [Specification changelog](/ambercast/spec/changelog/)
 
@@ -2290,15 +2397,11 @@ Links:
 # Security policy
 Source: https://kotarotsubaki.github.io/ambercast/reference/security-policy/
 
-This reference details the security maintenance policy and reporting procedures for ambercast.
+This page mirrors the repository's security policy. It covers the supported versions, the private reporting channel, and the scope of that channel.
 
 ## Supported versions {#supported-versions}
 
-| Release state | Supported versions |
-| --- | --- |
-| ambercast is pre-1.0. | Only the latest published version receives fixes. |
-
-Fixes are not promised for older pre-1.0 releases.
+ambercast is pre-1.0. The latest published version receives fixes. Older pre-1.0 releases get no promised fix.
 
 ## Vulnerability reporting {#vulnerability-reporting}
 
@@ -2309,18 +2412,21 @@ Fixes are not promised for older pre-1.0 releases.
 | Public issues | Do not open a public issue for a security report. |
 | Supply chain | The same private channel covers typosquats or impersonation of the `ambercast` npm package. |
 
-See also [Trust and security](/ambercast/explanation/trust-and-security/) and [Contribute](/ambercast/how-to/contribute/).
+## See also {#see-also}
+
+- [Trust and security](/ambercast/explanation/trust-and-security/)
+- [Contribute](/ambercast/how-to/contribute/)
 
 ---
 
 # Glossary
 Source: https://kotarotsubaki.github.io/ambercast/reference/glossary/
 
-This page is the single owner of site-wide terminology and the index of literal tokens that translators must preserve. Every definition here is normative and kept to a single sentence; follow each linked owner contract for complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
+Every definition here is normative and takes one sentence. Follow each linked owner contract for the complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
 
 ## Artifact terms {#artifact-terms}
 
-The following schema- and resolver-bound definitions govern the core artifact model:
+These schema- and resolver-bound definitions govern the core artifact model.
 
 | term | normative definition | owning schema / command | not to be confused with |
 | --- | --- | --- | --- |
@@ -2336,16 +2442,17 @@ The following schema- and resolver-bound definitions govern the core artifact mo
 
 ## Execution terms {#execution-terms}
 
-The following command- and report-bound definitions govern execution, target resolution, and reporting contracts:
+These command- and report-bound definitions govern execution, target resolution, and reporting contracts.
 
 | term | normative definition | owning schema / command | not to be confused with |
 | --- | --- | --- | --- |
+| replay | Replay is `run` executing a plan with its grounding; without `--resolve` it makes zero AI calls. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/) | heal |
 | freshness | Freshness is the provenance condition `check` reports for Plan/Grounding artifacts, not an execution outcome. | `ambercast check`; [Freshness and digests](/ambercast/spec/freshness/) | run success |
 | stale | Stale is a completed `check` status for an artifact whose freshness cannot be trusted. | `CompletedCheckResult`; [ambercast check](/ambercast/reference/cli/check/#status-vocabulary) | UI drift |
 | drift | Drift is a localized change in an element's accessibility neighborhood that changes its fingerprint. | fingerprint resolver; [Element fingerprint](/ambercast/spec/fingerprint/) | stale Plan provenance |
-| heal | Heal is the repair command whose non-list mode is permitted only by CI policy and an `idempotent` selected target. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/) | run grounding fallback |
-| target | A target is a named configured browser destination selected explicitly, by configured default, or when it is the sole configured target. | `resolveTarget`; [Configuration](/ambercast/reference/configuration/#key-table) | prompt |
-| replay isolation | Replay isolation is the target policy `healReplayIsolation`; `idempotent` permits heal and `stateful` rejects it. | target config / `ambercast heal` | Plan target definition |
+| heal | Heal is the repair command. Outside `--list`, it requires every target the plan references to set `healReplayIsolation: "idempotent"`, and in CI it also requires `ci.heal: true`. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#preconditions); [ambercast heal in CI](/ambercast/reference/cli/heal/#ci) | run grounding fallback |
+| target | A target is a named configured browser destination. Each plan step names its target, and `generate` chooses it from the configured targets, using `defaultTarget` when the prompt does not identify one. `run`, `check`, and `heal` take targets from the plan. | `defaultTarget`; [Configuration](/ambercast/reference/configuration/#key-table) | prompt |
+| replay isolation | Replay isolation is the target policy `healReplayIsolation`; `idempotent` permits heal and `stateful` rejects it, and heal checks every target the plan references. | target config / `ambercast heal` | Plan target definition |
 | report envelope | A report envelope is the versioned command-discriminated structured result returned by a reporting command. | `ReportEnvelope`; [Reports](/ambercast/reference/reports/#envelope) | persisted `report.json` |
 | report persistence | Report persistence is the run-envelope state `persisted`, `failed`, or `not-attempted` for the finalized envelope write. | run `ReportEnvelope`; [Reports](/ambercast/reference/reports/#persistence) | semantic test result |
 | secret reference | A secret reference is a whole-value string accepted by `SecretRef`, with one or more dot-separated segments of ASCII letters, digits, or underscores after `secrets.`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal secret |
@@ -2354,11 +2461,11 @@ The following command- and report-bound definitions govern execution, target res
 | `secrets.allow` | `secrets.allow` is the configuration array of pre-approved logical secret names, or the high-risk `"*"` value that accepts every AI-proposed name without per-name review. | `RawConfig`; [Configuration](/ambercast/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` values |
 | `SecretNameChoice` | `SecretNameChoice` is the provider-facing strict choice between a projected `allowedName` and a new `nameHint`, both resolved locally before a committed `SecretRef` exists. | `SecretNameChoice`; [Value types](/ambercast/spec/value-types/#shared-types) | committed `SecretRef` |
 
-`stale` belongs to check results and is not a run result status. Heal's idempotent-target check is skipped only in list mode.
+`stale` belongs to check results and is not a run result status. Heal's idempotent-target check is skipped in list mode.
 
 ## Translation invariant registry {#translation-invariant-registry}
 
-The following registry is the exhaustive inventory of literal tokens that must be preserved verbatim by translators across reference documentation. The report version in the fourth column is the `REPORT_SCHEMA_VERSION` recorded in that release's release commit.
+This registry is the index of literal tokens that translators keep verbatim across the Reference pages. In a version row, the fourth column holds the `REPORT_SCHEMA_VERSION` recorded in that release's release commit.
 
 | invariant | normative sentence | owner | not to be confused with |
 | --- | --- | --- | --- |
@@ -2370,13 +2477,13 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--allow-headless` | `--allow-headless` lifts view's non-interactive refusal; it is a no-op when the terminal is already interactive. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#interactive-gate) | implemented `--headed` |
 | `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
 | `--clear` | `--clear` is planned-only and has no accepted current baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
-| `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
-| `--dir` | `--dir` names the directory `ambercast init` scaffolds into. | `ambercast init`; [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
+| `--config` | `--config` is command-local and parsed by `generate`, `check`, and `view`. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
+| `--dir` | `--dir` names the directory `ambercast init` scaffolds into, and selects the session root of `ambercast mcp`. | `ambercast init`; [ambercast init](/ambercast/reference/cli/init/#flags); [ambercast mcp](/ambercast/reference/cli/mcp/#flags) | config `testDir` |
 | `--dry-run` | `--dry-run` withholds artifact writes for generate and heal. | generate/heal; [ambercast generate](/ambercast/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` opts the implemented generate command out of fresh-Plan reuse; for `ambercast init` it replaces an existing configuration instead of rejecting it. | `ambercast generate`; [ambercast generate](/ambercast/reference/cli/generate/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | heal `--yes` |
 | `--host` | `--host` selects view's bind address; a concrete IP or `localhost`, never a wildcard. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#host-binding) | target `baseUrl` |
-| `--json` | `--json` selects serialized structured-report output after an implemented command other than `init` or `view` returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
-| `--list` | `--list` is parsed by `generate`, `run`, `check`, and `heal`; each command page owns its listing result semantics. Neither `init` nor `view` accepts it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
+| `--json` | `--json` selects serialized structured-report output. `generate`, `run`, `check`, and `heal` accept it. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
+| `--list` | `--list` is parsed by `generate`, `run`, `check`, and `heal`; each command page owns its listing result semantics. `init`, `view`, and `mcp` do not accept it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` is planned-only and has no accepted current run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` fixes view to a single strict port instead of auto-incrementing through candidates. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#port-selection) | config `viewer.port` |
 | `--yes` | `--yes` authorizes heal settlement without an interactive confirmation, and skips init's confirmation prompt; neither substitutes for the user's own review. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | generate `--force` |
@@ -2408,7 +2515,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast check` | `ambercast check` is the implemented read-only freshness command. | [ambercast check](/ambercast/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
-| `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
+| `ambercast init` | `ambercast init` is implemented and plans four scaffold artifacts. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` starts the implemented stdio MCP server. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | MCP tool name |
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the current parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
@@ -2425,7 +2532,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-preview-and-apply) | HealResult representation |
 | `fresh-without-grounding` | `fresh-without-grounding` is a completed check status distinct from `fresh`. | check result; [ambercast check](/ambercast/reference/cli/check/#status-vocabulary) | missing Plan |
 | `grounding.schema.json` | `grounding.schema.json` is the generated Grounding JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Grounding instance |
-| `healReplayIsolation` | `healReplayIsolation` is the target policy whose `idempotent` value is required by heal. | target config / heal | browser mode |
+| `healReplayIsolation` | `healReplayIsolation` is the target policy whose `idempotent` value heal requires on every target the plan references. | target config / heal | browser mode |
 | `inputsDigest` | `inputsDigest` records the five-input Plan provenance digest. | `computeInputsDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `planDigest` |
 | `isError` | `isError` classifies implemented MCP tool results, with exit-code mappings and MCP-specific failures. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
 | `outputSchema` | `outputSchema` is omitted from every implemented MCP tool definition because the report schema is too large for `tools/list`. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | generated npm JSON Schema |
@@ -2444,14 +2551,23 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `testMatch` | `testMatch` requires at least one inclusion match for a relative path. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` exemplifies a whole-value secret reference whose body maps to an environment key. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal credential |
 
-See also: [CLI overview](/ambercast/reference/cli/overview/), [Configuration](/ambercast/reference/configuration/), [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/reference/error-codes/), [Exit codes](/ambercast/reference/exit-codes/), [JSON Schemas](/ambercast/reference/json-schemas/), [Environment variables](/ambercast/reference/environment-variables/), [MCP Tools](/ambercast/reference/mcp-tools/).
+## See also {#see-also}
+
+- [CLI overview](/ambercast/reference/cli/overview/)
+- [Configuration](/ambercast/reference/configuration/)
+- [Reports](/ambercast/reference/reports/)
+- [Error codes](/ambercast/reference/error-codes/)
+- [Exit codes](/ambercast/reference/exit-codes/)
+- [JSON Schemas](/ambercast/reference/json-schemas/)
+- [Environment variables](/ambercast/reference/environment-variables/)
+- [MCP Tools](/ambercast/reference/mcp-tools/)
 
 ---
 
 # MCP Tools
 Source: https://kotarotsubaki.github.io/ambercast/reference/mcp-tools/
 
-The MCP server exposes six tools in this order: `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. Tool names use the ambercast prefix and snake_case; the server does not mirror every CLI command.
+The MCP server exposes six tools in this order: `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. Tool names use the ambercast prefix and snake_case. The server does not mirror every CLI command.
 
 ## Tool table {#tool-table}
 
@@ -2486,17 +2602,21 @@ The MCP input intentionally excludes CLI flags `headed` (headless fixed), `list`
 
 ## Heal preview and apply {#heal-preview-and-apply}
 
-`ambercast_heal` defaults to preview (`dryRun: true`), unlike CLI heal's false default. A preview with commits returns an `applyToken`; a preview without commits does not. Apply with `dryRun: false` and `applyToken` alone: `files`, `ai`, and `allowEmpty` must be absent. A preview must omit `applyToken`. An invalid combination is an SDK input validation error. Apply is synchronous and does not create a job. A token is a 128-bit random value rendered as 32 hexadecimal characters; a newer preview supersedes pending tokens. Pending tokens expire 600000 ms after their first token-bearing response is assembled. A consumed token replays its saved result for 600000 ms after settlement.
+`ambercast_heal` defaults to preview (`dryRun: true`), unlike CLI heal's false default. A preview with commits returns an `applyToken`, and a preview without commits does not. Apply with `dryRun: false` and `applyToken` alone, so `files`, `ai`, and `allowEmpty` must be absent. A preview must omit `applyToken`. An invalid combination is an SDK input validation error. Apply is synchronous and does not create a job.
 
-If the client supports form elicitation, it asks for confirmation with a 600000 ms timeout. Accepting and confirming applies the repair; declining leaves it unapplied; cancellation interrupts it. If the client lacks form elicitation, the server authorizes apply. The token identifies a preview; requesting apply is a separate step, and client hints alone are not authorization.
+A token is a 128-bit random value rendered as 32 hexadecimal characters. A newer preview supersedes pending tokens. Pending tokens expire 600000 ms after `ambercast_heal` or `ambercast_job_status` first returns the token-bearing response to the client. Assembling that response into the job cache does not start the clock. A consumed token replays its saved result for 600000 ms after settlement.
+
+If the client supports form elicitation, it asks for confirmation with a 600000 ms timeout. Accepting and confirming applies the repair. Declining leaves it unapplied, and cancellation interrupts it. If the client lacks form elicitation, the server authorizes apply. The token identifies a preview, and requesting apply is a separate step. Client hints alone are not authorization.
 
 ## Results and jobs {#results-and-jobs}
 
-Every tool omits `outputSchema`: the report JSON Schema is 136 KB and would crowd `tools/list`; tools may also return a report envelope, a single Job record, or a Job record list. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
+Every tool omits `outputSchema`. The report JSON Schema is too large for `tools/list`, and tools may also return a report envelope, a single Job record, or a Job record list. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
 
-The single text item begins with `exitCode: <n>`. Only a heal preview with commits has a second line `applyToken: <token>`; the following line contains the envelope JSON. The response also has `_meta.exitCode` and, when present, `_meta.applyToken`. A completed job fetched by `ambercast_job_status` returns the same content, error classification, and metadata, plus `_meta.job` without the result.
+The single text item begins with `exitCode: <n>`. Only a heal preview with commits has a second line `applyToken: <token>`, and the following line contains the envelope JSON. The response also has `_meta.exitCode` and, when present, `_meta.applyToken`. A completed job fetched by `ambercast_job_status` returns the same content, error classification, and metadata, plus `_meta.job` without the result.
 
-Every generate, run, and heal preview call creates a Job. If it finishes within the synchronous wait bound, the caller receives the report response; otherwise it receives a job handle. A handle and a nonterminal status response contain a Job record in `structuredContent`; the text has three lines: `jobId: <id>`, `status: <status>`, and the status message. Their metadata contains `_meta.jobId`. `ambercast_check` and heal apply stay synchronous. `ambercast_job_status` with no ID lists jobs for this server process, newest first, as `structuredContent` with a `jobs` array; an empty list has text `no jobs`. This is a server-local job path, not the MCP Tasks extension. `ambercast_job_cancel` cancels a running or queued job and returns a record. Job records disappear 1800000 ms after termination or when the server exits.
+Every generate, run, and heal preview call creates a Job. If it finishes within the synchronous wait bound, the caller receives the report response. Otherwise it receives a job handle. A handle and a nonterminal status response contain a Job record in `structuredContent`. Their text has three lines: `jobId: <id>`, `status: <status>`, and the status message. Their metadata contains `_meta.jobId`.
+
+`ambercast_check` and heal apply stay synchronous. `ambercast_job_status` with no ID lists jobs for this server process, newest first, as `structuredContent` with a `jobs` array. An empty list has text `no jobs`. This is a server-local job path, not the MCP Tasks extension. `ambercast_job_cancel` cancels a running or queued job and returns a record. Job records disappear 1800000 ms after termination or when the server exits.
 
 | Job record field | Meaning |
 | --- | --- |

@@ -1,15 +1,19 @@
 ---
 title: CLI overview
-description: Reference for parser-wide CLI behavior, command-flag dispatch, and discovery defaults in ambercast.
+description: The seven ambercast commands, the options each command accepts, and the file discovery defaults.
 ---
 
-The `ambercast` command-line interface provides seven commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, browsing run results, and serving the MCP stdio server, using per-command option parsing and configured discovery defaults.
+Each `ambercast` command parses its own arguments. When you pass no files, configured discovery selects the tests.
 
 ## Command surface {#command-surface}
 
-The implemented commands are `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
+The implemented commands are `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`.
 
-Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to operate on plans whose steps name their execution Targets.
+Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to work on plans whose steps name their execution targets.
+
+Top-level `--help` and `--version` are handled before command dispatch. A `--help` after a recognized command and before any `--` is handled by that command right away. Malformed arguments exit with status `2`, write the usage to stderr, and produce no report.
+
+The usage block below is the CLI's own help output, including the `AI configuration` and `Heal configuration` lines.
 
 ```text
 Usage: ambercast <command> [options]
@@ -59,26 +63,36 @@ Heal configuration:
 
 | command | positional | accepted options | configuration path |
 | --- | --- | --- | --- |
-| init | none | dir, yes/-y, force, no-color | --dir argument (cwd when omitted) |
-| generate | literal paths; no paths = discovery | force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| view | none | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| mcp | none | dir, sync-wait-ms | --dir argument selects session root (cwd when omitted) |
+| init | none | dir, yes/-y, force, no-color | `--dir` argument (cwd when omitted) |
+| generate | literal paths; no paths = discovery | force, dry-run, target, ai, allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
+| run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > discovery |
+| check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
+| heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > discovery |
+| view | none | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
+| mcp | none | dir, sync-wait-ms | `--dir` argument selects the session root (cwd when omitted) |
 
-For `generate`, `run`, `check`, and `heal`, except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
+For `generate`, `run`, `check`, and `heal`, every positional argument outside `--list` must be a literal path inside `testDir`. Its name must be non-empty and end in exactly `.test.md`. Any other path fails with `PROMPT_PATH_INVALID`.
 
-- Passing `--` terminates option parsing, leaving all subsequent arguments to be interpreted as literal paths.
-- The `--json` and `--no-color` flags are handled individually by each command rather than through a shared global-flag abstraction.
-- `generate --target` restricts the Target definitions available to the generator. Run, check, and heal use the Target names recorded in each Plan.
+- `--` ends option parsing, so every later argument is a literal path.
+- `--json` and `--no-color` are handled by each command, not by a shared global flag.
+- `generate --target` restricts the target definitions available to the generator. `run`, `check`, and `heal` use the target names recorded in each plan.
 
 ## Discovery default {#discovery-default}
 
-When you pass no literal files to `generate`, `run`, `check`, or `heal`, that command delegates test file selection to configured discovery. `init`, `view`, and `mcp` take no prompt-file arguments.
+When you pass no literal files to `generate`, `run`, `check`, or `heal`, configured discovery selects the test files. `init`, `view`, and `mcp` take no prompt-file arguments.
 
-- The default inclusion pattern is `**/*.test.md`.
-- Default exclusions include `.runs`, Plan, and Grounding companions.
-- Discovery evaluates POSIX-relative paths by requiring an inclusion match first, after which an ignore match excludes the path.
+- The default `testMatch` is `**/*.test.md`.
+- The default `testIgnore` is `**/.runs/**` plus the plan and grounding companions.
+- Discovery evaluates POSIX-relative paths. A path must match an inclusion pattern first, and an ignore match then excludes it.
 
-Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast init](/ambercast/reference/cli/init/#flags), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), [ambercast heal](/ambercast/reference/cli/heal/#flags), [ambercast view](/ambercast/reference/cli/view/#flags), and [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
+The details are on these pages.
+
+- [Configuration](/ambercast/reference/configuration/#file-selection)
+- [Discovery patterns](/ambercast/reference/discovery-patterns/#selection)
+- [ambercast init](/ambercast/reference/cli/init/#flags)
+- [ambercast generate](/ambercast/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/reference/cli/run/#flags)
+- [ambercast check](/ambercast/reference/cli/check/#flags)
+- [ambercast heal](/ambercast/reference/cli/heal/#flags)
+- [ambercast view](/ambercast/reference/cli/view/#flags)
+- [ambercast mcp](/ambercast/reference/cli/mcp/#usage)

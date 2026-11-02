@@ -45,13 +45,13 @@
 - [MCP ツール](https://kotarotsubaki.github.io/ambercast/ja/reference/mcp-tools/): ambercast の MCP ワークフローにおけるツール、入力、結果、エラーの規約。
 
 ### CLI
-- [CLIの概要](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/): ambercast CLI のパーサー全体の仕様、コマンド体系、および自動探索の既定動作を解説します。
-- [ambercast generate](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/): ambercast generate コマンドのフラグ仕様および成果物生成に関するリファレンスです。
+- [CLIの概要](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/): ambercast の 7 つのコマンド、コマンドごとのオプション、ファイル探索の既定値をまとめたリファレンス。
+- [ambercast generate](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/): ambercast generate のフラグ、プロバイダーの解決、シークレットの同意、コンパニオンファイル、終了ステータスのリファレンス。
 - [ambercast run](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/): ambercast run コマンドのフラグ、再生パス、明示的な AI 解決、グラウンディングの書き戻し、レポートの永続化を解説する。
-- [ambercast check](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/): CLIにおけるアーティファクトの検査ステータスと検証結果の仕様を解説します。
-- [ambercast heal](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/): ambercast heal コマンドのフラグ、修復モデル、制限事項、認可境界、および副作用に関するリファレンス。
-- [ambercast init](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/init/): ambercast init が設定ファイル、サンプルプロンプト、およびリポジトリ向けのガイダンスを作成するためのコマンドラインリファレンスです。
-- [ambercast view](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/view/): ambercast view コマンドのリファレンス。フラグ、対話ゲート、ポート選択、ホストバインド、配信ルートを解説します。
+- [ambercast check](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/): 計画とグラウンディングの鮮度を調べる ambercast check のフラグ、ステータス、結果フィールド、読み取り専用の契約。
+- [ambercast heal](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/): ambercast heal のフラグ、修復の段階、上限、認可、CI での扱い、書き込みの挙動のリファレンス。
+- [ambercast init](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/init/): 設定ファイル、サンプルプロンプト、リポジトリ向けの案内を作る ambercast init の書式、フラグ、書き込むファイル、確認、終了コード。
+- [ambercast view](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/view/): ambercast view のフラグ、対話ゲート、ポートの選択、ホストの結び付け、配信するルートのリファレンス。
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/mcp/): MCP サーバーの起動、転送、終了処理、クライアント登録のリファレンス。
 
 ## PLAN SPECIFICATION

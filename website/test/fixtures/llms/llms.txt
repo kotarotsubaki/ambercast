@@ -45,13 +45,13 @@
 - [MCP Tools](https://kotarotsubaki.github.io/ambercast/reference/mcp-tools/): Tool contracts, inputs, results, and errors for ambercast MCP workflows.
 
 ### CLI
-- [CLI overview](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/): Reference for parser-wide CLI behavior, command-flag dispatch, and discovery defaults in ambercast.
-- [ambercast generate](https://kotarotsubaki.github.io/ambercast/reference/cli/generate/): Reference for ambercast generate flags, provider executor resolution, companion file artifacts, and exit statuses.
+- [CLI overview](https://kotarotsubaki.github.io/ambercast/reference/cli/overview/): The seven ambercast commands, the options each command accepts, and the file discovery defaults.
+- [ambercast generate](https://kotarotsubaki.github.io/ambercast/reference/cli/generate/): Flags, provider resolution, secret consent, companion files, and exit statuses of ambercast generate.
 - [ambercast run](https://kotarotsubaki.github.io/ambercast/reference/cli/run/): Reference for the ambercast run command, covering CLI flags, replay paths, explicit AI resolution, grounding write-back, and report persistence.
-- [ambercast check](https://kotarotsubaki.github.io/ambercast/reference/cli/check/): Inspect the freshness and validity of Ambercast test plans and grounding artifacts from the CLI.
-- [ambercast heal](https://kotarotsubaki.github.io/ambercast/reference/cli/heal/): Command-line reference for ambercast heal, defining flags, repair execution boundaries, authorization, and side effects.
-- [ambercast init](https://kotarotsubaki.github.io/ambercast/reference/cli/init/): Command-line reference for ambercast init, which scaffolds a configuration file, sample prompt, and repository guidance.
-- [ambercast view](https://kotarotsubaki.github.io/ambercast/reference/cli/view/): Command-line reference for ambercast view, defining flags, the interactive gate, port selection, host binding, and the served routes.
+- [ambercast check](https://kotarotsubaki.github.io/ambercast/reference/cli/check/): Flags, status values, result fields, and the read-only contract of ambercast check, which inspects plan and grounding freshness.
+- [ambercast heal](https://kotarotsubaki.github.io/ambercast/reference/cli/heal/): Flags, repair stages, limits, authorization, CI rule, and write behavior of ambercast heal.
+- [ambercast init](https://kotarotsubaki.github.io/ambercast/reference/cli/init/): Synopsis, flags, written files, confirmation, and exit codes of ambercast init, which scaffolds a configuration file, a sample prompt, and repository guidance.
+- [ambercast view](https://kotarotsubaki.github.io/ambercast/reference/cli/view/): Flags, the interactive gate, port selection, host binding, and served routes of ambercast view.
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/reference/cli/mcp/): Launch, transport, lifecycle, and client registration for the MCP server.
 
 ## PLAN SPECIFICATION

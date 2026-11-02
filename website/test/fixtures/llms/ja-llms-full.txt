@@ -2435,9 +2435,17 @@ MCP 層の意味エラーは `isError: true`、text 1個 `<CODE>: <message>`、`
 # CLIの概要
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/overview/
 
-`ambercast` CLI におけるパーサー全体の動作仕様、実装されているコマンド体系、およびオプションの対応関係について解説します。本ツールには `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の 7 つのコマンドが実装されています。
+`ambercast` はコマンドごとに引数を解析する。ファイルを指定しない場合の選択は、設定された探索に任せる。
 
 ## コマンド体系 {#command-surface}
+
+実装済みのコマンドは `init`・`generate`・`run`・`check`・`heal`・`view`・`mcp` の 7 つだけである。
+
+`ambercast run <file>`・`ambercast check <file>`・`ambercast heal <file>` は、手順が実行先のターゲットを名指しする計画（plan）を対象にする。
+
+最上位の `--help` と `--version` は、コマンドの振り分けより前に処理される。認識されたコマンドの後ろで `--` より前に置いた `--help` も、そのコマンドがすぐに処理する。形式が不正な引数は、レポートを出さずに終了コード `2` で終わり、使い方を標準エラーに書く。
+
+次の使い方ブロックは、CLI 自身のヘルプ出力と一致する。`AI configuration` と `Heal configuration` の行も含む。
 
 ```text
 Usage: ambercast <command> [options]
@@ -2483,94 +2491,87 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-実装されているコマンドは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` です。
+## コマンドとオプションの対応表 {#command-flag-matrix}
 
-トップレベルの `--help` および `--version` は、コマンドのディスパッチ前に処理を終了（ショートサーキット）します。不正な形式の引数が指定された場合は、レポートを出力せずに終了コード 2 で終了します。
-
-## コマンド・オプション対応表 {#command-flag-matrix}
-
-| コマンド | 位置引数 | 受け付けるオプション | 設定ファイルの探索優先順位 |
+| コマンド | 位置引数 | 受け付けるオプション | 設定の経路 |
 | --- | --- | --- | --- |
-| init | なし | `dir`（対象ディレクトリ）、`yes`/`-y`（確認の省略）、`force`（既存設定の置換）、`no-color`（カラー無効化） | `--dir` 引数（未指定時は cwd） |
-| generate | リテラルパス（パス未指定時は探索） | `force`（強制）、`dry-run`（ドライラン）、`target`（ターゲット指定）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| run | リテラルパス（パス未指定時は探索） | `grep`（パターン抽出）、`headed`（ブラウザ表示）、`resolve`（ライブ AI 解決を有効化）、`update-cache`（キャッシュ更新）、`stale`（stale（古くなった状態））、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
-| check | リテラルパス（パス未指定時は探索） | `allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| heal | リテラルパス（パス未指定時は探索） | `dry-run`（ドライラン）、`yes`/`-y`（プロンプト確認の省略）、`ai`（AIプロバイダー）、`allow-empty`（空結果の許可）、`list`（一覧表示）、`json`（JSON出力）、`no-color`（カラー無効化） | `AMBERCAST_CONFIG` > 探索 |
-| view | なし | `port`（ポート指定）、`host`（バインドアドレス）、`allow-headless`（非対話許可）、`config`（設定パス）、`no-color`（カラー無効化） | `--config` > `AMBERCAST_CONFIG` > 探索 |
-| mcp | なし | `dir`（セッションルート）、`sync-wait-ms`（同期応答の待機上限、ミリ秒） | `--dir` 引数（未指定時は cwd） |
+| init | なし | dir, yes/-y, force, no-color | `--dir` 引数（省略時はカレントディレクトリ） |
+| generate | リテラルパス。なしなら探索 | force, dry-run, target, ai, allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| run | リテラルパス。なしなら探索 | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > 探索 |
+| check | リテラルパス。なしなら探索 | allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| heal | リテラルパス。なしなら探索 | dry-run, yes/-y, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > 探索 |
+| view | なし | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > 探索 |
+| mcp | なし | dir, sync-wait-ms | `--dir` 引数がセッションルートを選ぶ（省略時はカレントディレクトリ） |
 
-ファイルパスを受け付けるコマンドでは、`--` はオプション解析を終了し、後続の引数をリテラルパスとして残します。
+`generate`・`run`・`check`・`heal` は、`--list` を除き、位置引数を `testDir` 内のリテラルパスとして受け取る。パスの名前は空でなく、接尾辞は正確に `.test.md` でなければならない。条件を満たさないパスは `PROMPT_PATH_INVALID` になる。
 
-`--json` および `--no-color` は、グローバルフラグの抽象化機構ではなく、これらを受け付ける各コマンドによって個別に解析されます。
+- `--` を渡すと、そこでオプションの解析が終わり、以降の引数はすべてリテラルパスになる。
+- `--json` と `--no-color` は、共有のグローバルフラグではなく、コマンドごとに処理される。
+- `generate --target` は、生成器が使えるターゲット定義を絞る。`run`・`check`・`heal` は、各計画に記録されたターゲット名を使う。
 
-`generate`、`run`、`check`、`heal` では、`--list` を除き、各位置引数は `testDir` 内にあり、空でない名前部分を持ち、拡張子が正確に `.test.md` であるリテラルパスでなければなりません。適格でないパスは、黙って無視されたり実行時クラッシュに至ったりする代わりに `PROMPT_PATH_INVALID` を発生させます。
+## 探索の既定値 {#discovery-default}
 
-`generate --target` はジェネレーターが利用できる Target 定義を制限します。run、check、heal は各 Plan に記録された Target 名を使用します。
+`generate`・`run`・`check`・`heal` にリテラルのファイルを渡さないと、設定された探索がテストファイルを選ぶ。`init`・`view`・`mcp` はプロンプトファイルの引数を取らない。
 
-## 探索の既定動作 {#discovery-default}
+- 既定の `testMatch` は `**/*.test.md` である。
+- 既定の `testIgnore` は `**/.runs/**` と、計画およびグラウンディングのコンパニオンファイルである。
+- 探索は POSIX 形式の相対パスを評価する。包含パターンの一致が先で、除外パターンの一致があればそのパスは外れる。
 
-`generate`、`run`、`check`、`heal` にリテラルファイルを指定しない場合、対象の選択を設定済みの自動探索に委譲します。`init`、`view`、`mcp` はプロンプトファイルを位置引数として受け付けません。既定の包含パターンは `**/*.test.md` であり、既定の除外対象には `.runs`、Plan コンパニオン、および Grounding コンパニオンが含まれます。
+詳細は次のページにある。
 
-探索処理は POSIX 相対パスを評価し、包含パターンのマッチ（inclusion match）を要求した上で、除外パターンのマッチ（ignore match）によって該当するパスを除外します。
-
-関連情報: [設定](/ambercast/ja/reference/configuration/#file-selection)、[ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)、[ambercast init](/ambercast/ja/reference/cli/init/#flags)、[ambercast generate](/ambercast/ja/reference/cli/generate/#flags)、[ambercast run](/ambercast/ja/reference/cli/run/#flags)、[ambercast check](/ambercast/ja/reference/cli/check/#flags)、[ambercast heal](/ambercast/ja/reference/cli/heal/#flags)、[ambercast view](/ambercast/ja/reference/cli/view/#flags)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)
+- [設定](/ambercast/ja/reference/configuration/#file-selection)
+- [探索パターン](/ambercast/ja/reference/discovery-patterns/#selection)
+- [ambercast init](/ambercast/ja/reference/cli/init/#flags)
+- [ambercast generate](/ambercast/ja/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/ja/reference/cli/run/#flags)
+- [ambercast check](/ambercast/ja/reference/cli/check/#flags)
+- [ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+- [ambercast view](/ambercast/ja/reference/cli/view/#flags)
+- [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)
 
 ---
 
 # ambercast generate
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/
 
-`ambercast generate` は、テストプロンプトに対応する Plan および Grounding 成果物を生成するためのコマンドです。本リファレンスでは、コマンドラインフラグの仕様、AIプロバイダ実行エンジンの解決、成果物の生成に伴う副作用、および終了ステータスについて解説します。
+`ambercast generate` は、テストプロンプトから計画（plan）とコンパニオンの成果物を作る。対象はリテラルのファイルパスか、探索で選んだテストである。
 
 ## フラグ {#flags}
 
-`ambercast generate` で利用可能なフラグの一覧です。ファイル指定を省略した場合は自動検出（discovery）が実行されます（ファイル選択の詳細は [設定](/ambercast/ja/reference/configuration/#file-selection) を参照してください）。
-
-| flag | value | effect | default |
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| files | path[] | literal prompts; absent selects discovery | discovery |
-| --force | boolean | force generation | false |
-| --dry-run | boolean | preview: `would-generate` only when generation is needed; fresh Plan returns `skipped-fresh`; neither outcome writes | false |
-| --target | name | select target | omitted |
-| --ai | claude\|codex | provider override | omitted |
-| --allow-empty | boolean | allow empty selection | false |
-| --list | boolean | list without generation | false |
-| --json | boolean | JSON envelope | false |
-| --config | path | explicit config | omitted |
-| --no-color | boolean | disable ANSI | false |
+| files | path[] | リテラルのプロンプト。未指定なら探索 | discovery |
+| --force | boolean | 生成を強制する | false |
+| --dry-run | boolean | 何も書かずに結果だけを返す。生成が必要なら `would-generate`、計画が新しければ `skipped-fresh` | false |
+| --target | name | 生成で使えるターゲットをこの 1 つに限る | omitted |
+| --ai | claude\|codex | プロバイダーの上書き | omitted |
+| --allow-empty | boolean | 空の選択を許可する | false |
+| --list | boolean | 生成せずに一覧を出す | false |
+| --json | boolean | JSON エンベロープで出力する | false |
+| --config | path | 設定ファイルを明示する | omitted |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
-## AI呼び出し {#ai-calls}
+## AI 呼び出し {#ai-calls}
 
-`ambercast generate` は、プロバイダ実行エンジン（provider executor）の解決を、その生成依存関係（generation dependency）を通じてのみ行います。設定済みのプロバイダおよび `--ai` によるオーバーライド指定は、このリゾルバへ渡されます。
+`generate` がプロバイダーの実行器を解決するのは、生成の経路だけである。設定されたプロバイダーと `--ai` の上書きは、この解決処理に渡される。
 
-フラグによる実行制御と生成動作は以下のとおりです。
+`--list` は、生成せずに探索の行を返す。
 
-- `--list` は生成を実行せず、検出行（discovery rows）を返します。
-- `--dry-run` を指定した場合、生成が必要なターゲットに対しては `would-generate` を返し、最新状態の Plan（fresh Plan）に対しては `skipped-fresh` を返します。
-- `--dry-run` のいずれの結果においても、成果物への書き込みは行われません。fresh ブランチでは Grounding の修復（Grounding repair）がスキップされ、生成ブランチでは実際の書き込み処理の前にリターンします。
+`--dry-run` では、生成が必要な対象は `would-generate` を返し、計画が新しい対象は `skipped-fresh` を返す。どちらの結果も成果物を書かない。新しい計画の分岐はグラウンディングの修復を飛ばし、生成の分岐は書き込みの前で戻るからだ。
 
-## シークレット同意 {#secret-consent}
+## シークレットの同意 {#secret-consent}
 
-生成は候補作成後に同意を求めます。候補 Plan を作成し、`secrets.allow` にないシークレット名を識別してから、Plan または Grounding を永続化する前に対話的な承認を求めます。最新の Plan を `--force` で再生成する場合も、この同意境界に従います。`--dry-run` は成果物を書き込まず、同意も永続化しません。
+生成は、候補を作ってから同意を取る順で進む。まず候補の計画を作り、`secrets.allow` に無いシークレット名を見つけ、計画かグラウンディングを書く前に対話で承認を求める。`--force` でも、新しい計画を再生成するときは同じ同意の境界に従う。`--dry-run` は成果物を書かず、同意も保存しない。
 
-非対話コンテキスト、または同意を拒否した場合、許可リストにない候補は `SECRET_CONSENT_REQUIRED` と終了コード 2 で失敗します。CI で実行する前にレビュー済みの名前を `secrets.allow` に追加してください。`"*"` は名前ごとのレビューを回避して AI が提案する任意の名前を受け入れるため、強いリスク警告を伴います。安全なワークフローは[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)を参照してください。
+非対話の環境や、同意を断った場合は、許可されていない候補が `SECRET_CONSENT_REQUIRED` で失敗し、終了コード `2` になる。CI で実行する前に、確認済みの名前を `secrets.allow` に加える。`"*"` は名前ごとの確認を省いて AI が提案したどの名前も受け入れるため、強いリスクを伴う。安全な手順は[シークレットを管理する](/ambercast/ja/how-to/manage-secrets/)を参照する。
 
 ## 副作用と終了コード {#side-effects}
 
-`<name>.test.md` という名称のプロンプトは、その隣に配置される Plan および Grounding のコンパニオンファイルに対応付けられます（詳細は [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) を参照してください）。
+`<name>.test.md` という名前のプロンプトには、同じ場所に計画とグラウンディングのコンパニオンが対応する（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)を参照する）。
 
-### 結果ステータス
+結果ステータスは `generated`・`would-generate`・`skipped-fresh`・`listed`・`failed`・`skipped` である（[レポート](/ambercast/ja/reference/reports/#generate-results)を参照する）。`would-generate` は、生成が必要な対象に対する `--dry-run` のステータスである。`skipped-fresh` は `--dry-run` でも返る。
 
-コマンド実行結果のステータスには、`generated`、`would-generate`、`skipped-fresh`、`listed`、`failed`、`skipped` があります（詳細は [レポート](/ambercast/ja/reference/reports/#generate-results) を参照してください）。
-
-- `would-generate`: 生成が必要なターゲットに対してのみ返される `--dry-run` 時のステータスです。
-- `skipped-fresh`: 最新状態の Plan に対して返されるステータスであり、`--dry-run` モードでも有効です。
-
-### 終了コード
-
-プロセスコードの値およびその集約の優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) に従います（終了コード一覧については [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table) を参照してください）。空の選択（empty selection）が行われた際に終了コード 5 を計上するかどうかは、`--allow-empty` フラグによって制御されます。
-
-関連リンク: [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)、[レポート](/ambercast/ja/reference/reports/#generate-results)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、[設定](/ambercast/ja/reference/configuration/#file-selection)
+終了コードの値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)が定め、個々のコードは[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。`--allow-empty` は、空の選択が終了コード `5` に寄与するかどうかを決める（[設定](/ambercast/ja/reference/configuration/#file-selection)を参照する）。
 
 ---
 
@@ -2636,151 +2637,172 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 # ambercast check
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/
 
-`ambercast check` は、テストプロンプトに対応するプランやグラウンディングなどのアーティファクトを読み取り専用で検査し、そのステータスを報告するコマンドです。AIプロバイダ、ブラウザ操作、イベント送受信、およびストレージへの書き込みを行わずに、状態の検証を素早く実行します。
+`ambercast check` はプロンプト、計画（plan）、グラウンディングのコンパニオンを調べ、それぞれが新しく正しいかを報告する。AI を呼ばず、ブラウザを起動せず、イベントを送らず、ディスクにも書かない。
 
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+プロンプトのパスを直接渡すことも、[設定された探索](/ambercast/ja/reference/configuration/#file-selection)に選ばせることもできる。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `files` | path[] | リテラルプロンプトの指定。省略時はディスカバリを実行 | discovery |
-| `--allow-empty` | boolean | 空の選択を許容 | false |
-| `--list` | boolean | 検査を行わずに一覧表示 | false |
-| `--json` | boolean | JSONエンベロープ形式で出力 | false |
-| `--config` | path | 明示的な設定ファイルの指定 | omitted |
-| `--no-color` | boolean | ANSIカラー出力を無効化 | false |
+| files | path[] | リテラルのプロンプト。未指定なら探索 | discovery |
+| --allow-empty | boolean | 空の選択を許可する | false |
+| --list | boolean | 検査せずに一覧を出す | false |
+| --json | boolean | JSON エンベロープで出力する | false |
+| --config | path | 設定ファイルを明示する | omitted |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
-## ステータス語彙 {#status-vocabulary}
+## ステータス一覧 {#status-vocabulary}
 
-`check` はアーティファクトの検査結果として、次のステータスを報告します。
+`check` は結果ごとに、次の 12 個のステータスのどれか 1 つを報告する。`listed` は `--list` のときだけ、`skipped` は中断の後だけに現れる。
 
-`fresh`、`stale`、`missing-plan`、`missing-grounding`、`invalid-grounding`、`stale-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed`、`skipped`
+- `fresh`
+- `stale`
+- `missing-plan`
+- `missing-grounding`
+- `invalid-grounding`
+- `stale-grounding`
+- `fresh-without-grounding`
+- `orphaned-plan`
+- `orphaned-grounding`
+- `invalid-artifact-name`
+- `listed`
+- `skipped`
 
-これらの値の厳密な導出ロジックおよび合否判定の分類は、[鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences) で定義されています。
+各ステータスの導出規則と合否は、[鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences)が定める。
 
-## 検査結果 {#results}
+## 結果 {#results}
 
-完了した検出結果（findings）の出力には、`id`、`file`、`planFile`、`status`、`reason` の各フィールドが必須として含まれます。`groundingFile` および `artifactFile` は、判定の根拠として存在する場合にのみ出力されます。レポートフィールド全体の定義については、[レポート](/ambercast/ja/reference/reports/#check-results) を参照してください。
+完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、すべて成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
 
-`check` の依存関係コントラクトからは、AI、ブラウザ、イベント、および書き込みストレージが完全に除外されています。
+## 読み取り専用の検査 {#read-only-contract}
 
-## 読み取り専用検査 {#read-only-contract}
+`check` は読み取り専用である。依存には AI ランタイム、ブラウザドライバー、イベント送信、書き込みストレージを含まない。実行時には、読み取り専用のストレージ、ファイルレイアウトの規則（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)を参照する）、探索（[設定](/ambercast/ja/reference/configuration/#file-selection)を参照する）を組み合わせる。
 
-`check` コマンドは、読み取り専用ストレージ、レイアウト、およびディスカバリの組み合わせで構成されています。
+終了コードの値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)が定め、対応の全体は[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
 
-プロセスの終了コードおよびその集約優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) で規定されています。信頼できないアーティファクトが検出された場合は終了コード `4` が、許容されていない空の選択が行われた場合は終了コード `5` が返されます。
-
-関連リンク:
-- [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)
-- [レポート](/ambercast/ja/reference/reports/#check-results)
-- [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)
-- [設定](/ambercast/ja/reference/configuration/#file-selection)
+- 信頼できない成果物は、終了コード `4` に寄与する。
+- 許可されていない空の選択は、終了コード `5` に寄与する。
 
 ---
 
 # ambercast heal
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/heal/
 
-`ambercast heal` は、修復処理の実行、認可境界、および関連する副作用を制御します。対象プロンプトの指定やディスカバリーの実行、変更をコミットせずに修復を測定するドライラン、非対話形式でのコミット認可など、実行時の挙動を指定する各種フラグを提供します。
+`ambercast heal` は計画（plan）とグラウンディングのコンパニオンを修復する。対象のプロンプトを選び、確定せずに修復を測定し、書き込みを認可できる。
 
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+`files` を渡さないと、heal は探索でプロンプトを選ぶ。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `files` | path[] | リテラルプロンプト。未指定時はディスカバリーを選択 | discovery |
-| `--dry-run` | boolean | バッファされた Plan または Grounding の変更をコミットせずに修復を測定 | false |
-| `--yes, -y` | boolean | 非対話形式のコミットを認可 | false |
-| `--ai` | claude\|codex | プロバイダーのオーバーライド | 省略 |
-| `--allow-empty` | boolean | 空の選択を許可 | false |
-| `--list` | boolean | 修復を実行せずに一覧表示 | false |
-| `--json` | boolean | JSON エンベロープ | false |
-| `--no-color` | boolean | ANSI 出力を無効化 | false |
+| files | path[] | リテラルのプロンプト。未指定なら探索 | discovery |
+| --dry-run | boolean | バッファした計画とグラウンディングの変更を確定せずに、修復だけを測定する | false |
+| --yes, -y | boolean | 非対話で確定することを認可する | false |
+| --ai | claude\|codex | プロバイダーの上書き | omitted |
+| --allow-empty | boolean | 空の選択を許可する | false |
+| --list | boolean | 修復せずに一覧を出す | false |
+| --json | boolean | JSON エンベロープで出力する | false |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
 ## 修復モデル {#repair-model}
 
-完了した修復結果は、`healed`、`partially-healed`、`unresolved`、および `no-changes-needed` を区別します。これらはそれぞれ制約された `application` と `stopReason` の値を持ちます。
+完了した修復の結果は `healed`・`partially-healed`・`unresolved`・`no-changes-needed` のどれかである。それぞれ、取りうる `application` と `stopReason` の値が決まっている。
 
-修復はまず Grounding を修復し、次に単一ステップまたは末尾の修復を試行し、最後に必要に応じてプラン全体の修復を実行します。Stage 3 は AI エグゼキューターを解決して生成を呼び出すため、実際のプロバイダーをディスパッチできます。
+heal は最大 3 段階で修復する。
 
-heal は新しいシークレット同意を決定しません。Stage 2 の候補に無効なシークレット名、許可リスト違反、または環境変数の衝突がある場合、その修復を `secret-name-invalid` として拒否します。Stage 3 の完全 Plan 候補が論理シークレット名の集合全体を変更した場合、heal は `stage3Rejection.reason: "secret-set-changed"` として拒否し、Plan または Grounding を更新せず、出荷済み CLI が逐語的に表示する次の日本語のヒントを表示します。
+1. 先にグラウンディングを修復する。
+2. 次に、1 つのステップか計画の後半を修復する。
+3. 前の段階で直らず、ケースの期限にも達していないときだけ、計画の全体を修復する。
+
+第 3 段階は AI 実行器を解決して生成を呼ぶため、実際のプロバイダーを呼び出すことがある。
+
+heal は、シークレットの同意を新たに判断しない。第 2 段階の候補に不正なシークレット名、許可リストの違反、環境変数との衝突があると、`secret-name-invalid` で却下する。第 3 段階の候補が論理的なシークレット名の集合全体を変えると、`stage3Rejection.reason: "secret-set-changed"` で却下する。この却下では、計画とグラウンディングのどちらも更新しない。
+
+CLI の人間向け出力は、続けて `hint: ` と下のヒントを表示する。`<file>` の部分は実際のプロンプトのパスに置き換わる。`--json` の出力は `stage3Rejection` を含み、ヒントは含まない。
 
 `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
 
-## 制限事項 {#limits}
+## 上限 {#limits}
 
-`heal.maxStepRepairs` が設定されている場合、実際の増分修復プロバイダーのディスパッチに対する正のハードリミットとなります。これには要素確認が含まれ、フェイルクローズのベースラインおよび Stage 3 は除外されます。
-
-`heal.caseTimeoutMs` は、ケース全体に対する正の受付期限（admission deadline）です。解決される既定値は 300000 ms です。
+- `heal.maxStepRepairs` は、設定した場合、段階的な修復で実際に起動するプロバイダー呼び出しの正の上限になる。要素の確認は数え、フェイルクローズの基準測定と第 3 段階は数えない。
+- `heal.caseTimeoutMs` は、ケース全体の受け付け期限を表す正の値である。既定値は `300000` ms である。
 
 ## 確認 {#confirmation}
 
-`--dry-run` が指定されていない限り、対象となる修復成果物は認可後にのみコミットされます。`--yes` は非対話形式の認可を提供します。
+`--dry-run` を除き、heal は認可を得てからでないと修復の成果物を確定しない。`--yes` は非対話で認可する。
 
 ## CI {#ci}
 
-`--list` を除き、`ci.heal` が true でない限り、CI 環境での修復は拒否されます。
+`--list` を除き、CI での heal は `ci.heal` が `true` でないと拒否される。
 
 ## 前提条件と書き込み {#preconditions}
 
-`--list` を除き、選択されたターゲットは冪等でなければなりません。`healReplayIsolation` の既定値は `stateful` です。
+`--list` を除き、プロンプトの計画を読み込んだ後は、その計画が参照するすべてのターゲットに `healReplayIsolation: "idempotent"` が必要である。満たさないと、heal はそのプロンプトを `CONFIG_INVALID`（終了コード `2`）で失敗させる。`healReplayIsolation` の既定値は `stateful` である。計画が参照しない他のターゲットは、heal を妨げない。
 
-Plan および Grounding コンパニオンへの書き込みは認可された確定までバッファされますが、各測定において runsDir に含まれるストレージを介して試行エビデンスが書き込まれる場合があります。この副作用は、認可前や `--dry-run` の実行中にも発生する可能性があります。
+heal は、認可された確定まで計画とグラウンディングの書き込みをバッファする。ただし、測定ごとの試行の証跡は、認可の前でも `--dry-run` の間でも、`runsDir` 内のストレージに書かれることがある。
 
-プロセス終了コードの値とその優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) が管理します。
+終了コードの値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)が定め、個々のコードは[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
 
-関連リンク: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#heal-results)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)。
+関連ページ: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#heal-results)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)
 
 ---
 
 # ambercast init
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/init/
 
+`ambercast init` は、プロジェクトで ambercast を使い始めるのに最低限必要なファイルを作る。書き込む前にすべての変更を計画し、カレントディレクトリ以外のディレクトリも対象にできる。
+
 ## 使い方 {#usage}
 
-```bash
+```text
 ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
 ```
 
-`ambercast init` は、プロジェクトで ambercast を使い始めるために必要な最小限のファイルを作成します。書き込みの前に変更計画を表示し、カレントワーキングディレクトリ以外のディレクトリも対象にできます。
-
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+`init` は位置引数を取らない。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `--dir` | `<path>` | スキャフォールディング先のプロジェクトルート | cwd |
-| `--yes, -y` | boolean | 確認プロンプトを省略 | false |
-| `--force` | boolean | 既存の ambercast.config.json を置き換え | false |
-| `--no-color` | boolean | ANSI を無効化 | false |
+| --dir | path | 雛形を作るプロジェクトルート | cwd |
+| --yes, -y | boolean | 確認のプロンプトを省く | false |
+| --force | boolean | 既存の ambercast.config.json を置き換える | false |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
-## 書き込む内容 {#what-it-writes}
+## 書き込むファイル {#what-it-writes}
 
-このコマンドは、プロジェクトルートからの相対パスで次の4つの成果物を計画します。
+コマンドは、プロジェクトルートからの相対パスで 4 つの成果物を計画する。
 
-| 成果物 | 不在の場合 | 既に存在する場合 |
+| 成果物 | 無いとき | すでにあるとき |
 | --- | --- | --- |
-| `ambercast.config.json` | 作成 | スキャフォールドと完全一致すればスキップ。それ以外は `--force` による置換がなければ拒否 |
-| `tests/ambercast/find-page.test.md` | 作成 | 内容を調べたり置き換えたりせずスキップ |
-| `.gitignore` | 作成 | `tests/ambercast/.runs/` が既にあればスキップ。それ以外はその行を追記 |
-| `AGENTS.md` | 作成 | ambercast のマーカーブロックが一致すればスキップ。正しいマーカー対で内容が異なれば置換、マーカーがなければ追記、不正なマーカーは拒否 |
+| `ambercast.config.json` | 作成する | 雛形と同一であればスキップする。違えば、`--force` で置き換えない限り拒否する |
+| `tests/ambercast/find-page.test.md` | 作成する | 中身を調べず、置き換えもせずにスキップする |
+| `.gitignore` | 下の 2 行の単位を付けて作成する | すでに `tests/ambercast/.runs/` を含めばスキップする。含まなければ、その単位を末尾に追加する |
+| `AGENTS.md` | 作成する | ambercast のマーカーブロックが一致すればスキップする。有効なマーカーの組が 1 つあって内容が違えば置き換え、マーカーが無ければ追記し、マーカーが壊れていれば拒否する |
 
-## 確認と非対話的な利用 {#confirmation}
+`.gitignore` の単位は、コメント `# ambercast run evidence` と、それに続く `tests/ambercast/.runs/` の行である。
 
-完全な計画は常に stderr に表示されます。対話的な端末では、その後に ambercast が `Write these files? [y/N] ` と確認します。`--yes` を指定するとこのプロンプトを省略できます。
+## 確認と非対話での利用 {#confirmation}
 
-CI または非 TTY の環境では、`--yes` を指定しない init は拒否されます。コーディングエージェントが実行する場合、`--yes` が省略するのは CLI の確認だけであり、4つのファイル変更に必要な人間の承認を代替するものではありません。[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)を参照してください。
+init は、変更計画の全体を必ず標準エラーに出力する。対話的な端末では、続けて `Write these files? [y/N] ` と尋ね、`--yes` はこの確認を省く。
+
+CI などの非 TTY 環境では、`--yes` を渡さない限り init は呼び出しを拒否する。コーディングエージェントがコマンドを実行する場合も、`--yes` が省くのは CLI の確認だけである。4 つのファイル変更に対する人間の承認は、`--yes` では代替できない。[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)を参照する。
 
 ## 終了コード {#exit-codes}
 
-- `0`: スキャフォールディングの成功、すべてスキップされた no-op、または確認の辞退。
-- `2`: 不正な引数、`--yes` なしの非対話利用、設定の競合、不正な `AGENTS.md` マーカーなど、事前検査での拒否。
-- `3`: I/O 失敗、中断、または計画の適用中の失敗。
+- `0`: 雛形の作成に成功した、すべての成果物をスキップした、または確認を断った。
+- `2`: 事前検査での拒否。引数の誤り、`--yes` なしの非対話実行、設定の衝突、`AGENTS.md` のマーカーの破損などが含まれる。
+- `3`: I/O の失敗、中断、または変更計画の適用中の失敗。
 
-共通のプロセスステータスについては、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)を参照してください。
+プロセス状態の共通の一覧は[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
 
 ## 再実行 {#re-running}
 
-成功後に同じコマンドを再実行しても冪等です。4つの成果物はすべて `skipped` と表示され、ambercast は `Nothing to do.` を出力し、ファイルのバイト列は変わりません。
+成功した後に同じコマンドを再実行しても結果は変わらない。4 つの成果物はすべて `skipped` と報告され、ambercast は `Nothing to do.` を出力する。バイト列も変わらない。
 
-## 関連リンク {#related}
+## 関連項目 {#see-also}
 
 - [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
 - [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
@@ -2792,65 +2814,69 @@ CI または非 TTY の環境では、`--yes` を指定しない init は拒否�
 # ambercast view
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/view/
 
-`ambercast view` は、設定済みの runs ディレクトリに永続化された run の結果を閲覧する、読み取り専用のローカル HTTP サーバーを起動します。テストを再実行したり AI 呼び出しを行ったりすることなく、開発者が run のケース・ステップ・スクリーンショットを確認できます。
+`ambercast view` は、設定された実行ディレクトリを対象に、読み取り専用のローカル HTTP サーバーを起動する。テストを再実行せずに、実行のケース、ステップ、スクリーンショットを確認できる。AI は呼ばない。
 
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+`view` は位置引数を取らない。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `--port` | n | 希望するポート。未指定時は 20 候補まで自動増分 | 4600 |
-| `--host` | addr | バインドアドレス。具体的な IP または localhost、ワイルドカード不可 | 127.0.0.1 |
-| `--allow-headless` | boolean | 非対話端末での実行を許可 | false |
-| `--config` | path | 明示的な設定パス | 省略 |
-| `--no-color` | boolean | ANSI 出力を無効化 | false |
+| --port | n | 希望するポート。指定しなければ 20 個の候補を順に試す | 4600 |
+| --host | addr | 結び付けるアドレス。具体的な IP か localhost で、ワイルドカードは不可 | 127.0.0.1 |
+| --allow-headless | boolean | 非対話の端末での起動を許可する | false |
+| --config | path | 設定ファイルを明示する | omitted |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
 ## 対話ゲート {#interactive-gate}
 
-`view` は、他の確認ゲート付きコマンドと同じ対話判定に従い、stdin と stderr の両方が端末に接続され、かつ `CI` が設定されていない場合を除いて起動を拒否します。`--allow-headless` を指定しない非対話実行は、次のメッセージとともに終了コード 2 で終了します。
+`view` は、標準入力と標準エラーがどちらも端末で、かつ `CI` が有効でないときにだけ起動する。未設定・空・`false` の `CI` は有効とみなさない。`init` も、確認のプロンプトの前に、端末と `CI` について同じ検査をする。`--allow-headless` を付けずに非対話で呼ぶと、次のメッセージを出して終了コード `2` で終わる。
 
-```
+```text
 view requires --allow-headless when no interactive terminal is attached.
 ```
 
-`--allow-headless` はこの拒否を解除します。既に対話端末である場合は no-op です。
+`--allow-headless` はこの拒否を解く。端末で起動する場合は何も変わらない。
 
-## ポート選択 {#port-selection}
+## ポートの選択 {#port-selection}
 
-開始ポートは `--port`、次に設定済みの `viewer.port`、最後に 4600 の順で決まります。`--port` を指定しない場合、`view` は開始ポートから連続する最大 20 個のポートを試行し、`EADDRINUSE` のときだけ次の候補へ進み、実際にバインドしたポートを表示します。`--port` を指定した場合、そのポートは厳格に扱われます。使用中であれば別のポートを試さずに終了コード 3 で終了します。すべての候補を使い切った場合、または `EADDRINUSE` 以外のバインド失敗も同様に終了コード 3 です。
+開始ポートは、`--port`、設定の `viewer.port`、`4600` の順で決まる。`--port` がなければ、`view` はそこから最大 20 個の連続したポートを試す。進むのは `EADDRINUSE` のときだけで、実際に結び付けたポートを出力する。
 
-## ホストバインド {#host-binding}
+`--port` を指定した場合は、そのポートだけを厳密に使う。使用中なら `view` は終了コード `3` で終わる。候補をすべて使い切った場合や、`EADDRINUSE` 以外の結び付けの失敗も、終了コード `3` になる。
 
-`--host` は具体的な IP アドレスまたは `localhost`（`127.0.0.1` に正規化）を受け付けます。このサーバーは認証を持たないため、ワイルドカードアドレス（`0.0.0.0`、`::`、`[::]`）は終了コード 2 で拒否されます。すべてのリクエストはバインドされたホストとポートに対して `Host` ヘッダーで検査され、異なるホストを指定したリクエストは 403 で拒否されます。ループバック以外のアドレスへのバインドは、認証なしで到達可能である旨の警告を表示します。
+## ホストの結び付け {#host-binding}
+
+`--host` には具体的な IP アドレスか `localhost` を渡す。`localhost` は `127.0.0.1` になる。ワイルドカードのアドレス（`0.0.0.0`・`::`・`[::]`）は、サーバーに認証が無いため、終了コード `2` で拒否される。すべてのリクエストの `Host` ヘッダーは、結び付けたホストとポートを指していなければならず、違えば `403` を返す。結び付けたアドレスが `127.0.0.1` と `::1` 以外のときは、認証なしで到達できるという警告を出力する。
 
 ## ルート {#routes}
 
-| ルート | 内容 |
+| ルート | 配信する内容 |
 | --- | --- |
-| `GET /` | run の一覧（新しい順）。状態・所要時間・ケース数を含む |
-| `GET /runs/<runId>` | 1 つの run のケース・ステップ・期待値/実際値・説明文・スクリーンショット |
-| `GET /runs/<runId>/report.json` | run が永続化した report の生バイト列 |
-| `GET /runs/<runId>/screenshots/<ref>` | run の report が実際に参照するスクリーンショット |
+| `GET /` | 新しい順の実行一覧。ステータス、所要時間、ケース数を表示する。 |
+| `GET /runs/<runId>` | 1 回の実行のケース、ステップ、期待値と実際の値、説明、スクリーンショット。 |
+| `GET /runs/<runId>/report.json` | 実行が永続化したレポートの生のバイト列。 |
+| `GET /runs/<runId>/screenshots/<ref>` | 実行のレポートが参照しているスクリーンショット。 |
 
-すべての応答に `X-Content-Type-Options: nosniff` と `Cache-Control: no-store` が付与されます。HTML 応答と生データ応答には固定の `Content-Security-Policy` と `Referrer-Policy: no-referrer` も付与されます。画面はサーバーサイドでレンダリングされ、クライアント側 JavaScript や外部リクエストは一切含まれません。
+すべてのレスポンスに `X-Content-Type-Options: nosniff` と `Cache-Control: no-store` が付く。HTML と生のレスポンスには、固定の `Content-Security-Policy` と `Referrer-Policy: no-referrer` も付く。ページはサーバー側で描画され、クライアントの JavaScript も外部へのリクエストも使わない。
 
-`report.json` を欠く run ディレクトリ（書き込み途中や永続化失敗など）は、壊れたリンクとしてではなく evidence only として一覧に表示されます。`report.json` の解析または検証に失敗した run も、一覧から消えることなく、生バイト列へのリンク付きで表示され続けます。
+`report.json` が無い実行ディレクトリは、書き込みの途中や永続化の失敗後などに、証跡のみの行として一覧に載る。`report.json` の解析か検証に失敗した実行も一覧に残り、生のバイト列に到達できる。
 
-`ambercast view` は `schemaVersion` が 3.x であるレポートをすべて読み取ります。現行 CLI と異なるマイナー版で書かれたレポートは、run 詳細ヘッダに「Schema `<version>`」と表示されます。異なるメジャー版のレポートは「Unsupported version `<version>`」として一覧に表示され、開くことはできません。
+`view` は `schemaVersion` が 3.x のレポートをすべて読む。別のマイナーバージョンのレポートは、実行の詳細ヘッダーに「Schema `<version>`」と表示される。別のメジャーバージョンのレポートは「Unsupported version `<version>`」として一覧に載り、開けない。
 
-`view` は、Ambercast のコマンドの中でネットワークポートを消費する唯一のコマンドです（MCP サーバーはポートを使用しない stdio 通信です）。
+`view` は、ネットワークポートを使う ambercast 唯一のコマンドである。MCP サーバーは stdio を使う。
 
-関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)。
+関連ページ: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)
 
 ---
 
 # ambercast mcp
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/mcp/
 
-`ambercast mcp` はポートを使用しない MCP サーバーを `stdio` で起動します。各プロセスが1つの session root を提供します。
+`ambercast mcp` は、ポートを使わない MCP サーバーを `stdio` で起動する。1 つのプロセスが扱うセッションルートは 1 つである。
 
-## 使用法 {#usage}
+## 使い方 {#usage}
 
-```sh
+```text
 ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
 ```
 
@@ -2858,26 +2884,28 @@ ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
 
 | フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `--dir` | path | 提供する session root | cwd |
-| `--sync-wait-ms` | n | 同期応答の待機上限（ミリ秒） | 45000 |
+| --dir | path | 扱うセッションルート | cwd |
+| --sync-wait-ms | n | 同期応答を待つ上限（ミリ秒） | 45000 |
 
-`--dir` は session root を選び、省略時はプロセスの現在の作業ディレクトリを使用します。相対パスもそこを基準に解決します。`--sync-wait-ms` は正の整数で既定値は 45000 です。長いワークフローがジョブハンドルを返すまでの同期待機を制限します。`--help` は他の引数より優先され、usage を stdout に出して exit 0 になります。
+`--dir` はセッションルートを選ぶ。省略するとプロセスのカレントディレクトリを使い、相対パスはそのディレクトリを基準に解決する。`--sync-wait-ms` は正の整数で、長いワークフローがジョブハンドルを返すまでの同期待ちの上限になる。`--help` は他の引数より優先され、使い方を標準出力に書いて終了コード 0 で終わる。
 
-解決したパスが存在しないかディレクトリでない場合、stderr に `ambercast mcp: --dir <path> is not a directory.` を出してサーバーを起動せず exit 2 になります。起動失敗は `ambercast mcp: failed to start (<error name>)` を出して exit 3 になります。不正なオプション、位置引数、待機上限は CLI の usage error を stderr に出して exit 2 になります。
+解決したディレクトリが無い、またはディレクトリでない場合は、標準エラーに `ambercast mcp: --dir <path> is not a directory.` を出力し、起動せずに終了コード 2 で終わる。起動に失敗すると `ambercast mcp: failed to start (<error name>)` を出力して終了コード 3 で終わる。不正なオプション、位置引数、不正な待ち時間の指定では、CLI の使い方エラーを標準エラーに出力して終了コード 2 で終わる。
 
-## 転送と終了 {#transport-and-shutdown}
+## 転送と終了処理 {#transport-and-shutdown}
 
-stdout には JSON-RPC 行だけを出します。stderr には進捗と起動時の1行 `ambercast mcp: serving <session root>` を出します。stdin end、SIGTERM、SIGINT のいずれかで draining に入ります。実行中の呼び出しを abort し、最大 10000 ms 待ちます。すべて確定すればサーバーを閉じて exit 0、期限内に確定しない場合は exit 3 になります。draining 中は新しいツール呼び出しを受け付けません。
+標準出力に流れるのは JSON-RPC の行だけである。標準エラーには進捗と、起動時の 1 行 `ambercast mcp: serving <session root>` を出力する。
+
+サーバーは、標準入力の終了、SIGTERM、SIGINT のいずれかでドレインを始める。実行中の呼び出しを中止し、最長 10000 ms 待ってからサーバーを閉じ、すべて決着していれば終了コード 0 で終わる。期限になっても決着しない呼び出しがあれば、終了コード 3 で終わる。ドレイン中の新しいツール呼び出しは拒否される。
 
 ## クライアント登録 {#client-registration}
 
-ambercast がインストールされたプロジェクトで `npx --no-install ambercast mcp` を使用します。Claude Code はプロジェクトの `.mcp.json` を読みます。
+ambercast をインストールしたプロジェクトで `npx --no-install ambercast mcp` を実行する。Claude Code はプロジェクトの `.mcp.json` を読む。
 
 ```json
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
 ```
 
-Codex CLI は `config.toml` を読みます。
+Codex CLI は `config.toml` を読む。
 
 ```toml
 [mcp_servers.ambercast]
@@ -2885,28 +2913,28 @@ command = "npx"
 args = ["--no-install", "ambercast", "mcp"]
 ```
 
-Claude Desktop の設定にも同じサーバー項目を指定できます。
+Claude Desktop は、設定に同じサーバーのエントリを書けば使える。
 
 ```json
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
 ```
 
-クライアントは常に ambercast がインストールされたプロジェクトから起動してください。`npx --no-install` がパッケージを解決できる必要があるためです。`--dir <path>` はサーバー起動後に別の session root を選ぶだけで、このパッケージ解決には影響しません。サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` を提供します。
+`npx --no-install` がパッケージを解決できるように、クライアントは ambercast をインストールしたプロジェクトから起動する。`--dir <path>` が選ぶのはサーバーの起動後のセッションルートだけで、パッケージの解決には影響しない。サーバーが提供するツールは `ambercast_generate`・`ambercast_run`・`ambercast_check`・`ambercast_heal`・`ambercast_job_status`・`ambercast_job_cancel` の 6 つである。
 
-## 計画時の設計からの変更 {#changes-from-the-planned-design}
+## 計画時の設計からの変更点 {#changes-from-the-planned-design}
 
-| 旧 planned ページ | 実装済みの契約 |
+| 以前に計画したページ | 実装された契約 |
 | --- | --- |
-| server flags 未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` に対応 |
-| 計画された5ツール | ジョブ状態と取消を含む6ツール |
-| report `outputSchema` を公開 | `outputSchema` を省略 |
-| heal preview のみ | `applyToken` による二段階 heal |
-| 同期呼び出しのみ | 長い呼び出しはジョブとなり、ID なしの status は一覧を返す |
-| MCP error 未指定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` は独立したエラー応答 |
-| CLI 入力フラグ未指定 | ツール入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外 |
-| report から exit code を推測 | `_meta.exitCode` に明示 |
+| サーバーのフラグは未規定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` に対応する |
+| 計画していたツールは 5 つ | ジョブの状態確認と取り消しを含む 6 つのツール |
+| レポートの `outputSchema` を公開する | `outputSchema` は省く |
+| heal はプレビューのみ | 2 段階の heal は `applyToken` を使う |
+| 同期呼び出しのみ | 長い呼び出しはジョブを返す。ID なしの状態確認はジョブの一覧を返す |
+| MCP のエラーは未規定 | `HEAL_APPLY_TOKEN_INVALID`・`HEAL_APPLY_FAILED`・`JOB_NOT_FOUND`・`JOB_FAILED` は別のエラー応答を持つ |
+| CLI の入力フラグは未規定 | ツールの入力に `headed`・`list`・`stale`・`json`・`yes`・`configPath` は含まない |
+| 終了コードはレポートから推測する | `_meta.exitCode` が明示的に運ぶ |
 
-関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)。
+関連ページ: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
 
 ---
 

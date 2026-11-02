@@ -1,53 +1,62 @@
 ---
 title: ambercast heal
-description: ambercast heal コマンドのフラグ、修復モデル、制限事項、認可境界、および副作用に関するリファレンス。
+description: ambercast heal のフラグ、修復の段階、上限、認可、CI での扱い、書き込みの挙動のリファレンス。
 ---
 
-`ambercast heal` は、修復処理の実行、認可境界、および関連する副作用を制御します。対象プロンプトの指定やディスカバリーの実行、変更をコミットせずに修復を測定するドライラン、非対話形式でのコミット認可など、実行時の挙動を指定する各種フラグを提供します。
+`ambercast heal` は計画（plan）とグラウンディングのコンパニオンを修復する。対象のプロンプトを選び、確定せずに修復を測定し、書き込みを認可できる。
 
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+`files` を渡さないと、heal は探索でプロンプトを選ぶ。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `files` | path[] | リテラルプロンプト。未指定時はディスカバリーを選択 | discovery |
-| `--dry-run` | boolean | バッファされた Plan または Grounding の変更をコミットせずに修復を測定 | false |
-| `--yes, -y` | boolean | 非対話形式のコミットを認可 | false |
-| `--ai` | claude\|codex | プロバイダーのオーバーライド | 省略 |
-| `--allow-empty` | boolean | 空の選択を許可 | false |
-| `--list` | boolean | 修復を実行せずに一覧表示 | false |
-| `--json` | boolean | JSON エンベロープ | false |
-| `--no-color` | boolean | ANSI 出力を無効化 | false |
+| files | path[] | リテラルのプロンプト。未指定なら探索 | discovery |
+| --dry-run | boolean | バッファした計画とグラウンディングの変更を確定せずに、修復だけを測定する | false |
+| --yes, -y | boolean | 非対話で確定することを認可する | false |
+| --ai | claude\|codex | プロバイダーの上書き | omitted |
+| --allow-empty | boolean | 空の選択を許可する | false |
+| --list | boolean | 修復せずに一覧を出す | false |
+| --json | boolean | JSON エンベロープで出力する | false |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
 ## 修復モデル {#repair-model}
 
-完了した修復結果は、`healed`、`partially-healed`、`unresolved`、および `no-changes-needed` を区別します。これらはそれぞれ制約された `application` と `stopReason` の値を持ちます。
+完了した修復の結果は `healed`・`partially-healed`・`unresolved`・`no-changes-needed` のどれかである。それぞれ、取りうる `application` と `stopReason` の値が決まっている。
 
-修復はまず Grounding を修復し、次に単一ステップまたは末尾の修復を試行し、最後に必要に応じてプラン全体の修復を実行します。Stage 3 は AI エグゼキューターを解決して生成を呼び出すため、実際のプロバイダーをディスパッチできます。
+heal は最大 3 段階で修復する。
 
-heal は新しいシークレット同意を決定しません。Stage 2 の候補に無効なシークレット名、許可リスト違反、または環境変数の衝突がある場合、その修復を `secret-name-invalid` として拒否します。Stage 3 の完全 Plan 候補が論理シークレット名の集合全体を変更した場合、heal は `stage3Rejection.reason: "secret-set-changed"` として拒否し、Plan または Grounding を更新せず、出荷済み CLI が逐語的に表示する次の日本語のヒントを表示します。
+1. 先にグラウンディングを修復する。
+2. 次に、1 つのステップか計画の後半を修復する。
+3. 前の段階で直らず、ケースの期限にも達していないときだけ、計画の全体を修復する。
+
+第 3 段階は AI 実行器を解決して生成を呼ぶため、実際のプロバイダーを呼び出すことがある。
+
+heal は、シークレットの同意を新たに判断しない。第 2 段階の候補に不正なシークレット名、許可リストの違反、環境変数との衝突があると、`secret-name-invalid` で却下する。第 3 段階の候補が論理的なシークレット名の集合全体を変えると、`stage3Rejection.reason: "secret-set-changed"` で却下する。この却下では、計画とグラウンディングのどちらも更新しない。
+
+CLI の人間向け出力は、続けて `hint: ` と下のヒントを表示する。`<file>` の部分は実際のプロンプトのパスに置き換わる。`--json` の出力は `stage3Rejection` を含み、ヒントは含まない。
 
 `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
 
-## 制限事項 {#limits}
+## 上限 {#limits}
 
-`heal.maxStepRepairs` が設定されている場合、実際の増分修復プロバイダーのディスパッチに対する正のハードリミットとなります。これには要素確認が含まれ、フェイルクローズのベースラインおよび Stage 3 は除外されます。
-
-`heal.caseTimeoutMs` は、ケース全体に対する正の受付期限（admission deadline）です。解決される既定値は 300000 ms です。
+- `heal.maxStepRepairs` は、設定した場合、段階的な修復で実際に起動するプロバイダー呼び出しの正の上限になる。要素の確認は数え、フェイルクローズの基準測定と第 3 段階は数えない。
+- `heal.caseTimeoutMs` は、ケース全体の受け付け期限を表す正の値である。既定値は `300000` ms である。
 
 ## 確認 {#confirmation}
 
-`--dry-run` が指定されていない限り、対象となる修復成果物は認可後にのみコミットされます。`--yes` は非対話形式の認可を提供します。
+`--dry-run` を除き、heal は認可を得てからでないと修復の成果物を確定しない。`--yes` は非対話で認可する。
 
 ## CI {#ci}
 
-`--list` を除き、`ci.heal` が true でない限り、CI 環境での修復は拒否されます。
+`--list` を除き、CI での heal は `ci.heal` が `true` でないと拒否される。
 
 ## 前提条件と書き込み {#preconditions}
 
-`--list` を除き、選択されたターゲットは冪等でなければなりません。`healReplayIsolation` の既定値は `stateful` です。
+`--list` を除き、プロンプトの計画を読み込んだ後は、その計画が参照するすべてのターゲットに `healReplayIsolation: "idempotent"` が必要である。満たさないと、heal はそのプロンプトを `CONFIG_INVALID`（終了コード `2`）で失敗させる。`healReplayIsolation` の既定値は `stateful` である。計画が参照しない他のターゲットは、heal を妨げない。
 
-Plan および Grounding コンパニオンへの書き込みは認可された確定までバッファされますが、各測定において runsDir に含まれるストレージを介して試行エビデンスが書き込まれる場合があります。この副作用は、認可前や `--dry-run` の実行中にも発生する可能性があります。
+heal は、認可された確定まで計画とグラウンディングの書き込みをバッファする。ただし、測定ごとの試行の証跡は、認可の前でも `--dry-run` の間でも、`runsDir` 内のストレージに書かれることがある。
 
-プロセス終了コードの値とその優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) が管理します。
+終了コードの値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)が定め、個々のコードは[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
 
-関連リンク: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#heal-results)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)。
+関連ページ: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#heal-results)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)

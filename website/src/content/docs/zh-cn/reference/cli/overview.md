@@ -1,11 +1,19 @@
 ---
 title: CLI 概览
-description: 介绍 ambercast 命令行界面的全局解析规则、核心命令集、命令与标志支持矩阵以及默认文件发现机制。
+description: ambercast 的 7 个命令、各命令接受的选项，以及文件发现的默认值。
 ---
 
-ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check、heal、view 与 mcp。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
+每个 `ambercast` 命令各自解析参数。不传文件时，由配置好的发现机制选择测试。
 
-## 命令界面 {#command-surface}
+## 命令体系 {#command-surface}
+
+已实现的命令只有 `init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。
+
+`ambercast run <file>`、`ambercast check <file>` 和 `ambercast heal <file>` 针对步骤中指明了执行目标的执行计划工作。
+
+顶层的 `--help` 和 `--version` 在命令分发之前处理。写在已识别命令之后、`--` 之前的 `--help`，由该命令立即处理。参数格式不正确时，命令以退出码 `2` 结束，把用法写到 stderr，并且不生成报告。
+
+下面的用法块与 CLI 自带的帮助输出一致，包括 `AI configuration` 和 `Heal configuration` 两部分。
 
 ```text
 Usage: ambercast <command> [options]
@@ -51,34 +59,40 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-ambercast 当前已实现的命令包括 init、generate、run、check、heal、view 以及 mcp。
+## 命令与选项矩阵 {#command-flag-matrix}
 
-顶层标志 `--help` 与 `--version` 会在命令分发之前短路处理并退出；若传入格式错误的参数，程序将直接以退出码 2 终止退出，且不输出错误报告。
-
-## 命令与标志矩阵 {#command-flag-matrix}
-
-| 命令 | 位置参数 | 支持的选项 | 配置路径 |
+| 命令 | 位置参数 | 可用选项 | 配置路径 |
 | --- | --- | --- | --- |
-| init | 无 | dir, yes/-y, force, no-color | `--dir` 参数（未指定时为 cwd） |
-| generate | 字面路径；未指定路径则执行发现 | force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| run | 字面路径；未指定路径则执行发现 | grep, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| check | 字面路径；未指定路径则执行发现 | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| view | 无 | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| mcp | 无 | dir, sync-wait-ms | --dir 参数指定会话根目录（未指定时为 cwd） |
+| init | 无 | dir, yes/-y, force, no-color | `--dir` 参数（省略时为当前目录） |
+| generate | 字面路径；无路径则走发现 | force, dry-run, target, ai, allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > 发现 |
+| run | 字面路径；无路径则走发现 | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > 发现 |
+| check | 字面路径；无路径则走发现 | allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > 发现 |
+| heal | 字面路径；无路径则走发现 | dry-run, yes/-y, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > 发现 |
+| view | 无 | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > 发现 |
+| mcp | 无 | dir, sync-wait-ms | `--dir` 参数选择会话根目录（省略时为当前目录） |
 
-对于 `generate`、`run`、`check` 和 `heal`，除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
+对 `generate`、`run`、`check` 和 `heal`，除 `--list` 外，每个位置参数都必须是 `testDir` 内的字面路径。路径的名称不能为空，并且后缀必须恰好是 `.test.md`。其他路径会以 `PROMPT_PATH_INVALID` 失败。
 
-对于接受文件路径的命令，`--` 标志结束选项解析，其后出现的参数均按字面路径处理。
+- `--` 结束选项解析，其后的参数全部按字面路径处理。
+- `--json` 和 `--no-color` 由各命令自行处理，没有共享的全局标志。
+- `generate --target` 限制生成器可用的目标定义。`run`、`check` 和 `heal` 使用每份执行计划中记录的目标名。
 
-`--json` 与 `--no-color` 由接受这些标志的命令独立解析，而非通过全局标志抽象层统一处理。
+## 发现默认值 {#discovery-default}
 
-`generate --target` 用于限制生成器可用的 Target 定义。run、check、heal 使用各 Plan 中记录的 Target 名称。
+不向 `generate`、`run`、`check` 或 `heal` 传字面文件时，配置好的发现机制选择测试文件。`init`、`view` 和 `mcp` 不接受 prompt 文件参数。
 
-## 默认发现规则 {#discovery-default}
+- 默认的 `testMatch` 是 `**/*.test.md`。
+- 默认的 `testIgnore` 是 `**/.runs/**`，以及执行计划和定位缓存的伴生文件。
+- 发现机制按 POSIX 相对路径计算。路径必须先匹配包含模式，随后匹配忽略模式则被排除。
 
-当 `generate`、`run`、`check` 或 `heal` 未收到字面文件路径时，该命令会将文件选择委托给所配置的发现机制。`init`、`view` 与 `mcp` 不接受提示词文件位置参数。默认包含模式为 `**/*.test.md`，默认排除项包括 `.runs` 目录、Plan 与 Grounding 伴生文件。
+详情见下列页面。
 
-发现机制对 POSIX 相对路径进行求值：首先要求满足包含匹配，若命中忽略匹配则会将该路径排除。
-
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection), [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection), [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags), [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags), [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags), [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags), [ambercast view](/ambercast/zh-cn/reference/cli/view/#flags), [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)。
+- [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
+- [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection)
+- [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags)
+- [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags)
+- [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags)
+- [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)
+- [ambercast view](/ambercast/zh-cn/reference/cli/view/#flags)
+- [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)

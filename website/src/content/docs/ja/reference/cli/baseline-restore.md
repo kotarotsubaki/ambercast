@@ -1,6 +1,6 @@
 ---
 title: ambercast baseline と ambercast restore
-description: ambercast baseline および ambercast restore で計画されている外部境界、ストレージ、および鮮度検知の仕様。
+description: 未実装の ambercast baseline と ambercast restore の、計画中のインターフェース、保存先、鮮度の規則、未決事項。
 status: planned
 sidebar:
   badge:
@@ -9,54 +9,51 @@ sidebar:
 ---
 
 :::caution
-`ambercast baseline` および `ambercast restore` は計画中の機能であり、現行版には実装されていません。本ドキュメントには現在の動作ではなく、計画されている設計上の動作を記載しています。
+`ambercast baseline` と `ambercast restore` は、現行版では実装されていない計画中の機能である。ここに書く内容は意図した設計であり、現在の機能ではない。
+
 :::
 
-`ambercast baseline` および `ambercast restore` は、データベースのキャプチャと復元を担う計画中のコマンドです。計画されているデータベース境界は DB リセット設計によって定義されています。
+このページは、ambercast が計画しているデータベースの境界を記録する。ベースラインの取得と復元は、別々の操作として扱う。
 
 ## ステータス {#status}
 
-`ambercast baseline` および `ambercast restore` は現行版には実装されておらず、利用可能な CLI コマンドではありません。両コマンドの計画されているデータベース境界は、DB リセット設計によって定義されています。利用可能なコマンドは CLI の概要を参照してください。
+`ambercast baseline` と `ambercast restore` は、現行版では実装されておらず、利用できる CLI コマンドでもない。2 つは効果が逆なので、別々の単純な動詞にしている。`reset` に統合するコマンドや、モードを切り替えるフラグは、誤用しやすいとして退けた。利用できるコマンドは[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)に、現在ある設定キーは[設定](/ambercast/ja/reference/configuration/#key-table)にある。
 
-リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface), [設定](/ambercast/ja/reference/configuration/#key-table)
+## 計画中の境界 {#planned-boundary}
 
-## 計画されている境界 {#planned-boundary}
-
-| コマンド / オプション | 計画されている規約 |
+| コマンド / オプション | 計画中の契約 |
 | --- | --- |
-| `baseline [--target <name>] [--list] [--clear] [--force] [--json]` | 現在のデータベースを選択されたターゲットのベースラインとしてキャプチャします。 |
-| `baseline --force` | 既存のベースラインの上書きを許可します。TTY の有無にかかわらず指定が必要であり、主キーが存在しない場合のリンターを回避することはありません。 |
-| `baseline --list` | ベースラインのメタデータのみを表示します。 |
-| `baseline --clear` | 選択されたベースラインを削除します。存在しない場合も冪等に成功します。 |
-| `restore [--target <name>] [--json]` | 手動デバッグまたは QA のために、選択されたターゲットをベースラインへ復元します。 |
-| `run --no-reset` | その実行においてリセットとフックをスキップします。デバッグを意図しており、CI での使用は推奨されません。 |
-| `check` 統合 | DB 接続を開くことなく、DB 設定の形式、解決可能なシークレット、ベースラインの存在、および `configDigest` を検証します。 |
+| `baseline [--target <name>] [--list] [--clear] [--force] [--json]` | 現在のデータベースを、選んだターゲットのベースラインとして取得する。 |
+| `baseline --force` | 既存のベースラインの上書きを許可する。TTY の有無にかかわらず必要で、主キーなしの検査は回避しない。 |
+| `baseline --list` | ベースラインのメタデータだけを表示する。 |
+| `baseline --clear` | 選んだベースラインを削除する。すでに無くても成功する。 |
+| `restore [--target <name>] [--json]` | 手動のデバッグや QA のために、選んだターゲットをベースラインへ戻す。 |
+| `run --no-reset` | その呼び出しだけ、リセットとフックを省く。デバッグ用で、CI では推奨しない。 |
+| `check` との連携 | データベース接続を開かずに、データベース設定の形、解決できるシークレット、ベースラインの有無、`configDigest` を検証する。 |
 
-キャプチャと復元は相反する効果を持つため、別個のフラットな動詞として定義されています。`reset` という名称やモードフラグによる設計は、誤用を招きやすいため却下されました。
+## 計画中の保存先と鮮度 {#planned-storage-and-freshness}
 
-## 計画されているストレージと鮮度 {#planned-storage-and-freshness}
-
-| 概念 | 計画されている規約 |
+| 概念 | 計画中の契約 |
 | --- | --- |
-| 配置場所 | 解決された設定ディレクトリからの相対パス `.baseline/<target>/`。設定変更不可であり、`runsDir` とは分離され、gitignore への追加が意図されています。 |
-| メタデータ | `meta.json` に target、driver、capturedAt、capabilities、configDigest、sourceFingerprint、および artifactRef を記録します。 |
-| `configDigest` | 未解決の driver / connection / driverOptions プレースホルダーのハッシュ。不一致は設定ドリフトとなり、自動再キャプチャは行われず終了コード 2 で終了します。 |
-| `sourceFingerprint` | シークレット以外のリモート識別情報のハッシュ。シークレット解決後の不一致は終了コード 3 で終了します。 |
-| プランの鮮度 | いずれの DB 鮮度値も Plan の `inputsDigest` には含まれません。 |
+| 場所 | `.baseline/<target>/`。解決した設定ディレクトリからの相対パスで、変更できず、`runsDir` とは別にし、gitignore する想定である。 |
+| メタデータ | `meta.json` に target、driver、capturedAt、capabilities、configDigest、sourceFingerprint、artifactRef を記録する。 |
+| `configDigest` | 未解決の driver、connection、driverOptions のプレースホルダーのハッシュ。不一致は設定のドリフトで、終了コード `2`、自動での再取得はしない。 |
+| `sourceFingerprint` | 秘匿でないリモートの識別情報のハッシュ。シークレット解決後の不一致は終了コード `3` になる。 |
+| 計画（plan）の鮮度 | 2 つのデータベースの鮮度の値は、どちらも計画の `inputsDigest` に入らない。 |
 
-`resetPerCase: true` の場合、リセットは最初のケースの実行前および各ケースの実行後に実行され、その後に順序付けられた境界フックが実行されます。そして次のケースの前にバリアプローブが成功する必要があります。
+`resetPerCase: true` のときは、最初のケースの前と、すべてのケースの後にリセットを行う。その後に順序付きの境界フックを実行し、次のケースへ進む前にバリアプローブが成功しなければならない。
 
-リセットまたはバリアプローブの失敗時は、既定では影響を受けたケースをエラーとして記録して実行を継続します。`onResetFailure: "abort"` が指定されている場合は実行全体を停止し、いずれの経路でも終了コード 3 で終了します。フックの失敗時は該当ケースのみをエラーとして実行を継続します。
+リセットまたはバリアプローブの失敗は、既定では該当のケースをエラーにして実行を続ける。`onResetFailure: "abort"` なら実行を止める。どちらの場合も終了コードは `3` である。フックの失敗でエラーになるのは、そのケースだけで、実行は続く。
 
-計画されている設定エラー（`baseline-missing`、未解決のターゲット／ドライバー、設定ドリフト、ベースラインの競合、無効なフラグの組み合わせ）は終了コード 2 で終了します。DB 接続エラー、リセット失敗、フック失敗、および source-fingerprint の不一致は終了コード 3 で終了します。集計の優先順位は `2 > 3 > 4 > 1 > 5 > 0` のまま維持されます。
+計画中の設定の失敗は終了コード `2` になる。`baseline-missing`、未解決のターゲットやドライバー、設定のドリフト、ベースラインの衝突、フラグの不正な組み合わせが該当する。データベース接続、リセット、フックの失敗と、ソースのフィンガープリントの不一致は終了コード `3` になる。集約時の優先順位は `2 > 3 > 4 > 1 > 5 > 0` のままである。
 
-人間向け出力および JSON 出力では、`mode` を `captured` または `restored` として明記する必要があります。
+人間向け出力と JSON 出力は、`mode` を `captured` か `restored` で示さなければならない。
 
 ## 未決事項 {#undecided-items}
 
 | 状態 | 項目 |
 | --- | --- |
-| 明示的に未決 | `baseline` および `restore` を導入するリリース。両コマンドともフィクスチャ機能に紐付いています。 |
-| 予約（未決ではない） | `--all-targets`、`--list --live`、追加のフックフェーズ、および並行ワーカー用の `db.<target>` サブキーは v2 の予約項目であり、本計画インターフェースの一部ではありません。 |
+| 明示的に未決 | `baseline` と `restore` を導入するリリース。どちらもフィクスチャ機能に結び付いている。 |
+| 予約済み、未決ではない | `--all-targets`、`--list --live`、追加のフックフェーズ、並列ワーカーの `db.<target>` サブキーは v2 の予約であり、この計画中のインターフェースには含まれない。 |
 
-リンク: [レポート](/ambercast/ja/reference/reports/#envelope), [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table), [鮮度とダイジェスト](/ambercast/ja/spec/freshness/)
+共通のレポートエンベロープは[レポート](/ambercast/ja/reference/reports/#envelope)を、ツール側の挙動は[MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)を、鮮度の導出は[鮮度とダイジェスト](/ambercast/ja/spec/freshness/)を参照する。

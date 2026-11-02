@@ -1,52 +1,62 @@
 ---
 title: ambercast heal
-description: Command-line reference for ambercast heal, defining flags, repair execution boundaries, authorization, and side effects.
+description: Flags, repair stages, limits, authorization, CI rule, and write behavior of ambercast heal.
 ---
 
-The `ambercast heal` command repairs test plans and Grounding companions, providing options to discover or select prompts, measure repairs without writing changes, and manage authorization boundaries.
+`ambercast heal` repairs plans and their grounding companions. You choose the prompts, measure a repair without committing it, or authorize the write.
 
 ## Flags {#flags}
 
-| Flag | Value | Effect | Default |
+Without `files`, heal selects prompts through discovery.
+
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `files` | path[] | literal prompts; absent selects discovery | discovery |
-| `--dry-run` | boolean | measures repair without committing buffered Plan or Grounding changes | false |
-| `--yes, -y` | boolean | authorizes non-interactive commit | false |
-| `--ai` | claude\|codex | provider override | omitted |
-| `--allow-empty` | boolean | allow empty selection | false |
-| `--list` | boolean | list without healing | false |
-| `--json` | boolean | JSON envelope | false |
-| `--no-color` | boolean | disable ANSI | false |
+| files | path[] | literal prompts; absent selects discovery | discovery |
+| --dry-run | boolean | measures repair without committing buffered plan or grounding changes | false |
+| --yes, -y | boolean | authorizes non-interactive commit | false |
+| --ai | claude\|codex | provider override | omitted |
+| --allow-empty | boolean | allow empty selection | false |
+| --list | boolean | list without healing | false |
+| --json | boolean | JSON envelope | false |
+| --no-color | boolean | disable ANSI | false |
 
 ## Repair model {#repair-model}
 
-A completed repair result distinguishes `healed`, `partially-healed`, `unresolved`, and `no-changes-needed`; each has constrained `application` and `stopReason` values.
+A completed repair result is `healed`, `partially-healed`, `unresolved`, or `no-changes-needed`. Each has constrained `application` and `stopReason` values.
 
-Heal first repairs Grounding, then attempts single-step or tail repair, and finally performs full-plan repair when needed; Stage 3 resolves an AI executor and calls generation, so it can dispatch a real provider.
+Heal repairs in up to three stages:
 
-Heal never makes a new secret-consent decision. If its Stage 2 candidate has an invalid secret name, allowlist failure, or environment-variable collision, it rejects that repair with `secret-name-invalid`. If the Stage 3 full-plan candidate changes the complete logical secret-name set, heal rejects it with `stage3Rejection.reason: "secret-set-changed"`, writes no Plan or Grounding update, and prints the literal Japanese hint the shipped CLI renders:
+1. It repairs the grounding first.
+2. It then repairs a single step or the tail of the plan.
+3. It repairs the full plan only when the earlier stages leave the case unrepaired and the case deadline has not been reached.
+
+Stage 3 resolves an AI executor and calls generation, so it can dispatch a real provider.
+
+Heal never makes a new secret-consent decision. It rejects a Stage 2 candidate that has an invalid secret name, an allowlist failure, or an environment-variable collision, with `secret-name-invalid`. It rejects a Stage 3 candidate that changes the complete logical secret-name set with `stage3Rejection.reason: "secret-set-changed"`. That rejection writes no plan or grounding update.
+
+The human output of the CLI then prints `hint: ` followed by the hint below, with the actual prompt path in place of `<file>`. The `--json` output carries `stage3Rejection` and no hint.
 
 `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
 
 ## Limits {#limits}
 
-- `heal.maxStepRepairs`, when set, is a positive hard limit on real incremental repair provider dispatches, including element confirmation and excluding the fail-closed baseline and Stage 3.
-- `heal.caseTimeoutMs` is a positive case-wide admission deadline; its resolved default is 300000 ms.
+- `heal.maxStepRepairs`, when set, is a positive hard limit on real incremental-repair provider dispatches. It counts element confirmation and excludes the fail-closed baseline and Stage 3.
+- `heal.caseTimeoutMs` is a positive case-wide admission deadline. Its default is `300000` ms.
 
 ## Confirmation {#confirmation}
 
-Unless `--dry-run`, eligible repair artifacts are committed only after authorization; `--yes` provides non-interactive authorization.
+Outside `--dry-run`, heal commits repair artifacts only after authorization. `--yes` authorizes non-interactively.
 
 ## CI {#ci}
 
-Except for `--list`, healing in CI is rejected unless `ci.heal` is true.
+Outside `--list`, heal in CI is rejected unless `ci.heal` is `true`.
 
 ## Preconditions and writes {#preconditions}
 
-Except for `--list`, the selected target must be idempotent; the default target is stateful.
+Outside `--list`, once a prompt's plan has loaded, every target that plan references must set `healReplayIsolation: "idempotent"`. Otherwise heal fails that prompt with `CONFIG_INVALID` (exit `2`). The default `healReplayIsolation` is `stateful`. Other configured targets that the plan does not reference do not block heal.
 
-Plan and Grounding companion writes are buffered until authorized settlement, but each measurement may write attempt evidence through runsDir-contained storage; this side effect can occur before authorization and during `--dry-run`.
+Heal buffers plan and grounding writes until authorized settlement. Each measurement can still write attempt evidence through `runsDir`-contained storage, before authorization and during `--dry-run`.
 
-Process-code values and their priority are owned by [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority).
+[Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) owns the process-code values and their priority, and the [exit code table](/ambercast/reference/exit-codes/#exit-code-table) lists each code.
 
-Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports](/ambercast/reference/reports/#heal-results), [Exit codes](/ambercast/reference/exit-codes/#exit-code-table), [File layout](/ambercast/reference/file-layout/#run-artifacts).
+Related pages: [Configuration](/ambercast/reference/configuration/#grounding), [Reports](/ambercast/reference/reports/#heal-results), and [File layout](/ambercast/reference/file-layout/#run-artifacts).

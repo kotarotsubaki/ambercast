@@ -1,26 +1,26 @@
 ---
 title: ambercast check
-description: Inspect the freshness and validity of Ambercast test plans and grounding artifacts from the CLI.
+description: Flags, status values, result fields, and the read-only contract of ambercast check, which inspects plan and grounding freshness.
 ---
 
-`ambercast check` inspects prompt files, plans, and grounding artifacts across your project to verify their freshness and integrity. Operating under a strict read-only contract, it allows you to validate test suite artifacts without invoking AI models, launching browsers, dispatching events, or writing to disk.
+`ambercast check` inspects prompts, plans, and grounding companions and reports whether each is fresh and valid. It makes no AI call, launches no browser, dispatches no event, and writes nothing to disk.
 
 ## Flags {#flags}
 
-You can pass prompt paths directly or rely on automated file discovery via [Configuration](/ambercast/reference/configuration/#file-selection), modify report formatting, or isolate a specific target.
+You can pass prompt paths directly or let [configured discovery](/ambercast/reference/configuration/#file-selection) select them.
 
-| Flag | Value | Effect | Default |
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `files` | `path[]` | literal prompts; absent selects discovery | `discovery` |
-| `--allow-empty` | `boolean` | allow empty selection | `false` |
-| `--list` | `boolean` | list without inspection | `false` |
-| `--json` | `boolean` | JSON envelope | `false` |
-| `--config` | `path` | explicit configuration | `omitted` |
-| `--no-color` | `boolean` | disable ANSI | `false` |
+| files | path[] | literal prompts; absent selects discovery | discovery |
+| --allow-empty | boolean | allow empty selection | false |
+| --list | boolean | list without inspection | false |
+| --json | boolean | JSON envelope | false |
+| --config | path | explicit configuration | omitted |
+| --no-color | boolean | disable ANSI | false |
 
 ## Status vocabulary {#status-vocabulary}
 
-During inspection, `check` reports one of the following artifact statuses:
+`check` reports one of these twelve statuses for each result. `listed` appears only with `--list`, and `skipped` only after an interruption.
 
 - `fresh`
 - `stale`
@@ -35,19 +35,17 @@ During inspection, `check` reports one of the following artifact statuses:
 - `listed`
 - `skipped`
 
-The canonical derivation rules and pass/fail classifications for these status values are defined in [Freshness and digests](/ambercast/spec/freshness/#freshness-consequences).
+[Freshness and digests](/ambercast/spec/freshness/#freshness-consequences) defines how each status is derived and whether it passes or fails.
 
 ## Results {#results}
 
-Completed findings produced by `check` require the fields `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` fields appear only when serving as evidence for a finding. Full field definitions and report structures are specified in [Reports](/ambercast/reference/reports/#check-results).
-
-The execution contract of `check` is read-only: its dependencies explicitly exclude AI runtimes, browser drivers, event dispatchers, and write storage.
+A completed finding carries `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` field appears only as evidence for a finding. A finding with status `invalid-artifact-name` is the exception: it has no `planFile` and carries `id`, `file`, `status`, `reason`, and `artifactFile`, which all name the artifact itself. [Reports](/ambercast/reference/reports/#check-results) lists the full field definitions and report structures.
 
 ## Read-only inspection {#read-only-contract}
 
-At runtime, `check` composes read-only storage, file layout rules (see [File layout](/ambercast/reference/file-layout/#companions)), and discovery logic (see [Configuration](/ambercast/reference/configuration/#file-selection)).
+`check` is read-only. Its dependencies exclude AI runtimes, browser drivers, event dispatchers, and write storage. At runtime it composes read-only storage, the file layout rules (see [File layout](/ambercast/reference/file-layout/#companions)), and discovery (see [Configuration](/ambercast/reference/configuration/#file-selection)).
 
-Process exit codes and their precedence are governed by [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority), with full mappings detailed in [Exit codes](/ambercast/reference/exit-codes/#exit-code-table):
+[Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) owns the process-code values and their precedence, and the [exit code table](/ambercast/reference/exit-codes/#exit-code-table) maps each code in full.
 
-- Untrustworthy artifacts contribute exit code `4`.
-- An unallowed empty selection contributes exit code `5`.
+- Untrustworthy artifacts contribute exit `4`.
+- An unallowed empty selection contributes exit `5`.

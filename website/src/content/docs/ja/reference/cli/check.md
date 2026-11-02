@@ -1,43 +1,51 @@
 ---
 title: ambercast check
-description: CLIにおけるアーティファクトの検査ステータスと検証結果の仕様を解説します。
+description: 計画とグラウンディングの鮮度を調べる ambercast check のフラグ、ステータス、結果フィールド、読み取り専用の契約。
 ---
 
-`ambercast check` は、テストプロンプトに対応するプランやグラウンディングなどのアーティファクトを読み取り専用で検査し、そのステータスを報告するコマンドです。AIプロバイダ、ブラウザ操作、イベント送受信、およびストレージへの書き込みを行わずに、状態の検証を素早く実行します。
+`ambercast check` はプロンプト、計画（plan）、グラウンディングのコンパニオンを調べ、それぞれが新しく正しいかを報告する。AI を呼ばず、ブラウザを起動せず、イベントを送らず、ディスクにも書かない。
 
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+プロンプトのパスを直接渡すことも、[設定された探索](/ambercast/ja/reference/configuration/#file-selection)に選ばせることもできる。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `files` | path[] | リテラルプロンプトの指定。省略時はディスカバリを実行 | discovery |
-| `--allow-empty` | boolean | 空の選択を許容 | false |
-| `--list` | boolean | 検査を行わずに一覧表示 | false |
-| `--json` | boolean | JSONエンベロープ形式で出力 | false |
-| `--config` | path | 明示的な設定ファイルの指定 | omitted |
-| `--no-color` | boolean | ANSIカラー出力を無効化 | false |
+| files | path[] | リテラルのプロンプト。未指定なら探索 | discovery |
+| --allow-empty | boolean | 空の選択を許可する | false |
+| --list | boolean | 検査せずに一覧を出す | false |
+| --json | boolean | JSON エンベロープで出力する | false |
+| --config | path | 設定ファイルを明示する | omitted |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
-## ステータス語彙 {#status-vocabulary}
+## ステータス一覧 {#status-vocabulary}
 
-`check` はアーティファクトの検査結果として、次のステータスを報告します。
+`check` は結果ごとに、次の 12 個のステータスのどれか 1 つを報告する。`listed` は `--list` のときだけ、`skipped` は中断の後だけに現れる。
 
-`fresh`、`stale`、`missing-plan`、`missing-grounding`、`invalid-grounding`、`stale-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed`、`skipped`
+- `fresh`
+- `stale`
+- `missing-plan`
+- `missing-grounding`
+- `invalid-grounding`
+- `stale-grounding`
+- `fresh-without-grounding`
+- `orphaned-plan`
+- `orphaned-grounding`
+- `invalid-artifact-name`
+- `listed`
+- `skipped`
 
-これらの値の厳密な導出ロジックおよび合否判定の分類は、[鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences) で定義されています。
+各ステータスの導出規則と合否は、[鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences)が定める。
 
-## 検査結果 {#results}
+## 結果 {#results}
 
-完了した検出結果（findings）の出力には、`id`、`file`、`planFile`、`status`、`reason` の各フィールドが必須として含まれます。`groundingFile` および `artifactFile` は、判定の根拠として存在する場合にのみ出力されます。レポートフィールド全体の定義については、[レポート](/ambercast/ja/reference/reports/#check-results) を参照してください。
+完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、すべて成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
 
-`check` の依存関係コントラクトからは、AI、ブラウザ、イベント、および書き込みストレージが完全に除外されています。
+## 読み取り専用の検査 {#read-only-contract}
 
-## 読み取り専用検査 {#read-only-contract}
+`check` は読み取り専用である。依存には AI ランタイム、ブラウザドライバー、イベント送信、書き込みストレージを含まない。実行時には、読み取り専用のストレージ、ファイルレイアウトの規則（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)を参照する）、探索（[設定](/ambercast/ja/reference/configuration/#file-selection)を参照する）を組み合わせる。
 
-`check` コマンドは、読み取り専用ストレージ、レイアウト、およびディスカバリの組み合わせで構成されています。
+終了コードの値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)が定め、対応の全体は[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
 
-プロセスの終了コードおよびその集約優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) で規定されています。信頼できないアーティファクトが検出された場合は終了コード `4` が、許容されていない空の選択が行われた場合は終了コード `5` が返されます。
-
-関連リンク:
-- [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)
-- [レポート](/ambercast/ja/reference/reports/#check-results)
-- [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)
-- [設定](/ambercast/ja/reference/configuration/#file-selection)
+- 信頼できない成果物は、終了コード `4` に寄与する。
+- 許可されていない空の選択は、終了コード `5` に寄与する。

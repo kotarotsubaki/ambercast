@@ -1,56 +1,43 @@
 ---
 title: ambercast generate
-description: ambercast generate コマンドのフラグ仕様および成果物生成に関するリファレンスです。
+description: ambercast generate のフラグ、プロバイダーの解決、シークレットの同意、コンパニオンファイル、終了ステータスのリファレンス。
 ---
 
-`ambercast generate` は、テストプロンプトに対応する Plan および Grounding 成果物を生成するためのコマンドです。本リファレンスでは、コマンドラインフラグの仕様、AIプロバイダ実行エンジンの解決、成果物の生成に伴う副作用、および終了ステータスについて解説します。
+`ambercast generate` は、テストプロンプトから計画（plan）とコンパニオンの成果物を作る。対象はリテラルのファイルパスか、探索で選んだテストである。
 
 ## フラグ {#flags}
 
-`ambercast generate` で利用可能なフラグの一覧です。ファイル指定を省略した場合は自動検出（discovery）が実行されます（ファイル選択の詳細は [設定](/ambercast/ja/reference/configuration/#file-selection) を参照してください）。
-
-| flag | value | effect | default |
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| files | path[] | literal prompts; absent selects discovery | discovery |
-| --force | boolean | force generation | false |
-| --dry-run | boolean | preview: `would-generate` only when generation is needed; fresh Plan returns `skipped-fresh`; neither outcome writes | false |
-| --target | name | select target | omitted |
-| --ai | claude\|codex | provider override | omitted |
-| --allow-empty | boolean | allow empty selection | false |
-| --list | boolean | list without generation | false |
-| --json | boolean | JSON envelope | false |
-| --config | path | explicit config | omitted |
-| --no-color | boolean | disable ANSI | false |
+| files | path[] | リテラルのプロンプト。未指定なら探索 | discovery |
+| --force | boolean | 生成を強制する | false |
+| --dry-run | boolean | 何も書かずに結果だけを返す。生成が必要なら `would-generate`、計画が新しければ `skipped-fresh` | false |
+| --target | name | 生成で使えるターゲットをこの 1 つに限る | omitted |
+| --ai | claude\|codex | プロバイダーの上書き | omitted |
+| --allow-empty | boolean | 空の選択を許可する | false |
+| --list | boolean | 生成せずに一覧を出す | false |
+| --json | boolean | JSON エンベロープで出力する | false |
+| --config | path | 設定ファイルを明示する | omitted |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
-## AI呼び出し {#ai-calls}
+## AI 呼び出し {#ai-calls}
 
-`ambercast generate` は、プロバイダ実行エンジン（provider executor）の解決を、その生成依存関係（generation dependency）を通じてのみ行います。設定済みのプロバイダおよび `--ai` によるオーバーライド指定は、このリゾルバへ渡されます。
+`generate` がプロバイダーの実行器を解決するのは、生成の経路だけである。設定されたプロバイダーと `--ai` の上書きは、この解決処理に渡される。
 
-フラグによる実行制御と生成動作は以下のとおりです。
+`--list` は、生成せずに探索の行を返す。
 
-- `--list` は生成を実行せず、検出行（discovery rows）を返します。
-- `--dry-run` を指定した場合、生成が必要なターゲットに対しては `would-generate` を返し、最新状態の Plan（fresh Plan）に対しては `skipped-fresh` を返します。
-- `--dry-run` のいずれの結果においても、成果物への書き込みは行われません。fresh ブランチでは Grounding の修復（Grounding repair）がスキップされ、生成ブランチでは実際の書き込み処理の前にリターンします。
+`--dry-run` では、生成が必要な対象は `would-generate` を返し、計画が新しい対象は `skipped-fresh` を返す。どちらの結果も成果物を書かない。新しい計画の分岐はグラウンディングの修復を飛ばし、生成の分岐は書き込みの前で戻るからだ。
 
-## シークレット同意 {#secret-consent}
+## シークレットの同意 {#secret-consent}
 
-生成は候補作成後に同意を求めます。候補 Plan を作成し、`secrets.allow` にないシークレット名を識別してから、Plan または Grounding を永続化する前に対話的な承認を求めます。最新の Plan を `--force` で再生成する場合も、この同意境界に従います。`--dry-run` は成果物を書き込まず、同意も永続化しません。
+生成は、候補を作ってから同意を取る順で進む。まず候補の計画を作り、`secrets.allow` に無いシークレット名を見つけ、計画かグラウンディングを書く前に対話で承認を求める。`--force` でも、新しい計画を再生成するときは同じ同意の境界に従う。`--dry-run` は成果物を書かず、同意も保存しない。
 
-非対話コンテキスト、または同意を拒否した場合、許可リストにない候補は `SECRET_CONSENT_REQUIRED` と終了コード 2 で失敗します。CI で実行する前にレビュー済みの名前を `secrets.allow` に追加してください。`"*"` は名前ごとのレビューを回避して AI が提案する任意の名前を受け入れるため、強いリスク警告を伴います。安全なワークフローは[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)を参照してください。
+非対話の環境や、同意を断った場合は、許可されていない候補が `SECRET_CONSENT_REQUIRED` で失敗し、終了コード `2` になる。CI で実行する前に、確認済みの名前を `secrets.allow` に加える。`"*"` は名前ごとの確認を省いて AI が提案したどの名前も受け入れるため、強いリスクを伴う。安全な手順は[シークレットを管理する](/ambercast/ja/how-to/manage-secrets/)を参照する。
 
 ## 副作用と終了コード {#side-effects}
 
-`<name>.test.md` という名称のプロンプトは、その隣に配置される Plan および Grounding のコンパニオンファイルに対応付けられます（詳細は [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) を参照してください）。
+`<name>.test.md` という名前のプロンプトには、同じ場所に計画とグラウンディングのコンパニオンが対応する（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)を参照する）。
 
-### 結果ステータス
+結果ステータスは `generated`・`would-generate`・`skipped-fresh`・`listed`・`failed`・`skipped` である（[レポート](/ambercast/ja/reference/reports/#generate-results)を参照する）。`would-generate` は、生成が必要な対象に対する `--dry-run` のステータスである。`skipped-fresh` は `--dry-run` でも返る。
 
-コマンド実行結果のステータスには、`generated`、`would-generate`、`skipped-fresh`、`listed`、`failed`、`skipped` があります（詳細は [レポート](/ambercast/ja/reference/reports/#generate-results) を参照してください）。
-
-- `would-generate`: 生成が必要なターゲットに対してのみ返される `--dry-run` 時のステータスです。
-- `skipped-fresh`: 最新状態の Plan に対して返されるステータスであり、`--dry-run` モードでも有効です。
-
-### 終了コード
-
-プロセスコードの値およびその集約の優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) に従います（終了コード一覧については [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table) を参照してください）。空の選択（empty selection）が行われた際に終了コード 5 を計上するかどうかは、`--allow-empty` フラグによって制御されます。
-
-関連リンク: [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)、[レポート](/ambercast/ja/reference/reports/#generate-results)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、[設定](/ambercast/ja/reference/configuration/#file-selection)
+終了コードの値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)が定め、個々のコードは[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。`--allow-empty` は、空の選択が終了コード `5` に寄与するかどうかを決める（[設定](/ambercast/ja/reference/configuration/#file-selection)を参照する）。

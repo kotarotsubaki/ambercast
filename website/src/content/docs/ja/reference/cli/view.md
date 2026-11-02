@@ -1,53 +1,57 @@
 ---
 title: ambercast view
-description: ambercast view コマンドのリファレンス。フラグ、対話ゲート、ポート選択、ホストバインド、配信ルートを解説します。
+description: ambercast view のフラグ、対話ゲート、ポートの選択、ホストの結び付け、配信するルートのリファレンス。
 ---
 
-`ambercast view` は、設定済みの runs ディレクトリに永続化された run の結果を閲覧する、読み取り専用のローカル HTTP サーバーを起動します。テストを再実行したり AI 呼び出しを行ったりすることなく、開発者が run のケース・ステップ・スクリーンショットを確認できます。
+`ambercast view` は、設定された実行ディレクトリを対象に、読み取り専用のローカル HTTP サーバーを起動する。テストを再実行せずに、実行のケース、ステップ、スクリーンショットを確認できる。AI は呼ばない。
 
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+`view` は位置引数を取らない。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `--port` | n | 希望するポート。未指定時は 20 候補まで自動増分 | 4600 |
-| `--host` | addr | バインドアドレス。具体的な IP または localhost、ワイルドカード不可 | 127.0.0.1 |
-| `--allow-headless` | boolean | 非対話端末での実行を許可 | false |
-| `--config` | path | 明示的な設定パス | 省略 |
-| `--no-color` | boolean | ANSI 出力を無効化 | false |
+| --port | n | 希望するポート。指定しなければ 20 個の候補を順に試す | 4600 |
+| --host | addr | 結び付けるアドレス。具体的な IP か localhost で、ワイルドカードは不可 | 127.0.0.1 |
+| --allow-headless | boolean | 非対話の端末での起動を許可する | false |
+| --config | path | 設定ファイルを明示する | omitted |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
 ## 対話ゲート {#interactive-gate}
 
-`view` は、他の確認ゲート付きコマンドと同じ対話判定に従い、stdin と stderr の両方が端末に接続され、かつ `CI` が設定されていない場合を除いて起動を拒否します。`--allow-headless` を指定しない非対話実行は、次のメッセージとともに終了コード 2 で終了します。
+`view` は、標準入力と標準エラーがどちらも端末で、かつ `CI` が有効でないときにだけ起動する。未設定・空・`false` の `CI` は有効とみなさない。`init` も、確認のプロンプトの前に、端末と `CI` について同じ検査をする。`--allow-headless` を付けずに非対話で呼ぶと、次のメッセージを出して終了コード `2` で終わる。
 
-```
+```text
 view requires --allow-headless when no interactive terminal is attached.
 ```
 
-`--allow-headless` はこの拒否を解除します。既に対話端末である場合は no-op です。
+`--allow-headless` はこの拒否を解く。端末で起動する場合は何も変わらない。
 
-## ポート選択 {#port-selection}
+## ポートの選択 {#port-selection}
 
-開始ポートは `--port`、次に設定済みの `viewer.port`、最後に 4600 の順で決まります。`--port` を指定しない場合、`view` は開始ポートから連続する最大 20 個のポートを試行し、`EADDRINUSE` のときだけ次の候補へ進み、実際にバインドしたポートを表示します。`--port` を指定した場合、そのポートは厳格に扱われます。使用中であれば別のポートを試さずに終了コード 3 で終了します。すべての候補を使い切った場合、または `EADDRINUSE` 以外のバインド失敗も同様に終了コード 3 です。
+開始ポートは、`--port`、設定の `viewer.port`、`4600` の順で決まる。`--port` がなければ、`view` はそこから最大 20 個の連続したポートを試す。進むのは `EADDRINUSE` のときだけで、実際に結び付けたポートを出力する。
 
-## ホストバインド {#host-binding}
+`--port` を指定した場合は、そのポートだけを厳密に使う。使用中なら `view` は終了コード `3` で終わる。候補をすべて使い切った場合や、`EADDRINUSE` 以外の結び付けの失敗も、終了コード `3` になる。
 
-`--host` は具体的な IP アドレスまたは `localhost`（`127.0.0.1` に正規化）を受け付けます。このサーバーは認証を持たないため、ワイルドカードアドレス（`0.0.0.0`、`::`、`[::]`）は終了コード 2 で拒否されます。すべてのリクエストはバインドされたホストとポートに対して `Host` ヘッダーで検査され、異なるホストを指定したリクエストは 403 で拒否されます。ループバック以外のアドレスへのバインドは、認証なしで到達可能である旨の警告を表示します。
+## ホストの結び付け {#host-binding}
+
+`--host` には具体的な IP アドレスか `localhost` を渡す。`localhost` は `127.0.0.1` になる。ワイルドカードのアドレス（`0.0.0.0`・`::`・`[::]`）は、サーバーに認証が無いため、終了コード `2` で拒否される。すべてのリクエストの `Host` ヘッダーは、結び付けたホストとポートを指していなければならず、違えば `403` を返す。結び付けたアドレスが `127.0.0.1` と `::1` 以外のときは、認証なしで到達できるという警告を出力する。
 
 ## ルート {#routes}
 
-| ルート | 内容 |
+| ルート | 配信する内容 |
 | --- | --- |
-| `GET /` | run の一覧（新しい順）。状態・所要時間・ケース数を含む |
-| `GET /runs/<runId>` | 1 つの run のケース・ステップ・期待値/実際値・説明文・スクリーンショット |
-| `GET /runs/<runId>/report.json` | run が永続化した report の生バイト列 |
-| `GET /runs/<runId>/screenshots/<ref>` | run の report が実際に参照するスクリーンショット |
+| `GET /` | 新しい順の実行一覧。ステータス、所要時間、ケース数を表示する。 |
+| `GET /runs/<runId>` | 1 回の実行のケース、ステップ、期待値と実際の値、説明、スクリーンショット。 |
+| `GET /runs/<runId>/report.json` | 実行が永続化したレポートの生のバイト列。 |
+| `GET /runs/<runId>/screenshots/<ref>` | 実行のレポートが参照しているスクリーンショット。 |
 
-すべての応答に `X-Content-Type-Options: nosniff` と `Cache-Control: no-store` が付与されます。HTML 応答と生データ応答には固定の `Content-Security-Policy` と `Referrer-Policy: no-referrer` も付与されます。画面はサーバーサイドでレンダリングされ、クライアント側 JavaScript や外部リクエストは一切含まれません。
+すべてのレスポンスに `X-Content-Type-Options: nosniff` と `Cache-Control: no-store` が付く。HTML と生のレスポンスには、固定の `Content-Security-Policy` と `Referrer-Policy: no-referrer` も付く。ページはサーバー側で描画され、クライアントの JavaScript も外部へのリクエストも使わない。
 
-`report.json` を欠く run ディレクトリ（書き込み途中や永続化失敗など）は、壊れたリンクとしてではなく evidence only として一覧に表示されます。`report.json` の解析または検証に失敗した run も、一覧から消えることなく、生バイト列へのリンク付きで表示され続けます。
+`report.json` が無い実行ディレクトリは、書き込みの途中や永続化の失敗後などに、証跡のみの行として一覧に載る。`report.json` の解析か検証に失敗した実行も一覧に残り、生のバイト列に到達できる。
 
-`ambercast view` は `schemaVersion` が 3.x であるレポートをすべて読み取ります。現行 CLI と異なるマイナー版で書かれたレポートは、run 詳細ヘッダに「Schema `<version>`」と表示されます。異なるメジャー版のレポートは「Unsupported version `<version>`」として一覧に表示され、開くことはできません。
+`view` は `schemaVersion` が 3.x のレポートをすべて読む。別のマイナーバージョンのレポートは、実行の詳細ヘッダーに「Schema `<version>`」と表示される。別のメジャーバージョンのレポートは「Unsupported version `<version>`」として一覧に載り、開けない。
 
-`view` は、Ambercast のコマンドの中でネットワークポートを消費する唯一のコマンドです（MCP サーバーはポートを使用しない stdio 通信です）。
+`view` は、ネットワークポートを使う ambercast 唯一のコマンドである。MCP サーバーは stdio を使う。
 
-関連情報: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)。
+関連ページ: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)

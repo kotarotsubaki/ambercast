@@ -1,33 +1,35 @@
 ---
 title: 終了コード
-description: ambercast がプロセス終了ステータスとして返す終了コードと、その集約優先順位のリファレンスです。
+description: ambercast が返すプロセスの終了コードと、複数の結果を 1 つにまとめるときの優先順位を示すリファレンス。
 ---
 
-ambercast は、機械判定が可能なプロセス終了ステータスとして終了コードを提供します。CI や自動実行スクリプトにおいて処理結果を判別できるように、各終了コードには固有の意味と集約時の優先順位が定められています。
-
-エラーコードの語彙については [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary)、レポートのエンベロープ構造については [レポート](/ambercast/ja/reference/reports/#envelope)、トラブルシューティングの手順については [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/) を参照してください。
+CI やスクリプトは、終了コードを見て実行結果を判別できる。終了コードは 0 から 5 までの 6 種類で、それぞれに優先順位がある。
 
 ## 終了コード一覧 {#exit-code-table}
 
-ambercast がプロセス終了時に返す終了コード、その定義、および優先順位は以下の通りです。
-
-| code | meaning | priority |
+| コード | 意味 | 優先順位（小さいほど優先） |
 | --- | --- | --- |
-| 0 | success or no candidate | 5 |
-| 1 | command-domain negative result | 3 |
-| 2 | usage or configuration error | 0 |
-| 3 | environment error | 1 |
-| 4 | untrustworthy plan or grounding artifact | 2 |
-| 5 | empty selection | 4 |
+| 0 | 成功、または候補なし | 5 |
+| 1 | コマンドとしての否定的な結果 | 3 |
+| 2 | 利用または設定のエラー | 0 |
+| 3 | 環境エラー | 1 |
+| 4 | 信頼できない計画（plan）またはグラウンディングの成果物 | 2 |
+| 5 | 選択が空 | 4 |
 
-たとえば、[`PROMPT_PATH_INVALID`](/ambercast/ja/reference/error-codes/#code-vocabulary) は終了コード 2 となる利用エラーです。
+たとえば [`PROMPT_PATH_INVALID`](/ambercast/ja/reference/error-codes/#code-vocabulary) は利用エラーであり、終了コード 2 で終わる。
 
 ## 集約優先順位 {#aggregation-priority}
 
-複数の終了コードが集約される場合、優先順位の数値（ランク）がより小さいコードが優先されます。これにより、優先関係は 2 > 3 > 4 > 1 > 5 > 0 と定まります。
+複数の結果が出たときは、優先順位の数値が小さい終了コードを採用する。順序は 2 > 3 > 4 > 1 > 5 > 0 である。
 
-このコード選択はイテレーション順序に依存せず、対象となる候補が存在しない場合は 0 を返します。
+結果は反復の順序に依存しない。候補がなければ 0 を返す。
 
-## 優先順位の互換性リンク {#priority}
+## 優先順位の互換アンカー {#priority}
 
-以前のアンカーとの後方互換性を維持するためのセクションですので、集約優先順位の詳細については [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) を参照してください。
+旧来のアンカーを残すための節である。内容は[集約優先順位](/ambercast/ja/reference/exit-codes/#aggregation-priority)を参照する。
+
+## 関連項目 {#see-also}
+
+- [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary)
+- [レポート](/ambercast/ja/reference/reports/#envelope)
+- [よくある失敗のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)

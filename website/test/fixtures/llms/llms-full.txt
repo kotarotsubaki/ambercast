@@ -1403,238 +1403,258 @@ The three package commands exit `0`, or their failure is documented before hando
 # Configuration
 Source: https://kotarotsubaki.github.io/ambercast/reference/configuration/
 
-ambercast resolves configuration keys through configuration files and built-in defaults. When a configuration file is present, `$schema` is required and all other declared keys are optional.
+ambercast builds its configuration from one configuration file and built-in defaults. This page covers how it picks the file, the target settings, and every key.
 
 ## File selection {#file-selection}
 
-A configuration file that is present must contain `$schema`; all other declared keys are optional.
+A configuration file that is present must contain `$schema`. Every other declared key is optional.
 
-Selection precedence is command `--config` (`generate` and `check` only), then `AMBERCAST_CONFIG`, then an ancestor `ambercast.config.json`, then built-in defaults.
+ambercast chooses the file in this order:
 
-An explicit nonexistent configuration path is an error and does not fall through to discovery or defaults.
+1. The `--config` value on the command. `generate`, `check`, and `view` accept it. `run`, `heal`, `init`, and `mcp` do not. See the [command flag matrix](/ambercast/reference/cli/overview/#command-flag-matrix).
+2. The `AMBERCAST_CONFIG` variable, described in [Environment variables](/ambercast/reference/environment-variables/#configuration).
+3. An `ambercast.config.json` in an ancestor directory.
+4. The built-in defaults.
 
-A supplied `targets` object replaces, rather than deep-merges with, default targets; omitting `defaultTarget` with that replacement clears the default.
+An explicit path that does not exist is an error. It does not fall through to discovery or the defaults.
+
+A `targets` object you supply replaces the default targets instead of merging with them. If the replacement omits `defaultTarget`, the default is cleared.
 
 ## Targets {#targets}
 
-A target configuration supplies a web surface and a browser destination; its `healReplayIsolation` and `resolveTimeoutMs` settings are resolved live (before heal, and before element resolution respectively) and are not Plan or inputs-digest fields.
+A target supplies a web surface and a browser destination. ambercast resolves `healReplayIsolation` and `resolveTimeoutMs` live, before heal and before element resolution. They are not plan fields and do not enter `inputsDigest`.
 
-At config load time, `src/config/load.ts` canonicalizes an authored `locale` with `Intl.getCanonicalLocales` and stores the lone result: `"ja-jp"` becomes `"ja-JP"`. A value that throws `RangeError`, an empty string, or a non-string value fails with `CONFIG_INVALID` (exit 2) at issue path `targets.<name>.locale`. The normalized locale reaches the Plan's target definition and the live Playwright browser context (`newContext({ baseURL, locale })`), affecting `navigator.language` and the first request's `Accept-Language` header for that target's pages.
+When it loads the file, ambercast canonicalizes an authored `locale` with `Intl.getCanonicalLocales`. For example, `"ja-jp"` becomes `"ja-JP"`. A value that throws `RangeError`, an empty string, or a non-string fails with `CONFIG_INVALID` (exit 2) at issue path `targets.<name>.locale`.
 
-This setting's scope stops at `Accept-Language`, `navigator.language`, and Intl resolution. It does not control the timezone or an application-side language cookie or preference, nor does it establish a priority order against those mechanisms.
+The normalized locale reaches the plan's target definition and the Playwright browser context. It affects `navigator.language` and the `Accept-Language` header of the first request for that target's pages.
+
+The setting stops there. It does not set the timezone, an application-side language cookie, or an application preference. It also defines no priority against those mechanisms.
 
 ## Key table {#key-table}
 
-| Key path | Type | Default | Constraint | Consumers |
+| key path | type | default | constraint | consumers |
 | --- | --- | --- | --- | --- |
 | `$schema` | string | — | required in a present file | loader |
-| `testDir` | string | `tests/ambercast` | resolves to an absolute layout path | generate, run, check, heal discovery/layout |
-| `runsDir` | string | `tests/ambercast/.runs` | resolves to an absolute layout path | run reports/evidence; heal contained writes |
-| `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher; every pattern must end in `.test.md` or config loading fails with `CONFIG_INVALID` | generate, run, check, heal discovery |
-| `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | excludes after inclusion match | generate, run, check, heal discovery |
-| `secrets.allow` | `SecretName[] \| "*"` | `[]` | an empty array requires consent for every secret name; `"*"` allows every name without consent (not recommended); a non-empty array allows exactly those names | generate, run, heal |
-| `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | replaces whole target record | generate input; run, check, heal referenced Plan targets |
-| `targets.<name>.surface` | `web` | absent | only `web` in TP1; the optional field resolves to `web` at use, not via a schema default | generate and Plan target definition |
+| `testDir` | string | `tests/ambercast` | resolves to an absolute layout path | generate, run, check, heal (discovery and layout) |
+| `runsDir` | string | `tests/ambercast/.runs` | resolves to an absolute layout path | run (reports and evidence); heal (contained writes) |
+| `testMatch` | string[] | `["**/*.test.md"]` | limited `*`/`**` matcher. Every pattern must end in `.test.md`, or loading fails with `CONFIG_INVALID` | generate, run, check, heal (discovery) |
+| `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | excludes after inclusion match | generate, run, check, heal (discovery) |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | an empty array requires consent for every secret name. `"*"` allows every name without consent (not recommended). A non-empty array allows exactly those names | generate, run, heal |
+| `targets.<name>.baseUrl` | string | `http://localhost:3000` on `web-user` | required in every target you write; an http(s) URL without a literal `{{secrets.`. Replaces the whole target record | generate (input); run, check, heal (plan-referenced targets) |
+| `targets.<name>.surface` | `web` | absent | only `web` in TP1. The optional field resolves to `web` at use, not through a schema default | generate; plan target definition |
 | `targets.<name>.description` | string | absent | optional generation context | generate |
-| `targets.<name>.executor.kind` | `playwright` | `playwright` | live UI executor kind; excluded from Plan digest | run and heal executor composition |
-| `targets.<name>.executor.browser` | `chromium` | `chromium` | live executor browser; excluded from Plan digest | run and heal executor composition |
-| `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`; an empty array denies that secret everywhere; a non-empty array replaces that default | generate, run, heal secret sink policy; check (freshness) |
-| `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal requires every Plan-referenced target to be `idempotent` | heal |
-| `targets.<name>.locale` | string | absent | canonicalized via `Intl.getCanonicalLocales`; a value that fails canonicalization is `CONFIG_INVALID` | generate and Plan target definition; run browser context |
-| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
-| `defaultTarget` | string | `web-user` | must resolve to a target; generator uses it when the prompt does not identify a step Target | generate |
-| `ai.provider` | `claude|codex|auto` | `auto` | CLI/environment may override | generate; run fallback; heal |
-| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; per-file generation attempts | generate only; never heal Stage 3 |
-| `ai.timeoutMs` | positive integer | `600000` | positive | generate; run fallback; heal |
-| `viewer.port` | integer | `4600` | 1–65535; starting candidate, overridden by `--port` | view |
+| `targets.<name>.executor.kind` | `playwright` | `playwright` | live UI executor kind; excluded from the plan digest | run, heal (executor composition) |
+| `targets.<name>.executor.browser` | `chromium` | `chromium` | live executor browser; excluded from the plan digest | run, heal (executor composition) |
+| `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | absent | an absent secret entry permits only `baseUrl`. An empty array denies that secret everywhere. A non-empty array replaces that default. Each origin is `scheme://host[:port]` with port 1–65535, and has no path, query, fragment, wildcard, userinfo, or literal `{{secrets.` | generate, run, heal (secret sink policy); check (freshness) |
+| `targets.<name>.healReplayIsolation` | `idempotent\|stateful` | `stateful` | heal requires every plan-referenced target to be `idempotent` | heal |
+| `targets.<name>.locale` | string | absent | canonicalized with `Intl.getCanonicalLocales`. A value that fails canonicalization is `CONFIG_INVALID` | generate; plan target definition; run (browser context) |
+| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run, heal |
+| `defaultTarget` | string | `web-user` | must resolve to a target. The generator uses it when the prompt does not identify a step's target | generate |
+| `ai.provider` | `claude\|codex\|auto` | `auto` | a CLI flag or environment variable may override it | generate; run (fallback); heal |
+| `ai.maxGenerateAttempts` | positive integer | `2` | 1–5; generation attempts per file | generate only; never heal Stage 3 |
+| `ai.timeoutMs` | positive integer | `600000` | positive | generate; run (fallback); heal |
+| `viewer.port` | integer | `4600` | 1–65535; the starting candidate, overridden by `--port` | view |
 | `ci.heal` | boolean | `false` | opt-in to non-list heal in CI | heal |
-| `ci.updateGroundingCache` | boolean | `false` | CI write-back opt-in | run |
-| `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | finite vocabulary | check |
-| `grounding.localWriteBack` | `auto|explicit` | `auto` | ignored in CI | run |
+| `ci.updateGroundingCache` | boolean | `false` | opt-in to cache write-back in CI | run |
+| `grounding.repositoryPolicy` | `committed\|uncommitted` | `committed` | finite vocabulary | check |
+| `grounding.localWriteBack` | `auto\|explicit` | `auto` | ignored in CI | run |
 | `heal.maxStepRepairs` | positive integer | absent | caps incremental real-provider dispatches only | heal |
 | `heal.caseTimeoutMs` | positive integer | `300000` | case admission deadline | heal |
 
+The `testMatch` and `testIgnore` patterns follow the [pattern language](/ambercast/reference/discovery-patterns/#pattern-language).
+
 ## Secret consent {#secret-consent}
 
-`secrets.allow` is the durable allowlist for logical secret names discovered during generation. `generate` prompts for names outside a list value and merges accepted names into the configuration file. In CI or another non-interactive context, pre-populate the list with names that have already been reviewed.
+`secrets.allow` is the durable allowlist of logical secret names found during generation. `generate` prompts for any name outside a list value and merges the names you accept into the file. In CI or another non-interactive context, fill the list with names that were already reviewed.
 
-`"*"` bypasses per-name consent and accepts any AI-proposed name. It is a high-risk escape hatch, not a safer default: use it only when accepting arbitrary proposed names without review is intended.
+`"*"` skips per-name consent and accepts any name the AI proposes. It is a high-risk escape hatch, not a safer default. Use it only when you intend to accept arbitrary proposed names without review.
 
 ## AI configuration {#ai}
 
-`ai.maxGenerateAttempts`: Maximum provider attempts per prompt during generate when the local validators reject a response. Between 1 and 5, default 2. Never applies to heal repairs.
+`ai.maxGenerateAttempts` is the maximum number of provider attempts per prompt during `generate`, including the first attempt. `generate` tries again only when local validation rejects a response. The range is 1 to 5, and the default is 2. It never applies to heal repairs.
 
-`ai.timeoutMs`: Deadline in milliseconds for one provider dispatch. Applies to every generate, run, and heal dispatch. The heal case deadline is an admission boundary only, so an admitted dispatch may still run up to this value. Default 600000.
+`ai.timeoutMs` is the deadline in milliseconds for one provider dispatch, with a default of 600000. It applies to every generate, run, and heal dispatch. The heal case deadline only decides admission, so an admitted dispatch can still run up to this value.
 
 ## Healing configuration {#heal}
 
-`heal.maxStepRepairs` controls incremental real-provider dispatches, while `heal.caseTimeoutMs` establishes the case-wide admission deadline.
+`heal.maxStepRepairs` caps incremental real-provider dispatches. `heal.caseTimeoutMs` is the admission deadline for the whole case.
 
 ## Grounding write-back {#grounding}
 
-| Environment | Resolved policy | Grounding writes when |
+| environment | resolved policy | grounding writes when |
 | --- | --- | --- |
-| local | `localWriteBack: auto` | automatically after a changed grounding result |
+| local | `localWriteBack: auto` | a grounding result changed |
 | local | `localWriteBack: explicit` | `--update-cache` is passed |
 | CI | `localWriteBack` ignored | `--update-cache` is passed or `ci.updateGroundingCache: true` |
 
-Links: [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix), [Discovery patterns](/ambercast/reference/discovery-patterns/#pattern-language), [Environment variables](/ambercast/reference/environment-variables/#configuration), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back).
+See [ambercast run](/ambercast/reference/cli/run/#grounding-write-back) for the command behavior.
+
+## See also {#see-also}
+
+- [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix)
+- [Discovery patterns](/ambercast/reference/discovery-patterns/#pattern-language)
+- [Environment variables](/ambercast/reference/environment-variables/#configuration)
+- [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 
 ---
 
 # Prompt file format
 Source: https://kotarotsubaki.github.io/ambercast/reference/prompt-format/
 
-Ambercast test prompts define end-to-end test cases in natural language. This reference specifies the exact file identity rules, source normalization transformations, and secret reference patterns enforced by the layout resolver and parser.
+A test prompt is a Markdown file that describes one end-to-end test case in natural language.
 
 ## File identity {#file-identity}
 
-| Condition | Enforced result |
+| condition | result |
 | --- | --- |
-| Path is inside `testDir`, ends in `.test.md`, and has a nonempty name before the suffix. | The layout resolver can derive plan, grounding, and case paths. |
-| Path is outside `testDir`, has another suffix, or is the bare filename `.test.md`. | Forward layout resolution rejects it with `RangeError`. |
+| The path is inside `testDir`, ends in `.test.md`, and has a nonempty name before the suffix. | The layout derives the plan, grounding, and case paths. |
+| The path is outside `testDir`, has another suffix, or is the bare filename `.test.md`. | The command stops with `PROMPT_PATH_INVALID` (exit 2). |
 
-File discovery is controlled by `testMatch` and `testIgnore`. The `.test.md` suffix is an exact source suffix required by the layout resolver, not a general Markdown parser rule. For pattern configuration details, see [Discovery patterns](/ambercast/reference/discovery-patterns/#selection).
+The `details.reason` field of that error is `outside-test-dir`, `not-test-md`, or `no-name`. `--list` does no eligibility validation, so it never raises this error. See [Reports](/ambercast/reference/reports/#errors) for the error contract.
+
+`testMatch` and `testIgnore` control which files discovery finds. The `.test.md` suffix is an exact requirement of the layout, not a general Markdown rule. For pattern details, see [Discovery patterns](/ambercast/reference/discovery-patterns/#selection).
 
 ## Normalization {#normalization}
 
-Before extraction, test prompt sources undergo strict normalization:
+ambercast normalizes a prompt before it extracts anything from it.
 
-| Operation | Exact rule |
+| operation | rule |
 | --- | --- |
-| Leading BOM | Remove at most one leading U+FEFF; preserve a second leading U+FEFF and any U+FEFF elsewhere. |
-| Line endings | Convert each CRLF and lone CR to one LF. |
-| Everything else | Preserve it: no trimming, whitespace collapsing, reordering, rewording, or other transformation. |
+| leading BOM | Remove at most one leading U+FEFF. A second leading U+FEFF and any U+FEFF elsewhere stay. |
+| line endings | Convert each CRLF and each lone CR to one LF. |
+| everything else | Keep it as is. ambercast does not trim, collapse whitespace, reorder, or reword. |
 
 ## Secret references {#secret-references}
 
-`SecretRef` is the syntax `generate` writes into the committed Plan's `secretRef` fields once a proposed secret name is consented; a prompt itself never contains this syntax (see [Legacy secret syntax](#legacy-secret-syntax) below — a prompt containing it is rejected). Secret references identify credential slots in schema fields:
+After you consent to a proposed secret name, `generate` writes a secret reference such as `{{secrets.name}}` into the `secretRef` fields of the plan. A prompt never contains one. ambercast rejects a prompt that has `{{secrets.` outside code spans and code blocks with `SECRET_SYNTAX_REJECTED`, as [Legacy secret syntax](#legacy-secret-syntax) explains.
 
-| Symbol | Verbatim implementation | Meaning |
+| symbol | definition | meaning |
 | --- | --- | --- |
-| `SECRET_REF_SOURCE` | `\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}` | One or more dot-separated ASCII alphanumeric/underscore segments after `secrets.`. |
-| `SECRET_REF_PATTERN` | `new RegExp(\`^${SECRET_REF_SOURCE}$\`)` | A secret-bearing schema field accepts the reference only as its entire value. |
+| `SECRET_REF_SOURCE` | `\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}` | `secrets.` followed by one or more dot-separated segments of ASCII letters, digits, and underscores. |
+| `SECRET_REF_PATTERN` | `SECRET_REF_SOURCE` anchored at both ends | A secret-bearing field accepts a reference only as its entire value. |
 
-Surrounding prose is not accepted by `SecretRef`; whole-value anchoring enforced by `SECRET_REF_PATTERN` keeps secret-bearing fields unambiguous. A valid reference such as `{{secrets.name}}` must occupy the entire field value rather than being embedded alongside prose.
+Surrounding text is not accepted. A valid reference must fill the whole field value.
 
 ## Legacy secret syntax {#legacy-secret-syntax}
 
-Older prompts could contain a grant line such as the following:
+Older prompts could contain a grant line such as this one:
 
 ```markdown
 @ambercast-secret {{secrets.password}}
 ```
 
-This syntax is no longer accepted. Remove every such line, then follow [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants); see [Secrets in plans](/ambercast/spec/secrets/) for the current consent and allowlist model.
+ambercast no longer accepts this syntax. Remove every such line, then follow [Migrate secret grants](/ambercast/how-to/upgrade/#migrate-secret-grants). The current consent and allowlist model is in [Secrets in plans](/ambercast/spec/secrets/).
 
 ## Terminal assertions and instruction coverage {#terminal-assertions-and-instruction-coverage}
 
-Each terminal success assertion must be covered by its instruction. URL arrival alone is not terminal proof; state a heading, message, or element that is visible at the destination.
+Each terminal success assertion must be covered by its instruction. Arriving at a URL is not proof by itself. State a heading, message, or element that is visible at the destination.
 
 > …I reach the dashboard and see the heading "Welcome back".
 
 ## Literal-secret rejection {#literal-secret-rejection}
 
-The canonical detector contract is defined in [Secrets in plans](/ambercast/spec/secrets/#literal-secret-rejection).
+Before persistence or report serialization, ambercast checks generated or provider-derived JSON against the literal-secret policy. A detected value is rejected with `SECRET_LITERAL_REJECTED`, and the literal is not kept in diagnostics.
 
-Before persistence or report serialization, generated or provider-derived JSON is checked by the literal-secret policy. A detected value produces `SecretLiteralRejectedError` without retaining the literal in diagnostics.
+The one exception is an item in the provider's `assumptions` list. When it matches secret detection, ambercast replaces it with a generic message and continues instead of failing with `SECRET_LITERAL_REJECTED`. The policy does not reject prompt prose for containing text that looks like a credential. The detector contract is in [Secrets in plans](/ambercast/spec/secrets/#literal-secret-rejection).
 
-This generated-plan policy does not reject arbitrary prompt prose merely because it contains credential-like text.
+## See also {#see-also}
 
-### Related documentation
-
-- Selection and discovery patterns: [Discovery patterns](/ambercast/reference/discovery-patterns/#selection)
-- Secret environment variables: [Environment variables](/ambercast/reference/environment-variables/#secrets)
-- Authoring guidelines: [Write effective prompts](/ambercast/how-to/write-effective-prompts/)
-- Managing secrets: [Manage secrets](/ambercast/how-to/manage-secrets/)
-- Secrets specification: [Secrets in plans](/ambercast/spec/secrets/)
+- [Discovery patterns](/ambercast/reference/discovery-patterns/#selection)
+- [Environment variables](/ambercast/reference/environment-variables/#secrets)
+- [Write effective prompts](/ambercast/how-to/write-effective-prompts/)
+- [Manage secrets](/ambercast/how-to/manage-secrets/)
+- [Secrets in plans](/ambercast/spec/secrets/)
 
 ---
 
 # Discovery patterns
 Source: https://kotarotsubaki.github.io/ambercast/reference/discovery-patterns/
 
-Ambercast discovers test files using configured matching patterns and lexical ordering. Pattern matching evaluates relative paths against anchored expressions using two wildcard tokens: `*` and `**`.
+ambercast matches `testMatch` and `testIgnore` patterns against paths relative to `testDir`. The pattern language has two wildcards, `*` and `**`.
 
 ## Pattern language {#pattern-language}
 
-The implemented grammar has only two wildcard tokens, `*` and `**`; everything else is literal.
+The grammar has only the wildcards below. Every other character is literal.
 
-| Syntax | Exact meaning |
+| syntax | meaning |
 | --- | --- |
 | `*` | Zero or more characters other than `/`, within one path segment (`[^/]*`). |
-| `**/` | Zero or more complete path segments, including none (`(?:.*/)?`). |
-| `**` not followed by `/` | Zero or more arbitrary characters, including `/` (`.*`). |
-| Every other character | Literal text; regular-expression metacharacters are escaped. Character classes, braces, extglobs, and other general glob syntax have no special meaning. |
-| Entire pattern | Matching is anchored with `^` and `$`; substrings do not count. |
+| `**/` | Zero or more whole path segments, including none (`(?:.*/)?`). |
+| `**` not followed by `/` | Zero or more characters of any kind, including `/` (`.*`). |
+| every other character | Literal text. Character classes, braces, extglobs, and other glob syntax have no special meaning. |
+| the whole pattern | Anchored at both ends. A match on a substring does not count. |
 
 ## Selection {#selection}
 
-| Stage | Contract |
+| stage | rule |
 | --- | --- |
-| Include | A path must match at least one `testMatch` pattern. An empty `testMatch` selects nothing. |
-| Exclude | A path matching any `testIgnore` is excluded even when it also matches `testMatch`. |
-| Path form | The matcher receives `/`-separated POSIX paths relative to `testDir`, never absolute paths. |
-| Ordering | Discovery skips non-files, deduplicates selected paths, and returns lexical sort order. |
-| Missing root | A missing `testDir` yields an empty selection; other directory-read failures become `FsIoError`. |
+| include | A path must match at least one `testMatch` pattern. An empty `testMatch` selects nothing. |
+| exclude | A path that matches any `testIgnore` pattern is excluded, even when it also matches `testMatch`. |
+| path form | The matcher receives `/`-separated POSIX paths relative to `testDir`, never absolute paths. |
+| order | Discovery skips anything that is not a file, removes duplicates, and sorts the paths lexically. |
+| missing root | A missing `testDir` gives an empty selection. Any other read failure becomes `FsIoError`, reported as `FS_IO_ERROR`. |
 
-The selected path order is the stable execution order supplied to consuming use cases.
+The sorted order is the stable execution order that commands use.
 
-A prompt intended only for explicit execution, rather than normal discovery, should be excluded with `testIgnore` and run by its literal path. `--list` intentionally performs no eligibility validation on any selection, literal or discovered.
+To keep a prompt out of normal discovery and still run it, exclude it with `testIgnore` and pass its literal path. `--list` does no eligibility validation on any selection.
 
 ## Defaults {#defaults}
 
-Defaults first include `.test.md` prompts, then exclude run directories and both companion artifact suffixes.
+By default, ambercast includes `.test.md` prompts and excludes run directories and both companion file suffixes.
 
-| Key | Default patterns |
+| key | default patterns |
 | --- | --- |
 | `testMatch` | `["**/*.test.md"]` |
 | `testIgnore` | `["**/.runs/**", "**/*.ambercast.plan.json", "**/*.ambercast.grounding.json"]` |
 
 ## Worked examples {#worked-examples}
 
-| Pattern / configuration | Candidate | Result | Why |
+| pattern or configuration | candidate | result | reason |
 | --- | --- | --- | --- |
-| `**/*.test.md` | `login.test.md` | match | `**/` may span zero segments. |
+| `**/*.test.md` | `login.test.md` | match | `**/` can span zero segments. |
 | `**/*.test.md` | `nested/checkout.test.md` | match | `**/` spans the parent segment. |
 | `ui/*.test.md` | `ui/auth/login.test.md` | no match | `*` cannot cross `/`. |
 | `login.test.md` | `login.test.md.bak` | no match | The whole path must match. |
-| include `**/*.test.md`; ignore `**/.runs/**` | `nested/.runs/cached.test.md` | no match | `testIgnore` wins after inclusion. |
+| include `**/*.test.md`, ignore `**/.runs/**` | `nested/.runs/cached.test.md` | no match | `testIgnore` wins after inclusion. |
 | `{login,nested}/*.test.md` | `login/login.test.md` | no match | Braces are literal, not alternation. |
 
-Links: [Configuration](/ambercast/reference/configuration/#key-table), [File layout](/ambercast/reference/file-layout/#companions), [Select which tests run](/ambercast/how-to/select-tests/).
+## See also {#see-also}
+
+- [Configuration](/ambercast/reference/configuration/#key-table)
+- [File layout](/ambercast/reference/file-layout/#companions)
+- [Select which tests run](/ambercast/how-to/select-tests/)
 
 ---
 
 # Reports
 Source: https://kotarotsubaki.github.io/ambercast/reference/reports/
 
-Ambercast reports provide structured, machine-readable JSON execution data for commands. Every object across public report schemas is strict and rejects unknown fields, organizing status metadata, execution duration, summary metrics, errors, and command-specific result payloads into a top-level envelope.
+Each command can emit one JSON report with run metadata, a summary, errors, and command-specific results.
 
 ## Envelope {#envelope}
 
-All objects across the public report schemas are strict and reject unknown fields. The `review` branch is defined in the schema, but no `review` command is available in the implemented CLI.
+All objects in the public report schemas are strict and reject unknown fields. The schema defines a `review` branch, but the CLI has no `review` command.
 
-| Field | Type and Contract |
+| field | type and contract |
 | --- | --- |
-| `schemaVersion` | literal 3.11 |
+| `schemaVersion` | literal `3.11` |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
-| `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
+| `startedAt` | UTC string shaped `YYYY-MM-DDTHH:mm:ssZ` |
 | `durationMs` | non-negative integer |
-| `summary` | strict `total`, `passed`, `failed`, `errored`, `skipped` non-negative integers |
-| `errors` | array of ReportError |
+| `summary` | strict object with non-negative integers `total`, `passed`, `failed`, `errored`, `skipped` |
+| `errors` | array of `ReportError` |
 | `results` | command-specific result array |
 | `reportPersistence` | `run` only: `persisted`, `failed`, or `not-attempted` |
 
 ## Result shapes {#result-shapes}
 
-The envelope's `results` array is command-specific. The following sections enumerate each implemented and schema-only branch.
+The `results` array depends on the command. The next sections list each branch, including the ones only the schema defines.
 
 ## Generate results {#generate-results}
 
-In `GenerateResult`, every branch is strict. The optional metrics listed below are the only additional fields permitted on their named branches.
+Every `GenerateResult` branch is strict. The optional fields listed are the only extra fields a branch allows.
 
-| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
 | `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
 | `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
@@ -1644,23 +1664,23 @@ In `GenerateResult`, every branch is strict. The optional metrics listed below a
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
-The AI provider may list assumptions absent from the prompt in an optional string array, `assumptions`. `generate` adds each nonblank assumption to `warnings` as `{ kind: 'generator-assumption', message }` on `generated` and `would-generate` results. Assumptions do not stop `generate` or `heal`.
+The AI provider can list assumptions that the prompt does not state, in an optional string array named `assumptions`. On `generated` and `would-generate` results, `generate` adds each nonblank assumption to `warnings` as `{ kind: 'generator-assumption', message }`. Assumptions never stop `generate` or `heal`.
 
-The human output shows `  warning: <message>` immediately after the result line. Ambercast replaces an item that matches secret detection with `An assumption was omitted because it looked like a secret.`.
+The human-readable output prints `warning: <message>`, indented by two spaces, right after the result line. If an assumption matches secret detection, ambercast replaces it with `An assumption was omitted because it looked like a secret.`.
 
-Ambercast does not store assumptions in the plan. A fresh re-run returns `skipped-fresh` without assumption warnings. Use `--force` to regenerate and see assumptions again; regeneration is non-deterministic.
+ambercast does not store assumptions in the plan. A re-run on a fresh plan returns `skipped-fresh` with no assumption warnings. Pass `--force` to regenerate and see the assumptions again. Regeneration is non-deterministic.
 
-The `ambiguities` field on `generated` and `would-generate` results is always `[]`. Provider `ambiguities` means only that a step's target cannot be assigned.
+On `generated` and `would-generate` results, `ambiguities` is always `[]`. A provider's `ambiguities` means only that a step's target cannot be assigned.
 
-Ambercast retries a single-target response with nonempty `ambiguities` as `AI_RESPONSE_INVALID`. If retries exhaust, it exits 3. Unresolved multi-target assignment still produces `PROMPT_AMBIGUOUS` and exit 2.
+For a single target, ambercast retries a response with nonempty `ambiguities` as `AI_RESPONSE_INVALID`, and exits 3 when the retries run out. An unresolved assignment across several targets still produces `PROMPT_AMBIGUOUS` and exit 2.
 
-Consumers that validate warning kinds as a closed union need the report 3.11 schema.
+A consumer that validates warning kinds as a closed union needs the report 3.11 schema.
 
 ## Run results {#run-results}
 
-In `RunResult`, every branch is strict.
+Every `RunResult` branch is strict.
 
-| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
 | `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
@@ -1668,9 +1688,9 @@ In `RunResult`, every branch is strict.
 
 ## Check results {#check-results}
 
-In `CheckResult`, every branch is strict.
+Every `CheckResult` branch is strict.
 
-| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
 | `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
@@ -1679,45 +1699,56 @@ In `CheckResult`, every branch is strict.
 
 ## Heal results {#heal-results}
 
-In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, `sessions`, and `explanation`; `aiCalls` is optional.
+Every completed `HealResult` branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, `sessions`, and `explanation`. `aiCalls` is optional.
 
-Only a `healed` row may include optional `warnings` containing `generator-assumption` items from the accepted Stage 3 candidate's `assumptions`. Other heal results forbid `warnings`. Assumptions do not fail Stage 3.
+Only a `healed` row can carry the optional `warnings`, which holds `generator-assumption` items from the `assumptions` of the accepted Stage 3 candidate. Other heal results forbid `warnings`. Assumptions do not fail Stage 3.
 
-| repairOutcome | Allowed Application | Allowed stopReason |
+| repairOutcome | allowed application | allowed stopReason |
 | --- | --- | --- |
 | `healed` | `applied`, `preview-only`, `declined`, `not-applied-interrupted`, `apply-failed`, `partially-applied` | `settled`, `attempt-limit`, `deadline` |
 | `partially-healed` | `applied`, `preview-only`, `declined`, `not-applied-interrupted`, `apply-failed`, `partially-applied` | `settled`, `attempt-limit`, `deadline` |
 | `unresolved` | `no-artifact-change`, `not-eligible` | `settled`, `attempt-limit`, `deadline` |
 | `no-changes-needed` | `no-artifact-change` | `settled` |
-| `listed` | identity-only: `id`, `file`, `status` | `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
-| `skipped` | identity-only: `id`, `file`, `status` | `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
+| `listed` | identity-only: `id`, `file`, `status` | forbidden: `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
+| `skipped` | identity-only: `id`, `file`, `status` | forbidden: `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
 
-When Stage 3 rejects a full-plan candidate because its logical secret-name set changes, the completed result has `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`. This is a hard rejection: no artifact commit occurs and users must regenerate with consent rather than silently reattribute the candidate.
+When Stage 3 rejects a full-plan candidate because its set of logical secret names changes, the completed result has `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`. The rejection is hard. No artifact is committed, and you must regenerate with consent instead of silently reassigning the candidate.
 
-Every completed branch may also include `repairTrace`, an ordered diagnostic array that projects the case's Stage 1, Stage 2, and Stage 3 attempts and outcomes. Stage 1 entries are `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`; Stage 2 entries are `{ stage: "stage2", stepId, outcome: "accepted" }` or `{ stage: "stage2", stepId, outcome: "rejected", reason }`, where `reason` is one of `provider-error`, `response-shape`, `id-mismatch`, `secret-name-invalid`, `coverage-invalid`, `obligation-mismatch`, `literal-secret`, or `no-advance`; and Stage 3 entries are `{ stage: "stage3", outcome: "accepted" }`, `{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`, `{ stage: "stage3", outcome: "failed", code? }`, or `{ stage: "stage3", outcome: "secret-set-rejected" }`. Each entry is strict: fields from another stage or outcome are not allowed.
+Every completed branch can also carry `repairTrace`, an ordered diagnostic array of the case's Stage 1, Stage 2, and Stage 3 attempts. Each entry is strict, so fields from another stage or outcome are not allowed.
 
-An admission-denied phase adds no `repairTrace` entry; it surfaces only through the case's `stopReason: "attempt-limit" | "deadline"`. Interrupted work never reaches a completed result at all — it is reported as `skipped` instead — so it has neither a `repairTrace` entry nor a `stopReason` value.
+| stage | outcome | other fields |
+| --- | --- | --- |
+| `stage1` | `accepted`, `no-advance` | `stepId` |
+| `stage1` | `not-eligible` | `stepId`, `reason`: one of `frontier-out-of-range`, `mode-none`, `trace-current`, `no-confirming-step`, `no-confirms` |
+| `stage2` | `accepted` | `stepId` |
+| `stage2` | `rejected` | `stepId`, `reason`: one of `provider-error`, `response-shape`, `id-mismatch`, `secret-name-invalid`, `coverage-invalid`, `obligation-mismatch`, `literal-secret`, `no-advance`, `intent-invalid` |
+| `stage3` | `accepted` | — |
+| `stage3` | `not-passing` | `firstFailureIndex` |
+| `stage3` | `failed` | optional `code` |
+| `stage3` | `secret-set-rejected` | — |
+
+A phase that admission denies adds no `repairTrace` entry. It shows up only through the case's `stopReason: "attempt-limit"` or `"deadline"`. Interrupted work never reaches a completed result. It is reported as `skipped`, so it has no `repairTrace` entry and no `stopReason`.
 
 ## Result statuses {#result-statuses}
 
-Step and review execution structures share common result branches.
+Step and review results share these branches.
 
-| Branch | Required Fields | Optional Fields |
+| branch | required fields | optional fields |
 | --- | --- | --- |
 | `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable` on capture only, `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
-| `observed` | `note: fixed OBSERVED_NOTE`, `accessibilitySnapshot` | — |
+| `observed` | `note`: the fixed `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
-| `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+| `review skipped` | `id`, `file`, `status: skipped` | — |
 
-An action or capture step may include `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` after local verification. `confirmed` is always `true` for `grounding`, because the binding came from an entry confirmed in an earlier run (it does not mean the entry was written in this run); for `quoted-match` and `ai-proposed`, it reflects the value at case end. The timing fields appear only when those stages ran. Earlier binding failures instead report a case error.
+After local verification, an action or capture step can carry `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`. For `grounding`, `confirmed` is always `true`, because the binding came from an entry confirmed in an earlier run. It does not mean the entry was written in this run. For `quoted-match` and `ai-proposed`, it holds the value at case end. The timing fields appear only when those stages ran. Earlier binding failures report a case error instead.
 
-Every executed run or completed heal result has a `sessions` entry for each Plan Target. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means that Target's launch did not return a session, including when execution stopped before reaching its first step. A failed close leaves the case status unchanged.
+Every executed run result and every completed heal result has a `sessions` entry for each target in the plan. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means the target's launch returned no session, including when execution stopped before its first step. A failed close leaves the case status unchanged.
 
 ## Review concerns {#review-concerns}
 
-Structures representing diagnostic findings reported during plan review.
+A review reports its findings as concerns on the plan.
 
-| Field | Type |
+| field | type |
 | --- | --- |
 | `stepId` | string |
 | `concern` | string |
@@ -1725,38 +1756,84 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these fifteen codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+A report error is a strict object scoped to the whole run or to one case. Every entry has `scope`, `kind`, `code`, and `message`. `hint` is optional for every code, and a case-scoped entry also has a non-whitespace `caseId`. `details` is optional and exists only for the fifteen codes below.
 
-| Code | Optional `details` shape |
+Where `attempts` appears, it is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`. A `SecretRef` has the syntax `{{secrets.<identifier>(.<identifier>)*}}`.
+
+| code | optional `details` shape |
 | --- | --- |
-| `AGENTIC_STEP_FAILED` | Case scope only: `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible", "element-visible", "text-equals", "url-matches", or "element-count"; expected: string } }`; counters describe completed tool calls. |
-| `CASE_ABORTED` | Case scope only: `{ reason: "run-reference-invalid", "run-value-missing", "secret-fill-incomplete", "agentic-no-terminal-evidence", "agentic-coverage-inexact", "agentic-proof-invalid", "grounding-secret-contaminated", or "grounding-snapshot-invalid"; stepId: string }`; `reason` is one of eight defined values. |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: any instruction-coverage, element-intent, or confirms issue code (`confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, `confirms-duplicate`), "text-equals-self-quote", "invalid-json", "schema-mismatch", "secret-allowed-name-not-projected", or "secret-conflicting-target-names" (the last two always carry stepId); path: Array<string or non-negative integer>; stepId?: StepId }>, attempts?: ... }` |
-| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk, credential-prefix-ghp, credential-prefix-aws-access-key, high-entropy-token, or embedded-secret-reference; path: non-whitespace string; attempts?: ... }` |
-| `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
-| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", or "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: non-whitespace string }> }` |
-| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" or "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" or "launch-failed"; engine: non-whitespace string }` |
-| `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" or "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
-| `PROMPT_AMBIGUOUS` | Case scope only: `{ ambiguities: integer at least 1 }`. |
+| `AGENTIC_STEP_FAILED` | `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible" \| "element-visible" \| "text-equals" \| "url-matches" \| "element-count", expected: string } }` Case scope only. The counters describe completed tool calls. |
+| `CASE_ABORTED` | `{ reason: "run-reference-invalid" \| "run-value-missing" \| "secret-fill-incomplete" \| "agentic-no-terminal-evidence" \| "agentic-coverage-inexact" \| "agentic-proof-invalid" \| "grounding-secret-contaminated" \| "grounding-snapshot-invalid", stepId: string }` Case scope only. `reason` has eight defined values. |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: instruction-coverage, element-intent, or confirms issue code \| "text-equals-self-quote" \| "invalid-json" \| "schema-mismatch" \| "secret-allowed-name-not-projected" \| "secret-conflicting-target-names", path: Array<string or non-negative integer>, stepId?: StepId }>, attempts?: ... }` The `confirms` issue codes are `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate`. The last two non-`confirms` issue codes always carry `stepId`. |
+| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk \| credential-prefix-ghp \| credential-prefix-aws-access-key \| high-entropy-token \| embedded-secret-reference, path: non-whitespace string, attempts?: ... }` |
+| `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` `refs` has at least two entries. |
+| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required" \| "declined" \| "not-interactive", secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: string }> }` The inner `reason` can be any string. |
+| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" \| "reference" }> }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" \| "launch-failed", engine: non-whitespace string }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" \| "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
+| `PROMPT_AMBIGUOUS` | `{ ambiguities: integer at least 1 }` Case scope only. |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
-| `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
-| `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
-| `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing", "recoverable-miss", "no-candidate", "ambiguous", "proposal-rejected", or "candidate-changed" }`; for an element step, `missing` means no grounding entry exists and `recoverable-miss` means an existing entry does not match the current page. |
+| `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
+| `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` Case scope only. |
+| `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` For an element step, `missing` means no grounding entry exists, and `recoverable-miss` means an existing entry does not match the current page. |
 
-For generated and would-generate results, `secrets` identifies the resolved candidate secret uses; a dry-run `skipped-fresh` result also includes it. Optional `warnings` records non-fatal policy warnings, including the high-risk `secrets.allow: "*"` configuration and `{ kind: "action-unconfirmed", stepId }` for an unconfirmed action. These fields make consent-related output observable without exposing secret values.
+For `AI_RESPONSE_INVALID`, the issue `code` is any of these values:
+
+| code | family |
+| --- | --- |
+| `citation-whitespace-only` | instruction coverage |
+| `anchor-invalid` | instruction coverage |
+| `citation-checksum-mismatch` | instruction coverage |
+| `criterion-id-duplicate` | instruction coverage |
+| `criterion-range-duplicate` | instruction coverage |
+| `criterion-order-invalid` | instruction coverage |
+| `source-span-invalid` | instruction coverage |
+| `source-span-whitespace-only` | instruction coverage |
+| `success-criterion-missing` | instruction coverage |
+| `intent-id-duplicate` | instruction coverage |
+| `intent-id-missing` | instruction coverage |
+| `intent-id-unknown` | instruction coverage |
+| `intent-id-action` | instruction coverage |
+| `intent-assertion-unsupported` | instruction coverage |
+| `terminal-url-matches-forbidden` | instruction coverage |
+| `verification-coverage-id-missing` | instruction coverage |
+| `verification-coverage-id-unknown` | instruction coverage |
+| `verification-coverage-id-action` | instruction coverage |
+| `verification-coverage-index-duplicate` | instruction coverage |
+| `verification-coverage-index-invalid` | instruction coverage |
+| `verification-assertion-repeated` | instruction coverage |
+| `intent-span-invalid` | element intent |
+| `intent-span-whitespace-only` | element intent |
+| `intent-citation-mismatch` | element intent |
+| `quote-span-invalid` | element intent |
+| `quote-text-mismatch` | element intent |
+| `quote-unpaired` | element intent |
+| `quote-outside-intent` | element intent |
+| `quote-whitespace-only` | element intent |
+| `confirms-unknown-step` | confirms |
+| `confirms-not-earlier` | confirms |
+| `confirms-not-action` | confirms |
+| `confirms-duplicate` | confirms |
+| `invalid-json` | other |
+| `schema-mismatch` | other |
+| `secret-allowed-name-not-projected` | other |
+| `secret-conflicting-target-names` | other |
+| `text-equals-self-quote` | other |
+
+On `generated` and `would-generate` results, `secrets` lists the candidate secret uses that ambercast resolved. A dry-run `skipped-fresh` result includes it too. The optional `warnings` records non-fatal policy warnings of five kinds: `secret-name-reused-across-targets`, `secret-target-changed`, `allowed-names-truncated`, `action-unconfirmed` (with `stepId`), and `generator-assumption`. These fields make consent-related output observable without exposing secret values. For the high-risk `"*"` setting, see [Secret consent](/ambercast/reference/configuration/#secret-consent).
 
 ## Report persistence {#persistence}
 
-Only `run` attempts persistence, writing to `runsDir/runId/report.json` using `JSON.stringify` of the finalized persisted envelope.
+Only `run` persists a report. It writes `runsDir/runId/report.json` with `JSON.stringify` of the finalized envelope.
 
-The `reportPersistence` property tracks the write outcome:
-- `persisted` follows a successful write whose disk JSON equals the returned envelope.
+The `reportPersistence` property records the write outcome:
+
+- `persisted` follows a successful write whose JSON on disk equals the returned envelope.
 - `failed` follows a write failure with no partial content visible.
-- `not-attempted` applies when a write is never tried, including a command failure before an outcome.
+- `not-attempted` applies when no write is tried, including a command failure before an outcome.
 
-Only the writer is pinned to the current schema version; the viewer reads any 3.x report leniently.
+Only the writer is pinned to the current schema version. The viewer reads any 3.x report leniently. The examples below show one envelope per command.
 
 ```json
 {"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
@@ -1771,22 +1848,27 @@ Only the writer is pinned to the current schema version; the viewer reads any 3.
 {"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
-## Persistence compatibility link {#report-persistence}
+## Persistence compatibility anchor {#report-persistence}
 
-See [Reports](/ambercast/reference/reports/#persistence) for report persistence details.
+This section keeps an older anchor alive. See [Report persistence](/ambercast/reference/reports/#persistence) for the content.
 
-Links: [Error codes](/ambercast/reference/error-codes/#code-vocabulary), [Exit codes](/ambercast/reference/exit-codes/#exit-code-table), [File layout](/ambercast/reference/file-layout/#run-artifacts), [ambercast run](/ambercast/reference/cli/run/#report-and-exits).
+## See also {#see-also}
+
+- [Error codes](/ambercast/reference/error-codes/#code-vocabulary)
+- [Exit codes](/ambercast/reference/exit-codes/#exit-code-table)
+- [File layout](/ambercast/reference/file-layout/#run-artifacts)
+- [ambercast run](/ambercast/reference/cli/run/#report-and-exits)
 
 ---
 
 # Error codes
 Source: https://kotarotsubaki.github.io/ambercast/reference/error-codes/
 
-ambercast defines a stable vocabulary of error codes for run- and case-level failures. For error payload envelopes, see [Reports](/ambercast/reference/reports/#errors); for process exit code definitions, see [Exit codes](/ambercast/reference/exit-codes/#exit-code-table); for recovery workflows, see [Troubleshoot common failures](/ambercast/how-to/troubleshoot/).
+ambercast reports run-level and case-level failures with a fixed set of error codes. Use this page to look up what a code means and which exit code it produces.
 
 ## Code vocabulary {#code-vocabulary}
 
-Usage errors and environment errors have independent report vocabularies. `SECRET_GRANT_UNATTRIBUTABLE` is the legacy exception: it remains in the report-code schema solely for backward compatibility with reports from an earlier tool version, but has no current `ErrorKind` or report-error branch.
+Usage errors and environment errors have separate vocabularies. `SECRET_GRANT_UNATTRIBUTABLE` is the legacy exception. It stays in the report-code schema only for compatibility with reports from an earlier version, and no current error kind or report branch produces it.
 
 | code | kind | scope | exit | condition |
 | --- | --- | --- | --- | --- |
@@ -1799,7 +1881,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
-| GROUNDING_UNRESOLVED | usage | case | 4 | grounding miss in an ai step or element step without `--resolve` |
+| GROUNDING_UNRESOLVED | usage | case | 4 | grounding miss in an ai step or element step without `--resolve`; four other reasons can occur even with `--resolve` |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | legacy | not producible | — | retained in the report schema for backward compatibility with reports from an earlier tool version; not produced by current `generate`, `run`, `heal`, or `check` |
 | SECRET_ENV_VAR_COLLISION | usage | case | 2 | secret environment variable collision |
@@ -1816,7 +1898,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 
 ### AI response issue codes {#ai-response-issue-codes}
 
-The following `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` retry and report issues when a generated `confirms` reference fails validation. `confirms-unsorted` remains internal and does not appear in retry feedback.
+When a generated `confirms` reference fails validation, these `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` retries and report issues. `confirms-unsorted` is internal and never appears in retry feedback.
 
 | code | condition |
 | --- | --- |
@@ -1825,18 +1907,44 @@ The following `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` r
 | `confirms-not-action` | referenced step is not an eligible action or capture |
 | `confirms-duplicate` | referenced step ID is repeated |
 
-A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `AGENTIC_STEP_FAILED` details contain the step ID, completed tool-call counters, and an optional last failed assertion; `CASE_ABORTED` details contain the closed abort reason and step ID; `PROMPT_AMBIGUOUS` details contain the count of unresolved ambiguities; `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
+## Details by code {#details}
+
+Only the codes below carry `details`. See [Reports](/ambercast/reference/reports/#errors) for the full contract of each code.
+
+| code | `details` content |
+| --- | --- |
+| `FS_IO_ERROR` | In case scope, may contain `details.partiallyWritten` with `plan` and/or `grounding`. |
+| `AI_RESPONSE_INVALID` | Normalized issues and optional retry attempts. |
+| `SECRET_LITERAL_REJECTED` | The detector, the path, and optional attempts. |
+| `SECRET_ENV_VAR_COLLISION` | The colliding `envVar` and the list of colliding secret references. |
+| `SECRET_CONSENT_REQUIRED` | The reason (`consent-required`, `declined`, or `not-interactive`) and the unresolved secrets, each with its name, step ID, environment variable, and reason. |
+| `SECRET_SYNTAX_REJECTED` | Each rejected legacy-syntax occurrence: line, column, and whether it is a grant line or a reference. |
+| `AI_EXECUTOR_UNAVAILABLE` | Optional attempts. |
+| `BROWSER_LAUNCH_FAILED` | A closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name. The fixed remediation hint is the report-level `hint` field, not part of `details`. |
+| `AGENTIC_STEP_FAILED` | The step ID, the completed tool-call counters, and an optional last failed assertion. |
+| `CASE_ABORTED` | The closed abort reason and the step ID. |
+| `PROMPT_AMBIGUOUS` | The count of unresolved ambiguities. |
+| `UNEXPECTED_CRASH` | An allowlisted cause name. |
+| `EXECUTOR_UNSUPPORTED` | The target, the executor, the reason (`surface-mismatch` or `capability-missing`), the missing capabilities, and optionally the surface. |
+| `PROMPT_PATH_INVALID` | The path and the reason (`outside-test-dir`, `not-test-md`, or `no-name`). |
+| `GROUNDING_UNRESOLVED` | The step ID and the reason (`missing`, `recoverable-miss`, `no-candidate`, `ambiguous`, `proposal-rejected`, or `candidate-changed`). |
+
+## See also {#see-also}
+
+- [Reports](/ambercast/reference/reports/#errors)
+- [Exit codes](/ambercast/reference/exit-codes/#exit-code-table)
+- [Troubleshoot common failures](/ambercast/how-to/troubleshoot/)
 
 ---
 
 # Exit codes
 Source: https://kotarotsubaki.github.io/ambercast/reference/exit-codes/
 
-ambercast conveys machine-facing process status through numeric exit codes. If you need troubleshooting steps, consult [Troubleshoot common failures](/ambercast/how-to/troubleshoot/). To inspect specific error codes and their programmatic definitions, see [Error codes](/ambercast/reference/error-codes/#code-vocabulary), and to inspect structured execution output, see [Reports](/ambercast/reference/reports/#envelope).
+CI and scripts read the exit code to tell how a run ended. ambercast uses six codes, 0 to 5, and each has a priority rank.
 
 ## Exit-code table {#exit-code-table}
 
-| code | meaning | priority |
+| code | meaning | priority (lower wins) |
 | --- | --- | --- |
 | 0 | success or no candidate | 5 |
 | 1 | command-domain negative result | 3 |
@@ -1845,55 +1953,80 @@ ambercast conveys machine-facing process status through numeric exit codes. If y
 | 4 | untrustworthy plan or grounding artifact | 2 |
 | 5 | empty selection | 4 |
 
-For example, [`PROMPT_PATH_INVALID`](/ambercast/reference/error-codes/#code-vocabulary) is a usage error that exits 2.
+For example, [`PROMPT_PATH_INVALID`](/ambercast/reference/error-codes/#code-vocabulary) is a usage error and exits with 2.
 
 ## Aggregation priority {#aggregation-priority}
 
-When aggregating exit codes across multiple outcomes, lower rank wins, establishing 2 > 3 > 4 > 1 > 5 > 0.
+When a command has several outcomes, the code with the lowest priority rank wins. The order is 2 > 3 > 4 > 1 > 5 > 0.
 
-Selection is independent of iteration order and returns 0 for no candidate.
+The result does not depend on iteration order. With no candidate, the code is 0.
 
-## Priority compatibility link {#priority}
+## Priority compatibility anchor {#priority}
 
-This section preserves a compatibility anchor; see [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority).
+This section keeps an older anchor alive. See [Aggregation priority](/ambercast/reference/exit-codes/#aggregation-priority) for the content.
+
+## See also {#see-also}
+
+- [Error codes](/ambercast/reference/error-codes/#code-vocabulary)
+- [Reports](/ambercast/reference/reports/#envelope)
+- [Troubleshoot common failures](/ambercast/how-to/troubleshoot/)
 
 ---
 
 # Environment variables
 Source: https://kotarotsubaki.github.io/ambercast/reference/environment-variables/
 
-Ambercast reads process environment variables for configuration path overrides, AI provider selection, secret reference resolution, and CI detection, while applying a deny-list filter to environment variables forwarded to AI-provider child processes.
+ambercast reads environment variables for the configuration path, the AI provider, secret values, and CI detection. It filters the environment before it starts an AI-provider child process.
 
 ## Configuration and provider {#configuration}
 
-| variable | where Ambercast reads it | effect | precedence / edge cases |
+| variable | when ambercast reads it | effect | precedence and edge cases |
 | --- | --- | --- | --- |
-| `AMBERCAST_CONFIG` | `readConfigEnvironment()` → `configPathOverride` | Selects an explicit configuration path. | A command `--config` value wins; then this variable; then ancestor discovery; then defaults. Empty is absent; other values are preserved. |
-| `AMBERCAST_AI_PROVIDER` | `readConfigEnvironment()` → `aiProviderRaw` | Replaces config/default `ai.provider` after validation as `claude`, `codex`, or `auto`. | `--ai` wins; then this variable; then config `ai.provider`; then the default `auto`. Empty is absent; an unsupported nonempty value is invalid. |
-| `AMBERCAST_SECRET_*` | `createEnvSecretsProvider().resolve()` | Resolves a specific `{{secrets.*}}` reference at the secret-provider boundary. | Dots become underscores and segments are uppercased: `{{secrets.a.b}}` maps to `AMBERCAST_SECRET_A_B`; a missing key returns `undefined`. This mapping is non-injective, so references such as `a.b` and `a_b` must not be used together. |
-| `CI` | `createProcessEnvironmentInfo().isCI()` | Supplies the CI-policy boolean consumed by runtime commands. | Active only when defined, nonempty, and not exactly lowercase `false`; `FALSE`, `0`, and whitespace are active. |
-| `AMBERCAST_DEBUG` | bare catch in `main.ts`; the run progress sink in `stderr-progress-sink.ts` | Prints the crash cause message and stack to stderr. | Also emits the classifying name, redacted message, and stack of a run's unclassified case exception to stderr; these diagnostics may include sensitive request-derived text. Inactive when unset, empty, exactly `0`, or exactly `false`; active otherwise. Matching is case-sensitive and does not trim whitespace. When a child-process diagnostic is available, it also prints `child process: exit <n>` or `child process: signal <name>` and `child stderr:` followed by the body (or `(empty)`). These new lines may also include sensitive request-derived text. |
+| `AMBERCAST_CONFIG` | when it looks for a configuration file | Selects an explicit configuration path. | A command's `--config` value wins. This variable comes next, then ancestor discovery, then the defaults. An empty value counts as absent, and any other value is used as given. |
+| `AMBERCAST_AI_PROVIDER` | when it resolves the AI provider | Replaces `ai.provider` from the configuration with `claude`, `codex`, or `auto`. | `--ai` wins. This variable comes next, then `ai.provider`, then the default `auto`. An empty value counts as absent. A nonempty value other than the three is invalid. |
+| `AMBERCAST_SECRET_*` | when a `{{secrets.*}}` reference needs a value | Supplies the value of one secret reference. | Dots become underscores and each segment is uppercased, so `{{secrets.a.b}}` reads `AMBERCAST_SECRET_A_B`. A missing variable leaves the secret unresolved. An existing empty variable is a resolved value. |
+| `CI` | when a command applies its CI policy | Turns on the CI policy. | The policy is active when the variable is defined, nonempty, and not exactly the lowercase `false`. Values such as `FALSE`, `0`, and whitespace keep it active. The check is case-sensitive and does not trim. |
+| `AMBERCAST_DEBUG` | when the CLI crashes, when `run` reports progress, and when the MCP server handles a crashed job or heal apply | Prints diagnostics to stderr. | Unset, empty, exactly `0`, and exactly `false` leave it inactive. Any other value activates it. The check is case-sensitive and does not trim. |
 
-Provider resolution applies the command `--ai` override before evaluating the loaded provider. When you specify a non-`auto` value, Ambercast returns it directly without probing; `auto` probes `claude` first and then `codex`. Each automatic provider probe has its own 8,000 ms availability deadline.
+The mapping from a secret reference to `AMBERCAST_SECRET_*` is not one-to-one. Do not use references such as `a.b` and `a_b` together.
+
+### What AMBERCAST_DEBUG prints {#debug-output}
+
+When `AMBERCAST_DEBUG` is active, ambercast prints these diagnostics to stderr:
+
+- The cause message and stack of a CLI crash.
+- The name, redacted message, and stack of a run's unclassified case exception.
+- The cause message and stack of a crashed job or heal apply in the MCP server.
+- When a child process diagnostic exists, `child process: exit <n>` or `child process: signal <name>`, then `child stderr:` followed by the body or `(empty)`.
+
+These diagnostics can contain sensitive text derived from requests.
+
+### Provider resolution {#provider-resolution}
+
+Provider resolution applies `--ai` first. A value other than `auto` is returned without probing. For `auto`, ambercast probes `claude` first and then `codex`. Each probe has an 8,000 ms deadline.
 
 ## Secrets and CI {#secrets}
 
-| withheld variable class | passed to AI-provider child? | exact rule |
+| withheld variable class | passed to an AI-provider child? | rule |
 | --- | --- | --- |
-| `AMBERCAST_SECRET_*` | No | Remove the namespace case-insensitively before every child invocation. |
-| `AMBERCAST_ENV_*` | No | Remove the namespace with the same case-insensitive deny rule. |
-
-The environment adapter does not parse `CI` case-insensitively or trim surrounding whitespace. When resolving secrets, an existing empty variable such as `AMBERCAST_SECRET_<NAME>` remains a resolved value; only a missing computed key returns `undefined`.
+| `AMBERCAST_SECRET_*` | no | ambercast removes the namespace, ignoring case, before every child invocation. |
+| `AMBERCAST_ENV_*` | no | ambercast removes the namespace by the same case-insensitive rule. |
 
 ## Provider child environment {#provider-child-environment}
 
-| passed variable class | passed to AI-provider child? | rule |
+| passed variable class | passed to an AI-provider child? | rule |
 | --- | --- | --- |
-| Supplied keys not matching `/^AMBERCAST_(SECRET|ENV)_/i` | Yes | The runner shallow-copies the injected environment, removes only denied keys, and supplies the result as `spawn(...).env`; ordinary runtime/provider variables and `AMBERCAST_CONFIG`, `AMBERCAST_AI_PROVIDER`, and `CI` therefore pass if present. |
+| keys that do not match `/^AMBERCAST_(SECRET\|ENV)_/i` | yes | The runner copies the environment, removes only the denied keys, and passes the result to the child. |
 
-Filtering functions as a deny-list rather than a fixed allow-list. It returns a shallow copy and leaves the parent process environment unchanged. Because the deny rule removes only keys matching `/^AMBERCAST_(SECRET|ENV)_/i`, variables such as `AMBERCAST_CONFIG`, `AMBERCAST_AI_PROVIDER`, and `CI` pass through to the child process alongside any general runtime and provider variables. The implementation makes no exhaustive promise about provider-specific authentication variable names.
+The filter is a deny-list, not an allow-list. It returns a shallow copy and leaves the parent environment unchanged. `AMBERCAST_CONFIG`, `AMBERCAST_AI_PROVIDER`, and `CI` pass through when set, together with ordinary runtime and provider variables. ambercast makes no promise about the names of provider authentication variables.
 
-Related references: [Configuration](/ambercast/reference/configuration/#file-selection), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast heal](/ambercast/reference/cli/heal/#flags), [Prompt file format](/ambercast/reference/prompt-format/#normalization).
+## See also {#see-also}
+
+- [Configuration](/ambercast/reference/configuration/#file-selection)
+- [ambercast generate](/ambercast/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/reference/cli/run/#flags)
+- [ambercast heal](/ambercast/reference/cli/heal/#flags)
+- [Prompt file format](/ambercast/reference/prompt-format/#normalization)
 
 ---
 

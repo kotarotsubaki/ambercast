@@ -1,43 +1,56 @@
 ---
 title: 環境変数
-description: Ambercastが読み取る環境変数と、AIプロバイダーの子プロセスに対するフィルタリング境界のリファレンスです。
+description: ambercast が読む環境変数と、AI プロバイダーの子プロセスに渡さない変数を示すリファレンス。
 ---
 
-Ambercastが読み取る環境変数と、AIプロバイダーの子プロセスに対するフィルタリング境界について説明します。
+ambercast は、設定ファイルのパス、AI プロバイダー、シークレットの値、CI の判定に環境変数を使う。AI プロバイダーの子プロセスを起動する前には、環境を絞り込む。
 
 ## 設定とプロバイダー {#configuration}
 
-| 変数 | 読み取り箇所 | 影響 | 優先順位・エッジケース |
+| 変数 | 読む場面 | 効果 | 優先順位と注意点 |
 | --- | --- | --- | --- |
-| `AMBERCAST_CONFIG` | `readConfigEnvironment()` → `configPathOverride` | 明示的な設定ファイルのパスを選択します。 | コマンドの `--config` の値が優先され、次にこの変数、次に祖先ディレクトリの探索、最後に既定値の順になります。空値は未指定として扱われ、その他の値は維持されます。 |
-| `AMBERCAST_AI_PROVIDER` | `readConfigEnvironment()` → `aiProviderRaw` | `claude`、`codex`、または `auto` として検証された後、設定ファイルまたは既定値の `ai.provider` を置き換えます。 | `--ai` が優先され、次にこの変数、次に設定ファイルの `ai.provider`、最後に既定値の `auto` の順になります。空値は未指定として扱われ、サポートされていない非空の値は無効となります。 |
-| `AMBERCAST_SECRET_*` | `createEnvSecretsProvider().resolve()` | シークレットプロバイダーの境界において、特定の `{{secrets.*}}` 参照を解決します。 | ドットはアンダースコアに変換され、各セグメントは大文字化されます（例: `{{secrets.a.b}}` は `AMBERCAST_SECRET_A_B` にマッピングされます）。キーが存在しない場合は `undefined` を返します。このマッピングは単射ではないため、`a.b` と `a_b` のような参照を同時に使用してはなりません。 |
-| `CI` | `createProcessEnvironmentInfo().isCI()` | ランタイムコマンドが消費するCIポリシーのブール値を提供します。 | 定義されており、空ではなく、かつ正確に小文字の `false` でない場合にのみアクティブになります。`FALSE`、`0`、および空白文字はアクティブとして扱われます。 |
-| `AMBERCAST_DEBUG` | `main.ts` の bare catch、`stderr-progress-sink.ts` の run 進行状況シンク | クラッシュ原因のメッセージとスタックを stderr に出力します。 | run の分類不能なケース例外について、分類名、redact 済みのメッセージ、スタックも stderr に出力します。これらの診断にはリクエスト由来の機微なテキストが含まれる可能性があります。未設定、空、正確に `0`、または正確に `false` のとき非アクティブです。それ以外ではアクティブになり、大文字・小文字を区別して空白をトリムしません。 子プロセスの診断がある場合は、`child process: exit <n>` または `child process: signal <name>` と、本文（または `(empty)`）を伴う `child stderr:` も出力します。これらの新しい行にもリクエスト由来の機微なテキストが含まれる可能性があります。 |
+| `AMBERCAST_CONFIG` | 設定ファイルを探すとき | 設定ファイルのパスを明示する。 | コマンドの `--config` が最優先である。次にこの変数、祖先ディレクトリの探索、既定値の順に続く。空の値は未指定として扱い、それ以外の値はそのまま使う。 |
+| `AMBERCAST_AI_PROVIDER` | AI プロバイダーを決めるとき | 設定の `ai.provider` を `claude`、`codex`、`auto` のいずれかで置き換える。 | `--ai` が最優先である。次にこの変数、設定の `ai.provider`、既定値の `auto` の順に続く。空の値は未指定として扱う。この 3 つ以外の非空の値は無効である。 |
+| `AMBERCAST_SECRET_*` | `{{secrets.*}}` の参照が値を必要とするとき | シークレット参照 1 件の値を渡す。 | ドットはアンダースコアに、各セグメントは大文字に変わる。`{{secrets.a.b}}` は `AMBERCAST_SECRET_A_B` を読む。変数がなければ未解決になる。存在する空の変数は、解決済みの値である。 |
+| `CI` | コマンドが CI の方針を適用するとき | CI の方針を有効にする。 | 定義されていて、空でなく、小文字の `false` そのものでなければ有効である。`FALSE`、`0`、空白は有効のままになる。判定は大文字と小文字を区別し、空白を取り除かない。 |
+| `AMBERCAST_DEBUG` | CLI がクラッシュしたとき、`run` が進捗を出すとき、MCP サーバーがクラッシュしたジョブや heal の適用を扱うとき | 診断を stderr に出す。 | 未設定、空、`0` そのもの、`false` そのものは無効である。それ以外は有効になる。判定は大文字と小文字を区別し、空白を取り除かない。 |
 
-プロバイダーの解決では、読み込まれたプロバイダーの前にコマンドの `--ai` による上書きが適用されます。`auto` 以外の値はプローブを行わずに返されますが、`auto` は `claude`、次に `codex` の順でプローブします。
+シークレット参照と `AMBERCAST_SECRET_*` の対応は 1 対 1 にならない。`a.b` と `a_b` のような参照を併用してはならない。
 
-各自動プロバイダーのプローブには、それぞれ固有の 8,000 ms の利用可能性デッドラインが設定されています。
+### AMBERCAST_DEBUG が出す内容 {#debug-output}
 
-## シークレットとCI {#secrets}
+`AMBERCAST_DEBUG` が有効なとき、ambercast は次の診断を stderr に出す。
 
-| 除外される変数の種類 | AIプロバイダーの子プロセスに渡されるか | 厳密なルール |
+- CLI のクラッシュの原因メッセージとスタック。
+- `run` で分類できなかったケース例外の名前、秘匿済みのメッセージ、スタック。
+- MCP サーバーで失敗したジョブや heal の適用の原因メッセージとスタック。
+- 子プロセスの診断があるときは、`child process: exit <n>` または `child process: signal <name>`。続けて `child stderr:` と本文（または `(empty)`）。
+
+診断は、リクエスト由来の機微なテキストを含むことがある。
+
+### プロバイダーの解決 {#provider-resolution}
+
+プロバイダーの解決は、まず `--ai` を適用する。`auto` 以外の値は、確認せずにそのまま返す。`auto` のときは `claude`、`codex` の順で確認する。確認ごとの期限は 8,000 ms である。
+
+## シークレットと CI {#secrets}
+
+| 渡さない変数の種類 | AI プロバイダーの子プロセスへ渡すか | 規則 |
 | --- | --- | --- |
-| `AMBERCAST_SECRET_*` | いいえ | 子プロセスの実行ごとに、大文字・小文字を区別せずこの名前空間を削除します。 |
-| `AMBERCAST_ENV_*` | いいえ | 同様の大文字・小文字を区別しない拒否ルールによって、この名前空間を削除します。 |
+| `AMBERCAST_SECRET_*` | 渡さない | 子プロセスを起動するたびに、大文字と小文字を区別せず、この名前空間を取り除く。 |
+| `AMBERCAST_ENV_*` | 渡さない | 同じ規則で、この名前空間を取り除く。 |
 
-環境アダプターは `CI` を大文字・小文字を区別せずにパースすることはなく、トリムも行いません。
+## プロバイダーの子プロセスの環境 {#provider-child-environment}
 
-環境変数として存在する空の `AMBERCAST_SECRET_<NAME>` は解決された値として維持され、計算されたキーが存在しない場合にのみ `undefined` を返します。
-
-## プロバイダーの子プロセス環境 {#provider-child-environment}
-
-| 渡される変数の種類 | AIプロバイダーの子プロセスに渡されるか | ルール |
+| 渡す変数の種類 | AI プロバイダーの子プロセスへ渡すか | 規則 |
 | --- | --- | --- |
-| `/^AMBERCAST_(SECRET|ENV)_/i` に一致しない指定されたキー | はい | ランナーは注入された環境を浅くコピーし、拒否されたキーのみを削除して、その結果を `spawn(...).env` として渡します。そのため、通常のランタイム変数やプロバイダー変数、および `AMBERCAST_CONFIG`、`AMBERCAST_AI_PROVIDER`、`CI` は、存在していれば渡されます。 |
+| `/^AMBERCAST_(SECRET\|ENV)_/i` に一致しないキー | 渡す | ランナーは環境をコピーし、拒否したキーだけを取り除いて、結果を子プロセスに渡す。 |
 
-フィルタリングは固定の許可リストではなく拒否リストであるため、実装としてプロバイダー固有の認証変数名について網羅的な保証は行われません。
+このフィルターは許可リストではなく拒否リストである。浅いコピーを返し、親プロセスの環境は変えない。`AMBERCAST_CONFIG`、`AMBERCAST_AI_PROVIDER`、`CI` は、設定されていればそのまま渡る。通常の実行環境の変数やプロバイダーの変数も同様である。プロバイダーの認証用変数の名前については、何も保証しない。
 
-フィルタリングは環境のコピーを返し、親プロセスの環境は変更されません。
+## 関連項目 {#see-also}
 
-関連リンク: [設定](/ambercast/ja/reference/configuration/#file-selection), [ambercast generate](/ambercast/ja/reference/cli/generate/#flags), [ambercast run](/ambercast/ja/reference/cli/run/#flags), [ambercast heal](/ambercast/ja/reference/cli/heal/#flags), [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization).
+- [設定](/ambercast/ja/reference/configuration/#file-selection)
+- [ambercast generate](/ambercast/ja/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/ja/reference/cli/run/#flags)
+- [ambercast heal](/ambercast/ja/reference/cli/heal/#flags)
+- [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization)

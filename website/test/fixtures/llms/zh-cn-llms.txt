@@ -21,12 +21,12 @@
 - [选择要运行的测试](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/select-tests/): 按路径、模式过滤或配置排除，选择要运行的测试 prompt 的 4 种方法。
 - [控制定位缓存回写](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/control-grounding-writeback/): 决定变更后的定位缓存在本地和 CI 中是否回写。
 - [审查生成的 diff](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/review-generated-diffs/): 在 generate 或 heal 之后，列出所有变更文件，并依次审查 Prompt、执行计划和定位缓存。
-- [在 Git 中管理构件](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/): 指导您在 Git 中管理 ambercast 生成的测试计划、grounding 伴生文件和运行目录。
-- [在其他 CI 平台上运行](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/run-on-other-ci/): 适用于 GitLab CI 与通用运行器的可移植 CI 配置方案。
-- [恢复 stale（已过期）产物](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/recover-stale-artifacts/): 查阅 check 状态至后续操作的对照表，以恢复处于 stale 或异常状态的产物。
-- [在不同版本间升级](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/upgrade/): 跨版本安全升级 ambercast 的操作流程与验证方法。
-- [常见故障排查](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/troubleshoot/): 按故障症状排查原因并执行对应的处置操作。
-- [参与贡献](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/contribute/): ambercast 代码仓库的贡献指南与流程说明。
+- [在 Git 中管理产物](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/): 把提示词、执行计划和定位缓存一起提交，并忽略运行证据。
+- [在其他 CI 平台上运行](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/run-on-other-ci/): 在 GitLab CI 或通用运行器中先运行 check 再运行 run，并保持修复关闭。
+- [恢复过期的产物](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/recover-stale-artifacts/): 按 check 报告的状态，恢复过期、缺失或孤立的产物。
+- [在不同版本间升级](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/upgrade/): 升级 ambercast，重新生成过期的执行计划，并与依赖一起提交。
+- [常见故障排查](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/troubleshoot/): 按观察到的症状查找处理操作，并重新运行受影响的最小命令。
+- [参与贡献](https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/contribute/): 通过 issue、fork、三项检查和 Pull Request 提交变更，或报告安全漏洞。
 
 ## REFERENCE
 - [配置](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/configuration/): 本页定义了配置键及其解析逻辑。

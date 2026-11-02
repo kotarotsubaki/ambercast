@@ -1,0 +1,72 @@
+---
+title: Gitでの成果物の管理
+description: プロンプト、計画、グラウンディングをまとめてコミットし、実行の記録を無視する手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+プロンプトと計画（plan）とグラウンディングをまとめてステージし、実行の記録は Git から外す。
+
+## 前提条件 \{#prerequisites}
+
+既定のグラウンディングのポリシーは `repositoryPolicy: "committed"` である。既定の runs ディレクトリは `tests/ambercast/.runs` である。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 3 つのファイルをステージする \{#stage-companions}
+
+   ポリシーが `committed` なら、`<name>.test.md`、`<name>.ambercast.plan.json`、`<name>.ambercast.grounding.json` をステージする。後ろの 2 つは、リゾルバーがプロンプトの隣に置く 2 つのコンパニオンの接尾辞で決まる。詳細は[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)にある。
+
+2. ## 実行の記録を無視する \{#ignore-runs}
+
+   設定した `runsDir` を `.gitignore` に足す。既定のままなら、次の 1 行を足す。
+
+   ```text
+   tests/ambercast/.runs/
+   ```
+
+   `runsDir` は設定で変えられる。run は、その下の呼び出しごとのディレクトリに `report.json` を 1 つ書く。
+
+3. ## グラウンディングを手元に置く \{#keep-grounding-local}
+
+   グラウンディングをローカルのキャッシュとして使うなら、`repositoryPolicy` を `uncommitted` にする。この手順と次の手順は、その場合だけ行う。`$schema` は公開されている設定スキーマの URL である。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"repositoryPolicy":"uncommitted"}}
+   ```
+
+4. ## 手元のグラウンディングを無視する \{#ignore-local-grounding}
+
+   `uncommitted` にしたら、次の 1 行も `.gitignore` に足す。`testDir` を変えているなら、`tests/ambercast` をその値に置き換える。
+
+   ```text
+   tests/ambercast/**/*.ambercast.grounding.json
+   ```
+
+   リゾルバーがグラウンディングのコンパニオンとして扱うのは、`testDir` の中にある、固定の接尾辞 `.ambercast.grounding.json` のファイルだけである。そのため、計画は追跡されたまま、手元のグラウンディングだけが無視される。
+
+</Steps>
+
+## 確認 \{#verification}
+
+```bash
+git status --short
+```
+
+- `committed` では、計画とグラウンディングのコンパニオンが表示される。
+- `uncommitted` では、計画は表示されるが、`testDir` 内の `*.ambercast.grounding.json` は表示されない。
+- `runsDir` を無視していれば、実行の記録は表示されない。
+
+## 関連情報 \{#related}
+
+<LinkCard title="ファイルレイアウト" href="/ambercast/ja/reference/file-layout/" description="プロンプトの隣に置かれるファイルと、実行の記録の場所を確かめる。" />
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="repositoryPolicy や runsDir などの設定キーを確かめる。" />
+
+<LinkCard title="計画ドキュメント" href="/ambercast/ja/spec/plan-document/" description="計画ファイルの形式を確かめる。" />
+
+<LinkCard title="グラウンディングドキュメント" href="/ambercast/ja/spec/grounding-document/" description="グラウンディングファイルの形式を確かめる。" />
+
+<LinkCard title="グラウンディングのライトバック制御" href="/ambercast/ja/how-to/control-grounding-writeback/" description="変更されたグラウンディングを書き戻すかどうかを決める。" />

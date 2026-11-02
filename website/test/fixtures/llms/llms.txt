@@ -21,12 +21,12 @@
 - [Select which tests run](https://kotarotsubaki.github.io/ambercast/how-to/select-tests/): Four ways to choose which test prompts run, by path, pattern filter, or config exclusion.
 - [Control grounding write-back](https://kotarotsubaki.github.io/ambercast/how-to/control-grounding-writeback/): Decide whether changed grounding is written back locally and in CI.
 - [Review generated diffs](https://kotarotsubaki.github.io/ambercast/how-to/review-generated-diffs/): After generate or heal, list every changed file and read the prompt, plan, and grounding in order.
-- [Manage artifacts in git](https://kotarotsubaki.github.io/ambercast/how-to/manage-artifacts-in-git/): Configure git tracking and ignore rules for ambercast plan, grounding, and run artifacts.
-- [Run on other CI platforms](https://kotarotsubaki.github.io/ambercast/how-to/run-on-other-ci/): Portable CI recipes for GitLab and generic runners.
+- [Manage artifacts in git](https://kotarotsubaki.github.io/ambercast/how-to/manage-artifacts-in-git/): Commit the prompt, plan, and grounding together and ignore the run evidence.
+- [Run on other CI platforms](https://kotarotsubaki.github.io/ambercast/how-to/run-on-other-ci/): Run check and then run on GitLab CI or a generic runner, with healing left off.
 - [Recover stale artifacts](https://kotarotsubaki.github.io/ambercast/how-to/recover-stale-artifacts/): Resolve stale, missing, or orphaned artifacts based on their check status.
-- [Upgrade between versions](https://kotarotsubaki.github.io/ambercast/how-to/upgrade/): Release-safety procedure for upgrading ambercast and regenerating stale plans.
-- [Troubleshoot common failures](https://kotarotsubaki.github.io/ambercast/how-to/troubleshoot/): Look up troubleshooting actions by observed symptoms to resolve ambercast failures.
-- [Contribute](https://kotarotsubaki.github.io/ambercast/how-to/contribute/): Repository contribution recipe for submitting changes and reporting vulnerabilities.
+- [Upgrade between versions](https://kotarotsubaki.github.io/ambercast/how-to/upgrade/): Upgrade ambercast, regenerate stale plans, and commit them with the dependency.
+- [Troubleshoot common failures](https://kotarotsubaki.github.io/ambercast/how-to/troubleshoot/): Find the action for an observed symptom and re-run the smallest affected command.
+- [Contribute](https://kotarotsubaki.github.io/ambercast/how-to/contribute/): Submit a change by issue, fork, three checks, and pull request, or report a vulnerability.
 
 ## REFERENCE
 - [Configuration](https://kotarotsubaki.github.io/ambercast/reference/configuration/): Configuration keys and resolution rules for ambercast.

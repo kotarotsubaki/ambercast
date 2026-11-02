@@ -1,0 +1,66 @@
+---
+title: 在其他 CI 平台上运行
+description: 在 GitLab CI 或通用运行器中先运行 check 再运行 run，并保持修复关闭。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+在已检出代码的作业里，先运行 `check` 再运行 `run`，并关闭修复和回写。
+
+## 前置条件 \{#prerequisites}
+
+你使用 GitLab CI 或通用运行器，作业已检出代码。`run` 的标志包括 `--resolve`、`--update-cache`、`--allow-empty` 和 `--list`，没有 `--config` 选项。
+
+定位缓存未命中时的默认行为已经是失败关闭。CI 不需要额外标志来抑制 AI 解析。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 安装 Chromium \{#install-browser}
+
+   安装项目的 Node 依赖，然后安装 Chromium。用平台的缓存机制缓存浏览器安装目录。
+
+   ```bash
+   npx playwright-core install chromium
+   ```
+
+   回放已完成定位的执行计划时，可以不选择 AI 提供商。
+
+2. ## 先运行 check，再运行 run \{#check-then-run}
+
+   ```bash
+   npx ambercast check && npx ambercast run
+   ```
+
+   有了 `&&`，只有 `check` 退出码为 `0` 时才会运行 `run`。`run` 会在它的调用目录中写入一份报告。
+
+3. ## 限制上传的内容 \{#limit-uploads}
+
+   报告中的步骤结果可能保留 `actual` 文本和无障碍快照。上传 `report.json` 之前，先落实事先审查、受限访问和较短保留期。只有这些控制措施都已落实时才上传。
+
+   上传调用证据或截图，也要在同样的控制下明确选择加入。失败的实时浏览器步骤可能在调用证据目录中保存 PNG 截图。
+
+   安全扫描检测不到 Canvas、图像或 CSS 渲染的像素，也检测不到扫描与截图之间发生的变化。
+
+4. ## 保持修复和回写关闭 \{#keep-heal-off}
+
+   不要调用 `heal`，也不要传入 `--update-cache`。CI 的默认值是 `ci.heal: false` 和 `ci.updateGroundingCache: false`。要在 CI 中真正修复，需通过 `ci.heal: true` 明确选择加入。
+
+</Steps>
+
+## 验证 \{#verification}
+
+以进程退出码作为作业的判定依据。不可信的产物对应退出码 `4`，环境故障对应退出码 `3`，二者是不同的类别。取值见[退出码表](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
+
+## 相关链接 \{#related}
+
+<LinkCard title="在 GitHub Actions 中运行 ambercast" href="/ambercast/zh-cn/tutorials/github-actions/" description="在 GitHub Actions 中运行同样的流程。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的报告内容和退出码。" />
+
+<LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解 run 的全部标志。" />
+
+<LinkCard title="退出码" href="/ambercast/zh-cn/reference/exit-codes/" description="了解退出码及其优先级。" />
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解 ci.heal 和 ci.updateGroundingCache 等配置键。" />

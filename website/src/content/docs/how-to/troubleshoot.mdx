@@ -1,0 +1,68 @@
+---
+title: Troubleshoot common failures
+description: Find the action for an observed symptom and re-run the smallest affected command.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Keep the failing command's output, take the action for the matching symptom, and re-run the smallest affected command.
+
+## Prerequisites \{#prerequisites}
+
+Your command invocation must be valid. Invalid flags, malformed command arguments, and missing option values write usage to stderr and exit `2` without a report envelope.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Find the matching symptom \{#match-symptom}
+
+   Keep the failing command's output. Re-run it with `--json` when you need the report. Find the matching symptom in the table in the next section.
+
+2. ## Apply the action \{#apply-action}
+
+   Take the action in that row. Use [Error codes](/ambercast/reference/error-codes/) for the exact error vocabulary and [Exit codes](/ambercast/reference/exit-codes/#priority) for process-status values and priority.
+
+3. ## Re-run the smallest command \{#rerun-smallest}
+
+   Re-run the smallest affected command.
+
+</Steps>
+
+## Symptoms and actions \{#symptom-table}
+
+| Symptom | Cause | Next action |
+| --- | --- | --- |
+| Invalid config, unresolved secret, or target | A configuration or invocation boundary needs correction. | Read [Error codes](/ambercast/reference/error-codes/), then correct the named setting without guessing values. |
+| Missing, stale, or untrustworthy companion | The committed artifact cannot be used as current evidence. | Use the matching row in [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/). |
+| `SECRET_CONSENT_REQUIRED` | Generation found a secret name that is not on the allowlist, and consent was declined or unavailable. | Review the name and add it to `secrets.allow`, or run generate again interactively. Do not add a secret value to the prompt. |
+| Heal reports `secret-set-changed` | A Stage 3 candidate changed the complete secret-name set, which heal cannot reattribute or consent to silently. | Run `ambercast generate --force <file>` and complete consent. The CLI prints this hint with the actual file path in place of `<file>`: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| Literal secret or legacy secret syntax | Protected IR rejected a secret-handling boundary. | Use [Manage secrets](/ambercast/how-to/manage-secrets/). Do not place a literal or a legacy grant line in the prompt. |
+| Browser, provider, storage, or crash | The execution environment failed. | Keep the output, repair the environment, then re-run the smallest command. |
+| Interrupted work | Batch work was incomplete. | Re-run after you resolve the interruption. |
+| Failed assertion | A replayed case has failing evidence. | Read the report, fix the app or the prompt, then re-run. |
+| Empty selection | No prompt matched the requested selection. | Correct the selection, or use `--allow-empty` only when the selection is meant to be empty. |
+
+## Verification \{#verification}
+
+Re-run the smallest affected command. It exits `0` only after no higher-priority condition remains.
+
+## Related \{#related}
+
+<LinkCard title="Error codes" href="/ambercast/reference/error-codes/" description="See the exact error vocabulary." />
+
+<LinkCard title="Exit codes" href="/ambercast/reference/exit-codes/" description="See the exit codes and their priority." />
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See the check statuses." />
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate results." />
+
+<LinkCard title="ambercast run" href="/ambercast/reference/cli/run/" description="See the flags and results of run." />
+
+<LinkCard title="ambercast heal" href="/ambercast/reference/cli/heal/" description="See how heal behaves and what it reports." />
+
+<LinkCard title="Recover stale artifacts" href="/ambercast/how-to/recover-stale-artifacts/" description="See the action for each check status." />
+
+<LinkCard title="Manage secrets" href="/ambercast/how-to/manage-secrets/" description="Approve secret names and pass their values." />
+
+<LinkCard title="Configure targets" href="/ambercast/how-to/configure-targets/" description="Set up targets and the related configuration." />

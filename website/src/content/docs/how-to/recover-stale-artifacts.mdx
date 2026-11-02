@@ -1,0 +1,73 @@
+---
+title: Recover stale artifacts
+description: Resolve stale, missing, or orphaned artifacts based on their check status.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Read the `check` status, take the action for that status, and run `check` again.
+
+## Prerequisites \{#prerequisites}
+
+`check` is read-only. It uses no provider, browser, event sink, or mutable storage.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Read the check status \{#read-status}
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+   Find each reported status in the table in the next section.
+
+2. ## Apply the action for that status \{#apply-action}
+
+   Run the action in the status row. Replace `<name>` in a command with your prompt file name without the `.test.md` suffix, for example `login` for `login.test.md`.
+
+3. ## Review the changes \{#review-changes}
+
+   Before you commit a changed plan or grounding, read its diff. See [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+
+</Steps>
+
+## Status actions \{#stale}
+
+| Status | Action | Expected result |
+| --- | --- | --- |
+| `fresh` | Run `npx ambercast check`. Change no artifact. | Exit `0`. |
+| `fresh-without-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | `generate` repairs the adjacent grounding file on disk, then reports `skipped-fresh` with `planFile` only. `groundingFile` is not a generate result field. |
+| `stale` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then read the diff. | A fresh generation can exit `0`. A check that is still untrustworthy exits `4`. |
+| `missing-plan` | Restore the plan from version control, or run `npx ambercast generate tests/ambercast/<name>.test.md`. | The generate result has a `planFile`. |
+| `missing-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | When the plan is fresh, `generate` creates the adjacent grounding file and returns `skipped-fresh` with `planFile` only. |
+| `stale-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
+| `invalid-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. If `check` still reports `invalid-grounding`, run `npx ambercast generate --force tests/ambercast/<name>.test.md`, which regenerates the plan and calls the AI provider, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
+| `orphaned-plan` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
+| `orphaned-grounding` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
+| `invalid-artifact-name` | Rename or remove the invalid companion through normal review. | The next check no longer reports the artifact whose name cannot map back to a prompt. |
+| `listed` | Run again without `--list`. | `--list` performed no plan or grounding read. |
+| `skipped` | Run again after you resolve the interruption. | A run-scoped `INTERRUPTED` error contributes exit `3`. |
+
+When the plan is fresh and its grounding is missing, does not parse, or has a different `planDigest`, the grounding that `generate` writes is an empty grounding bound to the plan. It is not a re-resolved one.
+
+Bind the elements again on your machine with `npx ambercast run --resolve --update-cache tests/ambercast/<name>.test.md`, as step 3 of [Re-ground after a producer change](/ambercast/how-to/upgrade/#reground-after-producer-change) does.
+
+## Verification \{#verification}
+
+Run `npx ambercast check --json` again. It exits `0` only when no higher-priority candidate remains. See [aggregation priority](/ambercast/reference/exit-codes/#aggregation-priority).
+
+## Related \{#related}
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See the check statuses and the read-only contract." />
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate results and exit codes." />
+
+<LinkCard title="Error codes" href="/ambercast/reference/error-codes/" description="See every error code." />
+
+<LinkCard title="Exit codes" href="/ambercast/reference/exit-codes/" description="See the exit codes and their priority." />
+
+<LinkCard title="ambercast heal" href="/ambercast/reference/cli/heal/" description="See how heal repairs a drifted plan." />
+
+<LinkCard title="Review generated diffs" href="/ambercast/how-to/review-generated-diffs/" description="Read changed plans and groundings before you commit." />

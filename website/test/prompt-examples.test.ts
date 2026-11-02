@@ -18,9 +18,9 @@ const legacyReference = '{{secrets.';
 const EXEMPT_NON_PROSE_LABELS = new Set(['json']);
 
 const exceptionTargets = [
-  ['website/src/content/docs/how-to/upgrade.md', 'migrate-secret-grants'],
-  ['website/src/content/docs/ja/how-to/upgrade.md', 'migrate-secret-grants'],
-  ['website/src/content/docs/zh-cn/how-to/upgrade.md', 'migrate-secret-grants'],
+  ['website/src/content/docs/how-to/upgrade.mdx', 'migrate-secret-grants'],
+  ['website/src/content/docs/ja/how-to/upgrade.mdx', 'migrate-secret-grants'],
+  ['website/src/content/docs/zh-cn/how-to/upgrade.mdx', 'migrate-secret-grants'],
   ['website/src/content/docs/reference/prompt-format.md', 'legacy-secret-syntax'],
   ['website/src/content/docs/ja/reference/prompt-format.md', 'legacy-secret-syntax'],
   ['website/src/content/docs/zh-cn/reference/prompt-format.md', 'legacy-secret-syntax'],

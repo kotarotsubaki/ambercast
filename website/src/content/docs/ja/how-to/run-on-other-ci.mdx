@@ -1,0 +1,66 @@
+---
+title: 他のCIプラットフォームでの実行
+description: GitLab CI や汎用ランナーで check の後に run を実行し、修復を無効にしたままにする手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+コードをチェックアウト済みのジョブで、`check` の後に `run` を実行し、修復と書き戻しはしない。
+
+## 前提条件 \{#prerequisites}
+
+GitLab CI か汎用ランナーで、ジョブがコードをチェックアウトしている。`run` のフラグには `--resolve`、`--update-cache`、`--allow-empty`、`--list` などがあり、`--config` はない。
+
+グラウンディングを見つけられないときの既定の動作は、すでに失敗扱いである。AI による解決を止めるフラグは、CI でも要らない。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## Chromium を入れる \{#install-browser}
+
+   プロジェクトの Node 依存関係を入れてから、Chromium を入れる。ブラウザのインストール先は、プラットフォームのキャッシュ機構でキャッシュする。
+
+   ```bash
+   npx playwright-core install chromium
+   ```
+
+   グラウンディングが済んだ計画（plan）の再生は、AI プロバイダーを選ばずに進められる。
+
+2. ## check の後に run を実行する \{#check-then-run}
+
+   ```bash
+   npx ambercast check && npx ambercast run
+   ```
+
+   `&&` があるので、`check` が終了コード `0` で終わったときだけ `run` に進む。`run` は、呼び出しごとのディレクトリにレポートを 1 つ書く。
+
+3. ## 証跡のアップロードを絞る \{#limit-uploads}
+
+   ステップの結果は、`actual` のテキストとアクセシビリティスナップショットを保持する場合がある。`report.json` をアップロードする前に、事前のレビュー、アクセス制限、短い保持期間を適用する。これらを適用できるときだけアップロードする。
+
+   証跡やスクリーンショットも、同じ管理のもとで、明示的に選んだときだけアップロードする。ライブブラウザのステップの失敗時には、証跡ディレクトリに PNG のスクリーンショットを保存することがある。
+
+   安全性のスキャンは、canvas、画像、CSS で描かれた画素を検出できない。スキャンからスクリーンショットまでの間の変化も検出できない。
+
+4. ## CI では修復も書き戻しもしない \{#keep-heal-off}
+
+   `heal` を呼ばず、`--update-cache` も渡さない。CI の既定は `ci.heal: false` と `ci.updateGroundingCache: false` である。CI で実際に修復するには、`ci.heal: true` を明示的に選ぶ。
+
+</Steps>
+
+## 確認 \{#verification}
+
+ジョブの成否は、プロセスの終了コードで決める。終了コード `4`（信頼できない成果物）と `3`（環境の失敗）は別の分類である。値の一覧は[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
+
+## 関連情報 \{#related}
+
+<LinkCard title="GitHub Actions で ambercast を実行する" href="/ambercast/ja/tutorials/github-actions/" description="GitHub Actions で同じ流れを実行する。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の動作と終了コードを確かめる。" />
+
+<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="run の全フラグを確かめる。" />
+
+<LinkCard title="終了コード" href="/ambercast/ja/reference/exit-codes/" description="終了コードの一覧と優先順位を確かめる。" />
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="ci.heal や ci.updateGroundingCache などの設定キーを確かめる。" />

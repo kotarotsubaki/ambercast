@@ -1,0 +1,66 @@
+---
+title: Run on other CI platforms
+description: Run check and then run on GitLab CI or a generic runner, with healing left off.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+In a job that already checks out your code, run `check` and then `run`, and leave healing and write-back off.
+
+## Prerequisites \{#prerequisites}
+
+You use GitLab CI or a generic runner, and the job has your code checked out. The flags of `run` include `--resolve`, `--update-cache`, `--allow-empty`, and `--list`, and `run` has no `--config` option.
+
+The default behavior on a grounding miss already fails closed. CI needs no flag to suppress AI resolution.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Install Chromium \{#install-browser}
+
+   Install the project's Node dependencies, then install Chromium. Cache the browser install directory with the platform's cache mechanism.
+
+   ```bash
+   npx playwright-core install chromium
+   ```
+
+   A replay of a fully grounded plan can proceed without selecting an AI provider.
+
+2. ## Run check, then run \{#check-then-run}
+
+   ```bash
+   npx ambercast check && npx ambercast run
+   ```
+
+   The `&&` reaches `run` only when `check` exits `0`. `run` writes one report in its invocation directory.
+
+3. ## Limit what you upload \{#limit-uploads}
+
+   Step results in the report can retain `actual` text and an accessibility snapshot. Before you upload `report.json`, apply prior review, restricted access, and short retention. Upload it only when those controls are available.
+
+   Upload invocation evidence or screenshots only by explicit opt-in, under the same controls. A failed live-browser step can save PNG screenshots in the invocation evidence directory.
+
+   The safety scan cannot detect canvas, image, or CSS-rendered pixels. It also cannot detect changes between the scan and the screenshot.
+
+4. ## Keep healing and write-back off \{#keep-heal-off}
+
+   Do not invoke `heal`, and do not pass `--update-cache`. The CI defaults are `ci.heal: false` and `ci.updateGroundingCache: false`. Real healing in CI is an explicit opt-in through `ci.heal: true`.
+
+</Steps>
+
+## Verification \{#verification}
+
+Gate the job on the process exit code. Untrustworthy artifacts (exit `4`) and environment failures (exit `3`) are distinct categories. See the [exit code table](/ambercast/reference/exit-codes/#exit-code-table).
+
+## Related \{#related}
+
+<LinkCard title="Running ambercast in GitHub Actions" href="/ambercast/tutorials/github-actions/" description="Run the same flow in GitHub Actions." />
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See what check reports and when it exits non-zero." />
+
+<LinkCard title="ambercast run" href="/ambercast/reference/cli/run/" description="See every flag of run." />
+
+<LinkCard title="Exit codes" href="/ambercast/reference/exit-codes/" description="See the exit codes and their priority." />
+
+<LinkCard title="Configuration" href="/ambercast/reference/configuration/" description="See configuration keys such as ci.heal and ci.updateGroundingCache." />

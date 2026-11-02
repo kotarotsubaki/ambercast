@@ -973,129 +973,275 @@ The resolver maps a prompt to its plan and grounding companions by fixed suffixe
 # Manage artifacts in git
 Source: https://kotarotsubaki.github.io/ambercast/how-to/manage-artifacts-in-git/
 
-This recipe explains how to manage ambercast artifacts in git. By default, the grounding policy is `repositoryPolicy: "committed"` and the runs directory is `tests/ambercast/.runs`.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Stage the prompt, plan, and grounding together, and keep the runs directory out of git.
 
-- The default grounding policy is `repositoryPolicy: "committed"`.
-- The default runs directory is `tests/ambercast/.runs`.
+## Prerequisites \{#prerequisites}
 
-## Steps {#steps}
+The default grounding policy is `repositoryPolicy: "committed"`. The default runs directory is `tests/ambercast/.runs`.
 
-1. Stage `<name>.test.md`, `<name>.ambercast.plan.json`, and `<name>.ambercast.grounding.json` when your policy is `committed`. The resolver defines the two adjacent companion suffixes.
-2. Set `{"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"repositoryPolicy":"uncommitted"}}` when grounding is a local cache. This is the published configuration Schema URL and `uncommitted` is an accepted policy.
-3. Add the configured `runsDir` to `.gitignore`. For the default, add `tests/ambercast/.runs/`. The `runsDir` path is configurable. A run writes one `report.json` within an invocation-specific directory below it.
-4. When `repositoryPolicy` is `uncommitted`, also add `tests/ambercast/**/*.ambercast.grounding.json` to `.gitignore`. Replace `tests/ambercast` with the configured `testDir` when it differs. The resolver derives Grounding companions only inside `testDir` with the fixed `.ambercast.grounding.json` suffix. Plans remain tracked while local Grounding companions are ignored.
+## Steps \{#steps}
 
-## Verification {#verification}
+<Steps>
 
-Run `git status --short`:
+1. ## Stage the three files \{#stage-companions}
 
-- With `committed`, expect plan and Grounding companions.
-- With `uncommitted`, expect the plan but not a `testDir`-local `*.ambercast.grounding.json`.
-- When the configured `runsDir` is ignored, do not expect its run evidence.
+   With the `committed` policy, stage `<name>.test.md`, `<name>.ambercast.plan.json`, and `<name>.ambercast.grounding.json`. The resolver defines the two adjacent companion suffixes. See [File layout](/ambercast/reference/file-layout/#companions).
 
-## Related {#related}
+2. ## Ignore the run evidence \{#ignore-runs}
 
-Links: [File layout](/ambercast/reference/file-layout/), [Configuration](/ambercast/reference/configuration/), [Plan document](/ambercast/spec/plan-document/), [Grounding document](/ambercast/spec/grounding-document/), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/).
+   Add the configured `runsDir` to `.gitignore`. For the default, add this line.
+
+   ```text
+   tests/ambercast/.runs/
+   ```
+
+   You can change `runsDir`. Each run writes one `report.json` in an invocation-specific directory below it.
+
+3. ## Keep grounding local \{#keep-grounding-local}
+
+   If grounding is a local cache, set `repositoryPolicy` to `uncommitted`. Do this step and the next one only in that case. The `$schema` value is the published configuration schema URL.
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"repositoryPolicy":"uncommitted"}}
+   ```
+
+4. ## Ignore the local grounding \{#ignore-local-grounding}
+
+   With `uncommitted`, also add this line to `.gitignore`. If your `testDir` differs from the default, replace `tests/ambercast` with it.
+
+   ```text
+   tests/ambercast/**/*.ambercast.grounding.json
+   ```
+
+   The resolver finds grounding companions only inside `testDir`, and only with the fixed `.ambercast.grounding.json` suffix. Plans stay tracked while the local grounding files are ignored.
+
+</Steps>
+
+## Verification \{#verification}
+
+```bash
+git status --short
+```
+
+- With `committed`, expect the plan and grounding companions.
+- With `uncommitted`, expect the plan but no `testDir`-local `*.ambercast.grounding.json`.
+- When the configured `runsDir` is ignored, expect no run evidence.
+
+## Related \{#related}
+
+<LinkCard title="File layout" href="/ambercast/reference/file-layout/" description="See which files sit next to a prompt and where run evidence goes." />
+
+<LinkCard title="Configuration" href="/ambercast/reference/configuration/" description="See configuration keys such as repositoryPolicy and runsDir." />
+
+<LinkCard title="Plan document" href="/ambercast/spec/plan-document/" description="See the format of the plan file." />
+
+<LinkCard title="Grounding document" href="/ambercast/spec/grounding-document/" description="See the format of the grounding file." />
+
+<LinkCard title="Control grounding write-back" href="/ambercast/how-to/control-grounding-writeback/" description="Decide whether changed grounding is written back." />
 
 ---
 
 # Run on other CI platforms
 Source: https://kotarotsubaki.github.io/ambercast/how-to/run-on-other-ci/
 
-This guide provides portable CI recipes for running ambercast on GitLab CI and generic runners.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+In a job that already checks out your code, run `check` and then `run`, and leave healing and write-back off.
 
-- `run` accepts `--resolve`, `--update-cache`, `--allow-empty`, and `--list`; it has no `--config` option. Its default grounding-miss behavior is already fail-closed, so CI needs no flag to suppress AI resolution.
+## Prerequisites \{#prerequisites}
 
-## Steps {#steps}
+You use GitLab CI or a generic runner, and the job has your code checked out. The flags of `run` include `--resolve`, `--update-cache`, `--allow-empty`, and `--list`, and `run` has no `--config` option.
 
-1. In GitLab CI or a generic runner, install the project’s Node dependencies and Chromium with `npx playwright-core install chromium`; cache the browser install directory using that platform’s cache mechanism. The repository requires Chromium and documents this install command; a fully grounded replay may proceed without provider selection.
-2. Run exactly `npx ambercast check` followed by `npx ambercast run`. Before uploading the invocation `report.json`, apply prior review, restricted access, and short retention; upload it only when those controls are available. Shell sequencing reaches `run` only when `check` exits successfully; `run` writes one report in its invocation directory, and report step results can retain `actual` text and an accessibility snapshot.
-3. Upload invocation evidence or screenshots only by explicit opt-in after the same prior review, restricted access, and short retention. Failed live browser steps can persist PNG screenshots under the invocation evidence directory, and the safety scan cannot detect canvas, image, or CSS-rendered pixels or a scan-to-screenshot timing gap.
-4. Do not invoke `heal` and do not pass `--update-cache`. CI defaults have `heal: false` and `updateGroundingCache: false`; real healing is an explicit opt-in via `ci.heal: true`, not a default CI action.
+The default behavior on a grounding miss already fails closed. CI needs no flag to suppress AI resolution.
 
-## Verification {#verification}
+## Steps \{#steps}
 
-- Gate the job on its process exit code to interpret it. Untrustworthy artifacts and environment failures are distinct process categories.
+<Steps>
 
-## Related {#related}
+1. ## Install Chromium \{#install-browser}
 
-Links: [Running ambercast in GitHub Actions](/ambercast/tutorials/github-actions/), [ambercast check](/ambercast/reference/cli/check/), [ambercast run](/ambercast/reference/cli/run/), [Exit codes](/ambercast/reference/exit-codes/), [Configuration](/ambercast/reference/configuration/).
+   Install the project's Node dependencies, then install Chromium. Cache the browser install directory with the platform's cache mechanism.
+
+   ```bash
+   npx playwright-core install chromium
+   ```
+
+   A replay of a fully grounded plan can proceed without selecting an AI provider.
+
+2. ## Run check, then run \{#check-then-run}
+
+   ```bash
+   npx ambercast check && npx ambercast run
+   ```
+
+   The `&&` reaches `run` only when `check` exits `0`. `run` writes one report in its invocation directory.
+
+3. ## Limit what you upload \{#limit-uploads}
+
+   Step results in the report can retain `actual` text and an accessibility snapshot. Before you upload `report.json`, apply prior review, restricted access, and short retention. Upload it only when those controls are available.
+
+   Upload invocation evidence or screenshots only by explicit opt-in, under the same controls. A failed live-browser step can save PNG screenshots in the invocation evidence directory.
+
+   The safety scan cannot detect canvas, image, or CSS-rendered pixels. It also cannot detect changes between the scan and the screenshot.
+
+4. ## Keep healing and write-back off \{#keep-heal-off}
+
+   Do not invoke `heal`, and do not pass `--update-cache`. The CI defaults are `ci.heal: false` and `ci.updateGroundingCache: false`. Real healing in CI is an explicit opt-in through `ci.heal: true`.
+
+</Steps>
+
+## Verification \{#verification}
+
+Gate the job on the process exit code. Untrustworthy artifacts (exit `4`) and environment failures (exit `3`) are distinct categories. See the [exit code table](/ambercast/reference/exit-codes/#exit-code-table).
+
+## Related \{#related}
+
+<LinkCard title="Running ambercast in GitHub Actions" href="/ambercast/tutorials/github-actions/" description="Run the same flow in GitHub Actions." />
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See what check reports and when it exits non-zero." />
+
+<LinkCard title="ambercast run" href="/ambercast/reference/cli/run/" description="See every flag of run." />
+
+<LinkCard title="Exit codes" href="/ambercast/reference/exit-codes/" description="See the exit codes and their priority." />
+
+<LinkCard title="Configuration" href="/ambercast/reference/configuration/" description="See configuration keys such as ci.heal and ci.updateGroundingCache." />
 
 ---
 
 # Recover stale artifacts
 Source: https://kotarotsubaki.github.io/ambercast/how-to/recover-stale-artifacts/
 
-When test artifacts fall out of date or go missing, use their reported check status to determine the recovery action.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Read the `check` status, take the action for that status, and run `check` again.
 
-`check` is read-only: its dependencies omit provider, browser, event sink, and mutable storage.
+## Prerequisites \{#prerequisites}
 
-## Steps {#stale}
+`check` is read-only. It uses no provider, browser, event sink, or mutable storage.
 
-| check status | exact next action | expected observable result |
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Read the check status \{#read-status}
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+   Find each reported status in the table in the next section.
+
+2. ## Apply the action for that status \{#apply-action}
+
+   Run the action in the status row. Replace `<name>` in a command with your prompt file name without the `.test.md` suffix, for example `login` for `login.test.md`.
+
+3. ## Review the changes \{#review-changes}
+
+   Before you commit a changed plan or grounding, read its diff. See [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+
+</Steps>
+
+## Status actions \{#stale}
+
+| Status | Action | Expected result |
 | --- | --- | --- |
-| `fresh` | Run `npx ambercast check`; make no artifact change. | Exit `0`. |
-| `fresh-without-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | `generate` repairs the adjacent Grounding file on disk, then reports `skipped-fresh` with `planFile` only; it does not report a grounding path. |
-| `stale` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then review the diff. | Fresh generation can exit `0`; a still-untrusted check exits `4`. |
-| `missing-plan` | Restore the plan from version control or run `npx ambercast generate tests/ambercast/<name>.test.md`. | A generated result has a `planFile`. |
-| `missing-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | When the Plan is fresh, `generate` creates its adjacent Grounding file on disk and returns `skipped-fresh` with `planFile` only; `groundingFile` is not a Generate result field. |
-| `stale-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then review the new grounding. | Check no longer emits a failed integrity finding when valid. |
-| `invalid-grounding` | Regenerate from the prompt and review the new grounding. | Check no longer emits a failed integrity finding when valid. |
-| `orphaned-plan` | Restore its prompt or remove the orphan through the project’s normal review process. | The next check no longer has that orphan finding. |
-| `orphaned-grounding` | Restore its prompt or remove the orphan through the project’s normal review process. | The next check no longer has that orphan finding. |
-| `invalid-artifact-name` | Rename/remove the invalid companion through normal review. | The next check no longer reports that inverse-incapable artifact. |
-| `listed` | Re-run without `--list` to inspect freshness. | `--list` performed no plan or grounding read. |
-| `skipped` | Re-run after resolving interruption. | A run-scoped `INTERRUPTED` error contributes exit `3`. |
+| `fresh` | Run `npx ambercast check`. Change no artifact. | Exit `0`. |
+| `fresh-without-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | `generate` repairs the adjacent grounding file on disk, then reports `skipped-fresh` with `planFile` only. `groundingFile` is not a generate result field. |
+| `stale` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then read the diff. | A fresh generation can exit `0`. A check that is still untrustworthy exits `4`. |
+| `missing-plan` | Restore the plan from version control, or run `npx ambercast generate tests/ambercast/<name>.test.md`. | The generate result has a `planFile`. |
+| `missing-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | When the plan is fresh, `generate` creates the adjacent grounding file and returns `skipped-fresh` with `planFile` only. |
+| `stale-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
+| `invalid-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. If `check` still reports `invalid-grounding`, run `npx ambercast generate --force tests/ambercast/<name>.test.md`, which regenerates the plan and calls the AI provider, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
+| `orphaned-plan` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
+| `orphaned-grounding` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
+| `invalid-artifact-name` | Rename or remove the invalid companion through normal review. | The next check no longer reports the artifact whose name cannot map back to a prompt. |
+| `listed` | Run again without `--list`. | `--list` performed no plan or grounding read. |
+| `skipped` | Run again after you resolve the interruption. | A run-scoped `INTERRUPTED` error contributes exit `3`. |
 
-## Verification {#verification}
+When the plan is fresh and its grounding is missing, does not parse, or has a different `planDigest`, the grounding that `generate` writes is an empty grounding bound to the plan. It is not a re-resolved one.
 
-Run `npx ambercast check --json`; expect exit `0` only when no candidate with higher priority remains.
+Bind the elements again on your machine with `npx ambercast run --resolve --update-cache tests/ambercast/<name>.test.md`, as step 3 of [Re-ground after a producer change](/ambercast/how-to/upgrade/#reground-after-producer-change) does.
 
-## Related {#related}
+## Verification \{#verification}
 
-Links: [ambercast check](/ambercast/reference/cli/check/), [ambercast generate](/ambercast/reference/cli/generate/), [Error codes](/ambercast/reference/error-codes/), [Exit codes](/ambercast/reference/exit-codes/), [ambercast heal](/ambercast/reference/cli/heal/), [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+Run `npx ambercast check --json` again. It exits `0` only when no higher-priority candidate remains. See [aggregation priority](/ambercast/reference/exit-codes/#aggregation-priority).
+
+## Related \{#related}
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See the check statuses and the read-only contract." />
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate results and exit codes." />
+
+<LinkCard title="Error codes" href="/ambercast/reference/error-codes/" description="See every error code." />
+
+<LinkCard title="Exit codes" href="/ambercast/reference/exit-codes/" description="See the exit codes and their priority." />
+
+<LinkCard title="ambercast heal" href="/ambercast/reference/cli/heal/" description="See how heal repairs a drifted plan." />
+
+<LinkCard title="Review generated diffs" href="/ambercast/how-to/review-generated-diffs/" description="Read changed plans and groundings before you commit." />
 
 ---
 
 # Upgrade between versions
 Source: https://kotarotsubaki.github.io/ambercast/how-to/upgrade/
 
-This release-safety procedure guides you through upgrading ambercast when changes to the producer fingerprint mark existing plans stale and require regeneration.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Read the BREAKING entries before you upgrade, then regenerate plans as `check` directs.
 
-- CHANGELOG 0.3.1 states that its producer-fingerprint change makes 0.1.0 plans stale and requires regeneration.
+## Prerequisites \{#prerequisites}
 
-## Steps {#steps}
+A release whose BREAKING entry changes the producer fingerprint makes existing plans stale and requires regeneration. The 0.2.0 entry is an example: it names the `inputsDigest` impact. See the [changelog](/ambercast/reference/changelog/#release-020).
 
-1. Read the target release’s BREAKING section before changing the dependency. The 0.3.1 entry explicitly names `inputsDigest` impact.
-2. Upgrade ambercast using the project’s package manager, then run `npx ambercast check --json`. Check returns a report and selects exit `4` for untrustworthy findings.
-3. If check exits `4`, run `npx ambercast generate` and review the plan/grounding diff. Generation composes the generator and report result.
-4. Commit the dependency and accepted companion changes together. Then re-run check to make the final condition observable.
+## Steps \{#steps}
 
-## Migrate secret grants {#migrate-secret-grants}
+<Steps>
 
-Prompts created for Plan v2 can contain legacy secret grant lines. Remove every grant line from the prompt; the old syntax is rejected and must not be migrated in place.
+1. ## Read the breaking changes \{#read-breaking}
+
+   Read the target release's BREAKING section before you change the dependency.
+
+2. ## Upgrade and run check \{#upgrade-and-check}
+
+   Upgrade ambercast with your project's package manager, then run `check`. It returns a report and selects exit `4` for untrustworthy findings.
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+3. ## Regenerate the stale plans \{#regenerate-stale}
+
+   If `check` exits `4`, run `generate` and read the plan and grounding diff. See [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+
+   ```bash
+   npx ambercast generate
+   ```
+
+4. ## Commit together \{#commit-together}
+
+   Commit the dependency and the accepted companion changes together. Then run `check` again so the final state is observable.
+
+</Steps>
+
+## Migrate secret grants \{#migrate-secret-grants}
+
+Prompts created for Plan v2 can contain legacy secret grant lines. Remove every grant line from the prompt. The old syntax is rejected and must not be migrated in place.
 
 ```markdown
 @ambercast-secret {{secrets.password}}
 ```
 
-Then run `npx ambercast generate --force <file>` and respond to the new consent prompt. For CI or another non-interactive environment, add the reviewed names to `secrets.allow` first. The regenerated Plan uses the v3 consent/allowlist model.
+Then run `npx ambercast generate --force <file>` and answer the new consent prompt. For CI or another non-interactive environment, add the reviewed names to `secrets.allow` first. The regenerated plan uses the v3 consent and allowlist model.
 
-## Re-ground after a producer change {#reground-after-producer-change}
+## Re-ground after a producer change \{#reground-after-producer-change}
 
 Changes to generator instructions or the response contract change the producer fingerprint, so plans from earlier releases are stale. Regenerating a plan replaces its grounding with an empty one, and the steps below bind every element step again. Plan 5 and Grounding 4 are unchanged.
 
 Report 3.11 adds `generator-assumption` warnings and optional `warnings` on `healed` rows. Update your report schema if you validate a closed union.
 
-The CLI `--strict` flag and MCP `strict` argument have been removed. Remove them from your calls. `ambercast generate --strict` exits 2 as an unknown option, and MCP rejects `strict` during input validation.
+The CLI `--strict` flag and the MCP `strict` argument have been removed. Remove them from your calls. `ambercast generate --strict` exits 2 as an unknown option, and MCP rejects `strict` during input validation.
 
 1. Run `npx ambercast check --json` and confirm that the affected plans report `stale`.
 2. Run `npx ambercast generate <file>` for each stale plan. In the diff, check that each assert lists in its `confirms` the inputs whose effects it shows.
@@ -1103,84 +1249,154 @@ The CLI `--strict` flag and MCP `strict` argument have been removed. Remove them
    - A plain run fails on that input with `GROUNDING_UNRESOLVED`.
    - Add an assert that shows the effect of that input, such as the signed-in user name, and repeat step 2.
 3. Run `npx ambercast run --resolve --update-cache <file>` on your machine. The grounding is empty after regeneration, so ambercast calls AI once for each element step that has no verbatim quote. CI does not save the grounding by default.
-4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report. Always commit the plan. Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`; when it is `uncommitted`, keep the grounding local.
+4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report.
+   - Always commit the plan.
+   - Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`.
+   - When it is `uncommitted`, keep the grounding local.
 
-## Verification {#verification}
+## Verification \{#verification}
 
-- `npx ambercast check` exits `0` after accepted regeneration.
+After you accept the regeneration, `npx ambercast check` exits `0`.
 
-## Related {#related}
+## Related \{#related}
 
-Links: [Changelog](/ambercast/reference/changelog/), [Freshness and digests](/ambercast/spec/freshness/), [ambercast check](/ambercast/reference/cli/check/), [ambercast generate](/ambercast/reference/cli/generate/), [Review generated diffs](/ambercast/how-to/review-generated-diffs/).
+<LinkCard title="Changelog" href="/ambercast/reference/changelog/" description="Read the BREAKING entries of each release." />
+
+<LinkCard title="Freshness and digests" href="/ambercast/spec/freshness/" description="See when a plan counts as stale." />
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See the check statuses and exit codes." />
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate results and exit codes." />
+
+<LinkCard title="Review generated diffs" href="/ambercast/how-to/review-generated-diffs/" description="Read regenerated plans and groundings before you commit." />
 
 ---
 
 # Troubleshoot common failures
 Source: https://kotarotsubaki.github.io/ambercast/how-to/troubleshoot/
 
-When an ambercast command fails, use this symptom-to-action reference to diagnose the underlying cause and determine your next step.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+Keep the failing command's output, take the action for the matching symptom, and re-run the smallest affected command.
 
-Before inspecting execution reports, ensure your command invocation is structurally valid. Invalid flags, malformed command arguments, and missing option values write usage to stderr and exit `2` without a report envelope.
+## Prerequisites \{#prerequisites}
 
-## Steps {#steps}
+Your command invocation must be valid. Invalid flags, malformed command arguments, and missing option values write usage to stderr and exit `2` without a report envelope.
 
-Match your observed symptom to the corresponding cause and action:
+## Steps \{#steps}
 
-| symptom | cause | next action |
+<Steps>
+
+1. ## Find the matching symptom \{#match-symptom}
+
+   Keep the failing command's output. Re-run it with `--json` when you need the report. Find the matching symptom in the table in the next section.
+
+2. ## Apply the action \{#apply-action}
+
+   Take the action in that row. Use [Error codes](/ambercast/reference/error-codes/) for the exact error vocabulary and [Exit codes](/ambercast/reference/exit-codes/#priority) for process-status values and priority.
+
+3. ## Re-run the smallest command \{#rerun-smallest}
+
+   Re-run the smallest affected command.
+
+</Steps>
+
+## Symptoms and actions \{#symptom-table}
+
+| Symptom | Cause | Next action |
 | --- | --- | --- |
 | Invalid config, unresolved secret, or target | A configuration or invocation boundary needs correction. | Read [Error codes](/ambercast/reference/error-codes/), then correct the named setting without guessing values. |
 | Missing, stale, or untrustworthy companion | The committed artifact cannot be used as current evidence. | Use the matching row in [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/). |
-| `SECRET_CONSENT_REQUIRED` | Generation found an unallowlisted secret name and consent was declined or unavailable. | Review the name, add it to `secrets.allow`, or rerun generate interactively; do not add a secret value to the prompt. |
-| Heal reports `secret-set-changed` | A Stage 3 candidate changed the complete secret-name set, which heal cannot reattribute or consent to silently. | Run `ambercast generate --force <file>` and complete consent; the shipped CLI renders this literal Japanese hint verbatim: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
-| Literal secret or legacy secret syntax | Protected IR rejected a secret-handling boundary. | Use [Manage secrets](/ambercast/how-to/manage-secrets/); do not place a literal or legacy grant line in the prompt. |
-| Browser, provider, storage, or crash | The execution environment failed. | Preserve JSON output, repair the environment, then rerun the smallest command. |
-| Interrupted work | Batch work was incomplete. | Re-run after the interruption is resolved. |
-| Failed assertion | A replayed case has failing evidence. | Inspect the report, fix the app or prompt, then rerun. |
-| Empty selection | No prompts matched the requested selection. | Correct selection, or use `--allow-empty` only for intentional emptiness. |
+| `SECRET_CONSENT_REQUIRED` | Generation found a secret name that is not on the allowlist, and consent was declined or unavailable. | Review the name and add it to `secrets.allow`, or run generate again interactively. Do not add a secret value to the prompt. |
+| Heal reports `secret-set-changed` | A Stage 3 candidate changed the complete secret-name set, which heal cannot reattribute or consent to silently. | Run `ambercast generate --force <file>` and complete consent. The CLI prints this hint with the actual file path in place of `<file>`: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| Literal secret or legacy secret syntax | Protected IR rejected a secret-handling boundary. | Use [Manage secrets](/ambercast/how-to/manage-secrets/). Do not place a literal or a legacy grant line in the prompt. |
+| Browser, provider, storage, or crash | The execution environment failed. | Keep the output, repair the environment, then re-run the smallest command. |
+| Interrupted work | Batch work was incomplete. | Re-run after you resolve the interruption. |
+| Failed assertion | A replayed case has failing evidence. | Read the report, fix the app or the prompt, then re-run. |
+| Empty selection | No prompt matched the requested selection. | Correct the selection, or use `--allow-empty` only when the selection is meant to be empty. |
 
-Use [Error codes](/ambercast/reference/error-codes/) for the exact error vocabulary and [Exit codes](/ambercast/reference/exit-codes/#priority) for process-status values and priority.
+## Verification \{#verification}
 
-## Verification {#verification}
+Re-run the smallest affected command. It exits `0` only after no higher-priority condition remains.
 
-Re-run the smallest affected command and expect exit `0` only after no higher-priority condition remains.
+## Related \{#related}
 
-## Related {#related}
+<LinkCard title="Error codes" href="/ambercast/reference/error-codes/" description="See the exact error vocabulary." />
 
-Links: [Error codes](/ambercast/reference/error-codes/), [Exit codes](/ambercast/reference/exit-codes/), [ambercast check](/ambercast/reference/cli/check/), [ambercast generate](/ambercast/reference/cli/generate/), [ambercast run](/ambercast/reference/cli/run/), [ambercast heal](/ambercast/reference/cli/heal/), [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/), [Manage secrets](/ambercast/how-to/manage-secrets/), [Configure targets](/ambercast/how-to/configure-targets/).
+<LinkCard title="Exit codes" href="/ambercast/reference/exit-codes/" description="See the exit codes and their priority." />
+
+<LinkCard title="ambercast check" href="/ambercast/reference/cli/check/" description="See the check statuses." />
+
+<LinkCard title="ambercast generate" href="/ambercast/reference/cli/generate/" description="See the generate results." />
+
+<LinkCard title="ambercast run" href="/ambercast/reference/cli/run/" description="See the flags and results of run." />
+
+<LinkCard title="ambercast heal" href="/ambercast/reference/cli/heal/" description="See how heal behaves and what it reports." />
+
+<LinkCard title="Recover stale artifacts" href="/ambercast/how-to/recover-stale-artifacts/" description="See the action for each check status." />
+
+<LinkCard title="Manage secrets" href="/ambercast/how-to/manage-secrets/" description="Approve secret names and pass their values." />
+
+<LinkCard title="Configure targets" href="/ambercast/how-to/configure-targets/" description="Set up targets and the related configuration." />
 
 ---
 
 # Contribute
 Source: https://kotarotsubaki.github.io/ambercast/how-to/contribute/
 
-This recipe guides you through contributing to the repository, centered on the `npm test`, `npm run typecheck`, and `npm run lint` scripts declared in the package.
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## Prerequisites {#prerequisites}
+As an external contributor, open an issue, fork and branch, run three checks, and open a pull request.
 
-The package declares `npm test`, `npm run typecheck`, and `npm run lint` scripts.
+## Prerequisites \{#prerequisites}
 
-## Steps {#steps}
+The package declares the `npm test`, `npm run typecheck`, and `npm run lint` scripts.
 
-### External contributor path
+## Steps \{#steps}
 
-1. Open an issue describing the problem or proposal, then fork and create a branch.
-2. Run `npm test`, `npm run typecheck`, and `npm run lint`, then open a pull request with a Conventional Commit title and resolve its review conversations.
-3. Report a vulnerability through GitHub Security Advisories rather than a public issue. Submit a private report with version, reproduction, and impact.
+<Steps>
 
-### Maintainer and agent workflow
+1. ## Open an issue \{#open-issue}
 
-- `AGENTS.md` and `.claude/` describe maintainer AI-agent automation and are not prerequisites for external contributors; external PR checks run in CI.
-- A maintainer or repository agent follows the development workflow in `AGENTS.md`, including its behavior-change test order.
+   Open an issue that describes the problem or proposal.
 
-## Verification {#verification}
+2. ## Fork and branch \{#fork-and-branch}
 
-The three package commands exit `0`, or their failure is documented before handoff.
+   Fork the repository and create a branch for your change.
 
-## Related {#related}
+3. ## Run the three checks \{#run-checks}
 
-Links: [Security policy](/ambercast/reference/security-policy/), [Changelog](/ambercast/reference/changelog/).
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   ```
+
+4. ## Open a pull request \{#open-pull-request}
+
+   Open a pull request with a Conventional Commit title, and resolve its review conversations.
+
+</Steps>
+
+## Report a vulnerability \{#report-vulnerability}
+
+Report a vulnerability through GitHub Security Advisories, not a public issue. Send a private report with the version, a reproduction, and the impact. See the [security policy](/ambercast/reference/security-policy/).
+
+## Maintainer and agent workflow \{#maintainer-workflow}
+
+`AGENTS.md` and `.claude/` describe the maintainer's AI-agent automation. They are not prerequisites for external contributors, and external pull request checks run in CI.
+
+A maintainer or repository agent follows the development workflow in `AGENTS.md`, including its behavior-change test order.
+
+## Verification \{#verification}
+
+The three package commands exit `0`, or their failure is documented before handoff. Confirm that your pull request is open.
+
+## Related \{#related}
+
+<LinkCard title="Security policy" href="/ambercast/reference/security-policy/" description="See how to report a vulnerability and what to expect." />
+
+<LinkCard title="Changelog" href="/ambercast/reference/changelog/" description="See the changes of each release." />
 
 ---
 

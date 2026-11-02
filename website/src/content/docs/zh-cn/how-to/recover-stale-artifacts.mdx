@@ -1,0 +1,73 @@
+---
+title: 恢复过期的产物
+description: 按 check 报告的状态，恢复过期、缺失或孤立的产物。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+读取 `check` 的状态，执行该状态对应的操作，再运行一次 `check`。
+
+## 前置条件 \{#prerequisites}
+
+`check` 是只读的。它不使用提供商、浏览器、事件接收器或可变存储。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 读取 check 的状态 \{#read-status}
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+   在下一节的表中，找到每个已报告的状态。
+
+2. ## 按状态执行对应操作 \{#apply-action}
+
+   执行该状态所在行的操作。命令里的 `<name>` 要换成去掉 `.test.md` 后的提示词文件名，例如 `login.test.md` 对应 `login`。
+
+3. ## 检查变更 \{#review-changes}
+
+   提交变更后的执行计划或定位缓存之前，先阅读它的 diff。见[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+</Steps>
+
+## 按状态处理 \{#stale}
+
+| 状态 | 操作 | 预期结果 |
+| --- | --- | --- |
+| `fresh` | 运行 `npx ambercast check`。不修改任何产物。 | 退出码 `0`。 |
+| `fresh-without-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | `generate` 修复磁盘上相邻的定位缓存文件，然后报告只含 `planFile` 的 `skipped-fresh`。`groundingFile` 不是 generate 的结果字段。 |
+| `stale` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，然后阅读 diff。 | 重新生成后可以退出 `0`。仍不可信的 check 退出 `4`。 |
+| `missing-plan` | 从版本控制恢复执行计划，或运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 生成结果包含 `planFile`。 |
+| `missing-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 执行计划为新鲜状态时，`generate` 创建相邻的定位缓存文件，并返回只含 `planFile` 的 `skipped-fresh`。 |
+| `stale-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。 | 有效时，check 不再报告完整性失败。 |
+| `invalid-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。如果 `check` 仍报告 `invalid-grounding`，就运行 `npx ambercast generate --force tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。后者会重新生成执行计划并调用 AI 提供商。 | 有效时，check 不再报告完整性失败。 |
+| `orphaned-plan` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
+| `orphaned-grounding` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
+| `invalid-artifact-name` | 通过正常审查流程重命名或移除这个无效的伴生文件。 | 下一次 check 不再报告名称无法对应回提示词的产物。 |
+| `listed` | 不带 `--list` 再运行一次。 | `--list` 没有读取任何执行计划或定位缓存。 |
+| `skipped` | 排除中断原因后再运行一次。 | 运行范围内的 `INTERRUPTED` 错误会使退出码为 `3`。 |
+
+执行计划为新鲜状态，而定位缓存缺失、无法解析或 `planDigest` 不同时，`generate` 写入的是绑定到该执行计划的空定位缓存，不是重新解析后的缓存。
+
+在本机运行 `npx ambercast run --resolve --update-cache tests/ambercast/<name>.test.md` 重新绑定元素，做法与[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)的第 3 步相同。
+
+## 验证 \{#verification}
+
+再次运行 `npx ambercast check --json`。只有没有更高优先级的候选状态时，才会退出 `0`。优先级见[聚合优先级](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
+
+## 相关链接 \{#related}
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的状态和只读约定。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的结果和退出码。" />
+
+<LinkCard title="错误代码" href="/ambercast/zh-cn/reference/error-codes/" description="了解全部错误代码。" />
+
+<LinkCard title="退出码" href="/ambercast/zh-cn/reference/exit-codes/" description="了解退出码及其优先级。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/zh-cn/reference/cli/heal/" description="了解 heal 如何修复发生漂移的执行计划。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="提交之前，先阅读变更后的执行计划和定位缓存。" />

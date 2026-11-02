@@ -1,0 +1,73 @@
+---
+title: 古くなった成果物の復旧
+description: check が報告する状態ごとに、成果物を復旧する対処と、その後に確かめる結果を示す。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+`check` の状態を読み、状態に合わせて対処し、もう一度 `check` で確かめる。
+
+## 前提条件 \{#prerequisites}
+
+`check` は読み取り専用である。プロバイダー、ブラウザ、イベントの出力先、書き込み可能なストレージを使わない。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## check の状態を読む \{#read-status}
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+   出力に現れた状態を、次の節の表で探す。
+
+2. ## 状態に合わせて対処する \{#apply-action}
+
+   表の対処を、行ごとに実行する。コマンドの `<name>` は、`.test.md` を除いたプロンプトのファイル名に置き換える。たとえば `login.test.md` なら `login` である。
+
+3. ## 変更を確かめる \{#review-changes}
+
+   対処で変わった計画（plan）やグラウンディングは、コミットする前に差分を読む。読み方は[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+</Steps>
+
+## 状態ごとの対処 \{#stale}
+
+| 状態 | 対処 | 期待する結果 |
+| --- | --- | --- |
+| `fresh` | `npx ambercast check` を実行する。成果物は変えない。 | 終了コード `0` で終わる。 |
+| `fresh-without-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | `generate` が隣のグラウンディングを書き直し、`planFile` だけを持つ `skipped-fresh` を報告する。`groundingFile` は generate の結果のフィールドではない。 |
+| `stale` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行し、差分を読む。 | 新しく生成すれば、終了コード `0` で終わることがある。信頼できないままの check は `4` で終わる。 |
+| `missing-plan` | 計画をバージョン管理から戻すか、`npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | 生成の結果に `planFile` がある。 |
+| `missing-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | 計画が fresh なら、`generate` が隣のグラウンディングを作り、`planFile` だけを持つ `skipped-fresh` を返す。 |
+| `stale-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行し、新しいグラウンディングを読む。 | 有効なら、check は整合性の失敗を出さなくなる。 |
+| `invalid-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。それでも `check` が `invalid-grounding` を報告するなら、`npx ambercast generate --force tests/ambercast/<name>.test.md` を実行し、新しいグラウンディングを読む。後者は計画を再生成し、AI プロバイダーを呼ぶ。 | 有効なら、check は整合性の失敗を出さなくなる。 |
+| `orphaned-plan` | プロンプトを戻すか、孤立した計画をプロジェクトの通常のレビューで取り除く。 | 次の check に、その孤立の指摘が出ない。 |
+| `orphaned-grounding` | プロンプトを戻すか、孤立したグラウンディングをプロジェクトの通常のレビューで取り除く。 | 次の check に、その孤立の指摘が出ない。 |
+| `invalid-artifact-name` | 名前が無効なコンパニオンを、通常のレビューで改名するか取り除く。 | 次の check が、プロンプトの名前に戻せない成果物を報告しない。 |
+| `listed` | `--list` を付けずに再実行する。 | `--list` は計画もグラウンディングも読まない。 |
+| `skipped` | 中断の原因を解消してから再実行する。 | run 単位の `INTERRUPTED` エラーは、終了コード `3` になる。 |
+
+計画が fresh で、グラウンディングが無い、読めない、または `planDigest` が違うとき、`generate` が書くのは束縛し直したグラウンディングではない。計画に結び付いた空のグラウンディングである。
+
+要素は、手元で `npx ambercast run --resolve --update-cache tests/ambercast/<name>.test.md` を実行して束縛し直す。手順は[プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change)の手順 3 と同じである。
+
+## 確認 \{#verification}
+
+`npx ambercast check --json` を再実行する。より優先度の高い候補が残っていなければ、終了コード `0` で終わる。優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)にある。
+
+## 関連情報 \{#related}
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の状態と読み取り専用の契約を確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の結果と終了コードを確かめる。" />
+
+<LinkCard title="エラーコード" href="/ambercast/ja/reference/error-codes/" description="エラーコードの一覧を確かめる。" />
+
+<LinkCard title="終了コード" href="/ambercast/ja/reference/exit-codes/" description="終了コードの一覧と優先順位を確かめる。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/ja/reference/cli/heal/" description="ドリフトした計画を修復する heal を確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="変わった計画とグラウンディングを、コミットの前に読む。" />

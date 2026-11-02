@@ -1,0 +1,68 @@
+---
+title: 常见故障排查
+description: 按观察到的症状查找处理操作，并重新运行受影响的最小命令。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+保留失败命令的输出，执行与症状对应的操作，再重新运行受影响的最小命令。
+
+## 前置条件 \{#prerequisites}
+
+命令的调用本身必须有效。传入无效标志、格式错误的命令参数或缺失选项值时，命令会把用法说明写入 stderr，并以退出码 `2` 结束，不生成报告封装体。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 找到匹配的症状 \{#match-symptom}
+
+   保留失败命令的输出。需要报告时，加上 `--json` 重新运行。在下一节的表中，找到与它匹配的症状。
+
+2. ## 执行对应操作 \{#apply-action}
+
+   执行该行的操作。准确的错误词汇见[错误代码](/ambercast/zh-cn/reference/error-codes/)，进程状态码的取值和优先级见[退出码](/ambercast/zh-cn/reference/exit-codes/#priority)。
+
+3. ## 重新运行最小的命令 \{#rerun-smallest}
+
+   重新运行受影响的最小命令。
+
+</Steps>
+
+## 症状与处理 \{#symptom-table}
+
+| 症状 | 原因 | 下一步操作 |
+| --- | --- | --- |
+| 无效的配置、未解析的机密或目标 | 需要修正配置或调用边界。 | 阅读[错误代码](/ambercast/zh-cn/reference/error-codes/)，然后修正其中指出的配置项，不要猜测取值。 |
+| 缺失、`stale` 或不可信的伴生文件 | 已提交的产物不能作为当前的依据。 | 按[恢复过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/)中对应的行处理。 |
+| `SECRET_CONSENT_REQUIRED` | 生成发现了不在许可列表中的机密名称，且同意被拒绝或无法请求。 | 审查名称并加入 `secrets.allow`，或以交互方式重新运行 generate。不要把机密值写进提示词。 |
+| heal 报告 `secret-set-changed` | Stage 3 候选改变了完整的机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并重新完成同意。CLI 会把 `<file>` 换成实际的文件路径后输出这条提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| 明文机密或旧版机密语法 | 受保护的 IR 拒绝了机密处理边界。 | 按[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)处理。不要在提示词中放入明文机密或旧版授权行。 |
+| 浏览器、提供商、存储故障或崩溃 | 执行环境发生故障。 | 保留输出，修复环境，然后重新运行最小的命令。 |
+| 工作中断 | 批处理未完成。 | 排除中断原因后重新运行。 |
+| 断言失败 | 回放的用例存在失败的证据。 | 阅读报告，修复应用或提示词，然后重新运行。 |
+| 选区为空 | 没有提示词与所请求的选区匹配。 | 修正选区。只有确实要选空时才使用 `--allow-empty`。 |
+
+## 验证 \{#verification}
+
+重新运行受影响的最小命令。只有不再存在更高优先级的条件时，退出码才为 `0`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="错误代码" href="/ambercast/zh-cn/reference/error-codes/" description="了解准确的错误词汇。" />
+
+<LinkCard title="退出码" href="/ambercast/zh-cn/reference/exit-codes/" description="了解退出码及其优先级。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的状态。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的结果。" />
+
+<LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解 run 的标志和结果。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/zh-cn/reference/cli/heal/" description="了解 heal 的行为和它报告的内容。" />
+
+<LinkCard title="恢复过期的产物" href="/ambercast/zh-cn/how-to/recover-stale-artifacts/" description="了解每个 check 状态对应的操作。" />
+
+<LinkCard title="管理机密" href="/ambercast/zh-cn/how-to/manage-secrets/" description="批准机密名称并传入它们的值。" />
+
+<LinkCard title="配置目标环境" href="/ambercast/zh-cn/how-to/configure-targets/" description="设置目标环境和相关配置。" />

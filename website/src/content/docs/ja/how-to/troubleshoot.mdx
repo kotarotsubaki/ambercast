@@ -1,0 +1,68 @@
+---
+title: 一般的な障害のトラブルシューティング
+description: 失敗したコマンドの症状から対処を探し、最小のコマンドを再実行して確かめる手順。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+失敗したコマンドの出力を残し、症状の行に従って対処し、影響を受けた最小のコマンドを再実行する。
+
+## 前提条件 \{#prerequisites}
+
+コマンドの呼び出し自体が正しくなければならない。無効なフラグ、形式の誤った引数、オプションの値の欠落があると、使い方が stderr に出て、レポートのエンベロープなしで終了コード `2` で終わる。
+
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 症状に合う行を探す \{#match-symptom}
+
+   失敗したコマンドの出力を残す。レポートが要るときは、`--json` を付けて再実行する。その症状に合う行を、次のセクションの表で探す。
+
+2. ## 対処する \{#apply-action}
+
+   その行に従って対処する。エラーの語彙は[エラーコード](/ambercast/ja/reference/error-codes/)で確かめる。プロセスの状態の値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#priority)にある。
+
+3. ## 最小のコマンドを再実行する \{#rerun-smallest}
+
+   影響を受けた最小のコマンドを再実行する。
+
+</Steps>
+
+## 症状と対処 \{#symptom-table}
+
+| 症状 | 原因 | 次の対処 |
+| --- | --- | --- |
+| 設定の不備、未解決のシークレット、ターゲットの不正 | 設定か呼び出しの境界を直す必要がある。 | [エラーコード](/ambercast/ja/reference/error-codes/)を読み、示された設定を、値を推測せずに直す。 |
+| コンパニオンの欠落、`stale`、または信頼できない状態 | コミット済みの成果物を、現在の証拠として使えない。 | [古くなった成果物の復旧](/ambercast/ja/how-to/recover-stale-artifacts/)の該当する行に従う。 |
+| `SECRET_CONSENT_REQUIRED` | 生成が許可リストにないシークレット名を見つけ、同意が断られたか、求められなかった。 | 名前を確かめて `secrets.allow` に足すか、対話的に generate を再実行する。プロンプトにシークレットの値を書かない。 |
+| heal が `secret-set-changed` を報告する | Stage 3 の候補がシークレット名の集合全体を変えた。heal はこれを黙って付け替えることも、同意することもできない。 | `ambercast generate --force <file>` を実行して同意を取り直す。CLI は、`<file>` を実際のファイルのパスに置き換えて、次のヒントを表示する: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| リテラルのシークレット、または旧形式のシークレット構文 | 保護された IR が、シークレットの扱いの境界を拒否した。 | [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)に従う。プロンプトにリテラルや旧形式のグラント行を書かない。 |
+| ブラウザ、プロバイダー、ストレージ、またはクラッシュ | 実行環境が失敗した。 | 出力を残し、環境を直してから、最小のコマンドを再実行する。 |
+| 中断された処理 | バッチの処理が終わっていない。 | 中断の原因を解消してから再実行する。 |
+| アサーションの失敗 | 再生したケースに、失敗の証拠がある。 | レポートを読み、アプリかプロンプトを直してから再実行する。 |
+| 選択が空 | 指定した選択に一致するプロンプトがない。 | 選択を直す。意図して空にするときだけ `--allow-empty` を使う。 |
+
+## 確認 \{#verification}
+
+影響を受けた最小のコマンドを再実行する。より優先度の高い条件が残っていなければ、終了コード `0` で終わる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="エラーコード" href="/ambercast/ja/reference/error-codes/" description="エラーの語彙を確かめる。" />
+
+<LinkCard title="終了コード" href="/ambercast/ja/reference/exit-codes/" description="終了コードの一覧と優先順位を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の状態を確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の結果を確かめる。" />
+
+<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="run のフラグと結果を確かめる。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/ja/reference/cli/heal/" description="heal の動作と結果を確かめる。" />
+
+<LinkCard title="古くなった成果物の復旧" href="/ambercast/ja/how-to/recover-stale-artifacts/" description="check の状態ごとの対処を確かめる。" />
+
+<LinkCard title="シークレットの管理" href="/ambercast/ja/how-to/manage-secrets/" description="シークレット名の承認と値の渡し方を確かめる。" />
+
+<LinkCard title="ターゲットの設定" href="/ambercast/ja/how-to/configure-targets/" description="ターゲットと関連する設定を確かめる。" />

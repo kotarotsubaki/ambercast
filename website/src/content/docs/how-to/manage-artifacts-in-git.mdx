@@ -1,0 +1,72 @@
+---
+title: Manage artifacts in git
+description: Commit the prompt, plan, and grounding together and ignore the run evidence.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+Stage the prompt, plan, and grounding together, and keep the runs directory out of git.
+
+## Prerequisites \{#prerequisites}
+
+The default grounding policy is `repositoryPolicy: "committed"`. The default runs directory is `tests/ambercast/.runs`.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Stage the three files \{#stage-companions}
+
+   With the `committed` policy, stage `<name>.test.md`, `<name>.ambercast.plan.json`, and `<name>.ambercast.grounding.json`. The resolver defines the two adjacent companion suffixes. See [File layout](/ambercast/reference/file-layout/#companions).
+
+2. ## Ignore the run evidence \{#ignore-runs}
+
+   Add the configured `runsDir` to `.gitignore`. For the default, add this line.
+
+   ```text
+   tests/ambercast/.runs/
+   ```
+
+   You can change `runsDir`. Each run writes one `report.json` in an invocation-specific directory below it.
+
+3. ## Keep grounding local \{#keep-grounding-local}
+
+   If grounding is a local cache, set `repositoryPolicy` to `uncommitted`. Do this step and the next one only in that case. The `$schema` value is the published configuration schema URL.
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"repositoryPolicy":"uncommitted"}}
+   ```
+
+4. ## Ignore the local grounding \{#ignore-local-grounding}
+
+   With `uncommitted`, also add this line to `.gitignore`. If your `testDir` differs from the default, replace `tests/ambercast` with it.
+
+   ```text
+   tests/ambercast/**/*.ambercast.grounding.json
+   ```
+
+   The resolver finds grounding companions only inside `testDir`, and only with the fixed `.ambercast.grounding.json` suffix. Plans stay tracked while the local grounding files are ignored.
+
+</Steps>
+
+## Verification \{#verification}
+
+```bash
+git status --short
+```
+
+- With `committed`, expect the plan and grounding companions.
+- With `uncommitted`, expect the plan but no `testDir`-local `*.ambercast.grounding.json`.
+- When the configured `runsDir` is ignored, expect no run evidence.
+
+## Related \{#related}
+
+<LinkCard title="File layout" href="/ambercast/reference/file-layout/" description="See which files sit next to a prompt and where run evidence goes." />
+
+<LinkCard title="Configuration" href="/ambercast/reference/configuration/" description="See configuration keys such as repositoryPolicy and runsDir." />
+
+<LinkCard title="Plan document" href="/ambercast/spec/plan-document/" description="See the format of the plan file." />
+
+<LinkCard title="Grounding document" href="/ambercast/spec/grounding-document/" description="See the format of the grounding file." />
+
+<LinkCard title="Control grounding write-back" href="/ambercast/how-to/control-grounding-writeback/" description="Decide whether changed grounding is written back." />

@@ -973,224 +973,430 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 # Gitでの成果物の管理
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/
 
-ambercast で生成される成果物を、設定されたリポジトリポリシーやディレクトリ構成に合わせて Git でバージョン管理する手順を説明します。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+プロンプトと計画（plan）とグラウンディングをまとめてステージし、実行の記録は Git から外す。
 
-作業を始める前に、以下の既定値を確認してください。
+## 前提条件 \{#prerequisites}
 
-- 既定のグラウンディングポリシーでは、`repositoryPolicy` は `"committed"` です。
-- 実行成果物を出力する既定の runs ディレクトリは `tests/ambercast/.runs` です。
+既定のグラウンディングのポリシーは `repositoryPolicy: "committed"` である。既定の runs ディレクトリは `tests/ambercast/.runs` である。
 
-## 手順 {#steps}
+## 手順 \{#steps}
 
-1. ポリシーが `committed` の場合は、`<name>.test.md`、`<name>.ambercast.plan.json`、および `<name>.ambercast.grounding.json` をステージングします。リゾルバーによって、テストファイルに隣接する2つのコンパニオン接尾辞が定義されています。
+<Steps>
 
-2. グラウンディングをローカルキャッシュとして扱う場合は、設定ファイルで `repositoryPolicy` を `uncommitted` に設定します。公開されている設定スキーマ URL を指定し、以下のように記述します。`uncommitted` は受け入れられるポリシー値です。
+1. ## 3 つのファイルをステージする \{#stage-companions}
 
+   ポリシーが `committed` なら、`<name>.test.md`、`<name>.ambercast.plan.json`、`<name>.ambercast.grounding.json` をステージする。後ろの 2 つは、リゾルバーがプロンプトの隣に置く 2 つのコンパニオンの接尾辞で決まる。詳細は[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)にある。
 
+2. ## 実行の記録を無視する \{#ignore-runs}
 
-3. 設定された `runsDir` を `.gitignore` に追加します。既定の設定を使用している場合は `tests/ambercast/.runs/` を追加してください。`runsDir` は設定可能であり、実行時にはその配下に生成される呼び出しごとのディレクトリ内に1つの `report.json` が書き込まれます。
+   設定した `runsDir` を `.gitignore` に足す。既定のままなら、次の 1 行を足す。
 
-4. `repositoryPolicy` が `uncommitted` の場合は、`.gitignore` に `tests/ambercast/**/*.ambercast.grounding.json` も追加します。設定された `testDir` が既定値と異なる場合は、`tests/ambercast` の部分を置き換えてください。リゾルバーは固定の `.ambercast.grounding.json` 接尾辞を持つグラウンディングコンパニオンを `testDir` 内でのみ解決します。これにより、プランの追跡を維持したまま、ローカルのグラウンディングコンパニオンのみを無視できます。
+   ```text
+   tests/ambercast/.runs/
+   ```
 
-## 確認 {#verification}
+   `runsDir` は設定で変えられる。run は、その下の呼び出しごとのディレクトリに `report.json` を 1 つ書く。
 
-`git status --short` を実行して、状態を確認します。
+3. ## グラウンディングを手元に置く \{#keep-grounding-local}
 
-- `committed` ポリシーの場合: プランとグラウンディングコンパニオンが表示されることを確認します。
-- `uncommitted` ポリシーの場合: プランは表示され、`testDir` 配下のローカルな `*.ambercast.grounding.json` は表示されないことを確認します。
-- 設定された `runsDir` を無視している場合: その実行証跡が表示されないことを確認します。
+   グラウンディングをローカルのキャッシュとして使うなら、`repositoryPolicy` を `uncommitted` にする。この手順と次の手順は、その場合だけ行う。`$schema` は公開されている設定スキーマの URL である。
 
-## 関連情報 {#related}
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"repositoryPolicy":"uncommitted"}}
+   ```
 
-関連リンク: [ファイルレイアウト](/ambercast/ja/reference/file-layout/), [設定](/ambercast/ja/reference/configuration/), [計画ドキュメント](/ambercast/ja/spec/plan-document/), [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/), [グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/).
+4. ## 手元のグラウンディングを無視する \{#ignore-local-grounding}
+
+   `uncommitted` にしたら、次の 1 行も `.gitignore` に足す。`testDir` を変えているなら、`tests/ambercast` をその値に置き換える。
+
+   ```text
+   tests/ambercast/**/*.ambercast.grounding.json
+   ```
+
+   リゾルバーがグラウンディングのコンパニオンとして扱うのは、`testDir` の中にある、固定の接尾辞 `.ambercast.grounding.json` のファイルだけである。そのため、計画は追跡されたまま、手元のグラウンディングだけが無視される。
+
+</Steps>
+
+## 確認 \{#verification}
+
+```bash
+git status --short
+```
+
+- `committed` では、計画とグラウンディングのコンパニオンが表示される。
+- `uncommitted` では、計画は表示されるが、`testDir` 内の `*.ambercast.grounding.json` は表示されない。
+- `runsDir` を無視していれば、実行の記録は表示されない。
+
+## 関連情報 \{#related}
+
+<LinkCard title="ファイルレイアウト" href="/ambercast/ja/reference/file-layout/" description="プロンプトの隣に置かれるファイルと、実行の記録の場所を確かめる。" />
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="repositoryPolicy や runsDir などの設定キーを確かめる。" />
+
+<LinkCard title="計画ドキュメント" href="/ambercast/ja/spec/plan-document/" description="計画ファイルの形式を確かめる。" />
+
+<LinkCard title="グラウンディングドキュメント" href="/ambercast/ja/spec/grounding-document/" description="グラウンディングファイルの形式を確かめる。" />
+
+<LinkCard title="グラウンディングのライトバック制御" href="/ambercast/ja/how-to/control-grounding-writeback/" description="変更されたグラウンディングを書き戻すかどうかを決める。" />
 
 ---
 
 # 他のCIプラットフォームでの実行
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/run-on-other-ci/
 
-GitLab CI や汎用ランナー環境で ambercast を実行するためのポータブルな CI レシピです。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+コードをチェックアウト済みのジョブで、`check` の後に `run` を実行し、修復と書き戻しはしない。
 
-- `run` は `--resolve`、`--update-cache`、`--allow-empty`、`--list` を受け付けますが、`--config` オプションは持ちません。グラウンディングミス時の既定動作はすでにフェイルクローズであるため、CI で AI 解決を抑制する追加フラグは不要です。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+GitLab CI か汎用ランナーで、ジョブがコードをチェックアウトしている。`run` のフラグには `--resolve`、`--update-cache`、`--allow-empty`、`--list` などがあり、`--config` はない。
 
-1. GitLab CI または汎用ランナーにおいて、プロジェクトの Node 依存関係と Chromium を `npx playwright-core install chromium` でインストールし、そのプラットフォームのキャッシュ機構を使用してブラウザのインストールディレクトリをキャッシュします。リポジトリは Chromium を必要としており、このインストールコマンドが文書化されています。完全にグラウンディングされたリプレイは、プロバイダーの解決なしで進行する場合があります。
-2. `npx ambercast check` を実行し、続いて `npx ambercast run` を正確に実行します。呼び出し時の `report.json` をアップロードする前に、事前のレビュー、アクセス制限、および短い保持期間を適用し、これらの管理策が利用可能な場合にのみアップロードしてください。シェルの順次実行により、`check` が正常終了した場合にのみ `run` に到達します。`run` は呼び出しディレクトリに1つのレポートを書き出し、レポートのステップ結果には `actual` のテキストやアクセシビリティのスナップショットが保持されることがあります。
-3. 呼び出し時のエビデンスやスクリーンショットは、同様の事前レビュー、アクセス制限、および短い保持期間を適用した上で、明示的なオプトインによってのみアップロードします。失敗したライブブラウザのステップは呼び出しエビデンスディレクトリ配下に PNG スクリーンショットを保存することがあり、セーフティスキャンでは canvas、画像、CSS でレンダリングされたピクセル、あるいはスキャンからスクリーンショット取得までのタイミングの隙間を検出できません。
-4. `heal` を呼び出さず、`--update-cache` も渡さないでください。CI の既定値では `heal: false` および `updateGroundingCache: false` となっています。実際の修復は `ci.heal: true` による明示的なオプトインであり、CI の既定のアクションではありません。
+グラウンディングを見つけられないときの既定の動作は、すでに失敗扱いである。AI による解決を止めるフラグは、CI でも要らない。
 
-## 確認 {#verification}
+## 手順 \{#steps}
 
-- プロセスの終了コードに基づいてジョブの成否を判定し、その解釈には [終了コード](/ambercast/ja/reference/exit-codes/) を使用します。信頼できないアーティファクトと環境の障害は、プロセス上異なるカテゴリです。
+<Steps>
 
-## 関連情報 {#related}
+1. ## Chromium を入れる \{#install-browser}
 
-関連リンク: [GitHub Actions で ambercast を実行する](/ambercast/ja/tutorials/github-actions/), [ambercast check](/ambercast/ja/reference/cli/check/), [ambercast run](/ambercast/ja/reference/cli/run/), [終了コード](/ambercast/ja/reference/exit-codes/), [設定](/ambercast/ja/reference/configuration/)
+   プロジェクトの Node 依存関係を入れてから、Chromium を入れる。ブラウザのインストール先は、プラットフォームのキャッシュ機構でキャッシュする。
+
+   ```bash
+   npx playwright-core install chromium
+   ```
+
+   グラウンディングが済んだ計画（plan）の再生は、AI プロバイダーを選ばずに進められる。
+
+2. ## check の後に run を実行する \{#check-then-run}
+
+   ```bash
+   npx ambercast check && npx ambercast run
+   ```
+
+   `&&` があるので、`check` が終了コード `0` で終わったときだけ `run` に進む。`run` は、呼び出しごとのディレクトリにレポートを 1 つ書く。
+
+3. ## 証跡のアップロードを絞る \{#limit-uploads}
+
+   ステップの結果は、`actual` のテキストとアクセシビリティスナップショットを保持する場合がある。`report.json` をアップロードする前に、事前のレビュー、アクセス制限、短い保持期間を適用する。これらを適用できるときだけアップロードする。
+
+   証跡やスクリーンショットも、同じ管理のもとで、明示的に選んだときだけアップロードする。ライブブラウザのステップの失敗時には、証跡ディレクトリに PNG のスクリーンショットを保存することがある。
+
+   安全性のスキャンは、canvas、画像、CSS で描かれた画素を検出できない。スキャンからスクリーンショットまでの間の変化も検出できない。
+
+4. ## CI では修復も書き戻しもしない \{#keep-heal-off}
+
+   `heal` を呼ばず、`--update-cache` も渡さない。CI の既定は `ci.heal: false` と `ci.updateGroundingCache: false` である。CI で実際に修復するには、`ci.heal: true` を明示的に選ぶ。
+
+</Steps>
+
+## 確認 \{#verification}
+
+ジョブの成否は、プロセスの終了コードで決める。終了コード `4`（信頼できない成果物）と `3`（環境の失敗）は別の分類である。値の一覧は[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
+
+## 関連情報 \{#related}
+
+<LinkCard title="GitHub Actions で ambercast を実行する" href="/ambercast/ja/tutorials/github-actions/" description="GitHub Actions で同じ流れを実行する。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の動作と終了コードを確かめる。" />
+
+<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="run の全フラグを確かめる。" />
+
+<LinkCard title="終了コード" href="/ambercast/ja/reference/exit-codes/" description="終了コードの一覧と優先順位を確かめる。" />
+
+<LinkCard title="設定" href="/ambercast/ja/reference/configuration/" description="ci.heal や ci.updateGroundingCache などの設定キーを確かめる。" />
 
 ---
 
-# stale（古くなった状態）のアーティファクトの復旧
+# 古くなった成果物の復旧
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/recover-stale-artifacts/
 
-`ambercast check` が報告する各ステータスに応じて、アーティファクトを復旧するための正確なアクションと期待される結果を説明します。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+`check` の状態を読み、状態に合わせて対処し、もう一度 `check` で確かめる。
 
-`ambercast check` は読み取り専用です。その依存関係にはプロバイダー、ブラウザ、イベントシンク、および変更可能なストレージは含まれません。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#stale}
+`check` は読み取り専用である。プロバイダー、ブラウザ、イベントの出力先、書き込み可能なストレージを使わない。
 
-| check ステータス | 正確な次のアクション | 期待される観察可能な結果 |
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## check の状態を読む \{#read-status}
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+   出力に現れた状態を、次の節の表で探す。
+
+2. ## 状態に合わせて対処する \{#apply-action}
+
+   表の対処を、行ごとに実行する。コマンドの `<name>` は、`.test.md` を除いたプロンプトのファイル名に置き換える。たとえば `login.test.md` なら `login` である。
+
+3. ## 変更を確かめる \{#review-changes}
+
+   対処で変わった計画（plan）やグラウンディングは、コミットする前に差分を読む。読み方は[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+</Steps>
+
+## 状態ごとの対処 \{#stale}
+
+| 状態 | 対処 | 期待する結果 |
 | --- | --- | --- |
-| `fresh` | `npx ambercast check` を実行し、アーティファクトの変更は行いません。 | 終了コード `0` で終了します。 |
-| `fresh-without-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行します。 | `generate` はディスク上の隣接する Grounding ファイルを修復し、その後 `planFile` のみを伴う `skipped-fresh` を報告します。Grounding のパスは報告しません。 |
-| `stale` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行し、差分を確認します。 | 新規の生成は終了コード `0` で終了することがあります。依然として信頼されていない（untrusted）check は終了コード `4` で終了します。 |
-| `missing-plan` | バージョン管理から Plan を復元するか、`npx ambercast generate tests/ambercast/<name>.test.md` を実行します。 | 生成結果に `planFile` が含まれます。 |
-| `missing-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行します。 | Plan が fresh な場合、`generate` はディスク上に隣接する Grounding ファイルを作成し、`planFile` のみを伴う `skipped-fresh` を返します。`groundingFile` は Generate の結果フィールドではありません。 |
-| `stale-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行し、新しい Grounding を確認します。 | 有効な場合、check は整合性検証の失敗を出力しなくなります。 |
-| `invalid-grounding` | プロンプトから再生成し、新しい Grounding を確認します。 | 有効な場合、check は整合性検証の失敗を出力しなくなります。 |
-| `orphaned-plan` | プロンプトを復元するか、プロジェクトの通常のレビュープロセスを通じて孤立したアーティファクトを削除します。 | 次回の check ではその孤立の指摘が含まれなくなります。 |
-| `orphaned-grounding` | プロンプトを復元するか、プロジェクトの通常のレビュープロセスを通じて孤立したアーティファクトを削除します。 | 次回の check ではその孤立の指摘が含まれなくなります。 |
-| `invalid-artifact-name` | 通常のレビューを通じて無効なコンパニオンの名前を変更または削除します。 | 次回の check では、その逆変換が不可能なアーティファクトが報告されなくなります。 |
-| `listed` | 鮮度を検査するために、`--list` なしで再実行します。 | `--list` は Plan または Grounding の読み取りを実行しませんでした。 |
-| `skipped` | 中断を解消した後に再実行します。 | 実行スコープの `INTERRUPTED` エラーは終了コード `3` に寄与します。 |
+| `fresh` | `npx ambercast check` を実行する。成果物は変えない。 | 終了コード `0` で終わる。 |
+| `fresh-without-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | `generate` が隣のグラウンディングを書き直し、`planFile` だけを持つ `skipped-fresh` を報告する。`groundingFile` は generate の結果のフィールドではない。 |
+| `stale` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行し、差分を読む。 | 新しく生成すれば、終了コード `0` で終わることがある。信頼できないままの check は `4` で終わる。 |
+| `missing-plan` | 計画をバージョン管理から戻すか、`npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | 生成の結果に `planFile` がある。 |
+| `missing-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | 計画が fresh なら、`generate` が隣のグラウンディングを作り、`planFile` だけを持つ `skipped-fresh` を返す。 |
+| `stale-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行し、新しいグラウンディングを読む。 | 有効なら、check は整合性の失敗を出さなくなる。 |
+| `invalid-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。それでも `check` が `invalid-grounding` を報告するなら、`npx ambercast generate --force tests/ambercast/<name>.test.md` を実行し、新しいグラウンディングを読む。後者は計画を再生成し、AI プロバイダーを呼ぶ。 | 有効なら、check は整合性の失敗を出さなくなる。 |
+| `orphaned-plan` | プロンプトを戻すか、孤立した計画をプロジェクトの通常のレビューで取り除く。 | 次の check に、その孤立の指摘が出ない。 |
+| `orphaned-grounding` | プロンプトを戻すか、孤立したグラウンディングをプロジェクトの通常のレビューで取り除く。 | 次の check に、その孤立の指摘が出ない。 |
+| `invalid-artifact-name` | 名前が無効なコンパニオンを、通常のレビューで改名するか取り除く。 | 次の check が、プロンプトの名前に戻せない成果物を報告しない。 |
+| `listed` | `--list` を付けずに再実行する。 | `--list` は計画もグラウンディングも読まない。 |
+| `skipped` | 中断の原因を解消してから再実行する。 | run 単位の `INTERRUPTED` エラーは、終了コード `3` になる。 |
 
-## 確認 {#verification}
+計画が fresh で、グラウンディングが無い、読めない、または `planDigest` が違うとき、`generate` が書くのは束縛し直したグラウンディングではない。計画に結び付いた空のグラウンディングである。
 
-`npx ambercast check --json` を実行します。より高い優先度を持つ候補が残っていない場合にのみ、終了コード `0` が期待されます。
+要素は、手元で `npx ambercast run --resolve --update-cache tests/ambercast/<name>.test.md` を実行して束縛し直す。手順は[プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change)の手順 3 と同じである。
 
-## 関連情報 {#related}
+## 確認 \{#verification}
 
-- [ambercast check](/ambercast/ja/reference/cli/check/)
-- [ambercast generate](/ambercast/ja/reference/cli/generate/)
-- [エラーコード](/ambercast/ja/reference/error-codes/)
-- [終了コード](/ambercast/ja/reference/exit-codes/)
-- [ambercast heal](/ambercast/ja/reference/cli/heal/)
-- [生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)
+`npx ambercast check --json` を再実行する。より優先度の高い候補が残っていなければ、終了コード `0` で終わる。優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)にある。
+
+## 関連情報 \{#related}
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の状態と読み取り専用の契約を確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の結果と終了コードを確かめる。" />
+
+<LinkCard title="エラーコード" href="/ambercast/ja/reference/error-codes/" description="エラーコードの一覧を確かめる。" />
+
+<LinkCard title="終了コード" href="/ambercast/ja/reference/exit-codes/" description="終了コードの一覧と優先順位を確かめる。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/ja/reference/cli/heal/" description="ドリフトした計画を修復する heal を確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="変わった計画とグラウンディングを、コミットの前に読む。" />
 
 ---
 
 # バージョン間のアップグレード
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/upgrade/
 
-ambercast のバージョン間を安全にアップグレードするための手順である。リリースの更新によって producer-fingerprint が変更され、計画が stale（古くなった状態）になった場合の再生成と検証を扱う。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+更新の前に BREAKING の項目を読み、更新の後は `check` の結果に従って計画（plan）を再生成する。
 
-CHANGELOG 0.3.1 に記載されている通り、producer-fingerprint の変更によって 0.1.0 の計画は stale（古くなった状態）になり、再生成が必要になる。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+プロデューサーのフィンガープリントを変える BREAKING の項目を持つリリースは、既存の計画を `stale` にし、再生成を求める。例は 0.2.0 の項目で、`inputsDigest` への影響が書かれている。詳細は[変更履歴](/ambercast/ja/reference/changelog/#release-020)にある。
 
-1. 依存関係を変更する前に、アップグレード対象リリースの BREAKING セクションを確認する。0.3.1 の項目では `inputsDigest` への影響が明記されている。
-2. プロジェクトのパッケージマネージャーを使用して ambercast をアップグレードし、`npx ambercast check --json` を実行する。check はレポートを返し、信頼できない検出結果に対して終了コード `4` を選択する。
-3. check が終了コード `4` で終了した場合は、`npx ambercast generate` を実行して計画とグラウンディングの差分を確認する。生成処理はジェネレーターとレポート結果を構成する。
-4. 依存関係と、受け入れたコンパニオンの変更をまとめてコミットする。その後に check を再実行して、最終的な状態を観測可能にする。
+## 手順 \{#steps}
 
-## シークレットグラントの移行 {#migrate-secret-grants}
+<Steps>
 
-Plan v2 用に作成されたプロンプトには、旧シークレットグラント行を含められる。プロンプトからグラント行をすべて削除する。旧構文は拒否され、その場で移行できない。
+1. ## 破壊的変更を読む \{#read-breaking}
+
+   依存関係を変える前に、更新先のリリースの BREAKING の項目を読む。
+
+2. ## 更新して check を実行する \{#upgrade-and-check}
+
+   プロジェクトのパッケージマネージャーで ambercast を更新してから、`check` を実行する。`check` はレポートを返し、信頼できない検出があると終了コード `4` を選ぶ。
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+3. ## 古くなった計画を再生成する \{#regenerate-stale}
+
+   `check` が終了コード `4` で終わったら、`generate` を実行して、計画とグラウンディングの差分を読む。読み方は[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)にある。
+
+   ```bash
+   npx ambercast generate
+   ```
+
+4. ## まとめてコミットする \{#commit-together}
+
+   依存関係と、受け入れたコンパニオンの変更をまとめてコミットする。その後で `check` を再実行して、最終的な状態を確かめる。
+
+</Steps>
+
+## シークレットグラントの移行 \{#migrate-secret-grants}
+
+Plan v2 用に作ったプロンプトには、旧形式のシークレットのグラント行が残っていることがある。旧構文は拒否されるので、その場で移行せず、グラント行をすべて削除する。
 
 ```markdown
 @ambercast-secret {{secrets.password}}
 ```
 
-続いて `npx ambercast generate --force <file>` を実行し、新しい同意プロンプトに応答する。CI または別の非対話環境では、先にレビュー済みの名前を `secrets.allow` に追加する。再生成された Plan では v3 の同意／許可リストモデルが使用される。
+次に `npx ambercast generate --force <file>` を実行し、新しい同意の確認に答える。CI などの非対話環境では、先にレビュー済みの名前を `secrets.allow` に足す。再生成した計画は、v3 の同意と許可リストのモデルを使う。
 
-## プロデューサー変更後の再グラウンディング {#reground-after-producer-change}
+## プロデューサー変更後の再グラウンディング \{#reground-after-producer-change}
 
-ジェネレーターの指示や応答契約が変わるとプロデューサーのフィンガープリントも変わり、以前の計画は stale になる。計画を再生成するとグラウンディングは空に置き換わるため、以下の手順ですべての要素ステップを束縛し直す。Plan 5 と Grounding 4 は変わらない。
+ジェネレーターの指示や応答契約が変わるとプロデューサーのフィンガープリントも変わり、以前の計画は `stale` になる。計画を再生成するとグラウンディングは空に置き換わるため、以下の手順ですべての要素ステップを束縛し直す。Plan 5 と Grounding 4 は変わらない。
 
 report 3.11 は `generator-assumption` の警告と、`healed` 行の任意の `warnings` を追加する。閉じた union を検証する利用者は report のスキーマを更新する。
 
 CLI の `--strict` と MCP の `strict` 引数は削除された。呼び出しから両者を取り除く。`ambercast generate --strict` は未知のオプションとして終了コード 2 になり、MCP は `strict` を入力検証で拒否する。
 
 1. `npx ambercast check --json` を実行し、対象の計画が `stale` と報告されることを確かめる。
-2. stale の計画ごとに `npx ambercast generate <file>` を実行する。差分を見て、入力の効果を示す assert の `confirms` にその入力が入ったことを確かめる。
+2. `stale` の計画ごとに `npx ambercast generate <file>` を実行する。差分を見て、入力の効果を示す assert の `confirms` にその入力が入ったことを確かめる。
    - generate がある入力について `action-unconfirmed` の警告を出したら、手順 3 へ進まない。
    - 通常の run はその入力で `GROUNDING_UNRESOLVED` になる。
    - サインイン後のユーザー名のように、その入力の効果を示す assert を足し、手順 2 をやり直す。
 3. 手元で `npx ambercast run --resolve --update-cache <file>` を実行する。再生成の直後はグラウンディングが空なので、逐語の引用がない要素ステップごとに ambercast が AI を 1 回呼ぶ。CI は既定でグラウンディングを保存しない。
-4. `npx ambercast check` で計画が `fresh` であることを確かめる。続けて `npx ambercast run <file>` を実行し、pass することと、レポートの `aiCalls` が 0 であることを確かめる。計画は常にコミットする。グラウンディングは `grounding.repositoryPolicy` が `committed` のときだけ計画と一緒にコミットし、`uncommitted` なら手元に置く。
+4. `npx ambercast check` で計画が `fresh` であることを確かめる。続けて `npx ambercast run <file>` を実行し、pass することと、レポートの `aiCalls` が 0 であることを確かめる。
+   - 計画は常にコミットする。
+   - グラウンディングは、`grounding.repositoryPolicy` が `committed` のときだけ計画と一緒にコミットする。
+   - `uncommitted` なら、グラウンディングは手元に置く。
 
-## 確認 {#verification}
+## 確認 \{#verification}
 
-再生成を受け入れた後、`npx ambercast check` が終了コード `0` で終了することを確認する。
+再生成を受け入れた後で、`npx ambercast check` が終了コード `0` で終わる。
 
-## 関連情報 {#related}
+## 関連情報 \{#related}
 
-リンク: [変更履歴](/ambercast/ja/reference/changelog/), [鮮度とダイジェスト](/ambercast/ja/spec/freshness/), [ambercast check](/ambercast/ja/reference/cli/check/), [ambercast generate](/ambercast/ja/reference/cli/generate/), [生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)
+<LinkCard title="変更履歴" href="/ambercast/ja/reference/changelog/" description="リリースごとの BREAKING の項目を読む。" />
+
+<LinkCard title="鮮度とダイジェスト" href="/ambercast/ja/spec/freshness/" description="計画が stale になる条件を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の状態と終了コードを確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の結果と終了コードを確かめる。" />
+
+<LinkCard title="生成された差分のレビュー" href="/ambercast/ja/how-to/review-generated-diffs/" description="再生成された計画とグラウンディングを、コミットの前に読む。" />
 
 ---
 
 # 一般的な障害のトラブルシューティング
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/troubleshoot/
 
-ambercast で発生した症状から原因を特定し、次に取るべき対応アクションを見つけるための手順です。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+失敗したコマンドの出力を残し、症状の行に従って対処し、影響を受けた最小のコマンドを再実行する。
 
-無効なフラグ、不正な形式のコマンド引数、またはオプション値の欠落がある場合、stderr に使用方法が出力され、レポートエンベロープなしで終了コード `2` で終了します。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+コマンドの呼び出し自体が正しくなければならない。無効なフラグ、形式の誤った引数、オプションの値の欠落があると、使い方が stderr に出て、レポートのエンベロープなしで終了コード `2` で終わる。
 
-| 症状 | 原因 | 次の対応 |
+## 手順 \{#steps}
+
+<Steps>
+
+1. ## 症状に合う行を探す \{#match-symptom}
+
+   失敗したコマンドの出力を残す。レポートが要るときは、`--json` を付けて再実行する。その症状に合う行を、次のセクションの表で探す。
+
+2. ## 対処する \{#apply-action}
+
+   その行に従って対処する。エラーの語彙は[エラーコード](/ambercast/ja/reference/error-codes/)で確かめる。プロセスの状態の値と優先順位は[終了コード](/ambercast/ja/reference/exit-codes/#priority)にある。
+
+3. ## 最小のコマンドを再実行する \{#rerun-smallest}
+
+   影響を受けた最小のコマンドを再実行する。
+
+</Steps>
+
+## 症状と対処 \{#symptom-table}
+
+| 症状 | 原因 | 次の対処 |
 | --- | --- | --- |
-| 設定の不備、未解決のシークレット、またはターゲットの不正 | 設定または呼び出し境界の修正が必要です。 | [エラーコード](/ambercast/ja/reference/error-codes/) を確認し、値を推測せずに指定された設定を修正します。 |
-| コンパニオンの欠落、stale（古くなった状態）、または信頼できないコンパニオン | コミットされた成果物を現在のエビデンスとして使用できません。 | [stale（古くなった状態）のアーティファクトの復旧](/ambercast/ja/how-to/recover-stale-artifacts/) の該当する行を参照して対応します。 |
-| `SECRET_CONSENT_REQUIRED` | 生成で許可リストにないシークレット名が検出され、同意が拒否されたか利用できませんでした。 | 名前をレビューして `secrets.allow` に追加するか、対話的に generate を再実行します。プロンプトにシークレット値を追加しないでください。 |
-| heal が `secret-set-changed` を報告する | Stage 3 の候補がシークレット名の集合全体を変更しました。heal はこれを黙って再帰属・同意できません。 | `ambercast generate --force <file>` を実行して同意を完了します。出荷済み CLI が逐語的に表示する日本語のヒント: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
-| リテラルシークレットまたは旧シークレット構文 | Protected IR がシークレット処理の境界を拒否しました。 | [シークレットの管理](/ambercast/ja/how-to/manage-secrets/) を参照してください。プロンプトにリテラルまたは旧グラント行を記述しないでください。 |
-| ブラウザ、プロバイダー、ストレージ、またはクラッシュ | 実行環境に障害が発生しました。 | JSON 出力を保存し、環境を修復した上で、最小限のコマンドを再実行します。 |
-| 中断された処理 | バッチ処理が完了していませんでした。 | 中断の原因が解決した後に再実行します。 |
-| アサーションの失敗 | 再生されたケースに失敗エビデンスが存在します。 | レポートを確認し、アプリケーションまたはプロンプトを修正してから再実行します。 |
-| 選択対象が空 | 指定された選択条件に一致するプロンプトがありませんでした。 | 選択条件を修正するか、意図して空にする場合にのみ `--allow-empty` を使用します。 |
+| 設定の不備、未解決のシークレット、ターゲットの不正 | 設定か呼び出しの境界を直す必要がある。 | [エラーコード](/ambercast/ja/reference/error-codes/)を読み、示された設定を、値を推測せずに直す。 |
+| コンパニオンの欠落、`stale`、または信頼できない状態 | コミット済みの成果物を、現在の証拠として使えない。 | [古くなった成果物の復旧](/ambercast/ja/how-to/recover-stale-artifacts/)の該当する行に従う。 |
+| `SECRET_CONSENT_REQUIRED` | 生成が許可リストにないシークレット名を見つけ、同意が断られたか、求められなかった。 | 名前を確かめて `secrets.allow` に足すか、対話的に generate を再実行する。プロンプトにシークレットの値を書かない。 |
+| heal が `secret-set-changed` を報告する | Stage 3 の候補がシークレット名の集合全体を変えた。heal はこれを黙って付け替えることも、同意することもできない。 | `ambercast generate --force <file>` を実行して同意を取り直す。CLI は、`<file>` を実際のファイルのパスに置き換えて、次のヒントを表示する: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| リテラルのシークレット、または旧形式のシークレット構文 | 保護された IR が、シークレットの扱いの境界を拒否した。 | [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)に従う。プロンプトにリテラルや旧形式のグラント行を書かない。 |
+| ブラウザ、プロバイダー、ストレージ、またはクラッシュ | 実行環境が失敗した。 | 出力を残し、環境を直してから、最小のコマンドを再実行する。 |
+| 中断された処理 | バッチの処理が終わっていない。 | 中断の原因を解消してから再実行する。 |
+| アサーションの失敗 | 再生したケースに、失敗の証拠がある。 | レポートを読み、アプリかプロンプトを直してから再実行する。 |
+| 選択が空 | 指定した選択に一致するプロンプトがない。 | 選択を直す。意図して空にするときだけ `--allow-empty` を使う。 |
 
-正確なエラー語彙については [エラーコード](/ambercast/ja/reference/error-codes/) を、プロセスステータスの値と優先順位については [終了コード](/ambercast/ja/reference/exit-codes/#priority) を参照してください。
+## 確認 \{#verification}
 
-## 確認 {#verification}
+影響を受けた最小のコマンドを再実行する。より優先度の高い条件が残っていなければ、終了コード `0` で終わる。
 
-影響を受けた最小限のコマンドを再実行し、より優先度の高い状態が残っていないことを確認した上で、終了コード `0` となることを確認します。
+## 関連情報 \{#related}
 
-## 関連情報 {#related}
+<LinkCard title="エラーコード" href="/ambercast/ja/reference/error-codes/" description="エラーの語彙を確かめる。" />
 
-リンク: [エラーコード](/ambercast/ja/reference/error-codes/)、[終了コード](/ambercast/ja/reference/exit-codes/)、[ambercast check](/ambercast/ja/reference/cli/check/)、[ambercast generate](/ambercast/ja/reference/cli/generate/)、[ambercast run](/ambercast/ja/reference/cli/run/)、[ambercast heal](/ambercast/ja/reference/cli/heal/)、[stale（古くなった状態）のアーティファクトの復旧](/ambercast/ja/how-to/recover-stale-artifacts/)、[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)、[ターゲットの設定](/ambercast/ja/how-to/configure-targets/)
+<LinkCard title="終了コード" href="/ambercast/ja/reference/exit-codes/" description="終了コードの一覧と優先順位を確かめる。" />
+
+<LinkCard title="ambercast check" href="/ambercast/ja/reference/cli/check/" description="check の状態を確かめる。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/ja/reference/cli/generate/" description="generate の結果を確かめる。" />
+
+<LinkCard title="ambercast run" href="/ambercast/ja/reference/cli/run/" description="run のフラグと結果を確かめる。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/ja/reference/cli/heal/" description="heal の動作と結果を確かめる。" />
+
+<LinkCard title="古くなった成果物の復旧" href="/ambercast/ja/how-to/recover-stale-artifacts/" description="check の状態ごとの対処を確かめる。" />
+
+<LinkCard title="シークレットの管理" href="/ambercast/ja/how-to/manage-secrets/" description="シークレット名の承認と値の渡し方を確かめる。" />
+
+<LinkCard title="ターゲットの設定" href="/ambercast/ja/how-to/configure-targets/" description="ターゲットと関連する設定を確かめる。" />
 
 ---
 
 # 貢献ガイド
 Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/contribute/
 
-リポジトリへの貢献手順を説明します。本パッケージには `npm test`、`npm run typecheck`、`npm run lint` のスクリプトが宣言されています。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+外部のコントリビューターは、Issue、フォーク、3 つの検査、プルリクエストの順に進める。
 
-- パッケージには `npm test`、`npm run typecheck`、および `npm run lint` スクリプトが宣言されています。
+## 前提条件 \{#prerequisites}
 
-## 手順 {#steps}
+パッケージには、`npm test`、`npm run typecheck`、`npm run lint` のスクリプトが宣言されている。
 
-### 外部コントリビューターのパス
+## 手順 \{#steps}
 
-1. 問題や提案を説明する Issue を作成し、その後リポジトリをフォークしてブランチを作成します。これが公開されている外部コントリビューションの流れです。
-2. `npm test`、`npm run typecheck`、および `npm run lint` を実行し、Conventional Commits 形式のタイトルでプルリクエストを作成して、レビューでの会話を解決します。リポジトリではこの PR ワークフローが求められます。
-3. 脆弱性を報告する場合は、公開の Issue ではなく GitHub Security Advisories を通じて報告します。セキュリティポリシーでは、バージョン、再現手順、および影響範囲を含めた非公開での報告を求めています。
+<Steps>
 
-### メンテナーおよびエージェントのワークフロー
+1. ## Issue を立てる \{#open-issue}
 
-- `AGENTS.md` および `.claude/` にはメンテナー向けの AI エージェント自動化について記載されていますが、外部コントリビューターの前提条件ではありません。外部の PR チェックは CI で実行されます。
-- メンテナーまたはリポジトリのエージェントは、挙動変更時のテスト順序を含め、`AGENTS.md` に記載の開発ワークフローに従います。
+   問題か提案を説明する Issue を立てる。
 
-## 確認 {#verification}
+2. ## フォークしてブランチを作る \{#fork-and-branch}
 
-- 3つのパッケージコマンドが終了コード `0` で完了することを確認するか、引き渡し前にその失敗内容を記録します。
+   リポジトリをフォークし、作業用のブランチを作る。
 
-## 関連情報 {#related}
+3. ## 3 つの検査を実行する \{#run-checks}
 
-リンク: [セキュリティポリシー](/ambercast/ja/reference/security-policy/)、[変更履歴](/ambercast/ja/reference/changelog/)。
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   ```
+
+4. ## プルリクエストを出す \{#open-pull-request}
+
+   Conventional Commit 形式のタイトルでプルリクエストを出し、レビューの会話をすべて解決する。
+
+</Steps>
+
+## 脆弱性の報告 \{#report-vulnerability}
+
+脆弱性は、公開の Issue ではなく GitHub Security Advisories で報告する。バージョン、再現手順、影響を書いた非公開の報告を送る。方針は[セキュリティポリシー](/ambercast/ja/reference/security-policy/)にある。
+
+## メンテナーとエージェントの進め方 \{#maintainer-workflow}
+
+`AGENTS.md` と `.claude/` は、メンテナーの AI エージェントによる自動化を説明するもので、外部のコントリビューターの前提条件ではない。外部のプルリクエストの検査は CI で動く。
+
+メンテナーやリポジトリのエージェントは、挙動を変えるときのテストの順序を含め、`AGENTS.md` の開発ワークフローに従う。
+
+## 確認 \{#verification}
+
+3 つのコマンドが終了コード `0` で終わる。失敗が残るなら、引き継ぐ前にその内容を記録する。プルリクエストが開いていることも確かめる。
+
+## 関連情報 \{#related}
+
+<LinkCard title="セキュリティポリシー" href="/ambercast/ja/reference/security-policy/" description="脆弱性の報告方法と対応方針を確かめる。" />
+
+<LinkCard title="変更履歴" href="/ambercast/ja/reference/changelog/" description="リリースごとの変更を確かめる。" />
 
 ---
 

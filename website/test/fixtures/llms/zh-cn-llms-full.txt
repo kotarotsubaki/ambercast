@@ -970,130 +970,276 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 ---
 
-# 在 Git 中管理构件
+# 在 Git 中管理产物
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/manage-artifacts-in-git/
 
-本文介绍如何在 Git 中管理 ambercast 的构件。默认情况下，grounding 策略为 `repositoryPolicy: "committed"`，默认 runs 目录为 `tests/ambercast/.runs`。您可以依据团队配置，将对应文件纳入版本控制或添加至忽略规则。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+把提示词、执行计划和定位缓存一起暂存，并让 Git 忽略运行记录目录。
 
-- 默认 grounding 策略为 `repositoryPolicy: "committed"`；默认 runs 目录为 `tests/ambercast/.runs`。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+默认的定位缓存策略是 `repositoryPolicy: "committed"`。默认的运行记录目录是 `tests/ambercast/.runs`。
 
-1. 当策略为 `committed` 时，暂存 `<name>.test.md`、`<name>.ambercast.plan.json` 与 `<name>.ambercast.grounding.json`。解析器定义了这两个相邻的伴生文件后缀。
-2. 当将 grounding 作为本地缓存使用时，请配置：
+## 操作步骤 \{#steps}
 
-   这是官方发布的配置 Schema URL，`uncommitted` 是受支持的策略。
-3. 将配置的 `runsDir` 添加至 `.gitignore`。若使用默认配置，请添加 `tests/ambercast/.runs/`。`runsDir` 是可配置的，运行过程会在其下专属的调用目录中写入一份 `report.json`。
-4. 当 `repositoryPolicy` 为 `uncommitted` 时，将 `tests/ambercast/**/*.ambercast.grounding.json` 也添加至 `.gitignore`。若配置的 `testDir` 与默认值不同，请将路径中的 `tests/ambercast` 替换为您配置的 `testDir`。解析器仅在 `testDir` 内部推导带有固定 `.ambercast.grounding.json` 后缀的 grounding 伴生文件。这样在忽略本地 grounding 伴生文件的同时，测试计划（Plan）依然保持被追踪状态。
+<Steps>
 
-## 验证 {#verification}
+1. ## 暂存三个文件 \{#stage-companions}
 
-- 运行 `git status --short`：
-  - 策略为 `committed` 时，应显示计划文件与 grounding 伴生文件。
-  - 策略为 `uncommitted` 时，应显示计划文件，但不应包含 `testDir` 本地的 `*.ambercast.grounding.json`。
-  - 当配置的 `runsDir` 已被忽略时，不应出现该目录下的运行证据。
+   策略为 `committed` 时，暂存 `<name>.test.md`、`<name>.ambercast.plan.json` 和 `<name>.ambercast.grounding.json`。解析器定义了这两个相邻的伴生文件后缀。详见[文件布局](/ambercast/zh-cn/reference/file-layout/#companions)。
 
-## 相关链接 {#related}
+2. ## 忽略运行证据 \{#ignore-runs}
 
-链接：[文件布局](/ambercast/zh-cn/reference/file-layout/)、[配置](/ambercast/zh-cn/reference/configuration/)、[计划文档](/ambercast/zh-cn/spec/plan-document/)、[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)、[控制 grounding 回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)。
+   把配置的 `runsDir` 添加到 `.gitignore`。使用默认值时，添加下面这一行。
+
+   ```text
+   tests/ambercast/.runs/
+   ```
+
+   `runsDir` 可以配置。每次运行会在它下面各自的调用目录中写入一份 `report.json`。
+
+3. ## 把定位缓存留在本地 \{#keep-grounding-local}
+
+   如果把定位缓存当作本地缓存，就把 `repositoryPolicy` 设为 `uncommitted`。只有这种情况才需要做这一步和下一步。`$schema` 的值是已发布的配置 Schema URL。
+
+   ```json
+   {"$schema":"https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json","grounding":{"repositoryPolicy":"uncommitted"}}
+   ```
+
+4. ## 忽略本地的定位缓存 \{#ignore-local-grounding}
+
+   设为 `uncommitted` 后，再把下面这一行添加到 `.gitignore`。如果 `testDir` 与默认值不同，就把 `tests/ambercast` 换成它。
+
+   ```text
+   tests/ambercast/**/*.ambercast.grounding.json
+   ```
+
+   解析器只在 `testDir` 内部查找定位缓存的伴生文件，并且只认固定后缀 `.ambercast.grounding.json`。因此执行计划仍被追踪，只有本地的定位缓存被忽略。
+
+</Steps>
+
+## 验证 \{#verification}
+
+```bash
+git status --short
+```
+
+- 策略为 `committed` 时，应看到执行计划和定位缓存的伴生文件。
+- 策略为 `uncommitted` 时，应看到执行计划，但看不到 `testDir` 内的 `*.ambercast.grounding.json`。
+- 配置的 `runsDir` 已被忽略时，不应看到运行证据。
+
+## 相关链接 \{#related}
+
+<LinkCard title="文件布局" href="/ambercast/zh-cn/reference/file-layout/" description="了解提示词旁边有哪些文件，以及运行证据存放的位置。" />
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解 repositoryPolicy 和 runsDir 等配置键。" />
+
+<LinkCard title="执行计划文档" href="/ambercast/zh-cn/spec/plan-document/" description="了解执行计划文件的格式。" />
+
+<LinkCard title="定位缓存文档" href="/ambercast/zh-cn/spec/grounding-document/" description="了解定位缓存文件的格式。" />
+
+<LinkCard title="控制定位缓存回写" href="/ambercast/zh-cn/how-to/control-grounding-writeback/" description="决定变更后的定位缓存是否回写。" />
 
 ---
 
 # 在其他 CI 平台上运行
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/run-on-other-ci/
 
-本文介绍适用于 GitLab CI 和通用运行器（generic runners）的可移植 CI 配置方案。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+在已检出代码的作业里，先运行 `check` 再运行 `run`，并关闭修复和回写。
 
-- `run` 接受 `--resolve`、`--update-cache`、`--allow-empty` 和 `--list`；它没有 `--config` 选项。其 grounding 未命中的默认行为已经是失败关闭，因此 CI 无需额外标志来抑制 AI 解析。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+你使用 GitLab CI 或通用运行器，作业已检出代码。`run` 的标志包括 `--resolve`、`--update-cache`、`--allow-empty` 和 `--list`，没有 `--config` 选项。
 
-1. 在 GitLab CI 或通用运行器中，安装项目的 Node 依赖项，并使用 `npx playwright-core install chromium` 安装 Chromium；使用对应平台的缓存机制缓存浏览器安装目录。代码仓库需要 Chromium 并记录了此安装命令；完全 grounding 的重放可能在无需选择提供商的情况下继续执行。
-2. 精确执行 `npx ambercast check`，随后执行 `npx ambercast run`。在上传调用生成的 `report.json` 之前，应用事前审查、受限访问及较短的保留期；仅在具备这些控制措施时才进行上传。Shell 顺序执行机制仅在 check 成功退出时才会执行 run；run 会在其调用目录中写入一份报告，且报告步骤结果可以保留 `actual` 文本和无障碍快照。
-3. 仅在经过相同的事前审查、受限访问及较短的保留期后，通过明确选择加入（opt-in）来上传调用证据或截图。执行失败的实时浏览器步骤可以在调用证据目录下持久化保存 PNG 截图，且安全扫描无法检测 Canvas、图像或 CSS 渲染的像素，也无法检测扫描到截图之间的时间差。
-4. 不要调用 `heal`，也不要传递 `--update-cache`。CI 默认配置包含 `heal: false` 和 `updateGroundingCache: false`；真正的修复是通过 `ci.heal: true` 明确选择加入的操作，并非默认的 CI 行为。
+定位缓存未命中时的默认行为已经是失败关闭。CI 不需要额外标志来抑制 AI 解析。
 
-## 验证 {#verification}
+## 操作步骤 \{#steps}
 
-- 依据进程退出代码对作业设置门禁，并据此解读结果。不可信产物与环境故障属于不同的进程类别。
+<Steps>
 
-## 相关链接 {#related}
+1. ## 安装 Chromium \{#install-browser}
 
-链接：[在 GitHub Actions 中运行 ambercast](/ambercast/zh-cn/tutorials/github-actions/)、[ambercast check](/ambercast/zh-cn/reference/cli/check/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/)、[退出码](/ambercast/zh-cn/reference/exit-codes/)、[配置](/ambercast/zh-cn/reference/configuration/)。
+   安装项目的 Node 依赖，然后安装 Chromium。用平台的缓存机制缓存浏览器安装目录。
+
+   ```bash
+   npx playwright-core install chromium
+   ```
+
+   回放已完成定位的执行计划时，可以不选择 AI 提供商。
+
+2. ## 先运行 check，再运行 run \{#check-then-run}
+
+   ```bash
+   npx ambercast check && npx ambercast run
+   ```
+
+   有了 `&&`，只有 `check` 退出码为 `0` 时才会运行 `run`。`run` 会在它的调用目录中写入一份报告。
+
+3. ## 限制上传的内容 \{#limit-uploads}
+
+   报告中的步骤结果可能保留 `actual` 文本和无障碍快照。上传 `report.json` 之前，先落实事先审查、受限访问和较短保留期。只有这些控制措施都已落实时才上传。
+
+   上传调用证据或截图，也要在同样的控制下明确选择加入。失败的实时浏览器步骤可能在调用证据目录中保存 PNG 截图。
+
+   安全扫描检测不到 Canvas、图像或 CSS 渲染的像素，也检测不到扫描与截图之间发生的变化。
+
+4. ## 保持修复和回写关闭 \{#keep-heal-off}
+
+   不要调用 `heal`，也不要传入 `--update-cache`。CI 的默认值是 `ci.heal: false` 和 `ci.updateGroundingCache: false`。要在 CI 中真正修复，需通过 `ci.heal: true` 明确选择加入。
+
+</Steps>
+
+## 验证 \{#verification}
+
+以进程退出码作为作业的判定依据。不可信的产物对应退出码 `4`，环境故障对应退出码 `3`，二者是不同的类别。取值见[退出码表](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
+
+## 相关链接 \{#related}
+
+<LinkCard title="在 GitHub Actions 中运行 ambercast" href="/ambercast/zh-cn/tutorials/github-actions/" description="在 GitHub Actions 中运行同样的流程。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的报告内容和退出码。" />
+
+<LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解 run 的全部标志。" />
+
+<LinkCard title="退出码" href="/ambercast/zh-cn/reference/exit-codes/" description="了解退出码及其优先级。" />
+
+<LinkCard title="配置" href="/ambercast/zh-cn/reference/configuration/" description="了解 ci.heal 和 ci.updateGroundingCache 等配置键。" />
 
 ---
 
-# 恢复 stale（已过期）产物
+# 恢复过期的产物
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/recover-stale-artifacts/
 
-本指南提供了从检查状态到后续操作的对照，指导您在产物处于 `stale`（已过期）或异常状态时采取确切的操作进行恢复。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+读取 `check` 的状态，执行该状态对应的操作，再运行一次 `check`。
 
-- `check` 是只读的：其依赖项省略了提供商、浏览器、事件接收器与可变存储。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#stale}
+`check` 是只读的。它不使用提供商、浏览器、事件接收器或可变存储。
 
-| check 状态 | 确切的后续操作 | 预期可观察结果 |
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 读取 check 的状态 \{#read-status}
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+   在下一节的表中，找到每个已报告的状态。
+
+2. ## 按状态执行对应操作 \{#apply-action}
+
+   执行该状态所在行的操作。命令里的 `<name>` 要换成去掉 `.test.md` 后的提示词文件名，例如 `login.test.md` 对应 `login`。
+
+3. ## 检查变更 \{#review-changes}
+
+   提交变更后的执行计划或定位缓存之前，先阅读它的 diff。见[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+</Steps>
+
+## 按状态处理 \{#stale}
+
+| 状态 | 操作 | 预期结果 |
 | --- | --- | --- |
-| `fresh` | 运行 `npx ambercast check`；不对产物做任何修改。 | 退出 `0`。 |
-| `fresh-without-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | `generate` 会在磁盘上修复相邻的 Grounding 文件，然后报告 `skipped-fresh` 且仅包含 `planFile`；它不会报告 grounding 路径。 |
-| `stale` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，随后审查 diff。 | 全新的生成可以退出 `0`；仍不受信任的检查退出 `4`。 |
-| `missing-plan` | 从版本控制中恢复 Plan，或运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 生成的结果包含 `planFile`。 |
-| `missing-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 当 Plan 处于 fresh 状态时，`generate` 会在磁盘上创建其相邻的 Grounding 文件并返回仅包含 `planFile` 的 `skipped-fresh`；`groundingFile` 并不是 Generate 的结果字段。 |
-| `stale-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，随后审查新的 grounding。 | 校验有效时，check 不再发出失败的完整性发现项。 |
-| `invalid-grounding` | 根据 prompt 重新生成并审查新的 grounding。 | 校验有效时，check 不再发出失败的完整性发现项。 |
-| `orphaned-plan` | 恢复其 prompt，或通过项目的正常审查流程移除该孤立文件。 | 下一次 check 不再包含该孤立项发现。 |
-| `orphaned-grounding` | 恢复其 prompt，或通过项目的正常审查流程移除该孤立文件。 | 下一次 check 不再包含该孤立项发现。 |
-| `invalid-artifact-name` | 通过正常审查流程重命名或移除该无效伴生文件。 | 下一次 check 不再报告该无法逆向解析的产物。 |
-| `listed` | 在不带 `--list` 的情况下重新运行以检查新鲜度。 | `--list` 未执行任何 Plan 或 Grounding 读取。 |
-| `skipped` | 解决中断后重新运行。 | 运行作用域内的 `INTERRUPTED` 错误会导致退出码 `3`。 |
+| `fresh` | 运行 `npx ambercast check`。不修改任何产物。 | 退出码 `0`。 |
+| `fresh-without-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | `generate` 修复磁盘上相邻的定位缓存文件，然后报告只含 `planFile` 的 `skipped-fresh`。`groundingFile` 不是 generate 的结果字段。 |
+| `stale` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，然后阅读 diff。 | 重新生成后可以退出 `0`。仍不可信的 check 退出 `4`。 |
+| `missing-plan` | 从版本控制恢复执行计划，或运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 生成结果包含 `planFile`。 |
+| `missing-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 执行计划为新鲜状态时，`generate` 创建相邻的定位缓存文件，并返回只含 `planFile` 的 `skipped-fresh`。 |
+| `stale-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。 | 有效时，check 不再报告完整性失败。 |
+| `invalid-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。如果 `check` 仍报告 `invalid-grounding`，就运行 `npx ambercast generate --force tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。后者会重新生成执行计划并调用 AI 提供商。 | 有效时，check 不再报告完整性失败。 |
+| `orphaned-plan` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
+| `orphaned-grounding` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
+| `invalid-artifact-name` | 通过正常审查流程重命名或移除这个无效的伴生文件。 | 下一次 check 不再报告名称无法对应回提示词的产物。 |
+| `listed` | 不带 `--list` 再运行一次。 | `--list` 没有读取任何执行计划或定位缓存。 |
+| `skipped` | 排除中断原因后再运行一次。 | 运行范围内的 `INTERRUPTED` 错误会使退出码为 `3`。 |
 
-## 验证 {#verification}
+执行计划为新鲜状态，而定位缓存缺失、无法解析或 `planDigest` 不同时，`generate` 写入的是绑定到该执行计划的空定位缓存，不是重新解析后的缓存。
 
-- 运行 `npx ambercast check --json`；仅在没有更高优先级的候选状态保留时，预期退出 `0`。
+在本机运行 `npx ambercast run --resolve --update-cache tests/ambercast/<name>.test.md` 重新绑定元素，做法与[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)的第 3 步相同。
 
-## 相关链接 {#related}
+## 验证 \{#verification}
 
-链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/)、[ambercast generate](/ambercast/zh-cn/reference/cli/generate/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)、[退出码](/ambercast/zh-cn/reference/exit-codes/)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/)、[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+再次运行 `npx ambercast check --json`。只有没有更高优先级的候选状态时，才会退出 `0`。优先级见[聚合优先级](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
+
+## 相关链接 \{#related}
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的状态和只读约定。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的结果和退出码。" />
+
+<LinkCard title="错误代码" href="/ambercast/zh-cn/reference/error-codes/" description="了解全部错误代码。" />
+
+<LinkCard title="退出码" href="/ambercast/zh-cn/reference/exit-codes/" description="了解退出码及其优先级。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/zh-cn/reference/cli/heal/" description="了解 heal 如何修复发生漂移的执行计划。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="提交之前，先阅读变更后的执行计划和定位缓存。" />
 
 ---
 
 # 在不同版本间升级
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/upgrade/
 
-本指南介绍了在不同版本之间升级 ambercast 的发布安全流程。当版本变动（如生成器指纹变更）导致既有的 plan 变为 `stale`（已过期）并需要重新生成时，请按照以下步骤处理。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+升级前先阅读 BREAKING 条目，升级后按 `check` 的结果重新生成执行计划。
 
-- CHANGELOG 0.3.1 指出其生成器指纹（producer-fingerprint）变更会导致 0.1.0 版本的 plan 变为 `stale`（已过期），并需要重新生成。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+某个版本的 BREAKING 条目如果改变了 producer 指纹，现有的执行计划就会过期，需要重新生成。0.2.0 的条目就是一个例子，它写明了对 `inputsDigest` 的影响。见[变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
 
-1. 在更改依赖项之前，请阅读目标版本的 BREAKING 说明。0.3.1 版本的条目明确指出了对 `inputsDigest` 的影响。
-2. 使用项目的包管理器升级 ambercast，然后运行 `npx ambercast check --json`。check 会返回一份报告，并在发现不可信结果时选择退出代码 `4`。
-3. 如果 check 的退出代码为 `4`，请运行 `npx ambercast generate` 并审查 plan 与 grounding 的 diff。生成操作会组合生成器与报告结果。
-4. 将依赖项与接受的伴生文件变动一同提交。随后重新运行 check，使最终状态可见。
+## 操作步骤 \{#steps}
 
-## 迁移机密授权 {#migrate-secret-grants}
+<Steps>
 
-为 Plan v2 创建的提示词可能包含旧版机密授权行。请从提示词中删除每一行授权；旧语法会被拒绝，不能原地迁移。
+1. ## 阅读破坏性变更 \{#read-breaking}
+
+   更改依赖之前，先阅读目标版本的 BREAKING 部分。
+
+2. ## 升级并运行 check \{#upgrade-and-check}
+
+   用项目的包管理器升级 ambercast，然后运行 `check`。它会返回报告，发现不可信的结果时选择退出码 `4`。
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+3. ## 重新生成过期的执行计划 \{#regenerate-stale}
+
+   如果 `check` 退出码为 `4`，就运行 `generate`，并阅读执行计划和定位缓存的 diff。做法见[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+   ```bash
+   npx ambercast generate
+   ```
+
+4. ## 一起提交 \{#commit-together}
+
+   把依赖和已接受的伴生文件变更一起提交。然后再运行一次 `check`，让最终状态可以观察。
+
+</Steps>
+
+## 迁移机密授权 \{#migrate-secret-grants}
+
+为 Plan v2 创建的提示词可能包含旧版机密授权行。请从提示词中删除每一行授权。旧语法会被拒绝，不能原地迁移。
 
 ```markdown
 @ambercast-secret {{secrets.password}}
 ```
 
-然后运行 `npx ambercast generate --force <file>` 并响应新的同意提示。对于 CI 或其他非交互环境，请先将已审查的名称添加到 `secrets.allow`。重新生成的 Plan 使用 v3 同意／许可列表模型。
+然后运行 `npx ambercast generate --force <file>`，并回答新的同意提示。对于 CI 或其他非交互环境，请先把已审查的名称添加到 `secrets.allow`。重新生成的执行计划使用 v3 的同意和许可列表模型。
 
-## 生成器变更后重新定位 {#reground-after-producer-change}
+## 生成器变更后重新定位 \{#reground-after-producer-change}
 
 生成器指令或响应契约发生变化后，producer 指纹随之改变，早期版本生成的执行计划会过期。重新生成执行计划会把其定位缓存替换为空缓存，下面的步骤会让每个元素步骤重新绑定。Plan 5 和 Grounding 4 保持不变。
 
-report 3.11 新增 `generator-assumption` 警告及 `healed` 行的可选 `warnings`。验证封闭 union 的使用者需要更新 report Schema。
+report 3.11 新增 `generator-assumption` 警告，以及 `healed` 行的可选 `warnings`。验证封闭 union 的使用者需要更新 report Schema。
 
 CLI 的 `--strict` 选项和 MCP 的 `strict` 参数已移除。请从调用中删除这两个参数。`ambercast generate --strict` 因未知选项以退出码 2 结束，MCP 在输入验证时拒绝 `strict`。
 
@@ -1103,82 +1249,154 @@ CLI 的 `--strict` 选项和 MCP 的 `strict` 参数已移除。请从调用中�
    - 普通的 run 会在该输入处以 `GROUNDING_UNRESOLVED` 失败。
    - 请加入能体现该输入效果的断言，例如登录后的用户名，然后重做第 2 步。
 3. 在本机运行 `npx ambercast run --resolve --update-cache <file>`。重新生成后定位缓存为空，所以对每个没有逐字引用的元素步骤，ambercast 会调用一次 AI。CI 默认不保存定位缓存。
-4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。执行计划始终提交；只有 `grounding.repositoryPolicy` 为 `committed` 时才将定位缓存与执行计划一起提交，为 `uncommitted` 时保留在本地。
+4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。
+   - 执行计划始终提交。
+   - 只有 `grounding.repositoryPolicy` 为 `committed` 时，才将定位缓存与执行计划一起提交。
+   - 为 `uncommitted` 时，定位缓存保留在本地。
 
-## 验证 {#verification}
+## 验证 \{#verification}
 
-- 接受重新生成后，`npx ambercast check` 的退出代码为 `0`。
+接受重新生成的结果后，`npx ambercast check` 退出码为 `0`。
 
-## 相关链接 {#related}
+## 相关链接 \{#related}
 
-链接：[变更日志](/ambercast/zh-cn/reference/changelog/)、[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/)、[ambercast check](/ambercast/zh-cn/reference/cli/check/)、[ambercast generate](/ambercast/zh-cn/reference/cli/generate/)、[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+<LinkCard title="变更日志" href="/ambercast/zh-cn/reference/changelog/" description="阅读每个版本的 BREAKING 条目。" />
+
+<LinkCard title="新鲜度与摘要" href="/ambercast/zh-cn/spec/freshness/" description="了解执行计划在什么条件下过期。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的状态和退出码。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的结果和退出码。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="提交之前，先阅读重新生成的执行计划和定位缓存。" />
 
 ---
 
 # 常见故障排查
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/troubleshoot/
 
-本指南为您提供常见故障从症状到下一步处置操作的速查索引。若您的命令调用本身存在格式或参数问题，ambercast 会在生成报告前直接向 stderr 输出用法说明并中止。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+保留失败命令的输出，执行与症状对应的操作，再重新运行受影响的最小命令。
 
-- 传入无效标志（flags）、格式错误的命令参数或缺失选项值时，命令会将用法说明写入 stderr 并以退出状态码 `2` 退出，且不会生成报告封装体（report envelope）。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+命令的调用本身必须有效。传入无效标志、格式错误的命令参数或缺失选项值时，命令会把用法说明写入 stderr，并以退出码 `2` 结束，不生成报告封装体。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 找到匹配的症状 \{#match-symptom}
+
+   保留失败命令的输出。需要报告时，加上 `--json` 重新运行。在下一节的表中，找到与它匹配的症状。
+
+2. ## 执行对应操作 \{#apply-action}
+
+   执行该行的操作。准确的错误词汇见[错误代码](/ambercast/zh-cn/reference/error-codes/)，进程状态码的取值和优先级见[退出码](/ambercast/zh-cn/reference/exit-codes/#priority)。
+
+3. ## 重新运行最小的命令 \{#rerun-smallest}
+
+   重新运行受影响的最小命令。
+
+</Steps>
+
+## 症状与处理 \{#symptom-table}
 
 | 症状 | 原因 | 下一步操作 |
 | --- | --- | --- |
-| 无效配置、未解析的密钥或目标 | 需要修正配置或调用边界。 | 查阅 [错误代码](/ambercast/zh-cn/reference/error-codes/)，随后直接修正对应的配置项，切勿随意猜测其取值。 |
-| 缺失、`stale`（已过期）或不可信的伴生文件 | 已提交的工件无法作为当前有效凭据使用。 | 使用 [恢复 stale（已过期）产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/) 中对应的行。 |
-| `SECRET_CONSENT_REQUIRED` | 生成发现未列入许可列表的机密名称，且同意被拒绝或不可用。 | 审查名称，将其加入 `secrets.allow`，或以交互方式重新运行 generate；不要向提示词添加机密值。 |
-| heal 报告 `secret-set-changed` | Stage 3 候选改变了完整机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并完成同意：已发布 CLI 会逐字呈现的日语提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
-| 明文机密或旧版机密语法 | 受保护的 IR 拒绝了机密处理边界。 | 查阅[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)；不要在提示词中放入明文或旧版授权行。 |
-| 浏览器、提供商、存储故障或崩溃 | 执行环境发生故障。 | 保留 JSON 输出，修复执行环境，随后重新运行最小受影响范围的命令。 |
-| 工作中断 | 批处理工作未完成。 | 待中断问题解决后重新运行。 |
-| 断言失败 | 回放的用例存在失败凭据。 | 检查报告，修复应用程序或提示词，随后重新运行。 |
-| 选区为空 | 没有提示词与所请求的选区匹配。 | 修正选区，或者仅在确认有意为空时使用 `--allow-empty`。 |
+| 无效的配置、未解析的机密或目标 | 需要修正配置或调用边界。 | 阅读[错误代码](/ambercast/zh-cn/reference/error-codes/)，然后修正其中指出的配置项，不要猜测取值。 |
+| 缺失、`stale` 或不可信的伴生文件 | 已提交的产物不能作为当前的依据。 | 按[恢复过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/)中对应的行处理。 |
+| `SECRET_CONSENT_REQUIRED` | 生成发现了不在许可列表中的机密名称，且同意被拒绝或无法请求。 | 审查名称并加入 `secrets.allow`，或以交互方式重新运行 generate。不要把机密值写进提示词。 |
+| heal 报告 `secret-set-changed` | Stage 3 候选改变了完整的机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并重新完成同意。CLI 会把 `<file>` 换成实际的文件路径后输出这条提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
+| 明文机密或旧版机密语法 | 受保护的 IR 拒绝了机密处理边界。 | 按[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)处理。不要在提示词中放入明文机密或旧版授权行。 |
+| 浏览器、提供商、存储故障或崩溃 | 执行环境发生故障。 | 保留输出，修复环境，然后重新运行最小的命令。 |
+| 工作中断 | 批处理未完成。 | 排除中断原因后重新运行。 |
+| 断言失败 | 回放的用例存在失败的证据。 | 阅读报告，修复应用或提示词，然后重新运行。 |
+| 选区为空 | 没有提示词与所请求的选区匹配。 | 修正选区。只有确实要选空时才使用 `--allow-empty`。 |
 
-准确的错误词汇表请查阅 [错误代码](/ambercast/zh-cn/reference/error-codes/)，进程状态码取值及其优先级请查阅 [退出码](/ambercast/zh-cn/reference/exit-codes/#priority)。
+## 验证 \{#verification}
 
-## 验证 {#verification}
+重新运行受影响的最小命令。只有不再存在更高优先级的条件时，退出码才为 `0`。
 
-- 重新运行受影响的最小命令；只有在不再存在更高优先级条件时，才应当返回退出状态码 `0`。
+## 相关链接 \{#related}
 
-## 相关链接 {#related}
+<LinkCard title="错误代码" href="/ambercast/zh-cn/reference/error-codes/" description="了解准确的错误词汇。" />
 
-链接：[错误代码](/ambercast/zh-cn/reference/error-codes/)、[退出码](/ambercast/zh-cn/reference/exit-codes/)、[ambercast check](/ambercast/zh-cn/reference/cli/check/)、[ambercast generate](/ambercast/zh-cn/reference/cli/generate/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/)、[恢复 stale（已过期）产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/)、[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[配置目标环境](/ambercast/zh-cn/how-to/configure-targets/)。
+<LinkCard title="退出码" href="/ambercast/zh-cn/reference/exit-codes/" description="了解退出码及其优先级。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的状态。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的结果。" />
+
+<LinkCard title="ambercast run" href="/ambercast/zh-cn/reference/cli/run/" description="了解 run 的标志和结果。" />
+
+<LinkCard title="ambercast heal" href="/ambercast/zh-cn/reference/cli/heal/" description="了解 heal 的行为和它报告的内容。" />
+
+<LinkCard title="恢复过期的产物" href="/ambercast/zh-cn/how-to/recover-stale-artifacts/" description="了解每个 check 状态对应的操作。" />
+
+<LinkCard title="管理机密" href="/ambercast/zh-cn/how-to/manage-secrets/" description="批准机密名称并传入它们的值。" />
+
+<LinkCard title="配置目标环境" href="/ambercast/zh-cn/how-to/configure-targets/" description="设置目标环境和相关配置。" />
 
 ---
 
 # 参与贡献
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/contribute/
 
-本文档介绍了向 ambercast 代码仓库提交贡献的具体流程与要求。
+import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-## 前提条件 {#prerequisites}
+外部贡献者先提交 issue，再 fork 并创建分支，运行三项检查，最后提交 Pull Request。
 
-- 项目 package 声明了 `npm test`、`npm run typecheck` 和 `npm run lint` 脚本。
+## 前置条件 \{#prerequisites}
 
-## 操作步骤 {#steps}
+项目的 package 声明了 `npm test`、`npm run typecheck` 和 `npm run lint` 脚本。
 
-### 外部贡献者流程
+## 操作步骤 \{#steps}
 
-1. 提交一个 issue 描述您发现的问题或提议，随后 fork 代码仓库并创建开发分支。这是公开发布的外部贡献流程。
-2. 运行 `npm test`、`npm run typecheck` 和 `npm run lint`，然后提交一个标题符合 Conventional Commit 规范的 Pull Request，并处理评审中的讨论。这些脚本均已存在，且仓库要求执行该 PR 工作流。
-3. 若发现安全漏洞，请通过 GitHub Security Advisories 提交，而非创建公开 issue。安全策略要求提交包含版本、复现步骤及影响说明的私密报告。
+<Steps>
 
-### 维护者与 Agent 工作流
+1. ## 提交 issue \{#open-issue}
 
-- `AGENTS.md` 与 `.claude/` 描述了维护者 AI Agent 自动化流程，并非外部贡献者的前提条件；外部 PR 检查会在 CI 中运行。
-- 维护者或仓库 Agent 遵循 `AGENTS.md` 中的开发工作流，包括其针对行为变更的测试顺序。
+   提交一个 issue，描述问题或提议。
 
-## 验证 {#verification}
+2. ## fork 并创建分支 \{#fork-and-branch}
 
-- 这三个 package 命令以退出码 `0` 退出，或者在移交前记录其失败信息。
+   fork 代码仓库，并为你的变更创建分支。
 
-## 相关链接 {#related}
+3. ## 运行三项检查 \{#run-checks}
 
-链接：[安全策略](/ambercast/zh-cn/reference/security-policy/)，[变更日志](/ambercast/zh-cn/reference/changelog/)。
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   ```
+
+4. ## 提交 Pull Request \{#open-pull-request}
+
+   提交标题符合 Conventional Commit 规范的 Pull Request，并处理完它的评审讨论。
+
+</Steps>
+
+## 报告安全漏洞 \{#report-vulnerability}
+
+请通过 GitHub Security Advisories 报告漏洞，不要创建公开 issue。提交一份包含版本、复现步骤和影响的私密报告。方针见[安全策略](/ambercast/zh-cn/reference/security-policy/)。
+
+## 维护者与 Agent 的工作流程 \{#maintainer-workflow}
+
+`AGENTS.md` 与 `.claude/` 描述了维护者的 AI Agent 自动化流程，并非外部贡献者的前置条件。外部 Pull Request 的检查在 CI 中运行。
+
+维护者或仓库 Agent 遵循 `AGENTS.md` 中的开发工作流程，包括其针对行为变更的测试顺序。
+
+## 验证 \{#verification}
+
+三个 package 命令退出码为 `0`，或者在移交前记录其失败信息。同时确认你的 Pull Request 已经打开。
+
+## 相关链接 \{#related}
+
+<LinkCard title="安全策略" href="/ambercast/zh-cn/reference/security-policy/" description="了解如何报告漏洞，以及报告之后的处理方式。" />
+
+<LinkCard title="变更日志" href="/ambercast/zh-cn/reference/changelog/" description="了解每个版本的变更。" />
 
 ---
 

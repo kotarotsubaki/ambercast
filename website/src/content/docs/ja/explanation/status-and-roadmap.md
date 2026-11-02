@@ -1,37 +1,28 @@
 ---
 title: ステータスとロードマップ
-description: ambercastの現在の実装境界、今後の計画、およびバージョン方針について解説します。
+description: 現行リリースが実装している範囲、計画中の機能、1.0より前のバージョンの扱いを説明する。
 ---
 
-ambercastの現在の実装境界を明確にし、実装済みの機能と今後の計画を区別して説明します。現行バージョンのCLIパーサーの公開コマンドとプラン再生成の要件を整理し、現時点でのツールの境界を把握できるようにします。
+現行のCLIは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを持つ。`review` とbaseline/restoreは計画中だ。1.0より前は、スキーマとプロデューサーの変更で計画の再生成が必要になる。
 
 ## 現行リリースで実装済み {#implemented}
 
-CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` を公開しています。MCP サブコマンドは stdio で 6 ツールを提供します。
+CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを公開している。`ambercast mcp` は、stdio上で6つのツールを提供する。
 
-また、0.3.1 ではプロデューサ契約のフィンガープリントが変更されました。これにより、プロデューサバンドルおよび `inputsDigest` がstale（古くなった状態）になるため、0.3.1 では 0.1.0 のプランの再生成が必要です。
+ブラウザーはChromiumだけに対応する。
 
-関連情報:
-- [CLIの概要](/ambercast/ja/reference/cli/overview/)
-- [互換性と再生成](/ambercast/ja/reference/compatibility/)
-- [変更履歴](/ambercast/ja/reference/changelog/)
+1.0より前は、マイナーリリースにも破壊的変更が入りうる。スキーマやプロデューサーの変更は、既存の計画（plan）の再生成を求める。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
 
-## 現行境界以降の計画 {#planned-after-current-boundary}
+関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[互換性と再生成](/ambercast/ja/reference/compatibility/)、[変更履歴](/ambercast/ja/reference/changelog/)
 
-`review`、baseline/restore は引き続き計画中です。MCP ツールは利用できます。
+## 現行の範囲より後の計画 {#planned-after-current-boundary}
 
-また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
+`review` と、baseline/restoreは計画中だ。ブラウザーは、FirefoxとWebKitへの対応を計画している。クラウド版も計画している。MCPツールは、すでに使える。
 
-関連情報:
-- [ambercast review](/ambercast/ja/reference/cli/review/)
-- [MCP サーバー](/ambercast/ja/agents/mcp-server/)
+関連リンク: [ambercast review](/ambercast/ja/reference/cli/review/)、[MCPサーバー](/ambercast/ja/agents/mcp-server/)
 
 ## バージョン方針 {#version-policy}
 
-現在公開されているパッケージバージョンは[互換性テーブル](/ambercast/ja/reference/compatibility/#compatibility-table)に記載しています。
+公開済みのパッケージバージョンは、[互換性テーブル](/ambercast/ja/reference/compatibility/#compatibility-table)にまとめている。製品は、MVPまで0.x系にとどまる。
 
-プロダクトの方針として、0.x の間はCLIのみを提供し、クラウド版とともに 1.0.0 をリリースします。
-
-関連情報:
-- [変更履歴](/ambercast/ja/reference/changelog/)
-- [設計思想](/ambercast/ja/philosophy/)
+関連リンク: [変更履歴](/ambercast/ja/reference/changelog/)、[設計思想](/ambercast/ja/philosophy/)

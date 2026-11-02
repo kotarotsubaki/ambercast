@@ -1,52 +1,57 @@
 ---
-title: リプレイとグラウンディング
-description: リプレイの実行パスと、キャッシュされたグラウンディングが提供する安全性境界の仕組みを解説します。
+title: 再生とグラウンディング
+description: 再生が記録済みのグラウンディングを使ってAIを呼ばずに動く仕組みと、ミスしたときの扱いを説明する。
 ---
 
-ambercastのリプレイ実行において、グラウンディングは実行パスとその安全性境界を明確に定める中核的な仕組みです。テスト実行パイプラインが各ステップを評価する際、キャッシュされたグラウンディング情報が存在するかどうかが、以後の処理経路を決定づける基準となります。
+グラウンディングが全ステップを覆っている実行では、AIを呼ばずに再生できる。覆えないミスは、既定ではフェイルクローズする。`--resolve` を付けたときだけ、ミスをその場で解決する。
 
-## リプレイのエビデンスとしてのグラウンディング {#grounding-as-replay-evidence}
+## 再生の証拠としてのグラウンディング {#grounding-as-replay-evidence}
 
-`run` は、AIステップおよび要素グラウンディングのステップバリアントに対してグラウンディングを消費します。一方で、ナビゲーション（navigation）、テキスト可視（text-visible）、URLマッチ（URL-match）、要素カウント（element-count）の各バリアントではグラウンディングの参照は行われません。カバレッジを満たす有効なAIトレース（covered, valid AI trace）が存在する場合、AIエグゼキューター（AI executor）を解決することなくリプレイできます。
+`run` がグラウンディングを参照するのは、`ai` ステップと、要素に結び付くステップ（click、press、fill、fill-secret、capture）だ。ナビゲーションとすべてのアサーションは、グラウンディングを引かず、実ページを直接確かめる。
 
-要素グラウンディングにはアクセシビリティフィンガープリント（accessibility fingerprint）が保存されており、解決処理では保存されているアルゴリズムとハッシュを、マッチしたノードから新たに取得したフィンガープリントと比較します。
+要素のエントリは、ロケーター、フィンガープリント、意図のダイジェスト、来歴を持つ。解決では保存済みのロケーターを使い、フィンガープリントを照合する。エントリの形は、グラウンディングドキュメントで確かめられる。
 
-リゾルバー（resolver）はヒット（hit）を、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid` から明確に区別して判定します。ここでミスマッチがヒットとして扱われることはありません。
+リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。不一致を命中として扱うことはない。
 
-関連情報: [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/), [要素フィンガープリント](/ambercast/ja/spec/fingerprint/), [ambercast run](/ambercast/ja/reference/cli/run/#ai-calls)
+再生中の判断は、次の4つに分かれる。
 
-## リプレイパス: グラウンディングヒット {#grounding-hit}
+- 有効なエントリがある場合は、AIを呼ばずに再生する。
+- 整合性が壊れている場合は、`--resolve` の有無に関わらずフェイルクローズする。
+- 回復できるミスで `--resolve` がある場合は、その場で解決する。
+- 回復できるミスで `--resolve` がない場合は、`GROUNDING_UNRESOLVED`（終了コード4）で止まる。
 
-キャッシュされたエビデンスが完全に合致するグラウンディングヒットの経路では、外部プロバイダーとの通信を伴わない実行パスが選択されます。カバレッジを満たす有効なAIトレースは、遅延エージェントフォールバック（lazy agentic fallback）が選択される前にリプレイされます。
+関連リンク: [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)、[要素フィンガープリント](/ambercast/ja/spec/fingerprint/)、[ambercast run](/ambercast/ja/reference/cli/run/#ai-calls)
 
-要素の分類が成功した場合、新たなライブ解決を要求するのではなく、保存されているフィンガープリントをリプレイコンテキストに提供します。このように、`run` の実行パイプラインは、完全なキャッシュが存在するときにプロバイダーへの問い合わせ（プロバイダーの解決）を行わずに実行できるように設計されています。
+## 命中したときの再生 {#grounding-hit}
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#replay), [CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
+記録済みで有効なAIトレースは、AIエグゼキューターを解決せずに再生する。エージェント的なフォールバックを選ぶより前に、この経路を使う。
 
-## リプレイパス: 明示的な解決を伴うミス {#miss-with-explicit-resolution}
+要素の解決が命中したときは、保存済みのフィンガープリントを再生に渡す。新しい解決は要求しない。キャッシュが揃っていれば、プロバイダーを調べずに実行でき、AI呼び出しのイベントも出ない。
 
-整合性検証に失敗したグラウンディング（無効な JSON やカバレッジまたは検証証明の失敗を含む）は、`--resolve` に関係なくフェイルクローズします。不在のグラウンディングと構造的に有効な legacy または recoverable のエントリだけが、`--resolve` でゲートされるミスパスです。
+関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#replay)、[CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
 
-`--resolve` を指定した場合、要素グラウンディングのミスはライブで解決（resolve live）でき、解決された要素フィンガープリントでグラウンディングエントリを更新できます。
+## 解決を明示したときのミス {#miss-with-explicit-resolution}
 
-グラウンディングヒットの経路では、AI呼び出しイベント（AI-call event）は発行されません。
+グラウンディングの整合性が壊れていると、`--resolve` を付けてもフェイルクローズする。JSONが不正な場合や、カバレッジか検証の証明に失敗した場合が当てはまる。
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back), [グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
+`--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。`--resolve` を付けない `run` はこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
 
-## リプレイパス: 未解決のミス {#unresolved-miss}
+`--resolve` を付けると、要素のミスはその場で解決する。解決したエントリを書くのは、`confirms` ステップがバインディングを確かめ、ライトバックのゲートが許したときだけだ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
 
-`--resolve` を指定しない場合、run はコールドスタートおよび回復可能なミスの双方でライブ解決を抑制します。AI-directed replay で使用可能なトレースがない AI ディレクテッドステップは、`grounding-unresolved`（終了コード 4）としてフェイルクローズし、`--resolve` を使うよう案内します。
+関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)、[グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
 
-要素グラウンディングのミスも、要素をライブで解決するのではなく、フェイルクローズします。
+## 解決しないミス {#unresolved-miss}
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#resolve), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+`--resolve` を付けないと、`run` はコールドスタートのミスと回復できるミスを、その場では解決しない。AI主導の再生で使えるトレースを持たない `ai` ステップは、`grounding-unresolved`（終了コード4）でフェイルクローズし、`--resolve` を案内する。
 
-## ドリフトのハンドオフ {#drift-handoff}
+要素のミスも同じで、その場で解決せずにフェイルクローズする。
 
-UIの変更などによってリプレイが単純なキャッシュ判定にとどまらなくなった段階で、関心はリプレイからヒーリング（healing）へと移行します。
+関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#resolve)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
 
-`fingerprint-mismatch` は、マッチしたノードの現在のアクセシビリティフィンガープリントが、保存されているフィンガープリントと異なることを意味します。`run` のユースケースでは、`fingerprint-mismatch` をグラウンディング解決が成功した場合とは明確に異なる分類ケースとして記録します。
+## ドリフトの引き継ぎ {#drift-handoff}
 
-ヒーリング処理はまずフェイルクローズのベースラインリプレイから開始され、そこで失敗が残る場合にグラウンディングの修復を試行できます。
+`fingerprint-mismatch` は、一致した要素の現在のフィンガープリントが、保存済みのものと違うことを表す。`run` はこれを、解決に成功した場合とは別の分類として記録する。
 
-関連情報: [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages), [UI変更後にテストを修復する](/ambercast/ja/tutorials/repair-your-first-drift/)
+ヒーリングは、フェイルクローズの基準再生から始める。失敗が残るときだけ、修復を試みる。
+
+関連リンク: [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages)、[UI変更後にテストを修復する](/ambercast/ja/tutorials/repair-your-first-drift/)

@@ -1,57 +1,38 @@
 ---
 title: CIにおける決定性
-description: CI環境における動作の背後にある信頼境界について解説します。
+description: CIで検査が副作用を持たず、書き込みが限られ、修復が既定で断られ、終了コードが1つに決まる仕組みを説明する。
 ---
 
-CI環境における ambercast の振る舞いは、明確に定義された信頼境界に基づいています。CIのパイプラインで検査ゲートとして機能させるため、システムは構造的なレベルで読み取り専用の境界を設けています。
+CIでは、検査が副作用を持たない。書き込むのは、既定では実行レポートと閉じた証跡だけだ。修復は既定で断り、混在した結果は最も強い問題を示す1つの終了コードで返す。
 
-## 読み取り専用の検査は構造的である {#read-only-check}
+## 読み取り専用の検査 {#read-only-check}
 
-`check` を検査ゲートとして使用できる理由は、その依存関係の構造にあります。
+`check` は、AIエグゼキューター、ブラウザー、シークレット、クロック、イベントのどれにも触れられない。ストレージへのアクセスも読み取り専用だ。読み取り専用であることは、慣習ではなく構造で保証される。
 
-検査処理を担う `CheckDeps` は、`ReadStorageAdapter`、レイアウト解決、探索、選択された設定、および任意の abort signal のみを公開します。AI エグゼキューター、ブラウザードライバー、シークレット、クロック、イベントポートは意図的に除外されており、コード上でもそれらの不在が読み取り専用の境界として定義されています。
+プロンプト、計画（plan）、グラウンディング、孤立した成果物の検出には、読み取りと存在確認があれば足りる。
 
-ストレージ機能自体も明示的に読み取り専用です。プロンプト、プラン、グラウンディングコンパニオン、および孤立した検出結果に対しては、読み取りと存在確認だけで十分に対応できます。
+関連リンク: [ambercast check](/ambercast/ja/reference/cli/check/#read-only-contract)、[計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#fresh-plan-decision)
 
-関連情報:
-- [ambercast check](/ambercast/ja/reference/cli/check/#read-only-contract)
-- [プランのライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#fresh-plan-decision)
+## 再生の書き込みは限られる {#bounded-side-effects}
 
-## リプレイの永続化範囲は限定されている {#bounded-side-effects}
+`run` が実行レポートのJSONを書く先は、その呼び出しのレポートパスだけだ。書く前に、エンベロープを `persisted` として確定させる。ファイルは、返したエンベロープと同じ内容になる。
 
-リプレイの実行時には、エビデンスの記録とソースアーティファクトの変更が区別されます。
+書き込みに失敗すると、`run` は `reportPersistence: "failed"` のエンベロープを返す。このとき、終了コードが0だったはずの実行だけが3になる。1、2、4、5はそのまま残る。`not-attempted` は書き込みを試していないことを、`failed` は途中までの内容が見える状態で残っていないことを表す。
 
-run コマンドは、まず `persisted` とマークされたエンベロープを確定し、その JSON を当該呼び出しの実行レポートパスにのみ書き込みます。この書き込みが失敗した場合、run は `reportPersistence: "failed"` を持つエンベロープを返します。この条件では、成功したバッチであっても終了コード 3 となります。
+CIでのグラウンディングの書き戻しは、`--update-cache` か `ci.updateGroundingCache: true` を指定したときだけ行う。詳しくは[設定](/ambercast/ja/reference/configuration/#grounding)にある。
 
-エンベロープの状態において、`reportPersistence: "not-attempted"` は永続化の書き込みが試行されなかったことを意味し、`failed` はターゲットパスに部分的なコンテンツが一切可視化されなかったことを意味します。
+関連リンク: [レポート](/ambercast/ja/reference/reports/#persistence)、[ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
 
-関連情報:
-- [レポート](/ambercast/ja/reference/reports/#report-persistence)
-- [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
+## CIでは既定でヒーリングを断る {#heal-refusal}
 
-## CI環境での修復は既定で拒否される {#heal-refusal}
+`--list` 以外の `heal` は、`ci.heal` が true でない限り、CIでは設定エラーで断る。`heal --list` は、書き込まない探索のまま使える。
 
-CI パイプラインにおいて、修復処理がアーティファクトを通知なく変更することはありません。
+ヒーリングは、計画とグラウンディングの候補を非公開の領域にためる。実ファイルへ書くのは、確認後のコミット手順だけだ。一方、再生の試行は、`--dry-run` でもケースの実行ディレクトリの下に閉じた証跡を書くことがある。
 
-CI 環境における実際の `heal` 呼び出しは、`config.ci.heal` が true でない限り設定エラーを送出します。この CI 拒否の判定はリストモードの短絡評価の後に評価されるため、`heal --list` は書き込みを行わない探索操作のままとなります。
+関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#ci)、[ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
 
-修復処理では、プランとグラウンディングコンパニオンのみをプライベートなオーバーレイにバッファリングします。確認の前、または `--dry-run` の実行中であっても、リプレイの試行によってケース実行ディレクトリ配下に限定されたエビデンスが書き込まれることはあります。
+## 最も強い問題が終了コードになる {#exit-priority}
 
-バッファリングされたコンパニオン候補から実際のアーティファクトの書き込みに至るルートは、その後のコミット機能のみです。
+結果が混在すると、終了コードは最も強い候補になる。優先順位は `2 > 3 > 4 > 1 > 5 > 0` で固定だ。反復の順序にも、候補の重複にも左右されない。
 
-関連情報:
-- [ambercast heal](/ambercast/ja/reference/cli/heal/#ci)
-- [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
-
-## 1つのプロセスステータスが最も強いブロッカーを表す {#exit-priority}
-
-混合した結果が存在する場合でも、プロセスステータスは1つの値として決定されます。
-
-終了ステータスのセレクターは、イテレーション順序や重複した候補とは無関係に、最も強い候補を選択します。
-
-モジュール読み込み時のアサーションが無効な順位テーブルを拒否し、この選択ルールを実行時不変条件として維持します。
-
-関連情報:
-- [終了コード](/ambercast/ja/reference/exit-codes/#priority)
-- [オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)
-- [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)

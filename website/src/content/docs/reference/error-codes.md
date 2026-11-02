@@ -1,13 +1,13 @@
 ---
 title: Error codes
-description: Reference vocabulary of stable error codes, execution scopes, and exit codes for ambercast.
+description: Stable error codes with their kind, scope, and exit code, and what each code's details contain.
 ---
 
-ambercast defines a stable vocabulary of error codes for run- and case-level failures. For error payload envelopes, see [Reports](/ambercast/reference/reports/#errors); for process exit code definitions, see [Exit codes](/ambercast/reference/exit-codes/#exit-code-table); for recovery workflows, see [Troubleshoot common failures](/ambercast/how-to/troubleshoot/).
+ambercast reports run-level and case-level failures with a fixed set of error codes. Use this page to look up what a code means and which exit code it produces.
 
 ## Code vocabulary {#code-vocabulary}
 
-Usage errors and environment errors have independent report vocabularies. `SECRET_GRANT_UNATTRIBUTABLE` is the legacy exception: it remains in the report-code schema solely for backward compatibility with reports from an earlier tool version, but has no current `ErrorKind` or report-error branch.
+Usage errors and environment errors have separate vocabularies. `SECRET_GRANT_UNATTRIBUTABLE` is the legacy exception. It stays in the report-code schema only for compatibility with reports from an earlier version, and no current error kind or report branch produces it.
 
 | code | kind | scope | exit | condition |
 | --- | --- | --- | --- | --- |
@@ -20,7 +20,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 | MISSING_PLAN | usage | run/case | 4 | plan absent |
 | STALE_PLAN | usage | run/case | 4 | stale plan |
 | INTEGRITY_VIOLATION | usage | run/case | 4 | artifact integrity fails |
-| GROUNDING_UNRESOLVED | usage | case | 4 | grounding miss in an ai step or element step without `--resolve` |
+| GROUNDING_UNRESOLVED | usage | case | 4 | grounding miss in an ai step or element step without `--resolve`; four other reasons can occur even with `--resolve` |
 | SECRET_LITERAL_REJECTED | usage | run/case | 2 | literal secret rejected |
 | SECRET_GRANT_UNATTRIBUTABLE | legacy | not producible | — | retained in the report schema for backward compatibility with reports from an earlier tool version; not produced by current `generate`, `run`, `heal`, or `check` |
 | SECRET_ENV_VAR_COLLISION | usage | case | 2 | secret environment variable collision |
@@ -37,7 +37,7 @@ Usage errors and environment errors have independent report vocabularies. `SECRE
 
 ### AI response issue codes {#ai-response-issue-codes}
 
-The following `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` retry and report issues when a generated `confirms` reference fails validation. `confirms-unsorted` remains internal and does not appear in retry feedback.
+When a generated `confirms` reference fails validation, these `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` retries and report issues. `confirms-unsorted` is internal and never appears in retry feedback.
 
 | code | condition |
 | --- | --- |
@@ -46,4 +46,30 @@ The following `AiResponseIssueCode` values can appear in `AI_RESPONSE_INVALID` r
 | `confirms-not-action` | referenced step is not an eligible action or capture |
 | `confirms-duplicate` | referenced step ID is repeated |
 
-A case-scoped `FS_IO_ERROR` can include `details.partiallyWritten` containing `plan` and/or `grounding`. Where present, `AI_RESPONSE_INVALID` details contain normalized issues and optional retry attempts; `SECRET_LITERAL_REJECTED` details contain its detector, path, and optional attempts; `SECRET_ENV_VAR_COLLISION` details contain the colliding `envVar` and the list of colliding secret refs; `SECRET_CONSENT_REQUIRED` details contain the reason (`consent-required`, `declined`, or `not-interactive`) and the list of unresolved secrets, each with its name, step id, environment variable, and reason; `SECRET_SYNTAX_REJECTED` details contain each rejected legacy-syntax occurrence (line, column, and whether it is a grant line or reference); `AI_EXECUTOR_UNAVAILABLE` details contain optional attempts; `BROWSER_LAUNCH_FAILED` details contain a closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name — its fixed remediation hint is the report-level `hint` field, not part of `details`; and `AGENTIC_STEP_FAILED` details contain the step ID, completed tool-call counters, and an optional last failed assertion; `CASE_ABORTED` details contain the closed abort reason and step ID; `PROMPT_AMBIGUOUS` details contain the count of unresolved ambiguities; `UNEXPECTED_CRASH` details contain an allowlisted cause name. See [Reports](/ambercast/reference/reports/#errors) for the complete per-code contract.
+## Details by code {#details}
+
+Only the codes below carry `details`. See [Reports](/ambercast/reference/reports/#errors) for the full contract of each code.
+
+| code | `details` content |
+| --- | --- |
+| `FS_IO_ERROR` | In case scope, may contain `details.partiallyWritten` with `plan` and/or `grounding`. |
+| `AI_RESPONSE_INVALID` | Normalized issues and optional retry attempts. |
+| `SECRET_LITERAL_REJECTED` | The detector, the path, and optional attempts. |
+| `SECRET_ENV_VAR_COLLISION` | The colliding `envVar` and the list of colliding secret references. |
+| `SECRET_CONSENT_REQUIRED` | The reason (`consent-required`, `declined`, or `not-interactive`) and the unresolved secrets, each with its name, step ID, environment variable, and reason. |
+| `SECRET_SYNTAX_REJECTED` | Each rejected legacy-syntax occurrence: line, column, and whether it is a grant line or a reference. |
+| `AI_EXECUTOR_UNAVAILABLE` | Optional attempts. |
+| `BROWSER_LAUNCH_FAILED` | A closed remediation reason (`executable-missing` or `launch-failed`) and the resolved engine name. The fixed remediation hint is the report-level `hint` field, not part of `details`. |
+| `AGENTIC_STEP_FAILED` | The step ID, the completed tool-call counters, and an optional last failed assertion. |
+| `CASE_ABORTED` | The closed abort reason and the step ID. |
+| `PROMPT_AMBIGUOUS` | The count of unresolved ambiguities. |
+| `UNEXPECTED_CRASH` | An allowlisted cause name. |
+| `EXECUTOR_UNSUPPORTED` | The target, the executor, the reason (`surface-mismatch` or `capability-missing`), the missing capabilities, and optionally the surface. |
+| `PROMPT_PATH_INVALID` | The path and the reason (`outside-test-dir`, `not-test-md`, or `no-name`). |
+| `GROUNDING_UNRESOLVED` | The step ID and the reason (`missing`, `recoverable-miss`, `no-candidate`, `ambiguous`, `proposal-rejected`, or `candidate-changed`). |
+
+## See also {#see-also}
+
+- [Reports](/ambercast/reference/reports/#errors)
+- [Exit codes](/ambercast/reference/exit-codes/#exit-code-table)
+- [Troubleshoot common failures](/ambercast/how-to/troubleshoot/)

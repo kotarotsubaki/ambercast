@@ -1,13 +1,13 @@
 ---
 title: Exit codes
-description: Process exit codes and aggregation priority for machine-facing status in ambercast.
+description: Process exit codes that ambercast returns, and the priority order that combines several outcomes into one code.
 ---
 
-ambercast conveys machine-facing process status through numeric exit codes. If you need troubleshooting steps, consult [Troubleshoot common failures](/ambercast/how-to/troubleshoot/). To inspect specific error codes and their programmatic definitions, see [Error codes](/ambercast/reference/error-codes/#code-vocabulary), and to inspect structured execution output, see [Reports](/ambercast/reference/reports/#envelope).
+CI and scripts read the exit code to tell how a run ended. ambercast uses six codes, 0 to 5, and each has a priority rank.
 
 ## Exit-code table {#exit-code-table}
 
-| code | meaning | priority |
+| code | meaning | priority (lower wins) |
 | --- | --- | --- |
 | 0 | success or no candidate | 5 |
 | 1 | command-domain negative result | 3 |
@@ -16,14 +16,20 @@ ambercast conveys machine-facing process status through numeric exit codes. If y
 | 4 | untrustworthy plan or grounding artifact | 2 |
 | 5 | empty selection | 4 |
 
-For example, [`PROMPT_PATH_INVALID`](/ambercast/reference/error-codes/#code-vocabulary) is a usage error that exits 2.
+For example, [`PROMPT_PATH_INVALID`](/ambercast/reference/error-codes/#code-vocabulary) is a usage error and exits with 2.
 
 ## Aggregation priority {#aggregation-priority}
 
-When aggregating exit codes across multiple outcomes, lower rank wins, establishing 2 > 3 > 4 > 1 > 5 > 0.
+When a command has several outcomes, the code with the lowest priority rank wins. The order is 2 > 3 > 4 > 1 > 5 > 0.
 
-Selection is independent of iteration order and returns 0 for no candidate.
+The result does not depend on iteration order. With no candidate, the code is 0.
 
-## Priority compatibility link {#priority}
+## Priority compatibility anchor {#priority}
 
-This section preserves a compatibility anchor; see [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority).
+This section keeps an older anchor alive. See [Aggregation priority](/ambercast/reference/exit-codes/#aggregation-priority) for the content.
+
+## See also {#see-also}
+
+- [Error codes](/ambercast/reference/error-codes/#code-vocabulary)
+- [Reports](/ambercast/reference/reports/#envelope)
+- [Troubleshoot common failures](/ambercast/how-to/troubleshoot/)

@@ -1,34 +1,34 @@
 ---
 title: Reports
-description: Reference for ambercast structured report schemas, envelope properties, command result shapes, and error structures.
+description: Report envelope, per-command result shapes, error details, and persistence rules for ambercast structured JSON reports.
 ---
 
-Ambercast reports provide structured, machine-readable JSON execution data for commands. Every object across public report schemas is strict and rejects unknown fields, organizing status metadata, execution duration, summary metrics, errors, and command-specific result payloads into a top-level envelope.
+Each command can emit one JSON report with run metadata, a summary, errors, and command-specific results.
 
 ## Envelope {#envelope}
 
-All objects across the public report schemas are strict and reject unknown fields. The `review` branch is defined in the schema, but no `review` command is available in the implemented CLI.
+All objects in the public report schemas are strict and reject unknown fields. The schema defines a `review` branch, but the CLI has no `review` command.
 
-| Field | Type and Contract |
+| field | type and contract |
 | --- | --- |
-| `schemaVersion` | literal 3.11 |
+| `schemaVersion` | literal `3.11` |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
-| `startedAt` | UTC-shaped YYYY-MM-DDTHH:mm:ssZ string |
+| `startedAt` | UTC string shaped `YYYY-MM-DDTHH:mm:ssZ` |
 | `durationMs` | non-negative integer |
-| `summary` | strict `total`, `passed`, `failed`, `errored`, `skipped` non-negative integers |
-| `errors` | array of ReportError |
+| `summary` | strict object with non-negative integers `total`, `passed`, `failed`, `errored`, `skipped` |
+| `errors` | array of `ReportError` |
 | `results` | command-specific result array |
 | `reportPersistence` | `run` only: `persisted`, `failed`, or `not-attempted` |
 
 ## Result shapes {#result-shapes}
 
-The envelope's `results` array is command-specific. The following sections enumerate each implemented and schema-only branch.
+The `results` array depends on the command. The next sections list each branch, including the ones only the schema defines.
 
 ## Generate results {#generate-results}
 
-In `GenerateResult`, every branch is strict. The optional metrics listed below are the only additional fields permitted on their named branches.
+Every `GenerateResult` branch is strict. The optional fields listed are the only extra fields a branch allows.
 
-| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
 | `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
 | `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
@@ -38,23 +38,23 @@ In `GenerateResult`, every branch is strict. The optional metrics listed below a
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
-The AI provider may list assumptions absent from the prompt in an optional string array, `assumptions`. `generate` adds each nonblank assumption to `warnings` as `{ kind: 'generator-assumption', message }` on `generated` and `would-generate` results. Assumptions do not stop `generate` or `heal`.
+The AI provider can list assumptions that the prompt does not state, in an optional string array named `assumptions`. On `generated` and `would-generate` results, `generate` adds each nonblank assumption to `warnings` as `{ kind: 'generator-assumption', message }`. Assumptions never stop `generate` or `heal`.
 
-The human output shows `  warning: <message>` immediately after the result line. Ambercast replaces an item that matches secret detection with `An assumption was omitted because it looked like a secret.`.
+The human-readable output prints `  warning: <message>` right after the result line. If an assumption matches secret detection, ambercast replaces it with `An assumption was omitted because it looked like a secret.`.
 
-Ambercast does not store assumptions in the plan. A fresh re-run returns `skipped-fresh` without assumption warnings. Use `--force` to regenerate and see assumptions again; regeneration is non-deterministic.
+ambercast does not store assumptions in the plan. A re-run on a fresh plan returns `skipped-fresh` with no assumption warnings. Pass `--force` to regenerate and see the assumptions again. Regeneration is non-deterministic.
 
-The `ambiguities` field on `generated` and `would-generate` results is always `[]`. Provider `ambiguities` means only that a step's target cannot be assigned.
+On `generated` and `would-generate` results, `ambiguities` is always `[]`. A provider's `ambiguities` means only that a step's target cannot be assigned.
 
-Ambercast retries a single-target response with nonempty `ambiguities` as `AI_RESPONSE_INVALID`. If retries exhaust, it exits 3. Unresolved multi-target assignment still produces `PROMPT_AMBIGUOUS` and exit 2.
+For a single target, ambercast retries a response with nonempty `ambiguities` as `AI_RESPONSE_INVALID`, and exits 3 when the retries run out. An unresolved assignment across several targets still produces `PROMPT_AMBIGUOUS` and exit 2.
 
-Consumers that validate warning kinds as a closed union need the report 3.11 schema.
+A consumer that validates warning kinds as a closed union needs the report 3.11 schema.
 
 ## Run results {#run-results}
 
-In `RunResult`, every branch is strict.
+Every `RunResult` branch is strict.
 
-| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
 | `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
@@ -62,9 +62,9 @@ In `RunResult`, every branch is strict.
 
 ## Check results {#check-results}
 
-In `CheckResult`, every branch is strict.
+Every `CheckResult` branch is strict.
 
-| Status | Required Fields | Optional Fields | Forbidden Branch Fields |
+| status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
 | `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
@@ -73,45 +73,56 @@ In `CheckResult`, every branch is strict.
 
 ## Heal results {#heal-results}
 
-In `HealResult`, every completed branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, `sessions`, and `explanation`; `aiCalls` is optional.
+Every completed `HealResult` branch requires `id`, `file`, `planFile`, `status: completed`, `durationMs`, `steps`, `sessions`, and `explanation`. `aiCalls` is optional.
 
-Only a `healed` row may include optional `warnings` containing `generator-assumption` items from the accepted Stage 3 candidate's `assumptions`. Other heal results forbid `warnings`. Assumptions do not fail Stage 3.
+Only a `healed` row can carry the optional `warnings`, which holds `generator-assumption` items from the `assumptions` of the accepted Stage 3 candidate. Other heal results forbid `warnings`. Assumptions do not fail Stage 3.
 
-| repairOutcome | Allowed Application | Allowed stopReason |
+| repairOutcome | allowed application | allowed stopReason |
 | --- | --- | --- |
 | `healed` | `applied`, `preview-only`, `declined`, `not-applied-interrupted`, `apply-failed`, `partially-applied` | `settled`, `attempt-limit`, `deadline` |
 | `partially-healed` | `applied`, `preview-only`, `declined`, `not-applied-interrupted`, `apply-failed`, `partially-applied` | `settled`, `attempt-limit`, `deadline` |
 | `unresolved` | `no-artifact-change`, `not-eligible` | `settled`, `attempt-limit`, `deadline` |
 | `no-changes-needed` | `no-artifact-change` | `settled` |
-| `listed` | identity-only: `id`, `file`, `status` | `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
-| `skipped` | identity-only: `id`, `file`, `status` | `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
+| `listed` | identity-only: `id`, `file`, `status` | forbidden: `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
+| `skipped` | identity-only: `id`, `file`, `status` | forbidden: `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
 
-When Stage 3 rejects a full-plan candidate because its logical secret-name set changes, the completed result has `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`. This is a hard rejection: no artifact commit occurs and users must regenerate with consent rather than silently reattribute the candidate.
+When Stage 3 rejects a full-plan candidate because its set of logical secret names changes, the completed result has `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }`. The rejection is hard. No artifact is committed, and you must regenerate with consent instead of silently reassigning the candidate.
 
-Every completed branch may also include `repairTrace`, an ordered diagnostic array that projects the case's Stage 1, Stage 2, and Stage 3 attempts and outcomes. Stage 1 entries are `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`; Stage 2 entries are `{ stage: "stage2", stepId, outcome: "accepted" }` or `{ stage: "stage2", stepId, outcome: "rejected", reason }`, where `reason` is one of `provider-error`, `response-shape`, `id-mismatch`, `secret-name-invalid`, `coverage-invalid`, `obligation-mismatch`, `literal-secret`, or `no-advance`; and Stage 3 entries are `{ stage: "stage3", outcome: "accepted" }`, `{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`, `{ stage: "stage3", outcome: "failed", code? }`, or `{ stage: "stage3", outcome: "secret-set-rejected" }`. Each entry is strict: fields from another stage or outcome are not allowed.
+Every completed branch can also carry `repairTrace`, an ordered diagnostic array of the case's Stage 1, Stage 2, and Stage 3 attempts. Each entry is strict, so fields from another stage or outcome are not allowed.
 
-An admission-denied phase adds no `repairTrace` entry; it surfaces only through the case's `stopReason: "attempt-limit" | "deadline"`. Interrupted work never reaches a completed result at all — it is reported as `skipped` instead — so it has neither a `repairTrace` entry nor a `stopReason` value.
+| stage | outcome | other fields |
+| --- | --- | --- |
+| `stage1` | `accepted`, `no-advance` | `stepId` |
+| `stage1` | `not-eligible` | `stepId`, `reason`: one of `frontier-out-of-range`, `mode-none`, `trace-current`, `no-confirming-step`, `no-confirms` |
+| `stage2` | `accepted` | `stepId` |
+| `stage2` | `rejected` | `stepId`, `reason`: one of `provider-error`, `response-shape`, `id-mismatch`, `secret-name-invalid`, `coverage-invalid`, `obligation-mismatch`, `literal-secret`, `no-advance`, `intent-invalid` |
+| `stage3` | `accepted` | — |
+| `stage3` | `not-passing` | `firstFailureIndex` |
+| `stage3` | `failed` | optional `code` |
+| `stage3` | `secret-set-rejected` | — |
+
+A phase that admission denies adds no `repairTrace` entry. It shows up only through the case's `stopReason: "attempt-limit"` or `"deadline"`. Interrupted work never reaches a completed result. It is reported as `skipped`, so it has no `repairTrace` entry and no `stopReason`.
 
 ## Result statuses {#result-statuses}
 
-Step and review execution structures share common result branches.
+Step and review results share these branches.
 
-| Branch | Required Fields | Optional Fields |
+| branch | required fields | optional fields |
 | --- | --- | --- |
 | `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable` on capture only, `kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
-| `observed` | `note: fixed OBSERVED_NOTE`, `accessibilitySnapshot` | — |
+| `observed` | `note`: the fixed `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
-| `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+| `review skipped` | `id`, `file`, `status: skipped` | — |
 
-An action or capture step may include `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` after local verification. `confirmed` is always `true` for `grounding`, because the binding came from an entry confirmed in an earlier run (it does not mean the entry was written in this run); for `quoted-match` and `ai-proposed`, it reflects the value at case end. The timing fields appear only when those stages ran. Earlier binding failures instead report a case error.
+After local verification, an action or capture step can carry `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`. For `grounding`, `confirmed` is always `true`, because the binding came from an entry confirmed in an earlier run. It does not mean the entry was written in this run. For `quoted-match` and `ai-proposed`, it holds the value at case end. The timing fields appear only when those stages ran. Earlier binding failures report a case error instead.
 
-Every executed run or completed heal result has a `sessions` entry for each Plan Target. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means that Target's launch did not return a session, including when execution stopped before reaching its first step. A failed close leaves the case status unchanged.
+Every executed run result and every completed heal result has a `sessions` entry for each target in the plan. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means the target's launch returned no session, including when execution stopped before its first step. A failed close leaves the case status unchanged.
 
 ## Review concerns {#review-concerns}
 
-Structures representing diagnostic findings reported during plan review.
+A review reports its findings as concerns on the plan.
 
-| Field | Type |
+| field | type |
 | --- | --- |
 | `stepId` | string |
 | `concern` | string |
@@ -119,38 +130,41 @@ Structures representing diagnostic findings reported during plan review.
 
 ## Errors {#errors}
 
-Report errors are strict objects scoped to either the overall command run or a specific test case. Every entry has `scope`, `kind`, `code`, and `message`; `hint` is optional for every code, and case-scoped entries additionally have a non-whitespace `caseId`. `details` is optional and is available only for these fifteen codes. Whenever shown, `attempts` is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`; `SecretRef` has the `{{secrets.<identifier>(.<identifier>)*}}` syntax.
+A report error is a strict object scoped to the whole run or to one case. Every entry has `scope`, `kind`, `code`, and `message`. `hint` is optional for every code, and a case-scoped entry also has a non-whitespace `caseId`. `details` is optional and exists only for the fifteen codes below.
 
-| Code | Optional `details` shape |
+Where `attempts` appears, it is `Array<{ attempt: integer 1–5, code: ReportErrorCode }>`. A `SecretRef` has the syntax `{{secrets.<identifier>(.<identifier>)*}}`.
+
+| code | optional `details` shape |
 | --- | --- |
-| `AGENTIC_STEP_FAILED` | Case scope only: `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible", "element-visible", "text-equals", "url-matches", or "element-count"; expected: string } }`; counters describe completed tool calls. |
-| `CASE_ABORTED` | Case scope only: `{ reason: "run-reference-invalid", "run-value-missing", "secret-fill-incomplete", "agentic-no-terminal-evidence", "agentic-coverage-inexact", "agentic-proof-invalid", "grounding-secret-contaminated", or "grounding-snapshot-invalid"; stepId: string }`; `reason` is one of eight defined values. |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: any instruction-coverage, element-intent, or confirms issue code (`confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, `confirms-duplicate`), "text-equals-self-quote", "invalid-json", "schema-mismatch", "secret-allowed-name-not-projected", or "secret-conflicting-target-names" (the last two always carry stepId); path: Array<string or non-negative integer>; stepId?: StepId }>, attempts?: ... }` |
-| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk, credential-prefix-ghp, credential-prefix-aws-access-key, high-entropy-token, or embedded-secret-reference; path: non-whitespace string; attempts?: ... }` |
-| `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` |
-| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", or "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: non-whitespace string }> }` |
-| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" or "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" or "launch-failed"; engine: non-whitespace string }` |
-| `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" or "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
-| `PROMPT_AMBIGUOUS` | Case scope only: `{ ambiguities: integer at least 1 }`. |
+| `AGENTIC_STEP_FAILED` | `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible" \| "element-visible" \| "text-equals" \| "url-matches" \| "element-count", expected: string } }` Case scope only. The counters describe completed tool calls. |
+| `CASE_ABORTED` | `{ reason: "run-reference-invalid" \| "run-value-missing" \| "secret-fill-incomplete" \| "agentic-no-terminal-evidence" \| "agentic-coverage-inexact" \| "agentic-proof-invalid" \| "grounding-secret-contaminated" \| "grounding-snapshot-invalid", stepId: string }` Case scope only. `reason` has eight defined values. |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: instruction-coverage, element-intent, or confirms issue code \| "text-equals-self-quote" \| "invalid-json" \| "schema-mismatch" \| "secret-allowed-name-not-projected" \| "secret-conflicting-target-names", path: Array<string or non-negative integer>, stepId?: StepId }>, attempts?: ... }` The `confirms` issue codes are `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate`. The last two non-`confirms` issue codes always carry `stepId`. |
+| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk \| credential-prefix-ghp \| credential-prefix-aws-access-key \| high-entropy-token \| embedded-secret-reference, path: non-whitespace string, attempts?: ... }` |
+| `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` `refs` has at least two entries. |
+| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required" \| "declined" \| "not-interactive", secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: string }> }` The inner `reason` can be any string. |
+| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" \| "reference" }> }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" \| "launch-failed", engine: non-whitespace string }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" \| "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
+| `PROMPT_AMBIGUOUS` | `{ ambiguities: integer at least 1 }` Case scope only. |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
-| `UNEXPECTED_CRASH` | `{ cause: { name: "Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "AbortError", or "TimeoutError" } }` |
-| `FS_IO_ERROR` | Case scope only: `{ partiallyWritten: Array<"plan" or "grounding"> }` |
-| `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir", "not-test-md", or "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing", "recoverable-miss", "no-candidate", "ambiguous", "proposal-rejected", or "candidate-changed" }`; for an element step, `missing` means no grounding entry exists and `recoverable-miss` means an existing entry does not match the current page. |
+| `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
+| `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` Case scope only. |
+| `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` For an element step, `missing` means no grounding entry exists, and `recoverable-miss` means an existing entry does not match the current page. |
 
-For generated and would-generate results, `secrets` identifies the resolved candidate secret uses; a dry-run `skipped-fresh` result also includes it. Optional `warnings` records non-fatal policy warnings, including the high-risk `secrets.allow: "*"` configuration and `{ kind: "action-unconfirmed", stepId }` for an unconfirmed action. These fields make consent-related output observable without exposing secret values.
+On `generated` and `would-generate` results, `secrets` lists the candidate secret uses that ambercast resolved. A dry-run `skipped-fresh` result includes it too. The optional `warnings` records non-fatal policy warnings of five kinds: `secret-name-reused-across-targets`, `secret-target-changed`, `allowed-names-truncated`, `action-unconfirmed` (with `stepId`), and `generator-assumption`. These fields make consent-related output observable without exposing secret values. For the high-risk `"*"` setting, see [Secret consent](/ambercast/reference/configuration/#secret-consent).
 
 ## Report persistence {#persistence}
 
-Only `run` attempts persistence, writing to `runsDir/runId/report.json` using `JSON.stringify` of the finalized persisted envelope.
+Only `run` persists a report. It writes `runsDir/runId/report.json` with `JSON.stringify` of the finalized envelope.
 
-The `reportPersistence` property tracks the write outcome:
-- `persisted` follows a successful write whose disk JSON equals the returned envelope.
+The `reportPersistence` property records the write outcome:
+
+- `persisted` follows a successful write whose JSON on disk equals the returned envelope.
 - `failed` follows a write failure with no partial content visible.
-- `not-attempted` applies when a write is never tried, including a command failure before an outcome.
+- `not-attempted` applies when no write is tried, including a command failure before an outcome.
 
-Only the writer is pinned to the current schema version; the viewer reads any 3.x report leniently.
+Only the writer is pinned to the current schema version. The viewer reads any 3.x report leniently. The examples below show one envelope per command.
 
 ```json
 {"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
@@ -165,8 +179,13 @@ Only the writer is pinned to the current schema version; the viewer reads any 3.
 {"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
-## Persistence compatibility link {#report-persistence}
+## Persistence compatibility anchor {#report-persistence}
 
-See [Reports](/ambercast/reference/reports/#persistence) for report persistence details.
+This section keeps an older anchor alive. See [Report persistence](/ambercast/reference/reports/#persistence) for the content.
 
-Links: [Error codes](/ambercast/reference/error-codes/#code-vocabulary), [Exit codes](/ambercast/reference/exit-codes/#exit-code-table), [File layout](/ambercast/reference/file-layout/#run-artifacts), [ambercast run](/ambercast/reference/cli/run/#report-and-exits).
+## See also {#see-also}
+
+- [Error codes](/ambercast/reference/error-codes/#code-vocabulary)
+- [Exit codes](/ambercast/reference/exit-codes/#exit-code-table)
+- [File layout](/ambercast/reference/file-layout/#run-artifacts)
+- [ambercast run](/ambercast/reference/cli/run/#report-and-exits)

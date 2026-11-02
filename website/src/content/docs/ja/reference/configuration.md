@@ -1,86 +1,97 @@
 ---
 title: 設定
-description: ambercast の設定キーと設定解決に関する仕様です。
+description: ambercast の設定キー、既定値、設定ファイルを選ぶ規則を示すリファレンス。
 ---
 
-ambercast の設定キーと設定解決の仕様について説明します。設定ファイルが存在する場合、`$schema` の指定が必須となりますが、それ以外のすべてのキーは任意です。設定はコマンドライン引数、環境変数、設定ファイル、組み込みデフォルト値の解決順序に従ってロードされます。
+ambercast は、1 つの設定ファイルと組み込みの既定値から設定を組み立てる。このページは、ファイルの選び方、ターゲットの設定、すべてのキーを扱う。
 
 ## ファイルの選択 {#file-selection}
 
-存在する設定ファイルには `$schema` が必ず含まれている必要があります。それ以外の宣言可能なキーはすべて省略可能です。
+存在する設定ファイルには `$schema` が必須である。そのほかの宣言済みのキーは、すべて任意である。
 
-設定の選択優先順位は次の順序に従います。
+ambercast は、次の順でファイルを選ぶ。
 
-1. コマンドの `--config` オプション（`generate` および `check` のみ）
-2. 環境変数 `AMBERCAST_CONFIG`
-3. 祖先ディレクトリを遡って検索される `ambercast.config.json`
-4. 組み込みのデフォルト値
+1. コマンドの `--config` の値。`generate`、`check`、`view` が受け付け、`run`、`heal`、`init`、`mcp` は受け付けない。[コマンドとフラグの対応表](/ambercast/ja/reference/cli/overview/#command-flag-matrix)を参照する。
+2. 環境変数 `AMBERCAST_CONFIG`。詳細は[環境変数](/ambercast/ja/reference/environment-variables/#configuration)を参照する。
+3. 祖先ディレクトリにある `ambercast.config.json`。
+4. 組み込みの既定値。
 
-明示的に指定された設定ファイルのパスが存在しない場合はエラーとなり、探索やデフォルト値へのフォールスルーは行われません。
+明示したパスが存在しなければエラーになる。検出や既定値には切り替わらない。
 
-設定ファイルで `targets` オブジェクトを指定した場合、デフォルトのターゲットとディープマージされるのではなく、ターゲット設定全体が置き換えられます。この置き換えに伴い `defaultTarget` を省略した場合は、デフォルトターゲットの指定がクリアされます。
+指定した `targets` オブジェクトは、既定のターゲットとマージせず、置き換える。置き換えで `defaultTarget` を省くと、既定のターゲットは解除される。
 
 ## ターゲット {#targets}
 
-ターゲット設定はブラウザの接続先を提供します。ターゲットの `healReplayIsolation` 設定は修復（heal）の実行前に、`resolveTimeoutMs` 設定は要素解決の実行前にそれぞれライブに解決され、いずれも Plan や inputs-digest のフィールドには含まれません。なお、`healReplayIsolation` の既定値は `stateful` です。
+ターゲットは、Web サーフェスとブラウザーの接続先を与える。ambercast は `healReplayIsolation` と `resolveTimeoutMs` を、heal の前と要素の解決の前に、その場で解決する。これらは計画（plan）のフィールドではなく、`inputsDigest` にも入らない。
 
-設定読み込み時に、`src/config/load.ts` が指定された `locale` を `Intl.getCanonicalLocales` で正規化し、結果がちょうど1要素ならその値を保持します。たとえば `"ja-jp"` は `"ja-JP"` になります。`RangeError` を投げる値、空文字、文字列以外の値は、issue path `targets.<name>.locale` に対する `CONFIG_INVALID`（終了コード 2）として拒否されます。正規化された値は Plan のターゲット定義と実行時の Playwright ブラウザコンテキスト（`newContext({ baseURL, locale })`）に渡され、そのターゲットのページにおける `navigator.language` と最初のリクエストの `Accept-Language` ヘッダーに反映されます。
+ファイルを読み込むとき、ambercast は記述された `locale` を `Intl.getCanonicalLocales` で正規化する。たとえば `"ja-jp"` は `"ja-JP"` になる。`RangeError` を投げる値、空文字列、文字列以外の値は、issue path（問題のパス） `targets.<name>.locale` で `CONFIG_INVALID`（終了コード 2）として失敗する。
 
-この設定の対象範囲は `Accept-Language`、`navigator.language`、Intl による解決までです。タイムゾーンやアプリケーション側の言語 Cookie・設定は制御せず、それらとの優先順位も定めません。
+正規化した locale は、計画のターゲット定義と Playwright のブラウザーコンテキストに渡る。そのターゲットのページの `navigator.language` と、最初のリクエストの `Accept-Language` ヘッダーに影響する。
 
-## 設定キー一覧 {#key-table}
+この設定の効果は、そこまでである。タイムゾーン、アプリ側の言語 Cookie、アプリ側の設定は変えない。それらとの優先順位も定めない。
 
-| キーパス | 型 | デフォルト値 | 制約 | 利用箇所 |
+## キー一覧 {#key-table}
+
+| キーのパス | 型 | 既定値 | 制約 | 使う側 |
 | --- | --- | --- | --- | --- |
-| `$schema` | string | — | 存在するファイルでは必須 | ローダー |
-| `testDir` | string | `tests/ambercast` | 絶対配置パスへと解決 | generate、run、check、heal の探索／配置 |
-| `runsDir` | string | `tests/ambercast/.runs` | 絶対配置パスへと解決 | run のレポート／エビデンス、heal 内の書き込み |
-| `testMatch` | string[] | `["**/*.test.md"]` | 限定された `*`/`**` マッチャー。すべてのパターンは `.test.md` で終わる必要があり、そうでなければ設定読み込みは `CONFIG_INVALID` で失敗 | generate、run、check、heal の探索 |
-| `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含マッチ後に除外 | generate、run、check、heal の探索 |
-| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空配列の場合はすべての secret 名に同意が必要。`"*"` はすべての名前を同意なしで許可（非推奨）。空でない配列の場合はその名前のみを許可 | generate、run、heal |
-| `targets.<name>.baseUrl` | string | `web-user` において `http://localhost:3000` | ターゲットレコード全体を置換 | generate、run、check、heal のターゲット選択 |
-| `targets.<name>.surface` | `web` | absent | TP1 では `web` のみ | generate と Plan のターゲット定義 |
-| `targets.<name>.description` | string | なし | 任意の生成コンテキスト | generate |
-| `targets.<name>.executor.kind` | `playwright` | `playwright` | 実行時に選ぶ UI executor の種類。Plan ダイジェストの対象外 | run、heal の executor 構成 |
-| `targets.<name>.executor.browser` | `chromium` | `chromium` | 実行時に使うブラウザ。Plan ダイジェストの対象外 | run、heal の executor 構成 |
-| `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | なし | シークレットエントリが存在しない場合は `baseUrl` のみを許可。空配列の場合はそのシークレットをすべての場所で拒否。空でない配列の場合はそのデフォルトを置換 | generate、run、heal のシークレットシンクポリシー、check（鮮度） |
-| `targets.<name>.healReplayIsolation` | `idempotent|stateful` | `stateful` | heal には選択された `idempotent` ターゲットが必要 | heal |
-| `targets.<name>.locale` | string | なし | `Intl.getCanonicalLocales` で正規化される。正規化に失敗した値は `CONFIG_INVALID` | generate と Plan のターゲット定義、run のブラウザコンテキスト |
-| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0–60000 | run; heal |
-| `defaultTarget` | string | `web-user` | ターゲットへと解決される必要あり | generate、run、check、heal のターゲット選択 |
-| `ai.provider` | `claude|codex|auto` | `auto` | CLI や環境変数によって上書きされる場合あり | generate、run のフォールバック、heal |
-| `ai.maxGenerateAttempts` | 正の整数 | `2` | 1〜5。ファイルごとの生成試行回数 | generate のみ。heal Stage 3 には適用しない |
-| `ai.timeoutMs` | 正の整数 | `600000` | 正の値 | generate、run のフォールバック、heal |
-| `viewer.port` | 整数 | `4600` | 1〜65535。開始候補ポート。`--port` で上書き可能 | view |
-| `ci.heal` | boolean | `false` | CI におけるリスト表示以外の heal のオプトイン | heal |
-| `ci.updateGroundingCache` | boolean | `false` | CI での書き戻しのオプトイン | run |
-| `grounding.repositoryPolicy` | `committed|uncommitted` | `committed` | 定義済みの語彙 | check |
-| `grounding.localWriteBack` | `auto|explicit` | `auto` | CI では無視される | run |
-| `heal.maxStepRepairs` | 正の整数 | なし | 実際のプロバイダーへの増分ディスパッチのみを制限 | heal |
-| `heal.caseTimeoutMs` | 正の整数 | `300000` | ケース受付のデッドライン | heal |
+| `$schema` | string | — | 設定ファイルがある場合は必須 | ローダー |
+| `testDir` | string | `tests/ambercast` | 絶対パスのレイアウトに解決される | generate、run、check、heal（検出とレイアウト） |
+| `runsDir` | string | `tests/ambercast/.runs` | 絶対パスのレイアウトに解決される | run（レポートと証拠）、heal（範囲を限った書き込み） |
+| `testMatch` | string[] | `["**/*.test.md"]` | `*`/`**` に限った一致規則。すべてのパターンは `.test.md` で終わる必要があり、そうでなければ読み込みは `CONFIG_INVALID` で失敗する | generate、run、check、heal（検出） |
+| `testIgnore` | string[] | `["**/.runs/**","**/*.ambercast.plan.json","**/*.ambercast.grounding.json"]` | 包含の判定のあとで除外する | generate、run、check、heal（検出） |
+| `secrets.allow` | `SecretName[] \| "*"` | `[]` | 空配列は、すべてのシークレット名に同意を求める。`"*"` は同意なしですべての名前を許可する（非推奨）。空でない配列は、列挙した名前だけを許可する | generate、run、heal |
+| `targets.<name>.baseUrl` | string | `web-user` では `http://localhost:3000` | 自分で書くすべてのターゲットで必須。リテラルの `{{secrets.` を含まない http(s) URL。ターゲットのレコード全体を置き換える | generate（入力）、run、check、heal（計画が参照するターゲット） |
+| `targets.<name>.surface` | `web` | — | TP1 では `web` だけである。省略可能なフィールドで、スキーマの既定値ではなく、使用時に `web` に解決される | generate、計画のターゲット定義 |
+| `targets.<name>.description` | string | — | 任意の生成コンテキスト | generate |
+| `targets.<name>.executor.kind` | `playwright` | `playwright` | 実行時の UI 実行器の種類。計画のダイジェストには含めない | run、heal（実行器の組み立て） |
+| `targets.<name>.executor.browser` | `chromium` | `chromium` | 実行時の実行器が使うブラウザー。計画のダイジェストには含めない | run、heal（実行器の組み立て） |
+| `targets.<name>.secretSinkOrigins` | `Record<SecretRef, SecretSinkOrigin[]>` | — | シークレットの項目がなければ、許可するのは `baseUrl` だけである。空配列は、そのシークレットをすべての場所で拒否する。空でない配列は、この既定値を置き換える。各オリジンは `scheme://host[:port]` の形で、ポートは 1〜65535 とし、パス、クエリ、フラグメント、ワイルドカード、ユーザー情報、リテラルの `{{secrets.` を含められない | generate、run、heal（シークレットの送り先の方針）、check（鮮度） |
+| `targets.<name>.healReplayIsolation` | `idempotent\|stateful` | `stateful` | heal は、計画が参照するすべてのターゲットが `idempotent` であることを求める | heal |
+| `targets.<name>.locale` | string | — | `Intl.getCanonicalLocales` で正規化される。正規化に失敗した値は `CONFIG_INVALID` になる | generate、計画のターゲット定義、run（ブラウザーコンテキスト） |
+| `targets.<name>.resolveTimeoutMs` | integer | `5000` | 0〜60000 | run、heal |
+| `defaultTarget` | string | `web-user` | ターゲットに解決される必要がある。プロンプトがステップのターゲットを示さないとき、ジェネレーターが使う | generate |
+| `ai.provider` | `claude\|codex\|auto` | `auto` | CLI のフラグまたは環境変数で上書きできる | generate、run（フォールバック）、heal |
+| `ai.maxGenerateAttempts` | positive integer | `2` | 1〜5。ファイルごとの生成の試行回数 | generate だけ。heal の第 3 段階では使わない |
+| `ai.timeoutMs` | positive integer | `600000` | 正の数 | generate、run（フォールバック）、heal |
+| `viewer.port` | integer | `4600` | 1〜65535。探索の開始候補で、`--port` で上書きされる | view |
+| `ci.heal` | boolean | `false` | CI で、一覧表示以外の heal を使うための明示的な選択 | heal |
+| `ci.updateGroundingCache` | boolean | `false` | CI で、キャッシュの書き戻しを使うための明示的な選択 | run |
+| `grounding.repositoryPolicy` | `committed\|uncommitted` | `committed` | 取りうる値は有限である | check |
+| `grounding.localWriteBack` | `auto\|explicit` | `auto` | CI では無視される | run |
+| `heal.maxStepRepairs` | positive integer | — | 実プロバイダーへの増分の呼び出し回数だけを制限する | heal |
+| `heal.caseTimeoutMs` | positive integer | `300000` | ケースを受け付ける期限 | heal |
 
-## シークレット同意 {#secret-consent}
+`testMatch` と `testIgnore` のパターンは、[パターン言語](/ambercast/ja/reference/discovery-patterns/#pattern-language)に従う。
 
-`secrets.allow` は、生成中に検出された論理シークレット名の永続的な許可リストです。`generate` はリストにない名前について対話的な承認を求め、承認した名前を設定ファイルへ統合します。CI または別の非対話環境では、すでにレビュー済みの名前を事前にリストへ追加してください。
+## シークレットの同意 {#secret-consent}
 
-`"*"` は名前ごとの同意を回避し、AI が提案した任意の名前を受け入れます。これはより安全な既定値ではなく、高リスクのエスケープハッチです。レビューなしで任意の提案名を受け入れることを意図する場合にのみ使用してください。
+`secrets.allow` は、生成中に見つかった論理的なシークレット名を保存する許可リストである。`generate` は、リストにない名前を確認し、承認した名前をファイルに追記する。CI など対話できない環境では、確認済みの名前をあらかじめリストに入れておく。
 
-## AI 設定 {#ai}
+`"*"` は名前ごとの同意を省き、AI が提案した任意の名前を受け入れる。より安全な既定値ではなく、リスクの高い抜け道である。提案された任意の名前を確認せずに受け入れる意図があるときだけ使う。
 
-`ai.maxGenerateAttempts`：ローカル検証で応答が拒否された場合に、generate がプロンプトごとに行うプロバイダー試行の最大回数です。1〜5 の範囲で指定でき、既定値は 2 です。heal の修復には適用されません。
+## AI の設定 {#ai}
 
-`ai.timeoutMs`：1 回のプロバイダーディスパッチに対する期限（ミリ秒）です。generate、run、heal のすべてのディスパッチに適用されます。heal のケース期限は受付境界にすぎないため、受付済みのディスパッチはこの値まで実行を継続できます。既定値は 600000 です。
+`ai.maxGenerateAttempts` は、`generate` がプロンプト 1 つについてプロバイダーに問い合わせる最大回数であり、初回を含む。再試行するのは、ローカルの検証が応答を退けたときだけである。範囲は 1 から 5 で、既定値は 2 である。heal の修復には適用しない。
 
-## 自己修復設定 {#heal}
+`ai.timeoutMs` は、プロバイダーへの 1 回の呼び出しの期限をミリ秒で示す。既定値は 600000 である。generate、run、heal のすべての呼び出しに適用する。heal のケースの期限は受け付けの判断にだけ使うため、受け付けた呼び出しはこの値まで動き続けることがある。
 
-`heal.maxStepRepairs` は実際のプロバイダーに対する段階的なディスパッチ回数を制御し、`heal.caseTimeoutMs` はテストケース全体の受付期限（デッドライン）を設定します。
+## heal の設定 {#heal}
 
-## Groundingの書き戻し {#grounding}
+`heal.maxStepRepairs` は、実プロバイダーへの増分の呼び出しの回数を制限する。`heal.caseTimeoutMs` は、ケース全体の受け付けの期限である。
 
-| 環境 | 解決されたポリシー | Groundingが書き戻される条件 |
+## グラウンディングの書き戻し {#grounding}
+
+| 環境 | 解決される方針 | グラウンディングを書き込む条件 |
 | --- | --- | --- |
-| ローカル | `localWriteBack: auto` | Grounding の結果が変更された後に自動的 |
-| ローカル | `localWriteBack: explicit` | `--update-cache` が渡されたとき |
-| CI | `localWriteBack` は無視される | `--update-cache` が渡されたとき、または `ci.updateGroundingCache: true` のとき |
+| ローカル | `localWriteBack: auto` | グラウンディングの結果が変わったとき |
+| ローカル | `localWriteBack: explicit` | `--update-cache` を渡したとき |
+| CI | `localWriteBack` は無視される | `--update-cache` を渡したとき、または `ci.updateGroundingCache: true` のとき |
 
-関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix), [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language), [環境変数](/ambercast/ja/reference/environment-variables/#configuration), [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
+コマンドの動作は [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back) を参照する。
+
+## 関連項目 {#see-also}
+
+- [CLI の概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix)
+- [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language)
+- [環境変数](/ambercast/ja/reference/environment-variables/#configuration)
+- [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)

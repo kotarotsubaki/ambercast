@@ -1,83 +1,81 @@
 ---
 title: レポート
-description: ambercast が出力する構造化レポートのスキーマおよび各コマンド固有の結果形式に関するリファレンスです。
+description: ambercast の構造化 JSON レポートのエンベロープ、コマンドごとの結果の形、エラーの詳細、永続化の規則を示すリファレンス。
 ---
 
-ambercast が出力するすべての構造化フィールドを定義します。各コマンドの実行結果は、共通のエンベロープ（外枠）に格納され、厳格なスキーマを持つ JSON 形式で表現されます。
+各コマンドは、実行のメタデータ、サマリー、エラー、コマンド固有の結果を持つ JSON のレポートを 1 つ出力できる。
 
 ## エンベロープ {#envelope}
 
-| フィールド | 型および制約 |
+公開レポートのスキーマのオブジェクトはすべて厳格で、未知のフィールドを拒否する。スキーマには `review` の分岐があるが、CLI に `review` コマンドはない。
+
+| フィールド | 型と規則 |
 | --- | --- |
 | `schemaVersion` | リテラル `3.11` |
-| `command` | `generate`、`run`、`check`、`heal`、または `review` |
-| `startedAt` | UTC 形式の `YYYY-MM-DDTHH:mm:ssZ` 文字列 |
-| `durationMs` | 非負整数 |
-| `summary` | 厳格なオブジェクト（`total`、`passed`、`failed`、`errored`、`skipped` の各非負整数） |
+| `command` | `generate`、`run`、`check`、`heal`、`review` のいずれか |
+| `startedAt` | `YYYY-MM-DDTHH:mm:ssZ` 形式の UTC 文字列 |
+| `durationMs` | 非負の整数 |
+| `summary` | 非負の整数 `total`、`passed`、`failed`、`errored`、`skipped` を持つ厳格なオブジェクト |
 | `errors` | `ReportError` の配列 |
-| `results` | コマンド固有の結果配列 |
-| `reportPersistence` | `run` のみ: `persisted`、`failed`、または `not-attempted` |
+| `results` | コマンド固有の結果の配列 |
+| `reportPersistence` | `run` のみ。`persisted`、`failed`、`not-attempted` のいずれか |
 
-公開レポートスキーマ内のオブジェクトは厳格（strict）に定義されており、未知のフィールドを拒否します。
+## 結果の形 {#result-shapes}
 
-`review` ブランチはスキーマ内に定義されていますが、実装された CLI に `review` コマンドは提供されていません。
+`results` 配列はコマンドごとに異なる。以降の節で、スキーマにだけ存在する分岐も含めて、各分岐を示す。
 
-## 結果の形状 {#result-shapes}
+## generate の結果 {#generate-results}
 
-エンベロープの `results` 配列はコマンドごとに固有です。以降の各セクションで、実装されているブランチおよびスキーマ上のみに存在するブランチの構造を規定します。
+`GenerateResult` の分岐はすべて厳格である。表の任意フィールドが、その分岐に追加できる唯一のフィールドである。
 
-## generate コマンドの結果 {#generate-results}
-
-`GenerateResult` の各ブランチは厳格（strict）です。下表の任意メトリクスは、示されたブランチに限り追加できます。
-
-| ステータス | 必須フィールド | 任意フィールド | ブランチで禁止されるフィールド |
+| ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
 | `generated` | `id`, `file`, `planFile`, `dryRun: false`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
 | `would-generate` | `id`, `file`, `planFile`, `dryRun: true`, `ambiguities: JSON[]`, `secrets` | `durationMs`, `aiCalls`, `warnings` | — |
-| `skipped-fresh`（`dryRun: true`） | `id`, `file`, `planFile`, `dryRun: true`, `secrets` | `durationMs`, `aiCalls`, `warnings` | `ambiguities` |
-| `skipped-fresh`（`dryRun: false`） | `id`, `file`, `planFile`, `dryRun: false` | `durationMs`, `aiCalls` | `ambiguities`, `secrets`, `warnings` |
+| `skipped-fresh` (`dryRun: true`) | `id`, `file`, `planFile`, `dryRun: true`, `secrets` | `durationMs`, `aiCalls`, `warnings` | `ambiguities` |
+| `skipped-fresh` (`dryRun: false`) | `id`, `file`, `planFile`, `dryRun: false` | `durationMs`, `aiCalls` | `ambiguities`, `secrets`, `warnings` |
 | `listed` | `id`, `file`, `dryRun: false` | — | `planFile`, `ambiguities`, `durationMs`, `aiCalls` |
 | `failed` | `id`, `file`, `dryRun: boolean` | `durationMs`, `aiCalls` | `planFile`, `ambiguities` |
 | `skipped` | `id`, `file` | — | `planFile`, `dryRun`, `ambiguities`, `durationMs`, `aiCalls` |
 
-AI プロバイダーの応答は任意の文字列配列 `assumptions` に、プロンプトが明示していない仮定を列挙する。`generate` は空白だけの項目を除き、`generated` と `would-generate` の `warnings` に `{ kind: 'generator-assumption', message }` を加える。仮定は `generate` や `heal` を止めない。
+AI プロバイダーは、プロンプトに書かれていない前提を、任意の文字列配列 `assumptions` に列挙できる。`generated` と `would-generate` の結果では、`generate` が空白でない前提を 1 件ずつ `{ kind: 'generator-assumption', message }` として `warnings` に加える。前提によって `generate` や `heal` が止まることはない。
 
-画面では結果行の直後に `  warning: <message>` を表示する。秘匿値の検査に当たった項目は `An assumption was omitted because it looked like a secret.` に置き換える。
+人が読む出力では、結果の行の直後に `  warning: <message>` を表示する。前提がシークレット検出に該当した場合、ambercast はそれを `An assumption was omitted because it looked like a secret.` に置き換える。
 
-仮定は計画に保存しない。fresh な計画の再実行では `skipped-fresh` となり、仮定の警告は出ない。`--force` で再生成すると再び確認できるが、結果は非決定的である。
+ambercast は前提を計画（plan）に保存しない。鮮度が保たれた計画に対する再実行は、前提の警告を伴わない `skipped-fresh` を返す。前提をもう一度見るには `--force` を渡して再生成する。再生成は非決定的である。
 
-`generated` と `would-generate` の `ambiguities` は常に `[]` である。プロバイダーの `ambiguities` は、ステップのターゲットを割り当てられない場合だけを意味する。
+`generated` と `would-generate` の結果では、`ambiguities` は常に `[]` である。プロバイダーの `ambiguities` は、ステップのターゲットを割り当てられないことだけを意味する。
 
-単一ターゲットの要求に空でない `ambiguities` を返すと、ambercast は `AI_RESPONSE_INVALID` として再試行する。再試行後も不正なら終了コードは 3 である。複数ターゲットで割り当てが決まらない場合は、従来どおり `PROMPT_AMBIGUOUS` と終了コード 2 になる。
+ターゲットが 1 つの場合、ambercast は空でない `ambiguities` を含む応答を `AI_RESPONSE_INVALID` として再試行し、再試行が尽きると終了コード 3 で終わる。複数ターゲットで割り当てが未解決のままなら、従来どおり `PROMPT_AMBIGUOUS` と終了コード 2 になる。
 
-閉じた union として警告を検証する利用者には、report 3.11 のスキーマが必要である。
+警告の種別を閉じたユニオンとして検証する利用側には、レポート 3.11 のスキーマが必要である。
 
-## run コマンドの結果 {#run-results}
+## run の結果 {#run-results}
 
-`RunResult` の各ブランチは厳格（strict）です。
+`RunResult` の分岐はすべて厳格である。
 
-| ステータス | 必須フィールド | 任意フィールド | ブランチで禁止されるフィールド |
+| ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
-## check コマンドの結果 {#check-results}
+## check の結果 {#check-results}
 
-`CheckResult` の各ブランチは厳格（strict）です。
+`CheckResult` の分岐はすべて厳格である。
 
-| ステータス | 必須フィールド | オプションフィールド | ブランチで禁止されるフィールド |
+| ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
-| `fresh`, `stale`（古くなった状態）, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
+| `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
 | `listed` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 | `skipped` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 
-## heal コマンドの結果 {#heal-results}
+## heal の結果 {#heal-results}
 
-`HealResult` において、`completed` の各ブランチはすべて `id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、および `explanation` を必須とし、`aiCalls` は任意です。
+完了した `HealResult` の分岐は、`id`、`file`、`planFile`、`status: completed`、`durationMs`、`steps`、`sessions`、`explanation` をすべて必須とする。`aiCalls` は任意である。
 
-Stage 3 で採用した候補の `assumptions` は、`healed` 行だけの任意フィールド `warnings` に `generator-assumption` として現れる。他の heal 結果には `warnings` を含めない。仮定は Stage 3 を失敗にしない。
+任意の `warnings` を持てるのは `healed` の行だけで、受理した Stage 3 の候補の `assumptions` に由来する `generator-assumption` の項目を入れる。ほかの heal の結果では `warnings` を禁止する。前提が Stage 3 を失敗させることはない。
 
 | repairOutcome | 許可される application | 許可される stopReason |
 | --- | --- | --- |
@@ -88,89 +86,106 @@ Stage 3 で採用した候補の `assumptions` は、`healed` 行だけの任意
 | `listed` | 識別情報のみ: `id`, `file`, `status` | 禁止: `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
 | `skipped` | 識別情報のみ: `id`, `file`, `status` | 禁止: `application`, `stopReason`, `planFile`, `durationMs`, `steps`, `explanation` |
 
-Stage 3 が論理シークレット名セットの変更を理由に完全な Plan 候補を拒否した場合、完了結果は `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }` となります。これはハード拒否です。アーティファクトはコミットされず、候補を黙って再帰属させるのではなく、ユーザーは同意を得て再生成する必要があります。
+Stage 3 が、論理的なシークレット名の集合が変わったことを理由に計画全体の候補を拒否すると、完了した結果は `stage3Rejection: { reason: "secret-set-changed", added: SecretName[], removed: SecretName[] }` を持つ。これは強い拒否である。成果物はコミットされず、候補を黙って付け替えるのではなく、同意を得て再生成する必要がある。
 
-すべての completed ブランチには、ケースごとの Stage 1、Stage 2、Stage 3 の試行と結果を順序どおりに投影する診断配列 `repairTrace` を任意で含められます。Stage 1 のエントリは `{ stage: "stage1", stepId, outcome: "accepted" | "no-advance" | "not-eligible" }`、Stage 2 のエントリは `{ stage: "stage2", stepId, outcome: "accepted" }` または `{ stage: "stage2", stepId, outcome: "rejected", reason }`（`reason` は `provider-error`、`response-shape`、`id-mismatch`、`secret-name-invalid`、`coverage-invalid`、`obligation-mismatch`、`literal-secret`、`no-advance` のいずれか）、Stage 3 のエントリは `{ stage: "stage3", outcome: "accepted" }`、`{ stage: "stage3", outcome: "not-passing", firstFailureIndex }`、`{ stage: "stage3", outcome: "failed", code? }`、または `{ stage: "stage3", outcome: "secret-set-rejected" }` です。各エントリは厳格であり、別の stage や outcome に属するフィールドは許可されません。
+完了した分岐は、`repairTrace` も持てる。これは、ケースの Stage 1、Stage 2、Stage 3 の試行を順に並べた診断の配列である。各項目は厳格で、別の段階や別の結果のフィールドは使えない。
 
-admission-denied フェーズは `repairTrace` エントリを追加しません。そのケースの `stopReason: "attempt-limit" | "deadline"` としてのみ表れます。中断（interrupted）された作業は completed 結果に一切到達せず、代わりに `skipped` として報告されるため、`repairTrace` エントリも `stopReason` も持ちません。
-
-## 結果ステータスと共通構造 {#result-statuses}
-
-ステップおよび review 結果で共有される構造です。
-
-| ブランチ | 必須フィールド | オプションフィールド |
+| 段階 | outcome | そのほかのフィールド |
 | --- | --- | --- |
-| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable`（capture のみ）、`kind: assertion/environment`, `expected`, `actual`, `screenshot`, `screenshotOmitted: secret-detected`, `observed`, `binding` |
-| `observed` | `note`: 固定値 `OBSERVED_NOTE`, `accessibilitySnapshot` | — |
+| `stage1` | `accepted`, `no-advance` | `stepId` |
+| `stage1` | `not-eligible` | `stepId`, `reason`。値は `frontier-out-of-range`, `mode-none`, `trace-current`, `no-confirming-step`, `no-confirms` のいずれか |
+| `stage2` | `accepted` | `stepId` |
+| `stage2` | `rejected` | `stepId`, `reason`。値は `provider-error`, `response-shape`, `id-mismatch`, `secret-name-invalid`, `coverage-invalid`, `obligation-mismatch`, `literal-secret`, `no-advance`, `intent-invalid` のいずれか |
+| `stage3` | `accepted` | — |
+| `stage3` | `not-passing` | `firstFailureIndex` |
+| `stage3` | `failed` | 任意の `code` |
+| `stage3` | `secret-set-rejected` | — |
+
+受け付けを拒否された段階は、`repairTrace` の項目を追加しない。ケースの `stopReason: "attempt-limit"` または `"deadline"` にだけ現れる。中断された作業は、完了した結果にならない。`skipped` として報告するので、`repairTrace` の項目と `stopReason` を持たない。
+
+## 結果のステータス {#result-statuses}
+
+ステップの結果とレビューの結果は、次の分岐を共有する。
+
+| 分岐 | 必須フィールド | 任意フィールド |
+| --- | --- | --- |
+| `step` | `id`, `type: action/assert/capture/ai`, `target`, `status: passed/failed/error/skipped` | `variable`（capture のみ）、`kind: assertion/environment`、`expected`、`actual`、`screenshot`、`screenshotOmitted: secret-detected`、`observed`、`binding` |
+| `observed` | `note`（固定の `OBSERVED_NOTE`）、`accessibilitySnapshot` | — |
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
-| `review skipped` | `id`, `file`, `status: skipped` | `concerns`, `planFile` |
+| `review skipped` | `id`, `file`, `status: skipped` | — |
 
-action と capture のステップでは、ローカル検証後に `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: 非負整数, aiProposalMs?: 非負整数 }` を含められます。`confirmed` は `grounding` では常に `true` です（以前の実行で確定済みの entry に由来し、この実行で entry を書き込んだことは意味しません）。`quoted-match` と `ai-proposed` ではケース終了時の値です。所要時間のフィールドは該当する段階を実行した場合にのみ現れます。それ以前の binding 失敗はケースエラーとして報告されます。
+ローカルでの検証を通ったあと、操作またはキャプチャーのステップは `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` を持てる。`grounding` では、バインディングが以前の実行で確認済みの項目に由来するため、`confirmed` は常に `true` である。その項目を今回の実行で書いたという意味ではない。`quoted-match` と `ai-proposed` では、ケース終了時の値を示す。時間のフィールドは、その段階が実行されたときだけ現れる。それより前のバインディングの失敗は、代わりにケースのエラーとして報告する。
 
-## review の懸念事項 {#review-concerns}
+実行された run の結果と完了した heal の結果は、計画の各ターゲットについて `sessions` の項目を持つ。各値は `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }` で、`state` は `not-opened`、`closed`、`close-failed` のいずれかである。`not-opened` は、そのターゲットの起動がセッションを返さなかったことを示す。最初のステップの前に実行が止まった場合も、これに当たる。クローズに失敗しても、ケースのステータスは変わらない。
 
-`ReviewConcern` のフィールド定義です。
+## レビューの指摘 {#review-concerns}
+
+レビューは、見つけた問題を計画に対する指摘として報告する。
 
 | フィールド | 型 |
 | --- | --- |
-| `stepId` | `string` |
-| `concern` | `string` |
-| `suggestion` | `string` |
+| `stepId` | string |
+| `concern` | string |
+| `suggestion` | string |
 
 ## エラー {#errors}
 
-`ReportError` は、コマンド全体または個々のテストケースにスコープされた厳格なオブジェクトです。すべてのエントリに `scope`、`kind`、`code`、`message` があり、`hint` はすべてのコードで任意です。case スコープのエントリには、空白以外の文字を含む `caseId` もあります。`details` は任意で、次の15コードにのみ存在します。記載されている `attempts` はすべて `Array<{ attempt: 1〜5 の整数, code: ReportErrorCode }>` であり、`SecretRef` は `{{secrets.<identifier>(.<identifier>)*}}` 構文です。
+レポートのエラーは、実行全体またはケース 1 つを範囲とする厳格なオブジェクトである。すべての項目が `scope`、`kind`、`code`、`message` を持つ。`hint` はどのコードでも任意で、ケースを範囲とする項目はさらに空白でない `caseId` を持つ。`details` は任意で、次の 15 個のコードにだけ存在する。
 
-| コード | 任意の `details` 形状 |
+`attempts` が現れる場合、型は `Array<{ attempt: integer 1–5, code: ReportErrorCode }>` である。`SecretRef` の構文は `{{secrets.<identifier>(.<identifier>)*}}` である。
+
+| コード | 任意の `details` の形 |
 | --- | --- |
-| `AGENTIC_STEP_FAILED` | case スコープのみ: `{ stepId: 空白以外の文字列, actions: 非負整数, assertions: 非負整数, passedAssertions: 非負整数, failedAssertions: 非負整数, targetRejections: 非負整数, lastFailedAssertion?: { check: "text-visible"・"element-visible"・"text-equals"・"url-matches"・"element-count" のいずれか; expected: 文字列 } }`。カウンターは完了したツール呼び出しを表します。 |
-| `CASE_ABORTED` | case スコープのみ: `{ reason: "run-reference-invalid"、"run-value-missing"、"secret-fill-incomplete"、"agentic-no-terminal-evidence"、"agentic-coverage-inexact"、"agentic-proof-invalid"、"grounding-secret-contaminated" または "grounding-snapshot-invalid"; stepId: 文字列 }`。`reason` は定義済みの8値のいずれかです。 |
-| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: 任意の instruction-coverage・element-intent・confirms issue code（`confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`）、"text-equals-self-quote"、"invalid-json"、"schema-mismatch"、"secret-allowed-name-not-projected"、または "secret-conflicting-target-names"（後者2つは常に stepId を伴う）; path: Array<string または非負整数>; stepId?: StepId }>, attempts?: ... }` |
-| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk、credential-prefix-ghp、credential-prefix-aws-access-key、high-entropy-token、または embedded-secret-reference; path: 空白以外の文字列; attempts?: ... }` |
-| `SECRET_ENV_VAR_COLLISION` | `{ envVar: 空白以外の文字列, refs: SecretRef[] }` |
-| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required", "declined", または "not-interactive"; secrets: Array<{ name: SecretName, stepId: StepId, envVar: 空白以外の文字列, reason: 空白以外の文字列 }> }` |
-| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: 正の整数, column: 正の整数, kind: "grant-line" または "reference" }> }` |
-| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" または "launch-failed"; engine: 空白以外の文字列 }` |
-| `EXECUTOR_UNSUPPORTED` | `{ target: 空白以外の文字列, executor: 空白以外の文字列, reason: "surface-mismatch" または "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: 空白以外の文字列 } }` |
-| `PROMPT_AMBIGUOUS` | case スコープのみ: `{ ambiguities: 1 以上の整数 }`。 |
+| `AGENTIC_STEP_FAILED` | `{ stepId: non-whitespace string, actions: non-negative integer, assertions: non-negative integer, passedAssertions: non-negative integer, failedAssertions: non-negative integer, targetRejections: non-negative integer, lastFailedAssertion?: { check: "text-visible" \| "element-visible" \| "text-equals" \| "url-matches" \| "element-count", expected: string } }` ケースの範囲のみ。カウンターは完了したツール呼び出しを数える。 |
+| `CASE_ABORTED` | `{ reason: "run-reference-invalid" \| "run-value-missing" \| "secret-fill-incomplete" \| "agentic-no-terminal-evidence" \| "agentic-coverage-inexact" \| "agentic-proof-invalid" \| "grounding-secret-contaminated" \| "grounding-snapshot-invalid", stepId: string }` ケースの範囲のみ。`reason` の定義済みの値は 8 つである。 |
+| `AI_RESPONSE_INVALID` | `{ issues: Array<{ code: instruction-coverage, element-intent, or confirms issue code \| "text-equals-self-quote" \| "invalid-json" \| "schema-mismatch" \| "secret-allowed-name-not-projected" \| "secret-conflicting-target-names", path: Array<string or non-negative integer>, stepId?: StepId }>, attempts?: ... }` `confirms` の問題コードは `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate` である。`confirms` 以外の最後の 2 つの問題コードは、常に `stepId` を持つ。 |
+| `SECRET_LITERAL_REJECTED` | `{ detector: credential-prefix-sk \| credential-prefix-ghp \| credential-prefix-aws-access-key \| high-entropy-token \| embedded-secret-reference, path: non-whitespace string, attempts?: ... }` |
+| `SECRET_ENV_VAR_COLLISION` | `{ envVar: non-whitespace string, refs: SecretRef[] }` `refs` は 2 件以上を持つ。 |
+| `SECRET_CONSENT_REQUIRED` | `{ reason: "consent-required" \| "declined" \| "not-interactive", secrets: Array<{ name: SecretName, stepId: StepId, envVar: non-whitespace string, reason: string }> }` 内側の `reason` は任意の文字列でよい。 |
+| `SECRET_SYNTAX_REJECTED` | `{ occurrences: Array<{ line: positive integer, column: positive integer, kind: "grant-line" \| "reference" }> }` |
+| `BROWSER_LAUNCH_FAILED` | `{ reason: "executable-missing" \| "launch-failed", engine: non-whitespace string }` |
+| `EXECUTOR_UNSUPPORTED` | `{ target: non-whitespace string, executor: non-whitespace string, reason: "surface-mismatch" \| "capability-missing", missing: UiCapability[], surface?: { target: "web", executor: non-whitespace string } }` |
+| `PROMPT_AMBIGUOUS` | `{ ambiguities: integer at least 1 }` ケースの範囲のみ。 |
 | `AI_EXECUTOR_UNAVAILABLE` | `{ attempts?: ... }` |
-| `UNEXPECTED_CRASH` | `{ cause: { name: "Error"、"TypeError"、"RangeError"、"SyntaxError"、"ReferenceError"、"AbortError"、または "TimeoutError" } }` |
-| `FS_IO_ERROR` | case スコープのみ: `{ partiallyWritten: Array<"plan" または "grounding"> }` |
-| `PROMPT_PATH_INVALID` | `{ path: 空白以外の文字列, reason: "outside-test-dir"、"not-test-md"、または "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing"、"recoverable-miss"、"no-candidate"、"ambiguous"、"proposal-rejected"、または "candidate-changed" }`。element step では、`missing` は grounding entry が存在しない場合、`recoverable-miss` は既存 entry が現在のページと一致しない場合を表します。 |
+| `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
+| `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` ケースの範囲のみ。 |
+| `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。 |
 
-`generated` と `would-generate` の結果では、`secrets` が解決済みの候補シークレット使用を示し、dry run の `skipped-fresh` 結果にも含まれます。任意の `warnings` は、高リスクな `secrets.allow: "*"` 設定や、未確認の action を示す `{ kind: "action-unconfirmed", stepId }` など、致命的でない警告を記録します。これらのフィールドにより、シークレット値を公開せずに同意関連の出力を観測できます。
+`generated` と `would-generate` の結果では、`secrets` に ambercast が解決したシークレット使用の候補を挙げる。dry-run の `skipped-fresh` の結果にも含まれる。任意の `warnings` は、致命的でない方針の警告を 5 種類記録する。`secret-name-reused-across-targets`、`secret-target-changed`、`allowed-names-truncated`、`action-unconfirmed`（`stepId` を伴う）、`generator-assumption` である。これらのフィールドにより、シークレットの値を出さずに、同意に関する出力を確認できる。リスクの高い `"*"` の設定は[シークレットの同意](/ambercast/ja/reference/configuration/#secret-consent)を参照する。
 
 ## レポートの永続化 {#persistence}
 
-レポートの永続化を試行するのは `run` コマンドのみです。確定した永続化エンベロープを `JSON.stringify` して、`runsDir/runId/report.json` に書き込みます。
+レポートを永続化するのは `run` だけである。確定したエンベロープを `JSON.stringify` で直列化し、`runsDir/runId/report.json` に書く。
 
-`reportPersistence` フィールドの状態は以下のとおりです。
+`reportPersistence` は、書き込みの結果を記録する。
 
-- `persisted`: ディスク上の JSON が返却されたエンベロープと一致する書き込みが成功したことを示します。
-- `failed`: 書き込みが失敗し、部分的なファイル内容が外部から見えない状態を示します。
-- `not-attempted`: 結果が得られる前にコマンドが失敗した場合など、書き込みが一度も試行されなかった場合に適用されます。
+- `persisted`: 書き込みに成功し、ディスク上の JSON が返したエンベロープと一致する。
+- `failed`: 書き込みに失敗し、一部の内容も見えない。
+- `not-attempted`: 書き込みを試みていない。結果が出る前にコマンドが失敗した場合も含む。
 
-現行スキーマ版に固定されるのは書き込み側のみです。viewer は 3.x のレポートをすべて寛容に読み取ります。
+現在のスキーマのバージョンに固定されるのは、書き込み側だけである。ビューアーは、3.x のレポートであれば寛容に読む。次の例は、コマンドごとのエンベロープを 1 つずつ示す。
 
 ```json
 {"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
-
 ```json
 {"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
-
 ```json
 {"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
-
 ```json
 {"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
-## 永続化の互換性リンク {#report-persistence}
+## 永続化の互換アンカー {#report-persistence}
 
-このセクションは以前のアンカーとの後方互換性を維持するためのものです。永続化の仕様については [レポート](/ambercast/ja/reference/reports/#persistence) を参照してください。
+旧来のアンカーを残すための節である。内容は[レポートの永続化](/ambercast/ja/reference/reports/#persistence)を参照する。
 
-関連情報: [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)、[ambercast run](/ambercast/ja/reference/cli/run/#report-and-exits)。
+## 関連項目 {#see-also}
+
+- [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary)
+- [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)
+- [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)
+- [ambercast run](/ambercast/ja/reference/cli/run/#report-and-exits)

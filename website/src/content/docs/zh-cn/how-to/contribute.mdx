@@ -1,0 +1,58 @@
+---
+title: 参与贡献
+description: 通过 issue、fork、三项检查和 Pull Request 提交变更，或报告安全漏洞。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+外部贡献者先提交 issue，再 fork 并创建分支，运行三项检查，最后提交 Pull Request。
+
+## 前置条件 \{#prerequisites}
+
+项目的 package 声明了 `npm test`、`npm run typecheck` 和 `npm run lint` 脚本。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 提交 issue \{#open-issue}
+
+   提交一个 issue，描述问题或提议。
+
+2. ## fork 并创建分支 \{#fork-and-branch}
+
+   fork 代码仓库，并为你的变更创建分支。
+
+3. ## 运行三项检查 \{#run-checks}
+
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   ```
+
+4. ## 提交 Pull Request \{#open-pull-request}
+
+   提交标题符合 Conventional Commit 规范的 Pull Request，并处理完它的评审讨论。
+
+</Steps>
+
+## 报告安全漏洞 \{#report-vulnerability}
+
+请通过 GitHub Security Advisories 报告漏洞，不要创建公开 issue。提交一份包含版本、复现步骤和影响的私密报告。方针见[安全策略](/ambercast/zh-cn/reference/security-policy/)。
+
+## 维护者与 Agent 的工作流程 \{#maintainer-workflow}
+
+`AGENTS.md` 与 `.claude/` 描述了维护者的 AI Agent 自动化流程，并非外部贡献者的前置条件。外部 Pull Request 的检查在 CI 中运行。
+
+维护者或仓库 Agent 遵循 `AGENTS.md` 中的开发工作流程，包括其针对行为变更的测试顺序。
+
+## 验证 \{#verification}
+
+三个 package 命令退出码为 `0`，或者在移交前记录其失败信息。同时确认你的 Pull Request 已经打开。
+
+## 相关链接 \{#related}
+
+<LinkCard title="安全策略" href="/ambercast/zh-cn/reference/security-policy/" description="了解如何报告漏洞，以及报告之后的处理方式。" />
+
+<LinkCard title="变更日志" href="/ambercast/zh-cn/reference/changelog/" description="了解每个版本的变更。" />

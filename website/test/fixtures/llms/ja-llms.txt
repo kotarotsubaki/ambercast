@@ -21,12 +21,12 @@
 - [実行するテストを選ぶ](https://kotarotsubaki.github.io/ambercast/ja/how-to/select-tests/): パス指定・パターンフィルタ・設定ファイルによる除外で、実行するテストプロンプトを選ぶ4つの方法。
 - [グラウンディングのライトバック制御](https://kotarotsubaki.github.io/ambercast/ja/how-to/control-grounding-writeback/): 変更されたグラウンディングを、ローカルと CI で書き戻すかどうかを設定で決める手順。
 - [生成された差分のレビュー](https://kotarotsubaki.github.io/ambercast/ja/how-to/review-generated-diffs/): generate や heal の後に、変わったファイルを一覧し、プロンプト・計画・グラウンディングの順に読む手順。
-- [Gitでの成果物の管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/): ambercast の成果物をリポジトリポリシーや実行ディレクトリの設定に合わせて Git でバージョン管理する手順を説明します。
-- [他のCIプラットフォームでの実行](https://kotarotsubaki.github.io/ambercast/ja/how-to/run-on-other-ci/): GitLab CIや汎用ランナー環境でambercastを実行するためのポータブルなCI設定手順です。
-- [stale（古くなった状態）のアーティファクトの復旧](https://kotarotsubaki.github.io/ambercast/ja/how-to/recover-stale-artifacts/): check のステータスに応じたアーティファクトの復旧手順と期待される結果を説明します。
-- [バージョン間のアップグレード](https://kotarotsubaki.github.io/ambercast/ja/how-to/upgrade/): ambercast のバージョン間を安全にアップグレードし、プランの整合性を確認する手順です。
-- [一般的な障害のトラブルシューティング](https://kotarotsubaki.github.io/ambercast/ja/how-to/troubleshoot/): 発生した症状から原因を特定し、次の対応アクションを実行するための手順を説明します。
-- [貢献ガイド](https://kotarotsubaki.github.io/ambercast/ja/how-to/contribute/): リポジトリへの貢献手順について説明します。
+- [Gitでの成果物の管理](https://kotarotsubaki.github.io/ambercast/ja/how-to/manage-artifacts-in-git/): プロンプト、計画、グラウンディングをまとめてコミットし、実行の記録を無視する手順。
+- [他のCIプラットフォームでの実行](https://kotarotsubaki.github.io/ambercast/ja/how-to/run-on-other-ci/): GitLab CI や汎用ランナーで check の後に run を実行し、修復を無効にしたままにする手順。
+- [古くなった成果物の復旧](https://kotarotsubaki.github.io/ambercast/ja/how-to/recover-stale-artifacts/): check が報告する状態ごとに、成果物を復旧する対処と、その後に確かめる結果を示す。
+- [バージョン間のアップグレード](https://kotarotsubaki.github.io/ambercast/ja/how-to/upgrade/): ambercast を更新し、古くなった計画を再生成して、依存関係とまとめてコミットする手順。
+- [一般的な障害のトラブルシューティング](https://kotarotsubaki.github.io/ambercast/ja/how-to/troubleshoot/): 失敗したコマンドの症状から対処を探し、最小のコマンドを再実行して確かめる手順。
+- [貢献ガイド](https://kotarotsubaki.github.io/ambercast/ja/how-to/contribute/): Issue、フォーク、3 つの検査、プルリクエストの順で変更を提出し、脆弱性を報告する手順。
 
 ## REFERENCE
 - [設定](https://kotarotsubaki.github.io/ambercast/ja/reference/configuration/): ambercast の設定キーと設定解決に関する仕様です。

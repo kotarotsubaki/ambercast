@@ -1,0 +1,84 @@
+---
+title: 在不同版本间升级
+description: 升级 ambercast，重新生成过期的执行计划，并与依赖一起提交。
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+升级前先阅读 BREAKING 条目，升级后按 `check` 的结果重新生成执行计划。
+
+## 前置条件 \{#prerequisites}
+
+某个版本的 BREAKING 条目如果改变了 producer 指纹，现有的执行计划就会过期，需要重新生成。0.2.0 的条目就是一个例子，它写明了对 `inputsDigest` 的影响。见[变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
+
+## 操作步骤 \{#steps}
+
+<Steps>
+
+1. ## 阅读破坏性变更 \{#read-breaking}
+
+   更改依赖之前，先阅读目标版本的 BREAKING 部分。
+
+2. ## 升级并运行 check \{#upgrade-and-check}
+
+   用项目的包管理器升级 ambercast，然后运行 `check`。它会返回报告，发现不可信的结果时选择退出码 `4`。
+
+   ```bash
+   npx ambercast check --json
+   ```
+
+3. ## 重新生成过期的执行计划 \{#regenerate-stale}
+
+   如果 `check` 退出码为 `4`，就运行 `generate`，并阅读执行计划和定位缓存的 diff。做法见[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+
+   ```bash
+   npx ambercast generate
+   ```
+
+4. ## 一起提交 \{#commit-together}
+
+   把依赖和已接受的伴生文件变更一起提交。然后再运行一次 `check`，让最终状态可以观察。
+
+</Steps>
+
+## 迁移机密授权 \{#migrate-secret-grants}
+
+为 Plan v2 创建的提示词可能包含旧版机密授权行。请从提示词中删除每一行授权。旧语法会被拒绝，不能原地迁移。
+
+```markdown
+@ambercast-secret {{secrets.password}}
+```
+
+然后运行 `npx ambercast generate --force <file>`，并回答新的同意提示。对于 CI 或其他非交互环境，请先把已审查的名称添加到 `secrets.allow`。重新生成的执行计划使用 v3 的同意和许可列表模型。
+
+## 生成器变更后重新定位 \{#reground-after-producer-change}
+
+生成器指令或响应契约发生变化后，producer 指纹随之改变，早期版本生成的执行计划会过期。重新生成执行计划会把其定位缓存替换为空缓存，下面的步骤会让每个元素步骤重新绑定。Plan 5 和 Grounding 4 保持不变。
+
+report 3.11 新增 `generator-assumption` 警告，以及 `healed` 行的可选 `warnings`。验证封闭 union 的使用者需要更新 report Schema。
+
+CLI 的 `--strict` 选项和 MCP 的 `strict` 参数已移除。请从调用中删除这两个参数。`ambercast generate --strict` 因未知选项以退出码 2 结束，MCP 在输入验证时拒绝 `strict`。
+
+1. 运行 `npx ambercast check --json`，确认受影响的执行计划报告为 `stale`。
+2. 对每个过期的执行计划运行 `npx ambercast generate <file>`。查看 diff，确认体现某个输入效果的断言，其 `confirms` 列出了该输入。
+   - 如果 generate 对某个输入给出 `action-unconfirmed` 警告，请不要继续第 3 步。
+   - 普通的 run 会在该输入处以 `GROUNDING_UNRESOLVED` 失败。
+   - 请加入能体现该输入效果的断言，例如登录后的用户名，然后重做第 2 步。
+3. 在本机运行 `npx ambercast run --resolve --update-cache <file>`。重新生成后定位缓存为空，所以对每个没有逐字引用的元素步骤，ambercast 会调用一次 AI。CI 默认不保存定位缓存。
+4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。执行计划始终提交。只有 `grounding.repositoryPolicy` 为 `committed` 时，才将定位缓存与执行计划一起提交。为 `uncommitted` 时，定位缓存保留在本地。
+
+## 验证 \{#verification}
+
+接受重新生成的结果后，`npx ambercast check` 退出码为 `0`。
+
+## 相关链接 \{#related}
+
+<LinkCard title="变更日志" href="/ambercast/zh-cn/reference/changelog/" description="阅读每个版本的 BREAKING 条目。" />
+
+<LinkCard title="新鲜度与摘要" href="/ambercast/zh-cn/spec/freshness/" description="了解执行计划在什么条件下过期。" />
+
+<LinkCard title="ambercast check" href="/ambercast/zh-cn/reference/cli/check/" description="了解 check 的状态和退出码。" />
+
+<LinkCard title="ambercast generate" href="/ambercast/zh-cn/reference/cli/generate/" description="了解 generate 的结果和退出码。" />
+
+<LinkCard title="审查生成的 diff" href="/ambercast/zh-cn/how-to/review-generated-diffs/" description="提交之前，先阅读重新生成的执行计划和定位缓存。" />

@@ -1,0 +1,58 @@
+---
+title: Contribute
+description: Submit a change by issue, fork, three checks, and pull request, or report a vulnerability.
+---
+
+import { Steps, LinkCard } from '@astrojs/starlight/components';
+
+As an external contributor, open an issue, fork and branch, run three checks, and open a pull request.
+
+## Prerequisites \{#prerequisites}
+
+The package declares the `npm test`, `npm run typecheck`, and `npm run lint` scripts.
+
+## Steps \{#steps}
+
+<Steps>
+
+1. ## Open an issue \{#open-issue}
+
+   Open an issue that describes the problem or proposal.
+
+2. ## Fork and branch \{#fork-and-branch}
+
+   Fork the repository and create a branch for your change.
+
+3. ## Run the three checks \{#run-checks}
+
+   ```bash
+   npm test
+   npm run typecheck
+   npm run lint
+   ```
+
+4. ## Open a pull request \{#open-pull-request}
+
+   Open a pull request with a Conventional Commit title, and resolve its review conversations.
+
+</Steps>
+
+## Report a vulnerability \{#report-vulnerability}
+
+Report a vulnerability through GitHub Security Advisories, not a public issue. Send a private report with the version, a reproduction, and the impact. See the [security policy](/ambercast/reference/security-policy/).
+
+## Maintainer and agent workflow \{#maintainer-workflow}
+
+`AGENTS.md` and `.claude/` describe the maintainer's AI-agent automation. They are not prerequisites for external contributors, and external pull request checks run in CI.
+
+A maintainer or repository agent follows the development workflow in `AGENTS.md`, including its behavior-change test order.
+
+## Verification \{#verification}
+
+The three package commands exit `0`, or their failure is documented before handoff. Confirm that your pull request is open.
+
+## Related \{#related}
+
+<LinkCard title="Security policy" href="/ambercast/reference/security-policy/" description="See how to report a vulnerability and what to expect." />
+
+<LinkCard title="Changelog" href="/ambercast/reference/changelog/" description="See the changes of each release." />

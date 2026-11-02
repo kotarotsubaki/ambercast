@@ -3984,94 +3984,121 @@ One rejected alternative tracked only package releases; it was rejected because 
 # Plan lifecycle and freshness
 Source: https://kotarotsubaki.github.io/ambercast/explanation/plan-lifecycle/
 
-When you decide whether an artifact can be replayed, you evaluate its provenance and freshness. In ambercast, plan freshness reflects whether an artifact matches the exact inputs that produced it, tracked through `inputsDigest`.
+A plan can be replayed only when it still matches the inputs that produced it and its grounding is bound to it. `check` answers both questions without running anything.
 
-## Provenance inputs {#provenance-inputs}
+## What a plan is built from {#provenance-inputs}
 
-At the core of plan provenance is `inputsDigest`. This value is the SHA-256 hash of canonical JSON containing normalized prompt text, the Plan schema version, the generator-template fingerprint, the producer-bundle fingerprint (`producerBundleFingerprint`), and named target definitions.
+`inputsDigest` is a SHA-256 hash that records what a plan was built from. It covers canonical JSON that holds these inputs:
 
-Tracking these inputs together means that plan freshness is not determined by prompt text alone. A schema or generator-template change makes an existing plan stale even if its prompt and targets have not changed. Furthermore, the producer-bundle fingerprint is independent of the template fingerprint because a producer-contract change can alter generation while prompt, schema, and template bytes remain unchanged.
+- The normalized prompt
+- The plan schema version
+- The generator-template fingerprint
+- The producer-bundle fingerprint (`producerBundleFingerprint`)
+- The definitions of the targets the plan references, which are the names in the plan's `targets`, sorted by name
 
-Links: [Freshness and digests](/ambercast/spec/freshness/#inputs-digest), [Configuration](/ambercast/reference/configuration/#targets), [Compatibility](/ambercast/reference/compatibility/)
+Changing a target the plan does not reference changes neither the digest nor freshness. `executor` is not hashed.
 
-## Fresh-plan decision {#fresh-plan-decision}
+With an unchanged prompt, a change to the schema, the template, or the producer contract still makes the plan stale. The producer-bundle fingerprint is separate from the template fingerprint because a contract change alone can change what generation produces.
 
-To determine whether a plan is fresh, `check` derives current provenance from normalized prompt text and selected target definitions, then compares it with `plan.source.inputsDigest`.
+Related: [Freshness and digests](/ambercast/spec/freshness/#inputs-digest), [Configuration](/ambercast/reference/configuration/#targets), [Compatibility](/ambercast/reference/compatibility/)
 
-A matching digest produces `fresh`. A mismatch produces `stale` with a reason that the plan is stale for the current prompt or target.
+## How `check` decides freshness {#fresh-plan-decision}
 
-Structural and semantic validity are required alongside matching provenance. Invalid JSON, schema failure, noncanonical serialization, or invalid instruction coverage also produce `stale` rather than a trustworthy fresh result.
+`check` recomputes `inputsDigest` from the current prompt and the targets the plan references. It compares the result with `plan.source.inputsDigest`. A match gives `fresh`, and a mismatch gives `stale`.
 
-Links: [ambercast check](/ambercast/reference/cli/check/#results), [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/#stale)
+A matching digest is not enough. A plan is also `stale` in each of these cases:
 
-## Grounding binding and one-to-one correspondence {#grounding-binding}
+- The JSON is invalid.
+- Schema validation fails.
+- The serialization is not canonical.
+- Instruction coverage is invalid.
+- An element intent or a source span is invalid.
+- The plan uses a retired `schemaVersion` (4).
+- A target the plan references is missing from the configuration.
 
-A fresh plan and a valid replay companion represent distinct artifact states tied by a specific binding. `planDigest` hashes replay-relevant plan content while excluding `generatorMeta`. Grounding is current only when its recorded `planDigest` equals the computed plan digest.
+This keeps a broken plan from being reported as `fresh`.
 
-When inspecting a fresh plan, `check` reports `missing-grounding`, `invalid-grounding`, or `stale-grounding` when the grounding companion is respectively absent, invalid, or bound to another plan.
+Related: [ambercast check](/ambercast/reference/cli/check/#results), [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/#stale)
 
-Repository configuration contextualizes missing companions. When repository policy is `uncommitted`, a fresh plan without valid grounding is reported as `fresh-without-grounding`, not as a plan-freshness failure.
+## How grounding binds to a plan {#grounding-binding}
 
-To maintain artifact integrity, `check` scans companion artifacts inversely. It reports an artifact with no corresponding test as `orphaned-plan` or `orphaned-grounding`, and it reports an inverse-incapable name as `invalid-artifact-name`.
+A `fresh` plan can still be unreplayable, because replay also needs grounding.
 
-Links: [Grounding document](/ambercast/spec/grounding-document/#plan-digest), [Reports](/ambercast/reference/reports/#check-results)
+`planDigest` hashes the replay-relevant content of a plan, without `generatorMeta`. Grounding is current only when its recorded `planDigest` equals the one computed from the plan. Plan freshness and the grounding binding are judged separately.
+
+`check` reports `missing-grounding` when grounding is absent, `invalid-grounding` when it is invalid, and `stale-grounding` when it is bound to another plan. When the repository policy is `uncommitted`, a `fresh` plan without valid grounding is reported as `fresh-without-grounding`. That is not a freshness failure.
+
+`check` also scans in the opposite direction. An artifact with no matching test is reported as `orphaned-plan` or `orphaned-grounding`. A name that cannot be traced back to a test is reported as `invalid-artifact-name`.
+
+Related: [Grounding document](/ambercast/spec/grounding-document/#plan-digest), [Reports](/ambercast/reference/reports/#check-results)
 
 ## What freshness hands off {#freshness-handoff}
 
-Freshness inspection maintains strict functional boundaries. `check` uses read-only storage plus layout and discovery dependencies; its dependency contract exposes no AI executor, browser driver, secrets, clock, or event port.
+`check` makes no AI call, launches no browser, and writes nothing. Its answer says only whether the plan matches today's inputs.
 
-This boundary isolates provenance assessment from runtime state. A fresh plan is a provenance conclusion, while grounding inspection adds replay-cache lifecycle evidence without redefining plan freshness.
+Problems that appear during replay are separate. When the UI changes and an element fingerprint no longer matches, the result is `fingerprint-mismatch`. That is drift, a runtime condition, and it does not change `inputsDigest`.
 
-Subsequent execution steps manage downstream drift independently. Drift during replay is a separate runtime condition: element fingerprint resolution can classify a `fingerprint-mismatch`, which is handed to replay fallback or healing rather than changing `inputsDigest`.
+Replay or healing takes over from there.
 
-Links: [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff), [Healing model](/ambercast/explanation/healing-model/#three-stages), [Operating contract](/ambercast/agents/operating-contract/#command-contract)
+Related: [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff), [Healing model](/ambercast/explanation/healing-model/#three-stages), [Operating contract](/ambercast/agents/operating-contract/#command-contract)
 
 ---
 
 # Replay and grounding
 Source: https://kotarotsubaki.github.io/ambercast/explanation/replay-and-grounding/
 
-Replay paths and their safety boundaries govern how test execution consumes cached grounding data. During a run, ambercast consumes grounding for AI steps and element-grounding step variants, allowing covered and valid AI traces to replay without resolving an AI executor.
+When grounding covers every step, replay runs without an AI call. A miss fails closed by default. Only `--resolve` lets ambercast resolve a miss live.
 
 ## Grounding as replay evidence {#grounding-as-replay-evidence}
 
-Run consumes grounding for AI steps and element-grounding step variants; navigation, text-visible, URL-match, and element-count variants have no grounding lookup. In an AI-directed replay, a covered, valid AI trace can replay without resolving an AI executor.
+`run` consumes grounding for `ai` steps and for element-binding steps: click, press, fill, fill-secret, and capture. Navigation and every assertion check the live page directly, without a grounding lookup.
 
-Element grounding stores an accessibility fingerprint, and resolution compares the stored algorithm and hash with a fresh fingerprint for the matched node. The resolver distinguishes a hit from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, and `snapshot-invalid`; a mismatch is not treated as a hit.
+An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
 
-Links: [Grounding document](/ambercast/spec/grounding-document/), [Element fingerprint](/ambercast/spec/fingerprint/), [ambercast run](/ambercast/reference/cli/run/#ai-calls)
+The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. A mismatch is never treated as a hit. `snapshot-invalid` and `secret-contaminated` abort the case.
 
-## Replay path: grounding hit {#grounding-hit}
+Replay then follows one of four paths:
 
-A covered-valid AI trace replays before any lazy agentic fallback is selected. A successful element classification supplies its stored fingerprint to the replay context rather than requesting a new live resolution.
+- A valid entry replays with zero AI calls.
+- An integrity failure fails closed, whether or not you pass `--resolve`.
+- A recoverable miss with `--resolve` is resolved live.
+- A recoverable miss without `--resolve` stops with `GROUNDING_UNRESOLVED` (exit 4).
 
-The run pipeline is designed so a complete cache can execute without probing a provider.
+Related: [Grounding document](/ambercast/spec/grounding-document/), [Element fingerprint](/ambercast/spec/fingerprint/), [ambercast run](/ambercast/reference/cli/run/#ai-calls)
 
-Links: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#bounded-side-effects)
+## When grounding hits {#grounding-hit}
 
-## Replay path: miss with explicit resolution {#miss-with-explicit-resolution}
+A covered, valid AI trace replays without resolving an AI executor. Replay takes this path before it considers any agentic fallback.
 
-Grounding that fails integrity validation, including invalid JSON or failed coverage or verification proof, fails closed regardless of `--resolve`. Only absent grounding and structurally valid legacy or recoverable entries are miss paths gated by `--resolve`; cache hits emit no AI-call event.
+When an element resolves as a hit, replay passes the stored fingerprint along and requests no new resolution. A complete cache runs without probing a provider, and a hit emits no AI-call event.
 
-With `--resolve`, an element grounding miss can resolve live and update the grounding entry with the resolved element fingerprint.
+Related: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#bounded-side-effects)
 
-Links: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
+## A miss with explicit resolution {#miss-with-explicit-resolution}
 
-## Replay path: unresolved miss {#unresolved-miss}
+Grounding that fails its integrity checks fails closed even with `--resolve`. Invalid JSON and a failed coverage or verification proof are examples.
 
-Without `--resolve`, run suppresses live resolution for both cold-start and recoverable misses. During an AI-directed replay, an AI-directed step with no usable trace fails closed as `grounding-unresolved` (exit 4) and points to `--resolve`.
+`--resolve` applies to two cases: grounding that is absent, and entries that are structurally valid but recoverable. Grounding written by a retired format version is one of the recoverable cases. For a plan with element-binding steps, `run` reports it as `GROUNDING_UNRESOLVED` without `--resolve`, and `run --resolve --update-cache` regenerates it.
 
-An element grounding miss also fails closed instead of resolving the element live.
+With `--resolve`, an element miss is resolved live. ambercast writes the entry only when every step that confirms the binding passes and the write-back gate allows it. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
 
-Links: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+Related: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
 
-## Drift hand-off {#drift-handoff}
+## A miss without resolution {#unresolved-miss}
 
-A `fingerprint-mismatch` means a matched node's current accessibility fingerprint differs from the stored fingerprint. The run use case records `fingerprint-mismatch` as a classification case distinct from a successful grounded resolution.
+Without `--resolve`, `run` resolves neither a cold-start miss nor a recoverable miss live. During an AI-directed replay, an `ai` step with no usable trace fails closed as `grounding-unresolved` (exit 4) and points to `--resolve`.
 
-Healing starts with a fail-closed baseline replay, then can attempt grounding repair when a failure remains.
+An element miss fails closed in the same way, with exit 4, instead of resolving the element live.
 
-Links: [Healing model](/ambercast/explanation/healing-model/#three-stages), [Healing a test after a UI change](/ambercast/tutorials/repair-your-first-drift/)
+Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+
+## Handing drift over {#drift-handoff}
+
+A `fingerprint-mismatch` means the current fingerprint of the matched element differs from the stored one. `run` records it as a classification of its own, distinct from a successful resolution.
+
+Healing starts with a fail-closed baseline replay. It attempts a repair only when a failure remains.
+
+Related: [Healing model](/ambercast/explanation/healing-model/#three-stages), [Healing a test after a UI change](/ambercast/tutorials/repair-your-first-drift/)
 
 ---
 
@@ -4141,146 +4168,152 @@ Related: [ambercast heal](/ambercast/reference/cli/heal/#confirmation), [Operati
 # Trust and security
 Source: https://kotarotsubaki.github.io/ambercast/explanation/trust-and-security/
 
-Ambercast defines explicit trust boundaries and fail-closed choices across plan validation, replay execution, page observations, and secret handling. During execution, run reads a plan only through its trusted instruction-covered-plan boundary before replay, establishing a strict separation between accepted execution inputs and unvalidated provider outputs.
+ambercast trusts only what it has validated locally. Page content, provider output, and secret values each pass a check or a redaction at a boundary, and anything that fails stops there.
 
 ## Artifacts and provider output are validated {#artifact-and-provider-boundaries}
 
-Durable artifact validation and the provider-output acceptance boundary remain strictly separated. When executing a test, run reads a plan only through its trusted instruction-covered-plan boundary before replay.
+`run` reads a plan only after it passes plan validation, including instruction coverage.
 
-Provider-generated steps are not trusted directly into persistent storage. When steps are produced, they are parsed against the local response contract, subjected to instruction-coverage checks, and then assembled into and parsed as a complete plan before persistence.
+Steps that a provider generates are not saved as they arrive. ambercast parses them against the local response contract and checks instruction coverage. It saves them only after they parse as a complete plan.
 
-For secrets, generation separates proposal from authorization. The provider can propose a `SecretNameChoice`, but Ambercast resolves every committed secret reference locally and persists a candidate only after the name is already allowlisted or receives interactive consent. `secrets.allow: "*"` bypasses per-name review and is therefore a deliberate high-risk configuration, not an implicit default.
+For secrets, proposing and authorizing are separate. The provider can only propose a secret name. ambercast resolves every committed secret reference locally. It saves a candidate only when the name is on the allowlist or you give consent interactively.
 
-Links: [Plan document](/ambercast/spec/plan-document/), [Conformance](/ambercast/spec/conformance/), [Error codes](/ambercast/reference/error-codes/)
+`secrets.allow: "*"` skips the per-name review. It is a deliberate high-risk setting, never an implicit default.
 
-## Page observations are not instructions {#untrusted-page-data}
+Related: [Plan document](/ambercast/spec/plan-document/), [Conformance](/ambercast/spec/conformance/), [Error codes](/ambercast/reference/error-codes/)
 
-Content from a tested application cannot act as instructions for an agent. When ambercast captures structured accessibility evidence from a page, that evidence carries a fixed notice that page-derived content must not be interpreted as directives.
+## Page content is not an instruction {#untrusted-page-data}
 
-Public reporting contracts maintain this boundary at the interface level. The error design makes the report schema the external truth for `errors[].code`, keeping implementation-specific error classes out of the public contract.
+Content from the application under test cannot act as an instruction to an agent. When ambercast captures accessibility evidence from a page, the evidence carries a fixed notice. The notice says that page content is not an instruction.
 
-Links: [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/reference/error-codes/), [Reading structured output](/ambercast/agents/reading-structured-output/)
+The report schema is the public source of truth for `errors[].code`. Implementation-specific error classes stay out of the public contract.
 
-## Page evidence is redacted before it is reused {#page-evidence-boundary}
+Related: [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/reference/error-codes/), [Reading structured output](/ambercast/agents/reading-structured-output/)
 
-Live observations from a tested page do not become unrestricted provider inputs or durable evidence. Before data crosses into the AI adapter, AI-bound snapshots exclude screenshot bytes and redact resolved secret values from accessibility-tree strings and object keys.
+## Page evidence is redacted before reuse {#page-evidence-boundary}
 
-When a step fails during live execution, failed-live-step evidence uses redacted accessibility data and treats uncertain secret presence as unsafe for screenshot capture.
+What ambercast observes on a live page does not flow unfiltered into provider input or saved evidence. Snapshots sent to the AI exclude screenshot bytes. Resolved secret values are redacted from accessibility-tree strings and keys.
 
-Redaction covers resolved secrets and run-state values known to the replay, but it does not guarantee removal of arbitrary page-derived personal data from `actual` text, accessibility snapshots, screenshots, canvas, image, CSS-rendered pixels, or a scan-to-screenshot timing gap. Treat persisted reports and evidence as sensitive and restrict access and retention.
+Evidence for a step that fails during a live run uses redacted accessibility data. When it is uncertain whether a secret is present, ambercast skips the screenshot.
 
-Links: [Secrets in plans](/ambercast/spec/secrets/), [Reports](/ambercast/reference/reports/)
+Redaction covers the resolved secrets and run-state values that replay knows. It does not remove arbitrary personal data that comes from the page. That data can remain in `actual` text, snapshots, screenshots, canvas, images, and CSS-rendered pixels. A gap between the scan and the screenshot can also leave data behind. Treat persisted reports and evidence as sensitive, and limit who can access them and how long you keep them.
 
-## Secret sinks gate browser fills {#secret-sink-boundary}
+Related: [Secrets in plans](/ambercast/spec/secrets/), [Reports](/ambercast/reference/reports/)
 
-Browser sink interactions apply origin-specific gating rather than relying on process environment boundaries. A `fill-secret` trace action applies its per-entry sink-origin gate before secret resolution and browser binding.
+## Secret sinks are checked before a fill {#secret-sink-boundary}
 
-Links: [Manage secrets](/ambercast/how-to/manage-secrets/), [Configuration](/ambercast/reference/configuration/)
+Browser writes do not rely on the process environment as a boundary. ambercast checks the sink origin of each entry. A `fill-secret` trace action performs that check before it resolves the secret and binds the browser.
 
-## Ambercast-managed secret namespaces stay out of provider children {#secret-boundary}
+Related: [Manage secrets](/ambercast/how-to/manage-secrets/), [Configuration](/ambercast/reference/configuration/)
 
-Configured AI providers run without access to ambercast-managed secret namespaces. When spawning child processes for a provider, provider child processes receive a copied environment that excludes `AMBERCAST_SECRET_*` and `AMBERCAST_ENV_*`, using case-insensitive matching.
+## Secret namespaces stay out of provider processes {#secret-boundary}
 
-The design assigns secret validation, generator policy, and report redaction distinct roles rather than trusting a schema alone to prove secrecy.
+Configured AI providers run without access to the secret namespaces that ambercast manages. A provider child process receives a copy of the environment without `AMBERCAST_SECRET_*` and `AMBERCAST_ENV_*`. The match is case-insensitive.
 
-Secret values resolve only at runtime from `AMBERCAST_SECRET_<NAME>`. Providers receive names rather than values, which avoids value disclosure but does not make descriptive names harmless; review proposed names before approving them.
+Secret validation, generator policy, and report redaction each have their own role. A schema alone cannot prove that a value stayed secret.
 
-Links: [Manage secrets](/ambercast/how-to/manage-secrets/), [Environment variables](/ambercast/reference/environment-variables/), [Security policy](/ambercast/reference/security-policy/)
+Secret values resolve only at runtime, from `AMBERCAST_SECRET_<NAME>`. Providers see names, never values. A descriptive name is still not harmless, so review each proposed name before you approve it.
+
+Related: [Manage secrets](/ambercast/how-to/manage-secrets/), [Environment variables](/ambercast/reference/environment-variables/), [Security policy](/ambercast/reference/security-policy/)
 
 ---
 
 # Determinism in CI
 Source: https://kotarotsubaki.github.io/ambercast/explanation/determinism-in-ci/
 
-When you run Ambercast in CI, execution is governed by explicit trust boundaries that isolate inspection, evidence collection, and artifact mutation. Inspection commands like `check` enforce these boundaries structurally through their dependency interfaces rather than through runtime conventions.
+In CI, inspection has no side effects. By default ambercast writes only the run report and contained evidence. It refuses to repair, and it reports the strongest problem as a single exit code.
 
-## Read-only inspection is structural {#read-only-check}
+## Read-only inspection {#read-only-check}
 
-When you use `check` as an inspection gate, its read-only behavior is established directly by its dependency contracts. `CheckDeps` exposes only `ReadStorageAdapter`, layout resolution, discovery, selected configuration, and an optional abort signal.
+`check` has no access to an AI executor, a browser, secrets, a clock, or events. Its storage access is read-only. Read-only is therefore structural, not a convention.
 
-`CheckDeps` intentionally omits the AI executor, browser driver, secrets, clock, and event ports; the code identifies their absence as the read-only boundary. The storage capability is explicitly read-only: reads and existence checks are sufficient for prompts, plans, grounding companions, and orphan findings.
+Reads and existence checks are enough to inspect prompts, plans, grounding, and orphaned artifacts.
 
-Links: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#fresh-plan-decision)
+Related: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#fresh-plan-decision)
 
-## Replay has bounded persistence {#bounded-side-effects}
+## Replay writes are bounded {#bounded-side-effects}
 
-Replay separates execution evidence from source artifact mutation. Run first finalizes an envelope marked `persisted`, then writes its JSON only to the invocation's run-report path.
+`run` writes its report JSON only to the report path of that invocation. It finalizes the envelope as `persisted` before the write, so the file equals the returned envelope.
 
-If that write fails, run returns an envelope with `reportPersistence: "failed"`; a successful batch becomes exit 3 in that condition. In the report schema, `reportPersistence: "not-attempted"` means no persistence write was tried, while `failed` means no partial content became visible at the target path.
+If the write fails, `run` returns the envelope with `reportPersistence: "failed"`. In that case only an otherwise-0 exit becomes 3. Exits 1, 2, 4, and 5 normally stay as they are. `not-attempted` means no write was tried, and `failed` means no partial content became visible.
 
-Links: [Reports](/ambercast/reference/reports/#report-persistence), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
+In CI, writing grounding back needs `--update-cache` or `ci.updateGroundingCache: true`. The [configuration reference](/ambercast/reference/configuration/#grounding) covers the details.
+
+Related: [Reports](/ambercast/reference/reports/#persistence), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 
 ## Healing is refused by default in CI {#heal-refusal}
 
-Repair cannot silently modify CI artifacts. A real `heal` invocation in CI throws a configuration error unless `config.ci.heal` is true. The CI refusal is evaluated after list-mode short-circuiting, so `heal --list` remains a non-writing discovery operation.
+Outside `--list`, `heal` in CI fails with a configuration error unless `ci.heal` is true. `heal --list` stays a discovery operation that writes nothing.
 
-Healing buffers only the plan and grounding companions in a private overlay; before confirmation or during `--dry-run`, replay attempts can still write contained evidence below the case run directory. A later commit capability is the only route from a buffered companion candidate to real artifact writes.
+Healing buffers plan and grounding candidates privately. It writes them only through the commit step. Replay attempts, including those under `--dry-run`, can still write contained evidence below the case run directory.
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#ci), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
+Related: [ambercast heal](/ambercast/reference/cli/heal/#ci), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
 
-## One process status represents the strongest blocker {#exit-priority}
+## The strongest problem sets the exit code {#exit-priority}
 
-When execution encounters mixed results, the process reports one predictable process status. The exit selector chooses the strongest candidate independently of iteration order and duplicate candidates. A module-load assertion rejects an invalid rank table, preserving that selection rule as a runtime invariant.
+When results are mixed, the exit code is the strongest candidate. The priority is fixed at `2 > 3 > 4 > 1 > 5 > 0`. Iteration order and duplicate candidates do not change the result.
 
-Links: [Exit codes](/ambercast/reference/exit-codes/#priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+Related: [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
 
 ---
 
 # How ambercast compares
 Source: https://kotarotsubaki.github.io/ambercast/explanation/comparison/
 
-When you evaluate automated testing approaches, examining their underlying design models provides far more insight than comparing feature matrices or claiming feature parity. Where traditional code generation workflows record browser actions and generate code for an editor, ambercast normalizes prompt text, derives plan provenance, and constructs a validated PlanDocument. This approach stems from a design rationale that prioritizes test assets that are not locked to a particular tool.
+Compare testing approaches by what each one keeps as the test asset, not by feature lists. ambercast keeps the prompt as the source and derives the plan from it. Code generation, record-and-replay, and direct-driving agents each keep something else.
 
-## Code generation begins with recorded interaction {#code-generation-model}
+## Code generation starts from recorded interaction {#code-generation-model}
 
-In code generation workflows, the test asset originates from captured user interaction. Playwright documents codegen as recording browser actions and generating code for the user to copy into an editor. Under that model, your test asset is an executable script tied directly to the idioms and syntax of that specific runner.
+In code generation, the test asset comes from captured interaction. Playwright documents codegen as recording browser actions and generating code to copy into an editor. The asset is then a script written for one runner.
 
-ambercast structures generation around an intermediate artifact instead. Generation normalizes prompt text, derives plan provenance, and constructs a validated PlanDocument. The design rationale prioritizes test assets that are not locked to a particular tool, giving you a structured specification derived from your prompt rather than script code generated from a live recording session.
+ambercast puts an intermediate artifact in between. It normalizes the prompt, derives plan provenance, and builds a validated plan. The design favors assets that are not locked to a particular tool.
 
-Links: [Philosophy](/ambercast/philosophy/), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/)
+Related: [Philosophy](/ambercast/philosophy/), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/)
 
-## Recorded tests preserve observed interaction {#record-and-replay-model}
+## Record-and-replay keeps observed interaction {#record-and-replay-model}
 
-Record-and-replay tools preserve the exact actions performed during a browser session. Cypress documents Studio as recording real interactions and translating them into test commands. In this paradigm, the recorded script captures user interactions and converts them directly into test commands within a test suite.
+Record-and-replay tools keep the actions performed in a browser session. Cypress documents Studio as recording real interactions and turning them into test commands. The recorded script becomes the asset inside the test suite.
 
-In ambercast, intent and execution bindings operate under separate contracts. A PlanDocument records `inputsDigest` while grounding binds separately to `planDigest`, so their provenance contracts are distinct. This separation distinguishes the derived plan from the grounding that targets elements during execution.
+ambercast keeps intent and element binding under separate contracts. The plan records `inputsDigest`, and grounding binds to `planDigest`. The derived plan and the grounding that locates elements can therefore change separately.
 
-Links: [Replay and grounding](/ambercast/explanation/replay-and-grounding/), [Philosophy](/ambercast/philosophy/)
+Related: [Replay and grounding](/ambercast/explanation/replay-and-grounding/), [Philosophy](/ambercast/philosophy/)
 
 ## Direct-driving agents act from the current session {#direct-driving-agent-model}
 
-Autonomous browser agents operate dynamically within an active browser session. In a general direct-driving-agent model, an agent may use screenshots and live tool calls without producing ambercast-equivalent committed plan and grounding artifacts, though whether this applies to a given agent product is not confirmed.
+A direct-driving agent works inside a live browser session. It may act from screenshots and live tool calls, and it may leave no committed plan or grounding behind.
 
-ambercast relies instead on reviewed, committed artifacts. Generated plans carry a producer-bundle fingerprint and normalized steps after schema validation. By producing and validating these normalized steps prior to execution, you work with inspectable artifacts governed by explicit schema validation and producer fingerprints.
+ambercast relies on reviewed, committed artifacts instead. A plan carries a producer-bundle fingerprint and schema-validated steps. Because ambercast builds and validates them before execution, you get artifacts you can read and inspect.
 
-Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Trust and security](/ambercast/explanation/trust-and-security/)
+Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Trust and security](/ambercast/explanation/trust-and-security/)
 
 ---
 
 # Status and roadmap
 Source: https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/
 
-ambercast establishes a definite boundary between what is currently implemented in the CLI and what is planned for future milestones. Today, the CLI parser exposes seven subcommands—`init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`—without exposing additional subcommands, while establishing the plan regeneration requirements you need to follow across versions.
+The CLI has seven subcommands today: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. `review` and baseline/restore are planned. Before 1.0, schema and producer changes can require you to regenerate plans.
 
-## Implemented in current release {#implemented}
+## Implemented in the current release {#implemented}
 
-The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. The MCP subcommand serves six tools over stdio, keeping the operational interface focused on scaffolding, compiling, executing, validating, repairing, browsing the results of test plans, and serving an MCP interface.
+The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. `ambercast mcp` serves six tools over stdio.
 
-When working across versions, 0.3.1 requires regeneration of 0.1.0 plans. This requirement exists because the producer-contract fingerprint changed between releases, making the producer bundle and `inputsDigest` from 0.1.0 stale under 0.3.1.
+Chromium is the only supported browser.
 
-Links: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambercast/reference/compatibility/), [Changelog](/ambercast/reference/changelog/)
+Before 1.0, a minor release can include breaking changes. A schema or producer change forces you to regenerate existing plans. In 0.2.0, for example, a producer-contract change made 0.1.0 plans stale. The [regeneration boundary](/ambercast/reference/compatibility/#regeneration-boundary) and the [0.2.0 changelog entry](/ambercast/reference/changelog/#release-020) show where regeneration is required.
+
+Related: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambercast/reference/compatibility/), [Changelog](/ambercast/reference/changelog/)
 
 ## Planned after the current boundary {#planned-after-current-boundary}
 
-Planned documentation still covers `review` and baseline/restore. MCP tools are available. On the execution side, support for Firefox and WebKit is planned by 1.0.
+`review` and baseline/restore are planned. Firefox and WebKit support is planned, and so is a cloud version. MCP tools are already available.
 
-Links: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/ambercast/agents/mcp-server/)
+Related: [ambercast review](/ambercast/reference/cli/review/), [MCP server](/ambercast/agents/mcp-server/)
 
 ## Version policy {#version-policy}
 
-The [Compatibility table](/ambercast/reference/compatibility/#compatibility-table) lists the published package version. The product policy is CLI-only through 0.x and ships 1.0.0 together with the cloud version. This pre-1.0 phase concentrates on stabilizing the standalone CLI tools before pairing them with the cloud release.
+The [compatibility table](/ambercast/reference/compatibility/#compatibility-table) lists the published package versions. The product stays on 0.x until MVP.
 
-Links: [Changelog](/ambercast/reference/changelog/), [Philosophy](/ambercast/philosophy/)
+Related: [Changelog](/ambercast/reference/changelog/), [Philosophy](/ambercast/philosophy/)
 
 ---
 

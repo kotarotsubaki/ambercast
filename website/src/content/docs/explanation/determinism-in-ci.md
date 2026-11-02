@@ -17,7 +17,7 @@ Related: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), 
 
 `run` writes its report JSON only to the report path of that invocation. It finalizes the envelope as `persisted` before the write, so the file equals the returned envelope.
 
-If the write fails, `run` returns the envelope with `reportPersistence: "failed"`. In that case only an otherwise-0 exit becomes 3. Exits 1, 2, 4, and 5 stay as they are. `not-attempted` means no write was tried, and `failed` means no partial content became visible.
+If the write fails, `run` returns the envelope with `reportPersistence: "failed"`. In that case only an otherwise-0 exit becomes 3. Exits 1, 2, 4, and 5 normally stay as they are. `not-attempted` means no write was tried, and `failed` means no partial content became visible.
 
 In CI, writing grounding back needs `--update-cache` or `ci.updateGroundingCache: true`. The [configuration reference](/ambercast/reference/configuration/#grounding) covers the details.
 

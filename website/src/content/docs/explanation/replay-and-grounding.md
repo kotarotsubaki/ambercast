@@ -11,7 +11,7 @@ When grounding covers every step, replay runs without an AI call. A miss fails c
 
 An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
 
-The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. A mismatch is never treated as a hit.
+The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. A mismatch is never treated as a hit. `snapshot-invalid` and `secret-contaminated` abort the case.
 
 Replay then follows one of four paths:
 
@@ -34,9 +34,9 @@ Related: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in 
 
 Grounding that fails its integrity checks fails closed even with `--resolve`. Invalid JSON and a failed coverage or verification proof are examples.
 
-`--resolve` applies to two cases: grounding that is absent, and entries that are structurally valid but recoverable. Grounding written by a retired format version is one of the recoverable cases. Without `--resolve`, `run` reports it as `GROUNDING_UNRESOLVED`, and `run --resolve --update-cache` regenerates it.
+`--resolve` applies to two cases: grounding that is absent, and entries that are structurally valid but recoverable. Grounding written by a retired format version is one of the recoverable cases. For a plan with element-binding steps, `run` reports it as `GROUNDING_UNRESOLVED` without `--resolve`, and `run --resolve --update-cache` regenerates it.
 
-With `--resolve`, an element miss is resolved live. ambercast writes the entry only when a passing `confirms` step confirms the binding and the write-back gate allows it. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
+With `--resolve`, an element miss is resolved live. ambercast writes the entry only when every step that confirms the binding passes and the write-back gate allows it. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
 
 Related: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
 
@@ -44,7 +44,7 @@ Related: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [C
 
 Without `--resolve`, `run` resolves neither a cold-start miss nor a recoverable miss live. During an AI-directed replay, an `ai` step with no usable trace fails closed as `grounding-unresolved` (exit 4) and points to `--resolve`.
 
-An element miss fails closed in the same way instead of resolving the element live.
+An element miss fails closed in the same way, with exit 4, instead of resolving the element live.
 
 Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
 

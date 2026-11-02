@@ -3982,118 +3982,124 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 ---
 
-# 计划生命周期与新鲜度
+# 执行计划的生命周期与新鲜度
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecycle/
 
-理解测试产物的出处与新鲜度判定机制，能够帮助您确定既有产物是否可以被重放。在出处模型中，`inputsDigest` 基于规范 JSON 计算得出，整合了标准化提示词文本、Plan 模式版本、生成器模板指纹、生成器捆绑包指纹 `producerBundleFingerprint` 以及具名目标定义。这些输入共同构成了产物出处的基准。
+执行计划只有在与生成它的输入保持一致，且定位缓存已绑定到它时，才能回放。`check` 无需运行任何内容，就能回答这两个问题。
 
 ## 出处输入 {#provenance-inputs}
 
-`inputsDigest` 是对包含标准化提示词文本、Plan 模式版本、生成器模板指纹、生成器捆绑包指纹 `producerBundleFingerprint` 以及具名目标定义的规范（canonical）JSON 计算而来的 SHA-256 摘要。通过这一计算，系统界定了受保护的完整出处输入集合。
+`inputsDigest` 是记录执行计划由什么生成的 SHA-256 摘要，对规范 JSON 计算得出。规范 JSON 包含以下输入：
 
-模式版本或生成器模板的变动会使现有的计划变为 `stale`（已过期），即使该计划的提示词和目标定义未发生任何改变。
+- 标准化后的提示词
+- 执行计划的模式版本
+- 生成器模板指纹
+- 生成器捆绑包指纹，即 `producerBundleFingerprint`
+- 执行计划所引用目标的定义，范围是执行计划的 `targets` 中列出的名称，按名称排序
 
-生成器捆绑包指纹独立于模板指纹，因为生成器契约的变更可能会改变生成结果，而此时提示词、模式以及模板的字节内容可能保持不变。
+修改执行计划未引用的目标，既不会改变摘要，也不会改变新鲜度。`executor` 不参与哈希。
+
+提示词不变时，模式、模板或生成器契约的变化仍会使执行计划变为 `stale`。生成器捆绑包指纹与模板指纹分开记录，因为仅契约变化就可能改变生成结果。
 
 相关链接：[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#inputs-digest)、[配置](/ambercast/zh-cn/reference/configuration/#targets)、[兼容性](/ambercast/zh-cn/reference/compatibility/)
 
-## 新鲜计划决策 {#fresh-plan-decision}
+## `check` 如何判定新鲜度 {#fresh-plan-decision}
 
-在执行新鲜度检查时，`check` 会从标准化提示词文本以及所选的目标定义中推导出当前出处，随后将其与 `plan.source.inputsDigest` 进行比对。
+`check` 根据当前提示词和执行计划引用的目标，重新计算 `inputsDigest`，再与 `plan.source.inputsDigest` 比较。一致时结果为 `fresh`，不一致时结果为 `stale`。
 
-比对结果决定了计划状态：若摘要匹配，则产生 `fresh` 判定；若摘要不匹配，则产生 `stale` 判定，并附带说明该计划针对当前的提示词或目标定义已过期的原因。
+摘要一致并不够。出现以下任一情况，执行计划同样为 `stale`：
 
-产物如果包含无效 JSON、模式校验失败、非规范序列化或指令覆盖无效，`check` 同样会产生 `stale` 判定，而不是可信的 fresh 结果。
+- JSON 无效
+- 模式校验失败
+- 序列化不是规范形式
+- 指令覆盖无效
+- 元素意图或源码区间无效
+- 使用了已淘汰的 `schemaVersion` 4
+- 执行计划引用的目标在配置中不存在
 
-相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#results)、[恢复 stale（已过期）产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/#stale)
+这样可以避免把已损坏的执行计划报告为 `fresh`。
 
-## Grounding 绑定与一一对应 {#grounding-binding}
+相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#results)、[恢复已过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/#stale)
 
-计划本身处于 fresh 状态，并不等同于存在可用的重放伴生文件。`planDigest` 对计划中与重放相关的内容计算哈希，同时排除了 `generatorMeta`；伴生文件 grounding 只有在其记录的 `planDigest` 等于计算出的计划摘要时，才属于最新状态。
+## 定位缓存如何绑定执行计划 {#grounding-binding}
 
-对于一份判定为 fresh 的计划，当 grounding 伴生文件缺失时，`check` 报告为 `missing-grounding`；当伴生文件无效时报告为 `invalid-grounding`；当伴生文件绑定到其他计划时则报告为 `stale-grounding`。
+`fresh` 的执行计划仍可能无法回放，因为回放还需要定位缓存。
 
-当代码仓库策略为 `uncommitted` 时，缺少有效 grounding 的 fresh 计划会被报告为 `fresh-without-grounding`，而不会被记为计划新鲜度失败。
+`planDigest` 对执行计划中与回放相关的内容计算哈希，不含 `generatorMeta`。只有定位缓存记录的 `planDigest` 与根据执行计划算出的值相等，它才算当前有效。执行计划的新鲜度与定位缓存的绑定，是分开判定的。
 
-此外，`check` 会反向扫描伴生文件产物：如果发现某个产物没有对应的测试，会将其报告为 `orphaned-plan` 或 `orphaned-grounding`；对于无法执行反向解析的产物名称，则会报告为 `invalid-artifact-name`。
+定位缓存缺失时，`check` 报告 `missing-grounding`；无效时报告 `invalid-grounding`；绑定到其他执行计划时报告 `stale-grounding`。仓库策略为 `uncommitted` 时，没有有效定位缓存的 `fresh` 执行计划会报告为 `fresh-without-grounding`，这不是新鲜度失败。
+
+`check` 还会反向扫描。没有对应测试的产物会报告为 `orphaned-plan` 或 `orphaned-grounding`；无法反查到测试的名称会报告为 `invalid-artifact-name`。
 
 相关链接：[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/#plan-digest)、[报告](/ambercast/zh-cn/reference/reports/#check-results)
 
-## 新鲜度移交的内容 {#freshness-handoff}
+## 新鲜度判定移交什么 {#freshness-handoff}
 
-`check` 依赖只读存储以及目录布局和发现依赖；在其依赖契约中，不暴露 AI 执行器、浏览器驱动、密钥、时钟或事件端口。
+`check` 不调用 AI，不启动浏览器，也不写入任何内容。它的结论只说明执行计划是否与当前输入一致。
 
-判定计划处于 fresh 状态纯粹是一个出处结论，而对 grounding 的检查则补充了重放缓存生命周期的证据，并不会重新定义计划本身的新鲜度。
+回放期间出现的问题另行处理。UI 变化导致元素指纹不再匹配时，结果是 `fingerprint-mismatch`。这属于漂移，是运行时状态，不会改变 `inputsDigest`。
 
-重放过程中的漂移属于独立的运行时状况：元素指纹解析可以将漂移归类为 `fingerprint-mismatch`，该状况会直接移交给重放回退机制或自愈处理，而不会修改 `inputsDigest`。
+之后由回放或自愈接手。
 
-相关链接：[重放与 grounding](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#three-stages)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)
+相关链接：[回放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#three-stages)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)
 
 ---
 
-# 重放与 grounding
+# 回放与定位缓存
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-grounding/
 
-本文旨在阐明测试重放的执行路径及其安全边界。在 ambercast 中，缓存的 grounding 为重放执行提供凭据。运行流程会针对 AI 步骤以及元素 grounding 步骤变体消费 grounding 数据；而导航（navigation）、文本可见（text-visible）、URL 匹配（URL-match）与元素计数（element-count）等步骤变体则不进行 grounding 查找。一条被覆盖且有效的 AI trace 无需解析 AI 执行器即可直接重放。
+定位缓存覆盖全部步骤时，回放无需调用 AI。未命中默认失败关闭，只有加上 `--resolve`，ambercast 才会实时解析未命中的步骤。
 
-## Grounding 作为重放凭据 {#grounding-as-replay-evidence}
+## 作为回放依据的定位缓存 {#grounding-as-replay-evidence}
 
-在运行流程中，缓存的 grounding 充当了重放判定的凭据。`run` 流程针对 AI 步骤与元素 grounding 步骤变体消费 grounding；而 navigation、text-visible、URL-match 以及 element-count 步骤变体不进行 grounding 查找。如果一条 AI trace 被覆盖且有效，系统即可在无需解析 AI 执行器的情况下直接执行重放。
+`run` 为 `ai` 步骤和绑定元素的步骤读取定位缓存。绑定元素的步骤包括 click、press、fill、fill-secret 和 capture。导航和所有断言直接检查实时页面，不查询定位缓存。
 
-针对元素 grounding，其中存储了可访问性指纹（accessibility fingerprint）。在解析匹配节点时，系统会将存储的算法与哈希值与当前节点生成的新指纹进行比对。
+元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见 [Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器能够将命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 以及 `snapshot-invalid` 明确区分开来；比对不匹配不会被当作命中来处理。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
 
-相关链接：
-- [Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)
-- [元素指纹](/ambercast/zh-cn/spec/fingerprint/)
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
+回放随后走以下四条路径之一：
 
-## 重放路径：grounding 命中 {#grounding-hit}
+- 有效条目：不调用 AI，直接回放。
+- 完整性失败：无论是否传入 `--resolve`，都失败关闭。
+- 可恢复的未命中且带 `--resolve`：实时解析。
+- 可恢复的未命中且不带 `--resolve`：以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。
 
-当既有凭据有效时，系统将进入命中路径。在 AI-directed replay 中，一条被覆盖且有效的 AI trace 会在选择任何惰性智能体回退（lazy agentic fallback）之前执行重放。
+相关链接：[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
 
-在元素处理层面，一次成功的元素分类会将已存储的指纹提供给重放上下文，而不是请求新的实时解析（live resolution）。
+## 定位缓存命中时 {#grounding-hit}
 
-运行流水线的设计使一份完整的缓存可以在不探测提供商（provider）的情况下执行。
+已覆盖且有效的 AI 轨迹无需解析 AI 执行器即可回放。回放会先走这条路径，再考虑任何代理式回退。
 
-相关链接：
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#replay)
-- [CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#bounded-side-effects)
+元素解析命中时，回放直接使用保存的指纹，不再请求新的解析。缓存完整时，运行无需探测提供方，命中也不会产生 AI 调用事件。
 
-## 重放路径：未命中与显式解析 {#miss-with-explicit-resolution}
+相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#replay)、[CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#bounded-side-effects)
 
-未通过完整性验证的 grounding（包括无效 JSON 或 coverage 或 verification proof 失败）无论是否传入 `--resolve` 均会失败关闭。只有缺失的 grounding 和结构有效的 legacy 或 recoverable 条目属于受 `--resolve` 控制的未命中路径。
+## 显式解析下的未命中 {#miss-with-explicit-resolution}
 
-传入 `--resolve` 时，元素 grounding 的未命中可以进行实时解析，并使用解析出的元素指纹更新对应的 grounding 条目。
+完整性校验失败的定位缓存，即使带 `--resolve` 也会失败关闭，例如 JSON 无效，或覆盖证明、校验证明失败。
 
-缓存命中不会发出任何 AI 调用事件（AI-call event）。
+`--resolve` 只处理两类情况：定位缓存不存在，以及结构有效但可恢复的条目。由已淘汰格式版本写入的定位缓存也属于可恢复情况。对含有元素绑定步骤的执行计划，不带 `--resolve` 时 `run` 会将其报告为 `GROUNDING_UNRESOLVED`，而 `run --resolve --update-cache` 会重新生成它。
 
-相关链接：
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
-- [控制 grounding 回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
+带 `--resolve` 时，元素未命中会实时解析。只有确认该绑定的所有步骤都通过，且回写开关允许时，ambercast 才会写入条目。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
 
-## 重放路径：未解析的未命中 {#unresolved-miss}
+相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)、[控制定位缓存回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
 
-未传入 `--resolve` 时，run 会同时抑制冷启动（cold-start）与可恢复未命中（recoverable-miss）的实时解析。AI 导向步骤缺少可用 trace 时会以 `grounding-unresolved` 失败关闭（退出码 4），并提示使用 `--resolve`。
+## 不解析时的未命中 {#unresolved-miss}
 
-元素 grounding 未命中同样会失败关闭，而不会对元素进行实时解析。
+不带 `--resolve` 时，`run` 既不会实时解析冷启动未命中，也不会解析可恢复的未命中。在 AI 驱动的回放中，没有可用轨迹的 `ai` 步骤会以 `grounding-unresolved` 失败关闭，退出码为 4，并提示使用 `--resolve`。
 
-相关链接：
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)
-- [读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
+元素未命中同样失败关闭，退出码为 4，不会实时解析元素。
 
-## 漂移交接 {#drift-handoff}
+相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
 
-当重放检测到界面变化时，执行将脱离重放的缓存决策，转入自愈范畴。如果匹配节点当前的可访问性指纹与存储的指纹不同，即判定为 `fingerprint-mismatch`。
+## 漂移的移交 {#drift-handoff}
 
-运行用例将 `fingerprint-mismatch` 记录为一种独立的分类情况，与成功的 grounded 解析截然区分。
+`fingerprint-mismatch` 表示匹配到的元素当前指纹与保存的指纹不同。`run` 将其记录为独立的分类，与解析成功的情况区分开。
 
-自愈流程首先从一次失败关闭的基线重放开始；如果在重放后仍然存在失败，流程可以尝试进行 grounding 修复（grounding repair）。
+自愈先做一次失败关闭的基线回放，只有仍有失败时才尝试修复。
 
-相关链接：
-- [自愈模型](/ambercast/zh-cn/explanation/healing-model/#three-stages)
-- [UI 变更后的测试自愈](/ambercast/zh-cn/tutorials/repair-your-first-drift/)
+相关链接：[自愈模型](/ambercast/zh-cn/explanation/healing-model/#three-stages)、[UI 变更后的测试自愈](/ambercast/zh-cn/tutorials/repair-your-first-drift/)
 
 ---
 
@@ -4163,49 +4169,51 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 # 信任与安全
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/trust-and-security/
 
-在端到端测试系统中，明确系统的信任边界与故障安全（fail-closed）选择是架构设计的核心。ambercast 将持久化工件校验与提供商输出的接纳边界明确区分开来：回放运行仅通过受信任的指令覆盖计划边界读取测试计划，而在生成阶段，提供商生成的步骤在持久化前必须经过本地响应契约解析与指令覆盖检查。
+ambercast 只信任在本地验证过的内容。页面内容、提供方输出和机密值在边界处各自经过校验或脱敏，通不过就停止。
 
-## 工件与提供商输出经过验证 {#artifact-and-provider-boundaries}
+## 产物与提供方输出都会校验 {#artifact-and-provider-boundaries}
 
-持久化工件的校验与提供商输出的接纳遵循相互独立的信任边界。在执行回放之前，`run` 命令仅通过其受信任的指令覆盖计划边界（instruction-covered-plan boundary）读取测试计划，使回放执行建立在已验证的计划结构之上。
+`run` 只有在执行计划通过校验后才会读取它，校验包括指令覆盖。
 
-对于提供商生成的步骤，系统不会将其直接视作可信的持久化工件。这些步骤首先需要针对本地响应契约进行解析，并接受指令覆盖检查；随后组装并作为完整计划进行解析，只有完全通过这些阶段后才会持久化存储。
+提供方生成的步骤不会原样保存。ambercast 先按本地响应契约解析，检查指令覆盖，再确认能解析为完整的执行计划，之后才保存。
 
-对于机密，生成将提案与授权分离。提供商可以提出 `SecretNameChoice`，但 Ambercast 会在本地解析每个提交的机密引用，且仅当名称已在许可列表中或获得交互式同意后，才持久化候选项。`secrets.allow: "*"` 会绕过逐名审查，因此它是有意设置的高风险配置，而非隐式默认值。
+对机密，提议与授权是分开的。提供方只能提议机密名称。每个已提交的机密引用都在本地解析。只有名称已在允许列表中，或你在交互中同意，候选项才会保存。
 
-相关链接：[计划文档](/ambercast/zh-cn/spec/plan-document/)、[符合性](/ambercast/zh-cn/spec/conformance/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)
+`secrets.allow: "*"` 会跳过逐个名称的审查。这是有意选择的高风险设置，不是隐式默认值。
 
-## 页面观测数据不构成指令 {#untrusted-page-data}
+相关链接：[执行计划文档](/ambercast/zh-cn/spec/plan-document/)、[符合性](/ambercast/zh-cn/spec/conformance/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)
 
-被测应用的内容与驱动测试执行的指令之间存在严格的界限。来自被测页面的观测数据属于外部输入，系统不会将其作为控制指令执行。为此，结构化的无障碍凭证带有固定声明，明确指出源自页面的内容不得被解释为指令。
+## 页面内容不是指令 {#untrusted-page-data}
 
-在错误处理架构上，错误设计将报告规范（report schema）作为 `errors[].code` 的外部真实来源，从而将特定于实现的错误类隔离在公共契约之外。
+被测应用的内容不能充当给代理的指令。ambercast 从页面采集无障碍证据时，证据会带一条固定声明：页面内容不是指令。
+
+报告模式是 `errors[].code` 的公开事实来源。具体实现的错误类不会进入公开契约。
 
 相关链接：[报告](/ambercast/zh-cn/reference/reports/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/)
 
-## 页面凭证在复用前进行脱敏 {#page-evidence-boundary}
+## 页面证据在复用前会脱敏 {#page-evidence-boundary}
 
-实时页面观测数据不会直接作为不受限制的提供商输入，也不会无条件转为持久化凭证。发往 AI 的快照在传入 AI 适配器之前，会排除截图字节，并从无障碍树字符串和对象键中对已解析的 Secret 值进行脱敏处理。
+ambercast 在实时页面上观察到的内容，不会原样进入提供方输入或保存的证据。发送给 AI 的快照不含截图字节，并且会从无障碍树的字符串和键中隐去已解析的机密值。
 
-当实时步骤执行失败时，失败步骤凭证使用脱敏后的无障碍数据，同时系统将不确定的 Secret 存在视为不适宜进行屏幕截图捕获。
+实时运行中失败步骤的证据使用脱敏后的无障碍数据。无法确定是否含有机密时，ambercast 会跳过截图。
 
-需要注意的是，脱敏范围覆盖了已解析的 Secret 以及回放已知的运行状态值，但这并不保证能从 `actual` 文本、无障碍快照、屏幕截图、canvas、图像、CSS 渲染像素或扫描与截图之间的时间差间隙中移除任意源自页面的个人数据。请您将持久化的报告和凭据视为敏感数据，并妥善限制其访问权限与保留期限。
+脱敏只覆盖回放已知的机密和运行状态值。页面本身带来的个人数据不一定会被清除，可能残留在 `actual` 文本、快照、截图、canvas、图片和 CSS 渲染的像素中。扫描与截图之间的时间差也可能留下数据。请把已保存的报告和证据视为敏感信息，限制访问范围和保留时间。
 
-相关链接：[计划中的机密](/ambercast/zh-cn/spec/secrets/)、[报告](/ambercast/zh-cn/reference/reports/)
+相关链接：[执行计划中的机密](/ambercast/zh-cn/spec/secrets/)、[报告](/ambercast/zh-cn/reference/reports/)
 
-## Secret 接收端限制浏览器填充 {#secret-sink-boundary}
+## 机密写入目标会先校验 {#secret-sink-boundary}
 
-浏览器源边界与提供商进程的环境变量过滤机制具有不同的控制范围。在执行 `fill-secret` 跟踪操作时，系统会在 Secret 解析和浏览器绑定之前，先应用其针对每条记录的接收端源门禁（per-entry sink-origin gate）。
+浏览器写入不依赖进程环境作为边界，而是逐个条目校验写入目标的来源。`fill-secret` 轨迹动作会在解析机密、绑定浏览器之前完成这项校验。
 
 相关链接：[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[配置](/ambercast/zh-cn/reference/configuration/)
 
-## ambercast 管理的 Secret 命名空间不进入提供商子进程 {#secret-boundary}
+## 机密命名空间不会进入提供方进程 {#secret-boundary}
 
-配置的提供商子进程不会被托付 ambercast 管理的敏感命名空间。提供商子进程接收的是一份复制的环境变量，该环境变量通过不区分大小写的匹配方式排除了 `AMBERCAST_SECRET_*` 与 `AMBERCAST_ENV_*`。
+已配置的 AI 提供方无法访问 ambercast 管理的机密命名空间。提供方的子进程拿到的是环境变量副本，其中不含 `AMBERCAST_SECRET_*` 和 `AMBERCAST_ENV_*`，匹配不区分大小写。
 
-在整体安全设计中，系统为 Secret 校验、生成器策略以及报告脱敏分配了各自独立的角色，而不是单纯依赖数据模式自身来证明保密性。
+机密校验、生成器策略和报告脱敏各有分工。仅靠模式无法证明机密没有泄露。
 
-机密值仅在运行时从 `AMBERCAST_SECRET_<NAME>` 解析。提供商接收名称而不是值，这避免了值的泄露，但不代表描述性名称毫无风险；请在批准前审查所提名称。
+机密值只在运行时从 `AMBERCAST_SECRET_<NAME>` 解析。提供方只能看到名称，看不到值。但描述性的名称并非无害，批准之前请检查每个被提议的名称。
 
 相关链接：[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)、[安全策略](/ambercast/zh-cn/reference/security-policy/)
 
@@ -4214,68 +4222,68 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/trust-and-se
 # CI 中的确定性
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/
 
-本文解释 CI 行为背后的信任边界。在 CI 流程中，Ambercast 将检查操作（`check`）作为门禁使用，其依赖结构被限制在只读范围之内：`CheckDeps` 仅暴露必要的只读与配置能力，同时省略了 AI 执行器、浏览器驱动与密钥等具有副作用的端口。
+在 CI 中，检查没有副作用。ambercast 默认只写运行报告和受限证据，拒绝自动修复，并把最严重的问题作为单一退出码返回。
 
-## 只读检查是结构性的 {#read-only-check}
+## 只读检查 {#read-only-check}
 
-当您在 CI 流水线中运行 `check` 时，该命令之所以能够作为可靠的检查门禁，是因为其只读特性并非依赖运行时约定，而是通过结构设计实现的。`CheckDeps` 仅暴露 `ReadStorageAdapter`、布局解析（layout resolution）、发现（discovery）、选定的配置以及一个可选的中止信号（abort signal）。
+`check` 无法访问 AI 执行器、浏览器、机密、时钟和事件。它对存储的访问也是只读的。因此只读是结构上的保证，不靠约定。
 
-`CheckDeps` 有意省略了 AI 执行器、浏览器驱动、密钥（secrets）、时钟以及事件端口；在代码实现中，正是这些端口的缺失界定了只读边界。在此边界约束下，存储能力也被明确限定为只读：对于 prompt、plan、grounding 伴生文件以及孤立发现（orphan findings），仅进行读取和存在性检查便足以完成检查任务。
+检查提示词、执行计划、定位缓存和孤立产物，只需要读取和存在性检查。
 
-相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#read-only-contract)、[计划生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/#fresh-plan-decision)
+相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#read-only-contract)、[执行计划的生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/#fresh-plan-decision)
 
-## 回放具有受限的持久化范围 {#bounded-side-effects}
+## 回放的写入有边界 {#bounded-side-effects}
 
-在执行测试回放时，运行产物的持久化具有受限的范围，从而将回放证据与源构件的变更区分开来。`run` 执行时，首先定稿一个标记为 `persisted` 的信封（envelope），随后将其 JSON 仅写入该次调用的运行报告路径（run-report path）。
+`run` 只把运行报告 JSON 写到本次调用的报告路径。写入之前，它先把信封定稿为 `persisted`，所以文件与返回的信封一致。
 
-如果该写入操作失败，`run` 会返回一个包含 `reportPersistence: "failed"` 的信封；在此条件下，即便用例批次本身执行成功，进程状态也会变为退出码 3。对于该字段的状态含义，`reportPersistence: "not-attempted"` 表示未曾尝试进行持久化写入，而 `failed` 则表示在目标路径上没有任何部分内容变为可见。关于伴生文件回写的边界，请参阅 [ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)。
+写入失败时，`run` 返回带有 `reportPersistence: "failed"` 的信封。此时只有原本退出码为 0 的运行会变成 3，退出码 1、2、4、5 通常保持不变。`not-attempted` 表示没有尝试写入，`failed` 表示没有留下可见的部分内容。
 
-相关链接：[报告](/ambercast/zh-cn/reference/reports/#report-persistence)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
+在 CI 中回写定位缓存，需要 `--update-cache` 或 `ci.updateGroundingCache: true`。详情见[配置参考](/ambercast/zh-cn/reference/configuration/#grounding)。
 
-## CI 中默认拒绝修复 {#heal-refusal}
+相关链接：[报告](/ambercast/zh-cn/reference/reports/#persistence)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 
-为了避免修复操作在流水线中静默修改 CI 构件，在 CI 环境中发起真正的 `heal` 调用时，除非 `config.ci.heal` 为 true，否则会抛出配置错误。CI 的这一拒绝判断是在列表模式短路求值之后才进行评估的，因此 `heal --list` 仍然是一个不执行写操作的发现操作。
+## CI 默认拒绝自愈 {#heal-refusal}
 
-在修复流程中，系统仅将 plan 和 grounding 伴生文件缓冲在私有覆盖层（private overlay）中；在确认之前或在 `--dry-run` 期间，回放尝试仍可在用例运行目录下写入受限的证据文件。从缓冲的伴生文件候选对象到真正的构件写入，后续的提交能力（commit capability）是唯一的途径。
+除 `--list` 外，除非 `ci.heal` 为 true，否则 CI 中的 `heal` 会以配置错误失败。`heal --list` 仍是不写入任何内容的发现操作。
+
+自愈把执行计划和定位缓存的候选项缓存在私有区域，只通过提交步骤写入。回放尝试仍可能在用例运行目录下写入受限证据，`--dry-run` 下的尝试也不例外。
 
 相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#ci)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#confirmation-and-writes)
 
-## 单一进程状态代表最强阻塞项 {#exit-priority}
+## 最严重的问题决定退出码 {#exit-priority}
 
-当批次运行产生混合的结果时，系统通过单一的退出状态反映最关键的问题。退出码选择器（exit selector）独立于迭代顺序和重复候选对象，从中选出最强候选状态（strongest candidate）。
+结果混杂时，退出码取最严重的候选项。优先级固定为 `2 > 3 > 4 > 1 > 5 > 0`。迭代顺序和重复的候选项都不会改变结果。
 
-在模块加载阶段，断言机制会拒绝无效的排序表（rank table），从而将该选择规则维持为一项运行时不变式。这使得混合结果能够以一个可预测的进程状态体现，反映出当前的最高优先级阻塞项。
-
-相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#priority)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#next-action-by-exit-code)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
+相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#next-action-by-exit-code)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
 
 ---
 
 # ambercast 的设计模型对比
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/comparison/
 
-在评估端到端测试方案时，考察其背后的设计模型往往比单纯对比功能更有价值。ambercast 的设计重点在于优先考虑不绑定于特定工具的测试资产。通过规范化提示词文本、推导计划来源并构建经过校验的 PlanDocument，ambercast 将测试的核心意图转化为独立的衍生计划，这与代码生成、录制回放以及直接驱动型 Agent 所依托的设计模型有着明确的区别。
+比较测试方法时，应看各自把什么作为测试产物保留下来，而不是比较功能清单。ambercast 以提示词为源，执行计划由它派生。代码生成、录制回放和直接操作的代理，保留的是别的东西。
 
-## 代码生成始于录制交互 {#code-generation-model}
+## 代码生成始于录制的交互 {#code-generation-model}
 
-Playwright 将 `codegen` 阐述为录制浏览器操作并生成代码，供用户复制到编辑器中。在该模型下，生成的产物直接体现为特定运行环境下的测试源代码，测试逻辑与具体的测试框架实现紧密交织。
+在代码生成模型中，测试产物来自捕获的交互。Playwright 文档把 codegen 描述为录制浏览器操作，并生成可复制到编辑器的代码。这时的产物是针对某个运行器编写的脚本。
 
-与之相对，ambercast 的设计考量优先关注不锁定于特定工具的测试资产。在生成阶段，ambercast 会规范化提示词文本，推导计划来源，并构建经过校验的 PlanDocument。测试意图借此被沉淀为结构化的衍生计划，而非直接捆绑在某一个具体工具的代码脚本中。
+ambercast 在中间放了一层产物：它先规范化提示词，派生执行计划的出处，再构建经过校验的执行计划。这样的设计倾向于不绑定特定工具的产物。
 
-相关链接：[设计哲学](/ambercast/zh-cn/philosophy/)、[计划生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)
+相关链接：[设计哲学](/ambercast/zh-cn/philosophy/)、[执行计划的生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)
 
-## 录制测试保留观察到的交互 {#record-and-replay-model}
+## 录制回放保留观察到的交互 {#record-and-replay-model}
 
-在 Cypress 的文档中，Studio 被描述为录制真实交互并将其转换为测试命令。传统的录制回放模型侧重于保留所观察到的操作步骤，并将其转换为连续的测试命令。
+录制回放工具保留在浏览器会话中执行的操作。Cypress 文档把 Studio 描述为录制真实交互，并把它们转换成测试命令。录制下来的脚本就成为测试套件中的产物。
 
-ambercast 则将明确的意图与可替换的交互定位区分开来。在 ambercast 中，PlanDocument 记录 inputsDigest，而 grounding 则独立绑定至 planDigest，因此两者的来源契约是相互独立的。这种分离使测试所声明的意图不会直接与某次观察到的具体界面定位强行绑定。
+ambercast 把意图和元素绑定放在不同的契约下。执行计划记录 `inputsDigest`，定位缓存则绑定到 `planDigest`。因此，派生的执行计划和负责定位元素的定位缓存可以分别变化。
 
-相关链接：[重放与 grounding](/ambercast/zh-cn/explanation/replay-and-grounding/)、[设计哲学](/ambercast/zh-cn/philosophy/)
+相关链接：[回放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/)、[设计哲学](/ambercast/zh-cn/philosophy/)
 
-## 直接驱动型 Agent 基于当前会话行动 {#direct-driving-agent-model}
+## 直接操作的代理依赖当前会话 {#direct-driving-agent-model}
 
-直接驱动型 Agent 通常依赖当前会话中的即时交互进行动态操作。一般的直接驱动型 Agent 模型可能会使用屏幕截图和实时工具调用，而不生成与 ambercast 等效的、已提交的计划与 grounding 资产；不过，这一特征是否适用于所有具体的 Agent 产品，目前尚未确认。
+直接操作的代理在实时浏览器会话中工作。它可能依据截图和实时工具调用行动，并且可能不留下已提交的执行计划或定位缓存。
 
-相比之下，ambercast 在完成 Schema 校验后，生成的计划会明确携带 producer-bundle 指纹以及规范化步骤。它并不在每次测试执行时依赖实时的会话驱动循环，而是产出可供审查与提交的固定测试资产。
+ambercast 则依赖经过审阅并提交的产物。执行计划带有生成器捆绑包指纹和经过模式校验的步骤。由于 ambercast 在执行前就构建并校验这些内容，你得到的是可阅读、可检查的产物。
 
 相关链接：[在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)、[信任与安全](/ambercast/zh-cn/explanation/trust-and-security/)
 
@@ -4284,27 +4292,27 @@ ambercast 则将明确的意图与可替换的交互定位区分开来。在 amb
 # 状态与路线图
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-roadmap/
 
-理解 ambercast 的当前边界，有助于区分已实现的工程事实与后续的设计规划。在当前阶段，ambercast 确立了明确的命令行能力范围，同时定义了计划（plans）在版本演进中的生命周期要求。
+当前 CLI 有七个子命令：`init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。`review` 和 baseline/restore 仍在计划中。1.0 之前，模式和生成器的变更可能要求你重新生成执行计划。
 
 ## 当前版本已实现 {#implemented}
 
-CLI 解析器所暴露的子命令包括 `init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。MCP 子命令通过 stdio 提供六项工具。
+CLI 解析器公开 `init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp` 七个子命令。`ambercast mcp` 通过 stdio 提供六个工具。
 
-对于在早期版本中生成的产物，0.3.1 要求重新生成 0.1.0 的计划。这是因为 producer-contract 的指纹发生了变更，致使既有的 producer bundle 以及 `inputsDigest` 处于 `stale`（已过期）状态。
+Chromium 是目前唯一支持的浏览器。
+
+1.0 之前，次版本也可能包含破坏性变更。模式或生成器的变更会迫使你重新生成现有的执行计划。例如在 0.2.0 中，生成器契约的变更使 0.1.0 的执行计划变为 `stale`。哪些版本需要重新生成，可查看[再生成边界](/ambercast/zh-cn/reference/compatibility/#regeneration-boundary)和 [0.2.0 变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[兼容性](/ambercast/zh-cn/reference/compatibility/)、[变更日志](/ambercast/zh-cn/reference/changelog/)
 
-## 当前边界之后的规划 {#planned-after-current-boundary}
+## 当前边界之后的计划 {#planned-after-current-boundary}
 
-`review` 和 baseline/restore 仍在规划中。MCP 工具现已提供。
-
-在浏览器平台支持方面，Firefox 和 WebKit 计划在 1.0 达成。
+`review` 和 baseline/restore 仍在计划中。Firefox 和 WebKit 支持在计划中，云版本也在计划中。MCP 工具已经可以使用。
 
 相关链接：[ambercast review](/ambercast/zh-cn/reference/cli/review/)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
 
 ## 版本策略 {#version-policy}
 
-[兼容性表](/ambercast/zh-cn/reference/compatibility/#compatibility-table)列出了目前已发布的软件包版本。关于工具演进的产品策略是：在整个 0.x 阶段仅保持 CLI 形式，并在迈向 1.0.0 时与云端版本一同交付。
+[兼容性表](/ambercast/zh-cn/reference/compatibility/#compatibility-table)列出了已发布的软件包版本。在 MVP 之前，产品保持在 0.x 版本。
 
 相关链接：[变更日志](/ambercast/zh-cn/reference/changelog/)、[设计哲学](/ambercast/zh-cn/philosophy/)
 

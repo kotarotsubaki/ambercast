@@ -11,7 +11,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见 [Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
 
 回放随后走以下四条路径之一：
 
@@ -34,9 +34,9 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 完整性校验失败的定位缓存，即使带 `--resolve` 也会失败关闭，例如 JSON 无效，或覆盖证明、校验证明失败。
 
-`--resolve` 只处理两类情况：定位缓存不存在，以及结构有效但可恢复的条目。由已淘汰格式版本写入的定位缓存也属于可恢复情况。不带 `--resolve` 时，`run` 会将其报告为 `GROUNDING_UNRESOLVED`，而 `run --resolve --update-cache` 会重新生成它。
+`--resolve` 只处理两类情况：定位缓存不存在，以及结构有效但可恢复的条目。由已淘汰格式版本写入的定位缓存也属于可恢复情况。对含有元素绑定步骤的执行计划，不带 `--resolve` 时 `run` 会将其报告为 `GROUNDING_UNRESOLVED`，而 `run --resolve --update-cache` 会重新生成它。
 
-带 `--resolve` 时，元素未命中会实时解析。只有通过的 `confirms` 步骤确认了绑定，且回写开关允许时，ambercast 才会写入条目。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
+带 `--resolve` 时，元素未命中会实时解析。只有确认该绑定的所有步骤都通过，且回写开关允许时，ambercast 才会写入条目。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)、[控制定位缓存回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
 
@@ -44,7 +44,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 不带 `--resolve` 时，`run` 既不会实时解析冷启动未命中，也不会解析可恢复的未命中。在 AI 驱动的回放中，没有可用轨迹的 `ai` 步骤会以 `grounding-unresolved` 失败关闭，退出码为 4，并提示使用 `--resolve`。
 
-元素未命中同样失败关闭，不会实时解析元素。
+元素未命中同样失败关闭，退出码为 4，不会实时解析元素。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
 

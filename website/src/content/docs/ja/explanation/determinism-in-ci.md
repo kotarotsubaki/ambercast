@@ -17,7 +17,7 @@ CIでは、検査が副作用を持たない。書き込むのは、既定では
 
 `run` が実行レポートのJSONを書く先は、その呼び出しのレポートパスだけだ。書く前に、エンベロープを `persisted` として確定させる。ファイルは、返したエンベロープと同じ内容になる。
 
-書き込みに失敗すると、`run` は `reportPersistence: "failed"` のエンベロープを返す。このとき、終了コードが0だったはずの実行だけが3になる。1、2、4、5はそのまま残る。`not-attempted` は書き込みを試していないことを、`failed` は途中までの内容が見える状態で残っていないことを表す。
+書き込みに失敗すると、`run` は `reportPersistence: "failed"` のエンベロープを返す。このとき、終了コードが0だったはずの実行だけが3になる。1、2、4、5は通常そのまま残る。`not-attempted` は書き込みを試していないことを、`failed` は途中までの内容が見える状態で残っていないことを表す。
 
 CIでのグラウンディングの書き戻しは、`--update-cache` か `ci.updateGroundingCache: true` を指定したときだけ行う。詳しくは[設定](/ambercast/ja/reference/configuration/#grounding)にある。
 

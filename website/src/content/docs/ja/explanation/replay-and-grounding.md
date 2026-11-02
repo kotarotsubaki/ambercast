@@ -11,7 +11,7 @@ description: 再生が記録済みのグラウンディングを使ってAIを�
 
 要素のエントリは、ロケーター、フィンガープリント、意図のダイジェスト、来歴を持つ。解決では保存済みのロケーターを使い、フィンガープリントを照合する。エントリの形は、グラウンディングドキュメントで確かめられる。
 
-リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。不一致を命中として扱うことはない。
+リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。不一致を命中として扱うことはない。`snapshot-invalid` と `secret-contaminated` は、ケースを中止させる。
 
 再生中の判断は、次の4つに分かれる。
 
@@ -34,9 +34,9 @@ description: 再生が記録済みのグラウンディングを使ってAIを�
 
 グラウンディングの整合性が壊れていると、`--resolve` を付けてもフェイルクローズする。JSONが不正な場合や、カバレッジか検証の証明に失敗した場合が当てはまる。
 
-`--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。`--resolve` を付けない `run` はこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
+`--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。要素に結び付くステップを持つ計画では、`--resolve` を付けない `run` がこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
 
-`--resolve` を付けると、要素のミスはその場で解決する。解決したエントリを書くのは、`confirms` ステップがバインディングを確かめ、ライトバックのゲートが許したときだけだ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
+`--resolve` を付けると、要素のミスはその場で解決する。解決したエントリを書くのは、バインディングを確かめる全ステップが合格し、ライトバックのゲートが許したときだけだ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)、[グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
 
@@ -44,7 +44,7 @@ description: 再生が記録済みのグラウンディングを使ってAIを�
 
 `--resolve` を付けないと、`run` はコールドスタートのミスと回復できるミスを、その場では解決しない。AI主導の再生で使えるトレースを持たない `ai` ステップは、`grounding-unresolved`（終了コード4）でフェイルクローズし、`--resolve` を案内する。
 
-要素のミスも同じで、その場で解決せずにフェイルクローズする。
+要素のミスも同じで、その場で解決せず、終了コード4でフェイルクローズする。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#resolve)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
 

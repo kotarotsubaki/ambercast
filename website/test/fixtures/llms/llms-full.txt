@@ -2470,7 +2470,7 @@ Heal configuration:
 | view | none | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
 | mcp | none | dir, sync-wait-ms | `--dir` argument selects the session root (cwd when omitted) |
 
-For `generate`, `run`, `check`, and `heal`, every positional argument outside `--list` must be a literal path inside `testDir`. Its name must be non-empty and end in exactly `.test.md`. Any other path fails with `PROMPT_PATH_INVALID`.
+For `generate`, `run`, `check`, and `heal`, every positional argument outside `--list` must be a literal path inside `testDir`. The name in front of the `.test.md` suffix must be non-empty, and the suffix must be exactly `.test.md`. Any other path fails with `PROMPT_PATH_INVALID`.
 
 - `--` ends option parsing, so every later argument is a literal path.
 - `--json` and `--no-color` are handled by each command, not by a shared global flag.
@@ -2638,7 +2638,7 @@ You can pass prompt paths directly or let [configured discovery](/ambercast/refe
 
 ## Results {#results}
 
-A completed finding carries `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` field appears only as evidence for a finding. A finding with status `invalid-artifact-name` is the exception: it has no `planFile` and carries `id`, `file`, `status`, `reason`, and `artifactFile`, which all name the artifact itself. [Reports](/ambercast/reference/reports/#check-results) lists the full field definitions and report structures.
+A completed finding carries `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` field appears only as evidence for a finding. A finding with status `invalid-artifact-name` is the exception: it has no `planFile` and carries `id`, `file`, `status`, `reason`, and `artifactFile`, where `id`, `file`, and `artifactFile` name the artifact itself. [Reports](/ambercast/reference/reports/#check-results) lists the full field definitions and report structures.
 
 ## Read-only inspection {#read-only-contract}
 

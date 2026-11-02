@@ -39,7 +39,7 @@ description: 計画とグラウンディングの鮮度を調べる ambercast ch
 
 ## 結果 {#results}
 
-完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、すべて成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
+完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、このうち `id`・`file`・`artifactFile` が成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
 
 ## 読み取り専用の検査 {#read-only-contract}
 

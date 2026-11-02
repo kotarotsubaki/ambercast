@@ -71,7 +71,7 @@ Heal configuration:
 | view | 无 | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > 发现 |
 | mcp | 无 | dir, sync-wait-ms | `--dir` 参数选择会话根目录（省略时为当前目录） |
 
-对 `generate`、`run`、`check` 和 `heal`，除 `--list` 外，每个位置参数都必须是 `testDir` 内的字面路径。路径的名称不能为空，并且后缀必须恰好是 `.test.md`。其他路径会以 `PROMPT_PATH_INVALID` 失败。
+对 `generate`、`run`、`check` 和 `heal`，除 `--list` 外，每个位置参数都必须是 `testDir` 内的字面路径。`.test.md` 前面的名称不能为空，并且后缀必须恰好是 `.test.md`。其他路径会以 `PROMPT_PATH_INVALID` 失败。
 
 - `--` 结束选项解析，其后的参数全部按字面路径处理。
 - `--json` 和 `--no-color` 由各命令自行处理，没有共享的全局标志。

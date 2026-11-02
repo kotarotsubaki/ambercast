@@ -39,7 +39,7 @@ description: 检查执行计划与定位缓存新鲜度的 ambercast check 的�
 
 ## 结果 {#results}
 
-完整的检查发现包含 `id`、`file`、`planFile`、`status` 和 `reason`。`groundingFile` 或 `artifactFile` 只在作为该发现的证据时出现。状态为 `invalid-artifact-name` 的发现是例外：它没有 `planFile`，而是包含 `id`、`file`、`status`、`reason` 和 `artifactFile`，这些字段都指向产物本身。完整的字段定义和报告结构见[报告](/ambercast/zh-cn/reference/reports/#check-results)。
+完整的检查发现包含 `id`、`file`、`planFile`、`status` 和 `reason`。`groundingFile` 或 `artifactFile` 只在作为该发现的证据时出现。状态为 `invalid-artifact-name` 的发现是例外：它没有 `planFile`，而是包含 `id`、`file`、`status`、`reason` 和 `artifactFile`，其中 `id`、`file` 和 `artifactFile` 指向产物本身。完整的字段定义和报告结构见[报告](/ambercast/zh-cn/reference/reports/#check-results)。
 
 ## 只读检查 {#read-only-contract}
 

@@ -71,7 +71,7 @@ Heal configuration:
 | view | なし | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > 探索 |
 | mcp | なし | dir, sync-wait-ms | `--dir` 引数がセッションルートを選ぶ（省略時はカレントディレクトリ） |
 
-`generate`・`run`・`check`・`heal` は、`--list` を除き、位置引数を `testDir` 内のリテラルパスとして受け取る。パスの名前は空でなく、接尾辞は正確に `.test.md` でなければならない。条件を満たさないパスは `PROMPT_PATH_INVALID` になる。
+`generate`・`run`・`check`・`heal` は、`--list` を除き、位置引数を `testDir` 内のリテラルパスとして受け取る。`.test.md` の前の名前は空であってはならず、接尾辞は正確に `.test.md` でなければならない。条件を満たさないパスは `PROMPT_PATH_INVALID` になる。
 
 - `--` を渡すと、そこでオプションの解析が終わり、以降の引数はすべてリテラルパスになる。
 - `--json` と `--no-color` は、共有のグローバルフラグではなく、コマンドごとに処理される。

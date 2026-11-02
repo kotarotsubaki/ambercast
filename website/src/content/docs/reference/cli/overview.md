@@ -71,7 +71,7 @@ Heal configuration:
 | view | none | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
 | mcp | none | dir, sync-wait-ms | `--dir` argument selects the session root (cwd when omitted) |
 
-For `generate`, `run`, `check`, and `heal`, every positional argument outside `--list` must be a literal path inside `testDir`. Its name must be non-empty and end in exactly `.test.md`. Any other path fails with `PROMPT_PATH_INVALID`.
+For `generate`, `run`, `check`, and `heal`, every positional argument outside `--list` must be a literal path inside `testDir`. The name in front of the `.test.md` suffix must be non-empty, and the suffix must be exactly `.test.md`. Any other path fails with `PROMPT_PATH_INVALID`.
 
 - `--` ends option parsing, so every later argument is a literal path.
 - `--json` and `--no-color` are handled by each command, not by a shared global flag.

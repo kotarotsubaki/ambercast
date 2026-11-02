@@ -2503,7 +2503,7 @@ Heal configuration:
 | view | なし | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > 探索 |
 | mcp | なし | dir, sync-wait-ms | `--dir` 引数がセッションルートを選ぶ（省略時はカレントディレクトリ） |
 
-`generate`・`run`・`check`・`heal` は、`--list` を除き、位置引数を `testDir` 内のリテラルパスとして受け取る。パスの名前は空でなく、接尾辞は正確に `.test.md` でなければならない。条件を満たさないパスは `PROMPT_PATH_INVALID` になる。
+`generate`・`run`・`check`・`heal` は、`--list` を除き、位置引数を `testDir` 内のリテラルパスとして受け取る。`.test.md` の前の名前は空であってはならず、接尾辞は正確に `.test.md` でなければならない。条件を満たさないパスは `PROMPT_PATH_INVALID` になる。
 
 - `--` を渡すと、そこでオプションの解析が終わり、以降の引数はすべてリテラルパスになる。
 - `--json` と `--no-color` は、共有のグローバルフラグではなく、コマンドごとに処理される。
@@ -2673,7 +2673,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/
 
 ## 結果 {#results}
 
-完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、すべて成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
+完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、このうち `id`・`file`・`artifactFile` が成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
 
 ## 読み取り専用の検査 {#read-only-contract}
 

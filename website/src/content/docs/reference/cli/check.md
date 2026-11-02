@@ -39,7 +39,7 @@ You can pass prompt paths directly or let [configured discovery](/ambercast/refe
 
 ## Results {#results}
 
-A completed finding carries `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` field appears only as evidence for a finding. A finding with status `invalid-artifact-name` is the exception: it has no `planFile` and carries `id`, `file`, `status`, `reason`, and `artifactFile`, which all name the artifact itself. [Reports](/ambercast/reference/reports/#check-results) lists the full field definitions and report structures.
+A completed finding carries `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` field appears only as evidence for a finding. A finding with status `invalid-artifact-name` is the exception: it has no `planFile` and carries `id`, `file`, `status`, `reason`, and `artifactFile`, where `id`, `file`, and `artifactFile` name the artifact itself. [Reports](/ambercast/reference/reports/#check-results) lists the full field definitions and report structures.
 
 ## Read-only inspection {#read-only-contract}
 

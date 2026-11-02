@@ -1080,7 +1080,7 @@ The default behavior on a grounding miss already fails closed. CI needs no flag 
 
 3. ## Limit what you upload \{#limit-uploads}
 
-   Step results in the report can retain `actual` text and an accessibility snapshot. Upload `report.json` only when you can apply prior review, restricted access, and short retention.
+   Step results in the report can retain `actual` text and an accessibility snapshot. Before you upload `report.json`, apply prior review, restricted access, and short retention. Upload it only when those controls are available.
 
    Upload invocation evidence or screenshots only by explicit opt-in, under the same controls. A failed live-browser step can save PNG screenshots in the invocation evidence directory.
 
@@ -1135,7 +1135,7 @@ Read the `check` status, take the action for that status, and run `check` again.
 
 2. ## Apply the action for that status \{#apply-action}
 
-   Run the action in the status row. Replace `<name>` in a command with your prompt file name.
+   Run the action in the status row. Replace `<name>` in a command with your prompt file name without the `.test.md` suffix, for example `login` for `login.test.md`.
 
 3. ## Review the changes \{#review-changes}
 
@@ -1153,7 +1153,7 @@ Read the `check` status, take the action for that status, and run `check` again.
 | `missing-plan` | Restore the plan from version control, or run `npx ambercast generate tests/ambercast/<name>.test.md`. | The generate result has a `planFile`. |
 | `missing-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | When the plan is fresh, `generate` creates the adjacent grounding file and returns `skipped-fresh` with `planFile` only. |
 | `stale-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
-| `invalid-grounding` | Run `npx ambercast generate --force tests/ambercast/<name>.test.md`, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
+| `invalid-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. If `check` still reports `invalid-grounding`, run `npx ambercast generate --force tests/ambercast/<name>.test.md`, which regenerates the plan and calls the AI provider, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
 | `orphaned-plan` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
 | `orphaned-grounding` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
 | `invalid-artifact-name` | Rename or remove the invalid companion through normal review. | The next check no longer reports the artifact whose name cannot map back to a prompt. |
@@ -1249,7 +1249,10 @@ The CLI `--strict` flag and the MCP `strict` argument have been removed. Remove 
    - A plain run fails on that input with `GROUNDING_UNRESOLVED`.
    - Add an assert that shows the effect of that input, such as the signed-in user name, and repeat step 2.
 3. Run `npx ambercast run --resolve --update-cache <file>` on your machine. The grounding is empty after regeneration, so ambercast calls AI once for each element step that has no verbatim quote. CI does not save the grounding by default.
-4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report. Always commit the plan. Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`. When it is `uncommitted`, keep the grounding local.
+4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report.
+   - Always commit the plan.
+   - Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`.
+   - When it is `uncommitted`, keep the grounding local.
 
 ## Verification \{#verification}
 
@@ -1274,7 +1277,7 @@ Source: https://kotarotsubaki.github.io/ambercast/how-to/troubleshoot/
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-Keep the failing command's JSON output, take the action for the matching symptom, and re-run the smallest affected command.
+Keep the failing command's output, take the action for the matching symptom, and re-run the smallest affected command.
 
 ## Prerequisites \{#prerequisites}
 
@@ -1286,7 +1289,7 @@ Your command invocation must be valid. Invalid flags, malformed command argument
 
 1. ## Find the matching symptom \{#match-symptom}
 
-   Keep the failing command's JSON output. Find the matching symptom in the table in the next section.
+   Keep the failing command's output. Re-run it with `--json` when you need the report. Find the matching symptom in the table in the next section.
 
 2. ## Apply the action \{#apply-action}
 
@@ -1307,7 +1310,7 @@ Your command invocation must be valid. Invalid flags, malformed command argument
 | `SECRET_CONSENT_REQUIRED` | Generation found a secret name that is not on the allowlist, and consent was declined or unavailable. | Review the name and add it to `secrets.allow`, or run generate again interactively. Do not add a secret value to the prompt. |
 | Heal reports `secret-set-changed` | A Stage 3 candidate changed the complete secret-name set, which heal cannot reattribute or consent to silently. | Run `ambercast generate --force <file>` and complete consent. The CLI prints this hint with the actual file path in place of `<file>`: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
 | Literal secret or legacy secret syntax | Protected IR rejected a secret-handling boundary. | Use [Manage secrets](/ambercast/how-to/manage-secrets/). Do not place a literal or a legacy grant line in the prompt. |
-| Browser, provider, storage, or crash | The execution environment failed. | Keep the JSON output, repair the environment, then re-run the smallest command. |
+| Browser, provider, storage, or crash | The execution environment failed. | Keep the output, repair the environment, then re-run the smallest command. |
 | Interrupted work | Batch work was incomplete. | Re-run after you resolve the interruption. |
 | Failed assertion | A replayed case has failing evidence. | Read the report, fix the app or the prompt, then re-run. |
 | Empty selection | No prompt matched the requested selection. | Correct the selection, or use `--allow-empty` only when the selection is meant to be empty. |

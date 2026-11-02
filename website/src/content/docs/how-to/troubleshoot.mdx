@@ -5,7 +5,7 @@ description: Find the action for an observed symptom and re-run the smallest aff
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-Keep the failing command's JSON output, take the action for the matching symptom, and re-run the smallest affected command.
+Keep the failing command's output, take the action for the matching symptom, and re-run the smallest affected command.
 
 ## Prerequisites \{#prerequisites}
 
@@ -17,7 +17,7 @@ Your command invocation must be valid. Invalid flags, malformed command argument
 
 1. ## Find the matching symptom \{#match-symptom}
 
-   Keep the failing command's JSON output. Find the matching symptom in the table in the next section.
+   Keep the failing command's output. Re-run it with `--json` when you need the report. Find the matching symptom in the table in the next section.
 
 2. ## Apply the action \{#apply-action}
 
@@ -38,7 +38,7 @@ Your command invocation must be valid. Invalid flags, malformed command argument
 | `SECRET_CONSENT_REQUIRED` | Generation found a secret name that is not on the allowlist, and consent was declined or unavailable. | Review the name and add it to `secrets.allow`, or run generate again interactively. Do not add a secret value to the prompt. |
 | Heal reports `secret-set-changed` | A Stage 3 candidate changed the complete secret-name set, which heal cannot reattribute or consent to silently. | Run `ambercast generate --force <file>` and complete consent. The CLI prints this hint with the actual file path in place of `<file>`: `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
 | Literal secret or legacy secret syntax | Protected IR rejected a secret-handling boundary. | Use [Manage secrets](/ambercast/how-to/manage-secrets/). Do not place a literal or a legacy grant line in the prompt. |
-| Browser, provider, storage, or crash | The execution environment failed. | Keep the JSON output, repair the environment, then re-run the smallest command. |
+| Browser, provider, storage, or crash | The execution environment failed. | Keep the output, repair the environment, then re-run the smallest command. |
 | Interrupted work | Batch work was incomplete. | Re-run after you resolve the interruption. |
 | Failed assertion | A replayed case has failing evidence. | Read the report, fix the app or the prompt, then re-run. |
 | Empty selection | No prompt matched the requested selection. | Correct the selection, or use `--allow-empty` only when the selection is meant to be empty. |

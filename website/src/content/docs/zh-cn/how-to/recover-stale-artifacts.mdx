@@ -25,7 +25,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 2. ## 按状态执行对应操作 \{#apply-action}
 
-   执行该状态所在行的操作。命令里的 `<name>` 要换成你的提示词文件名。
+   执行该状态所在行的操作。命令里的 `<name>` 要换成去掉 `.test.md` 后的提示词文件名，例如 `login.test.md` 对应 `login`。
 
 3. ## 检查变更 \{#review-changes}
 
@@ -43,7 +43,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 | `missing-plan` | 从版本控制恢复执行计划，或运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 生成结果包含 `planFile`。 |
 | `missing-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 执行计划为新鲜状态时，`generate` 创建相邻的定位缓存文件，并返回只含 `planFile` 的 `skipped-fresh`。 |
 | `stale-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。 | 有效时，check 不再报告完整性失败。 |
-| `invalid-grounding` | 运行 `npx ambercast generate --force tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。 | 有效时，check 不再报告完整性失败。 |
+| `invalid-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。如果 `check` 仍报告 `invalid-grounding`，就运行 `npx ambercast generate --force tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。后者会重新生成执行计划并调用 AI 提供商。 | 有效时，check 不再报告完整性失败。 |
 | `orphaned-plan` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
 | `orphaned-grounding` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
 | `invalid-artifact-name` | 通过正常审查流程重命名或移除这个无效的伴生文件。 | 下一次 check 不再报告名称无法对应回提示词的产物。 |

@@ -25,7 +25,7 @@ Read the `check` status, take the action for that status, and run `check` again.
 
 2. ## Apply the action for that status \{#apply-action}
 
-   Run the action in the status row. Replace `<name>` in a command with your prompt file name.
+   Run the action in the status row. Replace `<name>` in a command with your prompt file name without the `.test.md` suffix, for example `login` for `login.test.md`.
 
 3. ## Review the changes \{#review-changes}
 
@@ -43,7 +43,7 @@ Read the `check` status, take the action for that status, and run `check` again.
 | `missing-plan` | Restore the plan from version control, or run `npx ambercast generate tests/ambercast/<name>.test.md`. | The generate result has a `planFile`. |
 | `missing-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. | When the plan is fresh, `generate` creates the adjacent grounding file and returns `skipped-fresh` with `planFile` only. |
 | `stale-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
-| `invalid-grounding` | Run `npx ambercast generate --force tests/ambercast/<name>.test.md`, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
+| `invalid-grounding` | Run `npx ambercast generate tests/ambercast/<name>.test.md`. If `check` still reports `invalid-grounding`, run `npx ambercast generate --force tests/ambercast/<name>.test.md`, which regenerates the plan and calls the AI provider, then read the new grounding. | When it is valid, check no longer reports a failed integrity finding. |
 | `orphaned-plan` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
 | `orphaned-grounding` | Restore its prompt, or remove the orphan through the project's normal review process. | The next check no longer reports that orphan. |
 | `invalid-artifact-name` | Rename or remove the invalid companion through normal review. | The next check no longer reports the artifact whose name cannot map back to a prompt. |

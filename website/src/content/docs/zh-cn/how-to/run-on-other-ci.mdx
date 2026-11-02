@@ -37,7 +37,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 3. ## 限制上传的内容 \{#limit-uploads}
 
-   报告中的步骤结果可能保留 `actual` 文本和无障碍快照。只有能做到事先审查、受限访问和较短保留期时，才上传 `report.json`。
+   报告中的步骤结果可能保留 `actual` 文本和无障碍快照。上传 `report.json` 之前，先落实事先审查、受限访问和较短保留期。只有这些控制措施都已落实时才上传。
 
    上传调用证据或截图，也要在同样的控制下明确选择加入。失败的实时浏览器步骤可能在调用证据目录中保存 PNG 截图。
 

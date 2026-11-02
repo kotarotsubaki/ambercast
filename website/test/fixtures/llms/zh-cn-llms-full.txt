@@ -1080,7 +1080,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 3. ## 限制上传的内容 \{#limit-uploads}
 
-   报告中的步骤结果可能保留 `actual` 文本和无障碍快照。只有能做到事先审查、受限访问和较短保留期时，才上传 `report.json`。
+   报告中的步骤结果可能保留 `actual` 文本和无障碍快照。上传 `report.json` 之前，先落实事先审查、受限访问和较短保留期。只有这些控制措施都已落实时才上传。
 
    上传调用证据或截图，也要在同样的控制下明确选择加入。失败的实时浏览器步骤可能在调用证据目录中保存 PNG 截图。
 
@@ -1135,7 +1135,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 2. ## 按状态执行对应操作 \{#apply-action}
 
-   执行该状态所在行的操作。命令里的 `<name>` 要换成你的提示词文件名。
+   执行该状态所在行的操作。命令里的 `<name>` 要换成去掉 `.test.md` 后的提示词文件名，例如 `login.test.md` 对应 `login`。
 
 3. ## 检查变更 \{#review-changes}
 
@@ -1153,7 +1153,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 | `missing-plan` | 从版本控制恢复执行计划，或运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 生成结果包含 `planFile`。 |
 | `missing-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。 | 执行计划为新鲜状态时，`generate` 创建相邻的定位缓存文件，并返回只含 `planFile` 的 `skipped-fresh`。 |
 | `stale-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。 | 有效时，check 不再报告完整性失败。 |
-| `invalid-grounding` | 运行 `npx ambercast generate --force tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。 | 有效时，check 不再报告完整性失败。 |
+| `invalid-grounding` | 运行 `npx ambercast generate tests/ambercast/<name>.test.md`。如果 `check` 仍报告 `invalid-grounding`，就运行 `npx ambercast generate --force tests/ambercast/<name>.test.md`，然后阅读新的定位缓存。后者会重新生成执行计划并调用 AI 提供商。 | 有效时，check 不再报告完整性失败。 |
 | `orphaned-plan` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
 | `orphaned-grounding` | 恢复它的提示词，或通过项目的正常审查流程移除这个孤立文件。 | 下一次 check 不再报告该孤立项。 |
 | `invalid-artifact-name` | 通过正常审查流程重命名或移除这个无效的伴生文件。 | 下一次 check 不再报告名称无法对应回提示词的产物。 |
@@ -1249,7 +1249,10 @@ CLI 的 `--strict` 选项和 MCP 的 `strict` 参数已移除。请从调用中�
    - 普通的 run 会在该输入处以 `GROUNDING_UNRESOLVED` 失败。
    - 请加入能体现该输入效果的断言，例如登录后的用户名，然后重做第 2 步。
 3. 在本机运行 `npx ambercast run --resolve --update-cache <file>`。重新生成后定位缓存为空，所以对每个没有逐字引用的元素步骤，ambercast 会调用一次 AI。CI 默认不保存定位缓存。
-4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。执行计划始终提交。只有 `grounding.repositoryPolicy` 为 `committed` 时，才将定位缓存与执行计划一起提交。为 `uncommitted` 时，定位缓存保留在本地。
+4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。
+   - 执行计划始终提交。
+   - 只有 `grounding.repositoryPolicy` 为 `committed` 时，才将定位缓存与执行计划一起提交。
+   - 为 `uncommitted` 时，定位缓存保留在本地。
 
 ## 验证 \{#verification}
 
@@ -1274,7 +1277,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/how-to/troubleshoot/
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-保留失败命令的 JSON 输出，执行与症状对应的操作，再重新运行受影响的最小命令。
+保留失败命令的输出，执行与症状对应的操作，再重新运行受影响的最小命令。
 
 ## 前置条件 \{#prerequisites}
 
@@ -1286,7 +1289,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 1. ## 找到匹配的症状 \{#match-symptom}
 
-   保留失败命令的 JSON 输出。在下一节的表中，找到与它匹配的症状。
+   保留失败命令的输出。需要报告时，加上 `--json` 重新运行。在下一节的表中，找到与它匹配的症状。
 
 2. ## 执行对应操作 \{#apply-action}
 
@@ -1307,7 +1310,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 | `SECRET_CONSENT_REQUIRED` | 生成发现了不在许可列表中的机密名称，且同意被拒绝或无法请求。 | 审查名称并加入 `secrets.allow`，或以交互方式重新运行 generate。不要把机密值写进提示词。 |
 | heal 报告 `secret-set-changed` | Stage 3 候选改变了完整的机密名称集合，heal 无法悄然重新归因或同意。 | 运行 `ambercast generate --force <file>` 并重新完成同意。CLI 会把 `<file>` 换成实际的文件路径后输出这条提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す` |
 | 明文机密或旧版机密语法 | 受保护的 IR 拒绝了机密处理边界。 | 按[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)处理。不要在提示词中放入明文机密或旧版授权行。 |
-| 浏览器、提供商、存储故障或崩溃 | 执行环境发生故障。 | 保留 JSON 输出，修复环境，然后重新运行最小的命令。 |
+| 浏览器、提供商、存储故障或崩溃 | 执行环境发生故障。 | 保留输出，修复环境，然后重新运行最小的命令。 |
 | 工作中断 | 批处理未完成。 | 排除中断原因后重新运行。 |
 | 断言失败 | 回放的用例存在失败的证据。 | 阅读报告，修复应用或提示词，然后重新运行。 |
 | 选区为空 | 没有提示词与所请求的选区匹配。 | 修正选区。只有确实要选空时才使用 `--allow-empty`。 |

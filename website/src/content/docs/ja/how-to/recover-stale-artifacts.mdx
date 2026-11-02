@@ -25,7 +25,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 2. ## 状態に合わせて対処する \{#apply-action}
 
-   表の対処を、行ごとに実行する。コマンドの `<name>` は、プロンプトのファイル名に置き換える。
+   表の対処を、行ごとに実行する。コマンドの `<name>` は、`.test.md` を除いたプロンプトのファイル名に置き換える。たとえば `login.test.md` なら `login` である。
 
 3. ## 変更を確かめる \{#review-changes}
 
@@ -43,7 +43,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 | `missing-plan` | 計画をバージョン管理から戻すか、`npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | 生成の結果に `planFile` がある。 |
 | `missing-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。 | 計画が fresh なら、`generate` が隣のグラウンディングを作り、`planFile` だけを持つ `skipped-fresh` を返す。 |
 | `stale-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行し、新しいグラウンディングを読む。 | 有効なら、check は整合性の失敗を出さなくなる。 |
-| `invalid-grounding` | `npx ambercast generate --force tests/ambercast/<name>.test.md` を実行し、新しいグラウンディングを読む。 | 有効なら、check は整合性の失敗を出さなくなる。 |
+| `invalid-grounding` | `npx ambercast generate tests/ambercast/<name>.test.md` を実行する。それでも `check` が `invalid-grounding` を報告するなら、`npx ambercast generate --force tests/ambercast/<name>.test.md` を実行し、新しいグラウンディングを読む。後者は計画を再生成し、AI プロバイダーを呼ぶ。 | 有効なら、check は整合性の失敗を出さなくなる。 |
 | `orphaned-plan` | プロンプトを戻すか、孤立した計画をプロジェクトの通常のレビューで取り除く。 | 次の check に、その孤立の指摘が出ない。 |
 | `orphaned-grounding` | プロンプトを戻すか、孤立したグラウンディングをプロジェクトの通常のレビューで取り除く。 | 次の check に、その孤立の指摘が出ない。 |
 | `invalid-artifact-name` | 名前が無効なコンパニオンを、通常のレビューで改名するか取り除く。 | 次の check が、プロンプトの名前に戻せない成果物を報告しない。 |

@@ -1,55 +1,59 @@
 ---
 title: ambercast init
-description: ambercast init 的命令行参考：用于创建配置文件、示例提示词和仓库操作指引。
+description: 创建配置文件、示例 prompt 和仓库指引的 ambercast init 的用法、标志、写入文件、确认和退出码。
 ---
+
+`ambercast init` 创建在项目中开始使用 ambercast 所需的最少文件。它先规划全部变更，再执行任何写入，并且可以把当前目录之外的目录作为目标。
 
 ## 用法 {#usage}
 
-```bash
+```text
 ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
 ```
 
-`ambercast init` 会创建在项目中开始使用 ambercast 所需的最小文件集。它会先显示变更计划，再执行任何写入，并且可将当前工作目录之外的目录作为目标。
-
 ## 标志 {#flags}
 
-| 标志 | 取值 | 效果 | 默认值 |
+`init` 不接受位置参数。
+
+| 标志 | 取值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `--dir` | `<path>` | 要创建脚手架的项目根目录 | cwd |
-| `--yes, -y` | boolean | 跳过确认提示 | false |
-| `--force` | boolean | 替换现有的 ambercast.config.json | false |
-| `--no-color` | boolean | 禁用 ANSI | false |
+| --dir | path | 要生成脚手架的项目根目录 | cwd |
+| --yes, -y | boolean | 跳过确认提示 | false |
+| --force | boolean | 替换已有的 ambercast.config.json | false |
+| --no-color | boolean | 禁用 ANSI 颜色 | false |
 
-## 写入内容 {#what-it-writes}
+## 写入的文件 {#what-it-writes}
 
-该命令会为以下四个相对于项目根目录的工件创建计划：
+该命令规划四个产物，路径都相对于项目根目录：
 
-| 工件 | 不存在时 | 已存在时 |
+| 产物 | 不存在时 | 已存在时 |
 | --- | --- | --- |
-| `ambercast.config.json` | 创建 | 与脚手架完全一致时跳过；否则除非以 `--force` 替换，否则拒绝 |
-| `tests/ambercast/find-page.test.md` | 创建 | 不检查或替换其内容，直接跳过 |
-| `.gitignore` | 创建 | 已含有 `tests/ambercast/.runs/` 时跳过；否则追加该行 |
-| `AGENTS.md` | 创建 | ambercast 标记块匹配时跳过；一个有效标记对但内容不同时替换；没有标记时追加；标记格式错误时拒绝 |
+| `ambercast.config.json` | 创建 | 与脚手架完全一致则跳过；否则拒绝，除非 `--force` 替换它 |
+| `tests/ambercast/find-page.test.md` | 创建 | 不检查也不替换其内容，直接跳过 |
+| `.gitignore` | 连同下面的两行单元一起创建 | 已包含 `tests/ambercast/.runs/` 则跳过；否则在末尾追加这个单元 |
+| `AGENTS.md` | 创建 | ambercast 标记块一致则跳过；存在一对有效标记且内容不同则替换；没有标记则追加；标记格式损坏则拒绝 |
 
-## 确认与非交互式使用 {#confirmation}
+`.gitignore` 的单元由注释 `# ambercast run evidence` 和随后的 `tests/ambercast/.runs/` 一行组成。
 
-完整计划始终会输出到 stderr。在交互式终端中，ambercast 随后会询问 `Write these files? [y/N] `；`--yes` 可跳过此提示。
+## 确认与非交互使用 {#confirmation}
 
-在 CI 或其他非 TTY 环境中，未提供 `--yes` 的 init 调用会被拒绝。由编码 Agent 执行时，`--yes` 仅跳过 CLI 提示，绝不替代这四项文件变更所需的人类批准。请参阅[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)。
+init 总是把完整的变更计划打印到 stderr。在交互式终端中，它随后询问 `Write these files? [y/N] `，`--yes` 会跳过这个提示。
+
+在 CI 或其他非 TTY 环境中，除非传入 `--yes`，否则 init 会拒绝这次调用。编码代理运行该命令时，`--yes` 只跳过 CLI 的提示，不能代替人类对四个文件变更的批准。参见[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)。
 
 ## 退出码 {#exit-codes}
 
-- `0`：脚手架创建成功、全部跳过的 no-op，或拒绝确认。
-- `2`：预检拒绝，包括无效参数、没有 `--yes` 的非交互调用、配置冲突或格式错误的 `AGENTS.md` 标记。
-- `3`：I/O 失败、中断，或应用计划时失败。
+- `0`：脚手架生成成功、所有产物都被跳过，或你拒绝了确认。
+- `2`：预检阶段被拒绝，例如参数无效、未带 `--yes` 的非交互使用、配置冲突或 `AGENTS.md` 标记损坏。
+- `3`：I/O 失败、被中断，或在应用变更计划时失败。
 
-有关通用进程状态，请参阅[退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
+通用的进程状态说明见[退出码表](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
 
-## 再次运行 {#re-running}
+## 重复运行 {#re-running}
 
-成功后使用相同命令再次运行是幂等的：四个工件都会报告为 `skipped`，ambercast 输出 `Nothing to do.`，其字节内容不会改变。
+成功之后再次运行同一命令不会改变结果。四个产物都报告为 `skipped`，ambercast 打印 `Nothing to do.`，它们的字节保持不变。
 
-## 相关链接 {#related}
+## 另请参阅 {#see-also}
 
 - [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)
 - [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)

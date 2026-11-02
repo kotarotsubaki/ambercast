@@ -2397,9 +2397,17 @@ MCP 层的语义错误具有 `isError: true`、一个形如 `<CODE>: <message>` 
 # CLI 概览
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/
 
-ambercast 命令行界面（CLI）负责处理全局参数解析并分发各核心命令。当前已实现的命令包括 init、generate、run、check、heal、view 与 mcp。本文档为您汇总了 CLI 的语法结构、各命令的标志矩阵以及未显式提供路径时的默认文件发现规则。
+每个 `ambercast` 命令各自解析参数。不传文件时，由配置好的发现机制选择测试。
 
-## 命令界面 {#command-surface}
+## 命令体系 {#command-surface}
+
+已实现的命令只有 `init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。
+
+`ambercast run <file>`、`ambercast check <file>` 和 `ambercast heal <file>` 针对步骤中指明了执行目标的执行计划工作。
+
+顶层的 `--help` 和 `--version` 在命令分发之前处理。写在已识别命令之后、`--` 之前的 `--help`，由该命令立即处理。参数格式不正确时，命令以退出码 `2` 结束，把用法写到 stderr，并且不生成报告。
+
+下面的用法块与 CLI 自带的帮助输出一致，包括 `AI configuration` 和 `Heal configuration` 两部分。
 
 ```text
 Usage: ambercast <command> [options]
@@ -2445,83 +2453,85 @@ Heal configuration:
   heal.caseTimeoutMs: see docs/configuration.md for its admission-boundary contract.
 ```
 
-ambercast 当前已实现的命令包括 init、generate、run、check、heal、view 以及 mcp。
+## 命令与选项矩阵 {#command-flag-matrix}
 
-顶层标志 `--help` 与 `--version` 会在命令分发之前短路处理并退出；若传入格式错误的参数，程序将直接以退出码 2 终止退出，且不输出错误报告。
-
-## 命令与标志矩阵 {#command-flag-matrix}
-
-| 命令 | 位置参数 | 支持的选项 | 配置路径 |
+| 命令 | 位置参数 | 可用选项 | 配置路径 |
 | --- | --- | --- | --- |
-| init | 无 | dir, yes/-y, force, no-color | `--dir` 参数（未指定时为 cwd） |
-| generate | 字面路径；未指定路径则执行发现 | force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| run | 字面路径；未指定路径则执行发现 | grep, headed, resolve（启用实时 AI 解析）, update-cache, stale（已过期）, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| check | 字面路径；未指定路径则执行发现 | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| heal | 字面路径；未指定路径则执行发现 | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| view | 无 | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| mcp | 无 | dir, sync-wait-ms | --dir 参数指定会话根目录（未指定时为 cwd） |
+| init | 无 | dir, yes/-y, force, no-color | `--dir` 参数（省略时为当前目录） |
+| generate | 字面路径；无路径则走发现 | force, dry-run, target, ai, allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > 发现 |
+| run | 字面路径；无路径则走发现 | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > 发现 |
+| check | 字面路径；无路径则走发现 | allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > 发现 |
+| heal | 字面路径；无路径则走发现 | dry-run, yes/-y, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > 发现 |
+| view | 无 | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > 发现 |
+| mcp | 无 | dir, sync-wait-ms | `--dir` 参数选择会话根目录（省略时为当前目录） |
 
-对于 `generate`、`run`、`check` 和 `heal`，除 `--list` 模式外，每个位置参数都必须是 `testDir` 内的字面路径，具有非空的名称部分，且后缀精确为 `.test.md`。不符合条件的路径会产生 `PROMPT_PATH_INVALID`，而不是被静默忽略或导致执行崩溃。
+对 `generate`、`run`、`check` 和 `heal`，除 `--list` 外，每个位置参数都必须是 `testDir` 内的字面路径。`.test.md` 前面的名称不能为空，并且后缀必须恰好是 `.test.md`。其他路径会以 `PROMPT_PATH_INVALID` 失败。
 
-对于接受文件路径的命令，`--` 标志结束选项解析，其后出现的参数均按字面路径处理。
+- `--` 结束选项解析，其后的参数全部按字面路径处理。
+- `--json` 和 `--no-color` 由各命令自行处理，没有共享的全局标志。
+- `generate --target` 限制生成器可用的目标定义。`run`、`check` 和 `heal` 使用每份执行计划中记录的目标名。
 
-`--json` 与 `--no-color` 由接受这些标志的命令独立解析，而非通过全局标志抽象层统一处理。
+## 发现默认值 {#discovery-default}
 
-`generate --target` 用于限制生成器可用的 Target 定义。run、check、heal 使用各 Plan 中记录的 Target 名称。
+不向 `generate`、`run`、`check` 或 `heal` 传字面文件时，配置好的发现机制选择测试文件。`init`、`view` 和 `mcp` 不接受 prompt 文件参数。
 
-## 默认发现规则 {#discovery-default}
+- 默认的 `testMatch` 是 `**/*.test.md`。
+- 默认的 `testIgnore` 是 `**/.runs/**`，以及执行计划和定位缓存的伴生文件。
+- 发现机制按 POSIX 相对路径计算。路径必须先匹配包含模式，随后匹配忽略模式则被排除。
 
-当 `generate`、`run`、`check` 或 `heal` 未收到字面文件路径时，该命令会将文件选择委托给所配置的发现机制。`init`、`view` 与 `mcp` 不接受提示词文件位置参数。默认包含模式为 `**/*.test.md`，默认排除项包括 `.runs` 目录、Plan 与 Grounding 伴生文件。
+详情见下列页面。
 
-发现机制对 POSIX 相对路径进行求值：首先要求满足包含匹配，若命中忽略匹配则会将该路径排除。
-
-相关链接：[配置](/ambercast/zh-cn/reference/configuration/#file-selection), [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection), [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags), [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags), [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags), [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags), [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags), [ambercast view](/ambercast/zh-cn/reference/cli/view/#flags), [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)。
+- [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
+- [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection)
+- [ambercast init](/ambercast/zh-cn/reference/cli/init/#flags)
+- [ambercast generate](/ambercast/zh-cn/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/zh-cn/reference/cli/run/#flags)
+- [ambercast check](/ambercast/zh-cn/reference/cli/check/#flags)
+- [ambercast heal](/ambercast/zh-cn/reference/cli/heal/#flags)
+- [ambercast view](/ambercast/zh-cn/reference/cli/view/#flags)
+- [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)
 
 ---
 
 # ambercast generate
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/generate/
 
-`ambercast generate` 命令用于根据提示词生成测试执行计划与伴生文件。您可以直接指定字面提示词路径，或在缺省时由命令执行自动发现；同时支持通过参数配置强制生成、预览运行、AI 提供商覆盖以及输出格式。
+`ambercast generate` 把测试 prompt 编译成执行计划和伴生产物。它处理字面文件路径，或发现机制选出的测试。
 
-## 命令行参数 {#flags}
+## 标志 {#flags}
 
-| 参数 | 取值类型 | 效果 | 默认值 |
+| 标志 | 取值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| files | path[] | 字面提示词路径；缺省时执行自动发现 | discovery |
-| --force | boolean | 强制执行生成 | false |
-| --dry-run | boolean | 预览：仅在需要生成时返回 `would-generate`；未过期的 Plan 返回 `skipped-fresh`；两种结果均不写入产物 | false |
-| --target | name | 选择目标 | omitted |
+| files | path[] | 字面 prompt 路径；缺省时执行发现机制 | discovery |
+| --force | boolean | 强制生成 | false |
+| --dry-run | boolean | 不写入任何内容，只报告结果：需要生成时为 `would-generate`，执行计划仍新鲜时为 `skipped-fresh` | false |
+| --target | name | 把可用于生成的目标限定为这一个 | omitted |
 | --ai | claude\|codex | 覆盖提供商 | omitted |
-| --allow-empty | boolean | 允许空选择集 | false |
-| --list | boolean | 仅列出而不执行生成 | false |
-| --json | boolean | JSON 封装输出 | false |
-| --config | path | 显式指定配置文件 | omitted |
+| --allow-empty | boolean | 允许空选择 | false |
+| --list | boolean | 只列出，不生成 | false |
+| --json | boolean | JSON 封套 | false |
+| --config | path | 显式指定配置 | omitted |
 | --no-color | boolean | 禁用 ANSI 颜色 | false |
 
 ## AI 调用 {#ai-calls}
 
-- Generate 仅通过其生成依赖解析提供商执行器；已配置的提供商与 `--ai` 覆盖参数将提供给该解析器。
-- `--list` 返回发现行。在配合 `--dry-run` 时，需要生成的目标返回 `would-generate`；未过期的 Plan 返回 `skipped-fresh`。两种 dry-run 结果均不写入产物：未过期分支跳过 grounding 修复，而生成分支在写入前返回。
+`generate` 只在生成路径上解析提供商执行器。配置的提供商和 `--ai` 覆盖值都交给这个解析器。
+
+`--list` 不运行生成，只返回发现到的行。使用 `--dry-run` 时，需要生成的目标返回 `would-generate`，执行计划仍新鲜的目标返回 `skipped-fresh`。两种结果都不写产物：新鲜分支跳过定位缓存修复，生成分支在任何写入之前返回。
 
 ## 机密同意 {#secret-consent}
 
-生成采用“先候选后同意”的方式：它构造候选 Plan，识别 `secrets.allow` 之外的机密名称，并在持久化 Plan 或 Grounding 前请求交互式批准。即使用 `--force` 重新生成未过期的 Plan，也遵守该同意边界。`--dry-run` 不写入产物，也不持久化同意。
+生成先构造候选，再征求同意。它先构造候选执行计划，找出不在 `secrets.allow` 中的机密名，并在写入执行计划或定位缓存之前请求交互式批准。`--force` 重新生成仍新鲜的执行计划时，同样遵守这条同意边界。`--dry-run` 不写产物，也不保存同意。
 
-在非交互上下文中，或拒绝同意时，未许可的候选会以 `SECRET_CONSENT_REQUIRED` 和退出码 2 失败。请先将已审查的名称添加到 `secrets.allow` 后再于 CI 运行；`"*"` 会绕过逐名审查并接受 AI 提出的任意名称，因此带有强风险警告。安全工作流程请参见[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)。
+在非交互环境中，或你拒绝同意时，未被允许的候选会以 `SECRET_CONSENT_REQUIRED` 失败，退出码为 `2`。在 CI 中运行之前，先把审查过的名称加入 `secrets.allow`。值 `"*"` 跳过逐个名称的审查，接受 AI 提出的任何名称，因此风险很高。安全的做法见[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)。
 
 ## 副作用与退出码 {#side-effects}
 
-- 名为 `<name>.test.md` 的提示词映射到其同级的 plan 与 grounding 伴生文件。
-- 结果状态包括 generated、would-generate、skipped-fresh、listed、failed 和 skipped。`would-generate` 仅作为需要生成的目标在 dry-run 时的状态；`skipped-fresh` 在 dry-run 模式下同样有效。
-- 进程退出码的具体数值及其优先级由 [退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) 确定；`--allow-empty` 控制空选择集是否产生退出码 5。
+名为 `<name>.test.md` 的 prompt 对应同目录下的执行计划和定位缓存伴生文件，详见[文件布局](/ambercast/zh-cn/reference/file-layout/#companions)。
 
-## 相关链接
+结果状态有 `generated`、`would-generate`、`skipped-fresh`、`listed`、`failed` 和 `skipped`，详见[报告](/ambercast/zh-cn/reference/reports/#generate-results)。`would-generate` 是需要生成的目标在 dry-run 下的状态，`skipped-fresh` 在 dry-run 模式下同样会出现。
 
-- [文件布局](/ambercast/zh-cn/reference/file-layout/#companions)
-- [报告](/ambercast/zh-cn/reference/reports/#generate-results)
-- [退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)
-- [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
+进程退出码的取值及其优先级由[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)规定，各个退出码列在[退出码表](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)中。`--allow-empty` 决定空选择是否贡献退出码 `5`，详见[配置](/ambercast/zh-cn/reference/configuration/#file-selection)。
 
 ---
 
@@ -2589,150 +2599,172 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 # ambercast check
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/check/
 
-`ambercast check` 为命令行用户汇总检查状态。您可以直接指定字面提示词路径，或者在未指定时由命令执行自动发现；同时可以使用相关标志选择目标、允许空选择、仅列出文件而不执行检查、以 JSON 外层封包输出、显式指定配置文件或禁用 ANSI 颜色。
+`ambercast check` 检查 prompt、执行计划和定位缓存伴生文件，并报告各自是否新鲜、是否有效。它不调用 AI，不启动浏览器，不派发事件，也不向磁盘写入任何内容。
 
 ## 标志 {#flags}
 
-| 标志 | 值 | 作用 | 默认值 |
+你可以直接传入 prompt 路径，也可以让[配置的发现机制](/ambercast/zh-cn/reference/configuration/#file-selection)来选择。
+
+| 标志 | 取值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `files` | path[] | 字面提示词；未指定时选择自动发现 | discovery |
-| `--allow-empty` | boolean | 允许空选择 | false |
-| `--list` | boolean | 仅列出而不执行检查 | false |
-| `--json` | boolean | JSON 外层封包 | false |
-| `--config` | path | 显式指定配置 | 省略 |
-| `--no-color` | boolean | 禁用 ANSI 颜色 | false |
+| files | path[] | 字面 prompt 路径；缺省时执行发现机制 | discovery |
+| --allow-empty | boolean | 允许空选择 | false |
+| --list | boolean | 只列出，不检查 | false |
+| --json | boolean | JSON 封套 | false |
+| --config | path | 显式指定配置 | omitted |
+| --no-color | boolean | 禁用 ANSI 颜色 | false |
 
-## 状态词汇 {#status-vocabulary}
+## 状态值 {#status-vocabulary}
 
-`check` 报告的状态包括：`fresh`、`stale`（已过期）、`missing-plan`、`missing-grounding`、`invalid-grounding`、`stale-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed` 或 `skipped`。
+`check` 为每条结果报告下列 12 个状态之一。`listed` 只在使用 `--list` 时出现，`skipped` 只在中断之后出现。
 
-这些值的规范派生规则以及通过/失败分类归 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences) 所有。
+- `fresh`
+- `stale`
+- `missing-plan`
+- `missing-grounding`
+- `invalid-grounding`
+- `stale-grounding`
+- `fresh-without-grounding`
+- `orphaned-plan`
+- `orphaned-grounding`
+- `invalid-artifact-name`
+- `listed`
+- `skipped`
+
+每个状态如何推导、算通过还是失败，由[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences)规定。
 
 ## 结果 {#results}
 
-已完成的检查发现必须包含 `id`、`file`、`planFile`、`status` 和 `reason`；`groundingFile` 或 `artifactFile` 仅在其作为证据时才会出现。
-
-`check` 是只读命令：其依赖约定排除了 AI、浏览器、事件与写入存储。
+完整的检查发现包含 `id`、`file`、`planFile`、`status` 和 `reason`。`groundingFile` 或 `artifactFile` 只在作为该发现的证据时出现。状态为 `invalid-artifact-name` 的发现是例外：它没有 `planFile`，而是包含 `id`、`file`、`status`、`reason` 和 `artifactFile`，其中 `id`、`file` 和 `artifactFile` 指向产物本身。完整的字段定义和报告结构见[报告](/ambercast/zh-cn/reference/reports/#check-results)。
 
 ## 只读检查 {#read-only-contract}
 
-Check 组合了只读存储、布局与发现。
+`check` 是只读的。它的依赖不含 AI 运行时、浏览器驱动、事件派发器和写入存储。运行时它组合只读存储、文件布局规则和发现机制，详见[文件布局](/ambercast/zh-cn/reference/file-layout/#companions)与[配置](/ambercast/zh-cn/reference/configuration/#file-selection)。
 
-进程退出码的数值及其优先级归 [退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) 所有；不可信工件产生退出码 4，未被允许的空选择产生退出码 5。
+进程退出码的取值及其优先级由[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)规定，完整对应关系见[退出码表](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
 
-相关链接：[文件布局](/ambercast/zh-cn/reference/file-layout/#companions)、[报告](/ambercast/zh-cn/reference/reports/#check-results)、[退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)、[配置](/ambercast/zh-cn/reference/configuration/#file-selection)。
+- 不可信的产物贡献退出码 `4`。
+- 未被允许的空选择贡献退出码 `5`。
 
 ---
 
 # ambercast heal
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/
 
-`ambercast heal` 负责测试修复过程中的授权机制与运行时副作用。该命令支持对指定的测试提示词文件或通过自动发现选取的测试执行修复测量与变更提交，并提供非交互式授权、运行目标选择、AI 提供商覆盖以及输出格式等控制选项。
+`ambercast heal` 修复执行计划及其定位缓存伴生文件。你可以选择要处理的 prompt，在不提交的情况下测量修复，也可以授权写入。
 
-## 命令行选项 {#flags}
+## 标志 {#flags}
 
-| 标志 | 取值 | 效果 | 默认值 |
+不传 `files` 时，heal 通过发现机制选择 prompt。
+
+| 标志 | 取值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `files` | path[] | 字面提示词路径；缺省时执行自动发现 | discovery |
-| `--dry-run` | boolean | 仅测量修复而不提交缓冲的 Plan 或 Grounding 变更 | false |
-| `--yes, -y` | boolean | 授权非交互式提交 | false |
-| `--ai` | claude\|codex | 覆盖提供商 | omitted |
-| `--allow-empty` | boolean | 允许空选择集 | false |
-| `--list` | boolean | 仅列出而不执行修复 | false |
-| `--json` | boolean | 输出 JSON 封装格式 | false |
-| `--no-color` | boolean | 禁用 ANSI 颜色 | false |
+| files | path[] | 字面 prompt 路径；缺省时执行发现机制 | discovery |
+| --dry-run | boolean | 只测量修复，不提交已缓冲的执行计划和定位缓存改动 | false |
+| --yes, -y | boolean | 授权以非交互方式提交 | false |
+| --ai | claude\|codex | 覆盖提供商 | omitted |
+| --allow-empty | boolean | 允许空选择 | false |
+| --list | boolean | 只列出，不修复 | false |
+| --json | boolean | JSON 封套 | false |
+| --no-color | boolean | 禁用 ANSI 颜色 | false |
 
 ## 修复模型 {#repair-model}
 
-完成的修复结果区分为 `healed`、`partially-healed`、`unresolved` 和 `no-changes-needed` 四种状态；每种状态都具有受约束的 `application` 与 `stopReason` 取值。
+完成的修复结果是 `healed`、`partially-healed`、`unresolved` 或 `no-changes-needed` 之一。每种结果的 `application` 和 `stopReason` 取值都受到约束。
 
-修复流程首先修复 Grounding，随后尝试单步修复或尾部修复，并在必要时执行全计划修复；Stage 3 会解析 AI 执行器并调用生成逻辑，因此能够调度真实的提供商。
+heal 最多分三个阶段修复：
 
-heal 不会作出新的机密同意决定。若其 Stage 2 候选包含无效机密名称、许可列表失败或环境变量冲突，它会以 `secret-name-invalid` 拒绝该修复。若 Stage 3 全计划候选改变完整的逻辑机密名称集合，heal 会以 `stage3Rejection.reason: "secret-set-changed"` 拒绝它，不写入 Plan 或 Grounding 更新，并输出以下由已发布 CLI 逐字呈现的日语提示：
+1. 先修复定位缓存。
+2. 再修复单个步骤或执行计划的后半部分。
+3. 只有前面的阶段没能修好该用例，并且尚未到达用例期限时，才修复整份执行计划。
+
+第三阶段会解析 AI 执行器并调用生成，因此可能调用真实的提供商。
+
+heal 从不做新的机密同意决定。第二阶段的候选如果含有无效的机密名、违反允许列表或与环境变量冲突，heal 以 `secret-name-invalid` 拒绝它。第三阶段的候选如果改变了完整的逻辑机密名集合，heal 以 `stage3Rejection.reason: "secret-set-changed"` 拒绝它。这种拒绝不会写入任何执行计划或定位缓存更新。
+
+CLI 面向人的输出随后会打印 `hint: ` 和下面的提示，其中的 `<file>` 会被替换成实际的 prompt 路径。`--json` 输出包含 `stage3Rejection`，不含提示。
 
 `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
 
 ## 限制 {#limits}
 
-若设置了 `heal.maxStepRepairs`，该项是对真实增量修复提供商调度的正整数硬性限制，包含元素确认，但不包含失败关闭基线与 Stage 3。
+- `heal.maxStepRepairs` 设置后是一个正数硬上限，限制增量修复中真实的提供商调用次数。它计入元素确认，不计入失败关闭的基线测量和第三阶段。
+- `heal.caseTimeoutMs` 是整个用例的受理期限，取正数，默认值为 `300000` ms。
 
-`heal.caseTimeoutMs` 是针对整个用例的正整数准入截止时间；其解析后的默认值为 300000 ms。
+## 确认 {#confirmation}
 
-## 确认授权 {#confirmation}
+除 `--dry-run` 外，heal 只有在获得授权之后才会提交修复产物。`--yes` 以非交互方式授权。
 
-除非指定 `--dry-run`，否则符合条件的修复工件仅在获得授权后提交；`--yes` 提供非交互式授权。
+## CI {#ci}
 
-## CI 环境 {#ci}
+除 `--list` 外，在 CI 中运行 heal 会被拒绝，除非 `ci.heal` 为 `true`。
 
-除 `--list` 外，CI 环境中的修复操作将被拒绝，除非 `ci.heal` 为 true。
+## 前置条件与写入 {#preconditions}
 
-## 前提条件与写入行为 {#preconditions}
+除 `--list` 外，加载某个 prompt 的执行计划之后，该执行计划引用的每个目标都必须设置 `healReplayIsolation: "idempotent"`，否则 heal 会让这个 prompt 以 `CONFIG_INVALID` 失败，退出码为 `2`。`healReplayIsolation` 的默认值是 `stateful`。执行计划没有引用的其他目标不会阻止 heal。
 
-除 `--list` 外，所选目标必须是幂等的；默认目标是有状态的。
+heal 会缓冲执行计划和定位缓存的写入，直到获得授权后才结算。不过每次测量仍可能通过 `runsDir` 内的存储写入尝试证据，这可能发生在授权之前，也可能发生在 `--dry-run` 期间。
 
-Plan 与 Grounding 伴生文件的写入会被缓冲，直至通过授权结算；但每次测量都可能通过 runsDir 范围内的存储写入尝试凭证，此副作用可在授权前发生，且在 `--dry-run` 期间也会发生。
+进程退出码的取值及其优先级由[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)规定，各个退出码列在[退出码表](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)中。
 
-进程退出码的取值及其优先级由 [退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) 规定。
-
-## 相关链接
-
-- [配置](/ambercast/zh-cn/reference/configuration/#grounding)
-- [报告](/ambercast/zh-cn/reference/reports/#heal-results)
-- [退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)
-- [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)
+相关页面：[配置](/ambercast/zh-cn/reference/configuration/#grounding)、[报告](/ambercast/zh-cn/reference/reports/#heal-results)、[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)
 
 ---
 
 # ambercast init
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/init/
 
+`ambercast init` 创建在项目中开始使用 ambercast 所需的最少文件。它先规划全部变更，再执行任何写入，并且可以把当前目录之外的目录作为目标。
+
 ## 用法 {#usage}
 
-```bash
+```text
 ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
 ```
 
-`ambercast init` 会创建在项目中开始使用 ambercast 所需的最小文件集。它会先显示变更计划，再执行任何写入，并且可将当前工作目录之外的目录作为目标。
-
 ## 标志 {#flags}
 
-| 标志 | 取值 | 效果 | 默认值 |
+`init` 不接受位置参数。
+
+| 标志 | 取值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `--dir` | `<path>` | 要创建脚手架的项目根目录 | cwd |
-| `--yes, -y` | boolean | 跳过确认提示 | false |
-| `--force` | boolean | 替换现有的 ambercast.config.json | false |
-| `--no-color` | boolean | 禁用 ANSI | false |
+| --dir | path | 要生成脚手架的项目根目录 | cwd |
+| --yes, -y | boolean | 跳过确认提示 | false |
+| --force | boolean | 替换已有的 ambercast.config.json | false |
+| --no-color | boolean | 禁用 ANSI 颜色 | false |
 
-## 写入内容 {#what-it-writes}
+## 写入的文件 {#what-it-writes}
 
-该命令会为以下四个相对于项目根目录的工件创建计划：
+该命令规划四个产物，路径都相对于项目根目录：
 
-| 工件 | 不存在时 | 已存在时 |
+| 产物 | 不存在时 | 已存在时 |
 | --- | --- | --- |
-| `ambercast.config.json` | 创建 | 与脚手架完全一致时跳过；否则除非以 `--force` 替换，否则拒绝 |
-| `tests/ambercast/find-page.test.md` | 创建 | 不检查或替换其内容，直接跳过 |
-| `.gitignore` | 创建 | 已含有 `tests/ambercast/.runs/` 时跳过；否则追加该行 |
-| `AGENTS.md` | 创建 | ambercast 标记块匹配时跳过；一个有效标记对但内容不同时替换；没有标记时追加；标记格式错误时拒绝 |
+| `ambercast.config.json` | 创建 | 与脚手架完全一致则跳过；否则拒绝，除非 `--force` 替换它 |
+| `tests/ambercast/find-page.test.md` | 创建 | 不检查也不替换其内容，直接跳过 |
+| `.gitignore` | 连同下面的两行单元一起创建 | 已包含 `tests/ambercast/.runs/` 则跳过；否则在末尾追加这个单元 |
+| `AGENTS.md` | 创建 | ambercast 标记块一致则跳过；存在一对有效标记且内容不同则替换；没有标记则追加；标记格式损坏则拒绝 |
 
-## 确认与非交互式使用 {#confirmation}
+`.gitignore` 的单元由注释 `# ambercast run evidence` 和随后的 `tests/ambercast/.runs/` 一行组成。
 
-完整计划始终会输出到 stderr。在交互式终端中，ambercast 随后会询问 `Write these files? [y/N] `；`--yes` 可跳过此提示。
+## 确认与非交互使用 {#confirmation}
 
-在 CI 或其他非 TTY 环境中，未提供 `--yes` 的 init 调用会被拒绝。由编码 Agent 执行时，`--yes` 仅跳过 CLI 提示，绝不替代这四项文件变更所需的人类批准。请参阅[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)。
+init 总是把完整的变更计划打印到 stderr。在交互式终端中，它随后询问 `Write these files? [y/N] `，`--yes` 会跳过这个提示。
+
+在 CI 或其他非 TTY 环境中，除非传入 `--yes`，否则 init 会拒绝这次调用。编码代理运行该命令时，`--yes` 只跳过 CLI 的提示，不能代替人类对四个文件变更的批准。参见[操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)。
 
 ## 退出码 {#exit-codes}
 
-- `0`：脚手架创建成功、全部跳过的 no-op，或拒绝确认。
-- `2`：预检拒绝，包括无效参数、没有 `--yes` 的非交互调用、配置冲突或格式错误的 `AGENTS.md` 标记。
-- `3`：I/O 失败、中断，或应用计划时失败。
+- `0`：脚手架生成成功、所有产物都被跳过，或你拒绝了确认。
+- `2`：预检阶段被拒绝，例如参数无效、未带 `--yes` 的非交互使用、配置冲突或 `AGENTS.md` 标记损坏。
+- `3`：I/O 失败、被中断，或在应用变更计划时失败。
 
-有关通用进程状态，请参阅[退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
+通用的进程状态说明见[退出码表](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)。
 
-## 再次运行 {#re-running}
+## 重复运行 {#re-running}
 
-成功后使用相同命令再次运行是幂等的：四个工件都会报告为 `skipped`，ambercast 输出 `Nothing to do.`，其字节内容不会改变。
+成功之后再次运行同一命令不会改变结果。四个产物都报告为 `skipped`，ambercast 打印 `Nothing to do.`，它们的字节保持不变。
 
-## 相关链接 {#related}
+## 另请参阅 {#see-also}
 
 - [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)
 - [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)
@@ -2744,86 +2776,92 @@ ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
 # ambercast view
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/view/
 
-`ambercast view` 启动一个只读的本地 HTTP 服务器，用于浏览持久化在已配置 runs 目录下的运行结果，开发者无需重新运行测试或产生任何 AI 调用，即可查看某次 run 的用例、步骤与截图。
+`ambercast view` 针对配置中的运行目录，启动一个只读的本地 HTTP 服务器。你无需重新运行测试，就能查看某次运行的用例、步骤和截图。它不调用 AI。
 
 ## 标志 {#flags}
 
-| 标志 | 值 | 效果 | 默认值 |
+`view` 不接受位置参数。
+
+| 标志 | 取值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `--port` | n | 首选端口；未指定时最多自动递增尝试 20 个候选端口 | 4600 |
-| `--host` | addr | 绑定地址；必须是具体 IP 或 localhost，不允许通配地址 | 127.0.0.1 |
-| `--allow-headless` | boolean | 允许在非交互式终端中运行 | false |
-| `--config` | path | 显式配置路径 | 省略 |
-| `--no-color` | boolean | 禁用 ANSI 输出 | false |
+| --port | n | 首选端口；未指定时依次尝试 20 个候选端口 | 4600 |
+| --host | addr | 绑定地址；具体的 IP 或 localhost，不接受通配地址 | 127.0.0.1 |
+| --allow-headless | boolean | 允许在非交互终端中启动 | false |
+| --config | path | 显式指定配置 | omitted |
+| --no-color | boolean | 禁用 ANSI 颜色 | false |
 
 ## 交互门控 {#interactive-gate}
 
-`view` 遵循与其他带确认门控的命令相同的交互性判定：只有当 stdin 与 stderr 均连接到终端且未设置 `CI` 时才会启动。在未指定 `--allow-headless` 的非交互式调用中，命令将以退出码 2 终止，并输出：
+除非 stdin 和 stderr 都是终端，并且 `CI` 未生效，否则 `view` 拒绝启动。`init` 在确认提示之前也做同样的终端加 `CI` 检查。没有 `--allow-headless` 的非交互调用，会输出下面的消息并以退出码 `2` 结束：
 
-```
+```text
 view requires --allow-headless when no interactive terminal is attached.
 ```
 
-`--allow-headless` 会解除该拒绝；若已处于交互式终端，则该标志为空操作。
+`--allow-headless` 解除这个拒绝。在终端中启动时，它不改变任何行为。
 
 ## 端口选择 {#port-selection}
 
-起始端口依次取自 `--port`、已配置的 `viewer.port`，最后回退到 4600。未指定 `--port` 时，`view` 会从起始端口开始最多尝试 20 个连续端口，仅在遇到 `EADDRINUSE` 时才前进到下一个候选，并打印实际绑定的端口。指定 `--port` 时，该端口按严格模式处理：若被占用，不会尝试其他端口，而是以退出码 3 终止。所有候选均耗尽，或出现 `EADDRINUSE` 以外的绑定失败，同样以退出码 3 终止。
+起始端口依次取 `--port`、配置中的 `viewer.port`，最后是 `4600`。未指定 `--port` 时，`view` 从该端口起最多尝试 20 个连续端口。它只在遇到 `EADDRINUSE` 时才换下一个端口，并打印实际绑定的端口。
+
+指定 `--port` 时，只严格使用这一个端口：端口被占用，`view` 就以退出码 `3` 结束。用尽所有候选端口，或出现 `EADDRINUSE` 以外的绑定失败，同样以退出码 `3` 结束。
 
 ## 主机绑定 {#host-binding}
 
-`--host` 接受具体 IP 地址或 `localhost`（会被规范化为 `127.0.0.1`）。由于该服务器不提供任何身份验证，通配地址（`0.0.0.0`、`::`、`[::]`）会以退出码 2 被拒绝。每个请求都会依据绑定的主机与端口检查其 `Host` 请求头；指向其他主机的请求将被以 403 拒绝。绑定到非回环地址时，会打印一条警告，说明该服务器在无身份验证的情况下即可被访问。
+`--host` 接受具体的 IP 地址或 `localhost`，`localhost` 会规范化为 `127.0.0.1`。服务器没有认证，所以通配地址 `0.0.0.0`、`::` 和 `[::]` 会以退出码 `2` 被拒绝。每个请求的 `Host` 头都必须指向绑定的主机和端口，否则服务器返回 `403`。绑定的地址不是 `127.0.0.1` 或 `::1` 时，`view` 会打印警告，说明无需认证即可访问该服务器。
 
 ## 路由 {#routes}
 
-| 路由 | 提供内容 |
+| 路由 | 提供的内容 |
 | --- | --- |
-| `GET /` | 运行列表，按最新优先排序，包含状态、耗时与用例计数 |
-| `GET /runs/<runId>` | 单次运行的用例、步骤、期望/实际值、说明文字与截图 |
-| `GET /runs/<runId>/report.json` | 该次运行持久化的原始 report 字节内容 |
-| `GET /runs/<runId>/screenshots/<ref>` | 该次运行的 report 实际引用的截图 |
+| `GET /` | 按时间倒序排列的运行列表，含状态、耗时和用例数量。 |
+| `GET /runs/<runId>` | 某次运行的用例、步骤、期望值与实际值、说明和截图。 |
+| `GET /runs/<runId>/report.json` | 该次运行持久化报告的原始字节。 |
+| `GET /runs/<runId>/screenshots/<ref>` | 该次运行的报告所引用的截图。 |
 
-每个响应都携带 `X-Content-Type-Options: nosniff` 与 `Cache-Control: no-store`；HTML 与原始数据响应还携带固定的 `Content-Security-Policy` 与 `Referrer-Policy: no-referrer`。页面完全在服务端渲染，不包含任何客户端 JavaScript 或外部请求。
+每个响应都带有 `X-Content-Type-Options: nosniff` 和 `Cache-Control: no-store`。HTML 和原始响应还带有固定的 `Content-Security-Policy` 和 `Referrer-Policy: no-referrer`。页面在服务端渲染，不使用客户端 JavaScript，也不发出外部请求。
 
-缺少 `report.json` 的运行目录（例如写入过程中或持久化失败）会在列表中显示为仅有证据（evidence only），而不是一个失效链接。`report.json` 解析或校验失败的运行仍会保留在列表中，并提供指向其原始字节内容的链接，而不会从列表中消失。
+缺少 `report.json` 的运行目录，例如写入中途或持久化失败之后，会作为仅有证据的行出现在列表中。`report.json` 解析或校验失败的运行仍会出现在列表中，其原始字节仍可访问。
 
-`ambercast view` 会读取 `schemaVersion` 为 3.x 的所有报告。由与当前 CLI 不同的次版本写入的报告，会在运行详情标题中显示"Schema `<version>`"；来自其他主版本的报告会在列表中显示为"Unsupported version `<version>`"，且无法打开。
+`view` 读取所有 `schemaVersion` 为 3.x 的报告。其他次版本写出的报告，会在运行详情的标题中显示 Schema `<version>`。其他主版本的报告列为 Unsupported version `<version>`，无法打开。
 
-view 是 Ambercast 命令中唯一消耗网络端口的命令；MCP 服务器采用无端口的 stdio。
+`view` 是 ambercast 中唯一使用网络端口的命令。MCP 服务器使用 stdio。
 
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，[报告](/ambercast/zh-cn/reference/reports/#envelope)，[配置](/ambercast/zh-cn/reference/configuration/#key-table)，[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)。
+相关页面：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[报告](/ambercast/zh-cn/reference/reports/#envelope)、[配置](/ambercast/zh-cn/reference/configuration/#key-table)、[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)
 
 ---
 
 # ambercast mcp
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/mcp/
 
-`ambercast mcp` 通过 `stdio` 启动无端口的 MCP 服务器。每个进程服务于一个 session root。
+`ambercast mcp` 通过 `stdio` 启动不占用端口的 MCP 服务器。每个进程只服务一个会话根目录。
 
 ## 用法 {#usage}
 
-```sh
+```text
 ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
 ```
 
 ## 标志 {#flags}
 
-| 标志 | 取值 | 效果 | 默认值 |
+| 标志 | 取值 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `--dir` | path | 服务的 session root | cwd |
-| `--sync-wait-ms` | n | 同步响应等待界限（毫秒） | 45000 |
+| --dir | path | 要服务的会话根目录 | cwd |
+| --sync-wait-ms | n | 同步响应的等待上限，单位毫秒 | 45000 |
 
-`--dir` 选择 session root；省略时使用进程当前工作目录。相对路径也以该目录为基准解析。`--sync-wait-ms` 是正整数，默认值 45000，限定较长工作流返回作业句柄之前的同步等待时间。`--help` 优先于其他参数，向 stdout 输出用法并以退出码 0 结束。
+`--dir` 选择会话根目录。省略时使用进程的当前工作目录，相对路径以该目录为基准解析。`--sync-wait-ms` 是正整数，限定长工作流返回任务句柄之前的同步等待时间。`--help` 优先于其他参数，把用法打印到 stdout，退出码为 0。
 
-如果解析后的路径不存在或不是目录，stderr 输出 `ambercast mcp: --dir <path> is not a directory.`，服务器不会启动，退出码为 2。启动失败输出 `ambercast mcp: failed to start (<error name>)`，退出码为 3。非法选项、位置参数和等待界限通过 stderr 输出 CLI 用法错误，退出码为 2。
+如果解析出的目录不存在或不是目录，stderr 会输出 `ambercast mcp: --dir <path> is not a directory.`，进程不启动，退出码为 2。启动失败时输出 `ambercast mcp: failed to start (<error name>)`，退出码为 3。选项无效、出现位置参数或等待上限无效时，stderr 输出 CLI 用法错误，退出码为 2。
 
 ## 传输与关闭 {#transport-and-shutdown}
 
-stdout 仅包含 JSON-RPC 行。stderr 接收进度与一行启动日志 `ambercast mcp: serving <session root>`。stdin 结束、SIGTERM 或 SIGINT 均会启动 draining。服务器中止运行中的调用，最多等待 10000 ms；全部结算后关闭服务器并以退出码 0 结束，超时未结算则以退出码 3 结束。draining 期间拒绝新工具调用。
+stdout 只输出 JSON-RPC 行。stderr 输出进度信息和一行启动提示 `ambercast mcp: serving <session root>`。
+
+stdin 结束、收到 SIGTERM 或 SIGINT 时，服务器开始排空。它中止进行中的调用，最多等待 10000 ms，然后关闭服务器；全部结算后以退出码 0 结束。到期限时若仍有调用未结算，则以退出码 3 结束。排空期间，新的工具调用会被拒绝。
 
 ## 客户端注册 {#client-registration}
 
-在已安装 ambercast 的项目中使用 `npx --no-install ambercast mcp`。Claude Code 读取项目的 `.mcp.json`：
+在已安装 ambercast 的项目中运行 `npx --no-install ambercast mcp`。Claude Code 读取项目中的 `.mcp.json`：
 
 ```json
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
@@ -2837,28 +2875,28 @@ command = "npx"
 args = ["--no-install", "ambercast", "mcp"]
 ```
 
-Claude Desktop 配置中可使用相同的服务器条目：
+Claude Desktop 在其配置中接受同样的服务器条目：
 
 ```json
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
 ```
 
-始终从已安装 ambercast 的项目启动客户端，以便 `npx --no-install` 能解析该包；`--dir <path>` 仅在服务器启动后选择另一个 session root，不影响这一包解析过程。服务器提供 `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status` 和 `ambercast_job_cancel`。
+请从已安装 ambercast 的项目中启动客户端，这样 `npx --no-install` 才能解析到该包。`--dir <path>` 只在服务器启动之后选择另一个会话根目录，不影响包的解析。服务器提供 `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status` 和 `ambercast_job_cancel` 六个工具。
 
-## 与原计划设计的变化 {#changes-from-the-planned-design}
+## 相对规划设计的变化 {#changes-from-the-planned-design}
 
-| 原 planned 页面 | 已实现契约 |
+| 此前规划的页面 | 已实现的约定 |
 | --- | --- |
-| 未规定服务器标志 | `ambercast mcp` 支持 `--dir` 和 `--sync-wait-ms` |
-| 原计划五个工具 | 六个工具，包含作业状态与取消 |
-| 发布报告 `outputSchema` | 省略 `outputSchema` |
-| heal 只有预览 | 通过 `applyToken` 两阶段应用 |
-| 只有同步调用 | 较长调用返回作业，无 ID 的状态请求返回列表 |
-| 未规定 MCP 错误 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` 使用独立错误响应 |
-| 未规定 CLI 输入标志 | 工具输入排除 `headed`、`list`、`stale`、`json`、`yes`、`configPath` |
-| 从报告推断退出码 | `_meta.exitCode` 明确携带退出码 |
+| 服务器标志未规定 | `ambercast mcp` 支持 `--dir` 和 `--sync-wait-ms` |
+| 规划了五个工具 | 六个工具，包括任务状态查询和取消 |
+| 发布报告的 `outputSchema` | 省略 `outputSchema` |
+| heal 只有预览 | 两阶段 heal 使用 `applyToken` |
+| 只有同步调用 | 长调用返回任务；不带 ID 的状态查询列出任务 |
+| MCP 错误未规定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND` 和 `JOB_FAILED` 有单独的错误响应 |
+| CLI 输入标志未规定 | 工具输入不含 `headed`、`list`、`stale`、`json`、`yes` 和 `configPath` |
+| 退出码从报告推断 | `_meta.exitCode` 明确携带退出码 |
 
-相关链接：[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/#connection-boundary)、[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)。
+相关页面：[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/#connection-boundary)、[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)
 
 ---
 

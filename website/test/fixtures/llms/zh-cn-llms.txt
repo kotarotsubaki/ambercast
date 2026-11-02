@@ -45,13 +45,13 @@
 - [MCP 工具](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/mcp-tools/): ambercast MCP 工作流的工具、输入、结果与错误契约。
 
 ### CLI
-- [CLI 概览](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/): 介绍 ambercast 命令行界面的全局解析规则、核心命令集、命令与标志支持矩阵以及默认文件发现机制。
-- [ambercast generate](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/generate/): 详细参考 ambercast generate 的命令行参数、AI 提供商调用逻辑、伴生产物映射及退出状态。
+- [CLI 概览](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/overview/): ambercast 的 7 个命令、各命令接受的选项，以及文件发现的默认值。
+- [ambercast generate](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/generate/): ambercast generate 的标志、提供商解析、机密同意、伴生文件和退出状态参考。
 - [ambercast run](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/): 规范 ambercast run 的标志、回放路径、显式 AI 解析与运行写入行为。
-- [ambercast check](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/check/): 为 CLI 用户汇总检查状态。
-- [ambercast heal](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/): 规定 ambercast heal 命令的授权机制与运行时副作用，并提供选项、修复模型、限制及运行时行为的完整参考。
-- [ambercast init](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/init/): ambercast init 的命令行参考：用于创建配置文件、示例提示词和仓库操作指引。
-- [ambercast view](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/view/): ambercast view 命令参考，定义标志、交互门控、端口选择、主机绑定以及提供的路由。
+- [ambercast check](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/check/): 检查执行计划与定位缓存新鲜度的 ambercast check 的标志、状态值、结果字段和只读约定。
+- [ambercast heal](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/heal/): ambercast heal 的标志、修复阶段、限制、授权、CI 规则和写入行为参考。
+- [ambercast init](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/init/): 创建配置文件、示例 prompt 和仓库指引的 ambercast init 的用法、标志、写入文件、确认和退出码。
+- [ambercast view](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/view/): ambercast view 的标志、交互门控、端口选择、主机绑定和所提供路由的参考。
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/mcp/): MCP 服务器的启动、传输、关闭和客户端注册参考。
 
 ## PLAN SPECIFICATION

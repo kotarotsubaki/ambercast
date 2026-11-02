@@ -1,53 +1,57 @@
 ---
 title: ambercast view
-description: Command-line reference for ambercast view, defining flags, the interactive gate, port selection, host binding, and the served routes.
+description: Flags, the interactive gate, port selection, host binding, and served routes of ambercast view.
 ---
 
-The `ambercast view` command starts a read-only local HTTP server that browses run results persisted under the configured runs directory, so a developer can inspect a run's cases, steps, and screenshots without re-running tests or making any AI calls.
+`ambercast view` starts a read-only local HTTP server over the runs directory in your configuration. You inspect a run's cases, steps, and screenshots without re-running tests, and it makes no AI calls.
 
 ## Flags {#flags}
 
-| Flag | Value | Effect | Default |
+`view` takes no positional argument.
+
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `--port` | n | preferred port; auto-increments through 20 candidates unless set | 4600 |
-| `--host` | addr | bind address; a concrete IP or localhost, no wildcards | 127.0.0.1 |
-| `--allow-headless` | boolean | permit a non-interactive terminal | false |
-| `--config` | path | explicit config | omitted |
-| `--no-color` | boolean | disable ANSI | false |
+| --port | n | preferred port; auto-increments through 20 candidates unless set | 4600 |
+| --host | addr | bind address; a concrete IP or localhost, no wildcards | 127.0.0.1 |
+| --allow-headless | boolean | permit a non-interactive terminal | false |
+| --config | path | explicit config | omitted |
+| --no-color | boolean | disable ANSI | false |
 
 ## Interactive gate {#interactive-gate}
 
-`view` refuses to start unless stdin and stderr are both attached to a terminal and `CI` is not set, matching every other confirmation-gated command's interactivity check. Without `--allow-headless`, a non-interactive invocation exits 2 with:
+`view` refuses to start unless stdin and stderr are both terminals and `CI` is not active, meaning unset, empty, or `false`. `init` applies the same terminal-plus-`CI` check before its confirmation prompt. Without `--allow-headless`, a non-interactive invocation exits `2` with this message:
 
-```
+```text
 view requires --allow-headless when no interactive terminal is attached.
 ```
 
-`--allow-headless` lifts this refusal; it is a no-op in an already-interactive terminal.
+`--allow-headless` lifts the refusal. It changes nothing in a terminal.
 
 ## Port selection {#port-selection}
 
-The starting port is `--port`, then the configured `viewer.port`, then 4600. Without `--port`, `view` tries up to 20 consecutive ports starting there, advancing only on `EADDRINUSE`, and prints the port it actually bound. With `--port`, that single port is strict: if it is occupied, `view` exits 3 rather than trying another port. Exhausting every candidate, or any bind failure other than `EADDRINUSE`, also exits 3.
+The starting port is `--port`, then the configured `viewer.port`, then `4600`. Without `--port`, `view` tries up to 20 consecutive ports from there. It advances only on `EADDRINUSE` and prints the port it bound.
+
+With `--port`, that one port is strict: if it is occupied, `view` exits `3`. Exhausting every candidate, or any bind failure other than `EADDRINUSE`, also exits `3`.
 
 ## Host binding {#host-binding}
 
-`--host` accepts a concrete IP address or `localhost` (normalized to `127.0.0.1`); a wildcard address (`0.0.0.0`, `::`, `[::]`) exits 2, since this server has no authentication. Every request is checked against the bound host and port through its `Host` header; a request naming a different host is refused with 403. Binding to a non-loopback address prints a warning that the server is reachable without authentication.
+`--host` takes a concrete IP address or `localhost`, which becomes `127.0.0.1`. A wildcard address (`0.0.0.0`, `::`, or `[::]`) exits `2`, because the server has no authentication. The `Host` header of every request must name the bound host and port, or the server answers `403`. For any bound address other than `127.0.0.1` and `::1`, `view` prints a warning that the server is reachable without authentication.
 
 ## Routes {#routes}
 
-| Route | Serves |
+| route | serves |
 | --- | --- |
 | `GET /` | The run list, newest first, with status, duration, and case counts. |
-| `GET /runs/<runId>` | One run's cases, steps, expected/actual values, explanations, and screenshots. |
+| `GET /runs/<runId>` | One run's cases, steps, expected and actual values, explanations, and screenshots. |
 | `GET /runs/<runId>/report.json` | The run's raw persisted report bytes. |
-| `GET /runs/<runId>/screenshots/<ref>` | A screenshot the run's report actually references. |
+| `GET /runs/<runId>/screenshots/<ref>` | A screenshot that the run's report references. |
 
-Every response carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`; HTML and raw responses also carry a fixed `Content-Security-Policy` and `Referrer-Policy: no-referrer`. The page renders server-side with no client JavaScript and no external requests.
+Every response carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`. HTML and raw responses also carry a fixed `Content-Security-Policy` and `Referrer-Policy: no-referrer`. The page renders on the server with no client JavaScript and no external requests.
 
-A run directory missing its `report.json` (for example, mid-write, or after a failed persist) shows as evidence-only in the list rather than a broken link. A run whose `report.json` fails to parse or validate still appears, with its raw bytes reachable, rather than disappearing from the list.
+A run directory without `report.json`, for example mid-write or after a failed persist, appears in the list as evidence-only. A run whose `report.json` fails to parse or validate still appears, and its raw bytes stay reachable.
 
-`ambercast view` reads every report whose `schemaVersion` is 3.x. A report written by a different minor version than the current CLI shows "Schema `<version>`" in the run detail header; a report from another major version is listed as "Unsupported version `<version>`" and cannot be opened.
+`view` reads every report whose `schemaVersion` is 3.x. A report from another minor version shows "Schema `<version>`" in the run detail header. A report from another major version is listed as "Unsupported version `<version>`" and cannot be opened.
 
-`view` is the only Ambercast command that consumes a network port; the MCP server uses portless stdio.
+`view` is the only ambercast command that uses a network port. The MCP server uses stdio.
 
-Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
+Related pages: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table), and [ambercast mcp](/ambercast/reference/cli/mcp/#usage).

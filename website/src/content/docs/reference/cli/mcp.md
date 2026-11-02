@@ -7,28 +7,30 @@ description: Launch, transport, lifecycle, and client registration for the MCP s
 
 ## Usage {#usage}
 
-```sh
+```text
 ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
 ```
 
 ## Flags {#flags}
 
-| Flag | Value | Effect | Default |
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `--dir` | path | session root to serve | cwd |
-| `--sync-wait-ms` | n | synchronous response wait bound in milliseconds | 45000 |
+| --dir | path | session root to serve | cwd |
+| --sync-wait-ms | n | synchronous response wait bound in milliseconds | 45000 |
 
-`--dir` selects the session root; omission uses the process current working directory. Relative paths resolve against that directory. `--sync-wait-ms` is a positive integer with default 45000, bounding the synchronous wait before a long workflow returns a job handle. `--help` takes precedence over other arguments and prints usage to stdout with exit 0.
+`--dir` selects the session root. When you omit it, the server uses the current working directory of the process, and a relative path resolves against that directory. `--sync-wait-ms` is a positive integer that bounds the synchronous wait before a long workflow returns a job handle. `--help` takes precedence over the other arguments and prints the usage to stdout with exit 0.
 
-If the resolved directory is absent or not a directory, stderr prints `ambercast mcp: --dir <path> is not a directory.` and the process exits 2 without starting. Startup failure prints `ambercast mcp: failed to start (<error name>)` and exits 3. Invalid options, positional arguments, and invalid wait bounds use the CLI usage error on stderr with exit 2.
+If the resolved directory is missing or not a directory, stderr prints `ambercast mcp: --dir <path> is not a directory.` and the process exits 2 without starting. A startup failure prints `ambercast mcp: failed to start (<error name>)` and exits 3. Invalid options, positional arguments, and invalid wait bounds produce the CLI usage error on stderr with exit 2.
 
 ## Transport and shutdown {#transport-and-shutdown}
 
-Stdout contains JSON-RPC lines only. Stderr receives progress and one startup line, `ambercast mcp: serving <session root>`. The server begins draining on stdin end, SIGTERM, or SIGINT. It aborts in-flight calls, waits at most 10000 ms, closes the server, and exits 0 after settlement; an unsettled call at the deadline causes exit 3. New tool calls are rejected during draining.
+Stdout carries JSON-RPC lines only. Stderr carries progress and one startup line, `ambercast mcp: serving <session root>`.
+
+The server starts draining when stdin ends or on SIGTERM or SIGINT. It aborts in-flight calls, waits at most 10000 ms, closes the server, and exits 0 once everything has settled. If a call is still unsettled at the deadline, it exits 3. New tool calls are rejected while draining.
 
 ## Client registration {#client-registration}
 
-Use `npx --no-install ambercast mcp` in the project where ambercast is installed. Claude Code reads a project `.mcp.json`:
+Run `npx --no-install ambercast mcp` in the project where ambercast is installed. Claude Code reads a project `.mcp.json`:
 
 ```json
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
@@ -48,11 +50,11 @@ Claude Desktop accepts the same server entry in its configuration:
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
 ```
 
-Always start the client from a project where ambercast is installed, so `npx --no-install` can resolve the package; `--dir <path>` only selects a different session root once the server is running and has no effect on that package resolution. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
+Start the client from a project where ambercast is installed, so `npx --no-install` can resolve the package. `--dir <path>` only selects a different session root once the server is running, and it does not affect package resolution. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
 
 ## Changes from the planned design {#changes-from-the-planned-design}
 
-| Earlier planned page | Implemented contract |
+| earlier planned page | implemented contract |
 | --- | --- |
 | Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
 | Five planned tools | Six tools, including job status and cancellation |
@@ -63,4 +65,4 @@ Always start the client from a project where ambercast is installed, so `npx --n
 | CLI input flags unspecified | Tool inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
 | Exit code inferred from report | `_meta.exitCode` carries it explicitly |
 
-Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), [CLI overview](/ambercast/reference/cli/overview/#command-surface).
+Related pages: [MCP tools](/ambercast/reference/mcp-tools/#tool-table), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), and [CLI overview](/ambercast/reference/cli/overview/#command-surface).

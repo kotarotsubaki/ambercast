@@ -1,6 +1,6 @@
 ---
 title: ambercast baseline 与 restore
-description: ambercast baseline 与 restore 命令规划的外部边界、存储位置、新鲜度验证规则与未决事项参考。
+description: 尚未实现的 ambercast baseline 与 ambercast restore 的规划接口、存储位置、新鲜度规则和未决事项。
 status: planned
 sidebar:
   badge:
@@ -9,54 +9,50 @@ sidebar:
 ---
 
 :::caution
-`ambercast baseline` 与 `ambercast restore` 属于规划中的功能，在当前版本中尚未实现。本文档描述的是预期设计行为，而非当前的实现行为。
+`ambercast baseline` 和 `ambercast restore` 是当前版本尚未实现的规划功能。本页描述的接口和行为是预期的设计，不是现有功能。
 :::
 
-本文档记录 `ambercast baseline` 与 `ambercast restore` 规划的外部数据库边界、存储规范、新鲜度检验规则以及未决设计事项。
+本页记录 ambercast 规划中的数据库边界。捕获基线和恢复基线是两个相互独立的操作。
 
 ## 状态 {#status}
 
-`ambercast baseline` 与 `ambercast restore` 在当前版本中尚未实现，也不是可用的 CLI 命令。两者规划的数据库边界由数据库重置设计所定义。可用命令参见 CLI 概览。
+`ambercast baseline` 和 `ambercast restore` 在当前版本中尚未实现，也不是可用的 CLI 命令。两者效果相反，所以做成两个独立的扁平动词。把它们合并成 `reset` 命令，或用模式标志切换，都因为更容易误用而被否决。可用的命令见 [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，当前已有的配置键见[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
 
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[配置](/ambercast/zh-cn/reference/configuration/#key-table)。
+## 规划的边界 {#planned-boundary}
 
-## 规划的外部边界 {#planned-boundary}
-
-| 命令 / 选项 | 规划契约 |
+| 命令 / 选项 | 规划的约定 |
 | --- | --- |
-| `baseline [--target <name>] [--list] [--clear] [--force] [--json]` | 将当前数据库捕获为所选目标的基线。 |
-| `baseline --force` | 允许覆盖已存在的基线；无论是否处于 TTY 环境均须指定，且不会绕过无主键检查器。 |
-| `baseline --list` | 仅显示基线元数据。 |
-| `baseline --clear` | 删除所选基线；若基线不存在则幂等成功。 |
-| `restore [--target <name>] [--json]` | 将所选目标恢复为其基线，用于手动调试或 QA。 |
-| `run --no-reset` | 在该次调用中跳过重置与钩子；主要用于调试，不建议在 CI 中使用。 |
-| `check` 集成 | 在不建立数据库连接的情况下，验证数据库配置结构、可解析的密钥、基线是否存在以及 `configDigest`。 |
-
-捕获与恢复设计为独立的扁平动词，因为它们具有相反的效果；引入 `reset` 加模式标志的设计方案因更容易被误用而被否决。
+| `baseline [--target <name>] [--list] [--clear] [--force] [--json]` | 把当前数据库捕获为所选目标的基线。 |
+| `baseline --force` | 允许覆盖已有的基线。无论是否有 TTY 都必须带上，并且不会绕过无主键检查。 |
+| `baseline --list` | 只显示基线元数据。 |
+| `baseline --clear` | 删除所选基线，基线已不存在时同样成功。 |
+| `restore [--target <name>] [--json]` | 为手动调试或 QA，把所选目标恢复到其基线。 |
+| `run --no-reset` | 本次调用跳过重置和钩子。用于调试，不建议在 CI 中使用。 |
+| `check` 集成 | 在不打开数据库连接的前提下，校验数据库配置的形态、可解析的机密、基线是否存在以及 `configDigest`。 |
 
 ## 规划的存储与新鲜度 {#planned-storage-and-freshness}
 
-| 概念 | 规划契约 |
+| 概念 | 规划的约定 |
 | --- | --- |
-| 位置 | `.baseline/<target>/`，相对于解析后的配置目录，不可配置，独立于 `runsDir`，应加入 gitignore。 |
-| 元数据 | `meta.json` 记录 target、driver、capturedAt、capabilities、configDigest、sourceFingerprint 以及 artifactRef。 |
-| `configDigest` | 对未解析的 driver/connection/driverOptions 占位符进行哈希；不匹配即判定为配置漂移，退出码为 2，不会自动重新捕获。 |
-| `sourceFingerprint` | 对非机密的远程身份信息进行哈希；密钥解析后若不匹配，退出码为 3。 |
-| Plan 新鲜度 | 两个数据库新鲜度数值均不计入 Plan 的 `inputsDigest`。 |
+| 位置 | `.baseline/<target>/`，相对于解析后的配置目录。不可配置，与 `runsDir` 分开，打算加入 gitignore。 |
+| 元数据 | `meta.json` 记录 target、driver、capturedAt、capabilities、configDigest、sourceFingerprint 和 artifactRef。 |
+| `configDigest` | 未解析的 driver、connection 和 driverOptions 占位符的哈希。不一致属于配置漂移，退出码为 `2`，不会自动重新捕获。 |
+| `sourceFingerprint` | 非机密的远端身份的哈希。机密解析后不一致，退出码为 `3`。 |
+| 执行计划新鲜度 | 两个数据库新鲜度值都不会进入执行计划的 `inputsDigest`。 |
 
-当 `resetPerCase: true` 时，重置会在首个用例之前以及每个用例之后运行，随后按顺序运行边界钩子，且在进入下一个用例前屏障探测必须成功。
+`resetPerCase: true` 时，第一个用例之前和每个用例之后都会重置。随后按顺序运行边界钩子，进入下一个用例之前，屏障探测必须成功。
 
-重置或屏障失败默认将受影响的用例标记为错误并继续运行；配置 `onResetFailure: "abort"` 会中止运行，两种路径的退出码均为 3。钩子失败仅将该用例标记为错误并继续运行。
+重置或屏障探测失败，默认会让受影响的用例出错，运行继续。设置 `onResetFailure: "abort"` 则停止运行。两种情况的退出码都是 `3`。钩子失败只会让对应的用例出错，运行继续。
 
-规划的配置失败（`baseline-missing`、未解析的 target/driver、配置漂移、基线冲突以及无效标志组合）退出码为 2；数据库连接/重置/钩子失败以及 source-fingerprint 不匹配退出码为 3；综合退出码优先级仍为 `2 > 3 > 4 > 1 > 5 > 0`。
+规划中的配置类失败退出码为 `2`，包括 `baseline-missing`、未解析的目标或驱动、配置漂移、基线冲突和无效的标志组合。数据库连接、重置、钩子失败，以及源指纹不一致，退出码为 `3`。聚合时的优先级仍为 `2 > 3 > 4 > 1 > 5 > 0`。
 
-人类可读输出与 JSON 输出必须将 `mode` 标明为 `captured` 或 `restored`。
+面向人的输出和 JSON 输出都必须把 `mode` 标明为 `captured` 或 `restored`。
 
 ## 未决事项 {#undecided-items}
 
 | 状态 | 事项 |
 | --- | --- |
-| 明确未决 | 引入 `baseline` 与 `restore` 的具体发布版本；两者均与 fixture 功能绑定。 |
-| 保留项而非未决 | `--all-targets`、`--list --live`、额外的钩子阶段以及并行 worker 的 `db.<target>` 子键均属于 v2 保留项，不属于当前规划的接口范围。 |
+| 明确未决 | 引入 `baseline` 和 `restore` 的版本；两者都与 fixture 功能绑定。 |
+| 已预留，并非未决 | `--all-targets`、`--list --live`、额外的钩子阶段以及并行工作进程的 `db.<target>` 子键是 v2 的预留项，不属于这个规划的接口。 |
 
-相关链接：[报告](/ambercast/zh-cn/reference/reports/#envelope)、[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/)。
+通用的报告封套见[报告](/ambercast/zh-cn/reference/reports/#envelope)，工具侧的行为见 [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)，新鲜度的推导见[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/)。

@@ -1,6 +1,6 @@
 ---
 title: ambercast review
-description: 定义规划中的独立 AI 审查结果与已知命令行选项。
+description: 尚未实现的 ambercast review 的规划接口与未决事项，该命令让独立的 AI 判断执行计划是否符合意图。
 status: planned
 sidebar:
   badge:
@@ -9,36 +9,33 @@ sidebar:
 ---
 
 :::caution
-`ambercast review` 属于规划中的功能，尚未在当前版本中实现，也不是当前可用的 CLI 命令。本文档描述的是预期设计行为，而非当前版本的实际行为。
+`ambercast review` 在当前版本中尚未实现。本页描述的接口和约定是规划中的 v2 行为，而不是当前 CLI 的能力。
 :::
 
-本文档定义了规划中由独立 AI 审查测试计划（Plan）的结果与已知命令行选项。
+本页记录 `ambercast review` 计划检查什么、计划返回什么，以及哪些问题仍未决定。
 
 ## 状态 {#status}
 
-`ambercast review` 在当前版本中尚未实现，也不是可用的 CLI 命令。其作为 v2 命令的角色由命令行设计所定义。可用命令参见 CLI 概览。
-
-相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)、[报告](/ambercast/zh-cn/reference/reports/#result-shapes)。
+`ambercast review` 在当前版本中尚未实现，也不是可用的 CLI 命令。它计划在 v2 中提供。可用的命令见 [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)，目前已有的结果形态见[报告](/ambercast/zh-cn/reference/reports/#result-shapes)。
 
 ## 规划的接口 {#planned-interface}
 
-| 语法 / 行为 | 规划契约 |
+| 语法 / 行为 | 规划的约定 |
 | --- | --- |
-| `review [files...] [--target <name>] [--json]` | 在与生成器相互独立的上下文中请求 AI 评估 Plan 是否符合意图且验证是否充分。 |
-| `--target` | 规划的目标解析顺序依次为：显式指定的 target、配置的默认值、自身唯一的 target 键，若均未匹配则以退出码 2 退出；若显式给出的 target 名称无效，绝不回退。 |
-| `--json` | 在完成命令行参数解析后的每次退出时，输出通用的结构化外层封装。 |
-| 审查关注项 | 审查关注项属于该命令正规的红色失败（red result）结果，映射为退出码 1。 |
+| `review [files...] [--target <name>] [--json]` | 在与生成器分离的上下文中，请 AI 判断执行计划是否符合意图、验证是否充分。 |
+| `--target` | 目标按显式指定的目标、配置的默认值、唯一的自有目标键的顺序解析，都没有则以退出码 `2` 结束。显式给出的名称无效时，不会回退到其他目标。 |
+| `--json` | 在参数解析之后的每一种退出路径上，输出通用的结构化封套。 |
+| 审查关注项 | 关注项是该命令正当的红色结果，对应退出码 `1`。 |
 
-该命令归属于 v2，其名称已于 2026-08-01 正式确定。
-
-规划的多任务综合退出码判定优先级为 `2 > 3 > 4 > 1 > 5 > 0`。
+- 该命令划归 v2，名称已于 2026-08-01 确定。
+- 规划的聚合退出码优先级为 `2 > 3 > 4 > 1 > 5 > 0`。
 
 ## 未决事项 {#undecided-items}
 
-| 状态 | 事项 | 保持未决的原因 |
+| 状态 | 事项 | 仍未决定的原因 |
 | --- | --- | --- |
-| 缺口 | `--allow-empty` 与 `--list` | 命令概要中省略了它们，而命令与选项矩阵则将两者均分配给了 review 并定义了其行为。 |
-| 未规定 | 审查提供商与详细结果契约 | 设计中仅声明由独立上下文中的 AI 评判意图与验证充分性。 |
-| 明确未决 | `review` 无此类事项 | 仅 `baseline` 和 `restore` 带有此标记。 |
+| 缺口 | `--allow-empty` 和 `--list` | 规划中的设计把这两个标志都分配给 `review`，但它的语法中没有列出。 |
+| 未规定 | 审查提供商与详细的结果约定 | 设计只说明由独立上下文中的 AI 判断意图和验证是否充分。 |
+| 明确未决 | `review` 没有此类事项 | 只有 `baseline` 和 `restore` 带有这个标签。 |
 
-相关链接：[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[计划文档](/ambercast/zh-cn/spec/plan-document/)。
+当前可用的工具见 [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)，审查要读取的执行计划格式见[计划文档](/ambercast/zh-cn/spec/plan-document/)。

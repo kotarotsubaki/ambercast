@@ -1,2 +1,2 @@
-- [ambercast review](https://kotarotsubaki.github.io/ambercast/reference/cli/review/): Define the planned independent-AI review outcome and known flags for ambercast review.
-- [ambercast baseline and restore](https://kotarotsubaki.github.io/ambercast/reference/cli/baseline-restore/): Planned external database baseline capture and restore interface for ambercast.
+- [ambercast review](https://kotarotsubaki.github.io/ambercast/reference/cli/review/): The planned interface and open items of ambercast review, a not-yet-implemented command that asks an independent AI whether a plan meets its intent.
+- [ambercast baseline and restore](https://kotarotsubaki.github.io/ambercast/reference/cli/baseline-restore/): The planned interface, storage, freshness rules, and open items of ambercast baseline and ambercast restore, which are not implemented yet.

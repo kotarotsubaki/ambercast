@@ -2402,13 +2402,17 @@ Links: [ambercast mcp](/ambercast/reference/cli/mcp/#usage), [MCP server](/amber
 # CLI overview
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/overview/
 
-The `ambercast` command-line interface provides seven commands for scaffolding a project, generating, running, checking, and repairing deterministic test plans, browsing run results, and serving the MCP stdio server, using per-command option parsing and configured discovery defaults.
+Each `ambercast` command parses its own arguments. When you pass no files, configured discovery selects the tests.
 
 ## Command surface {#command-surface}
 
-The implemented commands are `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. Top-level `--help` and `--version` flags short-circuit before command dispatch; any malformed arguments exit with status code 2 without emitting a report.
+The implemented commands are `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`.
 
-Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to operate on plans whose steps name their execution Targets.
+Use `ambercast run <file>`, `ambercast check <file>`, or `ambercast heal <file>` to work on plans whose steps name their execution targets.
+
+Top-level `--help` and `--version` are handled before command dispatch. A `--help` after a recognized command and before any `--` is handled by that command right away. Malformed arguments exit with status `2`, write the usage to stderr, and produce no report.
+
+The usage block below is the CLI's own help output, including the `AI configuration` and `Heal configuration` lines.
 
 ```text
 Usage: ambercast <command> [options]
@@ -2458,36 +2462,46 @@ Heal configuration:
 
 | command | positional | accepted options | configuration path |
 | --- | --- | --- | --- |
-| init | none | dir, yes/-y, force, no-color | --dir argument (cwd when omitted) |
-| generate | literal paths; no paths = discovery | force, dry-run, target, ai, allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | AMBERCAST_CONFIG > discovery |
-| view | none | port, host, allow-headless, config, no-color | --config > AMBERCAST_CONFIG > discovery |
-| mcp | none | dir, sync-wait-ms | --dir argument selects session root (cwd when omitted) |
+| init | none | dir, yes/-y, force, no-color | `--dir` argument (cwd when omitted) |
+| generate | literal paths; no paths = discovery | force, dry-run, target, ai, allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
+| run | literal paths; no paths = discovery | grep, headed, resolve, update-cache, stale, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > discovery |
+| check | literal paths; no paths = discovery | allow-empty, list, json, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
+| heal | literal paths; no paths = discovery | dry-run, yes/-y, ai, allow-empty, list, json, no-color | `AMBERCAST_CONFIG` > discovery |
+| view | none | port, host, allow-headless, config, no-color | `--config` > `AMBERCAST_CONFIG` > discovery |
+| mcp | none | dir, sync-wait-ms | `--dir` argument selects the session root (cwd when omitted) |
 
-For `generate`, `run`, `check`, and `heal`, except in `--list` mode, each positional argument must be a literal path inside `testDir` with a non-empty name component and the exact `.test.md` suffix. An ineligible path produces `PROMPT_PATH_INVALID` instead of being silently ignored or allowed to crash execution.
+For `generate`, `run`, `check`, and `heal`, every positional argument outside `--list` must be a literal path inside `testDir`. The name in front of the `.test.md` suffix must be non-empty, and the suffix must be exactly `.test.md`. Any other path fails with `PROMPT_PATH_INVALID`.
 
-- Passing `--` terminates option parsing, leaving all subsequent arguments to be interpreted as literal paths.
-- The `--json` and `--no-color` flags are handled individually by each command rather than through a shared global-flag abstraction.
-- `generate --target` restricts the Target definitions available to the generator. Run, check, and heal use the Target names recorded in each Plan.
+- `--` ends option parsing, so every later argument is a literal path.
+- `--json` and `--no-color` are handled by each command, not by a shared global flag.
+- `generate --target` restricts the target definitions available to the generator. `run`, `check`, and `heal` use the target names recorded in each plan.
 
 ## Discovery default {#discovery-default}
 
-When you pass no literal files to `generate`, `run`, `check`, or `heal`, that command delegates test file selection to configured discovery. `init`, `view`, and `mcp` take no prompt-file arguments.
+When you pass no literal files to `generate`, `run`, `check`, or `heal`, configured discovery selects the test files. `init`, `view`, and `mcp` take no prompt-file arguments.
 
-- The default inclusion pattern is `**/*.test.md`.
-- Default exclusions include `.runs`, Plan, and Grounding companions.
-- Discovery evaluates POSIX-relative paths by requiring an inclusion match first, after which an ignore match excludes the path.
+- The default `testMatch` is `**/*.test.md`.
+- The default `testIgnore` is `**/.runs/**` plus the plan and grounding companions.
+- Discovery evaluates POSIX-relative paths. A path must match an inclusion pattern first, and an ignore match then excludes it.
 
-Related documentation: [Configuration](/ambercast/reference/configuration/#file-selection), [Discovery patterns](/ambercast/reference/discovery-patterns/#selection), [ambercast init](/ambercast/reference/cli/init/#flags), [ambercast generate](/ambercast/reference/cli/generate/#flags), [ambercast run](/ambercast/reference/cli/run/#flags), [ambercast check](/ambercast/reference/cli/check/#flags), [ambercast heal](/ambercast/reference/cli/heal/#flags), [ambercast view](/ambercast/reference/cli/view/#flags), and [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
+The details are on these pages.
+
+- [Configuration](/ambercast/reference/configuration/#file-selection)
+- [Discovery patterns](/ambercast/reference/discovery-patterns/#selection)
+- [ambercast init](/ambercast/reference/cli/init/#flags)
+- [ambercast generate](/ambercast/reference/cli/generate/#flags)
+- [ambercast run](/ambercast/reference/cli/run/#flags)
+- [ambercast check](/ambercast/reference/cli/check/#flags)
+- [ambercast heal](/ambercast/reference/cli/heal/#flags)
+- [ambercast view](/ambercast/reference/cli/view/#flags)
+- [ambercast mcp](/ambercast/reference/cli/mcp/#usage)
 
 ---
 
 # ambercast generate
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/generate/
 
-The `ambercast generate` command compiles test prompts into plans and companion artifacts, managing provider executor resolution and artifact generation across literal file paths or discovered tests.
+`ambercast generate` turns test prompts into plans and companion artifacts. It works on literal file paths or on tests that discovery selects.
 
 ## Flags {#flags}
 
@@ -2495,8 +2509,8 @@ The `ambercast generate` command compiles test prompts into plans and companion 
 | --- | --- | --- | --- |
 | files | path[] | literal prompts; absent selects discovery | discovery |
 | --force | boolean | force generation | false |
-| --dry-run | boolean | preview: `would-generate` only when generation is needed; fresh Plan returns `skipped-fresh`; neither outcome writes | false |
-| --target | name | limit available generation targets to this target only | omitted |
+| --dry-run | boolean | write nothing and report only: `would-generate` when generation is needed, `skipped-fresh` for a fresh plan | false |
+| --target | name | limit the generation targets to this target only | omitted |
 | --ai | claude\|codex | provider override | omitted |
 | --allow-empty | boolean | allow empty selection | false |
 | --list | boolean | list without generation | false |
@@ -2506,23 +2520,23 @@ The `ambercast generate` command compiles test prompts into plans and companion 
 
 ## AI calls {#ai-calls}
 
-`ambercast generate` resolves a provider executor only through its generation dependency; the configured provider and `--ai` override are supplied to that resolver.
+`generate` resolves a provider executor only on the generation path. The configured provider and the `--ai` override feed that resolver.
 
-`--list` returns discovery rows without running generation. With `--dry-run`, a target needing generation returns `would-generate`, while a fresh Plan returns `skipped-fresh`. Neither dry-run outcome writes artifacts: the fresh branch skips Grounding repair, and the generation branch returns before writes.
+`--list` returns discovery rows without running generation. With `--dry-run`, a target that needs generation returns `would-generate`, and a fresh plan returns `skipped-fresh`. Neither outcome writes artifacts: the fresh branch skips grounding repair, and the generation branch returns before any write.
 
 ## Secret consent {#secret-consent}
 
-Generation is candidate-then-consent: it constructs the candidate Plan, identifies secret names outside `secrets.allow`, and asks for interactive approval before persisting the Plan or Grounding. `--force` still follows this consent boundary when a fresh Plan is regenerated. `--dry-run` produces no artifact writes and does not persist consent.
+Generation builds a candidate first and asks for consent second. It constructs the candidate plan, finds secret names outside `secrets.allow`, and asks for interactive approval before it writes the plan or the grounding. `--force` follows the same consent boundary when it regenerates a fresh plan. `--dry-run` writes no artifact and stores no consent.
 
-In a non-interactive context, or when consent is declined, an unallowlisted candidate fails with `SECRET_CONSENT_REQUIRED` and exit 2. Add reviewed names to `secrets.allow` before running in CI; `"*"` bypasses per-name review and accepts any AI-proposed name, so it carries a strong risk warning. See [Manage secrets](/ambercast/how-to/manage-secrets/) for the safe workflow.
+In a non-interactive context, or when you decline, an unallowed candidate fails with `SECRET_CONSENT_REQUIRED` and exit `2`. Add reviewed names to `secrets.allow` before you run in CI. The value `"*"` skips the per-name review and accepts any name the AI proposes, so it carries a strong risk warning. See [Manage secrets](/ambercast/how-to/manage-secrets/) for the safe workflow.
 
 ## Side effects and exits {#side-effects}
 
 A prompt named `<name>.test.md` maps to plan and grounding companions beside it (see [File layout](/ambercast/reference/file-layout/#companions)).
 
-Result statuses are `generated`, `would-generate`, `skipped-fresh`, `listed`, `failed`, and `skipped` (see [Reports](/ambercast/reference/reports/#generate-results)). `would-generate` is the dry-run status only for a target that needs generation; `skipped-fresh` is also valid in dry-run mode.
+The result statuses are `generated`, `would-generate`, `skipped-fresh`, `listed`, `failed`, and `skipped` (see [Reports](/ambercast/reference/reports/#generate-results)). `would-generate` is the dry-run status for a target that needs generation, and `skipped-fresh` also appears in dry-run mode.
 
-Process-code values and their priority are owned by [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority), with individual codes listed in [Exit codes](/ambercast/reference/exit-codes/#exit-code-table). The `--allow-empty` flag controls whether an empty selection contributes exit 5 (see [Configuration](/ambercast/reference/configuration/#file-selection)).
+[Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) owns the process-code values and their priority, and the [exit code table](/ambercast/reference/exit-codes/#exit-code-table) lists each code. The `--allow-empty` flag decides whether an empty selection contributes exit `5` (see [Configuration](/ambercast/reference/configuration/#file-selection)).
 
 ---
 
@@ -2588,24 +2602,24 @@ Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports]
 # ambercast check
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/check/
 
-`ambercast check` inspects prompt files, plans, and grounding artifacts across your project to verify their freshness and integrity. Operating under a strict read-only contract, it allows you to validate test suite artifacts without invoking AI models, launching browsers, dispatching events, or writing to disk.
+`ambercast check` inspects prompts, plans, and grounding companions and reports whether each is fresh and valid. It makes no AI call, launches no browser, dispatches no event, and writes nothing to disk.
 
 ## Flags {#flags}
 
-You can pass prompt paths directly or rely on automated file discovery via [Configuration](/ambercast/reference/configuration/#file-selection), modify report formatting, or isolate a specific target.
+You can pass prompt paths directly or let [configured discovery](/ambercast/reference/configuration/#file-selection) select them.
 
-| Flag | Value | Effect | Default |
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `files` | `path[]` | literal prompts; absent selects discovery | `discovery` |
-| `--allow-empty` | `boolean` | allow empty selection | `false` |
-| `--list` | `boolean` | list without inspection | `false` |
-| `--json` | `boolean` | JSON envelope | `false` |
-| `--config` | `path` | explicit configuration | `omitted` |
-| `--no-color` | `boolean` | disable ANSI | `false` |
+| files | path[] | literal prompts; absent selects discovery | discovery |
+| --allow-empty | boolean | allow empty selection | false |
+| --list | boolean | list without inspection | false |
+| --json | boolean | JSON envelope | false |
+| --config | path | explicit configuration | omitted |
+| --no-color | boolean | disable ANSI | false |
 
 ## Status vocabulary {#status-vocabulary}
 
-During inspection, `check` reports one of the following artifact statuses:
+`check` reports one of these twelve statuses for each result. `listed` appears only with `--list`, and `skipped` only after an interruption.
 
 - `fresh`
 - `stale`
@@ -2620,128 +2634,140 @@ During inspection, `check` reports one of the following artifact statuses:
 - `listed`
 - `skipped`
 
-The canonical derivation rules and pass/fail classifications for these status values are defined in [Freshness and digests](/ambercast/spec/freshness/#freshness-consequences).
+[Freshness and digests](/ambercast/spec/freshness/#freshness-consequences) defines how each status is derived and whether it passes or fails.
 
 ## Results {#results}
 
-Completed findings produced by `check` require the fields `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` fields appear only when serving as evidence for a finding. Full field definitions and report structures are specified in [Reports](/ambercast/reference/reports/#check-results).
-
-The execution contract of `check` is read-only: its dependencies explicitly exclude AI runtimes, browser drivers, event dispatchers, and write storage.
+A completed finding carries `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` field appears only as evidence for a finding. A finding with status `invalid-artifact-name` is the exception: it has no `planFile` and carries `id`, `file`, `status`, `reason`, and `artifactFile`, where `id`, `file`, and `artifactFile` name the artifact itself. [Reports](/ambercast/reference/reports/#check-results) lists the full field definitions and report structures.
 
 ## Read-only inspection {#read-only-contract}
 
-At runtime, `check` composes read-only storage, file layout rules (see [File layout](/ambercast/reference/file-layout/#companions)), and discovery logic (see [Configuration](/ambercast/reference/configuration/#file-selection)).
+`check` is read-only. Its dependencies exclude AI runtimes, browser drivers, event dispatchers, and write storage. At runtime it composes read-only storage, the file layout rules (see [File layout](/ambercast/reference/file-layout/#companions)), and discovery (see [Configuration](/ambercast/reference/configuration/#file-selection)).
 
-Process exit codes and their precedence are governed by [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority), with full mappings detailed in [Exit codes](/ambercast/reference/exit-codes/#exit-code-table):
+[Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) owns the process-code values and their precedence, and the [exit code table](/ambercast/reference/exit-codes/#exit-code-table) maps each code in full.
 
-- Untrustworthy artifacts contribute exit code `4`.
-- An unallowed empty selection contributes exit code `5`.
+- Untrustworthy artifacts contribute exit `4`.
+- An unallowed empty selection contributes exit `5`.
 
 ---
 
 # ambercast heal
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/heal/
 
-The `ambercast heal` command repairs test plans and Grounding companions, providing options to discover or select prompts, measure repairs without writing changes, and manage authorization boundaries.
+`ambercast heal` repairs plans and their grounding companions. You choose the prompts, measure a repair without committing it, or authorize the write.
 
 ## Flags {#flags}
 
-| Flag | Value | Effect | Default |
+Without `files`, heal selects prompts through discovery.
+
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `files` | path[] | literal prompts; absent selects discovery | discovery |
-| `--dry-run` | boolean | measures repair without committing buffered Plan or Grounding changes | false |
-| `--yes, -y` | boolean | authorizes non-interactive commit | false |
-| `--ai` | claude\|codex | provider override | omitted |
-| `--allow-empty` | boolean | allow empty selection | false |
-| `--list` | boolean | list without healing | false |
-| `--json` | boolean | JSON envelope | false |
-| `--no-color` | boolean | disable ANSI | false |
+| files | path[] | literal prompts; absent selects discovery | discovery |
+| --dry-run | boolean | measures repair without committing buffered plan or grounding changes | false |
+| --yes, -y | boolean | authorizes non-interactive commit | false |
+| --ai | claude\|codex | provider override | omitted |
+| --allow-empty | boolean | allow empty selection | false |
+| --list | boolean | list without healing | false |
+| --json | boolean | JSON envelope | false |
+| --no-color | boolean | disable ANSI | false |
 
 ## Repair model {#repair-model}
 
-A completed repair result distinguishes `healed`, `partially-healed`, `unresolved`, and `no-changes-needed`; each has constrained `application` and `stopReason` values.
+A completed repair result is `healed`, `partially-healed`, `unresolved`, or `no-changes-needed`. Each has constrained `application` and `stopReason` values.
 
-Heal first repairs Grounding, then attempts single-step or tail repair, and finally performs full-plan repair when needed; Stage 3 resolves an AI executor and calls generation, so it can dispatch a real provider.
+Heal repairs in up to three stages:
 
-Heal never makes a new secret-consent decision. If its Stage 2 candidate has an invalid secret name, allowlist failure, or environment-variable collision, it rejects that repair with `secret-name-invalid`. If the Stage 3 full-plan candidate changes the complete logical secret-name set, heal rejects it with `stage3Rejection.reason: "secret-set-changed"`, writes no Plan or Grounding update, and prints the literal Japanese hint the shipped CLI renders:
+1. It repairs the grounding first.
+2. It then repairs a single step or the tail of the plan.
+3. It repairs the full plan only when the earlier stages leave the case unrepaired and the case deadline has not been reached.
+
+Stage 3 resolves an AI executor and calls generation, so it can dispatch a real provider.
+
+Heal never makes a new secret-consent decision. It rejects a Stage 2 candidate that has an invalid secret name, an allowlist failure, or an environment-variable collision, with `secret-name-invalid`. It rejects a Stage 3 candidate that changes the complete logical secret-name set with `stage3Rejection.reason: "secret-set-changed"`. That rejection writes no plan or grounding update.
+
+The human output of the CLI then prints `hint: ` followed by the hint below, with the actual prompt path in place of `<file>`. The `--json` output carries `stage3Rejection` and no hint.
 
 `秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`
 
 ## Limits {#limits}
 
-- `heal.maxStepRepairs`, when set, is a positive hard limit on real incremental repair provider dispatches, including element confirmation and excluding the fail-closed baseline and Stage 3.
-- `heal.caseTimeoutMs` is a positive case-wide admission deadline; its resolved default is 300000 ms.
+- `heal.maxStepRepairs`, when set, is a positive hard limit on real incremental-repair provider dispatches. It counts element confirmation and excludes the fail-closed baseline and Stage 3.
+- `heal.caseTimeoutMs` is a positive case-wide admission deadline. Its default is `300000` ms.
 
 ## Confirmation {#confirmation}
 
-Unless `--dry-run`, eligible repair artifacts are committed only after authorization; `--yes` provides non-interactive authorization.
+Outside `--dry-run`, heal commits repair artifacts only after authorization. `--yes` authorizes non-interactively.
 
 ## CI {#ci}
 
-Except for `--list`, healing in CI is rejected unless `ci.heal` is true.
+Outside `--list`, heal in CI is rejected unless `ci.heal` is `true`.
 
 ## Preconditions and writes {#preconditions}
 
-Except for `--list`, the selected target must be idempotent; the default target is stateful.
+Outside `--list`, once a prompt's plan has loaded, every target that plan references must set `healReplayIsolation: "idempotent"`. Otherwise heal fails that prompt with `CONFIG_INVALID` (exit `2`). The default `healReplayIsolation` is `stateful`. Other configured targets that the plan does not reference do not block heal.
 
-Plan and Grounding companion writes are buffered until authorized settlement, but each measurement may write attempt evidence through runsDir-contained storage; this side effect can occur before authorization and during `--dry-run`.
+Heal buffers plan and grounding writes until authorized settlement. Each measurement can still write attempt evidence through `runsDir`-contained storage, before authorization and during `--dry-run`.
 
-Process-code values and their priority are owned by [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority).
+[Exit codes](/ambercast/reference/exit-codes/#aggregation-priority) owns the process-code values and their priority, and the [exit code table](/ambercast/reference/exit-codes/#exit-code-table) lists each code.
 
-Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports](/ambercast/reference/reports/#heal-results), [Exit codes](/ambercast/reference/exit-codes/#exit-code-table), [File layout](/ambercast/reference/file-layout/#run-artifacts).
+Related pages: [Configuration](/ambercast/reference/configuration/#grounding), [Reports](/ambercast/reference/reports/#heal-results), and [File layout](/ambercast/reference/file-layout/#run-artifacts).
 
 ---
 
 # ambercast init
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/init/
 
+`ambercast init` creates the minimum files you need to start using ambercast in a project. It plans all changes before it writes anything, and it can target a directory other than the current one.
+
 ## Usage {#usage}
 
-```bash
+```text
 ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
 ```
 
-`ambercast init` scaffolds the minimum files needed to start using ambercast in a project. It plans the changes before writing anything and can target a directory other than the current working directory.
-
 ## Flags {#flags}
 
-| Flag | Value | Effect | Default |
+`init` takes no positional argument.
+
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `--dir` | `<path>` | project root to scaffold into | cwd |
-| `--yes, -y` | boolean | skip the confirmation prompt | false |
-| `--force` | boolean | replace an existing ambercast.config.json | false |
-| `--no-color` | boolean | disable ANSI | false |
+| --dir | path | project root to scaffold into | cwd |
+| --yes, -y | boolean | skip the confirmation prompt | false |
+| --force | boolean | replace an existing ambercast.config.json | false |
+| --no-color | boolean | disable ANSI | false |
 
 ## What it writes {#what-it-writes}
 
-The command plans four project-root-relative artifacts:
+The command plans four artifacts, each relative to the project root:
 
-| Artifact | When absent | When already present |
+| artifact | when absent | when already present |
 | --- | --- | --- |
 | `ambercast.config.json` | created | skipped when it exactly matches the scaffold; otherwise rejected unless `--force` replaces it |
 | `tests/ambercast/find-page.test.md` | created | skipped without inspecting or replacing its contents |
-| `.gitignore` | created | skipped when it already contains `tests/ambercast/.runs/`; otherwise that line is appended |
+| `.gitignore` | created with the two-line unit below | skipped when it already contains `tests/ambercast/.runs/`; otherwise the unit is appended |
 | `AGENTS.md` | created | skipped when its ambercast marker block matches; replaced when one valid marker pair differs, appended when no markers exist, and rejected for malformed markers |
+
+The `.gitignore` unit is the comment `# ambercast run evidence` followed by the line `tests/ambercast/.runs/`.
 
 ## Confirmation and non-interactive use {#confirmation}
 
-The complete plan is always printed to stderr. In an interactive terminal, ambercast then asks `Write these files? [y/N] `; `--yes` skips that prompt.
+init always prints the complete change plan to stderr. In an interactive terminal it then asks `Write these files? [y/N] `, and `--yes` skips that prompt.
 
-In CI or another non-TTY environment, init rejects the invocation unless `--yes` is supplied. When a coding agent runs the command, `--yes` skips only the CLI prompt: it never substitutes for the human approval required for the four file changes. See the [operating contract](/ambercast/agents/operating-contract/#command-contract).
+In CI or another non-TTY environment, init rejects the invocation unless you pass `--yes`. When a coding agent runs the command, `--yes` skips only the CLI prompt. It never replaces the human approval for the four file changes. See the [operating contract](/ambercast/agents/operating-contract/#command-contract).
 
 ## Exit codes {#exit-codes}
 
-- `0`: successful scaffolding, an all-skipped no-op, or a declined confirmation.
-- `2`: a preflight rejection, including invalid arguments, non-interactive use without `--yes`, a configuration conflict, or malformed `AGENTS.md` markers.
-- `3`: an I/O failure, interruption, or failure while applying the plan.
+- `0`: scaffolding succeeded, every artifact was skipped, or you declined the confirmation.
+- `2`: a preflight rejection, such as invalid arguments, non-interactive use without `--yes`, a configuration conflict, or malformed `AGENTS.md` markers.
+- `3`: an I/O failure, an interruption, or a failure while applying the change plan.
 
-For the shared process-status reference, see [Exit codes](/ambercast/reference/exit-codes/#exit-code-table).
+The shared process-status reference is the [exit code table](/ambercast/reference/exit-codes/#exit-code-table).
 
 ## Re-running {#re-running}
 
-After a successful run, repeating the same command is idempotent: all four artifacts are reported as `skipped`, ambercast prints `Nothing to do.`, and their bytes remain unchanged.
+Running the same command again after a success is idempotent. All four artifacts are reported as `skipped`, ambercast prints `Nothing to do.`, and their bytes stay unchanged.
 
-## Related {#related}
+## See also {#see-also}
 
 - [CLI overview](/ambercast/reference/cli/overview/#command-surface)
 - [Your first test in 5 minutes](/ambercast/tutorials/quick-start/)
@@ -2753,54 +2779,58 @@ After a successful run, repeating the same command is idempotent: all four artif
 # ambercast view
 Source: https://kotarotsubaki.github.io/ambercast/reference/cli/view/
 
-The `ambercast view` command starts a read-only local HTTP server that browses run results persisted under the configured runs directory, so a developer can inspect a run's cases, steps, and screenshots without re-running tests or making any AI calls.
+`ambercast view` starts a read-only local HTTP server over the runs directory in your configuration. You inspect a run's cases, steps, and screenshots without re-running tests, and it makes no AI calls.
 
 ## Flags {#flags}
 
-| Flag | Value | Effect | Default |
+`view` takes no positional argument.
+
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `--port` | n | preferred port; auto-increments through 20 candidates unless set | 4600 |
-| `--host` | addr | bind address; a concrete IP or localhost, no wildcards | 127.0.0.1 |
-| `--allow-headless` | boolean | permit a non-interactive terminal | false |
-| `--config` | path | explicit config | omitted |
-| `--no-color` | boolean | disable ANSI | false |
+| --port | n | preferred port; auto-increments through 20 candidates unless set | 4600 |
+| --host | addr | bind address; a concrete IP or localhost, no wildcards | 127.0.0.1 |
+| --allow-headless | boolean | permit a non-interactive terminal | false |
+| --config | path | explicit config | omitted |
+| --no-color | boolean | disable ANSI | false |
 
 ## Interactive gate {#interactive-gate}
 
-`view` refuses to start unless stdin and stderr are both attached to a terminal and `CI` is not set, matching every other confirmation-gated command's interactivity check. Without `--allow-headless`, a non-interactive invocation exits 2 with:
+`view` refuses to start unless stdin and stderr are both terminals and `CI` is not active, meaning unset, empty, or `false`. `init` applies the same terminal-plus-`CI` check before its confirmation prompt. Without `--allow-headless`, a non-interactive invocation exits `2` with this message:
 
-```
+```text
 view requires --allow-headless when no interactive terminal is attached.
 ```
 
-`--allow-headless` lifts this refusal; it is a no-op in an already-interactive terminal.
+`--allow-headless` lifts the refusal. It changes nothing in a terminal.
 
 ## Port selection {#port-selection}
 
-The starting port is `--port`, then the configured `viewer.port`, then 4600. Without `--port`, `view` tries up to 20 consecutive ports starting there, advancing only on `EADDRINUSE`, and prints the port it actually bound. With `--port`, that single port is strict: if it is occupied, `view` exits 3 rather than trying another port. Exhausting every candidate, or any bind failure other than `EADDRINUSE`, also exits 3.
+The starting port is `--port`, then the configured `viewer.port`, then `4600`. Without `--port`, `view` tries up to 20 consecutive ports from there. It advances only on `EADDRINUSE` and prints the port it bound.
+
+With `--port`, that one port is strict: if it is occupied, `view` exits `3`. Exhausting every candidate, or any bind failure other than `EADDRINUSE`, also exits `3`.
 
 ## Host binding {#host-binding}
 
-`--host` accepts a concrete IP address or `localhost` (normalized to `127.0.0.1`); a wildcard address (`0.0.0.0`, `::`, `[::]`) exits 2, since this server has no authentication. Every request is checked against the bound host and port through its `Host` header; a request naming a different host is refused with 403. Binding to a non-loopback address prints a warning that the server is reachable without authentication.
+`--host` takes a concrete IP address or `localhost`, which becomes `127.0.0.1`. A wildcard address (`0.0.0.0`, `::`, or `[::]`) exits `2`, because the server has no authentication. The `Host` header of every request must name the bound host and port, or the server answers `403`. For any bound address other than `127.0.0.1` and `::1`, `view` prints a warning that the server is reachable without authentication.
 
 ## Routes {#routes}
 
-| Route | Serves |
+| route | serves |
 | --- | --- |
 | `GET /` | The run list, newest first, with status, duration, and case counts. |
-| `GET /runs/<runId>` | One run's cases, steps, expected/actual values, explanations, and screenshots. |
+| `GET /runs/<runId>` | One run's cases, steps, expected and actual values, explanations, and screenshots. |
 | `GET /runs/<runId>/report.json` | The run's raw persisted report bytes. |
-| `GET /runs/<runId>/screenshots/<ref>` | A screenshot the run's report actually references. |
+| `GET /runs/<runId>/screenshots/<ref>` | A screenshot that the run's report references. |
 
-Every response carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`; HTML and raw responses also carry a fixed `Content-Security-Policy` and `Referrer-Policy: no-referrer`. The page renders server-side with no client JavaScript and no external requests.
+Every response carries `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`. HTML and raw responses also carry a fixed `Content-Security-Policy` and `Referrer-Policy: no-referrer`. The page renders on the server with no client JavaScript and no external requests.
 
-A run directory missing its `report.json` (for example, mid-write, or after a failed persist) shows as evidence-only in the list rather than a broken link. A run whose `report.json` fails to parse or validate still appears, with its raw bytes reachable, rather than disappearing from the list.
+A run directory without `report.json`, for example mid-write or after a failed persist, appears in the list as evidence-only. A run whose `report.json` fails to parse or validate still appears, and its raw bytes stay reachable.
 
-`ambercast view` reads every report whose `schemaVersion` is 3.x. A report written by a different minor version than the current CLI shows "Schema `<version>`" in the run detail header; a report from another major version is listed as "Unsupported version `<version>`" and cannot be opened.
+`view` reads every report whose `schemaVersion` is 3.x. A report from another minor version shows "Schema `<version>`" in the run detail header. A report from another major version is listed as "Unsupported version `<version>`" and cannot be opened.
 
-`view` is the only Ambercast command that consumes a network port; the MCP server uses portless stdio.
+`view` is the only ambercast command that uses a network port. The MCP server uses stdio.
 
-Links: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
+Related pages: [CLI overview](/ambercast/reference/cli/overview/#command-surface), [Reports](/ambercast/reference/reports/#envelope), [Configuration](/ambercast/reference/configuration/#key-table), and [ambercast mcp](/ambercast/reference/cli/mcp/#usage).
 
 ---
 
@@ -2811,28 +2841,30 @@ Source: https://kotarotsubaki.github.io/ambercast/reference/cli/mcp/
 
 ## Usage {#usage}
 
-```sh
+```text
 ambercast mcp [--dir <path>] [--sync-wait-ms <n>] [--help]
 ```
 
 ## Flags {#flags}
 
-| Flag | Value | Effect | Default |
+| flag | value | effect | default |
 | --- | --- | --- | --- |
-| `--dir` | path | session root to serve | cwd |
-| `--sync-wait-ms` | n | synchronous response wait bound in milliseconds | 45000 |
+| --dir | path | session root to serve | cwd |
+| --sync-wait-ms | n | synchronous response wait bound in milliseconds | 45000 |
 
-`--dir` selects the session root; omission uses the process current working directory. Relative paths resolve against that directory. `--sync-wait-ms` is a positive integer with default 45000, bounding the synchronous wait before a long workflow returns a job handle. `--help` takes precedence over other arguments and prints usage to stdout with exit 0.
+`--dir` selects the session root. When you omit it, the server uses the current working directory of the process, and a relative path resolves against that directory. `--sync-wait-ms` is a positive integer that bounds the synchronous wait before a long workflow returns a job handle. `--help` takes precedence over the other arguments and prints the usage to stdout with exit 0.
 
-If the resolved directory is absent or not a directory, stderr prints `ambercast mcp: --dir <path> is not a directory.` and the process exits 2 without starting. Startup failure prints `ambercast mcp: failed to start (<error name>)` and exits 3. Invalid options, positional arguments, and invalid wait bounds use the CLI usage error on stderr with exit 2.
+If the resolved directory is missing or not a directory, stderr prints `ambercast mcp: --dir <path> is not a directory.` and the process exits 2 without starting. A startup failure prints `ambercast mcp: failed to start (<error name>)` and exits 3. Invalid options, positional arguments, and invalid wait bounds produce the CLI usage error on stderr with exit 2.
 
 ## Transport and shutdown {#transport-and-shutdown}
 
-Stdout contains JSON-RPC lines only. Stderr receives progress and one startup line, `ambercast mcp: serving <session root>`. The server begins draining on stdin end, SIGTERM, or SIGINT. It aborts in-flight calls, waits at most 10000 ms, closes the server, and exits 0 after settlement; an unsettled call at the deadline causes exit 3. New tool calls are rejected during draining.
+Stdout carries JSON-RPC lines only. Stderr carries progress and one startup line, `ambercast mcp: serving <session root>`.
+
+The server starts draining when stdin ends or on SIGTERM or SIGINT. It aborts in-flight calls, waits at most 10000 ms, closes the server, and exits 0 once everything has settled. If a call is still unsettled at the deadline, it exits 3. New tool calls are rejected while draining.
 
 ## Client registration {#client-registration}
 
-Use `npx --no-install ambercast mcp` in the project where ambercast is installed. Claude Code reads a project `.mcp.json`:
+Run `npx --no-install ambercast mcp` in the project where ambercast is installed. Claude Code reads a project `.mcp.json`:
 
 ```json
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
@@ -2852,11 +2884,11 @@ Claude Desktop accepts the same server entry in its configuration:
 {"mcpServers":{"ambercast":{"command":"npx","args":["--no-install","ambercast","mcp"]}}}
 ```
 
-Always start the client from a project where ambercast is installed, so `npx --no-install` can resolve the package; `--dir <path>` only selects a different session root once the server is running and has no effect on that package resolution. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
+Start the client from a project where ambercast is installed, so `npx --no-install` can resolve the package. `--dir <path>` only selects a different session root once the server is running, and it does not affect package resolution. The server provides `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`.
 
 ## Changes from the planned design {#changes-from-the-planned-design}
 
-| Earlier planned page | Implemented contract |
+| earlier planned page | implemented contract |
 | --- | --- |
 | Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
 | Five planned tools | Six tools, including job status and cancellation |
@@ -2867,7 +2899,7 @@ Always start the client from a project where ambercast is installed, so `npx --n
 | CLI input flags unspecified | Tool inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
 | Exit code inferred from report | `_meta.exitCode` carries it explicitly |
 
-Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), [CLI overview](/ambercast/reference/cli/overview/#command-surface).
+Related pages: [MCP tools](/ambercast/reference/mcp-tools/#tool-table), [MCP server](/ambercast/agents/mcp-server/#connection-boundary), and [CLI overview](/ambercast/reference/cli/overview/#command-surface).
 
 ---
 

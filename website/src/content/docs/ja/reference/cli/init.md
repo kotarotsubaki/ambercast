@@ -1,55 +1,59 @@
 ---
 title: ambercast init
-description: ambercast init が設定ファイル、サンプルプロンプト、およびリポジトリ向けのガイダンスを作成するためのコマンドラインリファレンスです。
+description: 設定ファイル、サンプルプロンプト、リポジトリ向けの案内を作る ambercast init の書式、フラグ、書き込むファイル、確認、終了コード。
 ---
+
+`ambercast init` は、プロジェクトで ambercast を使い始めるのに最低限必要なファイルを作る。書き込む前にすべての変更を計画し、カレントディレクトリ以外のディレクトリも対象にできる。
 
 ## 使い方 {#usage}
 
-```bash
+```text
 ambercast init [--dir <path>] [--yes|-y] [--force] [--no-color] [--help]
 ```
 
-`ambercast init` は、プロジェクトで ambercast を使い始めるために必要な最小限のファイルを作成します。書き込みの前に変更計画を表示し、カレントワーキングディレクトリ以外のディレクトリも対象にできます。
-
 ## フラグ {#flags}
 
-| フラグ | 値 | 効果 | デフォルト |
+`init` は位置引数を取らない。
+
+| フラグ | 値 | 効果 | 既定値 |
 | --- | --- | --- | --- |
-| `--dir` | `<path>` | スキャフォールディング先のプロジェクトルート | cwd |
-| `--yes, -y` | boolean | 確認プロンプトを省略 | false |
-| `--force` | boolean | 既存の ambercast.config.json を置き換え | false |
-| `--no-color` | boolean | ANSI を無効化 | false |
+| --dir | path | 雛形を作るプロジェクトルート | cwd |
+| --yes, -y | boolean | 確認のプロンプトを省く | false |
+| --force | boolean | 既存の ambercast.config.json を置き換える | false |
+| --no-color | boolean | ANSI の色を無効にする | false |
 
-## 書き込む内容 {#what-it-writes}
+## 書き込むファイル {#what-it-writes}
 
-このコマンドは、プロジェクトルートからの相対パスで次の4つの成果物を計画します。
+コマンドは、プロジェクトルートからの相対パスで 4 つの成果物を計画する。
 
-| 成果物 | 不在の場合 | 既に存在する場合 |
+| 成果物 | 無いとき | すでにあるとき |
 | --- | --- | --- |
-| `ambercast.config.json` | 作成 | スキャフォールドと完全一致すればスキップ。それ以外は `--force` による置換がなければ拒否 |
-| `tests/ambercast/find-page.test.md` | 作成 | 内容を調べたり置き換えたりせずスキップ |
-| `.gitignore` | 作成 | `tests/ambercast/.runs/` が既にあればスキップ。それ以外はその行を追記 |
-| `AGENTS.md` | 作成 | ambercast のマーカーブロックが一致すればスキップ。正しいマーカー対で内容が異なれば置換、マーカーがなければ追記、不正なマーカーは拒否 |
+| `ambercast.config.json` | 作成する | 雛形と同一であればスキップする。違えば、`--force` で置き換えない限り拒否する |
+| `tests/ambercast/find-page.test.md` | 作成する | 中身を調べず、置き換えもせずにスキップする |
+| `.gitignore` | 下の 2 行の単位を付けて作成する | すでに `tests/ambercast/.runs/` を含めばスキップする。含まなければ、その単位を末尾に追加する |
+| `AGENTS.md` | 作成する | ambercast のマーカーブロックが一致すればスキップする。有効なマーカーの組が 1 つあって内容が違えば置き換え、マーカーが無ければ追記し、マーカーが壊れていれば拒否する |
 
-## 確認と非対話的な利用 {#confirmation}
+`.gitignore` の単位は、コメント `# ambercast run evidence` と、それに続く `tests/ambercast/.runs/` の行である。
 
-完全な計画は常に stderr に表示されます。対話的な端末では、その後に ambercast が `Write these files? [y/N] ` と確認します。`--yes` を指定するとこのプロンプトを省略できます。
+## 確認と非対話での利用 {#confirmation}
 
-CI または非 TTY の環境では、`--yes` を指定しない init は拒否されます。コーディングエージェントが実行する場合、`--yes` が省略するのは CLI の確認だけであり、4つのファイル変更に必要な人間の承認を代替するものではありません。[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)を参照してください。
+init は、変更計画の全体を必ず標準エラーに出力する。対話的な端末では、続けて `Write these files? [y/N] ` と尋ね、`--yes` はこの確認を省く。
+
+CI などの非 TTY 環境では、`--yes` を渡さない限り init は呼び出しを拒否する。コーディングエージェントがコマンドを実行する場合も、`--yes` が省くのは CLI の確認だけである。4 つのファイル変更に対する人間の承認は、`--yes` では代替できない。[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)を参照する。
 
 ## 終了コード {#exit-codes}
 
-- `0`: スキャフォールディングの成功、すべてスキップされた no-op、または確認の辞退。
-- `2`: 不正な引数、`--yes` なしの非対話利用、設定の競合、不正な `AGENTS.md` マーカーなど、事前検査での拒否。
-- `3`: I/O 失敗、中断、または計画の適用中の失敗。
+- `0`: 雛形の作成に成功した、すべての成果物をスキップした、または確認を断った。
+- `2`: 事前検査での拒否。引数の誤り、`--yes` なしの非対話実行、設定の衝突、`AGENTS.md` のマーカーの破損などが含まれる。
+- `3`: I/O の失敗、中断、または変更計画の適用中の失敗。
 
-共通のプロセスステータスについては、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)を参照してください。
+プロセス状態の共通の一覧は[終了コードの表](/ambercast/ja/reference/exit-codes/#exit-code-table)にある。
 
 ## 再実行 {#re-running}
 
-成功後に同じコマンドを再実行しても冪等です。4つの成果物はすべて `skipped` と表示され、ambercast は `Nothing to do.` を出力し、ファイルのバイト列は変わりません。
+成功した後に同じコマンドを再実行しても結果は変わらない。4 つの成果物はすべて `skipped` と報告され、ambercast は `Nothing to do.` を出力する。バイト列も変わらない。
 
-## 関連リンク {#related}
+## 関連項目 {#see-also}
 
 - [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
 - [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)

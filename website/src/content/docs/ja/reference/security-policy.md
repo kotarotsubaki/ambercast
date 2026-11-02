@@ -7,7 +7,7 @@ description: セキュリティ修正が提供される ambercast のバージ�
 
 ## サポート対象バージョン {#supported-versions}
 
-ambercast は pre-1.0 である。修正が提供されるのは最新の公開バージョンである。古い pre-1.0 リリースの修正は約束されない。
+ambercast は pre-1.0 である。修正が提供されるのは最新の公開バージョンだけである。古い pre-1.0 リリースの修正は約束されない。
 
 ## 脆弱性の報告 {#vulnerability-reporting}
 

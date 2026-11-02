@@ -86,7 +86,7 @@ description: 记录 ambercast 各版本中用户可见的产品行为与公共�
 
 | 类别 | 用户可见变更 |
 | --- | --- |
-| BREAKING | 执行计划 v2 → v3 删除机密授权来源。请删除旧授权行，用 `generate --force` 重新生成，并通过同意／`secrets.allow` 模型批准候选机密名称。执行计划 v2 不会原地迁移。报告 schema 3.5 新增机密策略错误码 `SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED` 与 `SECRET_SYNTAX_REJECTED`，新增可选的 `GROUNDING_UNRESOLVED` 详情，以及可选的 `GenerateResult` 字段 `secrets` 与 `warnings`。旧的 `@ambercast-secret` 授权行与 `{{secrets.*}}` prompt 语法会以退出码 2 被拒绝。 |
+| BREAKING | 执行计划 v2 → v3 删除机密授权来源。请删除旧授权行，用 `generate --force` 重新生成，并通过同意／`secrets.allow` 模型批准候选机密名称。执行计划 v2 不会原地迁移。报告 schema 3.5 新增机密策略错误码 `SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED` 与 `SECRET_SYNTAX_REJECTED`，新增可选的 `GROUNDING_UNRESOLVED` 详情，以及可选的 `GenerateResult` 字段 `secrets` 与 `warnings`。当 Stage 3 候选改变机密名称集合时，`heal` 返回 `secret-set-rejected` 结果，其 `stage3Rejection.reason` 为 `secret-set-changed`，并给出 `added` 与 `removed` 名称。旧的 `@ambercast-secret` 授权行与 `{{secrets.*}}` prompt 语法会以退出码 2 被拒绝。 |
 | BREAKING | 既有执行计划过期，需用 `ambercast generate --force` 重新生成。指令覆盖准则带有 `startAnchor`、`startColumn`、`endAnchor` 与 `endColumn`，`instructionCoveragePolicy` 修订号从 2 升到 3。 |
 | BREAKING | `generate` 对每个新检测到的机密名称都会停在同意关口。交互式终端会询问 `y / N / i`，其他运行以退出码 2 结束并列出未获允许的名称。同意后，这些名称会追加到 `secrets.allow`。 |
 | BREAKING | 只有带 `--resolve` 时，`run` 才用 AI 解决定位缓存未命中。`--cache-only` 被移除，使用它会以退出码 2 结束。`GROUNDING_UNRESOLVED` 对应退出码 4。 |

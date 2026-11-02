@@ -2048,12 +2048,12 @@ Ambercast は、コンパニオンファイルと実行成果物のパスをす�
 
 ## 実行成果物 {#run-artifacts}
 
-| 成果物 | 正確なパス | 書き込み元 / タイミング | 実装に基づくコミットポリシー |
+| 成果物 | 正確なパス | 書き込み元 / タイミング | コミットポリシー |
 | --- | --- | --- | --- |
 | プロンプト | `<testDir>/<dirs>/<name>.test.md` | ユーザーが書く入力。Ambercast は読み取る。 | リポジトリに関する判断はコード化されていない。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
-| 計画コンパニオン | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` が新規に生成した計画を書く。`heal` は承認された確定（settlement）の後にだけ置き換えられる。 | ランタイムはコミット済みの入力として扱う。リポジトリ操作は行わない。 |
+| 計画コンパニオン | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` が新規に生成した計画を書く。`heal` は承認された確定（settlement）の後にだけ置き換えられる。 | Ambercast はコミット済みの入力として扱う。リポジトリ操作は行わない。 |
 | グラウンディングコンパニオン | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | `generate` が作成または修復する。`run` は書き戻しポリシーに従い、変更されたグラウンディングを書くことがある。`heal` は確定後に置き換えられる。 | `grounding.repositoryPolicy` の既定値は `committed` で、`uncommitted` にもできる。Ambercast 自体はリポジトリ操作を行わない。 |
-| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` と `heal` は、ケースのエビデンスに単一の呼び出し識別子を使う。run ID はタイムスタンプと UUID からなる安全なセグメントである。 | ランタイムはこのディレクトリにリポジトリポリシーを持たない。`ambercast init` は既定の `runsDir` に対して `tests/ambercast/.runs/` を `.gitignore` に追記する。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
+| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` と `heal` は、ケースのエビデンスに単一の呼び出し識別子を使う。run ID はタイムスタンプと UUID からなる安全なセグメントである。 | Ambercast はこのディレクトリにリポジトリポリシーを持たない。`ambercast init` は既定の `runsDir` に対して `tests/ambercast/.runs/` を `.gitignore` に追記する。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
 | ケースディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | `run` が、ケースのエビデンス収集にこのディレクトリを渡す。 | 呼び出しディレクトリと同じ。 |
 | 実行スクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | `run` が、対象となる失敗したライブブラウザのステップに書く。シークレット検出により省略されることがある。 | 呼び出しディレクトリと同じ。 |
 | ヒール試行ディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | `heal` が試行ごとに正の序数を割り当てる。その試行のエビデンスとオーバーレイは、このディレクトリ配下に閉じ込める。 | 呼び出しディレクトリと同じ。 |
@@ -2062,7 +2062,7 @@ Ambercast は、コンパニオンファイルと実行成果物のパスをす�
 
 スクリーンショットはベストエフォートである。キャプチャや保存に失敗した場合も省略される。
 
-`runsDir` は独立して設定され、既定値は `tests/ambercast/.runs` である。レイアウト解決処理は `testDir` から導出しない。
+`runsDir` は独立して設定され、既定値は `tests/ambercast/.runs` である。Ambercast は `testDir` から導出しない。
 
 `runId` は `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$` に一致する必要がある。このパターンにより、区切り文字、ドットセグメント、空の ID を排除する。
 
@@ -2106,7 +2106,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 
 各 `$id` は公開パスの URL と一致する。サイトは現在の 4 つのスキーマを、`dist/schema/` のファイルとバイト単位で同一のコピーとして配信する。npm パッケージはこの 4 つを `ambercast/schema/<name>.json` としてエクスポートする。
 
-Astro の設定は、`site` を `https://kotarotsubaki.github.io` ホスト、base を `/ambercast` に設定する。上記の公開 URL はこのホストを使う。
+サイト設定では、`site` を `https://kotarotsubaki.github.io` ホスト、base を `/ambercast` に設定する。上記の公開 URL はこのホストを使う。
 
 ## 生成されるアーティファクト {#generated-artifacts}
 
@@ -2290,7 +2290,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/changelog/
 
 | 区分 | 変更内容 |
 | --- | --- |
-| BREAKING | 計画 v2 → v3 は、シークレットグラントの来歴を削除する。旧グラント行を削除し、`generate --force` で再生成して、同意／`secrets.allow` モデルで候補のシークレット名を承認する。計画 v2 はその場で移行されない。レポートスキーマ 3.5 は、シークレットポリシーのエラーコード `SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、任意の `GROUNDING_UNRESOLVED` の詳細、任意の `GenerateResult` の `secrets` と `warnings` フィールドを追加する。旧来の `@ambercast-secret` グラント行と `{{secrets.*}}` プロンプト構文は、終了コード 2 で拒否される。 |
+| BREAKING | 計画 v2 → v3 は、シークレットグラントの来歴を削除する。旧グラント行を削除し、`generate --force` で再生成して、同意／`secrets.allow` モデルで候補のシークレット名を承認する。計画 v2 はその場で移行されない。レポートスキーマ 3.5 は、シークレットポリシーのエラーコード `SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、任意の `GROUNDING_UNRESOLVED` の詳細、任意の `GenerateResult` の `secrets` と `warnings` フィールドを追加する。Stage 3 の候補がシークレット名の集合を変えると、`heal` は `secret-set-rejected` の結果を返し、`stage3Rejection.reason` は `secret-set-changed`、あわせて `added` と `removed` の名前を返す。旧来の `@ambercast-secret` グラント行と `{{secrets.*}}` プロンプト構文は、終了コード 2 で拒否される。 |
 | BREAKING | 既存の計画は古い状態になり、`ambercast generate --force` で再生成する。命令カバレッジの基準は `startAnchor`、`startColumn`、`endAnchor`、`endColumn` を持ち、`instructionCoveragePolicy` のリビジョンは 2 から 3 に進む。 |
 | BREAKING | `generate` は、新たに検出したシークレット名ごとに同意ゲートで止まる。対話端末では `y / N / i` を尋ね、それ以外の実行は終了コード 2 で終了して、許可されていない名前を列挙する。同意すると、その名前が `secrets.allow` に追記される。 |
 | BREAKING | `run` は、`--resolve` を付けた場合に限り、AI でグラウンディングのミスを解決する。`--cache-only` は削除され、終了コード 2 で終了する。`GROUNDING_UNRESOLVED` は終了コード 4 に対応する。 |
@@ -2408,7 +2408,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/security-policy/
 
 ## サポート対象バージョン {#supported-versions}
 
-ambercast は pre-1.0 である。修正が提供されるのは最新の公開バージョンである。古い pre-1.0 リリースの修正は約束されない。
+ambercast は pre-1.0 である。修正が提供されるのは最新の公開バージョンだけである。古い pre-1.0 リリースの修正は約束されない。
 
 ## 脆弱性の報告 {#vulnerability-reporting}
 
@@ -2429,7 +2429,7 @@ ambercast は pre-1.0 である。修正が提供されるのは最新の公開�
 # 用語集
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/glossary/
 
-各定義は規範であり、1文で述べる。フィールド、フラグ、ステータス、エラーの完全な表は、各定義にリンクした所有ドキュメントを参照する。予定段階のトークンには現行のランタイムセマンティクスがなく、現行版では使えない。
+各定義は規範であり、簡潔に述べる。フィールド、フラグ、ステータス、エラーの完全な表は、各定義にリンクした所有ドキュメントを参照する。予定段階のトークンには現行のランタイムセマンティクスがなく、現行版では使えない。
 
 ## アーティファクトに関する用語 {#artifact-terms}
 

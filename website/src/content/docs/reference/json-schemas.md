@@ -28,7 +28,7 @@ Five frozen snapshots remain for consumers of retired contracts. The site publis
 
 Each `$id` equals its public-path URL. The site serves the four current schemas as byte-identical copies of the files in `dist/schema/`. The npm package exports those four as `ambercast/schema/<name>.json`.
 
-The Astro configuration sets `site` to the `https://kotarotsubaki.github.io` host with base `/ambercast`. The publication URLs above use that host.
+The site configuration sets `site` to the `https://kotarotsubaki.github.io` host with base `/ambercast`. The publication URLs above use that host.
 
 ## Generated artifacts {#generated-artifacts}
 

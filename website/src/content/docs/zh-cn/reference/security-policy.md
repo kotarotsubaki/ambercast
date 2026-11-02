@@ -7,7 +7,7 @@ description: 哪些 ambercast 版本会获得安全修复，以及如何私下�
 
 ## 受支持的版本 {#supported-versions}
 
-ambercast 仍处于 pre-1.0 阶段。最新发布的版本会获得修复。较旧的 pre-1.0 版本不承诺提供修复。
+ambercast 仍处于 pre-1.0 阶段。仅最新发布的版本会获得修复。较旧的 pre-1.0 版本不承诺提供修复。
 
 ## 漏洞报告 {#vulnerability-reporting}
 

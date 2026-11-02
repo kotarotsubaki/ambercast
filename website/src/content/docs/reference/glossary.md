@@ -3,7 +3,7 @@ title: Glossary
 description: The normative site-wide terms of Ambercast and the index of literal tokens that translators keep verbatim.
 ---
 
-Every definition here is normative and takes one sentence. Follow each linked owner contract for the complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
+Every definition here is normative and concise. Follow each linked owner contract for the complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
 
 ## Artifact terms {#artifact-terms}
 

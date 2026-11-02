@@ -28,7 +28,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 
 各 `$id` は公開パスの URL と一致する。サイトは現在の 4 つのスキーマを、`dist/schema/` のファイルとバイト単位で同一のコピーとして配信する。npm パッケージはこの 4 つを `ambercast/schema/<name>.json` としてエクスポートする。
 
-Astro の設定は、`site` を `https://kotarotsubaki.github.io` ホスト、base を `/ambercast` に設定する。上記の公開 URL はこのホストを使う。
+サイト設定では、`site` を `https://kotarotsubaki.github.io` ホスト、base を `/ambercast` に設定する。上記の公開 URL はこのホストを使う。
 
 ## 生成されるアーティファクト {#generated-artifacts}
 

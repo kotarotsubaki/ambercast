@@ -7,7 +7,7 @@ This page mirrors the repository's security policy. It covers the supported vers
 
 ## Supported versions {#supported-versions}
 
-ambercast is pre-1.0. The latest published version receives fixes. Older pre-1.0 releases get no promised fix.
+ambercast is pre-1.0. Only the latest published version receives fixes. Older pre-1.0 releases get no promised fix.
 
 ## Vulnerability reporting {#vulnerability-reporting}
 

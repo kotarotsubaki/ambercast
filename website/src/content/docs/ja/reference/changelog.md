@@ -86,7 +86,7 @@ description: ambercast の各リリースにおける、ユーザーから見え
 
 | 区分 | 変更内容 |
 | --- | --- |
-| BREAKING | 計画 v2 → v3 は、シークレットグラントの来歴を削除する。旧グラント行を削除し、`generate --force` で再生成して、同意／`secrets.allow` モデルで候補のシークレット名を承認する。計画 v2 はその場で移行されない。レポートスキーマ 3.5 は、シークレットポリシーのエラーコード `SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、任意の `GROUNDING_UNRESOLVED` の詳細、任意の `GenerateResult` の `secrets` と `warnings` フィールドを追加する。旧来の `@ambercast-secret` グラント行と `{{secrets.*}}` プロンプト構文は、終了コード 2 で拒否される。 |
+| BREAKING | 計画 v2 → v3 は、シークレットグラントの来歴を削除する。旧グラント行を削除し、`generate --force` で再生成して、同意／`secrets.allow` モデルで候補のシークレット名を承認する。計画 v2 はその場で移行されない。レポートスキーマ 3.5 は、シークレットポリシーのエラーコード `SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、任意の `GROUNDING_UNRESOLVED` の詳細、任意の `GenerateResult` の `secrets` と `warnings` フィールドを追加する。Stage 3 の候補がシークレット名の集合を変えると、`heal` は `secret-set-rejected` の結果を返し、`stage3Rejection.reason` は `secret-set-changed`、あわせて `added` と `removed` の名前を返す。旧来の `@ambercast-secret` グラント行と `{{secrets.*}}` プロンプト構文は、終了コード 2 で拒否される。 |
 | BREAKING | 既存の計画は古い状態になり、`ambercast generate --force` で再生成する。命令カバレッジの基準は `startAnchor`、`startColumn`、`endAnchor`、`endColumn` を持ち、`instructionCoveragePolicy` のリビジョンは 2 から 3 に進む。 |
 | BREAKING | `generate` は、新たに検出したシークレット名ごとに同意ゲートで止まる。対話端末では `y / N / i` を尋ね、それ以外の実行は終了コード 2 で終了して、許可されていない名前を列挙する。同意すると、その名前が `secrets.allow` に追記される。 |
 | BREAKING | `run` は、`--resolve` を付けた場合に限り、AI でグラウンディングのミスを解決する。`--cache-only` は削除され、終了コード 2 で終了する。`GROUNDING_UNRESOLVED` は終了コード 4 に対応する。 |

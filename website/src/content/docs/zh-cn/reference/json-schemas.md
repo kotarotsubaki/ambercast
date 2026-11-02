@@ -28,7 +28,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 
 每个 `$id` 都与其公开路径 URL 一致。站点提供的 4 个当前 Schema，与 `dist/schema/` 中的文件逐字节相同。npm 软件包把这 4 个文件导出为 `ambercast/schema/<name>.json`。
 
-Astro 配置把 `site` 设为 `https://kotarotsubaki.github.io` 主机，基路径设为 `/ambercast`。上述发布 URL 均使用该主机。
+站点配置把 `site` 设为 `https://kotarotsubaki.github.io` 主机，基路径设为 `/ambercast`。上述发布 URL 均使用该主机。
 
 ## 生成的产物 {#generated-artifacts}
 

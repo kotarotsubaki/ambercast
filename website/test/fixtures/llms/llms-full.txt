@@ -2033,7 +2033,7 @@ The filter is a deny-list, not an allow-list. It returns a shallow copy and leav
 # File layout
 Source: https://kotarotsubaki.github.io/ambercast/reference/file-layout/
 
-Ambercast resolves every companion and run path from the test directory and the runs directory. This page lists each derived path, its writer and timing, and the commit policy the implementation encodes.
+Ambercast resolves every companion and run path from the test directory and the runs directory. This page lists each derived path, its writer and timing, and the commit policy Ambercast applies.
 
 ## Companions {#companions}
 
@@ -2046,12 +2046,12 @@ Forward mappings accept only an in-`testDir` path ending exactly in `.test.md` w
 
 ## Run artifacts {#run-artifacts}
 
-| Artifact | Exact path | Writer / timing | Implementation-backed commit policy |
+| Artifact | Exact path | Writer / timing | Commit policy |
 | --- | --- | --- | --- |
-| Prompt | `<testDir>/<dirs>/<name>.test.md` | You write it. Ambercast reads it. | No repository decision is encoded. The procedure is in [Manage artifacts in git](/ambercast/how-to/manage-artifacts-in-git/). |
-| Plan companion | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` writes a newly generated Plan. `heal` may replace it only after an authorized settlement. | The runtime treats it as a committed input. It performs no repository operation. |
+| Prompt | `<testDir>/<dirs>/<name>.test.md` | You write it. Ambercast reads it. | Ambercast applies no repository policy. The procedure is in [Manage artifacts in git](/ambercast/how-to/manage-artifacts-in-git/). |
+| Plan companion | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` writes a newly generated Plan. `heal` may replace it only after an authorized settlement. | Ambercast treats it as a committed input. It performs no repository operation. |
 | Grounding companion | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | `generate` creates or repairs it. `run` may write changed Grounding under the write-back policy. `heal` may replace it after settlement. | `grounding.repositoryPolicy` is `committed` by default and may be `uncommitted`. Ambercast performs no repository operation. |
-| Invocation directory | `<runsDir>/<runId>/` | `run` and `heal` use one invocation identity for case evidence. Run IDs are timestamp-plus-UUID safe segments. | The runtime has no repository policy for this directory. `ambercast init` appends `tests/ambercast/.runs/` to `.gitignore` for the default `runsDir`. The procedure is in [Manage artifacts in git](/ambercast/how-to/manage-artifacts-in-git/). |
+| Invocation directory | `<runsDir>/<runId>/` | `run` and `heal` use one invocation identity for case evidence. Run IDs are timestamp-plus-UUID safe segments. | Ambercast applies no repository policy to this directory. `ambercast init` appends `tests/ambercast/.runs/` to `.gitignore` for the default `runsDir`. The procedure is in [Manage artifacts in git](/ambercast/how-to/manage-artifacts-in-git/). |
 | Case directory | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | `run` provides this directory to evidence capture for the case. | Same as the invocation directory. |
 | Run screenshot | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | `run` writes it for an eligible failed live-browser step. Secret detection may omit it. | Same as the invocation directory. |
 | Heal attempt directory | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | `heal` allocates a positive ordinal per attempt. It confines that attempt's evidence and overlay under this directory. | Same as the invocation directory. |
@@ -2060,7 +2060,7 @@ Forward mappings accept only an in-`testDir` path ending exactly in `.test.md` w
 
 A screenshot is best effort. A capture or storage failure also omits it.
 
-`runsDir` is configured independently and defaults to `tests/ambercast/.runs`. The layout resolver does not derive it from `testDir`.
+`runsDir` is configured independently and defaults to `tests/ambercast/.runs`. Ambercast does not derive it from `testDir`.
 
 A `runId` must match `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`. The pattern prevents separators, dot segments, and empty IDs.
 
@@ -2104,7 +2104,7 @@ Five frozen snapshots remain for consumers of retired contracts. The site publis
 
 Each `$id` equals its public-path URL. The site serves the four current schemas as byte-identical copies of the files in `dist/schema/`. The npm package exports those four as `ambercast/schema/<name>.json`.
 
-The Astro configuration sets `site` to the `https://kotarotsubaki.github.io` host with base `/ambercast`. The publication URLs above use that host.
+The site configuration sets `site` to the `https://kotarotsubaki.github.io` host with base `/ambercast`. The publication URLs above use that host.
 
 ## Generated artifacts {#generated-artifacts}
 
@@ -2282,7 +2282,7 @@ Release date: 2026-09-15. Report schema 3.5.
 
 | Class | User-visible entry |
 | --- | --- |
-| BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model. Plan v2 is not migrated in place. Report schema 3.5 adds the secret-policy error codes `SECRET_ENV_VAR_COLLISION`, `SECRET_CONSENT_REQUIRED`, and `SECRET_SYNTAX_REJECTED`, the optional `GROUNDING_UNRESOLVED` details, and the optional `GenerateResult` `secrets` and `warnings` fields. The legacy `@ambercast-secret` grant line and `{{secrets.*}}` prompt syntax are rejected with exit 2. |
+| BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model. Plan v2 is not migrated in place. Report schema 3.5 adds the secret-policy error codes `SECRET_ENV_VAR_COLLISION`, `SECRET_CONSENT_REQUIRED`, and `SECRET_SYNTAX_REJECTED`, the optional `GROUNDING_UNRESOLVED` details, and the optional `GenerateResult` `secrets` and `warnings` fields. When a Stage 3 candidate changes the secret-name set, `heal` returns the `secret-set-rejected` result with `stage3Rejection.reason` `secret-set-changed`, plus the `added` and `removed` names. The legacy `@ambercast-secret` grant line and `{{secrets.*}}` prompt syntax are rejected with exit 2. |
 | BREAKING | Existing Plans become stale and are regenerated with `ambercast generate --force`. Instruction-coverage criteria carry `startAnchor`, `startColumn`, `endAnchor`, and `endColumn`, and the `instructionCoveragePolicy` revision moves from 2 to 3. |
 | BREAKING | `generate` stops at a consent gate for every newly detected secret name. An interactive terminal asks `y / N / i`, and any other run exits 2 and lists the unallowed names. Consenting appends the names to `secrets.allow`. |
 | BREAKING | `run` resolves grounding misses with AI only with `--resolve`. `--cache-only` is removed and exits 2. `GROUNDING_UNRESOLVED` maps to exit 4. |
@@ -2401,7 +2401,7 @@ This page mirrors the repository's security policy. It covers the supported vers
 
 ## Supported versions {#supported-versions}
 
-ambercast is pre-1.0. The latest published version receives fixes. Older pre-1.0 releases get no promised fix.
+ambercast is pre-1.0. Only the latest published version receives fixes. Older pre-1.0 releases get no promised fix.
 
 ## Vulnerability reporting {#vulnerability-reporting}
 
@@ -2422,7 +2422,7 @@ ambercast is pre-1.0. The latest published version receives fixes. Older pre-1.0
 # Glossary
 Source: https://kotarotsubaki.github.io/ambercast/reference/glossary/
 
-Every definition here is normative and takes one sentence. Follow each linked owner contract for the complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
+Every definition here is normative and concise. Follow each linked owner contract for the complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
 
 ## Artifact terms {#artifact-terms}
 

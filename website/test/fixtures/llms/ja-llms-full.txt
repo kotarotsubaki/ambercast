@@ -1343,7 +1343,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/how-to/contribute/
 
 import { Steps, LinkCard } from '@astrojs/starlight/components';
 
-外部のコントリビューターは、Issue を立て、フォークしてブランチを作る。3 つの検査を通したら、プルリクエストを出す。
+外部のコントリビューターは、Issue、フォーク、3 つの検査、プルリクエストの順に進める。
 
 ## 前提条件 \{#prerequisites}
 

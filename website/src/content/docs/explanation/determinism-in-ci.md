@@ -1,36 +1,38 @@
 ---
 title: Determinism in CI
-description: Explains the trust boundaries and structural isolation governing Ambercast execution in CI environments.
+description: In CI, ambercast inspects without side effects, writes only the run report and contained evidence by default, refuses to repair, and reports one exit code.
 ---
 
-When you run Ambercast in CI, execution is governed by explicit trust boundaries that isolate inspection, evidence collection, and artifact mutation. Inspection commands like `check` enforce these boundaries structurally through their dependency interfaces rather than through runtime conventions.
+In CI, inspection has no side effects. By default ambercast writes only the run report and contained evidence. It refuses to repair, and it reports the strongest problem as a single exit code.
 
-## Read-only inspection is structural {#read-only-check}
+## Read-only inspection {#read-only-check}
 
-When you use `check` as an inspection gate, its read-only behavior is established directly by its dependency contracts. `CheckDeps` exposes only `ReadStorageAdapter`, layout resolution, discovery, selected configuration, and an optional abort signal.
+`check` has no access to an AI executor, a browser, secrets, a clock, or events. Its storage access is read-only. Read-only is therefore structural, not a convention.
 
-`CheckDeps` intentionally omits the AI executor, browser driver, secrets, clock, and event ports; the code identifies their absence as the read-only boundary. The storage capability is explicitly read-only: reads and existence checks are sufficient for prompts, plans, grounding companions, and orphan findings.
+Reads and existence checks are enough to inspect prompts, plans, grounding, and orphaned artifacts.
 
-Links: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#fresh-plan-decision)
+Related: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#fresh-plan-decision)
 
-## Replay has bounded persistence {#bounded-side-effects}
+## Replay writes are bounded {#bounded-side-effects}
 
-Replay separates execution evidence from source artifact mutation. Run first finalizes an envelope marked `persisted`, then writes its JSON only to the invocation's run-report path.
+`run` writes its report JSON only to the report path of that invocation. It finalizes the envelope as `persisted` before the write, so the file equals the returned envelope.
 
-If that write fails, run returns an envelope with `reportPersistence: "failed"`; a successful batch becomes exit 3 in that condition. In the report schema, `reportPersistence: "not-attempted"` means no persistence write was tried, while `failed` means no partial content became visible at the target path.
+If the write fails, `run` returns the envelope with `reportPersistence: "failed"`. In that case only an otherwise-0 exit becomes 3. Exits 1, 2, 4, and 5 stay as they are. `not-attempted` means no write was tried, and `failed` means no partial content became visible.
 
-Links: [Reports](/ambercast/reference/reports/#report-persistence), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
+In CI, writing grounding back needs `--update-cache` or `ci.updateGroundingCache: true`. The [configuration reference](/ambercast/reference/configuration/#grounding) covers the details.
+
+Related: [Reports](/ambercast/reference/reports/#persistence), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 
 ## Healing is refused by default in CI {#heal-refusal}
 
-Repair cannot silently modify CI artifacts. A real `heal` invocation in CI throws a configuration error unless `config.ci.heal` is true. The CI refusal is evaluated after list-mode short-circuiting, so `heal --list` remains a non-writing discovery operation.
+Outside `--list`, `heal` in CI fails with a configuration error unless `ci.heal` is true. `heal --list` stays a discovery operation that writes nothing.
 
-Healing buffers only the plan and grounding companions in a private overlay; before confirmation or during `--dry-run`, replay attempts can still write contained evidence below the case run directory. A later commit capability is the only route from a buffered companion candidate to real artifact writes.
+Healing buffers plan and grounding candidates privately. It writes them only through the commit step. Replay attempts, including those under `--dry-run`, can still write contained evidence below the case run directory.
 
-Links: [ambercast heal](/ambercast/reference/cli/heal/#ci), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
+Related: [ambercast heal](/ambercast/reference/cli/heal/#ci), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
 
-## One process status represents the strongest blocker {#exit-priority}
+## The strongest problem sets the exit code {#exit-priority}
 
-When execution encounters mixed results, the process reports one predictable process status. The exit selector chooses the strongest candidate independently of iteration order and duplicate candidates. A module-load assertion rejects an invalid rank table, preserving that selection rule as a runtime invariant.
+When results are mixed, the exit code is the strongest candidate. The priority is fixed at `2 > 3 > 4 > 1 > 5 > 0`. Iteration order and duplicate candidates do not change the result.
 
-Links: [Exit codes](/ambercast/reference/exit-codes/#priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+Related: [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)

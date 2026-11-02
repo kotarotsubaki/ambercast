@@ -1,38 +1,38 @@
 ---
 title: CI 中的确定性
-description: 解释 CI 行为背后的信任边界。
+description: 在 CI 中，ambercast 的检查没有副作用，默认只写运行报告和受限证据，拒绝自动修复，并只返回一个退出码。
 ---
 
-本文解释 CI 行为背后的信任边界。在 CI 流程中，Ambercast 将检查操作（`check`）作为门禁使用，其依赖结构被限制在只读范围之内：`CheckDeps` 仅暴露必要的只读与配置能力，同时省略了 AI 执行器、浏览器驱动与密钥等具有副作用的端口。
+在 CI 中，检查没有副作用。ambercast 默认只写运行报告和受限证据，拒绝自动修复，并把最严重的问题作为单一退出码返回。
 
-## 只读检查是结构性的 {#read-only-check}
+## 只读检查 {#read-only-check}
 
-当您在 CI 流水线中运行 `check` 时，该命令之所以能够作为可靠的检查门禁，是因为其只读特性并非依赖运行时约定，而是通过结构设计实现的。`CheckDeps` 仅暴露 `ReadStorageAdapter`、布局解析（layout resolution）、发现（discovery）、选定的配置以及一个可选的中止信号（abort signal）。
+`check` 无法访问 AI 执行器、浏览器、机密、时钟和事件。它对存储的访问也是只读的。因此只读是结构上的保证，不靠约定。
 
-`CheckDeps` 有意省略了 AI 执行器、浏览器驱动、密钥（secrets）、时钟以及事件端口；在代码实现中，正是这些端口的缺失界定了只读边界。在此边界约束下，存储能力也被明确限定为只读：对于 prompt、plan、grounding 伴生文件以及孤立发现（orphan findings），仅进行读取和存在性检查便足以完成检查任务。
+检查提示词、执行计划、定位缓存和孤立产物，只需要读取和存在性检查。
 
-相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#read-only-contract)、[计划生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/#fresh-plan-decision)
+相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#read-only-contract)、[执行计划的生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/#fresh-plan-decision)
 
-## 回放具有受限的持久化范围 {#bounded-side-effects}
+## 回放的写入有边界 {#bounded-side-effects}
 
-在执行测试回放时，运行产物的持久化具有受限的范围，从而将回放证据与源构件的变更区分开来。`run` 执行时，首先定稿一个标记为 `persisted` 的信封（envelope），随后将其 JSON 仅写入该次调用的运行报告路径（run-report path）。
+`run` 只把运行报告 JSON 写到本次调用的报告路径。写入之前，它先把信封定稿为 `persisted`，所以文件与返回的信封一致。
 
-如果该写入操作失败，`run` 会返回一个包含 `reportPersistence: "failed"` 的信封；在此条件下，即便用例批次本身执行成功，进程状态也会变为退出码 3。对于该字段的状态含义，`reportPersistence: "not-attempted"` 表示未曾尝试进行持久化写入，而 `failed` 则表示在目标路径上没有任何部分内容变为可见。关于伴生文件回写的边界，请参阅 [ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)。
+写入失败时，`run` 返回带有 `reportPersistence: "failed"` 的信封。此时只有原本退出码为 0 的运行会变成 3，退出码 1、2、4、5 保持不变。`not-attempted` 表示没有尝试写入，`failed` 表示没有留下可见的部分内容。
 
-相关链接：[报告](/ambercast/zh-cn/reference/reports/#report-persistence)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
+在 CI 中回写定位缓存，需要 `--update-cache` 或 `ci.updateGroundingCache: true`。详情见[配置参考](/ambercast/zh-cn/reference/configuration/#grounding)。
 
-## CI 中默认拒绝修复 {#heal-refusal}
+相关链接：[报告](/ambercast/zh-cn/reference/reports/#persistence)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 
-为了避免修复操作在流水线中静默修改 CI 构件，在 CI 环境中发起真正的 `heal` 调用时，除非 `config.ci.heal` 为 true，否则会抛出配置错误。CI 的这一拒绝判断是在列表模式短路求值之后才进行评估的，因此 `heal --list` 仍然是一个不执行写操作的发现操作。
+## CI 默认拒绝自愈 {#heal-refusal}
 
-在修复流程中，系统仅将 plan 和 grounding 伴生文件缓冲在私有覆盖层（private overlay）中；在确认之前或在 `--dry-run` 期间，回放尝试仍可在用例运行目录下写入受限的证据文件。从缓冲的伴生文件候选对象到真正的构件写入，后续的提交能力（commit capability）是唯一的途径。
+除 `--list` 外，除非 `ci.heal` 为 true，否则 CI 中的 `heal` 会以配置错误失败。`heal --list` 仍是不写入任何内容的发现操作。
+
+自愈把执行计划和定位缓存的候选项缓存在私有区域，只通过提交步骤写入。回放尝试仍可能在用例运行目录下写入受限证据，`--dry-run` 下的尝试也不例外。
 
 相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#ci)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#confirmation-and-writes)
 
-## 单一进程状态代表最强阻塞项 {#exit-priority}
+## 最严重的问题决定退出码 {#exit-priority}
 
-当批次运行产生混合的结果时，系统通过单一的退出状态反映最关键的问题。退出码选择器（exit selector）独立于迭代顺序和重复候选对象，从中选出最强候选状态（strongest candidate）。
+结果混杂时，退出码取最严重的候选项。优先级固定为 `2 > 3 > 4 > 1 > 5 > 0`。迭代顺序和重复的候选项都不会改变结果。
 
-在模块加载阶段，断言机制会拒绝无效的排序表（rank table），从而将该选择规则维持为一项运行时不变式。这使得混合结果能够以一个可预测的进程状态体现，反映出当前的最高优先级阻塞项。
-
-相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#priority)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#next-action-by-exit-code)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
+相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#next-action-by-exit-code)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)

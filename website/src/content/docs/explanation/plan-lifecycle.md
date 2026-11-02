@@ -1,46 +1,62 @@
 ---
 title: Plan lifecycle and freshness
-description: Understand artifact provenance, plan freshness decisions, and grounding companion bindings when evaluating whether an artifact can be replayed.
+description: A plan can be replayed only while it matches the inputs that produced it, and `check` decides that without running anything.
 ---
 
-When you decide whether an artifact can be replayed, you evaluate its provenance and freshness. In ambercast, plan freshness reflects whether an artifact matches the exact inputs that produced it, tracked through `inputsDigest`.
+A plan can be replayed only when it still matches the inputs that produced it and its grounding is bound to it. `check` answers both questions without running anything.
 
-## Provenance inputs {#provenance-inputs}
+## What a plan is built from {#provenance-inputs}
 
-At the core of plan provenance is `inputsDigest`. This value is the SHA-256 hash of canonical JSON containing normalized prompt text, the Plan schema version, the generator-template fingerprint, the producer-bundle fingerprint (`producerBundleFingerprint`), and named target definitions.
+`inputsDigest` is a SHA-256 hash that records what a plan was built from. It covers canonical JSON that holds these inputs:
 
-Tracking these inputs together means that plan freshness is not determined by prompt text alone. A schema or generator-template change makes an existing plan stale even if its prompt and targets have not changed. Furthermore, the producer-bundle fingerprint is independent of the template fingerprint because a producer-contract change can alter generation while prompt, schema, and template bytes remain unchanged.
+- The normalized prompt
+- The plan schema version
+- The generator-template fingerprint
+- The producer-bundle fingerprint (`producerBundleFingerprint`)
+- The definitions of the targets the plan references, which are the names in the plan's `targets`, sorted by name
 
-Links: [Freshness and digests](/ambercast/spec/freshness/#inputs-digest), [Configuration](/ambercast/reference/configuration/#targets), [Compatibility](/ambercast/reference/compatibility/)
+Changing a target the plan does not reference changes neither the digest nor freshness. `executor` is not hashed.
 
-## Fresh-plan decision {#fresh-plan-decision}
+With an unchanged prompt, a change to the schema, the template, or the producer contract still makes the plan stale. The producer-bundle fingerprint is separate from the template fingerprint because a contract change alone can change what generation produces.
 
-To determine whether a plan is fresh, `check` derives current provenance from normalized prompt text and selected target definitions, then compares it with `plan.source.inputsDigest`.
+Related: [Freshness and digests](/ambercast/spec/freshness/#inputs-digest), [Configuration](/ambercast/reference/configuration/#targets), [Compatibility](/ambercast/reference/compatibility/)
 
-A matching digest produces `fresh`. A mismatch produces `stale` with a reason that the plan is stale for the current prompt or target.
+## How `check` decides freshness {#fresh-plan-decision}
 
-Structural and semantic validity are required alongside matching provenance. Invalid JSON, schema failure, noncanonical serialization, or invalid instruction coverage also produce `stale` rather than a trustworthy fresh result.
+`check` recomputes `inputsDigest` from the current prompt and the targets the plan references. It compares the result with `plan.source.inputsDigest`. A match gives `fresh`, and a mismatch gives `stale`.
 
-Links: [ambercast check](/ambercast/reference/cli/check/#results), [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/#stale)
+A matching digest is not enough. A plan is also `stale` in each of these cases:
 
-## Grounding binding and one-to-one correspondence {#grounding-binding}
+- The JSON is invalid.
+- Schema validation fails.
+- The serialization is not canonical.
+- Instruction coverage is invalid.
+- An element intent or a source span is invalid.
+- The plan uses a retired `schemaVersion` (4).
+- A target the plan references is missing from the configuration.
 
-A fresh plan and a valid replay companion represent distinct artifact states tied by a specific binding. `planDigest` hashes replay-relevant plan content while excluding `generatorMeta`. Grounding is current only when its recorded `planDigest` equals the computed plan digest.
+This keeps a broken plan from being reported as `fresh`.
 
-When inspecting a fresh plan, `check` reports `missing-grounding`, `invalid-grounding`, or `stale-grounding` when the grounding companion is respectively absent, invalid, or bound to another plan.
+Related: [ambercast check](/ambercast/reference/cli/check/#results), [Recover stale artifacts](/ambercast/how-to/recover-stale-artifacts/#stale)
 
-Repository configuration contextualizes missing companions. When repository policy is `uncommitted`, a fresh plan without valid grounding is reported as `fresh-without-grounding`, not as a plan-freshness failure.
+## How grounding binds to a plan {#grounding-binding}
 
-To maintain artifact integrity, `check` scans companion artifacts inversely. It reports an artifact with no corresponding test as `orphaned-plan` or `orphaned-grounding`, and it reports an inverse-incapable name as `invalid-artifact-name`.
+A `fresh` plan can still be unreplayable, because replay also needs grounding.
 
-Links: [Grounding document](/ambercast/spec/grounding-document/#plan-digest), [Reports](/ambercast/reference/reports/#check-results)
+`planDigest` hashes the replay-relevant content of a plan, without `generatorMeta`. Grounding is current only when its recorded `planDigest` equals the one computed from the plan. Plan freshness and the grounding binding are judged separately.
+
+`check` reports `missing-grounding` when grounding is absent, `invalid-grounding` when it is invalid, and `stale-grounding` when it is bound to another plan. When the repository policy is `uncommitted`, a `fresh` plan without valid grounding is reported as `fresh-without-grounding`. That is not a freshness failure.
+
+`check` also scans in the opposite direction. An artifact with no matching test is reported as `orphaned-plan` or `orphaned-grounding`. A name that cannot be traced back to a test is reported as `invalid-artifact-name`.
+
+Related: [Grounding document](/ambercast/spec/grounding-document/#plan-digest), [Reports](/ambercast/reference/reports/#check-results)
 
 ## What freshness hands off {#freshness-handoff}
 
-Freshness inspection maintains strict functional boundaries. `check` uses read-only storage plus layout and discovery dependencies; its dependency contract exposes no AI executor, browser driver, secrets, clock, or event port.
+`check` makes no AI call, launches no browser, and writes nothing. Its answer says only whether the plan matches today's inputs.
 
-This boundary isolates provenance assessment from runtime state. A fresh plan is a provenance conclusion, while grounding inspection adds replay-cache lifecycle evidence without redefining plan freshness.
+Problems that appear during replay are separate. When the UI changes and an element fingerprint no longer matches, the result is `fingerprint-mismatch`. That is drift, a runtime condition, and it does not change `inputsDigest`.
 
-Subsequent execution steps manage downstream drift independently. Drift during replay is a separate runtime condition: element fingerprint resolution can classify a `fingerprint-mismatch`, which is handed to replay fallback or healing rather than changing `inputsDigest`.
+Replay or healing takes over from there.
 
-Links: [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff), [Healing model](/ambercast/explanation/healing-model/#three-stages), [Operating contract](/ambercast/agents/operating-contract/#command-contract)
+Related: [Replay and grounding](/ambercast/explanation/replay-and-grounding/#drift-handoff), [Healing model](/ambercast/explanation/healing-model/#three-stages), [Operating contract](/ambercast/agents/operating-contract/#command-contract)

@@ -1,65 +1,57 @@
 ---
-title: 重放与 grounding
-description: 解释重放路径及其安全边界。
+title: 回放与定位缓存
+description: 回放复用已记录的定位缓存，因此完全覆盖的运行无需调用 AI，未命中时默认失败关闭，只有加上 `--resolve` 才会实时解析。
 ---
 
-本文旨在阐明测试重放的执行路径及其安全边界。在 ambercast 中，缓存的 grounding 为重放执行提供凭据。运行流程会针对 AI 步骤以及元素 grounding 步骤变体消费 grounding 数据；而导航（navigation）、文本可见（text-visible）、URL 匹配（URL-match）与元素计数（element-count）等步骤变体则不进行 grounding 查找。一条被覆盖且有效的 AI trace 无需解析 AI 执行器即可直接重放。
+定位缓存覆盖全部步骤时，回放无需调用 AI。未命中默认失败关闭，只有加上 `--resolve`，ambercast 才会实时解析未命中的步骤。
 
-## Grounding 作为重放凭据 {#grounding-as-replay-evidence}
+## 作为回放依据的定位缓存 {#grounding-as-replay-evidence}
 
-在运行流程中，缓存的 grounding 充当了重放判定的凭据。`run` 流程针对 AI 步骤与元素 grounding 步骤变体消费 grounding；而 navigation、text-visible、URL-match 以及 element-count 步骤变体不进行 grounding 查找。如果一条 AI trace 被覆盖且有效，系统即可在无需解析 AI 执行器的情况下直接执行重放。
+`run` 为 `ai` 步骤和绑定元素的步骤读取定位缓存。绑定元素的步骤包括 click、press、fill、fill-secret 和 capture。导航和所有断言直接检查实时页面，不查询定位缓存。
 
-针对元素 grounding，其中存储了可访问性指纹（accessibility fingerprint）。在解析匹配节点时，系统会将存储的算法与哈希值与当前节点生成的新指纹进行比对。
+元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见 [Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器能够将命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 以及 `snapshot-invalid` 明确区分开来；比对不匹配不会被当作命中来处理。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。
 
-相关链接：
-- [Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)
-- [元素指纹](/ambercast/zh-cn/spec/fingerprint/)
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
+回放随后走以下四条路径之一：
 
-## 重放路径：grounding 命中 {#grounding-hit}
+- 有效条目：不调用 AI，直接回放。
+- 完整性失败：无论是否传入 `--resolve`，都失败关闭。
+- 可恢复的未命中且带 `--resolve`：实时解析。
+- 可恢复的未命中且不带 `--resolve`：以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。
 
-当既有凭据有效时，系统将进入命中路径。在 AI-directed replay 中，一条被覆盖且有效的 AI trace 会在选择任何惰性智能体回退（lazy agentic fallback）之前执行重放。
+相关链接：[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
 
-在元素处理层面，一次成功的元素分类会将已存储的指纹提供给重放上下文，而不是请求新的实时解析（live resolution）。
+## 定位缓存命中时 {#grounding-hit}
 
-运行流水线的设计使一份完整的缓存可以在不探测提供商（provider）的情况下执行。
+已覆盖且有效的 AI 轨迹无需解析 AI 执行器即可回放。回放会先走这条路径，再考虑任何代理式回退。
 
-相关链接：
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#replay)
-- [CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#bounded-side-effects)
+元素解析命中时，回放直接使用保存的指纹，不再请求新的解析。缓存完整时，运行无需探测提供方，命中也不会产生 AI 调用事件。
 
-## 重放路径：未命中与显式解析 {#miss-with-explicit-resolution}
+相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#replay)、[CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#bounded-side-effects)
 
-未通过完整性验证的 grounding（包括无效 JSON 或 coverage 或 verification proof 失败）无论是否传入 `--resolve` 均会失败关闭。只有缺失的 grounding 和结构有效的 legacy 或 recoverable 条目属于受 `--resolve` 控制的未命中路径。
+## 显式解析下的未命中 {#miss-with-explicit-resolution}
 
-传入 `--resolve` 时，元素 grounding 的未命中可以进行实时解析，并使用解析出的元素指纹更新对应的 grounding 条目。
+完整性校验失败的定位缓存，即使带 `--resolve` 也会失败关闭，例如 JSON 无效，或覆盖证明、校验证明失败。
 
-缓存命中不会发出任何 AI 调用事件（AI-call event）。
+`--resolve` 只处理两类情况：定位缓存不存在，以及结构有效但可恢复的条目。由已淘汰格式版本写入的定位缓存也属于可恢复情况。不带 `--resolve` 时，`run` 会将其报告为 `GROUNDING_UNRESOLVED`，而 `run --resolve --update-cache` 会重新生成它。
 
-相关链接：
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
-- [控制 grounding 回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
+带 `--resolve` 时，元素未命中会实时解析。只有通过的 `confirms` 步骤确认了绑定，且回写开关允许时，ambercast 才会写入条目。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
 
-## 重放路径：未解析的未命中 {#unresolved-miss}
+相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)、[控制定位缓存回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
 
-未传入 `--resolve` 时，run 会同时抑制冷启动（cold-start）与可恢复未命中（recoverable-miss）的实时解析。AI 导向步骤缺少可用 trace 时会以 `grounding-unresolved` 失败关闭（退出码 4），并提示使用 `--resolve`。
+## 不解析时的未命中 {#unresolved-miss}
 
-元素 grounding 未命中同样会失败关闭，而不会对元素进行实时解析。
+不带 `--resolve` 时，`run` 既不会实时解析冷启动未命中，也不会解析可恢复的未命中。在 AI 驱动的回放中，没有可用轨迹的 `ai` 步骤会以 `grounding-unresolved` 失败关闭，退出码为 4，并提示使用 `--resolve`。
 
-相关链接：
-- [ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)
-- [读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
+元素未命中同样失败关闭，不会实时解析元素。
 
-## 漂移交接 {#drift-handoff}
+相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
 
-当重放检测到界面变化时，执行将脱离重放的缓存决策，转入自愈范畴。如果匹配节点当前的可访问性指纹与存储的指纹不同，即判定为 `fingerprint-mismatch`。
+## 漂移的移交 {#drift-handoff}
 
-运行用例将 `fingerprint-mismatch` 记录为一种独立的分类情况，与成功的 grounded 解析截然区分。
+`fingerprint-mismatch` 表示匹配到的元素当前指纹与保存的指纹不同。`run` 将其记录为独立的分类，与解析成功的情况区分开。
 
-自愈流程首先从一次失败关闭的基线重放开始；如果在重放后仍然存在失败，流程可以尝试进行 grounding 修复（grounding repair）。
+自愈先做一次失败关闭的基线回放，只有仍有失败时才尝试修复。
 
-相关链接：
-- [自愈模型](/ambercast/zh-cn/explanation/healing-model/#three-stages)
-- [UI 变更后的测试自愈](/ambercast/zh-cn/tutorials/repair-your-first-drift/)
+相关链接：[自愈模型](/ambercast/zh-cn/explanation/healing-model/#three-stages)、[UI 变更后的测试自愈](/ambercast/zh-cn/tutorials/repair-your-first-drift/)

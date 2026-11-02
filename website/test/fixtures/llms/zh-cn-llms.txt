@@ -36,12 +36,12 @@
 - [错误代码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/error-codes/): 稳定的错误代码及其类别、作用域和退出码，以及每个代码的 details 包含的内容。
 - [退出码](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/exit-codes/): ambercast 返回的进程退出码，以及把多个结果合并为一个退出码时的优先级。
 - [环境变量](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/environment-variables/): ambercast 读取的环境变量，以及不会传给 AI 提供方子进程的变量。
-- [文件布局](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/file-layout/): 详细定义 Ambercast 的路径运算规则、产物写入方、生成时机以及基于实现的仓库提交策略。
-- [JSON Schema 规范](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/json-schemas/): 规范重新构建时的发布约定，并梳理当前生成的 JSON Schema 产物与结构约束边界。
-- [兼容性](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/compatibility/): 说明产物格式的兼容性与重新生成要求。
-- [变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/changelog/): 记录 ambercast 用户可见的产品行为与公共契约变更，优先展示破坏性变更。
-- [安全策略](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/security-policy/): ambercast 的版本支持范围与安全漏洞私下报告流程。
-- [术语表](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/): ambercast 全站术语的权威规范性定义以及翻译人员必须保留的字面量词元索引。
+- [文件布局](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/file-layout/): 说明 Ambercast 为伴生文件和运行产物推导的路径、各文件的写入方以及写入时机。
+- [JSON Schema 规范](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/json-schemas/): 说明 Ambercast 配置、执行计划、定位缓存与报告文档所用 JSON Schema 的发布元数据、生成文件与结构约束边界。
+- [兼容性](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/compatibility/): 说明各软件包版本的产物格式兼容性，以及哪些变更要求重新生成执行计划、定位缓存或报告。
+- [变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/changelog/): 记录 ambercast 各版本中用户可见的产品行为与公共契约变更，破坏性变更排在最前。
+- [安全策略](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/security-policy/): 哪些 ambercast 版本会获得安全修复，以及如何私下报告安全漏洞。
+- [术语表](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/): ambercast 全站术语的规范性定义，以及翻译时必须保持原样的字面量词元索引。
 - [MCP 工具](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/mcp-tools/): ambercast MCP 工作流的工具、输入、结果与错误契约。
 
 ### CLI

@@ -1,13 +1,13 @@
 ---
 title: Glossary
-description: Normative site-wide terminology and index of literal translation-invariant tokens for Ambercast.
+description: The normative site-wide terms of Ambercast and the index of literal tokens that translators keep verbatim.
 ---
 
-This page is the single owner of site-wide terminology and the index of literal tokens that translators must preserve. Every definition here is normative and kept to a single sentence; follow each linked owner contract for complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
+Every definition here is normative and concise. Follow each linked owner contract for the complete field, flag, status, or error tables. Planned-only tokens have no current runtime semantics and are not available in current releases.
 
 ## Artifact terms {#artifact-terms}
 
-The following schema- and resolver-bound definitions govern the core artifact model:
+These schema- and resolver-bound definitions govern the core artifact model.
 
 | term | normative definition | owning schema / command | not to be confused with |
 | --- | --- | --- | --- |
@@ -23,16 +23,17 @@ The following schema- and resolver-bound definitions govern the core artifact mo
 
 ## Execution terms {#execution-terms}
 
-The following command- and report-bound definitions govern execution, target resolution, and reporting contracts:
+These command- and report-bound definitions govern execution, target resolution, and reporting contracts.
 
 | term | normative definition | owning schema / command | not to be confused with |
 | --- | --- | --- | --- |
+| replay | Replay is `run` executing a plan with its grounding; without `--resolve` it makes zero AI calls. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/) | heal |
 | freshness | Freshness is the provenance condition `check` reports for Plan/Grounding artifacts, not an execution outcome. | `ambercast check`; [Freshness and digests](/ambercast/spec/freshness/) | run success |
 | stale | Stale is a completed `check` status for an artifact whose freshness cannot be trusted. | `CompletedCheckResult`; [ambercast check](/ambercast/reference/cli/check/#status-vocabulary) | UI drift |
 | drift | Drift is a localized change in an element's accessibility neighborhood that changes its fingerprint. | fingerprint resolver; [Element fingerprint](/ambercast/spec/fingerprint/) | stale Plan provenance |
-| heal | Heal is the repair command whose non-list mode is permitted only by CI policy and an `idempotent` selected target. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/) | run grounding fallback |
-| target | A target is a named configured browser destination selected explicitly, by configured default, or when it is the sole configured target. | `resolveTarget`; [Configuration](/ambercast/reference/configuration/#key-table) | prompt |
-| replay isolation | Replay isolation is the target policy `healReplayIsolation`; `idempotent` permits heal and `stateful` rejects it. | target config / `ambercast heal` | Plan target definition |
+| heal | Heal is the repair command. Outside `--list`, it requires every target the plan references to set `healReplayIsolation: "idempotent"`, and in CI it also requires `ci.heal: true`. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#preconditions); [ambercast heal in CI](/ambercast/reference/cli/heal/#ci) | run grounding fallback |
+| target | A target is a named configured browser destination. Each plan step names its target, and `generate` chooses it from the configured targets, using `defaultTarget` when the prompt does not identify one. `run`, `check`, and `heal` take targets from the plan. | `defaultTarget`; [Configuration](/ambercast/reference/configuration/#key-table) | prompt |
+| replay isolation | Replay isolation is the target policy `healReplayIsolation`; `idempotent` permits heal and `stateful` rejects it, and heal checks every target the plan references. | target config / `ambercast heal` | Plan target definition |
 | report envelope | A report envelope is the versioned command-discriminated structured result returned by a reporting command. | `ReportEnvelope`; [Reports](/ambercast/reference/reports/#envelope) | persisted `report.json` |
 | report persistence | Report persistence is the run-envelope state `persisted`, `failed`, or `not-attempted` for the finalized envelope write. | run `ReportEnvelope`; [Reports](/ambercast/reference/reports/#persistence) | semantic test result |
 | secret reference | A secret reference is a whole-value string accepted by `SecretRef`, with one or more dot-separated segments of ASCII letters, digits, or underscores after `secrets.`. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal secret |
@@ -41,11 +42,11 @@ The following command- and report-bound definitions govern execution, target res
 | `secrets.allow` | `secrets.allow` is the configuration array of pre-approved logical secret names, or the high-risk `"*"` value that accepts every AI-proposed name without per-name review. | `RawConfig`; [Configuration](/ambercast/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` values |
 | `SecretNameChoice` | `SecretNameChoice` is the provider-facing strict choice between a projected `allowedName` and a new `nameHint`, both resolved locally before a committed `SecretRef` exists. | `SecretNameChoice`; [Value types](/ambercast/spec/value-types/#shared-types) | committed `SecretRef` |
 
-`stale` belongs to check results and is not a run result status. Heal's idempotent-target check is skipped only in list mode.
+`stale` belongs to check results and is not a run result status. Heal's idempotent-target check is skipped in list mode.
 
 ## Translation invariant registry {#translation-invariant-registry}
 
-The following registry is the exhaustive inventory of literal tokens that must be preserved verbatim by translators across reference documentation. The report version in the fourth column is the `REPORT_SCHEMA_VERSION` recorded in that release's release commit.
+This registry is the index of literal tokens that translators keep verbatim across the Reference pages. In a version row, the fourth column holds the `REPORT_SCHEMA_VERSION` recorded in that release's release commit.
 
 | invariant | normative sentence | owner | not to be confused with |
 | --- | --- | --- | --- |
@@ -57,13 +58,13 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `--allow-headless` | `--allow-headless` lifts view's non-interactive refusal; it is a no-op when the terminal is already interactive. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#interactive-gate) | implemented `--headed` |
 | `--resolve` | `--resolve` opts run into live AI resolution when grounding is missing; without it, run rejects the miss. | `ambercast run`; [ambercast run](/ambercast/reference/cli/run/#flags) | offline test discovery |
 | `--clear` | `--clear` is planned-only and has no accepted current baseline parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | file deletion by current commands |
-| `--config` | `--config` is command-local and parsed only by generate and check. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
-| `--dir` | `--dir` names the directory `ambercast init` scaffolds into. | `ambercast init`; [ambercast init](/ambercast/reference/cli/init/#flags) | config `testDir` |
+| `--config` | `--config` is command-local and parsed by `generate`, `check`, and `view`. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
+| `--dir` | `--dir` names the directory `ambercast init` scaffolds into, and selects the session root of `ambercast mcp`. | `ambercast init`; [ambercast init](/ambercast/reference/cli/init/#flags); [ambercast mcp](/ambercast/reference/cli/mcp/#flags) | config `testDir` |
 | `--dry-run` | `--dry-run` withholds artifact writes for generate and heal. | generate/heal; [ambercast generate](/ambercast/reference/cli/generate/#flags) | `--list` |
 | `--force` | `--force` opts the implemented generate command out of fresh-Plan reuse; for `ambercast init` it replaces an existing configuration instead of rejecting it. | `ambercast generate`; [ambercast generate](/ambercast/reference/cli/generate/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | heal `--yes` |
 | `--host` | `--host` selects view's bind address; a concrete IP or `localhost`, never a wildcard. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#host-binding) | target `baseUrl` |
-| `--json` | `--json` selects serialized structured-report output after an implemented command other than `init` or `view` returns. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
-| `--list` | `--list` is parsed by `generate`, `run`, `check`, and `heal`; each command page owns its listing result semantics. Neither `init` nor `view` accepts it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
+| `--json` | `--json` selects serialized structured-report output. `generate`, `run`, `check`, and `heal` accept it. | CLI renderer; [Reports](/ambercast/reference/reports/#envelope) | MCP JSON-RPC |
+| `--list` | `--list` is parsed by `generate`, `run`, `check`, and `heal`; each command page owns its listing result semantics. `init`, `view`, and `mcp` do not accept it. | CLI parser; [CLI overview](/ambercast/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
 | `--no-reset` | `--no-reset` is planned-only and has no accepted current run parser semantics. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#planned-boundary) | `--force` |
 | `--port` | `--port` fixes view to a single strict port instead of auto-incrementing through candidates. | `ambercast view`; [ambercast view](/ambercast/reference/cli/view/#port-selection) | config `viewer.port` |
 | `--yes` | `--yes` authorizes heal settlement without an interactive confirmation, and skips init's confirmation prompt; neither substitutes for the user's own review. | `ambercast heal`; [ambercast heal](/ambercast/reference/cli/heal/#flags); [ambercast init](/ambercast/reference/cli/init/#flags) | generate `--force` |
@@ -95,7 +96,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `ambercast check` | `ambercast check` is the implemented read-only freshness command. | [ambercast check](/ambercast/reference/cli/check/) | `ambercast run` |
 | `ambercast generate` | `ambercast generate` is the implemented Plan-generation command. | [ambercast generate](/ambercast/reference/cli/generate/) | `ambercast run` |
 | `ambercast heal` | `ambercast heal` is the implemented guarded artifact-repair command. | [ambercast heal](/ambercast/reference/cli/heal/) | run fallback |
-| `ambercast init` | `ambercast init` is implemented and writes four scaffold files. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
+| `ambercast init` | `ambercast init` is implemented and plans four scaffold artifacts. | [ambercast init](/ambercast/reference/cli/init/#usage) | `ambercast generate` |
 | `ambercast mcp` | `ambercast mcp` starts the implemented stdio MCP server. | [ambercast mcp](/ambercast/reference/cli/mcp/#usage) | MCP tool name |
 | `ambercast restore` | `ambercast restore` is planned-only and rejected by the current parser. | [ambercast baseline and restore](/ambercast/reference/cli/baseline-restore/#status) | implemented command |
 | `ambercast review` | `ambercast review` is planned-only even though the runtime report schema contains a review branch. | [ambercast review](/ambercast/reference/cli/review/#status) | schema availability |
@@ -112,7 +113,7 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `dryRun` | `dryRun` is an input field for the CLI/MCP heal preview request; a completed `HealResult` represents preview with `application: preview-only`, not a `dryRun` field. | heal request / [MCP Tools](/ambercast/reference/mcp-tools/#heal-preview-and-apply) | HealResult representation |
 | `fresh-without-grounding` | `fresh-without-grounding` is a completed check status distinct from `fresh`. | check result; [ambercast check](/ambercast/reference/cli/check/#status-vocabulary) | missing Plan |
 | `grounding.schema.json` | `grounding.schema.json` is the generated Grounding JSON Schema and npm export target. | [JSON Schemas](/ambercast/reference/json-schemas/#generated-artifacts) | Grounding instance |
-| `healReplayIsolation` | `healReplayIsolation` is the target policy whose `idempotent` value is required by heal. | target config / heal | browser mode |
+| `healReplayIsolation` | `healReplayIsolation` is the target policy whose `idempotent` value heal requires on every target the plan references. | target config / heal | browser mode |
 | `inputsDigest` | `inputsDigest` records the five-input Plan provenance digest. | `computeInputsDigest`; [Freshness and digests](/ambercast/spec/freshness/) | `planDigest` |
 | `isError` | `isError` classifies implemented MCP tool results, with exit-code mappings and MCP-specific failures. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | test-red status |
 | `outputSchema` | `outputSchema` is omitted from every implemented MCP tool definition because the report schema is too large for `tools/list`. | [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) | generated npm JSON Schema |
@@ -131,4 +132,13 @@ The following registry is the exhaustive inventory of literal tokens that must b
 | `testMatch` | `testMatch` requires at least one inclusion match for a relative path. | discovery matcher; [Discovery patterns](/ambercast/reference/discovery-patterns/#selection) | `testIgnore` |
 | `{{secrets.name}}` | `{{secrets.name}}` exemplifies a whole-value secret reference whose body maps to an environment key. | `SecretRef`; [Prompt file format](/ambercast/reference/prompt-format/#secret-references) | literal credential |
 
-See also: [CLI overview](/ambercast/reference/cli/overview/), [Configuration](/ambercast/reference/configuration/), [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/reference/error-codes/), [Exit codes](/ambercast/reference/exit-codes/), [JSON Schemas](/ambercast/reference/json-schemas/), [Environment variables](/ambercast/reference/environment-variables/), [MCP Tools](/ambercast/reference/mcp-tools/).
+## See also {#see-also}
+
+- [CLI overview](/ambercast/reference/cli/overview/)
+- [Configuration](/ambercast/reference/configuration/)
+- [Reports](/ambercast/reference/reports/)
+- [Error codes](/ambercast/reference/error-codes/)
+- [Exit codes](/ambercast/reference/exit-codes/)
+- [JSON Schemas](/ambercast/reference/json-schemas/)
+- [Environment variables](/ambercast/reference/environment-variables/)
+- [MCP Tools](/ambercast/reference/mcp-tools/)

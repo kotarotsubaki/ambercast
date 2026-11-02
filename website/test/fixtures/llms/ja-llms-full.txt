@@ -2033,115 +2033,124 @@ ambercast は、設定ファイルのパス、AI プロバイダー、シーク�
 # ファイルレイアウト
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/file-layout/
 
-Ambercastにおけるパス計算、成果物の生成タイミング、および実装に基づくリポジトリポリシーを定義します。テストディレクトリ内のテストファイルから導出されるコンパニオンファイルや、実行時に生成される成果物の配置規則を規定します。
+Ambercast は、コンパニオンファイルと実行成果物のパスをすべてテストディレクトリと実行ディレクトリから解決する。本ページは、導出される各パスと、その書き込み元・タイミング、実装が持つコミットポリシーを示す。
 
 ## コンパニオン {#companions}
 
 | 入力パス | 導出パス | 規則 |
 | --- | --- | --- |
-| `<testDir>/<dirs>/<name>.test.md` | `<testDir>/<dirs>/<name>.ambercast.plan.json` | 末尾の `.test.md` のみを置換し、`<name>` に含まれる他のドットは保持します。 |
-| `<testDir>/<dirs>/<name>.test.md` | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | 同様に隣接する末尾サフィックスの変換を適用します。 |
+| `<testDir>/<dirs>/<name>.test.md` | `<testDir>/<dirs>/<name>.ambercast.plan.json` | 末尾の `.test.md` だけを置換する。`<name>` に含まれる他のドットは保持する。 |
+| `<testDir>/<dirs>/<name>.test.md` | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | 隣接する末尾サフィックスに同じ変換を適用する。 |
 
-順方向のマッピングは、`testDir` 内に存在し、末尾が厳密に `.test.md` で終わり、かつ空でない名前を持つパスのみを受け入れます。無効な呼び出し元の入力に対しては `RangeError` を送出します。
+順方向のマッピングは、`testDir` 内にあり、末尾が厳密に `.test.md` で、名前が空でないパスだけを受け入れる。無効な呼び出し元の入力は `RangeError` を送出する。
 
-逆方向のマッピングは、ツリー内の厳密なプランまたはグラウンディングのサフィックスのみを認識し、それ以外の場合は `undefined` を返します。
+逆方向のマッピングが認識するのは、ツリー内で厳密に一致する計画（plan）かグラウンディングのサフィックスだけである。それ以外には `undefined` を返す。
 
-## 実行アーティファクト {#run-artifacts}
+## 実行成果物 {#run-artifacts}
 
-| アーティファクト | 正確なパス | 書き込み元 / タイミング | 実装に基づくコミットポリシー |
+| 成果物 | 正確なパス | 書き込み元 / タイミング | コミットポリシー |
 | --- | --- | --- | --- |
-| プロンプト | `<testDir>/<dirs>/<name>.test.md` | ユーザーが作成する入力です。Ambercastがこれを読み取ります。 | Gitに関する判断はコード化されていません。Gitの手順は how-to/manage-artifacts-in-git が管轄します。 |
-| プランコンパニオン | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` が新規生成されたプランを書き込みます。`heal` は承認された確定（settlement）の後にのみこれを置き換えることができます。 | ランタイムはこれをコミット済みの入力として扱いますが、Git操作は一切行いません。 |
-| グラウンディングコンパニオン | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | `generate` が作成または修復します。`run` はライトバックポリシーに基づいて変更されたグラウンディングを書き込む場合があります。`heal` は確定後にこれを置き換えることができます。 | `grounding.repositoryPolicy` の既定値は `committed` であり、`uncommitted` に設定することも可能です。Ambercast自体はGit操作を一切行いません。 |
-| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` および `heal` が、ケースのエビデンス用に単一の呼び出し識別子を使用します。run IDはタイムスタンプとUUIDからなる安全なセグメントです。 | このディレクトリに対するリポジトリポリシーは存在しません。Gitの手順は how-to/manage-artifacts-in-git が管轄します。 |
-| ケースディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | `run` がケースのエビデンス収集用にこのディレクトリを提供します。 | 呼び出しディレクトリと同様です。 |
-| 実行時スクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | `run` が、対象となる失敗したライブブラウザステップに対して書き込みます。シークレット検出により省略される場合があります。 | 呼び出しディレクトリと同様です。 |
-| ヒール試行ディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | `heal` が試行ごとに正の序数を割り当て、その試行のエビデンスおよびオーバーレイをその配下に隔離して格納します。 | 呼び出しディレクトリと同様です。 |
-| ヒールスクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | 共有キャプチャパスが、対象となる失敗したステップのエビデンスを試行スコープのケースディレクトリ内に書き込みます。 | 呼び出しディレクトリと同様です。 |
-| 実行レポート | `<runsDir>/<runId>/report.json` | 実行完了後に `run` のみが確定したバッチエンベロープを書き込みます。アトミック書き込みに失敗すると `reportPersistence` が変化します。 | 呼び出しディレクトリと同様です。 |
+| プロンプト | `<testDir>/<dirs>/<name>.test.md` | ユーザーが書く入力。Ambercast は読み取る。 | リポジトリに関する判断はコード化されていない。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
+| 計画コンパニオン | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` が新規に生成した計画を書く。`heal` は承認された確定（settlement）の後にだけ置き換えられる。 | Ambercast はコミット済みの入力として扱う。リポジトリ操作は行わない。 |
+| グラウンディングコンパニオン | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | `generate` が作成または修復する。`run` は書き戻しポリシーに従い、変更されたグラウンディングを書くことがある。`heal` は確定後に置き換えられる。 | `grounding.repositoryPolicy` の既定値は `committed` で、`uncommitted` にもできる。Ambercast 自体はリポジトリ操作を行わない。 |
+| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` と `heal` は、ケースのエビデンスに単一の呼び出し識別子を使う。run ID はタイムスタンプと UUID からなる安全なセグメントである。 | Ambercast はこのディレクトリにリポジトリポリシーを持たない。`ambercast init` は既定の `runsDir` に対して `tests/ambercast/.runs/` を `.gitignore` に追記する。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
+| ケースディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | `run` が、ケースのエビデンス収集にこのディレクトリを渡す。 | 呼び出しディレクトリと同じ。 |
+| 実行スクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | `run` が、対象となる失敗したライブブラウザのステップに書く。シークレット検出により省略されることがある。 | 呼び出しディレクトリと同じ。 |
+| ヒール試行ディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | `heal` が試行ごとに正の序数を割り当てる。その試行のエビデンスとオーバーレイは、このディレクトリ配下に閉じ込める。 | 呼び出しディレクトリと同じ。 |
+| ヒールスクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/<stepId>.png` | 共有キャプチャパスが、対象となる失敗ステップのエビデンスを、試行単位のケースディレクトリに書く。 | 呼び出しディレクトリと同じ。 |
+| 実行レポート | `<runsDir>/<runId>/report.json` | `run` が実行後に確定したバッチエンベロープを書く。[`ambercast view`](/ambercast/ja/reference/cli/view/)がこれを読む。アトミック書き込みに失敗すると `reportPersistence` が変わる。 | 呼び出しディレクトリと同じ。 |
 
-スクリーンショットはベストエフォートで、キャプチャや保存に失敗した場合も省略される。
+スクリーンショットはベストエフォートである。キャプチャや保存に失敗した場合も省略される。
 
-`runsDir` は独立して設定され、既定値は `tests/ambercast/.runs` です。レイアウト解決処理によって `testDir` から導出されることはありません。
+`runsDir` は独立して設定され、既定値は `tests/ambercast/.runs` である。Ambercast は `testDir` から導出しない。
 
-`runId` は `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$` に一致する必要があり、区切り文字、ドットセグメント、および空のIDを排除します。
+`runId` は `^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$` に一致する必要がある。このパターンにより、区切り文字、ドットセグメント、空の ID を排除する。
 
-`report.json` を永続化するのは `run` のみです。`generate`、`check`、および `heal` は、このレイアウト書き込みを行わずにエンベロープを返します。
+`report.json` は `run` が書く。他のレポート系コマンドは、書き込みを行わずにエンベロープを返す。
 
-## 関連情報
+## 関連項目 {#see-also}
 
 - [設定](/ambercast/ja/reference/configuration/#key-table)
 - [レポート](/ambercast/ja/reference/reports/#persistence)
 - [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity)
-- [Gitでの成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)
-- [プランのライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/)
+- [Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)
+- [計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/)
 
 ---
 
 # JSON スキーマ
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/json-schemas/
 
-Ambercast におけるスキーマ再構築時の公開規約を定義し、現在生成されているスキーマの一覧を提示します。ドキュメントサイトおよび npm エクスポート向けに計画されている公開メタデータと、ビルド時に生成されるアーティファクトの仕様を説明します。
+ambercast は JSON Schema draft 2020-12 のファイルを公開する。これらは、設定ファイル、計画（plan）ドキュメント、グラウンディングキャッシュ、レポートを検証する。このページは、公開メタデータ、生成ファイル、スキーマで表現できない事項を示す。
 
 ## 公開メタデータ {#publication-metadata}
 
-ambercast は、これらのメタデータと、ドキュメントサイトおよび npm 間でバイト単位で同一なファイルを公開しています。
+現在の契約を表すスキーマは `main` 上に 4 つある。最新リリースより新しいスキーマバージョンは、リリースされた時点で[互換性](/ambercast/ja/reference/compatibility/#compatibility-table)に載る。
 
-| アーティファクト | 公開パスおよび `$id` | バージョン | `title` | `description` | スコープ | 状態 |
+| artifact | 公開パスと `$id` | バージョン | `title` | `description` | スコープ | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
-| config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がありません） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
-| plan（履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持される、凍結済みの Plan v2 スナップショット。 | 利用可能 |
-| plan（履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持される、凍結済みの Plan v3 スナップショット。 | 利用可能 |
-| plan（履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持される、凍結済みの Plan v4 スナップショット。 | 利用可能 |
+| config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がない） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | targets と steps を含む、現在の完成した `PlanDocument`。 | 利用可能 |
-| grounding（履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | 廃止された契約の利用者のために保持される、凍結済みの Grounding v2 スナップショット。 | 利用可能 |
-| grounding（履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | 廃止された契約の利用者のために保持する、凍結済みの Grounding v3 スナップショット。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.11"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
-各スキーマの `$id` はその公開パス URL と一致します。バイト単位で同一のスキーマファイルが、ドキュメントサイトと npm の `schemas/` エクスポートに公開されています。
+廃止された契約の利用者のために、凍結済みのスナップショットを 5 つ残している。サイトはコミット済みのファイルからこれらを公開し、npm パッケージはエクスポートしない。
 
-現在の Astro 設定では、`site` は規定の `https://kotarotsubaki.github.io` ホスト、base は `/ambercast` に設定されています。上記の公開 URL はこのホストを使用します。
+| artifact | 公開パスと `$id` | バージョン | `title` | `description` | スコープ | 状態 |
+| --- | --- | --- | --- | --- | --- | --- |
+| plan （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v2.schema.json` | 2 | `ambercast plan schema v2` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持する、凍結済みの 計画 v2 スナップショット。 | 利用可能 |
+| plan （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json` | 3 | `ambercast plan schema v3` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持する、凍結済みの 計画 v3 スナップショット。 | 利用可能 |
+| plan （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持する、凍結済みの 計画 v4 スナップショット。 | 利用可能 |
+| grounding （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | 廃止された契約の利用者のために保持する、凍結済みの グラウンディング v2 スナップショット。 | 利用可能 |
+| grounding （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | 廃止された契約の利用者のために保持する、凍結済みの グラウンディング v3 スナップショット。 | 利用可能 |
+
+各 `$id` は公開パスの URL と一致する。サイトは現在の 4 つのスキーマを、`dist/schema/` のファイルとバイト単位で同一のコピーとして配信する。npm パッケージはこの 4 つを `ambercast/schema/<name>.json` としてエクスポートする。
+
+サイト設定では、`site` を `https://kotarotsubaki.github.io` ホスト、base を `/ambercast` に設定する。上記の公開 URL はこのホストを使う。
 
 ## 生成されるアーティファクト {#generated-artifacts}
 
 | 生成ファイル | 検証対象 | 生成元 | npm エクスポート |
 | --- | --- | --- | --- |
-| `plan.schema.json` | Plan の `schemaVersion` が 5 であり、provenance source、targets、steps を含む現在の完成した `PlanDocument`。 | JSON Schema 2020-12 として変換された Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
-| `grounding.schema.json` | Grounding の `schemaVersion` が 4 であり、`planDigest` およびステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 として変換された Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
-| `config.schema.json` | `$schema` が必須であり、それ以外に宣言される設定は任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 として変換された Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report の `schemaVersion` 3.11 を含む、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 として変換された Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `plan.schema.json` | 計画の `schemaVersion` が 5 であり、provenance source、targets、steps を含む現在の完成した `PlanDocument`。 | JSON Schema 2020-12 に変換した Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
+| `grounding.schema.json` | グラウンディングの `schemaVersion` が 4 であり、`planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 に変換した Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
+| `config.schema.json` | `$schema` が必須で、宣言される設定はそれ以外すべて任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 に変換した Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
+| `report.schema.json` | Report の `schemaVersion` 3.11 を持つ、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 に変換した Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-`npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行します。これによりスキーマディレクトリが再帰的に作成され、上記のちょうど 4 つのファイルが書き出されます。
+`npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行する。このスクリプトはスキーマディレクトリを再帰的に作成し、上記 4 つのスキーマファイルを書き出す。`dist/manifest/` 配下にはマニフェストファイルも書き出す。
 
-確認された生成ファイルは、`$schema` を通じて JSON Schema draft 2020-12 を宣言し、公開メタデータに示した `$id` も含んでいます。
+確認済みの生成ファイルは、`$schema` で JSON Schema draft 2020-12 を宣言する。各ファイルは、公開メタデータに示した `$id` も宣言する。
 
 ## 構造上の境界 {#structural-boundary}
 
-Plan、Grounding、config、report の各 JSON Schema は、個別の手書き定義として保守されるのではなく、Zod から導出されています。
+計画、グラウンディング、config、レポートの JSON Schema は Zod から導出する。個別の手書き定義としては保守しない。
 
-Plan の重複するステップ ID は、JSON Schema 2020-12 では配列項目間の射影フィールドの一意性を表現できないため、Zod のみによる意味論的リファインメントとなっています。
+計画の重複したステップ ID は、Zod だけが担う意味上のリファインメントである。JSON Schema 2020-12 は、配列項目にまたがる射影フィールドの一意性を表現できない。
 
-生成された Plan の JSON Schema を検証するだけでは、重複ステップ ID の一意性は担保されません。統合された検証境界については [適合性](/ambercast/ja/spec/conformance/) に記載されています。
+生成された計画の JSON Schema だけを検証しても、ステップ ID の重複がないことは確かめられない。両者を合わせた境界は[適合性](/ambercast/ja/spec/conformance/)に記載している。
 
 ## レポートスキーマ {#report-schema}
 
-`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされています。Report の `schemaVersion` 3.11、必須のステップ Target 識別情報、および実行された run と完了した heal の結果に含まれるセッション一覧を含む、構造化されたレポートエンベロープとコマンド固有の結果を検証します。
+`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされる。このスキーマは、構造化されたレポートエンベロープとコマンド固有の結果を検証する。対象には、Report の `schemaVersion` 3.11、必須のステップ Target 識別情報、実行された run と完了した heal の結果にあるセッション一覧が含まれる。
 
-関連リンク: [設定](/ambercast/ja/reference/configuration/#key-table), [レポート](/ambercast/ja/reference/reports/#envelope), [適合性](/ambercast/ja/spec/conformance/), [計画ドキュメント](/ambercast/ja/spec/plan-document/), [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)
+## 関連項目 {#see-also}
+
+- [計画ドキュメント](/ambercast/ja/spec/plan-document/)
+- [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)
+- [設定](/ambercast/ja/reference/configuration/#key-table)
+- [適合性](/ambercast/ja/spec/conformance/)
+- [レポート](/ambercast/ja/reference/reports/#envelope)
 
 ---
 
 # 互換性と再生成
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/compatibility/
 
-ambercast が生成する Plan や Grounding などのアーティファクト形式における互換性と、入力や規約の変更に伴う再生成の境界について規定します。
+各リリースはスキーマバージョンと要素フィンガープリントタグを固定する。以下の表は、リリースごとに固定されるバージョンと、再生成を要する変更を示す。
 
 ## 互換性テーブル {#compatibility-table}
 
-パッケージの各バージョンと、各アーティファクトのスキーマバージョンおよび要素フィンガープリントタグの対応関係は以下の通りです。
-
-| パッケージバージョン | Plan `schemaVersion` | Grounding `schemaVersion` | 要素フィンガープリントタグ | レポート `schemaVersion` |
+| パッケージバージョン | 計画（plan） `schemaVersion` | グラウンディング `schemaVersion` | 要素フィンガープリントタグ | レポート `schemaVersion` |
 | --- | --- | --- | --- | --- |
 | `0.1.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
@@ -2150,33 +2159,47 @@ ambercast が生成する Plan や Grounding などのアーティファクト�
 | `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
 | `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 
-表には 0.1.0、0.2.0、Plan または Grounding のスキーマバージョンが変更された各リリース、および 0.8.0 以降のすべてのリリースを記載します。
+表には 0.1.0、0.2.0、0.8.0 以降のすべてのリリース、計画またはグラウンディングのスキーマバージョンが変わった各リリースを載せる。最新リリースより後に `main` で変わったスキーマバージョンは、リリース時にこの表へ載る。現在公開中のスキーマは [JSON スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata) を参照する。
 
-バージョン 0.2.0 では、Plan のスキーマバージョンを変更することなくプロバイダのリクエスト規約が変更されました。この変更により `producerBundleFingerprint` およびすべてのプロンプトの `inputsDigest` が変化するため、0.1.0 で生成された Plan は stale（陳腐化）として扱われます。
+バージョン 0.2.0 では、計画のスキーマバージョンを上げずにプロバイダーのリクエスト規約が変わった。この変更で `producerBundleFingerprint` とすべてのプロンプトの `inputsDigest` が変わり、0.1.0 の計画は stale（陳腐化）になった。詳しくは [変更履歴](/ambercast/ja/reference/changelog/#release-020) を参照する。
 
-スキーマバージョン 1 または 2 の Plan は、インプレースで移行（マイグレーション）されることはありません。`generate` はいずれも fresh ではないものとして扱い、現行の Plan を再生成します。`check` は読み取り専用で `stale` として報告し、`run` と `heal` は `INTEGRITY_VIOLATION`（終了コード 4）として拒否します。Plan v3 は、v2 のシークレットグラントの provenance モデルを、同意と `secrets.allow` に置き換えます。Plan v4 もインプレース移行されず、同じく fresh ではない Plan、`stale`、`INTEGRITY_VIOLATION` として扱われます。Plan v5 は v4 の要素参照をソースに裏付けられた intent に置き換えて `confirms` を追加し、Grounding v3 は v2 のフィンガープリントのみのエントリを locator、fingerprint、intentDigest、provenance に置き換えます。手順を追ったアップグレード方法については、[バージョン間のアップグレード](/ambercast/ja/how-to/upgrade/) を参照してください。
+スキーマの変更は、いずれもインプレースでは移行されない。遷移ごとに次の扱いになる。
+
+- 計画 v1 と v2: `generate` はどちらも fresh ではないものとして扱い、現行の計画を再生成する。`check` は読み取り専用で `stale` と報告する。`run` と `heal` は `INTEGRITY_VIOLATION`（終了コード 4）で拒否する。
+- 計画 v3: v2 のシークレットグラントの provenance モデルを、同意と `secrets.allow` に置き換える。
+- 計画 v4: インプレースでは移行されない。fresh ではない計画、`stale`、`INTEGRITY_VIOLATION` として同じく扱われる。
+- 計画 v5: v4 の要素参照をソースに裏付けられた intent へ置き換え、`confirms` も追加する。
+- グラウンディング v3: v2 のフィンガープリントのみのエントリを置き換える。新しいエントリは locator、fingerprint、intentDigest、provenance を持つ。
+
+手順を追ったアップグレード方法は [バージョン間のアップグレード](/ambercast/ja/how-to/upgrade/) を参照する。
 
 ## 再生成境界 {#regeneration-boundary}
 
-コードや設定、プロンプトに変更が加わった際の影響範囲と、それに伴うアーティファクトの再生成義務は以下の通り定義されています。
-
 | 変更内容 | 影響を受ける対象 | 再生成・対応の義務 |
 | --- | --- | --- |
-| 正規化されたプロンプト、Plan スキーマバージョン、ジェネレータテンプレートのフィンガープリント、プロデューサバンドルのフィンガープリント、または名前付きターゲット定義の変更 | `inputsDigest` および Plan の鮮度 | Plan を再生成します。その結果として生じる Grounding の紐付けには、リプレイ関連 Plan 内容の変更に伴う義務が個別に適用されます。 |
-| リプレイに関連する Plan の内容 | Grounding に記録された `planDigest` | Grounding を再生成または置換します。`generatorMeta` のみの変更は `planDigest` に含まれません。 |
-| 受け入れ対象の要素フィンガープリントアルゴリズムまたはプリイメージ | 既存の要素グラウンディングエントリ | `run` では、利用不能なソースは、存在しない場合、無効な JSON の場合、stale な provenance の場合、またはカバレッジの主張がないまま厳密なパースに失敗した場合はキャッシュミスとして扱われます。現行の provenance を持つソースが一度カバレッジを主張した場合、その構造的または正規化の失敗は整合性エラー（integrity failure）となり、フォールバックは行われません。`check` では、グラウンディングの検査において JSON やスキーマの不備、および主張された非正規ソースは `invalid` として分類され、古い `planDigest` は `stale` として分類されます。公開レポートのステータスは [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences) のリポジトリポリシーに従って導出されます。 |
-| レポートのスキーマバージョンまたはフィールド規約 | 構造化出力のコンシューマおよび永続化された実行レポート | 出力されるレポート契約に対応するようコンシューマを更新します。3.5 では、シークレットポリシーエラーの詳細、generate のシークレット使用・警告フィールド、および heal Stage 3 の拒否詳細が追加されます。 |
-| Plan、Grounding、設定、または report の Zod スキーマ | 公開された npm スキーマアーティファクト | パッケージのビルドを実行し、それぞれの Zod ソースから 4 つの JSON Schema を再生成します。 |
+| 正規化されたプロンプト、計画のスキーマバージョン、ジェネレーターテンプレートのフィンガープリント、プロデューサーバンドルのフィンガープリント、または名前付きターゲット定義の変更 | `inputsDigest` と計画の鮮度 | 計画を再生成する。その結果のグラウンディングの紐付けは、再生に関係する計画の内容として別に扱う。 |
+| 再生に関係する計画の内容 | グラウンディングに記録された `planDigest` | グラウンディングを再生成または置換する。`generatorMeta` だけの変更は `planDigest` に含まれない。 |
+| 受け入れ対象の要素フィンガープリントアルゴリズムまたはプリイメージ | 既存の要素グラウンディングエントリ | `run` では、次のソースをキャッシュミスとして扱う。対象は、存在しないソース、無効な JSON のソース、stale な provenance のソース、カバレッジの主張がないまま厳密なパースに失敗したソースである。現行の provenance を持つソースがカバレッジを主張した後の構造的または正規化の失敗は、整合性エラーになり、フォールバックしない。`check` のグラウンディング検査は、JSON やスキーマの不備と、主張された非正規ソースを `invalid` に分類し、古い `planDigest` を `stale` に分類する。公開レポートのステータスは [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences) のリポジトリポリシーに従って導出する。 |
+| レポートのスキーマバージョンまたはフィールド規約 | 構造化出力のコンシューマーと永続化された実行レポート | 出力されるレポート契約に合わせてコンシューマーを更新する。各レポートバージョンの変更点は [変更履歴](/ambercast/ja/reference/changelog/) に載っている。 |
+| 計画、グラウンディング、設定、またはレポートの Zod スキーマ | 公開された npm スキーマアーティファクト | パッケージのビルドを実行し、それぞれの Zod ソースから 4 つの JSON Schema を再生成する。 |
 
-`inputsDigest` は、正規化されたプロンプト、Plan スキーマバージョン、ジェネレータテンプレートのフィンガープリント、プロデューサバンドルのフィンガープリント（`producerBundleFingerprint`）、および名前付きターゲット定義という 5 つの入力値のみを対象に、正規 JSON（canonical JSON）および SHA-256 を介して厳密にハッシュ値を算出します。
+`inputsDigest` は、宣言された 5 つの入力だけを、正規 JSON（canonical JSON）と SHA-256 でハッシュする。入力は次のとおりである。
 
-Grounding の鮮度判定は、Grounding 自体に記録された `planDigest` と、候補となる Plan に対して計算されたダイジェストとの直接的な完全一致チェック（direct equality check）によって検証されます。
+- 正規化されたプロンプト
+- 計画のスキーマバージョン
+- ジェネレーターテンプレートのフィンガープリント
+- プロデューサーバンドルのフィンガープリント
+- 名前付きターゲット定義
 
-### 関連ドキュメント
+グラウンディングの鮮度判定は、グラウンディングに記録された `planDigest` と、候補の計画から計算したダイジェストとの直接の一致比較である。
+
+## 関連項目 {#see-also}
+
 - [変更履歴](/ambercast/ja/reference/changelog/#release-020)
 - [バージョン間のアップグレード](/ambercast/ja/how-to/upgrade/)
 - [ambercast check](/ambercast/ja/reference/cli/check/#status-vocabulary)
 - [鮮度とダイジェスト](/ambercast/ja/spec/freshness/)
+- [鮮度の帰結](/ambercast/ja/spec/freshness/#freshness-consequences)
 - [仕様変更履歴](/ambercast/ja/spec/changelog/)
 
 ---
@@ -2184,111 +2207,195 @@ Grounding の鮮度判定は、Grounding 自体に記録された `planDigest` �
 # 変更履歴
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/changelog/
 
-ambercast の各リリースにおける、ユーザーから見える製品の動作変更および公開コントラクトの変更履歴です。破壊的変更（BREAKING）を先頭に配置し、各リリースの変更点を記載しています。
+このページは、製品の動作と公開コントラクトに関するエントリだけを載せる。次の項目は載せない。リポジトリのアーキテクチャスキャナー、エージェントフック、ワークツリーのライフサイクル、lint 設定である。CI、テスト、ドキュメントサイト、プロジェクトのワークフローも載せない。
+
+リリース 0.3.0 と 0.3.1 は製品に関するエントリがないため、節を設けない。リリース 0.4.0 は、3 回のプロデューサーバンドル改訂で既存の計画（plan）を古い状態にしたため、節を設けない。その改訂は `generatorSecretPolicy` 2 → 3 → 4 と `instructionCoveragePolicy` 1 → 2 である。以前のリリースの計画は `ambercast generate` で再生成する。これらのリリースのほかのエントリは、リポジトリの `CHANGELOG.md` にも載っている。
+
+## リリース 0.9.0 {#release-090}
+
+リリース日: 2026-10-08。レポートスキーマ 3.10。
+
+| 区分 | 変更内容 |
+| --- | --- |
+| BREAKING | レポートスキーマ 3.10 は、ケーススコープのエラーコード `CASE_ABORTED`（`reason` と `stepId` を持つ）と `PROMPT_AMBIGUOUS`（`ambiguities` を持つ）を追加する。曖昧なプロンプトによる `generate` または `heal` の失敗は、実行スコープの `UNEXPECTED_CRASH` を伴う終了コード 3 ではなく、`PROMPT_AMBIGUOUS` を伴う終了コード 2 で終了する。これまでエラーコードなしで終わっていた実行行は、`CASE_ABORTED`、`AGENTIC_STEP_FAILED`、またはケーススコープの `UNEXPECTED_CRASH` を持つ。`heal` は Stage 3 と最終再生の失敗をケースエラーとして報告するため、サマリーはその行をエラー扱いで数える。終了コードは変わらない。`ambercast view` はエラーのヒントと詳細を表示する。 |
+| Feature | すべての失敗経路が、コード付きで診断できるレポートエラーを返す。 |
+
+バージョン 0.9.0 には、宣言された破壊的変更が 1 件ある。
+
+## リリース 0.8.0 {#release-080}
+
+リリース日: 2026-10-06。レポートスキーマ 3.9。
+
+| 区分 | 変更内容 |
+| --- | --- |
+| Feature | レポートスキーマ 3.9 は、ケーススコープの環境エラーに `AGENTIC_STEP_FAILED` を追加する。また、確認に関する問題コード `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate` を `AiResponseIssueCode` に追加する。 |
+| Fix | `generate` は、診断を組み立てる前に、プロバイダーのステップ ID にシークレットのリテラルが含まれないか確認する。 |
+| Fix | `generate` は `navigate` ステップの `confirms` 参照を取り除き、違反をコードで報告する。 |
+| Fix | `run` は、確認済みのグラウンディングエントリから得たバインディングに対して、常に `confirmed: true` を報告する。 |
+| Fix | ランナーは、エージェントのステップ失敗を分類し、AI が指示したアサートを期限まで繰り返し確認する。 |
+
+バージョン 0.8.0 には、宣言された破壊的変更がない。
+
+## リリース 0.7.0 {#release-070}
+
+リリース日: 2026-10-02。レポートスキーマ 3.8。
+
+| 区分 | 変更内容 |
+| --- | --- |
+| BREAKING | 計画 v3 → v4 は、必須のステップ Target 名を追加し、計画のブラウザー選択を削除する。v3 の計画を再生成する。 |
+| BREAKING | 計画 v4 → v5 は、ソースに裏付けられた `intent` と `confirms`、および Target スコープの `locale` を追加する。グラウンディング v2 → v3 は、素のフィンガープリントを、ロケーター、フィンガープリント、インテントダイジェスト、来歴に置き換える。v4 の計画とそのグラウンディングを再生成する。 |
+| BREAKING | Target の設定が `targets.<name>.browser` から `targets.<name>.executor` に移り、ローダーは旧キーを拒否する。レポートに `EXECUTOR_UNSUPPORTED` と `sessions[name].executor` が加わる。 |
+| BREAKING | UI エグゼキューターの種別語彙が統一される。`--resolve` なしで要素ステップがグラウンディングをミスすると、コードなしの終了コード 3 ではなく、`GROUNDING_UNRESOLVED` を伴う終了コード 4 で報告する。 |
+| Feature | レポートスキーマが 3.8 に進む。3.7 はステップの Target 名と Target ごとのセッションを追加し、3.8 は heal Stage 1 の `binding` 診断を追加する。 |
+| Feature | `ambercast init` が、設定、サンプルプロンプト、`.gitignore`、`AGENTS.md` を生成する。 |
+| Feature | `ambercast view` は、`.runs` のレポートを表示する読み取り専用のローカルビューアーである。 |
+| Feature | `targets.<name>.locale` で、ブラウザーコンテキストのロケールを指定できる。 |
+| Feature | UI エグゼキューターの抽象化が、機能の事前確認を追加する。 |
+| Feature | heal Stage 1 が `confirms` を通じて要素のインテントを再バインドする。 |
+| Feature | 要素のインテント、引用の照合、インテントダイジェストのプリミティブが追加される。 |
+| Feature | 計画 IR v4 は、ステップごとの Target と、Target ごとに 1 つのセッションを持つ。 |
+| Feature | MCP の stdio サーバーが追加される。 |
+| Feature | MCP のジョブモデルが `ambercast_job_status` と `ambercast_job_cancel` を追加する。 |
+| Feature | MCP の heal 適用は 2 段階で行い、トークンの発行とエリシテーションを伴う。 |
+| Feature | ランタイムイベントのファンアウトが MCP に対応し、heal の準備が 2 フェーズになる。 |
+| Fix | `init` は、生成する設定にブラウザーを追加し、BOM に対して安全に計画を立て、失敗時は適用の前に中止する。 |
+| Fix | MCP サーバーは、失敗したジョブと heal 適用のクラッシュに対して `AMBERCAST_DEBUG` 診断を出力する。 |
+| Fix | MCP サーバーは、シャットダウン中に、heal 適用の確認と処理中のツール応答を待つ。 |
+| Fix | MCP サーバーは、進捗通知の送信に失敗すると stderr に 1 行書き込む。 |
+| Fix | レポートは、`AI_RESPONSE_INVALID` に生成時の問題の詳細を保持する。 |
+| Fix | `run` は、エージェントによる Target 解決の失敗を、診断付きで回復する。 |
+| Fix | `run` は、アサートとバインディングについて、期限の時点で最後のポーリングサンプルを取得する。 |
+| Fix | `view` は、すべての 3.x スキーマバージョンの実行レポートを、寛容に読み込む。 |
+| Fix | `view` は、既定ポートの `Host` ヘッダーと authority 形式でない `Host` ヘッダーを拒否し、属性内の `runId` をエスケープする。 |
+| Fix | `view` は、スクリーンショットと長いテキストがステップ表からあふれないようにする。 |
+| Fix | `view` は、デザインシステムのダークトークン、ステップ表のステータスバッジ、ゼロを省いた合計を適用する。 |
+
+バージョン 0.7.0 には、宣言された破壊的変更が 4 件ある。
+
+## リリース 0.6.0 {#release-060}
+
+リリース日: 2026-09-18。レポートスキーマ 3.6。
+
+| 区分 | 変更内容 |
+| --- | --- |
+| BREAKING | スキーマ検証に失敗したエージェントの MCP ツール呼び出しは、最初の不一致で `INTEGRITY_VIOLATION` をラッチしなくなる。ケースごとに連続 3 回までの拒否は、残りの予算を添えた構造化結果を返す。4 回目でケースは、`INTEGRITY_VIOLATION`（kind `usage`、終了コード 4）ではなく、`AI_RESPONSE_INVALID`（kind `environment`、終了コード 3）で終わる。この変更でレポートスキーマのバージョンは動かない。 |
+| Feature | レポートスキーマ 3.6 は、完了した heal の結果に任意の診断 `repairTrace` を追加し、ドライランと適用は同じ結果を返す。 |
+| Feature | `run` は、解決の前に要素が存在するまで待つ。 |
+
+バージョン 0.6.0 には、宣言された破壊的変更が 1 件ある。
 
 ## リリース 0.5.0 {#release-050}
 
-リリース日: 2026-09-15。
+リリース日: 2026-09-15。レポートスキーマ 3.5。
 
 | 区分 | 変更内容 |
 | --- | --- |
-| BREAKING | Plan v2 → v3 はシークレットグラントの来歴を削除します。旧グラント行を削除し、`generate --force` で再生成して、同意／`secrets.allow` モデルで候補シークレット名を承認してください。Plan v2 はその場で移行されません。 |
+| BREAKING | 計画 v2 → v3 は、シークレットグラントの来歴を削除する。旧グラント行を削除し、`generate --force` で再生成して、同意／`secrets.allow` モデルで候補のシークレット名を承認する。計画 v2 はその場で移行されない。レポートスキーマ 3.5 は、シークレットポリシーのエラーコード `SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、任意の `GROUNDING_UNRESOLVED` の詳細、任意の `GenerateResult` の `secrets` と `warnings` フィールドを追加する。Stage 3 の候補がシークレット名の集合を変えると、`heal` は `secret-set-rejected` の結果を返し、`stage3Rejection.reason` は `secret-set-changed`、あわせて `added` と `removed` の名前を返す。旧来の `@ambercast-secret` グラント行と `{{secrets.*}}` プロンプト構文は、終了コード 2 で拒否される。 |
+| BREAKING | 既存の計画は古い状態になり、`ambercast generate --force` で再生成する。命令カバレッジの基準は `startAnchor`、`startColumn`、`endAnchor`、`endColumn` を持ち、`instructionCoveragePolicy` のリビジョンは 2 から 3 に進む。 |
+| BREAKING | `generate` は、新たに検出したシークレット名ごとに同意ゲートで止まる。対話端末では `y / N / i` を尋ね、それ以外の実行は終了コード 2 で終了して、許可されていない名前を列挙する。同意すると、その名前が `secrets.allow` に追記される。 |
+| BREAKING | `run` は、`--resolve` を付けた場合に限り、AI でグラウンディングのミスを解決する。`--cache-only` は削除され、終了コード 2 で終了する。`GROUNDING_UNRESOLVED` は終了コード 4 に対応する。 |
+| Feature | `run` に、プロセス内 MCP サーバーを使うエージェントエグゼキューターが加わる。 |
+| Feature | 命令カバレッジは、アンカー ID で照合する。 |
+| Feature | heal の Stage 2 と Stage 3 は、許可リストモデルの下で、シークレット集合の不変性を保って動く。 |
+| Feature | シークレット名の付与は決定的になり、許可リストが検証される。 |
+| Fix | `generate` は、埋め込まれたシークレット参照を理由に拒否されたプロバイダー応答を再試行する。 |
+| Fix | `BROWSER_LAUNCH_FAILED` は、ヒントと詳細を付けて分類される（レポートスキーマ 3.4）。 |
+
+バージョン 0.5.0 には、宣言された破壊的変更が 4 件ある。
 
 ## リリース 0.2.0 {#release-020}
 
-2026-09-04 付の `CHANGELOG.md` リリース 0.2.0 と同期しています。
-
-バージョン 0.2.0 には申告された破壊的変更が1件含まれており、本セクションでは修正内容よりも前に配置しています。
+リリース日: 2026-09-04。
 
 | 区分 | 変更内容 |
 | --- | --- |
-| BREAKING | プロバイダーリクエストスキーマにおいて `producerBundleFingerprint`、ひいてはすべてのプロンプトの `inputsDigest` が変更されました。すべての 0.1.0 の Plan を再生成してください。`check` は古い Plan を stale として終了コード 4 で報告し、`generate` または `--force` により新しい Plan を作成します。 |
-| Fix | 生成処理において、プロバイダーレスポンス内の空の `verificationIntent` を受け入れるようになりました。 |
-| Fix | `generate --list` は、生成処理で実際に必要とされない限り、AI プロバイダーを解決しません。 |
-| Fix | 人間向けレポート出力において、制御シーケンスがサニタイズされます。 |
+| BREAKING | プロバイダーリクエストスキーマにおいて `producerBundleFingerprint`、ひいてはすべてのプロンプトの `inputsDigest` が変更された。すべての 0.1.0 の計画を再生成する。`check` は古い計画を stale として終了コード 4 で報告し、`generate` または `--force` により新しい計画を作成する。 |
+| Fix | 生成処理において、プロバイダーレスポンス内の空の `verificationIntent` を受け入れるようになった。 |
+| Fix | `generate --list` は、生成処理で実際に必要とされない限り、AI プロバイダーを解決しない。 |
+| Fix | 人間向けレポート出力において、制御シーケンスがサニタイズされる。 |
+
+バージョン 0.2.0 には、宣言された破壊的変更が 1 件あり、修正より前に置いている。
 
 ## リリース 0.1.0 {#release-010}
 
-2026-09-03 付の `CHANGELOG.md` リリース 0.1.0 と同期しています。
-
-本リリースの記載では、リポジトリのアーキテクチャスキャナー、エージェントフック、ワークツリーのライフサイクル、lint 設定、プロジェクトワークフローのみを変更する changelog エントリを除外していますが、製品の動作や公開コントラクトに関するエントリは漏れなく網羅しています。
+リリース日: 2026-09-03。
 
 | 区分 | 変更内容 |
 | --- | --- |
-| BREAKING | v1 フィンガープリントのプリイメージが変更され、正規化された親要素および隣接兄弟要素の識別情報が含まれるようになりました。古い grounding はミスマッチとなり、通常のリプレイでは1回の AI フォールバックが実行され、キャッシュ専用（cache-only）および CI でのリプレイでは完全なミス（clean miss）時に処理を中止（abort）します。 |
-| BREAKING | TypeScript のビルドベースラインとして Node.js 22.14 以降が必須となりました。 |
-| Feature | ブラウザキャプチャに単一のアクセシビリティキャプチャと、3チャネルの OR シークレット検出機能が追加されました。 |
-| Feature | 実ストレージおよびシステムアダプターが利用可能になりました。 |
-| Feature | `generate` が Claude Code CLI および Codex CLI アダプターと接続されました。 |
-| Feature | 設定の読み込みとパッケージ化された JSON Schema が実装されました。 |
-| Feature | Canonical JSON シリアライゼーションとダイジェスト計算が実装されました。 |
-| Feature | Grounding がトレースの唯一の権威となりました。 |
-| Feature | Plan/Grounding の Zod スキーマおよび JSON Schema 生成が実装されました。 |
-| Feature | AI grounding トレースがイベントと検証レコードの形式に再設計されました。 |
-| Feature | レイアウトレゾルバーと共通設定ボキャブラリが追加されました。 |
-| Feature | `inputsDigest` に Plan の producer-bundle フィンガープリントが含まれるようになりました。 |
-| Feature | シークレット参照に明示的な付与行（grant lines）と逐語引用（verbatim citation）検証が導入されました。 |
-| Feature | Grounding リポジトリ／書き戻しポリシーが、grounding 未検出の検知と統合されました。 |
-| Feature | `heal` にコミットプリイメージの完全性検証と `runsDir` への書き込み封じ込めが追加されました。 |
-| Feature | `heal` にフロンティア単一ステップの Stage 2 イテレーションが追加されました。 |
-| Feature | 3段階の heal ステートマシンが実装されました。 |
-| Feature | Heal CLI の確認プロンプトとコマンド配線が実装されました。 |
-| Feature | `heal` に実際の AI ディスパッチに対するケーススコープの承認バジェット（admission budget）が追加されました。 |
-| Feature | `heal` に1回読み取りの検証済みスナップショットプリイメージが追加されました。 |
-| Feature | `run` と `heal` が単一の grounding-recovery テーブルを共有するようになりました。 |
-| Feature | `heal` の Stage 2 プロバイダーコンテキストが構造化され、現在の Plan を含むようになりました。 |
-| Feature | Plan スキーマバージョン 2 で命令カバレッジ（instruction coverage）が必須となりました。 |
-| Feature | ストレージ書き込みにアトミック書き込みコントラクトが追加されました。 |
-| Feature | 設定に `secretSinkOrigins` が追加され、ブラウザポートに専用の `fillSecret` が追加されました。 |
-| Feature | ブラウザ要素の解決が `BoundElement` ライブハンドルに移行し、`.first()` が廃止されました。 |
-| Feature | 構造化レポートにスキーマ 2.0 の中断および正規化動作が追加されました。 |
-| Feature | Heal レポートに一覧化されたブランチと `dryRun` が追加されました。 |
-| Feature | レポートの確定処理が単一の型付き境界となりました。 |
-| Feature | レポートスキーマ 3.0 において、heal の `repairOutcome` が `application` から分離されました。修復を拒絶した場合は終了コード 1 で終了します。 |
-| Feature | レポートスキーマ 3.1 により、コードごとの任意のエラー `details` が追加され、すべてのレポートエラーで `hint` を使用できるようになりました。 |
-| Feature | `run` に Chromium での grounding ヒット時に AI 呼び出しゼロでリプレイする機能が追加されました。 |
-| Feature | `run` に grounding ミス時のリカバリおよびトレースリプレイ機能が追加されました。 |
-| Feature | `run` に `--allow-empty` と `--list` が実装され、`--stale=regenerate` は意図的に未サポートのまま維持されました。 |
-| Feature | `run` が失敗の証跡およびその RunReport を `.runs` 配下に永続化するようになりました。 |
-| Feature | コマンド間でのターゲット選択が統合されました。 |
-| Feature | `check` が読み取り専用の Plan/Grounding 鮮度ゲートとなりました。 |
-| Fix | Codex CLI の未完了時に stderr の抜粋を保持するようになりました。 |
-| Fix | ブラウザへの入力直前に secret-sink オリジンが再検証されるようになりました。 |
-| Fix | `fillSecret` が単一の要素ハンドルに固定されるようになりました。 |
-| Fix | `check` が inverse-then-judge によるアーティファクトスキャンと、検出専用の `--list` を使用するようになりました。 |
-| Fix | `check` と `run` が正規の grounding 検証を共有するようになりました。 |
-| Fix | 子プロセスの破棄において、spawn 失敗後に実際の close イベントを待機するようになりました。 |
-| Fix | v1 フィンガープリントの実装が修正され、フォールバック中に AI から提供されたフィンガープリントが検証されるようになりました。 |
-| Fix | スキーマの正規表現処理が、dotAll の欠落および `baseUrl` のシークレット漏洩ギャップに対して強化されました。 |
-| Fix | フィンガープリントのパース処理がフェイルクローズとなり、受け入れられるアルゴリズムが `a11y-neighborhood-v2` に変更されました。 |
-| Fix | `heal` は修復可能なナビゲーションの分類を case-outcome エラーのみに限定するようになりました。 |
-| Fix | `heal` の調停および伝播処理が、整合性違反時にフェイルクローズするようになりました。 |
-| Fix | `heal` がフェーズトークン上のディスパッチプロトコル違反をラッチするようになりました。 |
-| Fix | `heal` の Stage 2 において、型付き拒絶を伴って secret-grant シードを保持するようになりました。 |
-| Fix | `heal` が実際の CLI 子プロセスの破棄を監視し、フェイルクローズなクリーンアップを行うようになりました。 |
-| Fix | `heal` が AI 呼び出しの送出をディスパッチバジェットの承認と同期させるようになりました。 |
-| Fix | アトミック書き込みコントラクトのカバレッジとドキュメントが強化されました。 |
-| Fix | Run レポートの識別パスがプロジェクトルート相対になりました。 |
-| Fix | 認証情報ヒューリスティックのリテラル検出が `fill.value` に対しても対称的に適用されるようになりました。 |
-| Fix | リプレイ処理がクロスオリジンバイパスとして `blob:` ナビゲーションを拒否するようになりました。 |
-| Fix | Grounding フォールバックの AI タイムアウトが合成・分類されるようになりました。 |
-| Fix | プロバイダーの可用性プローブに新しいアボートタイムアウトが設定されるようになりました。 |
-| Fix | Run のスクリーンショットがプロジェクトルート相対となり、レポートの永続化に3つの状態が定義されました。 |
-| Fix | アクセシビリティスナップショットがリダクトされ、AI 境界においてスクリーンショットが差し控え（withhold）られるようになりました。 |
-| Fix | レポート境界においてシークレットおよび実行時の値がリダクトされるようになりました。 |
-| Fix | リプレイ処理がクロスオリジンナビゲーションを拒否するようになりました。 |
-| Fix | 埋め込みシークレット参照が拒否され、永続化前に grounding が再検証されるようになりました。 |
-| Fix | 解決済みシークレットのスキャンがトレースに対して反復的かつフェイルクローズになりました。 |
-| Fix | `run` が厳格な 1 対 1 の secret-grant 消費を強制し、帰属が不健全（attribution-unsound）な新規 Plan を再生成するようになりました。 |
-| Fix | AI CLI の子プロセス環境変数が拒絶され、応答しない子プロセスはアボート時に回収（reap）されるようになりました。 |
-| Fix | プロンプトに存在しない、生成またはリプレイされたシークレット参照が拒否されるようになりました。 |
-| Fix | 終了コードの集約順序として `2 > 3 > 4 > 1 > 5 > 0` が使用されるようになりました。 |
-| Fix | `generate` がイベントシンクを接続し、Claude CLI リクエストから `$schema` を削除するようになり、さらに run のステップ開始タイミングが修正されました。 |
+| BREAKING | v1 フィンガープリントのプリイメージが変更され、正規化された親要素および隣接兄弟要素の識別情報が含まれるようになった。古いグラウンディングはミスマッチとなり、通常の再生では1回の AI フォールバックが実行され、キャッシュ専用（cache-only）および CI での再生では完全なミス（clean miss）時に処理を中止（abort）する。 |
+| BREAKING | TypeScript のビルドベースラインとして Node.js 22.14 以降が必須となった。 |
+| Feature | ブラウザキャプチャに単一のアクセシビリティキャプチャと、3チャネルの OR シークレット検出機能が追加された。 |
+| Feature | 実ストレージおよびシステムアダプターが利用可能になった。 |
+| Feature | `generate` が Claude Code CLI および Codex CLI アダプターと接続された。 |
+| Feature | 設定の読み込みとパッケージ化された JSON Schema が実装された。 |
+| Feature | Canonical JSON シリアライゼーションとダイジェスト計算が実装された。 |
+| Feature | グラウンディングがトレースの唯一の権威となった。 |
+| Feature | 計画／グラウンディングの Zod スキーマおよび JSON Schema 生成が実装された。 |
+| Feature | AI グラウンディングトレースがイベントと検証レコードの形式に再設計された。 |
+| Feature | レイアウトレゾルバーと共通設定ボキャブラリが追加された。 |
+| Feature | `inputsDigest` に計画の producer-bundle フィンガープリントが含まれるようになった。 |
+| Feature | シークレット参照に明示的な付与行（grant lines）と逐語引用（verbatim citation）検証が導入された。 |
+| Feature | グラウンディングリポジトリ／書き戻しポリシーが、グラウンディング未検出の検知と統合された。 |
+| Feature | `heal` にコミットプリイメージの完全性検証と `runsDir` への書き込み封じ込めが追加された。 |
+| Feature | `heal` にフロンティア単一ステップの Stage 2 イテレーションが追加された。 |
+| Feature | 3段階の heal ステートマシンが実装された。 |
+| Feature | Heal CLI の確認プロンプトとコマンド配線が実装された。 |
+| Feature | `heal` に実際の AI ディスパッチに対するケーススコープの承認バジェット（admission budget）が追加された。 |
+| Feature | `heal` に1回読み取りの検証済みスナップショットプリイメージが追加された。 |
+| Feature | `run` と `heal` が単一のグラウンディング回復テーブルを共有するようになった。 |
+| Feature | `heal` の Stage 2 プロバイダーコンテキストが構造化され、現在の計画を含むようになった。 |
+| Feature | 計画スキーマバージョン 2 で命令カバレッジ（instruction coverage）が必須となった。 |
+| Feature | ストレージ書き込みにアトミック書き込みコントラクトが追加された。 |
+| Feature | 設定に `secretSinkOrigins` が追加され、ブラウザポートに専用の `fillSecret` が追加された。 |
+| Feature | ブラウザ要素の解決が `BoundElement` ライブハンドルに移行し、`.first()` が廃止された。 |
+| Feature | 構造化レポートにスキーマ 2.0 の中断および正規化動作が追加された。 |
+| Feature | Heal レポートに一覧化されたブランチと `dryRun` が追加された。 |
+| Feature | レポートの確定処理が単一の型付き境界となった。 |
+| Feature | レポートスキーマ 3.0 において、heal の `repairOutcome` が `application` から分離された。修復を拒絶した場合は終了コード 1 で終了する。 |
+| Feature | レポートスキーマ 3.1 により、コードごとの任意のエラー `details` が追加され、すべてのレポートエラーで `hint` を使用できるようになった。 |
+| Feature | `run` に Chromium でのグラウンディングヒット時に AI 呼び出しゼロで再生する機能が追加された。 |
+| Feature | `run` にグラウンディングミス時のリカバリおよびトレース再生機能が追加された。 |
+| Feature | `run` に `--allow-empty` と `--list` が実装され、`--stale=regenerate` は意図的に未サポートのまま維持された。 |
+| Feature | `run` が失敗の証跡およびその RunReport を `.runs` 配下に永続化するようになった。 |
+| Feature | コマンド間でのターゲット選択が統合された。 |
+| Feature | `check` が読み取り専用の計画／グラウンディング鮮度ゲートとなった。 |
+| Fix | Codex CLI の未完了時に stderr の抜粋を保持するようになった。 |
+| Fix | ブラウザへの入力直前に secret-sink オリジンが再検証されるようになった。 |
+| Fix | `fillSecret` が単一の要素ハンドルに固定されるようになった。 |
+| Fix | `check` が inverse-then-judge によるアーティファクトスキャンと、検出専用の `--list` を使用するようになった。 |
+| Fix | `check` と `run` が正規のグラウンディング検証を共有するようになった。 |
+| Fix | 子プロセスの破棄において、spawn 失敗後に実際の close イベントを待機するようになった。 |
+| Fix | v1 フィンガープリントの実装が修正され、フォールバック中に AI から提供されたフィンガープリントが検証されるようになった。 |
+| Fix | スキーマの正規表現処理が、dotAll の欠落および `baseUrl` のシークレット漏洩ギャップに対して強化された。 |
+| Fix | フィンガープリントのパース処理がフェイルクローズとなり、受け入れられるアルゴリズムが `a11y-neighborhood-v2` に変更された。 |
+| Fix | `heal` は修復可能なナビゲーションの分類を case-outcome エラーのみに限定するようになった。 |
+| Fix | `heal` の調停および伝播処理が、整合性違反時にフェイルクローズするようになった。 |
+| Fix | `heal` がフェーズトークン上のディスパッチプロトコル違反をラッチするようになった。 |
+| Fix | `heal` の Stage 2 において、型付き拒絶を伴って secret-grant シードを保持するようになった。 |
+| Fix | `heal` が実際の CLI 子プロセスの破棄を監視し、フェイルクローズなクリーンアップを行うようになった。 |
+| Fix | `heal` が AI 呼び出しの送出をディスパッチバジェットの承認と同期させるようになった。 |
+| Fix | アトミック書き込みコントラクトのカバレッジとドキュメントが強化された。 |
+| Fix | Run レポートの識別パスがプロジェクトルート相対になった。 |
+| Fix | 認証情報ヒューリスティックのリテラル検出が `fill.value` に対しても対称的に適用されるようになった。 |
+| Fix | 再生処理がクロスオリジンバイパスとして `blob:` ナビゲーションを拒否するようになった。 |
+| Fix | グラウンディングフォールバックの AI タイムアウトが合成・分類されるようになった。 |
+| Fix | プロバイダーの可用性プローブに新しいアボートタイムアウトが設定されるようになった。 |
+| Fix | Run のスクリーンショットがプロジェクトルート相対となり、レポートの永続化に3つの状態が定義された。 |
+| Fix | アクセシビリティスナップショットがリダクトされ、AI 境界においてスクリーンショットが差し控え（withhold）られるようになった。 |
+| Fix | レポート境界においてシークレットおよび実行時の値がリダクトされるようになった。 |
+| Fix | 再生処理がクロスオリジンナビゲーションを拒否するようになった。 |
+| Fix | 埋め込みシークレット参照が拒否され、永続化前にグラウンディングが再検証されるようになった。 |
+| Fix | 解決済みシークレットのスキャンがトレースに対して反復的かつフェイルクローズになった。 |
+| Fix | `run` が厳格な 1 対 1 の secret-grant 消費を強制し、帰属が不健全（attribution-unsound）な新規計画を再生成するようになった。 |
+| Fix | AI CLI の子プロセス環境変数が拒絶され、応答しない子プロセスはアボート時に回収（reap）されるようになった。 |
+| Fix | プロンプトに存在しない、生成または再生されたシークレット参照が拒否されるようになった。 |
+| Fix | 終了コードの集約順序として `2 > 3 > 4 > 1 > 5 > 0` が使用されるようになった。 |
+| Fix | `generate` がイベントシンクを接続し、Claude CLI リクエストから `$schema` を削除するようになり、さらに run のステップ開始タイミングが修正された。 |
 
-### 関連リンク
+## 関連項目 {#see-also}
 
-- [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table)
-- [互換性と再生成](/ambercast/ja/reference/compatibility/#regeneration-boundary)
+- [互換性表](/ambercast/ja/reference/compatibility/#compatibility-table)
+- [再生成の境界](/ambercast/ja/reference/compatibility/#regeneration-boundary)
 - [バージョン間のアップグレード](/ambercast/ja/how-to/upgrade/)
 - [仕様変更履歴](/ambercast/ja/spec/changelog/)
 
@@ -2297,220 +2404,233 @@ ambercast の各リリースにおける、ユーザーから見える製品の�
 # セキュリティポリシー
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/security-policy/
 
-ambercast のセキュリティポリシーです。サポート対象となるバージョンと、脆弱性を報告するための窓口および要件を定めています。
+このページはリポジトリのセキュリティポリシーに対応する。サポート対象バージョン、非公開の報告窓口、その窓口が扱う範囲を示す。
 
 ## サポート対象バージョン {#supported-versions}
 
-| リリース状態 | サポート対象バージョン |
-| --- | --- |
-| ambercast は pre-1.0 です。 | 修正が提供されるのは最新の公開バージョンのみです。 |
-
-古い pre-1.0 リリースに対する修正の提供は約束されていません。
+ambercast は pre-1.0 である。修正が提供されるのは最新の公開バージョンだけである。古い pre-1.0 リリースの修正は約束されない。
 
 ## 脆弱性の報告 {#vulnerability-reporting}
 
 | 項目 | ポリシー |
 | --- | --- |
-| 報告窓口 | GitHub Security Advisories（`https://github.com/kotarotsubaki/ambercast/security/advisories/new`）を通じて非公開で報告してください。 |
-| 必要な記載内容 | 影響を受けるバージョン、再現手順、および影響を含めてください。 |
-| 公開 Issue | セキュリティ報告のために公開 Issue を開かないでください。 |
-| サプライチェーン | `ambercast` npm パッケージのタイポスクワッティングやなりすましについても、同一の非公開窓口で対応します。 |
+| 報告窓口 | GitHub Security Advisories（`https://github.com/kotarotsubaki/ambercast/security/advisories/new`）から非公開で報告する。 |
+| 必要な記載内容 | 影響を受けるバージョン、再現手順、影響を含める。 |
+| 公開 Issue | セキュリティ報告のために公開 Issue を開かない。 |
+| サプライチェーン | `ambercast` npm パッケージのタイポスクワッティングやなりすましも、同じ非公開窓口で扱う。 |
 
-信頼境界の説明については [トラストとセキュリティ](/ambercast/ja/explanation/trust-and-security/) を、コントリビューション手順については [貢献ガイド](/ambercast/ja/how-to/contribute/) を参照してください。
+## 関連項目 {#see-also}
+
+- [トラストとセキュリティ](/ambercast/ja/explanation/trust-and-security/)
+- [貢献ガイド](/ambercast/ja/how-to/contribute/)
 
 ---
 
 # 用語集
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/glossary/
 
-ambercast全体で使用される用語の規範的な定義と、ドキュメントの翻訳や各種実装において正確に保持すべき不変トークン（リテラルトークン）の一覧です。各定義は1文の規範的記述として定義されています。フィールド、フラグ、ステータス、エラーコードの詳細な仕様については、各所有ドキュメントのリンク先を参照してください。なお、計画中と記載されたトークンには現行版でのランタイムセマンティクスは存在せず、現時点で利用可能な機能としては提供されません。
+各定義は規範であり、簡潔に述べる。フィールド、フラグ、ステータス、エラーの完全な表は、各定義にリンクした所有ドキュメントを参照する。予定段階のトークンには現行のランタイムセマンティクスがなく、現行版では使えない。
 
 ## アーティファクトに関する用語 {#artifact-terms}
 
-スキーマおよびリゾルバーに拘束される定義です。
+次の定義は、スキーマとリゾルバーが規定するアーティファクトの中核モデルを定める。
 
 | 用語 | 規範的定義 | 所有スキーマ / コマンド | 混同しやすい概念 |
 | --- | --- | --- | --- |
-| plan | Planとは、`inputsDigest` に正規化プロンプトの出所を記録し、本体に名前付きターゲットと実行可能ステップを記録する、スキーマに準拠した `PlanDocument` です。 | `PlanDocument`; [計画ドキュメント](/ambercast/ja/spec/plan-document/) | prompt または grounding |
-| grounding | Groundingとは、ステップをキーとするエントリを1つのPlanに紐付ける、`planDigest` を備えたスキーマ準拠のPlan単位キャッシュです。 | `GroundingDocument`; [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/) | Plan または run レポート |
-| artifact | アーティファクトとは、ツリー内の `.test.md` プロンプトから派生したコンパニオンであるPlanまたはGroundingです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | runの実行エビデンス |
-| fingerprint | フィンガープリントとは、リテラル `a11y-neighborhood-v2` アルゴリズムとSHA-256ハッシュを含む、要素グラウンディングの値です。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | `planDigest` |
-| inputs digest | 入力ダイジェストとは、正規化プロンプト、Planスキーマバージョン、ジェネレーターテンプレートのフィンガープリント、プロデューサバンドルのフィンガープリント、および名前付きターゲットから生成される、出所確認用の標準的なSHA-256ダイジェストです。 | `computeInputsDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `planDigest` |
-| plan digest | プランダイジェストとは、Groundingを紐付けるために使用される、`generatorMeta` を除外したスキーマ準拠Planの標準的なSHA-256ハッシュです。 | `computePlanDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `inputsDigest` |
-| normalized test prompt | 正規化テストプロンプトとは、先頭の最大1つのU+FEFFを除去し、CRLFおよび単独のCRをLFにマッピングしつつ、その他の要素をすべて維持したプロンプトです。 | `normalizeTestMd`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization) | 書式クリーンアップ |
+| plan | 計画（plan）とは、`inputsDigest` に正規化プロンプトの出所を記録し、本体に名前付きターゲットと実行可能なステップを記録する、スキーマ準拠の `PlanDocument` である。 | `PlanDocument`; [計画ドキュメント](/ambercast/ja/spec/plan-document/) | prompt または grounding |
+| grounding | グラウンディング（grounding）とは、ステップをキーとするエントリを、`planDigest` によって1つの計画に紐付ける、スキーマ準拠の計画単位のキャッシュである。 | `GroundingDocument`; [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/) | 計画または run レポート |
+| artifact | アーティファクトとは、ツリー内の `.test.md` プロンプトから派生した、計画またはグラウンディングのコンパニオンである。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | runの実行エビデンス |
+| fingerprint | フィンガープリントとは、リテラル `a11y-neighborhood-v2` のアルゴリズムと SHA-256 ハッシュを含む、要素グラウンディングの値である。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | `planDigest` |
+| inputs digest | 入力ダイジェストとは、正規化プロンプト、計画のスキーマバージョン、ジェネレーターテンプレートのフィンガープリント、プロデューサーバンドルのフィンガープリント、名前付きターゲットから求める、出所確認用の標準的な SHA-256 ダイジェストである。 | `computeInputsDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `planDigest` |
+| plan digest | 計画ダイジェストとは、グラウンディングを紐付けるために使う、`generatorMeta` を除いたスキーマ準拠の計画の標準的な SHA-256 ハッシュである。 | `computePlanDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `inputsDigest` |
+| normalized test prompt | 正規化テストプロンプトとは、先頭の U+FEFF を最大1つ除去し、CRLF と単独の CR を LF に置き換え、それ以外をすべて保持したプロンプトである。 | `normalizeTestMd`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#normalization) | 書式の整形 |
 
-`PlanDocument` および `GroundingDocument` は厳格なランタイムの信頼境界であり、これらからJSON Schemaが導出されます。
+`PlanDocument` と `GroundingDocument` は厳格なランタイムの信頼境界であり、JSON Schema はこれらから導出する。
 
 ## 実行に関する用語 {#execution-terms}
 
-コマンドおよびレポートに拘束される定義です。
+次の定義は、コマンドとレポートが規定する実行、ターゲット解決、レポートの契約を定める。
 
 | 用語 | 規範的定義 | 所有スキーマ / コマンド | 混同しやすい概念 |
 | --- | --- | --- | --- |
-| freshness | 鮮度（freshness）とは、実行結果ではなく、Plan/Groundingアーティファクトに対して `check` が報告する出所の状態です。 | `ambercast check`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | runの成功 |
-| stale | ステール（stale）とは、鮮度が信頼できないアーティファクトに対して出力される、完了した `check` のステータスです。 | `CompletedCheckResult`; [ambercast check](/ambercast/ja/reference/cli/check/#status-vocabulary) | UIドリフト |
-| drift | ドリフト（drift）とは、要素のフィンガープリントを変化させる、要素のアクセシビリティ近傍における局所的な変化です。 | フィンガープリント解決ツール; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | ステールなPlanの出所 |
-| heal | Healとは、非リストモードにおいてはCIポリシーおよび選択されたターゲットが `idempotent` である場合のみ許可される修復コマンドです。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/) | run実行時のグラウンディングフォールバック |
-| target | ターゲットとは、明示的、設定上のデフォルト、または唯一設定されたターゲットである場合に選択される、設定済みの名前付きブラウザ接続先です。 | `resolveTarget`; [設定](/ambercast/ja/reference/configuration/#key-table) | プロンプト |
-| replay isolation | リプレイ分離（replay isolation）とは、ターゲットポリシーである `healReplayIsolation` を指し、`idempotent` はhealを許可し、`stateful` はhealを拒絶します。 | ターゲット設定 / `ambercast heal` | Planのターゲット定義 |
-| report envelope | レポートエンベロープとは、レポート生成コマンドによって返される、バージョン管理されコマンドごとに識別される構造化結果です。 | `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#envelope) | 永続化された `report.json` |
-| report persistence | レポート永続化（report persistence）とは、確定したエンベロープの書き込みに関する、runエンベロープの状態（`persisted`、`failed`、または `not-attempted`）です。 | runの `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#persistence) | セマンティックなテスト結果 |
-| secret reference | シークレット参照とは、`SecretRef` で受け入れられる完全一致文字列であり、`secrets.` の後にASCII英数字またはアンダースコアで構成される1つ以上のドット区切りセグメントが続きます。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | リテラルのシークレット値 |
-| consent | 同意とは、`generate` が `secrets.allow` の外にあるシークレット名を含む候補を永続化する前に必要な、対話式の判断です。 | `ambercast generate`; [シークレットの管理](/ambercast/ja/how-to/manage-secrets/) | 実行時のシークレット値解決 |
-| allowlist | 許可リストとは、生成が候補を永続化する前に `secrets.allow` で受け入れる、レビュー済みの論理シークレット名の集合です。 | configuration / `ambercast generate`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | シークレットシンクのオリジン |
-| `secrets.allow` | `secrets.allow` は、事前承認済みの論理シークレット名を持つ設定配列、または名前ごとのレビューなしで AI が提案したすべての名前を受け入れる高リスクな `"*"` 値です。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` の値 |
-| `SecretNameChoice` | `SecretNameChoice` は、プロジェクションされた `allowedName` と新しい `nameHint` のプロバイダー向けの厳格な選択であり、コミット済みの `SecretRef` が存在する前に両方がローカルで解決されます。 | `SecretNameChoice`; [値の型](/ambercast/ja/spec/value-types/#shared-types) | コミット済みの `SecretRef` |
+| replay | 再生（replay）とは、`run` が計画をそのグラウンディングとともに実行することである。`--resolve` を付けない再生は AI を呼ばない。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/) | heal |
+| freshness | 鮮度（freshness）とは、実行結果ではなく、計画とグラウンディングのアーティファクトについて `check` が報告する出所の状態である。 | `ambercast check`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | runの成功 |
+| stale | ステール（stale）とは、鮮度を信頼できないアーティファクトに対する、完了した `check` のステータスである。 | `CompletedCheckResult`; [ambercast check](/ambercast/ja/reference/cli/check/#status-vocabulary) | UIドリフト |
+| drift | ドリフト（drift）とは、要素のフィンガープリントを変える、要素のアクセシビリティ近傍における局所的な変化である。 | フィンガープリント解決ツール; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | ステールな計画の出所 |
+| heal | healは修復コマンドである。`--list` 以外では、計画が参照するすべてのターゲットに `healReplayIsolation: "idempotent"` を要求し、CI では `ci.heal: true` も要求する。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions); [CIでのheal](/ambercast/ja/reference/cli/heal/#ci) | run実行時のグラウンディングフォールバック |
+| target | ターゲットとは、設定済みの名前付きブラウザ接続先である。計画の各ステップがターゲットを名指しし、`generate` は設定済みターゲットから選ぶ。プロンプトが指定しないときは `defaultTarget` を使う。`run`、`check`、`heal` は計画からターゲットを取る。 | `defaultTarget`; [設定](/ambercast/ja/reference/configuration/#key-table) | プロンプト |
+| replay isolation | 再生分離（replay isolation）とは、ターゲットポリシー `healReplayIsolation` を指す。`idempotent` はhealを許可し、`stateful` は拒絶する。healは計画が参照するすべてのターゲットを検査する。 | ターゲット設定 / `ambercast heal` | 計画のターゲット定義 |
+| report envelope | レポートエンベロープとは、レポートを返すコマンドが返す、バージョン付きでコマンドごとに識別される構造化結果である。 | `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#envelope) | 永続化された `report.json` |
+| report persistence | レポート永続化（report persistence）とは、確定したエンベロープの書き込みに関する run エンベロープの状態であり、`persisted`、`failed`、`not-attempted` のいずれかである。 | runの `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#persistence) | セマンティックなテスト結果 |
+| secret reference | シークレット参照とは、`SecretRef` が受け入れる値全体の文字列であり、`secrets.` の後に、ASCII の英数字またはアンダースコアからなるドット区切りのセグメントが1つ以上続く。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | リテラルのシークレット値 |
+| consent | 同意とは、`generate` が `secrets.allow` の外にあるシークレット名を含む候補を永続化する前に必要な、対話式の判断である。 | `ambercast generate`; [シークレットの管理](/ambercast/ja/how-to/manage-secrets/) | 実行時のシークレット値解決 |
+| allowlist | 許可リストとは、生成が候補を永続化する前に `secrets.allow` が受け入れる、レビュー済みの論理シークレット名の集合である。 | 設定 / `ambercast generate`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | シークレットシンクのオリジン |
+| `secrets.allow` | `secrets.allow` は、事前承認済みの論理シークレット名を並べる設定の配列である。高リスクな `"*"` を指定すると、AI が提案したすべての名前を名前ごとのレビューなしで受け入れる。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` の値 |
+| `SecretNameChoice` | `SecretNameChoice` は、投影された `allowedName` と新しい `nameHint` のどちらかを選ぶ、プロバイダー向けの厳格な選択である。コミット済みの `SecretRef` が存在する前に、どちらもローカルで解決する。 | `SecretNameChoice`; [値の型](/ambercast/ja/spec/value-types/#shared-types) | コミット済みの `SecretRef` |
 
-`stale` はcheckの結果に属するステータスであり、runの結果ステータスではありません。また、healの冪等ターゲット検証（idempotent-target check）がスキップされるのはリストモード時のみです。
+`stale` はcheckの結果に属するステータスであり、runの結果ステータスではない。healの冪等ターゲットの検査をスキップするのはリストモードのときである。
 
 ## 翻訳不変レジストリ {#translation-invariant-registry}
 
-ドキュメント全体において翻訳せず保持すべきトークンの網羅的一覧です。第4列のレポートバージョンは、そのリリースのコミットに記録された `REPORT_SCHEMA_VERSION` です。
+レファレンス全体で翻訳せずに保持するリテラルトークンの索引である。バージョン行の第4列は、そのリリースのリリースコミットに記録された `REPORT_SCHEMA_VERSION` を示す。
 
 | 不変トークン | 規範的定義 | 所有者 | 混同しやすい概念 |
 | --- | --- | --- | --- |
-| `$id` | `$id` は、生成される各スキーマに公開される JSON Schema の識別子です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata) | 設定の `$schema` |
-| `$schema` | `$schema` は設定ファイルが存在する場合の必須識別子フィールドであり、生成されるスキーマにおけるDraft宣言です。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#key-table) | `$id` |
-| `**` | `**` はパス区切り文字をまたぐ検出用ワイルドカードです。 | マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language) | 1セグメントの `*` |
-| `--` | `--` はオプション解析を終了し、後続のトークンをリテラルパスとして扱います。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--` で始まるファイル名 |
-| `--allow-empty` | `--allow-empty` は、このフラグを解析するコマンドにおいて空の選択を許容します。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--list` |
-| `--allow-headless` | `--allow-headless` は view の非対話拒否を解除します。既に対話端末である場合は no-op です。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#interactive-gate) | 実装済みの `--headed` |
-| `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可します。指定しない場合、run はミスを拒絶します。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
-| `--clear` | `--clear` は計画中（現行版では未実装）であり、現行版で受け入れられるベースラインパーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
-| `--config` | `--config` はコマンドローカルのフラグであり、generateとcheckでのみ解析されます。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
-| `--dir` | `--dir` は `ambercast init` が scaffold 先とするディレクトリを指定します。 | `ambercast init`; [ambercast init](/ambercast/ja/reference/cli/init/#flags) | 設定の `testDir` |
-| `--dry-run` | `--dry-run` は、generateおよびhealにおいてアーティファクトの書き込みを保留します。 | generate/heal; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | `--list` |
-| `--force` | `--force` は、実装済みのgenerateコマンドにおいて最新のPlanの再利用を無効化します。`ambercast init` では既存の設定ファイルを拒否せず置き換えます。 | `ambercast generate`; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | healの `--yes` |
-| `--host` | `--host` は view のバインドアドレスを選択します。具体的な IP または `localhost` のみで、ワイルドカードは不可です。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#host-binding) | ターゲットの `baseUrl` |
-| `--json` | `--json` は、`init` と `view` を除く実装済みコマンドの実行完了後にシリアライズされた構造化レポート出力を選択します。 | CLIレンダラー; [レポート](/ambercast/ja/reference/reports/#envelope) | MCP JSON-RPC |
-| `--list` | `--list` は `generate`、`run`、`check`、`heal` で解析されます。一覧表示の結果セマンティクスは各コマンドのドキュメントが所有します。`init` と `view` はどちらも受け付けません。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
-| `--no-reset` | `--no-reset` は計画中（現行版では未実装）であり、現行版で受け入れられる run パーサーセマンティクスはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | `--force` |
-| `--port` | `--port` は view を候補自動増分ではなく単一の厳格なポートに固定します。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#port-selection) | 設定の `viewer.port` |
-| `--yes` | `--yes` は、対話的な確認なしでhealの適用を承認し、initの確認プロンプトを省略します。いずれも利用者自身のレビューの代わりにはなりません。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | generateの `--force` |
-| `.ambercast.grounding.json` | `.ambercast.grounding.json` は、隣接するGroundingコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Planのサフィックス |
-| `.ambercast.plan.json` | `.ambercast.plan.json` は、隣接するPlanコンパニオンの正確なサフィックスです。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | Groundingのサフィックス |
-| `.baseline` | `.baseline` は計画中（現行版では未実装）であり、現行版のレイアウト解決ツールが導出することはありません。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-storage-and-freshness) | 実装済みの `.runs` |
-| `.runs` | `.runs` はデフォルトの `runsDir` の最終セグメントであり、独立して解決されるルートではありません。 | 設定 / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | コンパニオンアーティファクト |
-| `.test.md` | `.test.md` は、検出されたプロンプトパスがレイアウトマッピングを受け取るために必要な正確なサフィックスです。 | レイアウト解決ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity) | 任意のMarkdown |
-| `0.1.0` | `0.1.0` はリポジトリのチェンジログに記載されている2026-09-03のリリースを示します。 | [変更履歴](/ambercast/ja/reference/changelog/#release-010) | アーティファクトのスキーマバージョン |
-| `0.9.0` | `0.9.0` は、このリファレンス群が対象とする現在のパッケージバージョンです。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.10` |
-| `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` は、最も強い優先度から最も弱い優先度への固定されたプロセス終了コードの優先順位です。 | 終了コードセレクター; [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) | 数値順 |
-| `@ambercast-secret` | `@ambercast-secret` は拒否されるレガシープロンプト構文であり、Plan v3 アーティファクトを再生成する前に除去する必要があります。 | プロンプトパーサー; [シークレットグラントの移行](/ambercast/ja/how-to/upgrade/#migrate-secret-grants) | シークレット参照 |
-| `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` は、環境変数によるプロバイダーのオーバーライドを指定します。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--ai` |
-| `AMBERCAST_CONFIG` | `AMBERCAST_CONFIG` は、環境変数による設定ファイルパスのオーバーライドを指定します。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--config` |
-| `AMBERCAST_ENV_*` | `AMBERCAST_ENV_*` はAIプロバイダーの子プロセスから除外される名前空間であり、Ambercastの入力一覧には含まれません。 | 子プロセスランナー; [環境変数](/ambercast/ja/reference/environment-variables/#provider-child-environment) | `AMBERCAST_SECRET_*` |
-| `AMBERCAST_SECRET_*` | `AMBERCAST_SECRET_*` はシークレット参照を解決し、AIプロバイダーの子プロセスからは除外されます。 | シークレットアダプター / 子プロセスランナー; [環境変数](/ambercast/ja/reference/environment-variables/#secrets) | `AMBERCAST_ENV_*` |
-| `CI` | `CI` は、定義されており、空文字でなく、正確に小文字の `false` でない場合にアクティブと判定されます。 | 環境情報; [環境変数](/ambercast/ja/reference/environment-variables/#secrets) | 一般的な真偽値（truthy）判定 |
-| `CONFIG_INVALID` | `CONFIG_INVALID` は、無効な設定に対する構造化使用方法エラーコードです。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | プロセス終了コード2そのもの |
-| `FS_IO_ERROR` | `FS_IO_ERROR` は、ファイルシステムI/O障害に対する構造化環境エラーコードです。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | 拒絶されたアーティファクト全般 |
-| `GitHub Security Advisories` | GitHub Security Advisoriesは、非公開の脆弱性報告チャネルです。 | `SECURITY.md`; [セキュリティポリシー](/ambercast/ja/reference/security-policy/#vulnerability-reporting) | 公開issue |
-| `GroundingDocument` | `GroundingDocument` は、Groundingの `schemaVersion`、`planDigest`、およびエントリを所有する厳格なスキーマです。 | `GroundingDocument`; [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/) | `PlanDocument` |
-| `INTERRUPTED` | `INTERRUPTED` は、中断された実行に対する構造化環境エラーコードです。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | アサーション失敗 |
-| `JSON-RPC` | `JSON-RPC` は実装済み MCP サーバーの stdio メッセージを運びます。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | CLI `--json` |
-| `PlanDocument` | `PlanDocument` は、Planのバージョン、出所、ターゲット、およびステップを所有する厳格なスキーマです。 | `PlanDocument`; [計画ドキュメント](/ambercast/ja/spec/plan-document/) | `GroundingDocument` |
-| `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` は、`SECRET_REF_SOURCE` から構築される完全一致用の固定正規表現です。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | アンカーなしの断片 |
-| `a11y-neighborhood-v2` | `a11y-neighborhood-v2` は、唯一受け入れられる要素フィンガープリントのアルゴリズムリテラルです。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | Planスキーマバージョン2 |
-| `ambercast` | `ambercast` はパッケージバイナリ名でありCLIプログラムです。 | パッケージ / CLI概要 | アーティファクトスキーマ |
-| `ambercast baseline` | `ambercast baseline` は計画中（現行版では未実装）であり、現行版のパーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
-| `ambercast check` | `ambercast check` は実装済みの読み取り専用鮮度確認コマンドです。 | [ambercast check](/ambercast/ja/reference/cli/check/) | `ambercast run` |
-| `ambercast generate` | `ambercast generate` は実装済みのPlan生成コマンドです。 | [ambercast generate](/ambercast/ja/reference/cli/generate/) | `ambercast run` |
-| `ambercast heal` | `ambercast heal` は実装済みの保護されたアーティファクト修復コマンドです。 | [ambercast heal](/ambercast/ja/reference/cli/heal/) | runフォールバック |
-| `ambercast init` | `ambercast init` は実装済みで、4つのファイルを書き込みます。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | `ambercast generate` |
-| `ambercast mcp` | `ambercast mcp` は実装済みの stdio MCP サーバーを起動します。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | MCPツール名 |
-| `ambercast restore` | `ambercast restore` は計画中（現行版では未実装）であり、現行版のパーサーによって拒絶されます。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
-| `ambercast review` | `ambercast review` は計画中（現行版では未実装）です（ランタイムレポートスキーマにreviewブランチが含まれている場合でも同様です）。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
-| `ambercast run` | `ambercast run` は実装済みの決定論的リプレイコマンドです。 | [ambercast run](/ambercast/ja/reference/cli/run/) | `ambercast generate` |
-| `ambercast view` | `ambercast view` は実装済みの読み取り専用ローカル結果ビューアです。 | [ambercast view](/ambercast/ja/reference/cli/view/) | `ambercast run` |
-| `ambercast_check` | `ambercast_check` は実装済みの読み取り専用 MCP 鮮度確認ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
-| `ambercast_generate` | `ambercast_generate` は実装済みの MCP Plan 生成ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
-| `ambercast_heal` | `ambercast_heal` はプレビューと token 認可による適用を持つ実装済み MCP 修復ツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
-| `ambercast_job_cancel` | `ambercast_job_cancel` はこのサーバープロセスのジョブの取消を要求します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
-| `ambercast_job_status` | `ambercast_job_status` はジョブ一覧または単一ジョブの状態と結果を取得します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
-| `ambercast_review` | `ambercast_review` は将来の MCP ツールであり、実装済みの 6 ツールには含まれません。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 計画中の CLI review |
-| `ambercast_run` | `ambercast_run` は実装済みの MCP リプレイツールです。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
-| `config.schema.json` | `config.schema.json` は生成される設定JSON Schemaであり、npmのconfig-schemaエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | 設定インスタンス |
-| `dryRun` | `dryRun` はCLI/MCPのhealプレビュー要求用の入力フィールドです。完了した `HealResult` は `dryRun` フィールドではなく `application: preview-only` でプレビューを表します。 | heal要求 / [MCP ツール](/ambercast/ja/reference/mcp-tools/#heal-preview-and-apply) | HealResultの表現 |
-| `fresh-without-grounding` | `fresh-without-grounding` は、`fresh` とは区別される完了したcheckステータスです。 | check結果; [ambercast check](/ambercast/ja/reference/cli/check/#status-vocabulary) | 欠落しているPlan |
-| `grounding.schema.json` | `grounding.schema.json` は生成されるGrounding JSON Schemaであり、npmのエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | Groundingインスタンス |
-| `healReplayIsolation` | `healReplayIsolation` はhealにおいて `idempotent` の値が要求されるターゲットポリシーです。 | ターゲット設定 / heal | ブラウザモード |
-| `inputsDigest` | `inputsDigest` は5つの入力からなるPlanの出所ダイジェストを記録します。 | `computeInputsDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `planDigest` |
-| `isError` | `isError` は exit code の写像と MCP 固有の失敗によって実装済み MCP ツールの結果を分類します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | test-redステータス |
-| `outputSchema` | report スキーマが大きいため、実装済みの全 MCP ツール定義では `outputSchema` を省略します。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 生成されるnpm JSON Schema |
-| `plan.schema.json` | `plan.schema.json` は生成されるPlan JSON Schemaであり、npmのエクスポート先です。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | Planインスタンス |
-| `planDigest` | `planDigest` は、`generatorMeta` を除外したリプレイ関連のPlan内容にGroundingを紐付けます。 | `computePlanDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `inputsDigest` |
-| `producerBundleFingerprint` | `producerBundleFingerprint` はプロデューサコントラクトの出所を示し、その変更は `inputsDigest` を変化させます。 | generateの出所 / [互換性と再生成](/ambercast/ja/reference/compatibility/#regeneration-boundary) | 要素フィンガープリント |
-| `report.json` | `report.json` は呼び出しディレクトリ配下に配置される、run実行時のみ永続化される確定エンベロープです。 | run / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | stdoutのエンベロープ |
-| `reportPersistence` | `reportPersistence` は、永続化の試行に関するrunエンベロープの状態です。 | runレポート; [レポート](/ambercast/ja/reference/reports/#persistence) | テストステータス |
-| `review` | `review` はレポートスキーマのコマンドブランチであり、実装済みCLIコマンドの存在を示すものではありません。 | `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#result-shapes) | 利用可能なコマンド |
-| `schemaVersion` | `schemaVersion` はバージョン管理されたPlan、Grounding、またはレポートコントラクトを識別します。 | IR/レポートスキーマ | パッケージバージョン |
-| `stderr` | `stderr` は CLI の使用方法エラー、クラッシュ診断、永続化警告、および MCP 起動ログを出力します。 | CLIランタイム / [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | stdoutの応答 |
-| `stdio` | `stdio` は実装済み MCP サーバーのトランスポートです。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | ネットワークポート |
-| `stdout` | `stdout` はヘルプ/バージョン情報および完了したコマンドレポートを出力し、プロセスのステータスは個別に割り当てられます。 | CLIランタイム / [レポート](/ambercast/ja/reference/reports/#envelope) | stderrの診断情報 |
-| `structuredContent` | `structuredContent` は実装済み MCP 応答で report envelope または Job record を運びます。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI JSONテキスト |
-| `testIgnore` | `testIgnore` は包含された相対パスから一致するパスを除外します。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testMatch` |
-| `testMatch` | `testMatch` は相対パスに対して少なくとも1つの一致を要求します。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testIgnore` |
-| `{{secrets.name}}` | `{{secrets.name}}` は、環境変数のキーに対応する完全一致のシークレット参照の例です。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | リテラルの認証情報 |
+| `$id` | `$id` は、生成される各スキーマに公開される JSON Schema の識別子である。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#publication-metadata) | 設定の `$schema` |
+| `$schema` | `$schema` は設定ファイルが存在する場合の必須識別子フィールドであり、生成されるスキーマにおけるDraft宣言である。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#key-table) | `$id` |
+| `**` | `**` はパス区切り文字をまたぐ検出用ワイルドカードである。 | マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language) | 1セグメントの `*` |
+| `--` | `--` はオプション解析を終了し、後続のトークンをリテラルパスとして扱う。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--` で始まるファイル名 |
+| `--allow-empty` | `--allow-empty` は、このフラグを解析するコマンドにおいて空の選択を許容する。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--list` |
+| `--allow-headless` | `--allow-headless` は view の非対話拒否を解除する。既に対話端末である場合は no-op である。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#interactive-gate) | 実装済みの `--headed` |
+| `--resolve` | `--resolve` は、グラウンディングが不足している場合に run がライブ AI 解決を行うことを明示的に許可する。指定しない場合、run はミスを拒絶する。 | `ambercast run`; [ambercast run](/ambercast/ja/reference/cli/run/#flags) | オフラインテスト検出 |
+| `--clear` | `--clear` は計画中（現行版では未実装）であり、現行版で受け入れられるベースラインパーサーセマンティクスはない。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | 現行コマンドによるファイル削除 |
+| `--config` | `--config` はコマンドローカルのフラグであり、`generate`、`check`、`view` が解析する。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `AMBERCAST_CONFIG` |
+| `--dir` | `--dir` は `ambercast init` がスキャフォールドする先のディレクトリを指定し、`ambercast mcp` ではセッションルートを選ぶ。 | `ambercast init`; [ambercast init](/ambercast/ja/reference/cli/init/#flags); [ambercast mcp](/ambercast/ja/reference/cli/mcp/#flags) | 設定の `testDir` |
+| `--dry-run` | `--dry-run` は、generateおよびhealにおいてアーティファクトの書き込みを保留する。 | generate/heal; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags) | `--list` |
+| `--force` | `--force` は、実装済みのgenerateコマンドにおいて最新の計画の再利用を無効化する。`ambercast init` では既存の設定ファイルを拒否せず置き換える。 | `ambercast generate`; [ambercast generate](/ambercast/ja/reference/cli/generate/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | healの `--yes` |
+| `--host` | `--host` は view のバインドアドレスを選択する。具体的な IP または `localhost` のみで、ワイルドカードは不可である。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#host-binding) | ターゲットの `baseUrl` |
+| `--json` | `--json` はシリアライズされた構造化レポートの出力を選ぶ。`generate`、`run`、`check`、`heal` が受け付ける。 | CLIレンダラー; [レポート](/ambercast/ja/reference/reports/#envelope) | MCP JSON-RPC |
+| `--list` | `--list` は `generate`、`run`、`check`、`heal` で解析される。一覧表示の結果セマンティクスは各コマンドのドキュメントが所有する。`init`、`view`、`mcp` は受け付けない。 | CLIパーサー; [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix) | `--allow-empty` |
+| `--no-reset` | `--no-reset` は計画中（現行版では未実装）であり、現行版で受け入れられる run パーサーセマンティクスはない。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-boundary) | `--force` |
+| `--port` | `--port` は view を候補自動増分ではなく単一の厳格なポートに固定する。 | `ambercast view`; [ambercast view](/ambercast/ja/reference/cli/view/#port-selection) | 設定の `viewer.port` |
+| `--yes` | `--yes` は、対話的な確認なしでhealの適用を承認し、initの確認プロンプトを省略する。いずれも利用者自身のレビューの代わりにならない。 | `ambercast heal`; [ambercast heal](/ambercast/ja/reference/cli/heal/#flags); [ambercast init](/ambercast/ja/reference/cli/init/#flags) | generateの `--force` |
+| `.ambercast.grounding.json` | `.ambercast.grounding.json` は、隣接するグラウンディングコンパニオンの正確なサフィックスである。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | 計画のサフィックス |
+| `.ambercast.plan.json` | `.ambercast.plan.json` は、隣接する計画コンパニオンの正確なサフィックスである。 | レイアウト解決ツール; [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions) | グラウンディングのサフィックス |
+| `.baseline` | `.baseline` は計画中（現行版では未実装）であり、現行版のレイアウト解決ツールが導出することはない。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#planned-storage-and-freshness) | 実装済みの `.runs` |
+| `.runs` | `.runs` はデフォルトの `runsDir` の最終セグメントであり、独立して解決されるルートではない。 | 設定 / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | コンパニオンアーティファクト |
+| `.test.md` | `.test.md` は、検出されたプロンプトパスがレイアウトマッピングを受け取るために必要な正確なサフィックスである。 | レイアウト解決ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity) | 任意のMarkdown |
+| `0.1.0` | `0.1.0` はリポジトリのチェンジログに記載されている2026-09-03のリリースを示す。 | [変更履歴](/ambercast/ja/reference/changelog/#release-010) | アーティファクトのスキーマバージョン |
+| `0.9.0` | `0.9.0` は、このリファレンス群が対象とする現在のパッケージバージョンである。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.10` |
+| `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` は、最も強い優先度から最も弱い優先度への固定されたプロセス終了コードの優先順位である。 | 終了コードセレクター; [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) | 数値順 |
+| `@ambercast-secret` | `@ambercast-secret` は拒否されるレガシープロンプト構文であり、計画 v3 のアーティファクトを再生成する前に除去する必要がある。 | プロンプトパーサー; [シークレットグラントの移行](/ambercast/ja/how-to/upgrade/#migrate-secret-grants) | シークレット参照 |
+| `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` は、環境変数によるプロバイダーのオーバーライドを指定する。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--ai` |
+| `AMBERCAST_CONFIG` | `AMBERCAST_CONFIG` は、環境変数による設定ファイルパスのオーバーライドを指定する。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--config` |
+| `AMBERCAST_ENV_*` | `AMBERCAST_ENV_*` はAIプロバイダーの子プロセスから除外される名前空間であり、Ambercastの入力一覧には含まれない。 | 子プロセスランナー; [環境変数](/ambercast/ja/reference/environment-variables/#provider-child-environment) | `AMBERCAST_SECRET_*` |
+| `AMBERCAST_SECRET_*` | `AMBERCAST_SECRET_*` はシークレット参照を解決し、AIプロバイダーの子プロセスからは除外される。 | シークレットアダプター / 子プロセスランナー; [環境変数](/ambercast/ja/reference/environment-variables/#secrets) | `AMBERCAST_ENV_*` |
+| `CI` | `CI` は、定義されており、空文字でなく、正確に小文字の `false` でない場合にアクティブと判定される。 | 環境情報; [環境変数](/ambercast/ja/reference/environment-variables/#secrets) | 一般的な真偽値（truthy）判定 |
+| `CONFIG_INVALID` | `CONFIG_INVALID` は、無効な設定に対する、使用方法エラーを表す構造化コードである。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | プロセス終了コード2そのもの |
+| `FS_IO_ERROR` | `FS_IO_ERROR` は、ファイルシステムI/O障害に対する構造化環境エラーコードである。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | 拒絶されたアーティファクト全般 |
+| `GitHub Security Advisories` | GitHub Security Advisoriesは、非公開の脆弱性報告チャネルである。 | `SECURITY.md`; [セキュリティポリシー](/ambercast/ja/reference/security-policy/#vulnerability-reporting) | 公開issue |
+| `GroundingDocument` | `GroundingDocument` は、グラウンディングの `schemaVersion`、`planDigest`、およびエントリを所有する厳格なスキーマである。 | `GroundingDocument`; [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/) | `PlanDocument` |
+| `INTERRUPTED` | `INTERRUPTED` は、中断された実行に対する構造化環境エラーコードである。 | レポートスキーマ; [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary) | アサーション失敗 |
+| `JSON-RPC` | `JSON-RPC` は実装済み MCP サーバーの stdio メッセージを運ぶ。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | CLI `--json` |
+| `PlanDocument` | `PlanDocument` は、計画のバージョン、出所、ターゲット、およびステップを所有する厳格なスキーマである。 | `PlanDocument`; [計画ドキュメント](/ambercast/ja/spec/plan-document/) | `GroundingDocument` |
+| `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` は、`SECRET_REF_SOURCE` から構築される完全一致用の固定正規表現である。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | アンカーなしの断片 |
+| `a11y-neighborhood-v2` | `a11y-neighborhood-v2` は、唯一受け入れられる要素フィンガープリントのアルゴリズムリテラルである。 | `Fingerprint`; [要素フィンガープリント](/ambercast/ja/spec/fingerprint/) | 計画スキーマバージョン2 |
+| `ambercast` | `ambercast` はパッケージバイナリ名でありCLIプログラムである。 | パッケージ / CLI概要 | アーティファクトスキーマ |
+| `ambercast baseline` | `ambercast baseline` は計画中（現行版では未実装）であり、現行版のパーサーによって拒絶される。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
+| `ambercast check` | `ambercast check` は実装済みの読み取り専用鮮度確認コマンドである。 | [ambercast check](/ambercast/ja/reference/cli/check/) | `ambercast run` |
+| `ambercast generate` | `ambercast generate` は実装済みの計画生成コマンドである。 | [ambercast generate](/ambercast/ja/reference/cli/generate/) | `ambercast run` |
+| `ambercast heal` | `ambercast heal` は実装済みの保護されたアーティファクト修復コマンドである。 | [ambercast heal](/ambercast/ja/reference/cli/heal/) | runフォールバック |
+| `ambercast init` | `ambercast init` は実装済みで、4つのスキャフォールド用アーティファクトの作成を予定し、既存のものは省略できる。 | [ambercast init](/ambercast/ja/reference/cli/init/#usage) | `ambercast generate` |
+| `ambercast mcp` | `ambercast mcp` は実装済みの stdio MCP サーバーを起動する。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | MCPツール名 |
+| `ambercast restore` | `ambercast restore` は計画中（現行版では未実装）であり、現行版のパーサーによって拒絶される。 | [ambercast baseline と ambercast restore](/ambercast/ja/reference/cli/baseline-restore/#status) | 実装済みコマンド |
+| `ambercast review` | `ambercast review` は計画中（現行版では未実装）である。ランタイムのレポートスキーマに review ブランチが含まれていても同様である。 | [ambercast review](/ambercast/ja/reference/cli/review/#status) | スキーマ上の利用可能性 |
+| `ambercast run` | `ambercast run` は実装済みの決定論的な再生コマンドである。 | [ambercast run](/ambercast/ja/reference/cli/run/) | `ambercast generate` |
+| `ambercast view` | `ambercast view` は実装済みの読み取り専用ローカル結果ビューアである。 | [ambercast view](/ambercast/ja/reference/cli/view/) | `ambercast run` |
+| `ambercast_check` | `ambercast_check` は実装済みの読み取り専用 MCP 鮮度確認ツールである。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast check` |
+| `ambercast_generate` | `ambercast_generate` は実装済みの MCP 計画生成ツールである。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast generate` |
+| `ambercast_heal` | `ambercast_heal` はプレビューと token 認可による適用を持つ実装済み MCP 修復ツールである。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast heal` |
+| `ambercast_job_cancel` | `ambercast_job_cancel` はこのサーバープロセスのジョブの取消を要求する。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
+| `ambercast_job_status` | `ambercast_job_status` はジョブ一覧または単一ジョブの状態と結果を取得する。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI コマンド |
+| `ambercast_review` | `ambercast_review` は将来の MCP ツールであり、実装済みの 6 ツールには含まれない。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 計画中の CLI review |
+| `ambercast_run` | `ambercast_run` は実装済みの MCP 再生ツールである。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI `ambercast run` |
+| `config.schema.json` | `config.schema.json` は生成される設定JSON Schemaであり、npmのconfig-schemaエクスポート先である。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | 設定インスタンス |
+| `dryRun` | `dryRun` はCLI/MCPのhealプレビュー要求用の入力フィールドである。完了した `HealResult` は `dryRun` フィールドではなく `application: preview-only` でプレビューを表す。 | heal要求 / [MCP ツール](/ambercast/ja/reference/mcp-tools/#heal-preview-and-apply) | HealResultの表現 |
+| `fresh-without-grounding` | `fresh-without-grounding` は、`fresh` とは区別される完了したcheckステータスである。 | check結果; [ambercast check](/ambercast/ja/reference/cli/check/#status-vocabulary) | 欠落している計画 |
+| `grounding.schema.json` | `grounding.schema.json` は生成されるグラウンディング用の JSON Schema であり、npmのエクスポート先である。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | グラウンディングインスタンス |
+| `healReplayIsolation` | `healReplayIsolation` は、heal が計画の参照するすべてのターゲットに対して `idempotent` を要求するターゲットポリシーである。 | ターゲット設定 / heal | ブラウザモード |
+| `inputsDigest` | `inputsDigest` は5つの入力からなる計画の出所ダイジェストを記録する。 | `computeInputsDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `planDigest` |
+| `isError` | `isError` は exit code の写像と MCP 固有の失敗によって実装済み MCP ツールの結果を分類する。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | test-redステータス |
+| `outputSchema` | report スキーマが `tools/list` に載せるには大きすぎるため、実装済みの全 MCP ツール定義では `outputSchema` を省略する。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | 生成されるnpm JSON Schema |
+| `plan.schema.json` | `plan.schema.json` は生成される計画用の JSON Schema であり、npmのエクスポート先である。 | [JSON スキーマ](/ambercast/ja/reference/json-schemas/#generated-artifacts) | 計画インスタンス |
+| `planDigest` | `planDigest` は、`generatorMeta` を除外した再生関連の計画内容にグラウンディングを紐付ける。 | `computePlanDigest`; [鮮度とダイジェスト](/ambercast/ja/spec/freshness/) | `inputsDigest` |
+| `producerBundleFingerprint` | `producerBundleFingerprint` はプロデューサコントラクトの出所を示し、その変更は `inputsDigest` を変化させる。 | generateの出所 / [互換性と再生成](/ambercast/ja/reference/compatibility/#regeneration-boundary) | 要素フィンガープリント |
+| `report.json` | `report.json` は呼び出しディレクトリ配下に配置される、run実行時のみ永続化される確定エンベロープである。 | run / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | stdoutのエンベロープ |
+| `reportPersistence` | `reportPersistence` は、永続化の試行に関するrunエンベロープの状態である。 | runレポート; [レポート](/ambercast/ja/reference/reports/#persistence) | テストステータス |
+| `review` | `review` はレポートスキーマのコマンドブランチであり、実装済みCLIコマンドの存在を示すものではない。 | `ReportEnvelope`; [レポート](/ambercast/ja/reference/reports/#result-shapes) | 利用可能なコマンド |
+| `schemaVersion` | `schemaVersion` はバージョン管理された計画、グラウンディング、またはレポートコントラクトを識別する。 | IR/レポートスキーマ | パッケージバージョン |
+| `stderr` | `stderr` は CLI の使用方法エラー、クラッシュ診断、永続化警告、および MCP 起動ログを出力する。 | CLIランタイム / [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | stdoutの応答 |
+| `stdio` | `stdio` は実装済み MCP サーバーのトランスポートである。 | [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage) | ネットワークポート |
+| `stdout` | `stdout` はヘルプ/バージョン情報および完了したコマンドレポートを出力し、プロセスのステータスは個別に割り当てられる。 | CLIランタイム / [レポート](/ambercast/ja/reference/reports/#envelope) | stderrの診断情報 |
+| `structuredContent` | `structuredContent` は実装済み MCP 応答で report envelope または Job record を運ぶ。 | [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) | CLI JSONテキスト |
+| `testIgnore` | `testIgnore` は包含された相対パスから一致するパスを除外する。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testMatch` |
+| `testMatch` | `testMatch` は相対パスに対して少なくとも1つの一致を要求する。 | 検出マッチャー; [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection) | `testIgnore` |
+| `{{secrets.name}}` | `{{secrets.name}}` は、環境変数のキーに対応する完全一致のシークレット参照の例である。 | `SecretRef`; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#secret-references) | リテラルの認証情報 |
 
-関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/), [設定](/ambercast/ja/reference/configuration/), [レポート](/ambercast/ja/reference/reports/), [エラーコード](/ambercast/ja/reference/error-codes/), [終了コード](/ambercast/ja/reference/exit-codes/), [JSON スキーマ](/ambercast/ja/reference/json-schemas/), [環境変数](/ambercast/ja/reference/environment-variables/), [MCP ツール](/ambercast/ja/reference/mcp-tools/)
+## 関連項目 {#see-also}
+
+- [CLIの概要](/ambercast/ja/reference/cli/overview/)
+- [設定](/ambercast/ja/reference/configuration/)
+- [レポート](/ambercast/ja/reference/reports/)
+- [エラーコード](/ambercast/ja/reference/error-codes/)
+- [終了コード](/ambercast/ja/reference/exit-codes/)
+- [JSON スキーマ](/ambercast/ja/reference/json-schemas/)
+- [環境変数](/ambercast/ja/reference/environment-variables/)
+- [MCP ツール](/ambercast/ja/reference/mcp-tools/)
 
 ---
 
 # MCP ツール
 Source: https://kotarotsubaki.github.io/ambercast/ja/reference/mcp-tools/
 
-MCP サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` の順で6つのツールを公開します。ツール名は ambercast プレフィックスと snake_case を使用し、すべての CLI コマンドを複製するものではありません。
+MCP サーバーは `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` の順で6つのツールを公開する。ツール名は ambercast プレフィックスと snake_case を使う。サーバーはすべての CLI コマンドを複製しない。
 
 ## ツール一覧 {#tool-table}
 
-アノテーションは readOnly / destructive / idempotent / openWorld の順です。4値をすべて明示しますが、認可ではなくヒントです。generate の冪等ヒントは弱い意味であり、最新の Plan はスキップされて効果が収束しても、AI 出力は変動し得ます。
+アノテーションは readOnly / destructive / idempotent / openWorld の順で並ぶ。4値をすべて明示するが、認可ではなくヒントである。generate の冪等ヒントは弱い意味を持つ。最新の計画（plan）はスキップされ、効果は収束する。ただし AI 出力は変動し得る。
 
 | ツール | 対応 CLI | アノテーション | `isError: true` | `isError: false` の負の結果 |
 | --- | --- | --- | --- | --- |
 | `ambercast_generate` | generate | false / false / true（弱）/ false | exit 2（`PROMPT_AMBIGUOUS` 含む）・3 | exit 5 |
 | `ambercast_run` | run | false / false / false / true | exit 2・3・4（MISSING_PLAN / STALE_PLAN / INTEGRITY_VIOLATION / GROUNDING_UNRESOLVED） | exit 1（assertion red）、exit 5 |
-| `ambercast_check` | check | true / false / true / false | exit 2・3 | exit 4（stale は results[].status の正常成果）、exit 5 |
+| `ambercast_check` | check | true / false / true / false | exit 2・3 | exit 4（stale は results[].status の正常な結果）、exit 5 |
 | `ambercast_heal` | heal | false / true / false / true | exit 2（CI 拒否と `PROMPT_AMBIGUOUS` を含む）・3・4、`HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED` | exit 1（未解決・拒否）、exit 5 |
-| `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`、failed 時の `JOB_FAILED`、結果のある completed/cancelled は元ツールの写像 | 非終端 record・一覧・queued cancel record |
+| `ambercast_job_status` | — | true / false / true / false | `JOB_NOT_FOUND`、failed 時の `JOB_FAILED`、結果のある completed または cancelled は元ツールの写像 | 非終端の record、一覧、queued cancel の record |
 | `ambercast_job_cancel` | — | false / false / true / false | `JOB_NOT_FOUND` | — |
 
-`isError` はレポートの集約済み exit code から決め、個別の report error は再分類しません。heal は Claude Code 用の対話ヒントも設定しますが、それ自体は承認の証拠ではありません。
+`isError` はレポートの集約済み exit code で決まる。サーバーは個別の report error を再分類しない。heal は Claude Code 用の対話ヒントも設定するが、このヒントは承認の証拠ではない。
 
 ## 入力 {#inputs}
 
-入力は strict object です。不明キー、型不一致、refine 違反は SDK の `Input validation error` と `isError: true` になります。引数がない場合は `{}` を渡します。
+入力は strict object である。不明なキー、型の不一致、refine 違反は、SDK の `Input validation error` と `isError: true` になる。引数がない場合は `{}` を渡す。
 
 | 範囲 | プロパティと既定値 |
 | --- | --- |
-| 共通 | `files?: string[]`（省略と `[]` はともに config discovery、相対パスは session root 基準）、`allowEmpty?: boolean`（false） |
+| 共通 | `files?: string[]`（省略と `[]` はともに config discovery を選ぶ。相対パスは session root 基準）、`allowEmpty?: boolean`（false） |
 | `ambercast_generate` | `target?: string`（ジェネレーターが利用できる Target 定義を制限する）、`force?: boolean`（false）、`dryRun?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_run` | `grep?: string`（有効な正規表現）、`resolve?: boolean`（false）、`updateCache?: boolean`（false）、`ai?: 'claude' \| 'codex'` |
 | `ambercast_check` | 共通入力のみ |
 | `ambercast_heal` | `dryRun?: boolean`（true）、`applyToken?: string`、`ai?: 'claude' \| 'codex'` |
-| `ambercast_job_status` | `jobId?: string`（省略時は当該サーバープロセスの一覧）、`waitMs?: number`（0、整数 0〜45000、ID 指定時のみ有効） |
+| `ambercast_job_status` | `jobId?: string`（省略時は当該サーバープロセスの一覧）、`waitMs?: number`（0。整数 0〜45000、ID 指定時のみ有効） |
 | `ambercast_job_cancel` | `jobId: string` |
 
-MCP 入力から CLI フラグ `headed`（headless 固定）、`list`、`stale`（fail 固定）、`json`、`yes`（`applyToken` に置換）、`configPath` を除外します。
+MCP 入力は意図的に CLI フラグを除外する。除外するのは `headed`（headless 固定）、`list`、`stale`（fail 固定）、`json`、`yes`（`applyToken` に置換）、`configPath` である。
 
 ## heal のプレビューと適用 {#heal-preview-and-apply}
 
-`ambercast_heal` は CLI heal の false 既定と異なり、プレビュー（`dryRun: true`）が既定です。コミットがあるプレビューのみ `applyToken` を返します。適用には `dryRun: false` と `applyToken` だけを指定し、`files`、`ai`、`allowEmpty` は省略します。プレビューでは `applyToken` を省略します。違反は SDK 入力エラーです。適用は同期実行で、ジョブを作りません。token は 128-bit 暗号乱数の hex 32 文字です。新しいプレビューは pending token を supersede します。pending token は token を含む応答を初めて組み立ててから 600000 ms で期限切れになり、consumed token は確定から 600000 ms の間、保存済み結果を再送します。
+`ambercast_heal` は CLI heal の false 既定と異なり、プレビュー（`dryRun: true`）が既定である。コミットがあるプレビューは `applyToken` を返し、コミットがないプレビューは返さない。適用には `dryRun: false` と `applyToken` だけを指定する。このとき `files`、`ai`、`allowEmpty` は省略する。プレビューでは `applyToken` を省略する。無効な組み合わせは SDK の入力検証エラーになる。適用は同期実行で、ジョブを作らない。
 
-クライアントが form elicitation に対応する場合、600000 ms の制限で確認を求めます。受諾と確認で修復を適用し、拒否なら未適用、取消なら中断となります。form elicitation がないクライアントではサーバーが適用を認可します。token はプレビューを識別するもので、適用の要求は別の操作です。クライアントのヒントだけでは認可になりません。
+token は 128-bit の乱数で、hex 32 文字で表す。新しいプレビューは pending token を supersede する。pending token は、`ambercast_heal` または `ambercast_job_status` が token を含む応答を初めてクライアントへ返してから 600000 ms で期限切れになる。応答をジョブのキャッシュへ組み立てた時点では、この時計は始まらない。consumed token は確定から 600000 ms の間、保存済みの結果を再送する。
+
+クライアントが form elicitation に対応する場合、サーバーは 600000 ms の制限で確認を求める。受諾して確認すると修復を適用する。拒否すると未適用のままになり、取消すると中断する。form elicitation に対応しないクライアントでは、サーバーが適用を認可する。token はプレビューを識別するだけで、適用の要求は別の操作である。クライアントのヒントだけでは認可にならない。
 
 ## 結果とジョブ {#results-and-jobs}
 
-全ツールで `outputSchema` を省略します。report JSON Schema は 136 KB で `tools/list` を圧迫し、ツールは report envelope、単一の Job record、または Job record の一覧のいずれかを返すためです。完了した report の `structuredContent` は CLI JSON 出力と同じ envelope で、exit code を追加しません。スクリーンショットは projectRoot 相対のパスであり、inline base64 にしません。
+全ツールで `outputSchema` を省略する。report JSON Schema は `tools/list` に載せるには大きすぎる。また、ツールは report envelope、単一の Job record、Job record の一覧のいずれかを返し得る。完了した report の `structuredContent` は CLI JSON 出力と同じ envelope で、exit code を追加しない。スクリーンショットは projectRoot 相対のパスで、inline base64 にはしない。
 
-text 1行目は `exitCode: <n>` です。コミットのある heal preview のみ2行目が `applyToken: <token>` になり、その後に envelope JSON が続きます。応答には `_meta.exitCode` と、該当する場合 `_meta.applyToken` も含まれます。`ambercast_job_status` で取得した完了ジョブは同じ content・error 分類・metadata に、result を含まない `_meta.job` を加えます。
+text の1行目は `exitCode: <n>` である。コミットのある heal preview だけは2行目が `applyToken: <token>` になり、次の行に envelope JSON が続く。応答には `_meta.exitCode` も含まれ、該当する場合は `_meta.applyToken` も含まれる。`ambercast_job_status` で取得した完了ジョブは、同じ content、error 分類、metadata に加えて、result を含まない `_meta.job` を返す。
 
-generate、run、heal preview は呼び出しごとに Job を作ります。同期待機上限内に終われば report 応答を返し、終わらなければジョブハンドルを返します。ハンドルと非終端 status は Job record を `structuredContent` に入れ、text は `jobId: <id>`、`status: <status>`、status message の3行です。metadata は `_meta.jobId` を含みます。`ambercast_check` と heal apply は同期実行です。`ambercast_job_status` の ID 省略時は当該サーバープロセスのジョブを新しい順で一覧表示し、`structuredContent` に `jobs` 配列を入れます。空の一覧の text は `no jobs` です。これはサーバー固有の経路であり、MCP Tasks extension ではありません。`ambercast_job_cancel` は running または queued ジョブを取り消して record を返します。record は終端から 1800000 ms 後、またはサーバー終了時に消えます。
+generate、run、heal preview は呼び出しごとに Job を作る。同期待機の上限内に終われば、呼び出し元は report 応答を受け取る。終わらなければ、ジョブハンドルを受け取る。ハンドルと非終端の status 応答は、Job record を `structuredContent` に入れる。text は3行で、`jobId: <id>`、`status: <status>`、status message の順に並ぶ。metadata は `_meta.jobId` を含む。
+
+`ambercast_check` と heal の適用は同期実行のままである。`ambercast_job_status` は ID を省略すると、当該サーバープロセスのジョブを新しい順に一覧表示する。結果は `structuredContent` の `jobs` 配列に入る。空の一覧の text は `no jobs` である。これはサーバー固有のジョブ経路であり、MCP Tasks extension ではない。`ambercast_job_cancel` は running または queued のジョブを取り消し、record を返す。Job record は終端から 1800000 ms 後、またはサーバー終了時に消える。
 
 | Job record フィールド | 意味 |
 | --- | --- |
 | `jobId` | UUID v4 の識別子 |
 | `tool` | 元ツール |
-| `status` | working / completed / failed / cancelled |
-| `statusMessage` | 空でない進捗または終端状態の文 |
+| `status` | working、completed、failed、cancelled のいずれか |
+| `statusMessage` | 空でない進捗または終端状態のメッセージ |
 | `progress` | 通知の有無に関係ない runtime event の累計 |
 | `createdAt` | ISO 8601 UTC の作成日時 |
 | `lastUpdatedAt` | status または progress が最後に変化した ISO 8601 UTC 日時 |
@@ -2519,21 +2639,21 @@ generate、run、heal preview は呼び出しごとに Job を作ります。同
 
 ## MCP エラー {#mcp-errors}
 
-MCP 層の意味エラーは `isError: true`、text 1個 `<CODE>: <message>`、`structuredContent` なしです。コードは `HEAL_APPLY_TOKEN_INVALID`（reason `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` です。入力不正は SDK の検証エラーを使用し、ドメイン・環境失敗は report envelope に残します。
+MCP 層の意味エラーは、`isError: true`、`<CODE>: <message>` 形式の text 1個を持ち、`structuredContent` を持たない。コードは `HEAL_APPLY_TOKEN_INVALID`（reason は `missing`、`unknown-token`、`superseded`、`expired`）、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` である。入力不正は代わりに SDK の検証エラーを使う。ドメインと環境の失敗は report envelope に残る。
 
-## 計画時の設計からの変更 {#changes-from-the-planned-design}
+## 当初の設計からの変更 {#changes-from-the-planned-design}
 
-| 旧 planned ページ | 実装済みの契約 |
+| 以前の予定ページ | 実装済みの契約 |
 | --- | --- |
-| review を含む5ツール | 4ワークフローと status/cancel の6ツール。review は公開しない |
+| review を含む5ツール | 4ワークフローと status・cancel の6ツール。review は公開しない |
 | report `outputSchema` を公開 | 全ツールで `outputSchema` を省略 |
-| heal は preview のみ | `applyToken` による二段階と同期 apply |
-| 同期ワークフローのみ | 長い generate/run/heal preview はジョブになり、ID なしの status は一覧を返す |
-| server flags 未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` を受け付ける |
-| report exit 分類のみ | MCP error code と SDK 検証エラーを report envelope と区別 |
-| CLI flag 対応未指定 | 入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外 |
-| exit code は report から推測 | `_meta.exitCode` と text 1行目に exit code を載せる |
-| `target` は4ツール共通と規定 | `target` は `ambercast_generate` のみが受け付ける。`ambercast_run`・`ambercast_check`・`ambercast_heal` は Plan 自体に記録された Target を使用する（CLI 側の Plan IR v4 移行と一致） |
+| heal は preview のみ | `applyToken` による二段階の heal と同期の apply |
+| 同期ワークフローのみ | 長い generate、run、heal preview はジョブを返す。ID なしの status は一覧を返す |
+| server flags は未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` を受け付ける |
+| report の exit 分類のみ | MCP error code と SDK 検証エラーを report envelope と区別する |
+| CLI flag の対応は未指定 | 入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外する |
+| exit code は report から推測 | `_meta.exitCode` と text の1行目が exit code を載せる |
+| `target` は4ツール共通と規定 | `target` は `ambercast_generate` だけが受け付ける。`ambercast_run`、`ambercast_check`、`ambercast_heal` は計画自体に記録された Target を選ぶ。これは CLI 側の 計画 IR v4 移行と一致する |
 
 関連リンク: [ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[レポート](/ambercast/ja/reference/reports/#envelope)、[終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)。
 

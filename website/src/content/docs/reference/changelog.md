@@ -3,17 +3,101 @@ title: Changelog
 description: User-visible product behavior and public-contract changes across ambercast releases, with breaking changes listed first.
 ---
 
-This reference tracks user-visible product behavior and public-contract changes across ambercast releases, ordering breaking changes before fixes.
+This page lists product behavior and public-contract entries only. It leaves out repository architecture scanners, agent hooks, worktree lifecycle, lint configuration, CI, tests, the documentation site, and project workflow.
 
-## Release 0.5.0 {#release-050}
+Releases 0.3.0 and 0.3.1 have no section because they have no product entries. Release 0.4.0 has no section because it made existing Plans stale through three producer-bundle revisions. Those revisions are `generatorSecretPolicy` 2 → 3 → 4 and `instructionCoveragePolicy` 1 → 2, so Plans from earlier releases are regenerated with `ambercast generate`. The repository's `CHANGELOG.md` also lists the other entries of those releases.
 
-Release date: 2026-09-15.
+## Release 0.9.0 {#release-090}
+
+Release date: 2026-10-08. Report schema 3.10.
 
 | Class | User-visible entry |
 | --- | --- |
-| BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model; Plan v2 is not migrated in place. |
+| BREAKING | Report schema 3.10 adds the case-scoped error codes `CASE_ABORTED` (with `reason` and `stepId`) and `PROMPT_AMBIGUOUS` (with `ambiguities`). A `generate` or `heal` failure caused by an ambiguous prompt exits 2 with `PROMPT_AMBIGUOUS` instead of exiting 3 with a run-scoped `UNEXPECTED_CRASH`. Run rows that used to end without an error code carry `CASE_ABORTED`, `AGENTIC_STEP_FAILED`, or a case-scoped `UNEXPECTED_CRASH`. `heal` reports Stage 3 and final-replay failures as case errors, so the summary counts those rows as errored, and exit codes are unchanged. `ambercast view` shows error hints and details. |
+| Feature | Every failure path yields a coded, diagnosable report error. |
 
-Version 0.5.0 has one declared breaking change.
+Version 0.9.0 has one declared breaking change.
+
+## Release 0.8.0 {#release-080}
+
+Release date: 2026-10-06. Report schema 3.9.
+
+| Class | User-visible entry |
+| --- | --- |
+| Feature | Report schema 3.9 adds `AGENTIC_STEP_FAILED` to case-scoped environment errors. It also adds the confirmation issue codes `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, and `confirms-duplicate` to `AiResponseIssueCode`. |
+| Fix | `generate` checks provider step IDs for secret literals before building diagnostics. |
+| Fix | `generate` drops `confirms` references on `navigate` steps and reports violations by code. |
+| Fix | `run` always reports `confirmed: true` for a binding from a confirmed grounding entry. |
+| Fix | The runner classifies agentic step failures and polls AI-directed asserts until the deadline. |
+
+Version 0.8.0 declares no breaking change.
+
+## Release 0.7.0 {#release-070}
+
+Release date: 2026-10-02. Report schema 3.8.
+
+| Class | User-visible entry |
+| --- | --- |
+| BREAKING | Plan v3 → v4 adds required step Target names and removes Plan browser selection. Regenerate v3 Plans. |
+| BREAKING | Plan v4 → v5 adds source-backed `intent` and `confirms` and Target-scoped `locale`. Grounding v2 → v3 replaces bare fingerprints with locator, fingerprint, intent digest, and provenance. Regenerate v4 Plans and their Grounding. |
+| BREAKING | Target configuration moves from `targets.<name>.browser` to `targets.<name>.executor`, and the loader rejects the old key. The report gains `EXECUTOR_UNSUPPORTED` and `sessions[name].executor`. |
+| BREAKING | The UI executor kind vocabulary is unified. An element step's grounding miss without `--resolve` reports `GROUNDING_UNRESOLVED` with exit 4 instead of exit 3 without a code. |
+| Feature | Report schema moves to 3.8. Version 3.7 adds step Target names and per-Target sessions, and 3.8 adds heal Stage 1 `binding` diagnostics. |
+| Feature | `ambercast init` scaffolds the configuration, a sample prompt, `.gitignore`, and `AGENTS.md`. |
+| Feature | `ambercast view` is a read-only local viewer for `.runs` reports. |
+| Feature | `targets.<name>.locale` sets the locale of browser contexts. |
+| Feature | A UI executor abstraction adds capability preflight. |
+| Feature | Heal Stage 1 rebinds element intents through `confirms`. |
+| Feature | Element intent, quote matching, and intent digest primitives are added. |
+| Feature | Plan IR v4 carries a per-step Target and one session per Target. |
+| Feature | The MCP stdio server is added. |
+| Feature | The MCP job model adds `ambercast_job_status` and `ambercast_job_cancel`. |
+| Feature | The MCP heal apply takes two steps, with token issuance and elicitation. |
+| Feature | Runtime event fan-out serves MCP, and heal preparation has two phases. |
+| Fix | `init` adds a browser to the scaffolded configuration, plans BOM-safely, and aborts before applying on failure. |
+| Fix | The MCP server emits `AMBERCAST_DEBUG` diagnostics for failed jobs and heal apply crashes. |
+| Fix | The MCP server waits for heal apply confirmation and in-flight tool responses during shutdown. |
+| Fix | The MCP server writes a stderr line when a progress notification fails to send. |
+| Fix | Reports keep generation issue details in `AI_RESPONSE_INVALID`. |
+| Fix | `run` recovers agentic target-resolution failures with diagnostics. |
+| Fix | `run` takes the final poll sample at the deadline for assertions and binding. |
+| Fix | `view` reads run reports from every 3.x schema version leniently. |
+| Fix | `view` rejects default-port and non-authority `Host` headers and escapes `runId` in attributes. |
+| Fix | `view` keeps screenshots and long text from overflowing the step table. |
+| Fix | `view` applies the design system's dark tokens, status badges in the step table, and zero-omitted totals. |
+
+Version 0.7.0 has four declared breaking changes.
+
+## Release 0.6.0 {#release-060}
+
+Release date: 2026-09-18. Report schema 3.6.
+
+| Class | User-visible entry |
+| --- | --- |
+| BREAKING | Agentic MCP tool calls that fail schema validation no longer latch `INTEGRITY_VIOLATION` on the first mismatch. Up to 3 consecutive rejections per case return a structured result with the remaining budget. The 4th ends the case with `AI_RESPONSE_INVALID` (kind `environment`, exit 3) instead of `INTEGRITY_VIOLATION` (kind `usage`, exit 4). This change does not move the report schema version. |
+| Feature | Report schema 3.6 adds the optional `repairTrace` diagnostic to completed heal results, and dry-run and apply produce the same result. |
+| Feature | `run` waits for element presence before resolution. |
+
+Version 0.6.0 has one declared breaking change.
+
+## Release 0.5.0 {#release-050}
+
+Release date: 2026-09-15. Report schema 3.5.
+
+| Class | User-visible entry |
+| --- | --- |
+| BREAKING | Plan v2 → v3 removes secret-grant provenance. Remove legacy grant lines, regenerate with `generate --force`, and approve the candidate secret names through the consent/`secrets.allow` model. Plan v2 is not migrated in place. Report schema 3.5 adds the secret-policy error codes `SECRET_ENV_VAR_COLLISION`, `SECRET_CONSENT_REQUIRED`, and `SECRET_SYNTAX_REJECTED`, the optional `GROUNDING_UNRESOLVED` details, and the optional `GenerateResult` `secrets` and `warnings` fields. When a Stage 3 candidate changes the secret-name set, `heal` returns the `secret-set-rejected` result with `stage3Rejection.reason` `secret-set-changed`, plus the `added` and `removed` names. The legacy `@ambercast-secret` grant line and `{{secrets.*}}` prompt syntax are rejected with exit 2. |
+| BREAKING | Existing Plans become stale and are regenerated with `ambercast generate --force`. Instruction-coverage criteria carry `startAnchor`, `startColumn`, `endAnchor`, and `endColumn`, and the `instructionCoveragePolicy` revision moves from 2 to 3. |
+| BREAKING | `generate` stops at a consent gate for every newly detected secret name. An interactive terminal asks `y / N / i`, and any other run exits 2 and lists the unallowed names. Consenting appends the names to `secrets.allow`. |
+| BREAKING | `run` resolves grounding misses with AI only with `--resolve`. `--cache-only` is removed and exits 2. `GROUNDING_UNRESOLVED` maps to exit 4. |
+| Feature | `run` gains an agentic executor over an in-process MCP server. |
+| Feature | Instruction coverage matches by anchor IDs. |
+| Feature | Heal Stages 2 and 3 run under the allowlist model with secret-set invariance. |
+| Feature | Secret naming is deterministic, and the allowlist is verified. |
+| Fix | `generate` retries a provider response rejected for an embedded secret reference. |
+| Fix | `BROWSER_LAUNCH_FAILED` is classified with a hint and details (report schema 3.4). |
+
+Version 0.5.0 has four declared breaking changes.
 
 ## Release 0.2.0 {#release-020}
 
@@ -104,12 +188,10 @@ Release date: 2026-09-03.
 | Fix | Exit aggregation uses `2 > 3 > 4 > 1 > 5 > 0`. |
 | Fix | Generate wires its event sink, strips `$schema` from Claude CLI requests, and fixes run step-start timing. |
 
-This release section excludes changelog entries that only change repository architecture scanners, agent hooks, worktree lifecycle, lint configuration, or project workflow; it does not silently omit product behavior or public-contract entries.
 
-## Related
+## See also {#see-also}
 
-Links:
-- [Compatibility](/ambercast/reference/compatibility/#compatibility-table)
-- [Compatibility](/ambercast/reference/compatibility/#regeneration-boundary)
+- [Compatibility table](/ambercast/reference/compatibility/#compatibility-table)
+- [Regeneration boundary](/ambercast/reference/compatibility/#regeneration-boundary)
 - [Upgrade between versions](/ambercast/how-to/upgrade/)
 - [Specification changelog](/ambercast/spec/changelog/)

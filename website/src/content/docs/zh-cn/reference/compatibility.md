@@ -1,13 +1,13 @@
 ---
 title: 兼容性
-description: 说明产物格式的兼容性与重新生成要求。
+description: 说明各软件包版本的产物格式兼容性，以及哪些变更要求重新生成执行计划、定位缓存或报告。
 ---
 
-ambercast 在不同版本之间定义了明确的产物格式兼容性与重新生成边界。本文档为您提供各版本对应的模式版本、元素指纹算法标记，以及当底层契约、模板或规范发生变更时重新生成各项产物的具体规则。
+每个发布版本都固定了各项 schema 版本和元素指纹标记。下表列出各版本固定的版本号，以及需要重新生成的变更。
 
 ## 兼容性表 {#compatibility-table}
 
-| package 版本 | Plan `schemaVersion` | Grounding `schemaVersion` | element fingerprint tag | report `schemaVersion` |
+| 软件包版本 | 执行计划 `schemaVersion` | 定位缓存 `schemaVersion` | 元素指纹标记 | 报告 `schemaVersion` |
 | --- | --- | --- | --- | --- |
 | `0.1.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
 | `0.2.0` | `2` | `1` | `a11y-neighborhood-v2` | `3.0` |
@@ -16,29 +16,45 @@ ambercast 在不同版本之间定义了明确的产物格式兼容性与重新�
 | `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
 | `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 
-表中列出 0.1.0、0.2.0、每个变更 Plan 或 Grounding Schema 版本的发布版本，以及从 0.8.0 起的所有发布版本。
+表中列出 0.1.0、0.2.0、从 0.8.0 起的所有发布版本，以及每个变更了执行计划或定位缓存 schema 版本的发布版本。最新发布版本之后 `main` 上新增的 schema 版本，会在发布时加入此表。当前已发布的 schema 请参阅 [JSON Schema](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
 
-0.2.0 版本变更了 provider 请求契约，但并未递增 Plan 的 `schemaVersion`。该变更改变了 `producerBundleFingerprint` 以及每个提示词的 `inputsDigest`，导致 0.1.0 版本的 Plan 变为陈旧状态（stale）。
+0.2.0 版本变更了 provider 请求契约，但没有递增执行计划的 schema 版本。该变更改变了 `producerBundleFingerprint` 和每个提示词的 `inputsDigest`，使 0.1.0 的执行计划变为陈旧状态，即 `stale`。详见[变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
 
-模式版本为 1 或 2 的 Plan 均不会就地迁移。`generate` 将其视为非 fresh，并重新生成当前版本的 Plan；`check` 以只读方式将其报告为 `stale`；`run` 和 `heal` 则以 `INTEGRITY_VIOLATION`（退出代码 4）拒绝它。Plan v3 使用同意和 `secrets.allow` 替代 v2 的 secret-grant provenance 模型。Plan v4 同样不会就地迁移，并受到相同的非 fresh、`stale` 和 `INTEGRITY_VIOLATION` 处理。Plan v5 将 v4 的元素引用替换为有来源依据的 intent，并增加 `confirms`；Grounding v3 将 v2 中仅含指纹的条目替换为 locator、fingerprint、intentDigest 和 provenance。如需分步升级说明，请参阅[在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)。
+schema 变更都不会就地迁移。每次变更的处理方式如下。
+
+- 执行计划 v1 和 v2：`generate` 将其视为非 fresh，并重新生成当前版本的执行计划。`check` 以只读方式将其报告为 `stale`。`run` 和 `heal` 以 `INTEGRITY_VIOLATION` 拒绝它，退出码为 4。
+- 执行计划 v3：用同意和 `secrets.allow` 替代 v2 的机密授权 provenance 模型。
+- 执行计划 v4：同样不会就地迁移，并受到相同的非 fresh、`stale` 和 `INTEGRITY_VIOLATION` 处理。
+- 执行计划 v5：将 v4 的元素引用替换为有来源依据的 intent，并增加 `confirms`。
+- 定位缓存 v3：将 v2 中仅含指纹的条目替换为 locator、fingerprint、intentDigest 和 provenance。
+
+分步升级说明请参阅[在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)。
 
 ## 重新生成边界 {#regeneration-boundary}
 
 | 变更 | 受影响产物 | 重新生成要求 |
 | --- | --- | --- |
-| 规范化提示词（normalized prompt）、Plan schema 版本、generator-template 指纹、producer-bundle 指纹，或命名的 target 定义 | `inputsDigest` 与 Plan 新鲜度 | 重新生成 Plan。由此产生的 Grounding 绑定则由回放相关内容的规则单独约束。 |
-| 与回放相关的 Plan 内容 | Grounding 记录的 `planDigest` | 重新生成或替换 Grounding；仅 `generatorMeta` 发生变更不会计入 `planDigest`。 |
-| 接受的 element 指纹算法或原像（preimage） | 现有的 element-grounding 条目 | 在 `run` 执行期间，不可用的源在缺失、JSON 无效、来源信息陈旧（stale provenance），或在未声明覆盖率（coverage claim）的情况下未通过严格解析时，均视为缓存未命中（cache miss）。一旦具备当前来源信息的源声明了覆盖率，其结构或规范性失败将被判定为完整性故障（integrity failure），不会降级回退。在 `check` 中，grounding 检查将 JSON/模式解析失败以及声明的非规范源归类为 `invalid`，将陈旧的 `planDigest` 归类为 `stale`；公共报告状态依据 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences) 派生。 |
-| Report schema 版本或字段契约 | 结构化输出消费者与持久化的运行报告 | 更新消费者以适配输出的报告契约；3.5 新增 secret-policy 错误详情、generate 的 secret-use 和 warning 字段，以及 heal Stage 3 的拒绝详情。 |
-| Plan、Grounding、配置或 report 的 Zod schema | 已发布的 npm schema 产物 | 运行 package 构建，以便从对应的 Zod 源码重新生成这四个 JSON Schema。 |
+| 规范化提示词、执行计划 schema 版本、generator-template 指纹、producer-bundle 指纹，或命名的 target 定义 | `inputsDigest` 与执行计划的新鲜度 | 重新生成执行计划。由此产生的定位缓存绑定，则由回放相关内容的规则单独约束。 |
+| 与回放相关的执行计划内容 | 定位缓存记录的 `planDigest` | 重新生成或替换定位缓存。仅 `generatorMeta` 发生变更不会计入 `planDigest`。 |
+| 接受的元素指纹算法或原像（preimage） | 现有的元素定位缓存条目 | 在 `run` 中，以下源视为缓存未命中：缺失的源、JSON 无效的源、来源信息陈旧的源，以及未声明覆盖率却未通过严格解析的源。一旦具备当前来源信息的源声明了覆盖率，其结构或规范性失败就是完整性故障，不会降级回退。在 `check` 中，定位缓存检查把 JSON 或 schema 解析失败归类为 `invalid`，把声明的非规范源也归类为 `invalid`，把陈旧的 `planDigest` 归类为 `stale`。公开报告状态依据[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences)中的仓库策略派生。 |
+| 报告 schema 版本或字段契约 | 结构化输出的消费者与持久化的运行报告 | 更新消费者以适配输出的报告契约。每个报告版本的变更内容见[变更日志](/ambercast/zh-cn/reference/changelog/)。 |
+| 执行计划、定位缓存、配置或报告的 Zod schema | 已发布的 npm schema 产物 | 运行软件包构建，从对应的 Zod 源码重新生成这四个 JSON Schema。 |
 
-`inputsDigest` 通过规范 JSON（canonical JSON）与 SHA-256 对上述五项输入（规范化提示词、Plan schema 版本、generator-template 指纹、producer-bundle 指纹以及命名的 target 定义）进行精确哈希。
+`inputsDigest` 只对声明的五项输入做哈希，哈希使用规范 JSON 与 SHA-256。五项输入如下。
 
-Grounding 的新鲜度判定是将其自身记录的 `planDigest` 与为候选 Plan 计算得出的摘要进行直接相等性比对。
+- 规范化提示词
+- 执行计划 schema 版本
+- generator-template 指纹
+- producer-bundle 指纹
+- 命名的 target 定义
 
-相关链接：
+定位缓存的新鲜度判定，是将其记录的 `planDigest` 与候选执行计划算出的摘要直接比对是否相等。
+
+## 另请参阅 {#see-also}
+
 - [变更日志](/ambercast/zh-cn/reference/changelog/#release-020)
 - [在不同版本间升级](/ambercast/zh-cn/how-to/upgrade/)
 - [ambercast check](/ambercast/zh-cn/reference/cli/check/#status-vocabulary)
 - [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/)
+- [新鲜度后果](/ambercast/zh-cn/spec/freshness/#freshness-consequences)
 - [规范变更日志](/ambercast/zh-cn/spec/changelog/)

@@ -36,12 +36,12 @@
 - [エラーコード](https://kotarotsubaki.github.io/ambercast/ja/reference/error-codes/): 安定したエラーコードの種別・スコープ・終了コードと、各コードの details に入る内容を示すリファレンス。
 - [終了コード](https://kotarotsubaki.github.io/ambercast/ja/reference/exit-codes/): ambercast が返すプロセスの終了コードと、複数の結果を 1 つにまとめるときの優先順位を示すリファレンス。
 - [環境変数](https://kotarotsubaki.github.io/ambercast/ja/reference/environment-variables/): ambercast が読む環境変数と、AI プロバイダーの子プロセスに渡さない変数を示すリファレンス。
-- [ファイルレイアウト](https://kotarotsubaki.github.io/ambercast/ja/reference/file-layout/): パス計算、成果物の生成タイミング、および実装に基づくリポジトリポリシーを定義します。
-- [JSON スキーマ](https://kotarotsubaki.github.io/ambercast/ja/reference/json-schemas/): Ambercast におけるスキーマ再構築時の公開規約を定義し、現在生成されている JSON Schema アーティファクトの一覧を提示します。
-- [互換性と再生成](https://kotarotsubaki.github.io/ambercast/ja/reference/compatibility/): ambercast におけるアーティファクト形式のバージョン互換性と、変更に伴う再生成の要件について定義します。
-- [変更履歴](https://kotarotsubaki.github.io/ambercast/ja/reference/changelog/): ambercast のユーザーから見える製品の動作変更および公開コントラクトの変更履歴です。
-- [セキュリティポリシー](https://kotarotsubaki.github.io/ambercast/ja/reference/security-policy/): ambercast のサポート対象バージョンと脆弱性報告の手順に関するリファレンスです。
-- [用語集](https://kotarotsubaki.github.io/ambercast/ja/reference/glossary/): ambercast全体で使用される用語の規範的定義と、翻訳時に保持すべき不変トークンのレジストリを提供します。
+- [ファイルレイアウト](https://kotarotsubaki.github.io/ambercast/ja/reference/file-layout/): コンパニオンファイルと実行成果物について、Ambercast が導出するパス、書き込み元、書き込みタイミングを定義する。
+- [JSON スキーマ](https://kotarotsubaki.github.io/ambercast/ja/reference/json-schemas/): ambercast の設定・計画・グラウンディング・レポートを検証する JSON Schema の公開メタデータ、生成ファイル、構造上の限界を示すリファレンス。
+- [互換性と再生成](https://kotarotsubaki.github.io/ambercast/ja/reference/compatibility/): パッケージのバージョンごとのアーティファクト形式の互換性と、計画・グラウンディング・レポートの再生成が必要になる変更を示す。
+- [変更履歴](https://kotarotsubaki.github.io/ambercast/ja/reference/changelog/): ambercast の各リリースにおける、ユーザーから見える製品の動作変更と公開コントラクトの変更を、破壊的変更を先頭にして記録する。
+- [セキュリティポリシー](https://kotarotsubaki.github.io/ambercast/ja/reference/security-policy/): セキュリティ修正が提供される ambercast のバージョンと、脆弱性を非公開で報告する方法を示すリファレンス。
+- [用語集](https://kotarotsubaki.github.io/ambercast/ja/reference/glossary/): ambercast 全体で使う用語の規範的な定義と、翻訳で変えないリテラルトークンの索引である。
 - [MCP ツール](https://kotarotsubaki.github.io/ambercast/ja/reference/mcp-tools/): ambercast の MCP ワークフローにおけるツール、入力、結果、エラーの規約。
 
 ### CLI

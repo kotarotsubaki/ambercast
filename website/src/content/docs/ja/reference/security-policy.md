@@ -1,25 +1,24 @@
 ---
 title: セキュリティポリシー
-description: ambercast のサポート対象バージョンと脆弱性報告の手順に関するリファレンスです。
+description: セキュリティ修正が提供される ambercast のバージョンと、脆弱性を非公開で報告する方法を示すリファレンス。
 ---
 
-ambercast のセキュリティポリシーです。サポート対象となるバージョンと、脆弱性を報告するための窓口および要件を定めています。
+このページはリポジトリのセキュリティポリシーに対応する。サポート対象バージョン、非公開の報告窓口、その窓口が扱う範囲を示す。
 
 ## サポート対象バージョン {#supported-versions}
 
-| リリース状態 | サポート対象バージョン |
-| --- | --- |
-| ambercast は pre-1.0 です。 | 修正が提供されるのは最新の公開バージョンのみです。 |
-
-古い pre-1.0 リリースに対する修正の提供は約束されていません。
+ambercast は pre-1.0 である。修正が提供されるのは最新の公開バージョンだけである。古い pre-1.0 リリースの修正は約束されない。
 
 ## 脆弱性の報告 {#vulnerability-reporting}
 
 | 項目 | ポリシー |
 | --- | --- |
-| 報告窓口 | GitHub Security Advisories（`https://github.com/kotarotsubaki/ambercast/security/advisories/new`）を通じて非公開で報告してください。 |
-| 必要な記載内容 | 影響を受けるバージョン、再現手順、および影響を含めてください。 |
-| 公開 Issue | セキュリティ報告のために公開 Issue を開かないでください。 |
-| サプライチェーン | `ambercast` npm パッケージのタイポスクワッティングやなりすましについても、同一の非公開窓口で対応します。 |
+| 報告窓口 | GitHub Security Advisories（`https://github.com/kotarotsubaki/ambercast/security/advisories/new`）から非公開で報告する。 |
+| 必要な記載内容 | 影響を受けるバージョン、再現手順、影響を含める。 |
+| 公開 Issue | セキュリティ報告のために公開 Issue を開かない。 |
+| サプライチェーン | `ambercast` npm パッケージのタイポスクワッティングやなりすましも、同じ非公開窓口で扱う。 |
 
-信頼境界の説明については [トラストとセキュリティ](/ambercast/ja/explanation/trust-and-security/) を、コントリビューション手順については [貢献ガイド](/ambercast/ja/how-to/contribute/) を参照してください。
+## 関連項目 {#see-also}
+
+- [トラストとセキュリティ](/ambercast/ja/explanation/trust-and-security/)
+- [貢献ガイド](/ambercast/ja/how-to/contribute/)

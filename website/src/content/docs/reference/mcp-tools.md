@@ -3,7 +3,7 @@ title: MCP Tools
 description: Tool contracts, inputs, results, and errors for ambercast MCP workflows.
 ---
 
-The MCP server exposes six tools in this order: `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. Tool names use the ambercast prefix and snake_case; the server does not mirror every CLI command.
+The MCP server exposes six tools in this order: `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. Tool names use the ambercast prefix and snake_case. The server does not mirror every CLI command.
 
 ## Tool table {#tool-table}
 
@@ -38,17 +38,21 @@ The MCP input intentionally excludes CLI flags `headed` (headless fixed), `list`
 
 ## Heal preview and apply {#heal-preview-and-apply}
 
-`ambercast_heal` defaults to preview (`dryRun: true`), unlike CLI heal's false default. A preview with commits returns an `applyToken`; a preview without commits does not. Apply with `dryRun: false` and `applyToken` alone: `files`, `ai`, and `allowEmpty` must be absent. A preview must omit `applyToken`. An invalid combination is an SDK input validation error. Apply is synchronous and does not create a job. A token is a 128-bit random value rendered as 32 hexadecimal characters; a newer preview supersedes pending tokens. Pending tokens expire 600000 ms after their first token-bearing response is assembled. A consumed token replays its saved result for 600000 ms after settlement.
+`ambercast_heal` defaults to preview (`dryRun: true`), unlike CLI heal's false default. A preview with commits returns an `applyToken`, and a preview without commits does not. Apply with `dryRun: false` and `applyToken` alone, so `files`, `ai`, and `allowEmpty` must be absent. A preview must omit `applyToken`. An invalid combination is an SDK input validation error. Apply is synchronous and does not create a job.
 
-If the client supports form elicitation, it asks for confirmation with a 600000 ms timeout. Accepting and confirming applies the repair; declining leaves it unapplied; cancellation interrupts it. If the client lacks form elicitation, the server authorizes apply. The token identifies a preview; requesting apply is a separate step, and client hints alone are not authorization.
+A token is a 128-bit random value rendered as 32 hexadecimal characters. A newer preview supersedes pending tokens. Pending tokens expire 600000 ms after `ambercast_heal` or `ambercast_job_status` first returns the token-bearing response to the client. Assembling that response into the job cache does not start the clock. A consumed token replays its saved result for 600000 ms after settlement.
+
+If the client supports form elicitation, it asks for confirmation with a 600000 ms timeout. Accepting and confirming applies the repair. Declining leaves it unapplied, and cancellation interrupts it. If the client lacks form elicitation, the server authorizes apply. The token identifies a preview, and requesting apply is a separate step. Client hints alone are not authorization.
 
 ## Results and jobs {#results-and-jobs}
 
-Every tool omits `outputSchema`: the report JSON Schema is 136 KB and would crowd `tools/list`; tools may also return a report envelope, a single Job record, or a Job record list. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
+Every tool omits `outputSchema`. The report JSON Schema is too large for `tools/list`, and tools may also return a report envelope, a single Job record, or a Job record list. A completed report uses the same `structuredContent` envelope as CLI JSON output, without adding an exit code to that envelope. Screenshots remain project-root-relative paths in it, never inline base64.
 
-The single text item begins with `exitCode: <n>`. Only a heal preview with commits has a second line `applyToken: <token>`; the following line contains the envelope JSON. The response also has `_meta.exitCode` and, when present, `_meta.applyToken`. A completed job fetched by `ambercast_job_status` returns the same content, error classification, and metadata, plus `_meta.job` without the result.
+The single text item begins with `exitCode: <n>`. Only a heal preview with commits has a second line `applyToken: <token>`, and the following line contains the envelope JSON. The response also has `_meta.exitCode` and, when present, `_meta.applyToken`. A completed job fetched by `ambercast_job_status` returns the same content, error classification, and metadata, plus `_meta.job` without the result.
 
-Every generate, run, and heal preview call creates a Job. If it finishes within the synchronous wait bound, the caller receives the report response; otherwise it receives a job handle. A handle and a nonterminal status response contain a Job record in `structuredContent`; the text has three lines: `jobId: <id>`, `status: <status>`, and the status message. Their metadata contains `_meta.jobId`. `ambercast_check` and heal apply stay synchronous. `ambercast_job_status` with no ID lists jobs for this server process, newest first, as `structuredContent` with a `jobs` array; an empty list has text `no jobs`. This is a server-local job path, not the MCP Tasks extension. `ambercast_job_cancel` cancels a running or queued job and returns a record. Job records disappear 1800000 ms after termination or when the server exits.
+Every generate, run, and heal preview call creates a Job. If it finishes within the synchronous wait bound, the caller receives the report response. Otherwise it receives a job handle. A handle and a nonterminal status response contain a Job record in `structuredContent`. Their text has three lines: `jobId: <id>`, `status: <status>`, and the status message. Their metadata contains `_meta.jobId`.
+
+`ambercast_check` and heal apply stay synchronous. `ambercast_job_status` with no ID lists jobs for this server process, newest first, as `structuredContent` with a `jobs` array. An empty list has text `no jobs`. This is a server-local job path, not the MCP Tasks extension. `ambercast_job_cancel` cancels a running or queued job and returns a record. Job records disappear 1800000 ms after termination or when the server exits.
 
 | Job record field | Meaning |
 | --- | --- |

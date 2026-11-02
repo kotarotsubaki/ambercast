@@ -57,7 +57,7 @@ Each terminal success assertion must be covered by its instruction. Arriving at 
 
 Before persistence or report serialization, ambercast checks generated or provider-derived JSON against the literal-secret policy. A detected value is rejected with `SECRET_LITERAL_REJECTED`, and the literal is not kept in diagnostics.
 
-The policy does not reject prompt prose for containing text that looks like a credential. The detector contract is in [Secrets in plans](/ambercast/spec/secrets/#literal-secret-rejection).
+The one exception is an item in the provider's `assumptions` list. When it matches secret detection, ambercast replaces it with a generic message and continues instead of failing with `SECRET_LITERAL_REJECTED`. The policy does not reject prompt prose for containing text that looks like a credential. The detector contract is in [Secrets in plans](/ambercast/spec/secrets/#literal-secret-rejection).
 
 ## See also {#see-also}
 

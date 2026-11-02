@@ -40,7 +40,7 @@ Every `GenerateResult` branch is strict. The optional fields listed are the only
 
 The AI provider can list assumptions that the prompt does not state, in an optional string array named `assumptions`. On `generated` and `would-generate` results, `generate` adds each nonblank assumption to `warnings` as `{ kind: 'generator-assumption', message }`. Assumptions never stop `generate` or `heal`.
 
-The human-readable output prints `  warning: <message>` right after the result line. If an assumption matches secret detection, ambercast replaces it with `An assumption was omitted because it looked like a secret.`.
+The human-readable output prints `warning: <message>`, indented by two spaces, right after the result line. If an assumption matches secret detection, ambercast replaces it with `An assumption was omitted because it looked like a secret.`.
 
 ambercast does not store assumptions in the plan. A re-run on a fresh plan returns `skipped-fresh` with no assumption warnings. Pass `--force` to regenerate and see the assumptions again. Regeneration is non-deterministic.
 
@@ -151,6 +151,49 @@ Where `attempts` appears, it is `Array<{ attempt: integer 1–5, code: ReportErr
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` Case scope only. |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
 | `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` For an element step, `missing` means no grounding entry exists, and `recoverable-miss` means an existing entry does not match the current page. |
+
+For `AI_RESPONSE_INVALID`, the issue `code` is any of these values:
+
+| code | family |
+| --- | --- |
+| `citation-whitespace-only` | instruction coverage |
+| `anchor-invalid` | instruction coverage |
+| `citation-checksum-mismatch` | instruction coverage |
+| `criterion-id-duplicate` | instruction coverage |
+| `criterion-range-duplicate` | instruction coverage |
+| `criterion-order-invalid` | instruction coverage |
+| `source-span-invalid` | instruction coverage |
+| `source-span-whitespace-only` | instruction coverage |
+| `success-criterion-missing` | instruction coverage |
+| `intent-id-duplicate` | instruction coverage |
+| `intent-id-missing` | instruction coverage |
+| `intent-id-unknown` | instruction coverage |
+| `intent-id-action` | instruction coverage |
+| `intent-assertion-unsupported` | instruction coverage |
+| `terminal-url-matches-forbidden` | instruction coverage |
+| `verification-coverage-id-missing` | instruction coverage |
+| `verification-coverage-id-unknown` | instruction coverage |
+| `verification-coverage-id-action` | instruction coverage |
+| `verification-coverage-index-duplicate` | instruction coverage |
+| `verification-coverage-index-invalid` | instruction coverage |
+| `verification-assertion-repeated` | instruction coverage |
+| `intent-span-invalid` | element intent |
+| `intent-span-whitespace-only` | element intent |
+| `intent-citation-mismatch` | element intent |
+| `quote-span-invalid` | element intent |
+| `quote-text-mismatch` | element intent |
+| `quote-unpaired` | element intent |
+| `quote-outside-intent` | element intent |
+| `quote-whitespace-only` | element intent |
+| `confirms-unknown-step` | confirms |
+| `confirms-not-earlier` | confirms |
+| `confirms-not-action` | confirms |
+| `confirms-duplicate` | confirms |
+| `invalid-json` | other |
+| `schema-mismatch` | other |
+| `secret-allowed-name-not-projected` | other |
+| `secret-conflicting-target-names` | other |
+| `text-equals-self-quote` | other |
 
 On `generated` and `would-generate` results, `secrets` lists the candidate secret uses that ambercast resolved. A dry-run `skipped-fresh` result includes it too. The optional `warnings` records non-fatal policy warnings of five kinds: `secret-name-reused-across-targets`, `secret-target-changed`, `allowed-names-truncated`, `action-unconfirmed` (with `stepId`), and `generator-assumption`. These fields make consent-related output observable without exposing secret values. For the high-risk `"*"` setting, see [Secret consent](/ambercast/reference/configuration/#secret-consent).
 

@@ -57,7 +57,7 @@ ambercast は、プロンプトから何かを取り出す前に、プロンプ�
 
 永続化やレポートの直列化の前に、ambercast は生成された JSON とプロバイダー由来の JSON をリテラルのシークレット方針で検査する。検出した値は `SECRET_LITERAL_REJECTED` で拒否し、リテラルは診断に残さない。
 
-この方針は、認証情報らしい文字列を含むというだけで、プロンプトの文章を拒否することはない。検出器の契約は[計画におけるシークレット](/ambercast/ja/spec/secrets/#literal-secret-rejection)にある。
+例外は、プロバイダーの `assumptions` の項目である。シークレット検出に該当した項目は、`SECRET_LITERAL_REJECTED` で失敗せず、汎用のメッセージに置き換えて処理を続ける。この方針は、認証情報らしい文字列を含むというだけで、プロンプトの文章を拒否することはない。検出器の契約は[計画におけるシークレット](/ambercast/ja/spec/secrets/#literal-secret-rejection)にある。
 
 ## 関連項目 {#see-also}
 

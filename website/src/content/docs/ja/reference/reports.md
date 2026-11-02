@@ -40,7 +40,7 @@ description: ambercast の構造化 JSON レポートのエンベロープ、コ
 
 AI プロバイダーは、プロンプトに書かれていない前提を、任意の文字列配列 `assumptions` に列挙できる。`generated` と `would-generate` の結果では、`generate` が空白でない前提を 1 件ずつ `{ kind: 'generator-assumption', message }` として `warnings` に加える。前提によって `generate` や `heal` が止まることはない。
 
-人が読む出力では、結果の行の直後に `  warning: <message>` を表示する。前提がシークレット検出に該当した場合、ambercast はそれを `An assumption was omitted because it looked like a secret.` に置き換える。
+人が読む出力では、結果の行の直後に、2 つの空白でインデントした `warning: <message>` を表示する。前提がシークレット検出に該当した場合、ambercast はそれを `An assumption was omitted because it looked like a secret.` に置き換える。
 
 ambercast は前提を計画（plan）に保存しない。鮮度が保たれた計画に対する再実行は、前提の警告を伴わない `skipped-fresh` を返す。前提をもう一度見るには `--force` を渡して再生成する。再生成は非決定的である。
 
@@ -151,6 +151,49 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` ケースの範囲のみ。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
 | `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。 |
+
+`AI_RESPONSE_INVALID` の問題の `code` は、次のいずれかである。
+
+| コード | 分類 |
+| --- | --- |
+| `citation-whitespace-only` | 指示のカバレッジ |
+| `anchor-invalid` | 指示のカバレッジ |
+| `citation-checksum-mismatch` | 指示のカバレッジ |
+| `criterion-id-duplicate` | 指示のカバレッジ |
+| `criterion-range-duplicate` | 指示のカバレッジ |
+| `criterion-order-invalid` | 指示のカバレッジ |
+| `source-span-invalid` | 指示のカバレッジ |
+| `source-span-whitespace-only` | 指示のカバレッジ |
+| `success-criterion-missing` | 指示のカバレッジ |
+| `intent-id-duplicate` | 指示のカバレッジ |
+| `intent-id-missing` | 指示のカバレッジ |
+| `intent-id-unknown` | 指示のカバレッジ |
+| `intent-id-action` | 指示のカバレッジ |
+| `intent-assertion-unsupported` | 指示のカバレッジ |
+| `terminal-url-matches-forbidden` | 指示のカバレッジ |
+| `verification-coverage-id-missing` | 指示のカバレッジ |
+| `verification-coverage-id-unknown` | 指示のカバレッジ |
+| `verification-coverage-id-action` | 指示のカバレッジ |
+| `verification-coverage-index-duplicate` | 指示のカバレッジ |
+| `verification-coverage-index-invalid` | 指示のカバレッジ |
+| `verification-assertion-repeated` | 指示のカバレッジ |
+| `intent-span-invalid` | 要素の意図 |
+| `intent-span-whitespace-only` | 要素の意図 |
+| `intent-citation-mismatch` | 要素の意図 |
+| `quote-span-invalid` | 要素の意図 |
+| `quote-text-mismatch` | 要素の意図 |
+| `quote-unpaired` | 要素の意図 |
+| `quote-outside-intent` | 要素の意図 |
+| `quote-whitespace-only` | 要素の意図 |
+| `confirms-unknown-step` | confirms |
+| `confirms-not-earlier` | confirms |
+| `confirms-not-action` | confirms |
+| `confirms-duplicate` | confirms |
+| `invalid-json` | そのほか |
+| `schema-mismatch` | そのほか |
+| `secret-allowed-name-not-projected` | そのほか |
+| `secret-conflicting-target-names` | そのほか |
+| `text-equals-self-quote` | そのほか |
 
 `generated` と `would-generate` の結果では、`secrets` に ambercast が解決したシークレット使用の候補を挙げる。dry-run の `skipped-fresh` の結果にも含まれる。任意の `warnings` は、致命的でない方針の警告を 5 種類記録する。`secret-name-reused-across-targets`、`secret-target-changed`、`allowed-names-truncated`、`action-unconfirmed`（`stepId` を伴う）、`generator-assumption` である。これらのフィールドにより、シークレットの値を出さずに、同意に関する出力を確認できる。リスクの高い `"*"` の設定は[シークレットの同意](/ambercast/ja/reference/configuration/#secret-consent)を参照する。
 

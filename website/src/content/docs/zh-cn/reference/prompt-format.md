@@ -57,7 +57,7 @@ ambercast 不再接受这种语法。请删除所有这样的行，然后按[迁
 
 在持久化或序列化报告之前，ambercast 会按字面量机密策略检查生成的或来自提供方的 JSON。检测到的值会以 `SECRET_LITERAL_REJECTED` 被拒绝，字面量不会保留在诊断信息中。
 
-该策略不会因为提示词文字看起来像凭据就拒绝提示词。检测器的契约见[执行计划中的机密](/ambercast/zh-cn/spec/secrets/#literal-secret-rejection)。
+唯一的例外是提供方返回的 `assumptions` 列表中的条目。命中机密检测时，ambercast 会把它替换为通用消息并继续处理，而不是以 `SECRET_LITERAL_REJECTED` 失败。该策略不会因为提示词文字看起来像凭据就拒绝提示词。检测器的契约见[执行计划中的机密](/ambercast/zh-cn/spec/secrets/#literal-secret-rejection)。
 
 ## 另请参阅 {#see-also}
 

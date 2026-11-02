@@ -1555,7 +1555,7 @@ ambercast 不再接受这种语法。请删除所有这样的行，然后按[迁
 
 在持久化或序列化报告之前，ambercast 会按字面量机密策略检查生成的或来自提供方的 JSON。检测到的值会以 `SECRET_LITERAL_REJECTED` 被拒绝，字面量不会保留在诊断信息中。
 
-该策略不会因为提示词文字看起来像凭据就拒绝提示词。检测器的契约见[执行计划中的机密](/ambercast/zh-cn/spec/secrets/#literal-secret-rejection)。
+唯一的例外是提供方返回的 `assumptions` 列表中的条目。命中机密检测时，ambercast 会把它替换为通用消息并继续处理，而不是以 `SECRET_LITERAL_REJECTED` 失败。该策略不会因为提示词文字看起来像凭据就拒绝提示词。检测器的契约见[执行计划中的机密](/ambercast/zh-cn/spec/secrets/#literal-secret-rejection)。
 
 ## 另请参阅 {#see-also}
 
@@ -1666,7 +1666,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/
 
 AI 提供方可以在可选的字符串数组 `assumptions` 中列出提示词没有写明的假设。在 `generated` 和 `would-generate` 的结果中，`generate` 会把每条非空白的假设作为 `{ kind: 'generator-assumption', message }` 加入 `warnings`。假设不会让 `generate` 或 `heal` 停止。
 
-面向人的输出会在结果行之后立即打印 `  warning: <message>`。假设命中机密检测时，ambercast 会把它替换为 `An assumption was omitted because it looked like a secret.`。
+面向人的输出会在结果行之后立即打印 `warning: <message>`，前面有两个空格的缩进。假设命中机密检测时，ambercast 会把它替换为 `An assumption was omitted because it looked like a secret.`。
 
 ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再次运行，会返回不带假设警告的 `skipped-fresh`。传入 `--force` 可以重新生成并再次看到假设。重新生成具有不确定性。
 
@@ -1777,6 +1777,49 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` 仅用例作用域。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
 | `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。 |
+
+`AI_RESPONSE_INVALID` 的问题 `code` 可以是下列任一值：
+
+| code | 类别 |
+| --- | --- |
+| `citation-whitespace-only` | 指令覆盖 |
+| `anchor-invalid` | 指令覆盖 |
+| `citation-checksum-mismatch` | 指令覆盖 |
+| `criterion-id-duplicate` | 指令覆盖 |
+| `criterion-range-duplicate` | 指令覆盖 |
+| `criterion-order-invalid` | 指令覆盖 |
+| `source-span-invalid` | 指令覆盖 |
+| `source-span-whitespace-only` | 指令覆盖 |
+| `success-criterion-missing` | 指令覆盖 |
+| `intent-id-duplicate` | 指令覆盖 |
+| `intent-id-missing` | 指令覆盖 |
+| `intent-id-unknown` | 指令覆盖 |
+| `intent-id-action` | 指令覆盖 |
+| `intent-assertion-unsupported` | 指令覆盖 |
+| `terminal-url-matches-forbidden` | 指令覆盖 |
+| `verification-coverage-id-missing` | 指令覆盖 |
+| `verification-coverage-id-unknown` | 指令覆盖 |
+| `verification-coverage-id-action` | 指令覆盖 |
+| `verification-coverage-index-duplicate` | 指令覆盖 |
+| `verification-coverage-index-invalid` | 指令覆盖 |
+| `verification-assertion-repeated` | 指令覆盖 |
+| `intent-span-invalid` | 元素意图 |
+| `intent-span-whitespace-only` | 元素意图 |
+| `intent-citation-mismatch` | 元素意图 |
+| `quote-span-invalid` | 元素意图 |
+| `quote-text-mismatch` | 元素意图 |
+| `quote-unpaired` | 元素意图 |
+| `quote-outside-intent` | 元素意图 |
+| `quote-whitespace-only` | 元素意图 |
+| `confirms-unknown-step` | confirms |
+| `confirms-not-earlier` | confirms |
+| `confirms-not-action` | confirms |
+| `confirms-duplicate` | confirms |
+| `invalid-json` | 其他 |
+| `schema-mismatch` | 其他 |
+| `secret-allowed-name-not-projected` | 其他 |
+| `secret-conflicting-target-names` | 其他 |
+| `text-equals-self-quote` | 其他 |
 
 在 `generated` 和 `would-generate` 的结果中，`secrets` 列出 ambercast 已解析的候选机密用途，dry-run 的 `skipped-fresh` 结果也包含它。可选的 `warnings` 记录五种非致命的策略警告：`secret-name-reused-across-targets`、`secret-target-changed`、`allowed-names-truncated`、`action-unconfirmed` 和 `generator-assumption`。其中 `action-unconfirmed` 带有 `stepId`。这些字段让与同意相关的输出可以被观察，同时不暴露机密值。高风险的 `"*"` 设置见[机密同意](/ambercast/zh-cn/reference/configuration/#secret-consent)。
 

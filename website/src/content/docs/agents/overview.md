@@ -27,6 +27,8 @@ The basic loop is implement, write or adjust the requested `.test.md`, run it, a
 3. Run that `.test.md` and read its JSON report.
 4. Fix from the report, then run again if needed.
 
-`run` needs a trusted plan, so `generate` comes first. `generate` writes the plan and grounding files beside the prompt. Replay with complete grounding makes no AI call. A grounding miss fails with exit 4 unless you pass `--resolve`.
+`run` needs a trusted plan, so run `generate` first when none exists. `generate` writes the plan and grounding files beside the prompt.
+
+Replay with complete grounding makes no AI call and needs no available provider. A grounding miss fails with exit 4 unless you pass `--resolve`.
 
 Related: [Operating contract](/ambercast/agents/operating-contract/), [Reports](/ambercast/reference/reports/)

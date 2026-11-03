@@ -1,6 +1,6 @@
 ---
 title: Operating contract
-description: For each command, what must hold before you run it, what it may write, whether it needs the user's approval, and what to do next after an exit code or report error.
+description: For each command, this page says what must hold before you run it, what it may write, whether it needs the user's approval, and what to do after an exit code or report error.
 ---
 
 The tables below say whether you may run a command and what to do after it. The CLI implements seven commands: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`.
@@ -15,7 +15,7 @@ Check the precondition and the side effects before you run a command. `check` an
 | `generate` | A valid prompt and target. | Writes the plan and grounding; after interactive consent, adds accepted secret names to `secrets.allow`. | Yes for consent and writes; show the diff before any commit. | Works once reviewed names are in `secrets.allow`. |
 | `run` | A trusted plan for the selected prompt. | Persists the report; writes grounding only through the write-back gate. | Yes, unless the requested scope already allows writes. | Works, subject to the write-back policy. |
 | `check` | A selection that discovery can find. | Reads prompts and artifacts only. | No. | Works. |
-| `heal` | Every target the plan references sets `healReplayIsolation: "idempotent"`. | May write attempt evidence; writes plan and grounding changes only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | Refused unless `ci.heal` is `true`, except with `--list`. |
+| `heal` | Every target the plan references sets `healReplayIsolation: "idempotent"` (the default is `stateful`). | May write attempt evidence; writes plan and grounding changes only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | Refused unless `ci.heal` is `true`, except with `--list`. |
 | `view` | stdin and stderr are terminals and `CI` is inactive, or you pass `--allow-headless`. Without `--port`, it tries up to 20 consecutive ports. | None; serves persisted run reports read-only. | No. | Needs `--allow-headless` when no terminal is attached. |
 | `mcp` | The session-root directory exists. | Starts a stdio server; each tool follows its own write and approval boundaries. | Depends on the tool. | Depends on the tool. |
 

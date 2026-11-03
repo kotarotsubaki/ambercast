@@ -27,6 +27,8 @@ CLI 有七个命令：`init`、`generate`、`run`、`check`、`heal`、`view` �
 3. 运行该 `.test.md`，读取它的 JSON 报告。
 4. 依据报告修复，必要时再次运行。
 
-`run` 需要可信的执行计划，所以要先运行 `generate`。`generate` 会在提示词旁写入执行计划和定位缓存文件。定位缓存完整时，回放不调用 AI。定位缓存未命中时，除非传入 `--resolve`，否则命令以退出码 4 失败。
+`run` 需要可信的执行计划，没有时要先运行 `generate`。`generate` 会在提示词旁写入执行计划和定位缓存文件。
+
+定位缓存完整时，回放不调用 AI，也不需要可用的提供方。定位缓存未命中时，除非传入 `--resolve`，否则命令以退出码 4 失败。
 
 相关链接：[操作契约](/ambercast/zh-cn/agents/operating-contract/)、[报告](/ambercast/zh-cn/reference/reports/)

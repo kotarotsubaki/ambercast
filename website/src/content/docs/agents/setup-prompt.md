@@ -1,6 +1,6 @@
 ---
 title: Setup prompt
-description: One prompt to paste into a coding agent so it works only on the requested test, presents a diff, and asks before any write it was not asked for.
+description: Paste this prompt into a coding agent so it works only on the requested test, presents a diff, and asks before any write it was not asked for.
 ---
 
 Give the agent this prompt and it knows what to read, how far to go, and in what order to work. Paste it as written, in English.

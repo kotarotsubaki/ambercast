@@ -78,9 +78,9 @@
 
 ## FOR AI AGENTS
 - [Using ambercast from an AI agent](https://kotarotsubaki.github.io/ambercast/agents/overview/): Before an agent changes a test asset it reads four pages in order, then works in a loop of implement, write the prompt, run, and fix from the report.
-- [Operating contract](https://kotarotsubaki.github.io/ambercast/agents/operating-contract/): For each command, what must hold before you run it, what it may write, whether it needs the user's approval, and what to do next after an exit code or report error.
-- [Setup prompt](https://kotarotsubaki.github.io/ambercast/agents/setup-prompt/): One prompt to paste into a coding agent so it works only on the requested test, presents a diff, and asks before any write it was not asked for.
+- [Operating contract](https://kotarotsubaki.github.io/ambercast/agents/operating-contract/): For each command, this page says what must hold before you run it, what it may write, whether it needs the user's approval, and what to do after an exit code or report error.
+- [Setup prompt](https://kotarotsubaki.github.io/ambercast/agents/setup-prompt/): Paste this prompt into a coding agent so it works only on the requested test, presents a diff, and asks before any write it was not asked for.
 - [Reading structured output](https://kotarotsubaki.github.io/ambercast/agents/reading-structured-output/): Read a JSON report in a fixed order, `command`, then `reportPersistence` for `run`, then `errors[].code`, then each `results[].status`, and act on the first that calls for it.
-- [Machine-readable resources](https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/): Which machine-readable files the site publishes, and that `capabilities.json` decides what is available.
+- [Machine-readable resources](https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/): The site publishes these machine-readable files, and `capabilities.json` decides which of them are available.
 - [Official skill](https://kotarotsubaki.github.io/ambercast/agents/official-skill/): ambercast ships an Agent Skills skill named `ambercast` that teaches a coding agent the prompt, run, and report loop, and this page says what it covers and where it sits next to the setup prompt and the MCP server.
 - [MCP server](https://kotarotsubaki.github.io/ambercast/agents/mcp-server/): `ambercast mcp` serves one session root over stdio to an MCP client, and this page says what the agent can call and where each call's details live.

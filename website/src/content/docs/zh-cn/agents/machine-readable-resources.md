@@ -32,6 +32,6 @@ description: 站点发布了哪些机器可读文件，以及由 `capabilities.j
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 可用 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 可用 |
 
-`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2` 和 `grounding.v3` 的 schema 是提交在仓库中的冻结快照，原样复制到站点。配置、Plan v5、Grounding v4 和报告的 schema，以及 `capabilities.json` 与 `manifest/cli.json`，与进入 npm 包的构建产物逐字节一致。
+`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2` 和 `grounding.v3` 的 schema 是提交在仓库中的冻结快照，原样复制到站点。配置、执行计划 v5、定位缓存 v4 和报告的 schema，以及 `capabilities.json` 与 `manifest/cli.json`，与进入 npm 包的构建产物逐字节一致。
 
 相关链接：[在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)、[JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/)、[状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)

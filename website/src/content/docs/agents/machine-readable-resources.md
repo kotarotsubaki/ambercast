@@ -1,6 +1,6 @@
 ---
 title: Machine-readable resources
-description: Which machine-readable files the site publishes, and that `capabilities.json` decides what is available.
+description: The site publishes these machine-readable files, and `capabilities.json` decides which of them are available.
 ---
 
 These are the files you can fetch, and the rule that says which of them to trust.

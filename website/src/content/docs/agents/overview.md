@@ -1,28 +1,32 @@
 ---
 title: Using ambercast from an AI agent
-description: Operational reading order and bounded execution loop for AI agents using ambercast.
+description: Before an agent changes a test asset it reads four pages in order, then works in a loop of implement, write the prompt, run, and fix from the report.
 ---
 
-This guide defines the operational reading order, side effects, and action branching for AI agents using ambercast. The available CLI commands are `init`, `generate`, `run`, `check`, and `heal`.
+This page tells an agent what to read before it starts and in what order to work. Agent pages own reading order, side effects, and action branching, Reference owns exact specifications, and How-to owns procedures.
 
 ## Read before acting {#read-before-acting}
 
-AI-agent documentation defines reading order, side effects, and action branching; Reference owns exact specifications and How-to owns procedures. The available CLI commands are `init`, `generate`, `run`, `check`, and `heal`. Before changing a test asset, establish the minimum required context:
+The CLI has seven commands: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. Before you change a test asset, read these four pages in order.
 
-| Read | Reason |
+| Read | What you get |
 | --- | --- |
-| [Your first test in 5 minutes](/ambercast/tutorials/quick-start/) | Establishes the artifact loop and prerequisites. |
-| [Operating contract](/ambercast/agents/operating-contract/) | Establishes side effects and approval boundaries. |
-| [CLI overview](/ambercast/reference/cli/overview/) | Selects the exact command contract. |
-| [Reports](/ambercast/reference/reports/) | Interprets structured output after a command. |
+| [Your first test in 5 minutes](/ambercast/tutorials/quick-start/) | The artifact loop and prerequisites |
+| [Operating contract](/ambercast/agents/operating-contract/) | Side effects and approval boundaries |
+| [CLI overview](/ambercast/reference/cli/overview/) | The exact contract of each command |
+| [Reports](/ambercast/reference/reports/) | How to read the JSON report after a command |
 
-## Operate in a bounded loop {#bounded-loop}
+Related: [Setup prompt](/ambercast/agents/setup-prompt/), [Reading structured output](/ambercast/agents/reading-structured-output/), [Machine-readable resources](/ambercast/agents/machine-readable-resources/)
 
-The required basic agent loop is implement → write or adjust the requested `.test.md` → run → fix from the report. Generation derives provenance from normalized prompt text and selected targets, then constructs a plan and its adjacent grounding path. A fully grounded run can proceed without resolving an AI provider.
+## Work in a bounded loop {#bounded-loop}
 
-1. Implement the requested product change within the approved scope. → The implementation is ready for its requested test intent.
-2. Write or adjust the requested `.test.md`. → The prompt expresses the behavior to verify.
-3. Run the selected `.test.md` and read its structured result. → Use [Reports](/ambercast/reference/reports/) to interpret the envelope before choosing a next action.
-4. Fix from the report, then repeat the selected loop as needed. → [Operating contract](/ambercast/agents/operating-contract/) owns approval boundaries and safe action branching; do not infer them from a result alone.
+The basic loop is implement, write or adjust the requested `.test.md`, run it, and fix from the report. Take approval boundaries from the operating contract, not from a single result.
 
-Links: [Setup prompt](/ambercast/agents/setup-prompt/), [Operating contract](/ambercast/agents/operating-contract/), [Reading structured output](/ambercast/agents/reading-structured-output/), [Machine-readable resources](/ambercast/agents/machine-readable-resources/), [Reports](/ambercast/reference/reports/)
+1. Implement the requested product change within the approved scope.
+2. Write or adjust the requested `.test.md` so the prompt states the behavior to verify.
+3. Run that `.test.md` and read its JSON report.
+4. Fix from the report, then run again if needed.
+
+`run` needs a trusted plan, so `generate` comes first. `generate` writes the plan and grounding files beside the prompt. Replay with complete grounding makes no AI call. A grounding miss fails with exit 4 unless you pass `--resolve`.
+
+Related: [Operating contract](/ambercast/agents/operating-contract/), [Reports](/ambercast/reference/reports/)

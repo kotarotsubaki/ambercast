@@ -77,10 +77,10 @@
 - [状态与路线图](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-roadmap/): 说明当前版本已实现的内容、计划中的内容，以及 1.0 之前版本的演进方式。
 
 ## FOR AI AGENTS
-- [在 AI Agent 中使用 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/overview/): 为 AI Agent 提供修改测试资产前的操作阅读顺序、副作用范围与有界运行循环指引。
-- [操作契约](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/operating-contract/): 规定 AI Agent 安全调用 ambercast 时的动作边界、核心禁令以及退出状态与错误处理契约。
-- [设置提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/setup-prompt/): 为处理指定测试的 AI Agent 提供轻量、以审查为先的完整可复制运行提示词。
-- [读取结构化输出](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/reading-structured-output/): 指导 Agent 根据报告信封进行逻辑分支，按固定安全顺序处理命令、结果状态、错误代码与报告持久化。
-- [机器可读资源](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-resources/): 明确列出已发布的机器可读资源及其可用性规则。
-- [official skill](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/official-skill/): 说明 ambercast 内置的面向编码智能体的 official skill，及其在智能体接口设计中的角色。
-- [MCP 服务器](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/mcp-server/): 使用 ambercast MCP 服务器的 Agent 连接边界。
+- [在 AI Agent 中使用 ambercast](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/overview/): Agent 在修改测试资产前按顺序阅读四个页面，然后按“实现、编写提示词、运行、依据报告修复”的循环工作。
+- [操作契约](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/operating-contract/): 针对每个命令，说明运行前必须满足什么条件、会写入什么、是否需要用户批准，以及收到退出码或报告错误后下一步做什么。
+- [设置提示词](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/setup-prompt/): 一段可以贴给编码 Agent 的提示词，让它只处理所要求的测试、展示差异，并在没有被要求的写入前先征求同意。
+- [读取结构化输出](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/reading-structured-output/): 按固定顺序读取 JSON 报告：先看 `command`，再看 `run` 的 `reportPersistence`，然后是 `errors[].code`，最后是每个 `results[].status`，遇到第一个需要处理的项就行动。
+- [机器可读资源](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-resources/): 站点发布了哪些机器可读文件，以及由 `capabilities.json` 决定哪些内容可用。
+- [official skill](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/official-skill/): ambercast 随附一个名为 `ambercast` 的 Agent Skills skill，教编码 Agent 掌握“写提示词、运行、读报告”的循环，本页说明它的覆盖范围，以及它与设置提示词和 MCP 服务器的关系。
+- [MCP 服务器](https://kotarotsubaki.github.io/ambercast/zh-cn/agents/mcp-server/): `ambercast mcp` 通过 stdio 向 MCP 客户端提供一个会话根目录，本页说明 Agent 可以调用什么，以及每个调用的细节在哪里查。

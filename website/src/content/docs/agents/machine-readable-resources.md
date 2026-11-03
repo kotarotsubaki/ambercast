@@ -1,13 +1,13 @@
 ---
 title: Machine-readable resources
-description: Published machine-readable documentation artifacts and their availability rules for AI agents.
+description: Which machine-readable files the site publishes, and that `capabilities.json` decides what is available.
 ---
 
-This page outlines published machine-readable resources and the rules governing their availability.
+These are the files you can fetch, and the rule that says which of them to trust.
 
 ## Availability rule {#availability-rule}
 
-`capabilities.json` is the final availability source for agents. Planned pages are excluded from default `llms.txt` and `llms-full.txt`. All of the following resources are published on the live site in this release.
+`capabilities.json` is the final source for what is available. Planned pages stay out of `llms.txt` and `llms-full.txt`, and `llms-planned.txt` lists each with its title and description.
 
 ## Published artifacts {#planned-artifacts}
 
@@ -32,6 +32,6 @@ This page outlines published machine-readable resources and the rules governing 
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | available |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | available |
 
-`schemas/plan.v2.schema.json`, `schemas/plan.v3.schema.json`, `schemas/plan.v4.schema.json`, `schemas/grounding.v2.schema.json`, and `schemas/grounding.v3.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v5 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
+The `plan.v2`, `plan.v3`, `plan.v4`, `grounding.v2`, and `grounding.v3` schemas are frozen snapshots committed in the repository and copied to the site unchanged. The config, Plan v5, Grounding v4, and report schemas, `capabilities.json`, and `manifest/cli.json` are copied byte for byte from the build that also goes into the npm package.
 
-Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
+Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)

@@ -13,8 +13,8 @@ ambercastは、[Agent Skills](https://agentskills.io)のskillを`skills/ambercas
 
 ## 想定する役割 {#intended-role}
 
-skillは、実行のループを教える。[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)は、依頼された1つのテストに対して、差分を先に示すという境界を置く。[MCPサーバー](/ambercast/ja/agents/mcp-server/)は、シェルではなくツール呼び出しで動くクライアントのための接続である。
+skillは、実行のループを教える。[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)は、依頼された1つのテストに対して、差分を先に示すという境界を置く。[MCP サーバー](/ambercast/ja/agents/mcp-server/)は、シェルではなくツール呼び出しで動くクライアントのための接続である。
 
 ambercastはコーディングエージェントを、人向けのプロンプトやビューアと並ぶ第一級の利用者として扱う。
 
-関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)、[MCPサーバー](/ambercast/ja/agents/mcp-server/)、[状況とロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
+関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)、[MCP サーバー](/ambercast/ja/agents/mcp-server/)、[ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)

@@ -77,10 +77,10 @@
 - [Status and roadmap](https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/): What the current release implements, what is planned, and how versions move before 1.0.
 
 ## FOR AI AGENTS
-- [Using ambercast from an AI agent](https://kotarotsubaki.github.io/ambercast/agents/overview/): Operational reading order and bounded execution loop for AI agents using ambercast.
-- [Operating contract](https://kotarotsubaki.github.io/ambercast/agents/operating-contract/): Action boundaries, command preconditions, prohibitions, and next safe actions for invoking ambercast commands.
-- [Setup prompt](https://kotarotsubaki.github.io/ambercast/agents/setup-prompt/): Complete copy-pasteable operating prompt providing a thin, review-first boundary for an agent working on a requested test.
-- [Reading structured output](https://kotarotsubaki.github.io/ambercast/agents/reading-structured-output/): Branch on the report envelope, inspect reportPersistence and errors, and evaluate command-specific result statuses in ambercast.
-- [Machine-readable resources](https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/): Published machine-readable documentation artifacts and their availability rules for AI agents.
-- [Official skill](https://kotarotsubaki.github.io/ambercast/agents/official-skill/): The official Agent Skills skill ambercast ships for AI coding agents, and its role within the agent-facing interface.
-- [MCP server](https://kotarotsubaki.github.io/ambercast/agents/mcp-server/): Connection boundary for agents using the ambercast MCP server.
+- [Using ambercast from an AI agent](https://kotarotsubaki.github.io/ambercast/agents/overview/): Before an agent changes a test asset it reads four pages in order, then works in a loop of implement, write the prompt, run, and fix from the report.
+- [Operating contract](https://kotarotsubaki.github.io/ambercast/agents/operating-contract/): For each command, what must hold before you run it, what it may write, whether it needs the user's approval, and what to do next after an exit code or report error.
+- [Setup prompt](https://kotarotsubaki.github.io/ambercast/agents/setup-prompt/): One prompt to paste into a coding agent so it works only on the requested test, presents a diff, and asks before any write it was not asked for.
+- [Reading structured output](https://kotarotsubaki.github.io/ambercast/agents/reading-structured-output/): Read a JSON report in a fixed order, `command`, then `reportPersistence` for `run`, then `errors[].code`, then each `results[].status`, and act on the first that calls for it.
+- [Machine-readable resources](https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/): Which machine-readable files the site publishes, and that `capabilities.json` decides what is available.
+- [Official skill](https://kotarotsubaki.github.io/ambercast/agents/official-skill/): ambercast ships an Agent Skills skill named `ambercast` that teaches a coding agent the prompt, run, and report loop, and this page says what it covers and where it sits next to the setup prompt and the MCP server.
+- [MCP server](https://kotarotsubaki.github.io/ambercast/agents/mcp-server/): `ambercast mcp` serves one session root over stdio to an MCP client, and this page says what the agent can call and where each call's details live.

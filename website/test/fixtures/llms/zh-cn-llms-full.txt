@@ -4321,91 +4321,100 @@ Chromium 是目前唯一支持的浏览器。
 # 在 AI Agent 中使用 ambercast
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/overview/
 
-在修改测试资产前，本文档为 AI Agent 梳理所需的操作阅读顺序、副作用范围与操作分支。可用的 CLI 命令包括 `init`、`generate`、`run`、`check` 和 `heal`；确切的规范归属 Reference，具体操作流程归属 How-to。
+本页帮助 Agent 决定开始前读什么、按什么顺序行动。Agent 页面负责阅读顺序、副作用和行动分支，精确规格由参考页负责，操作步骤由操作指南负责。
 
 ## 行动前阅读 {#read-before-acting}
 
-在修改测试资产前，您需要建立最基本的上下文认知。在考虑执行任何命令之前，请先查阅对应的确切契约：
+CLI 有七个命令：`init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。修改测试资产前，按顺序阅读下面四个页面。
 
-| 阅读文档 | 原因 |
+| 阅读 | 得到什么 |
 | --- | --- |
-| [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/) | 建立产物循环与前提条件。 |
-| [操作契约](/ambercast/zh-cn/agents/operating-contract/) | 确立副作用与审批边界。 |
-| [CLI 概览](/ambercast/zh-cn/reference/cli/overview/) | 选择确切的命令契约。 |
-| [报告](/ambercast/zh-cn/reference/reports/) | 在命令执行后解读结构化输出。 |
+| [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/) | 产物循环与前置条件 |
+| [操作契约](/ambercast/zh-cn/agents/operating-contract/) | 副作用与审批边界 |
+| [CLI 概览](/ambercast/zh-cn/reference/cli/overview/) | 每个命令的精确契约 |
+| [报告](/ambercast/zh-cn/reference/reports/) | 命令执行后如何读取 JSON 报告 |
 
-## 在有界循环中操作 {#bounded-loop}
+相关链接：[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/)、[机器可读资源](/ambercast/zh-cn/agents/machine-readable-resources/)
 
-Agent 所需的基础循环为：实现 → 编写或调整所请求的 `.test.md` → 运行 → 根据报告修复。生成（generation）过程会从规范化的 prompt 文本与选定的目标中获取来源依据（provenance），进而构建 plan 及其相邻的 grounding 路径。完全 grounding 的运行可以在无需解析 AI 提供商的情况下进行。
+## 在有界循环中工作 {#bounded-loop}
 
-1. 在批准的范围内实现所请求的产品变更。→ 实现已就绪，可用于其所请求的测试意图。
-2. 编写或调整所请求的 `.test.md`。→ prompt 表达了待验证的行为。
-3. 运行选定的 `.test.md` 并读取其结构化结果。→ 在选择下一步行动前，使用 [报告](/ambercast/zh-cn/reference/reports/) 解读 envelope。
-4. 根据报告进行修复，随后按需重复选定的循环。→ [操作契约](/ambercast/zh-cn/agents/operating-contract/) 规定了审批边界与安全的操作分支；切勿仅凭结果自行推断。
+基本循环是：实现，编写或调整所要求的 `.test.md`，运行，依据报告修复。审批边界以操作契约为准，不要从单个结果推断。
 
-相关链接：[设置提示词](/ambercast/zh-cn/agents/setup-prompt/), [操作契约](/ambercast/zh-cn/agents/operating-contract/), [读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/), [机器可读资源](/ambercast/zh-cn/agents/machine-readable-resources/), [报告](/ambercast/zh-cn/reference/reports/)
+1. 在获批的范围内实现所要求的产品改动。
+2. 编写或调整所要求的 `.test.md`，让提示词写明要验证的行为。
+3. 运行该 `.test.md`，读取它的 JSON 报告。
+4. 依据报告修复，必要时再次运行。
+
+`run` 需要可信的执行计划，所以要先运行 `generate`。`generate` 会在提示词旁写入执行计划和定位缓存文件。定位缓存完整时，回放不调用 AI。定位缓存未命中时，除非传入 `--resolve`，否则命令以退出码 4 失败。
+
+相关链接：[操作契约](/ambercast/zh-cn/agents/operating-contract/)、[报告](/ambercast/zh-cn/reference/reports/)
 
 ---
 
 # 操作契约
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/operating-contract/
 
-ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
+本页帮助 Agent 判断能否运行某个命令，以及运行后怎么做。CLI 实现了七个命令：`init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。
 
 ## 命令契约 {#command-contract}
 
-解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。其中，`check` 与 `view` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
+运行命令前，先确认前置条件和副作用。`check` 与 `view` 不需要可写存储、AI 提供方或浏览器。`heal` 会把执行计划与定位缓存的改动保留到确认之后，但在批准前和 `--dry-run` 期间，仍可能在 `runsDir` 下写入尝试证据。
 
-| 命令 | 前提条件 | 副作用 | 是否需要批准？ | CI 中是否安全？ |
+| 命令 | 前置条件 | 副作用 | 是否需要批准 | CI 中使用 |
 | --- | --- | --- | --- | --- |
-| init | 对目标目录具有写入权限。 | 可能写入四个工件：配置、示例 prompt、一行 `.gitignore` 和一个 AGENTS.md 块。 | 需要用户明确批准；`--yes` 不构成 agent 授权。 | 默认不安全；在非交互环境中没有 `--yes` 会被拒绝，且在 CI 中使用也不会改变批准边界。 |
-| generate | 所选 prompt 与目标必须有效；新提出的机密名称若不在许可列表中，需要取得同意。 | 可能写入 Plan、Grounding 工件以及已接受的名称到 `secrets.allow`。 | 同意与写入时需要；提交前须呈现 diff。 | 已审查名称预先填入 `secrets.allow` 时安全。 |
-| run | 所选 prompt 具有受信任的计划。 | 写入调用报告；可在其回写契约下写入 grounding。 | 当请求的范围未预先授权写入时需要。 | 安全，遵循回写策略。 |
-| check | 所选目标可被发现。 | 仅读取 prompt 与工件。 | 不需要 ambercast 工件写入批准。 | 安全。 |
-| heal | 目标具备幂等性，且在 CI 中时已启用真实尝试。 | 可能在 runs 目录中写入尝试证据；仅在确认后提交测得的计划/grounding 候选变更。 | 需要用户明确批准；--yes 不构成 agent 授权。 | 默认不安全；仅在 ci.heal: true 时安全。 |
-| view | 具备交互式终端，或指定 `--allow-headless`；具有可绑定的空闲端口。 | 无；仅读取已持久化的 run report 的 HTTP 服务器。 | 不需要 ambercast 工件写入批准。 | 默认不安全；未指定 `--allow-headless` 的非交互使用会被拒绝。 |
-| mcp | 会话根目录存在。 | 启动 stdio 服务器；所调用工具遵循各自的写入与批准边界。 | 取决于所调用的工具。 | 取决于所调用的工具。 |
+| `init` | 对目标目录有写权限。 | 可能写入配置、示例提示词、两行 `.gitignore` 内容和 `AGENTS.md` 区块。 | 需要用户明确批准；`--yes` 不等于 Agent 授权。 | 不带 `--yes` 的非交互运行会被拒绝。在 CI 中使用不改变批准边界。 |
+| `generate` | 提示词和目标有效。 | 写入执行计划和定位缓存；经交互同意后，把接受的机密名称加入 `secrets.allow`。 | 同意与写入需要批准；提交前先展示差异。 | 评审过的名称已在 `secrets.allow` 中时可用。 |
+| `run` | 所选提示词有可信的执行计划。 | 保存报告；仅在通过回写条件时写入定位缓存。 | 请求范围未允许写入时需要批准。 | 可用，遵循回写策略。 |
+| `check` | 发现机制能找到所选测试。 | 只读取提示词和产物。 | 不需要。 | 可用。 |
+| `heal` | 执行计划引用的每个目标都设置了 `healReplayIsolation: "idempotent"`。 | 可能写入尝试证据；执行计划与定位缓存的改动只在确认后写入。 | 需要用户明确批准；`--yes` 不等于 Agent 授权。 | 除 `--list` 外，`ci.heal` 不为 `true` 时被拒绝。 |
+| `view` | stdin 与 stderr 都是终端且 `CI` 未启用，或传入 `--allow-headless`。不带 `--port` 时最多尝试 20 个连续端口。 | 无；以只读方式提供已保存的运行报告。 | 不需要。 | 没有终端时需要 `--allow-headless`。 |
+| `mcp` | 会话根目录已存在。 | 启动 stdio 服务器；各工具遵循自己的写入与批准边界。 | 取决于所调用的工具。 | 取决于所调用的工具。 |
+
+`heal` 的目标不是幂等时，命令以退出码 2 失败，错误码为 `CONFIG_INVALID`。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[ambercast init](/ambercast/zh-cn/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 
 ## 禁止事项 {#prohibitions}
 
-以下为调用命令时必须遵守的非协商性安全边界：
+以下限制没有例外。
 
-- Agent 绝不能在 prompt、工件、命令、报告或消息中放置字面机密值；请改用 SecretRef、其环境变量值以及目标的接收端策略（sink policy）。
-- 公共错误词汇表中包含 `SECRET_LITERAL_REJECTED`；该检测器属于狭义的启发式检测，不能替代 Agent 对字面机密的禁止规则。
-- Agent 绝不能添加 `@ambercast-secret` 授权行。对于 `secrets.allow` 之外的生成名称，应取得操作员的明确同意，或请操作员添加已审查的名称；`"*"` 无需逐名审查即可接受任意 AI 提议名称，因此需要明确批准。
-- 在 CI 环境中，除非启用了 `ci.heal`，否则会拒绝执行真实的修复。
-- `--yes` 仅用于预先授权 CLI 的确认提示；dry run 绝不会进行提交。
+- 不要在提示词、产物、命令、报告或消息中写入机密的明文值。使用 `SecretRef`、对应的环境变量以及目标的输出位置策略。
+- `SECRET_LITERAL_REJECTED` 来自范围很窄的检测，不能代替上面的禁止规则。
+- 不要添加 `@ambercast-secret` 授权行。名称不在 `secrets.allow` 中时，先取得操作者同意，或请操作者加入已评审的名称。`"*"` 会接受 AI 提出的任意名称，因此需要明确批准。
+- 在 CI 中，除非 `ci.heal` 为 `true`，否则不要运行真正的 heal。
+- `--yes` 只回答 CLI 的确认提示。试运行从不提交。
 
 相关链接：[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#confirmation-and-writes)
 
-## 进程状态后的后续动作 {#next-action-by-exit-code}
+## 按退出码决定下一步 {#next-action-by-exit-code}
 
-进程状态是从批处理退出候选状态中选出的，独立于结果的返回顺序。
+命令有多个结果时，退出码按固定优先级决定，与结果的顺序无关。按下表行动。
 
-| 进程结果 | 下一步安全动作 |
+| 退出码 | 含义 | 下一步安全动作 |
+| --- | --- | --- |
+| 0 | 成功或没有候选 | 检查允许范围内的差异，在范围内继续。 |
+| 1 | 命令自身的否定结果 | 读取失败的证据。不要自动 heal 或重新生成。 |
+| 2 | 用法或配置问题 | 读取 `errors[].code`，修正对应的边界。 |
+| 3 | 环境问题 | 保留 JSON 报告，修复环境而不是测试。 |
+| 4 | 执行计划或定位缓存不可信 | 遇到 `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION` 时，走过期产物恢复流程。遇到 `GROUNDING_UNRESOLVED` 时，仅当请求范围允许调用 AI 并写入定位缓存才加 `--resolve` 重跑，否则向用户报告。 |
+| 5 | 选择为空 | 先确认意图，再决定是否允许空选择。 |
+
+相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)
+
+## 按报告错误决定下一步 {#next-action-by-report-error}
+
+报告 schema 定义了十五种用法代码与八种环境代码。`INTERRUPTED` 属于整次运行，受影响的用例以 `skipped` 行表示。每个会被产生的错误码恰好属于下表的一行。遗留的 `SECRET_GRANT_UNATTRIBUTABLE` 不会被产生，也没有对应的行。
+
+| 错误码 | 下一步安全动作 |
 | --- | --- |
-| 成功 | 检查允许的 diff，并在范围内继续。 |
-| 失败证据 | 检查失败证据；不要自动执行 heal 或重新生成。 |
-| 用法或配置问题 | 读取 `errors[].code` 并修正该边界。 |
-| 环境问题 | 保留 envelope 并修复环境，而非修改测试语义。 |
-| 不可信工件 | 使用 `stale`（已过期）工件恢复。 |
-| 空选择 | 在允许空集合前，重新确认选择意图。 |
-
-相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#priority)
-
-## 按报告错误分类的后续动作 {#next-action-by-report-error}
-
-报告 schema 定义了十五种用法代码与八种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
-
-| 错误类别 | 下一步安全动作 |
-| --- | --- |
-| 配置、机密或目标 | 读取指定的 Reference，在不猜测具体值的情况下修正该边界。 |
-| `SECRET_CONSENT_REQUIRED` | 以交互方式获得对所列名称的批准，或将已审查的名称添加至 `secrets.allow`；不得将同意视为已获授而重试。 |
-| 计划新鲜度或完整性 | 将工件视为不可信，并使用 `stale`（已过期）工件恢复。 |
-| 浏览器、提供商、存储或崩溃 | 保留 envelope 并修复环境。 |
-| 中断 | 将剩余工作视为未完成；切勿推断用例结果。 |
+| `CONFIG_INVALID`、`PROMPT_PATH_INVALID`、`TARGET_UNRESOLVED`、`EXECUTOR_UNSUPPORTED`、`PROMPT_AMBIGUOUS` | 阅读对应的参考页，不要猜测取值，直接修正边界。 |
+| `SECRET_UNRESOLVED`、`SECRET_LITERAL_REJECTED`、`SECRET_ENV_VAR_COLLISION`、`SECRET_SYNTAX_REJECTED` | 修正机密引用或环境变量，不要把值写进提示词。 |
+| `SECRET_CONSENT_REQUIRED` | 以交互方式取得批准，或把评审过的名称加入 `secrets.allow`。不要当作已同意而重试。 |
+| `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION` | 视产物为不可信，走过期产物恢复流程。 |
+| `GROUNDING_UNRESOLVED` | 仅当请求范围允许时才加 `--resolve` 重跑，否则向用户报告。仍然失败时，读取 `details.reason` 并报告，不要反复重试。 |
+| `BROWSER_LAUNCH_FAILED`、`AI_EXECUTOR_UNAVAILABLE`、`AI_RESPONSE_INVALID`、`FS_IO_ERROR`、`UNEXPECTED_CRASH` | 保留 JSON 报告，修复环境。 |
+| `AGENTIC_STEP_FAILED`、`CASE_ABORTED` | 读取 `details`。不要推断用例结果，修正环境或调用条件。 |
+| `INTERRUPTED` | 视剩余工作为未完成，不要推断用例结果。 |
 
 相关链接：[错误代码](/ambercast/zh-cn/reference/error-codes/)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)、[常见故障排查](/ambercast/zh-cn/how-to/troubleshoot/)
 
@@ -4414,19 +4423,17 @@ ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`
 # 设置提示词
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/setup-prompt/
 
-本页提供了一套可直接复制的完整运行提示词，旨在为处理指定测试的 Agent 建立轻量且以审查为先的工作边界。
+把这段提示词交给 Agent，它就知道要读什么、做到哪一步、按什么顺序工作。请按原样以英文粘贴。
 
 ## 可复制的提示词 {#copy-paste-prompt}
 
-本提示词遵循以下明确的契约与行为规则：
+提示词设定了五条规则。
 
-- **声明开发服务器边界**：设置提示词明确声明了开发服务器的边界。
-- **无依赖工件检查**：`check` 可以在无需 AI 或浏览器能力的情况下检查工件。
-- **Diff 优先与提交限制**：提示词将展示 diff 设定为默认行为；提交代码必须经过请求。
-- **未传参发现规则**：在未提供文件参数时，`generate`、`run` 和 `heal` 会各自根据配置好的发现规则来选择测试。
-- **提供商解析机制**：提供商解析在存在显式覆盖时使用该覆盖，否则使用配置的提供商；在 `auto` 模式下，会先探测 claude 再探测 codex。
-
-您可以将以下提示词完整复制并提供给 Agent：
+1. AI 提供方先取显式指定的值，再取配置的提供方。在 `auto` 模式下，先尝试 `claude`，再尝试 `codex`。
+2. `check` 不使用 AI 和浏览器，只检查产物。
+3. 默认只展示差异，只有被要求时才提交。
+4. 开发服务器归操作者所有。Agent 假定应用已在配置的基础 URL 上运行，不启动也不停止它。
+5. 不带文件参数时，`generate`、`run` 和 `heal` 会选中配置的发现规则匹配的全部测试。
 
 ~~~markdown
 You are working on ambercast tests in this repository.
@@ -4440,67 +4447,66 @@ Never place literal secret values in prompts, artifacts, commands, reports, or m
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
-相关链接：[5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)、[操作契约](/ambercast/zh-cn/agents/operating-contract/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)
+相关链接：[5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)、[操作契约](/ambercast/zh-cn/agents/operating-contract/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)
 
 ---
 
 # 读取结构化输出
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/reading-structured-output/
 
-本页指导 Agent 如何根据报告信封进行逻辑分支，而不是重现完整的数据模式。报告信封通过 `command` 区分不同的命令分支，并且只有 `run` 分支包含 `reportPersistence`。在处理输出时，您需要按照固定的安全顺序依次处理 `command`、`errors[].code`、`results[].status` 以及 `reportPersistence`。
+本页帮助 Agent 决定从报告的哪里开始读、在哪里停下、什么结果可以继续。报告由 `command` 决定属于 `generate`、`run`、`check`、`heal` 或 `review` 分支。
 
-## 信封决策树 {#decision-tree}
+## 决策树 {#decision-tree}
 
-处理报告信封时，请遵循以下规则：
+按 `command`、`reportPersistence`、`errors[].code`、`results[].status` 的顺序读取。只有 `run` 有 `reportPersistence`，取值为 `persisted`、`failed` 或 `not-attempted`。schema 定义了 `review` 分支，但 CLI 没有 `review` 命令。
 
-- 报告信封通过 `command` 区分出 `generate`、`run`、`check`、`heal` 和 `review` 分支。
-- 只有 `run` 分支包含 `reportPersistence`，其取值为 `persisted`、`failed` 以及 `not-attempted`。
-- 报告模式提供了一套公开且稳定的 `errors[].code` 词汇表。
+只要 `errors[].code` 里有错误码，就先按操作契约的报告错误表处理，再改动文件。没有错误码时，按该命令的规则逐行归类 `results[].status`。
 
 ~~~
 Read command.
 ├─ run: read reportPersistence first.
-│  ├─ failed → retain stdout envelope; treat persistence as an environment problem.
-│  └─ persisted/not-attempted → continue to results.
-├─ generate/check/heal/review → continue to results.
+│  ├─ failed → keep the stdout report; treat persistence as an environment problem.
+│  └─ persisted/not-attempted → continue to errors.
+├─ generate/check/heal/review → continue to errors.
 Read every errors[].code.
-├─ any code → use operating-contract's error-code table before changing files.
+├─ any code → use the operating contract's report-error table before changing files.
 └─ none → classify every results[].status for this command.
-   ├─ failed/error/stale/missing/orphaned → stop at the corresponding contract.
-   ├─ skipped/listed → treat as incomplete or discovery-only, not success.
-   └─ healthy status → continue only within approved scope.
+   ├─ listed/skipped → discovery-only or incomplete, not success.
+   ├─ generate failed, run failed/error → read the evidence; do not heal or regenerate automatically.
+   ├─ check other than fresh/fresh-without-grounding → artifacts are untrustworthy; use stale-artifact recovery.
+   ├─ heal unresolved/partially-healed → report it; do not retry automatically.
+   └─ any other status → continue only within approved scope.
 ~~~
 
 相关链接：[报告](/ambercast/zh-cn/reference/reports/)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#next-action-by-report-error)
 
-## 状态代表特定命令的凭据 {#status-by-command}
+## 状态代表各命令自己的证据 {#status-by-command}
 
-各命令对应的 `results[].status` 代表各自特定的执行凭据，不能混淆解读：
+每个命令的 `results[].status` 词汇各不相同。`listed` 只表示发现了测试，`skipped` 不带任何执行证据，两者都不是成功。
 
-- `run` 执行结果使用 `passed`、`failed` 或 `error`；`listed` 仅用于发现，而 `skipped` 不携带任何执行凭据。
-- `generate` 区分 `generated`、`would-generate`、`skipped-fresh`、`listed`、`failed` 和 `skipped`。
-- `check` 包括 `fresh`/`stale`（已过期）、`plan-missing`/`grounding-missing` 或 `orphaned` 结果，以及 `fresh-without-grounding`、`listed` 和 `skipped`。
+- `generate` 使用 `generated`、`would-generate`、`skipped-fresh`、`listed`、`failed` 和 `skipped`。
+- `run` 使用 `passed`、`failed`、`error`、`listed` 和 `skipped`。
+- `check` 使用 `fresh`、`stale`、`missing-plan`、`missing-grounding`、`stale-grounding`、`invalid-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed` 和 `skipped`。
+- 已完成的 `heal` 行带有 `status: completed`，`repairOutcome` 为 `healed`、`partially-healed`、`unresolved` 或 `no-changes-needed`。`listed` 和 `skipped` 行只带标识信息。
 
-相关链接：[报告](/ambercast/zh-cn/reference/reports/#result-statuses)、[计划生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/#grounding-binding)
+相关链接：[generate 结果](/ambercast/zh-cn/reference/reports/#generate-results)、[run 结果](/ambercast/zh-cn/reference/reports/#run-results)、[check 结果](/ambercast/zh-cn/reference/reports/#check-results)、[heal 结果](/ambercast/zh-cn/reference/reports/#heal-results)、[执行计划的生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/#grounding-binding)
 
-## 进程状态是批处理级别的信号 {#exit-code-signal}
+## 退出码是整批的信号 {#exit-code-signal}
 
-报告错误在其 `code` 之外，同时记录了其 `scope` 与 `kind`。
+先读各行和错误，再把退出码当作整批的信号。每个报告错误还会在 `errors[]` 中记录它的范围和类别。
 
-相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#priority)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#next-action-by-exit-code)
+相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)、[操作契约](/ambercast/zh-cn/agents/operating-contract/#next-action-by-exit-code)
 
 ---
 
 # 机器可读资源
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-resources/
 
-本页面列出 ambercast 已发布的机器可读资源及其可用性状态。智能体应以 `capabilities.json` 作为最终的可用性依据。
+本页帮助 Agent 决定可以获取哪些文件，以及能否信任这些文件。
 
 ## 可用性规则 {#availability-rule}
 
-- `capabilities.json` 是智能体判断资源最终可用性的依据。
-- 计划中的页面会被排除在默认的 `llms.txt` 与 `llms-full.txt` 之外。
-- 以下列出的所有资源均已在本次发布中上线。
+是否可用，最终以 `capabilities.json` 为准。计划中的页面不会进入 `llms.txt` 和 `llms-full.txt`，而是连同标题和说明列在 `llms-planned.txt` 中。
 
 ## 已发布的产物 {#planned-artifacts}
 
@@ -4525,9 +4531,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 可用 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 可用 |
 
-`schemas/plan.v2.schema.json`、`schemas/plan.v3.schema.json`、`schemas/plan.v4.schema.json`、`schemas/grounding.v2.schema.json` 与 `schemas/grounding.v3.schema.json` 是复制到文档站点的冻结、已提交历史快照。当前构建会生成 config Schema、Plan v5 Schema、grounding Schema、report Schema、`capabilities.json` 与 `manifest/cli.json`，其文档站点与 npm 分发包中的字节完全一致。
-
-本页面介绍在本次发布中已上线的产物。
+`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2` 和 `grounding.v3` 的 schema 是提交在仓库中的冻结快照，原样复制到站点。配置、Plan v5、Grounding v4 和报告的 schema，以及 `capabilities.json` 与 `manifest/cli.json`，与进入 npm 包的构建产物逐字节一致。
 
 相关链接：[在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)、[JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/)、[状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)
 
@@ -4536,46 +4540,52 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/machine-readable-
 # official skill
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/official-skill/
 
-本文档向您说明 ambercast 内置的 official skill，以及该功能在智能体接口设计中的角色。
+本页帮助 Agent 判断这个 skill 教什么，以及它与设置提示词、MCP 服务器有何不同。
 
-## 这是什么 {#what-it-is}
+## 它是什么 {#what-it-is}
 
-ambercast 在 `skills/ambercast/SKILL.md` 中内置了一个名为 `ambercast` 的 [Agent Skills](https://agentskills.io) 技能。它教会编码智能体编写 `<name>.test.md` 提示词、通过 CLI 运行 `generate` / `run` / `check` / `heal` 循环、读取 `--json` 报告并处理退出码，以及选择下一步安全的操作。
+ambercast 在 `skills/ambercast/SKILL.md` 随附一个 [Agent Skills](https://agentskills.io) skill，名为 `ambercast`。它教编码 Agent 编写 `<name>.test.md` 提示词，通过 CLI 驱动 `generate`、`run`、`check` 和 `heal`，读取 `--json` 报告与退出码，并选择下一步安全动作。
 
-安装方式（Claude Code、Codex CLI、支持 `gh skill` 的智能体、skills.sh，或从已安装的包手动复制）请参见 [README](https://github.com/kotarotsubaki/ambercast#official-skill)。为处理指定测试的智能体提供轻量、以审查为先边界的完整可复制运行提示词，请参见[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)。
+安装方式有 Claude Code、Codex CLI、兼容 `gh skill` 的 Agent、skills.sh，以及从已安装的包中手动复制，见 [README](https://github.com/kotarotsubaki/ambercast#official-skill)。
 
 ## 预期角色 {#intended-role}
 
-智能体接口设计将编码智能体视为与面向人类用户的 prompt 和 viewer 界面并列的一等用户。
+这个 skill 教循环本身。[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)为一个被要求的测试设定先审阅的边界。[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)则是为调用工具而不是使用 shell 的客户端准备的连接。
 
-相关链接：
-- [在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)
-- [设置提示词](/ambercast/zh-cn/agents/setup-prompt/)
-- [MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
-- [状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)
+ambercast 把编码 Agent 视为一等用户，与面向人的提示词和查看器并列。
+
+相关链接：[在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)、[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)、[状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)
 
 ---
 
 # MCP 服务器
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/agents/mcp-server/
 
-`ambercast mcp` 子命令通过无端口的 `stdio` 连接供 Agent 执行及修复按键级 E2E 测试。一个服务器进程服务于一个 session root，由 `--dir` 指定；省略时使用进程当前工作目录。工具中的文件路径以该 root 为基准解析。`--sync-wait-ms` 设置同步响应等待界限，默认值为 45000 ms。
+本页帮助 Agent 判断能从 MCP 客户端调用什么，以及去哪里查每个调用的细节。服务器运行的是 ambercast 的浏览器 E2E 工作流：generate、run、check 和 heal。
 
 ## 连接边界 {#connection-boundary}
 
-连接提供 `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status` 和 `ambercast_job_cancel`。前四项是工作流，后两项观察及取消服务器本地作业。输入、注解、Job record、`isError` 及 MCP 错误界面详见 [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)。客户端进程注册示例见 [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#client-registration)。
+`ambercast mcp` 提供不占用端口的 stdio 连接。一个服务器进程只服务一个会话根目录。用 `--dir` 指定，省略时使用进程的当前工作目录。
+
+传给工具的文件相对于这个根目录解析。`--sync-wait-ms` 限定同步等待的上限，默认值为 45000 ms。
+
+服务器公开六个工具：`ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status` 和 `ambercast_job_cancel`。前四个是工作流，后两个用于查看和取消服务器内的作业。
+
+如 [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)所述，只有 `ambercast_generate` 接受 `target`。其他工作流工具从执行计划中选择目标。
+
+输入、注解、作业记录、`isError` 和 MCP 错误面也在同一页。客户端的注册方式见 [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#client-registration)。
 
 ## 与原计划设计的变化 {#changes-from-the-planned-design}
 
-| 原 planned 页面 | 已实现连接 |
+| 此前的计划页面 | 已实现的连接 |
 | --- | --- |
-| 原计划五个工具 | 六个工具，包含作业状态与取消 |
-| 发布报告 `outputSchema` | 省略 `outputSchema` |
-| heal 只有预览 | 通过 `applyToken` 两阶段应用 |
-| 只有同步工作流 | 较长调用变成作业，无 ID 的状态请求返回列表 |
-| 未规定服务器标志 | `ambercast mcp` 支持 `--dir` 和 `--sync-wait-ms` |
-| 未规定 MCP 错误 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` 使用独立错误界面 |
-| 未规定 CLI 输入 | 输入排除 `headed`、`list`、`stale`、`json`、`yes`、`configPath` |
-| 从报告推断退出码 | `_meta.exitCode` 明确携带退出码 |
+| 包含 `review` 的五个计划中的工具 | 六个工具，包括作业状态与取消；不公开 `review` |
+| 发布报告的 `outputSchema` | 省略 `outputSchema` |
+| 只有 heal 预览 | 使用 `applyToken` 的两阶段 heal |
+| 只有同步工作流 | 较长的 `generate`、`run` 和 heal 预览调用会返回作业；不带 ID 查询状态会列出作业 |
+| 服务器参数未定 | `ambercast mcp` 支持 `--dir` 和 `--sync-wait-ms` |
+| MCP 错误未定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND` 和 `JOB_FAILED` 使用独立的错误面 |
+| CLI 输入未定 | 输入不含 `headed`、`list`、`stale`、`json`、`yes` 和 `configPath` |
+| 退出码由报告推断 | `_meta.exitCode` 明确给出 |
 
-相关链接：[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/)。
+相关链接：[MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)、[ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/)

@@ -1,63 +1,68 @@
 ---
 title: 操作契约
-description: 规定 AI Agent 安全调用 ambercast 时的动作边界、核心禁令以及退出状态与错误处理契约。
+description: 针对每个命令，说明运行前必须满足什么条件、会写入什么、是否需要用户批准，以及收到退出码或报告错误后下一步做什么。
 ---
 
-ambercast 解析器所公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。本页为 AI Agent 提供调用这些命令时的动作边界、前提条件、副作用以及所需的批准规则，帮助您判断是否能够安全地调用相应命令。
+本页帮助 Agent 判断能否运行某个命令，以及运行后怎么做。CLI 实现了七个命令：`init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。
 
 ## 命令契约 {#command-contract}
 
-解析器公开实现的命令恰好为 `init`、`generate`、`run`、`check`、`heal`、`view` 与 `mcp`。其中，`check` 与 `view` 命令完全不依赖可变存储、AI 提供商或浏览器。对于 `heal` 命令，系统仅将计划与 grounding 伴生文件的修改缓冲至确认阶段；但在获得批准之前以及在 dry run 运行期间，其重放尝试可能会在用例运行目录中写入包含证据。
+运行命令前，先确认前置条件和副作用。`check` 与 `view` 不需要可写存储、AI 提供方或浏览器。`heal` 会把执行计划与定位缓存的改动保留到确认之后，但在批准前和 `--dry-run` 期间，仍可能在 `runsDir` 下写入尝试证据。
 
-| 命令 | 前提条件 | 副作用 | 是否需要批准？ | CI 中是否安全？ |
+| 命令 | 前置条件 | 副作用 | 是否需要批准 | CI 中使用 |
 | --- | --- | --- | --- | --- |
-| init | 对目标目录具有写入权限。 | 可能写入四个工件：配置、示例 prompt、一行 `.gitignore` 和一个 AGENTS.md 块。 | 需要用户明确批准；`--yes` 不构成 agent 授权。 | 默认不安全；在非交互环境中没有 `--yes` 会被拒绝，且在 CI 中使用也不会改变批准边界。 |
-| generate | 所选 prompt 与目标必须有效；新提出的机密名称若不在许可列表中，需要取得同意。 | 可能写入 Plan、Grounding 工件以及已接受的名称到 `secrets.allow`。 | 同意与写入时需要；提交前须呈现 diff。 | 已审查名称预先填入 `secrets.allow` 时安全。 |
-| run | 所选 prompt 具有受信任的计划。 | 写入调用报告；可在其回写契约下写入 grounding。 | 当请求的范围未预先授权写入时需要。 | 安全，遵循回写策略。 |
-| check | 所选目标可被发现。 | 仅读取 prompt 与工件。 | 不需要 ambercast 工件写入批准。 | 安全。 |
-| heal | 目标具备幂等性，且在 CI 中时已启用真实尝试。 | 可能在 runs 目录中写入尝试证据；仅在确认后提交测得的计划/grounding 候选变更。 | 需要用户明确批准；--yes 不构成 agent 授权。 | 默认不安全；仅在 ci.heal: true 时安全。 |
-| view | 具备交互式终端，或指定 `--allow-headless`；具有可绑定的空闲端口。 | 无；仅读取已持久化的 run report 的 HTTP 服务器。 | 不需要 ambercast 工件写入批准。 | 默认不安全；未指定 `--allow-headless` 的非交互使用会被拒绝。 |
-| mcp | 会话根目录存在。 | 启动 stdio 服务器；所调用工具遵循各自的写入与批准边界。 | 取决于所调用的工具。 | 取决于所调用的工具。 |
+| `init` | 对目标目录有写权限。 | 可能写入配置、示例提示词、两行 `.gitignore` 内容和 `AGENTS.md` 区块。 | 需要用户明确批准；`--yes` 不等于 Agent 授权。 | 不带 `--yes` 的非交互运行会被拒绝。在 CI 中使用不改变批准边界。 |
+| `generate` | 提示词和目标有效。 | 写入执行计划和定位缓存；经交互同意后，把接受的机密名称加入 `secrets.allow`。 | 同意与写入需要批准；提交前先展示差异。 | 评审过的名称已在 `secrets.allow` 中时可用。 |
+| `run` | 所选提示词有可信的执行计划。 | 保存报告；仅在通过回写条件时写入定位缓存。 | 请求范围未允许写入时需要批准。 | 可用，遵循回写策略。 |
+| `check` | 发现机制能找到所选测试。 | 只读取提示词和产物。 | 不需要。 | 可用。 |
+| `heal` | 执行计划引用的每个目标都设置了 `healReplayIsolation: "idempotent"`。 | 可能写入尝试证据；执行计划与定位缓存的改动只在确认后写入。 | 需要用户明确批准；`--yes` 不等于 Agent 授权。 | 除 `--list` 外，`ci.heal` 不为 `true` 时被拒绝。 |
+| `view` | stdin 与 stderr 都是终端且 `CI` 未启用，或传入 `--allow-headless`。不带 `--port` 时最多尝试 20 个连续端口。 | 无；以只读方式提供已保存的运行报告。 | 不需要。 | 没有终端时需要 `--allow-headless`。 |
+| `mcp` | 会话根目录已存在。 | 启动 stdio 服务器；各工具遵循自己的写入与批准边界。 | 取决于所调用的工具。 | 取决于所调用的工具。 |
+
+`heal` 的目标不是幂等时，命令以退出码 2 失败，错误码为 `CONFIG_INVALID`。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[ambercast init](/ambercast/zh-cn/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 
 ## 禁止事项 {#prohibitions}
 
-以下为调用命令时必须遵守的非协商性安全边界：
+以下限制没有例外。
 
-- Agent 绝不能在 prompt、工件、命令、报告或消息中放置字面机密值；请改用 SecretRef、其环境变量值以及目标的接收端策略（sink policy）。
-- 公共错误词汇表中包含 `SECRET_LITERAL_REJECTED`；该检测器属于狭义的启发式检测，不能替代 Agent 对字面机密的禁止规则。
-- Agent 绝不能添加 `@ambercast-secret` 授权行。对于 `secrets.allow` 之外的生成名称，应取得操作员的明确同意，或请操作员添加已审查的名称；`"*"` 无需逐名审查即可接受任意 AI 提议名称，因此需要明确批准。
-- 在 CI 环境中，除非启用了 `ci.heal`，否则会拒绝执行真实的修复。
-- `--yes` 仅用于预先授权 CLI 的确认提示；dry run 绝不会进行提交。
+- 不要在提示词、产物、命令、报告或消息中写入机密的明文值。使用 `SecretRef`、对应的环境变量以及目标的输出位置策略。
+- `SECRET_LITERAL_REJECTED` 来自范围很窄的检测，不能代替上面的禁止规则。
+- 不要添加 `@ambercast-secret` 授权行。名称不在 `secrets.allow` 中时，先取得操作者同意，或请操作者加入已评审的名称。`"*"` 会接受 AI 提出的任意名称，因此需要明确批准。
+- 在 CI 中，除非 `ci.heal` 为 `true`，否则不要运行真正的 heal。
+- `--yes` 只回答 CLI 的确认提示。试运行从不提交。
 
 相关链接：[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#confirmation-and-writes)
 
-## 进程状态后的后续动作 {#next-action-by-exit-code}
+## 按退出码决定下一步 {#next-action-by-exit-code}
 
-进程状态是从批处理退出候选状态中选出的，独立于结果的返回顺序。
+命令有多个结果时，退出码按固定优先级决定，与结果的顺序无关。按下表行动。
 
-| 进程结果 | 下一步安全动作 |
+| 退出码 | 含义 | 下一步安全动作 |
+| --- | --- | --- |
+| 0 | 成功或没有候选 | 检查允许范围内的差异，在范围内继续。 |
+| 1 | 命令自身的否定结果 | 读取失败的证据。不要自动 heal 或重新生成。 |
+| 2 | 用法或配置问题 | 读取 `errors[].code`，修正对应的边界。 |
+| 3 | 环境问题 | 保留 JSON 报告，修复环境而不是测试。 |
+| 4 | 执行计划或定位缓存不可信 | 遇到 `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION` 时，走过期产物恢复流程。遇到 `GROUNDING_UNRESOLVED` 时，仅当请求范围允许调用 AI 并写入定位缓存才加 `--resolve` 重跑，否则向用户报告。 |
+| 5 | 选择为空 | 先确认意图，再决定是否允许空选择。 |
+
+相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)
+
+## 按报告错误决定下一步 {#next-action-by-report-error}
+
+报告 schema 定义了十五种用法代码与八种环境代码。`INTERRUPTED` 属于整次运行，受影响的用例以 `skipped` 行表示。每个会被产生的错误码恰好属于下表的一行。遗留的 `SECRET_GRANT_UNATTRIBUTABLE` 不会被产生，也没有对应的行。
+
+| 错误码 | 下一步安全动作 |
 | --- | --- |
-| 成功 | 检查允许的 diff，并在范围内继续。 |
-| 失败证据 | 检查失败证据；不要自动执行 heal 或重新生成。 |
-| 用法或配置问题 | 读取 `errors[].code` 并修正该边界。 |
-| 环境问题 | 保留 envelope 并修复环境，而非修改测试语义。 |
-| 不可信工件 | 使用 `stale`（已过期）工件恢复。 |
-| 空选择 | 在允许空集合前，重新确认选择意图。 |
-
-相关链接：[退出码](/ambercast/zh-cn/reference/exit-codes/#priority)
-
-## 按报告错误分类的后续动作 {#next-action-by-report-error}
-
-报告 schema 定义了十五种用法代码与八种环境代码，且两类代码在 schema 中按类别进行了结构化分离。其中，`INTERRUPTED` 属于运行级别（run-scoped），而被跳过的结果行则代表受影响的具体用例。
-
-| 错误类别 | 下一步安全动作 |
-| --- | --- |
-| 配置、机密或目标 | 读取指定的 Reference，在不猜测具体值的情况下修正该边界。 |
-| `SECRET_CONSENT_REQUIRED` | 以交互方式获得对所列名称的批准，或将已审查的名称添加至 `secrets.allow`；不得将同意视为已获授而重试。 |
-| 计划新鲜度或完整性 | 将工件视为不可信，并使用 `stale`（已过期）工件恢复。 |
-| 浏览器、提供商、存储或崩溃 | 保留 envelope 并修复环境。 |
-| 中断 | 将剩余工作视为未完成；切勿推断用例结果。 |
+| `CONFIG_INVALID`、`PROMPT_PATH_INVALID`、`TARGET_UNRESOLVED`、`EXECUTOR_UNSUPPORTED`、`PROMPT_AMBIGUOUS` | 阅读对应的参考页，不要猜测取值，直接修正边界。 |
+| `SECRET_UNRESOLVED`、`SECRET_LITERAL_REJECTED`、`SECRET_ENV_VAR_COLLISION`、`SECRET_SYNTAX_REJECTED` | 修正机密引用或环境变量，不要把值写进提示词。 |
+| `SECRET_CONSENT_REQUIRED` | 以交互方式取得批准，或把评审过的名称加入 `secrets.allow`。不要当作已同意而重试。 |
+| `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION` | 视产物为不可信，走过期产物恢复流程。 |
+| `GROUNDING_UNRESOLVED` | 仅当请求范围允许时才加 `--resolve` 重跑，否则向用户报告。仍然失败时，读取 `details.reason` 并报告，不要反复重试。 |
+| `BROWSER_LAUNCH_FAILED`、`AI_EXECUTOR_UNAVAILABLE`、`AI_RESPONSE_INVALID`、`FS_IO_ERROR`、`UNEXPECTED_CRASH` | 保留 JSON 报告，修复环境。 |
+| `AGENTIC_STEP_FAILED`、`CASE_ABORTED` | 读取 `details`。不要推断用例结果，修正环境或调用条件。 |
+| `INTERRUPTED` | 视剩余工作为未完成，不要推断用例结果。 |
 
 相关链接：[错误代码](/ambercast/zh-cn/reference/error-codes/)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)、[常见故障排查](/ambercast/zh-cn/how-to/troubleshoot/)

@@ -4320,112 +4320,119 @@ Related: [Changelog](/ambercast/reference/changelog/), [Philosophy](/ambercast/p
 # Using ambercast from an AI agent
 Source: https://kotarotsubaki.github.io/ambercast/agents/overview/
 
-This guide defines the operational reading order, side effects, and action branching for AI agents using ambercast. The available CLI commands are `init`, `generate`, `run`, `check`, and `heal`.
+This page tells an agent what to read before it starts and in what order to work. Agent pages own reading order, side effects, and action branching, Reference owns exact specifications, and How-to owns procedures.
 
 ## Read before acting {#read-before-acting}
 
-AI-agent documentation defines reading order, side effects, and action branching; Reference owns exact specifications and How-to owns procedures. The available CLI commands are `init`, `generate`, `run`, `check`, and `heal`. Before changing a test asset, establish the minimum required context:
+The CLI has seven commands: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. Before you change a test asset, read these four pages in order.
 
-| Read | Reason |
+| Read | What you get |
 | --- | --- |
-| [Your first test in 5 minutes](/ambercast/tutorials/quick-start/) | Establishes the artifact loop and prerequisites. |
-| [Operating contract](/ambercast/agents/operating-contract/) | Establishes side effects and approval boundaries. |
-| [CLI overview](/ambercast/reference/cli/overview/) | Selects the exact command contract. |
-| [Reports](/ambercast/reference/reports/) | Interprets structured output after a command. |
+| [Your first test in 5 minutes](/ambercast/tutorials/quick-start/) | The artifact loop and prerequisites |
+| [Operating contract](/ambercast/agents/operating-contract/) | Side effects and approval boundaries |
+| [CLI overview](/ambercast/reference/cli/overview/) | The exact contract of each command |
+| [Reports](/ambercast/reference/reports/) | How to read the JSON report after a command |
 
-## Operate in a bounded loop {#bounded-loop}
+Related: [Setup prompt](/ambercast/agents/setup-prompt/), [Reading structured output](/ambercast/agents/reading-structured-output/), [Machine-readable resources](/ambercast/agents/machine-readable-resources/)
 
-The required basic agent loop is implement → write or adjust the requested `.test.md` → run → fix from the report. Generation derives provenance from normalized prompt text and selected targets, then constructs a plan and its adjacent grounding path. A fully grounded run can proceed without resolving an AI provider.
+## Work in a bounded loop {#bounded-loop}
 
-1. Implement the requested product change within the approved scope. → The implementation is ready for its requested test intent.
-2. Write or adjust the requested `.test.md`. → The prompt expresses the behavior to verify.
-3. Run the selected `.test.md` and read its structured result. → Use [Reports](/ambercast/reference/reports/) to interpret the envelope before choosing a next action.
-4. Fix from the report, then repeat the selected loop as needed. → [Operating contract](/ambercast/agents/operating-contract/) owns approval boundaries and safe action branching; do not infer them from a result alone.
+The basic loop is implement, write or adjust the requested `.test.md`, run it, and fix from the report. Take approval boundaries from the operating contract, not from a single result.
 
-Links: [Setup prompt](/ambercast/agents/setup-prompt/), [Operating contract](/ambercast/agents/operating-contract/), [Reading structured output](/ambercast/agents/reading-structured-output/), [Machine-readable resources](/ambercast/agents/machine-readable-resources/), [Reports](/ambercast/reference/reports/)
+1. Implement the requested product change within the approved scope.
+2. Write or adjust the requested `.test.md` so the prompt states the behavior to verify.
+3. Run that `.test.md` and read its JSON report.
+4. Fix from the report, then run again if needed.
+
+`run` needs a trusted plan, so `generate` comes first. `generate` writes the plan and grounding files beside the prompt. Replay with complete grounding makes no AI call. A grounding miss fails with exit 4 unless you pass `--resolve`.
+
+Related: [Operating contract](/ambercast/agents/operating-contract/), [Reports](/ambercast/reference/reports/)
 
 ---
 
 # Operating contract
 Source: https://kotarotsubaki.github.io/ambercast/agents/operating-contract/
 
-This operating contract defines the action boundaries, preconditions, side effects, and safe follow-up actions for invoking ambercast commands. The CLI parser exposes exactly seven implemented commands: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`.
+The tables below say whether you may run a command and what to do after it. The CLI implements seven commands: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`.
 
 ## Command contract {#command-contract}
 
-Before invoking a command, verify its preconditions and expected side effects to decide whether you can execute it safely. The parser exposes exactly `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp` as implemented commands.
+Check the precondition and the side effects before you run a command. `check` and `view` need no write storage, AI provider, or browser. `heal` holds plan and grounding changes until confirmation, but it can write attempt evidence under `runsDir` before approval and during `--dry-run`.
 
-Among these commands, `check` and `view` have no mutable-storage, AI-provider, or browser dependency. Healing buffers only plan and grounding companion changes until confirmation, but its replay attempts may write contained evidence in the case run directory before approval and during dry runs.
-
-| Command | Precondition | Side effects | Needs approval? | Safe in CI? |
+| Command | Precondition | Side effects | Needs approval? | Use in CI |
 | --- | --- | --- | --- | --- |
-| `init` | Write permission for the target directory. | May write four artifacts: config, sample prompt, one `.gitignore` line, and an `AGENTS.md` block. | Explicit user approval; `--yes` is not agent authorization. | No by default; it rejects non-interactive use without `--yes`, and CI use does not change the approval boundary. |
-| `generate` | A selected prompt and target must be valid; newly proposed secret names need consent unless allowlisted. | May write Plan and Grounding artifacts and accepted names into `secrets.allow`. | Yes for consent and writes; present diff before commit. | Yes when reviewed names are pre-populated in `secrets.allow`. |
-| `run` | A selected prompt has a trusted plan. | Writes invocation report; may write grounding under its write-back contract. | Yes when requested scope does not already authorize writes. | Yes, subject to write-back policy. |
-| `check` | A selection can be discovered. | Reads prompts and artifacts only. | No ambercast-artifact write approval required. | Yes. |
-| `heal` | Target is idempotent and a real attempt is CI-enabled when in CI. | May write attempt evidence in the runs directory; commits measured plan/grounding candidates only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | No by default; only with `ci.heal: true`. |
-| `view` | An interactive terminal, or `--allow-headless`; a free port to bind. | None; read-only HTTP server over persisted run reports. | No ambercast-artifact write approval required. | No by default; it rejects non-interactive use without `--allow-headless`. |
-| `mcp` | A directory exists for the session root. | Starts a stdio server; called tools follow their own write and approval boundaries. | Depends on the tool invoked. | Depends on the tool invoked. |
+| `init` | Write permission for the target directory. | May write the config, a sample prompt, a two-line `.gitignore` unit, and an `AGENTS.md` block. | Explicit user approval; `--yes` is not agent authorization. | Rejects non-interactive use without `--yes`. CI use does not change the approval boundary. |
+| `generate` | A valid prompt and target. | Writes the plan and grounding; after interactive consent, adds accepted secret names to `secrets.allow`. | Yes for consent and writes; show the diff before any commit. | Works once reviewed names are in `secrets.allow`. |
+| `run` | A trusted plan for the selected prompt. | Persists the report; writes grounding only through the write-back gate. | Yes, unless the requested scope already allows writes. | Works, subject to the write-back policy. |
+| `check` | A selection that discovery can find. | Reads prompts and artifacts only. | No. | Works. |
+| `heal` | Every target the plan references sets `healReplayIsolation: "idempotent"`. | May write attempt evidence; writes plan and grounding changes only after confirmation. | Explicit user approval; `--yes` is not agent authorization. | Refused unless `ci.heal` is `true`, except with `--list`. |
+| `view` | stdin and stderr are terminals and `CI` is inactive, or you pass `--allow-headless`. Without `--port`, it tries up to 20 consecutive ports. | None; serves persisted run reports read-only. | No. | Needs `--allow-headless` when no terminal is attached. |
+| `mcp` | The session-root directory exists. | Starts a stdio server; each tool follows its own write and approval boundaries. | Depends on the tool. | Depends on the tool. |
 
-Links: [CLI overview](/ambercast/reference/cli/overview/), [ambercast init](/ambercast/reference/cli/init/#confirmation), [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
+If a `heal` target is not idempotent, the command fails with `CONFIG_INVALID` and exit 2.
+
+Related: [CLI overview](/ambercast/reference/cli/overview/), [ambercast init](/ambercast/reference/cli/init/#confirmation), [ambercast heal](/ambercast/reference/cli/heal/#preconditions), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 
 ## Prohibitions {#prohibitions}
 
-Operating within safety boundaries requires adhering to these non-negotiable restrictions:
+These restrictions have no exceptions.
 
-- An agent MUST NOT place a literal secret value in a prompt, artifact, command, report, or message; use a `SecretRef`, its environment-variable value, and the target's sink policy instead.
-- The public error vocabulary includes `SECRET_LITERAL_REJECTED`; the detector is a narrow heuristic and does not replace the agent prohibition on literal secrets.
-- An agent MUST NOT add `@ambercast-secret` grant lines. For a generated name outside `secrets.allow`, obtain explicit operator consent or ask the operator to add the reviewed name; `"*"` requires explicit approval because it accepts arbitrary AI-proposed names without per-name review.
-- In CI, real healing is refused unless `ci.heal` is enabled.
-- `--yes` pre-authorizes the CLI confirmation prompt only; dry runs never commit.
+- Never place a literal secret value in a prompt, artifact, command, report, or message. Use a `SecretRef`, its environment variable, and the target's sink policy.
+- `SECRET_LITERAL_REJECTED` comes from a narrow heuristic. It does not replace the prohibition above.
+- Never add `@ambercast-secret` grant lines. For a name outside `secrets.allow`, get the operator's consent or ask them to add the reviewed name. `"*"` needs explicit approval because it accepts any name the AI proposes.
+- In CI, do not run a real heal unless `ci.heal` is `true`.
+- `--yes` answers the CLI confirmation prompt only. A dry run never commits.
 
-Links: [Manage secrets](/ambercast/how-to/manage-secrets/), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
+Related: [Manage secrets](/ambercast/how-to/manage-secrets/), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
 
-## Next action after a process status {#next-action-by-exit-code}
+## Next action by exit code {#next-action-by-exit-code}
 
-A process status is selected from batch exit candidates independently of result order. Use the mappings below to determine the next safe action:
+When a command has several outcomes, the exit code follows a fixed priority, not the order of the results. Act on the code as follows.
 
-| Process outcome | Next safe action |
-| --- | --- |
-| success | Inspect permitted diffs and continue within scope. |
-| failed evidence | Inspect failed evidence; do not heal or regenerate automatically. |
-| usage or configuration problem | Read `errors[].code` and correct that boundary. |
-| environment problem | Preserve the envelope and fix the environment, not test semantics. |
-| untrustworthy artifacts | Use stale-artifact recovery. |
-| empty selection | Reconfirm selection intent before allowing an empty set. |
+| Exit | Meaning | Next safe action |
+| --- | --- | --- |
+| 0 | Success or no candidate | Inspect permitted diffs and continue within scope. |
+| 1 | Command-specific negative result | Read the failed evidence. Do not heal or regenerate automatically. |
+| 2 | Usage or configuration problem | Read `errors[].code` and fix that boundary. |
+| 3 | Environment problem | Keep the JSON report and fix the environment, not the test. |
+| 4 | Untrustworthy plan or grounding | For `MISSING_PLAN`, `STALE_PLAN`, and `INTEGRITY_VIOLATION`, use stale-artifact recovery. For `GROUNDING_UNRESOLVED`, rerun with `--resolve` only if the requested scope allows an AI call and a grounding write; otherwise report it. |
+| 5 | Empty selection | Confirm the intended selection before you allow an empty set. |
 
-Links: [Exit codes](/ambercast/reference/exit-codes/#priority)
+Related: [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority)
 
 ## Next action by report error {#next-action-by-report-error}
 
-The report schema defines fifteen usage codes and eight environment codes, structurally separated by kind in the report schema. When an execution is interrupted, `INTERRUPTED` is run-scoped, while skipped result rows represent affected cases. Map each error family to its non-destructive first action:
+The report schema defines fifteen usage codes and eight environment codes. `INTERRUPTED` is run-scoped, and `skipped` rows mark the cases it affected. Each producible code belongs to exactly one row. The legacy `SECRET_GRANT_UNATTRIBUTABLE` is never produced and has no row.
 
-| Error family | Next safe action |
+| Codes | Next safe action |
 | --- | --- |
-| configuration, secret, or target | Read the named Reference and correct the boundary without guessing values. |
-| `SECRET_CONSENT_REQUIRED` | Obtain approval for the listed names interactively or add reviewed names to `secrets.allow`; do not retry as though consent had been granted. |
-| plan freshness or integrity | Treat artifacts as untrusted and use stale-artifact recovery. |
-| browser, provider, storage, or crash | Preserve the envelope and repair the environment. |
-| interruption | Treat remaining work as incomplete; do not infer a case result. |
+| `CONFIG_INVALID`, `PROMPT_PATH_INVALID`, `TARGET_UNRESOLVED`, `EXECUTOR_UNSUPPORTED`, `PROMPT_AMBIGUOUS` | Read the named Reference page and fix the boundary without guessing values. |
+| `SECRET_UNRESOLVED`, `SECRET_LITERAL_REJECTED`, `SECRET_ENV_VAR_COLLISION`, `SECRET_SYNTAX_REJECTED` | Fix the secret reference or environment variable. Never write the value into the prompt. |
+| `SECRET_CONSENT_REQUIRED` | Get approval interactively or add reviewed names to `secrets.allow`. Do not retry as if consent were granted. |
+| `MISSING_PLAN`, `STALE_PLAN`, `INTEGRITY_VIOLATION` | Treat the artifacts as untrusted and use stale-artifact recovery. |
+| `GROUNDING_UNRESOLVED` | Rerun with `--resolve` only if the requested scope allows it; otherwise report it. If it still fails, read `details.reason` and report it instead of looping. |
+| `BROWSER_LAUNCH_FAILED`, `AI_EXECUTOR_UNAVAILABLE`, `AI_RESPONSE_INVALID`, `FS_IO_ERROR`, `UNEXPECTED_CRASH` | Keep the JSON report and repair the environment. |
+| `AGENTIC_STEP_FAILED`, `CASE_ABORTED` | Read `details`. Do not infer the case result; fix the environment or the call. |
+| `INTERRUPTED` | Treat the remaining work as incomplete and infer no case result. |
 
-Links: [Error codes](/ambercast/reference/error-codes/), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree), [Troubleshoot common failures](/ambercast/how-to/troubleshoot/)
+Related: [Error codes](/ambercast/reference/error-codes/), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree), [Troubleshoot common failures](/ambercast/how-to/troubleshoot/)
 
 ---
 
 # Setup prompt
 Source: https://kotarotsubaki.github.io/ambercast/agents/setup-prompt/
 
-This page provides the complete copy-pasteable operating prompt that establishes a thin, review-first boundary for an agent working on a requested test.
+Give the agent this prompt and it knows what to read, how far to go, and in what order to work. Paste it as written, in English.
 
 ## Copy-paste prompt {#copy-paste-prompt}
 
-The prompt defines the following operational rules:
+The prompt sets five rules.
 
-1. Provider resolution uses an explicit override when present, otherwise the configured provider, and in auto mode probes claude before codex.
-2. `check` can inspect artifacts without AI or browser capabilities.
-3. The default for this prompt is presenting a diff; commits require a request.
-4. The setup prompt states the dev-server boundary.
-5. With no file arguments, `generate`, `run`, and `heal` each select tests through configured discovery rules.
+1. The AI provider comes from an explicit override, then the configured provider. In `auto` mode, ambercast tries `claude` before `codex`.
+2. `check` inspects artifacts without AI or a browser.
+3. The default is to present a diff; commit only when asked.
+4. The dev server belongs to the operator. The agent assumes the app already runs at the configured base URL and never starts or stops it.
+5. With no file arguments, `generate`, `run`, and `heal` select every test that the configured discovery rules match.
 
 ~~~markdown
 You are working on ambercast tests in this repository.
@@ -4439,65 +4446,66 @@ Never place literal secret values in prompts, artifacts, commands, reports, or m
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
-Links: [Your first test in 5 minutes](/ambercast/tutorials/quick-start/), [Operating contract](/ambercast/agents/operating-contract/), [Environment variables](/ambercast/reference/environment-variables/)
+Related: [Your first test in 5 minutes](/ambercast/tutorials/quick-start/), [Operating contract](/ambercast/agents/operating-contract/), [Environment variables](/ambercast/reference/environment-variables/)
 
 ---
 
 # Reading structured output
 Source: https://kotarotsubaki.github.io/ambercast/agents/reading-structured-output/
 
-When you consume structured output from ambercast, branch on the report envelope to inspect execution details in a fixed, safe order. A report envelope is discriminated by `command` into `generate`, `run`, `check`, `heal`, and `review` branches, each pairing shared error records with command-specific result structures.
+A report belongs to the `generate`, `run`, `check`, `heal`, or `review` branch, selected by `command`. The sections below say where to start reading, when to stop, and when a result lets you continue.
 
-## Envelope decision tree {#decision-tree}
+## Decision tree {#decision-tree}
 
-Process `command`, `reportPersistence`, `errors[].code`, and `results[].status` in a fixed order.
+Read `command`, `reportPersistence`, `errors[].code`, and `results[].status` in that order. Only `run` has `reportPersistence`, with the values `persisted`, `failed`, and `not-attempted`. The schema defines a `review` branch, but the CLI has no `review` command.
 
-The top-level envelope is discriminated by `command` into `generate`, `run`, `check`, `heal`, and `review` branches. Only the `run` branch contains `reportPersistence`, whose values are `persisted`, `failed`, and `not-attempted`. For other commands, proceed directly to evaluating results.
-
-Across all commands, the report schema supplies a stable public vocabulary of `errors[].code`. Inspect these codes before taking action on files. If no errors are present, classify each `results[].status` according to the rules for that specific command.
+If `errors[].code` holds any code, use the operating contract's report-error table before you change files. If it holds none, classify each `results[].status` by the rules for that command.
 
 ~~~
 Read command.
 ├─ run: read reportPersistence first.
-│  ├─ failed → retain stdout envelope; treat persistence as an environment problem.
-│  └─ persisted/not-attempted → continue to results.
-├─ generate/check/heal/review → continue to results.
+│  ├─ failed → keep the stdout report; treat persistence as an environment problem.
+│  └─ persisted/not-attempted → continue to errors.
+├─ generate/check/heal/review → continue to errors.
 Read every errors[].code.
-├─ any code → use operating-contract's error-code table before changing files.
+├─ any code → use the operating contract's report-error table before changing files.
 └─ none → classify every results[].status for this command.
-   ├─ failed/error/stale/missing/orphaned → stop at the corresponding contract.
-   ├─ skipped/listed → treat as incomplete or discovery-only, not success.
-   └─ healthy status → continue only within approved scope.
+   ├─ listed/skipped → discovery-only or incomplete, not success.
+   ├─ generate failed, run failed/error → read the evidence; do not heal or regenerate automatically.
+   ├─ check other than fresh/fresh-without-grounding → artifacts are untrustworthy; use stale-artifact recovery.
+   ├─ heal unresolved/partially-healed → report it; do not retry automatically.
+   └─ any other status → continue only within approved scope.
 ~~~
 
-Links: [Reports](/ambercast/reference/reports/), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-report-error)
+Related: [Reports](/ambercast/reference/reports/), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-report-error)
 
 ## Status means command-specific evidence {#status-by-command}
 
-Each command maintains its own vocabulary for `results[].status`, and each status communicates distinct execution evidence:
+Each command has its own `results[].status` vocabulary. `listed` is discovery only, and `skipped` carries no execution evidence. Neither is success.
 
-- **`run`**: Execution results use `passed`, `failed`, or `error`. The `listed` status is discovery-only, and `skipped` carries no execution evidence.
-- **`generate`**: Distinguishes `generated`, `would-generate`, `skipped-fresh`, `listed`, `failed`, and `skipped`.
-- **`check`**: Includes `fresh`/`stale`, plan/grounding-missing or `orphaned` outcomes, plus `fresh-without-grounding`, `listed`, and `skipped`.
+- `generate` uses `generated`, `would-generate`, `skipped-fresh`, `listed`, `failed`, and `skipped`.
+- `run` uses `passed`, `failed`, `error`, `listed`, and `skipped`.
+- `check` uses `fresh`, `stale`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding`, `orphaned-plan`, `orphaned-grounding`, `invalid-artifact-name`, `listed`, and `skipped`.
+- A completed `heal` row has `status: completed`, and `repairOutcome` is `healed`, `partially-healed`, `unresolved`, or `no-changes-needed`. `listed` and `skipped` rows carry identity only.
 
-Links: [Reports](/ambercast/reference/reports/#result-statuses), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#grounding-binding)
+Related: [Generate results](/ambercast/reference/reports/#generate-results), [Run results](/ambercast/reference/reports/#run-results), [Check results](/ambercast/reference/reports/#check-results), [Heal results](/ambercast/reference/reports/#heal-results), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#grounding-binding)
 
-## Process status is a batch-level signal {#exit-code-signal}
+## The exit code is a batch-level signal {#exit-code-signal}
 
-Use the process status as a batch-level signal only after retaining the more specific rows and errors from the envelope. Alongside its code, a report error records its scope and kind in `errors[]`.
+Read the exit code only after the rows and errors, as a signal for the whole batch. Each report error also records its scope and kind in `errors[]`.
 
-Links: [Exit codes](/ambercast/reference/exit-codes/#priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code)
+Related: [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code)
 
 ---
 
 # Machine-readable resources
 Source: https://kotarotsubaki.github.io/ambercast/agents/machine-readable-resources/
 
-This page outlines published machine-readable resources and the rules governing their availability.
+These are the files you can fetch, and the rule that says which of them to trust.
 
 ## Availability rule {#availability-rule}
 
-`capabilities.json` is the final availability source for agents. Planned pages are excluded from default `llms.txt` and `llms-full.txt`. All of the following resources are published on the live site in this release.
+`capabilities.json` is the final source for what is available. Planned pages stay out of `llms.txt` and `llms-full.txt`, and `llms-planned.txt` lists each with its title and description.
 
 ## Published artifacts {#planned-artifacts}
 
@@ -4522,51 +4530,61 @@ This page outlines published machine-readable resources and the rules governing 
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | available |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | available |
 
-`schemas/plan.v2.schema.json`, `schemas/plan.v3.schema.json`, `schemas/plan.v4.schema.json`, `schemas/grounding.v2.schema.json`, and `schemas/grounding.v3.schema.json` are frozen, committed historical snapshots copied to the site. The current build generates the config schema, Plan v5 schema, grounding schema, report schema, `capabilities.json`, and `manifest/cli.json` with identical bytes for the site and npm distribution. This page covers the artifacts published in this release.
+The `plan.v2`, `plan.v3`, `plan.v4`, `grounding.v2`, and `grounding.v3` schemas are frozen snapshots committed in the repository and copied to the site unchanged. The config, Plan v5, Grounding v4, and report schemas, `capabilities.json`, and `manifest/cli.json` are copied byte for byte from the build that also goes into the npm package.
 
-Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
+Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
 
 ---
 
 # Official skill
 Source: https://kotarotsubaki.github.io/ambercast/agents/official-skill/
 
-This page describes the official skill ambercast ships and its role within the ambercast agent-facing interface.
+The skill teaches an agent the ambercast loop. This page explains how it differs from the setup prompt and the MCP server.
 
 ## What it is {#what-it-is}
 
-ambercast ships an [Agent Skills](https://agentskills.io) skill at `skills/ambercast/SKILL.md`, named `ambercast`. It teaches a coding agent to author `<name>.test.md` prompts, drive the `generate` / `run` / `check` / `heal` loop through the CLI, read the `--json` report and process the exit code, and choose the next safe action.
+ambercast ships an [Agent Skills](https://agentskills.io) skill at `skills/ambercast/SKILL.md`, named `ambercast`. It teaches a coding agent to write `<name>.test.md` prompts, drive `generate`, `run`, `check`, and `heal` through the CLI, read the `--json` report and the exit code, and choose the next safe action.
 
-For the install methods (Claude Code, Codex CLI, `gh skill`-compatible agents, skills.sh, or a manual copy from the installed package) see the [README](https://github.com/kotarotsubaki/ambercast#official-skill). For the complete copy-pasteable operating prompt that establishes a thin, review-first boundary for an agent working on a requested test, see [Setup prompt](/ambercast/agents/setup-prompt/).
+The [README](https://github.com/kotarotsubaki/ambercast#official-skill) covers the install methods: Claude Code, Codex CLI, `gh skill`-compatible agents, skills.sh, or a manual copy from the installed package.
 
 ## Intended role {#intended-role}
 
-The agent-interface design treats coding agents as first-class users alongside the human-facing prompt and viewer surfaces.
+The skill teaches the loop. The [setup prompt](/ambercast/agents/setup-prompt/) sets the review-first boundary for one requested test. The [MCP server](/ambercast/agents/mcp-server/) is the connection for clients that call tools instead of a shell.
 
-Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Setup prompt](/ambercast/agents/setup-prompt/), [MCP server](/ambercast/agents/mcp-server/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
+ambercast treats coding agents as first-class users next to the prompt and viewer surfaces for people.
+
+Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Setup prompt](/ambercast/agents/setup-prompt/), [MCP server](/ambercast/agents/mcp-server/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
 
 ---
 
 # MCP server
 Source: https://kotarotsubaki.github.io/ambercast/agents/mcp-server/
 
-The `ambercast mcp` subcommand provides a portless `stdio` connection for agents to run and repair keystroke E2E tests. One server process serves one session root: `--dir` selects it, or the process current working directory is used. Files supplied to tools resolve relative to that root. Use `--sync-wait-ms` to set the synchronous response wait bound; the default is 45000 ms.
+This page lists what you can call from an MCP client and where each call is documented. The server runs ambercast's browser E2E workflows: generate, run, check, and heal.
 
 ## Connection boundary {#connection-boundary}
 
-The connection exposes `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. The first four are the workflow operations; the last two observe and cancel server-local jobs. See [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) for inputs, annotations, job records, `isError`, and the MCP error surface. Register the process in your client as shown in [ambercast mcp](/ambercast/reference/cli/mcp/#client-registration).
+`ambercast mcp` provides a portless stdio connection. One server process serves one session root. `--dir` selects it, and the process working directory is used when you omit it.
+
+Files you pass to tools resolve against that root. `--sync-wait-ms` bounds the synchronous wait, and the default is 45000 ms.
+
+The server exposes six tools: `ambercast_generate`, `ambercast_run`, `ambercast_check`, `ambercast_heal`, `ambercast_job_status`, and `ambercast_job_cancel`. The first four are the workflows, and the last two observe and cancel server-local jobs.
+
+As [MCP Tools](/ambercast/reference/mcp-tools/#tool-table) explains, only `ambercast_generate` accepts `target`. The other workflow tools select targets from the plan.
+
+Inputs, annotations, job records, `isError`, and the MCP error surface are on the same page. Register the process in your client as shown in [ambercast mcp](/ambercast/reference/cli/mcp/#client-registration).
 
 ## Changes from the planned design {#changes-from-the-planned-design}
 
 | Earlier planned page | Implemented connection |
 | --- | --- |
-| Five planned tools | Six tools, including job status and cancellation |
+| Five planned tools, including `review` | Six tools, including job status and cancellation; `review` is not exposed |
 | Report `outputSchema` published | `outputSchema` omitted |
 | Heal preview only | Two-stage heal uses `applyToken` |
-| Synchronous workflows only | Long calls become jobs; status without ID lists jobs |
+| Synchronous workflows only | Long `generate`, `run`, and heal-preview calls return jobs; status without an ID lists jobs |
 | Server flags unspecified | `ambercast mcp` supports `--dir` and `--sync-wait-ms` |
 | MCP errors unspecified | `HEAL_APPLY_TOKEN_INVALID`, `HEAL_APPLY_FAILED`, `JOB_NOT_FOUND`, and `JOB_FAILED` use a separate error surface |
 | CLI inputs unspecified | Inputs exclude `headed`, `list`, `stale`, `json`, `yes`, and `configPath` |
 | Exit code inferred from report | `_meta.exitCode` carries it explicitly |
 
-Links: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage), [Reading structured output](/ambercast/agents/reading-structured-output/).
+Related: [MCP Tools](/ambercast/reference/mcp-tools/#tool-table), [ambercast mcp](/ambercast/reference/cli/mcp/#usage), [Reading structured output](/ambercast/agents/reading-structured-output/)

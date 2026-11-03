@@ -4329,110 +4329,119 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 # AIエージェントからのambercastの利用
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/overview/
 
-AIエージェントがテストアセットを変更するにあたり、事前に把握すべき運用上の読む順序と安全な実行ループを定めます。
+このページで、エージェントは何を読んでから作業を始めるか、どの順で動くかを決める。読み順、副作用、行動の分岐はエージェント向けページが扱い、正確な仕様はリファレンスが、手順はHow-toが扱う。
 
-## 操作の前に読むべきドキュメント {#read-before-acting}
+## 動く前に読むページ {#read-before-acting}
 
-AIエージェント向けのドキュメントでは、読む順序、副作用、およびアクションの分岐を定めています。正確な仕様はリファレンスが、手順はHow-toが扱います。利用可能なCLIコマンドは `init`、`generate`、`run`、`check`、`heal` です。
+CLIには`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp`の7つのコマンドがある。テストアセットを変える前に、次の4ページを上から順に読む。
 
-| 参照ドキュメント | 理由 |
+| 読むページ | 得られるもの |
 | --- | --- |
-| [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/) | 成果物ループと前提条件を確立するため。 |
-| [オペレーション規約](/ambercast/ja/agents/operating-contract/) | 副作用と承認境界を確立するため。 |
-| [CLIの概要](/ambercast/ja/reference/cli/overview/) | 正確なコマンドコントラクトを選択するため。 |
-| [レポート](/ambercast/ja/reference/reports/) | コマンド実行後の構造化出力を解釈するため。 |
+| [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/) | 成果物のループと前提条件 |
+| [オペレーション規約](/ambercast/ja/agents/operating-contract/) | 副作用と承認の境界 |
+| [CLIの概要](/ambercast/ja/reference/cli/overview/) | 各コマンドの正確な仕様 |
+| [レポート](/ambercast/ja/reference/reports/) | コマンド実行後のJSONレポートの読み方 |
 
-## 境界づけられたループでの実行 {#bounded-loop}
+関連リンク: [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)、[機械可読リソース](/ambercast/ja/agents/machine-readable-resources/)
 
-必須となる基本的なエージェントループは、実装 → 要求された `.test.md` の記述または調整 → 実行 → レポートからの修正、です。
+## 範囲を決めたループで進める {#bounded-loop}
 
-生成（`generate`）は、正規化されたプロンプトテキストと選択されたターゲットから出所（provenance）を導出し、プランとそれに隣接する grounding パスを構築します。完全な grounding が行われた実行は、AIプロバイダーを解決することなく進めることができます。
+基本のループは、実装、依頼された`.test.md`の記述または調整、実行、レポートからの修正の順である。承認の境界は個々の結果から推測せず、オペレーション規約に従う。
 
-1. 承認されたスコープ内で要求された製品変更を実装します。→ 実装が要求されたテスト意図に対して準備できた状態になります。
-2. 要求された `.test.md` を記述または調整します。→ プロンプトによって検証する振る舞いを表現します。
-3. 選択した `.test.md` を実行し、その構造化された結果を読み取ります。→ 次のアクションを選択する前に、エンベロープを解釈するために [レポート](/ambercast/ja/reference/reports/) を使用します。
-4. レポートから修正を行い、必要に応じて選択したループを繰り返します。→ 承認境界と安全なアクション分岐は [オペレーション規約](/ambercast/ja/agents/operating-contract/) が定めています。実行結果のみからこれらを推測して判断しないでください。
+1. 承認された範囲で、依頼された製品の変更を実装する。
+2. 依頼された`.test.md`を書くか調整し、検証したい振る舞いをプロンプトに表す。
+3. その`.test.md`を実行し、JSONレポートを読む。
+4. レポートに従って直し、必要ならもう一度実行する。
 
-関連リンク: [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/), [オペレーション規約](/ambercast/ja/agents/operating-contract/), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/), [機械可読リソース](/ambercast/ja/agents/machine-readable-resources/), [レポート](/ambercast/ja/reference/reports/)
+`run`には信頼できる計画（plan）が要るため、先に`generate`を実行する。`generate`は計画とグラウンディングのファイルをプロンプトの隣に書く。グラウンディングがそろっていれば、再生はAIを呼ばない。グラウンディングが見つからないときは、`--resolve`を付けない限り終了コード4で失敗する。
+
+関連リンク: [オペレーション規約](/ambercast/ja/agents/operating-contract/)、[レポート](/ambercast/ja/reference/reports/)
 
 ---
 
 # オペレーション規約
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/
 
-本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
+エージェントはこのページで、コマンドを実行してよいか、実行後に何をするかを決める。CLIが実装しているコマンドは`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp`の7つである。
 
-## コマンド規約 {#command-contract}
+## コマンドごとの規約 {#command-contract}
 
-パーサーが実装済みコマンドとして公開しているのは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのコマンドのみです。`check` と `view` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
+コマンドを実行する前に、前提条件と副作用を確かめる。`check`と`view`は、書き込み用ストレージ、AIプロバイダー、ブラウザのいずれも必要としない。`heal`は計画（plan）とグラウンディングの変更を確認まで保留するが、確認の前や`--dry-run`の最中にも、`runsDir`の下へ試行の証跡を書くことがある。
 
-| コマンド | 前提条件 | 副作用 | 承認の要否 | CIで安全か |
+| コマンド | 前提条件 | 副作用 | 承認 | CIでの利用 |
 | --- | --- | --- | --- | --- |
-| init | 対象ディレクトリへの書き込み権限があること。 | 設定、サンプルプロンプト、`.gitignore` の1行、AGENTS.md のブロックからなる4つのアーティファクトを書き込む場合があります。 | ユーザーによる明示的な承認が必要です。`--yes` はエージェントへの権限付与ではありません。 | 既定では安全ではありません。非対話環境では `--yes` なしで拒否され、CIで使用する場合も承認境界は変わりません。 |
-| generate | 選択されたプロンプトとターゲットが有効であり、新たに提案されたシークレット名は許可リストにない限り同意が必要です。 | Plan および Grounding アーティファクトと、承認済みの名前を `secrets.allow` に書き込む場合があります。 | 同意と書き込みに必要です。コミット前に diff を提示してください。 | レビュー済みの名前が `secrets.allow` に事前登録されている場合に安全です。 |
-| run | 選択されたプロンプトに信頼できる plan が存在すること。 | 実行レポートを書き込みます。write-back コントラクトに基づき grounding を書き込む場合があります。 | 要求されたスコープで書き込みが未承認の場合は必要です。 | write-back ポリシーに従い、安全です。 |
-| check | 選択対象が検出可能であること。 | プロンプトとアーティファクトの読み取りのみを行います。 | ambercast アーティファクト書き込みの承認は不要です。 | 安全です。 |
-| heal | ターゲットが冪等であり、CI環境では実際の試行がCIで有効化されていること。 | runs ディレクトリ内に試行のエビデンスを書き込む場合があります。確認後にのみ、測定された plan/grounding 候補をコミットします。 | ユーザーによる明示的な承認が必要です。--yes はエージェントへの権限付与ではありません。 | 既定では安全ではありません（ci.heal: true の場合のみ）。 |
-| view | 対話端末、または `--allow-headless`。バインド可能な空きポートがあること。 | なし。永続化された run report を読み取るだけの HTTP サーバーです。 | ambercast アーティファクト書き込みの承認は不要です。 | 既定では安全ではありません。`--allow-headless` なしの非対話利用は拒否されます。 |
-| mcp | セッションルートのディレクトリが存在すること。 | stdio サーバーを起動します。ツール呼び出しの書き込みと承認境界はツールごとに適用されます。 | 呼び出すツールによります。 | 呼び出すツールによります。 |
+| `init` | 対象ディレクトリへの書き込み権限 | 設定ファイル、サンプルのプロンプト、2行の`.gitignore`の追記、`AGENTS.md`のブロックを書くことがある | ユーザーの明示的な承認が必要。`--yes`はエージェントの承認にならない | `--yes`なしの非対話実行は拒否される。CIで使っても承認の境界は変わらない |
+| `generate` | 選んだプロンプトとターゲットが有効であること | 計画とグラウンディングを書く。対話での同意の後、承認されたシークレット名を`secrets.allow`へ加える | 同意と書き込みに承認が必要。コミットの前に差分を示す | レビュー済みの名前が`secrets.allow`にあれば使える |
+| `run` | 選んだプロンプトに信頼できる計画があること | レポートを保存する。グラウンディングは書き戻しの条件を満たすときだけ書く | 依頼の範囲が書き込みを認めていなければ必要 | 書き戻しの方針に従って使える |
+| `check` | テストを検出できること | プロンプトと成果物を読むだけ | 不要 | 使える |
+| `heal` | 計画が参照する全ターゲットで`healReplayIsolation: "idempotent"`を設定済みであること | 試行の証跡を書くことがある。計画とグラウンディングの変更は確認の後にだけ書く | ユーザーの明示的な承認が必要。`--yes`はエージェントの承認にならない | 既定では使えない。`--list`以外は`ci.heal: true`のときだけ使える |
+| `view` | stdinとstderrが端末で`CI`が無効か、`--allow-headless`を渡すこと。`--port`なしなら連続20ポートまで試す | なし。保存済みのレポートを読み取り専用で配信する | 不要 | 既定では使えない。`--allow-headless`で非対話の実行を許す |
+| `mcp` | セッションルートのディレクトリが存在すること | stdioのサーバーを起動する。呼んだツールがそれぞれの書き込みと承認の境界に従う | 呼ぶツールによる | 呼ぶツールによる |
 
-関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/), [ambercast init](/ambercast/ja/reference/cli/init/#confirmation), [ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions), [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
+`heal`の前提を満たさないと、終了コード2で`CONFIG_INVALID`になる。
+
+関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[ambercast init](/ambercast/ja/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
 
 ## 禁止事項 {#prohibitions}
 
-- エージェントは、プロンプト、アーティファクト、コマンド、レポート、またはメッセージ内にシークレットのリテラル値を配置してはなりません（MUST NOT）。代わりに `SecretRef`、その環境変数値、およびターゲットのシンクポリシーを使用してください。
-- 公開エラーボキャブラリには `SECRET_LITERAL_REJECTED` が含まれますが、この検出器は限定的なヒューリスティックであり、リテラルシークレットに関するエージェントの禁止事項を代替するものではありません。
-- エージェントは `@ambercast-secret` のグラント行を追加してはなりません。生成された名前が `secrets.allow` の外にある場合、明示的な運用者の同意を得るか、運用者にレビュー済みの名前を追加するよう依頼してください。`"*"` は名前ごとのレビューなしで任意の AI 提案名を受け入れるため、明示的な承認が必要です。
-- CI環境では、`ci.heal` が有効化されていない限り、実際の修復（real healing）は拒絶されます。
-- `--yes` はCLIの確認プロンプトを事前承認するのみであり、dry run がコミットを行うことは決してありません。
+次の制限は例外なく守る。
 
-関連リンク: [シークレットの管理](/ambercast/ja/how-to/manage-secrets/), [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
+- プロンプト、成果物、コマンド、レポート、メッセージに、シークレットの値そのものを書かない。`SecretRef`と環境変数の値を使い、ターゲットのシンク方針に従う。
+- `SECRET_LITERAL_REJECTED`は狭い検出にすぎず、シークレットの値を書かないという禁止の代わりにならない。
+- `@ambercast-secret`の許可行を加えない。`secrets.allow`にない名前は、オペレーターの同意を得るか、レビュー済みの名前をオペレーターに加えてもらう。`"*"`はAIが提案する任意の名前を通すため、明示的な承認が要る。
+- CIでは、`ci.heal`が`true`でない限り実際のhealを実行しない。
+- `--yes`が答えるのはCLIの確認プロンプトだけである。`--dry-run`は計画とグラウンディングを書き換えない。
 
-## プロセス終了ステータス後の次のアクション {#next-action-by-exit-code}
+関連リンク: [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)、[ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
 
-プロセスステータスは、結果の順序とは無関係に、バッチ終了候補の中から選択されます。
+## 終了コードごとの次の行動 {#next-action-by-exit-code}
 
-| プロセスの結果 | 次の安全なアクション |
+複数の結果があるときの終了コードは、結果の並びではなく固定の優先順位で決まる。コードを受けたら、次の表に従う。
+
+| 終了コード | 意味 | 次の安全な行動 |
+| --- | --- | --- |
+| 0 | 成功、または候補なし | 許可された差分を確かめ、範囲内で続ける |
+| 1 | コマンド固有の否定的な結果 | 失敗の証跡を読む。自動でhealや再生成をしない |
+| 2 | 使用方法または設定の問題 | `errors[].code`を読み、その境界を直す |
+| 3 | 環境の問題 | JSONレポートを残し、テストの意味ではなく環境を直す |
+| 4 | 計画またはグラウンディングを信頼できない | `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION`では、古い成果物の復旧手順に従う。`GROUNDING_UNRESOLVED`では、依頼の範囲がAIの呼び出しとグラウンディングの書き込みを認めるときだけ`--resolve`を付けて再実行し、認めないなら報告する |
+| 5 | 選択が空 | 空の選択を許すか、依頼の意図を確かめ直す |
+
+関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)
+
+## レポートのエラーごとの次の行動 {#next-action-by-report-error}
+
+レポートスキーマは、15個の使用方法コードと8個の環境コードを定義している。`INTERRUPTED`は実行単位のエラーで、影響を受けたケースは`skipped`の行に表れる。生成されうるコードは、次のどれか1行に当てはまる。レガシーの`SECRET_GRANT_UNATTRIBUTABLE`は生成されず、行を持たない。
+
+| コード | 次の安全な行動 |
 | --- | --- |
-| 成功 | 許可された diff を確認し、スコープ内で作業を継続します。 |
-| 失敗したエビデンス | 失敗したエビデンスを調査します。自動で heal や再生成を行わないでください。 |
-| 使用方法または設定の問題 | `errors[].code` を読み取り、その境界を修正します。 |
-| 環境の問題 | エンベロープを保持し、テストのセマンティクスではなく環境を修正します。 |
-| 信頼できないアーティファクト | stale（古くなった状態）のアーティファクト復旧手順を使用します。 |
-| 空の選択 | 空のセットを許容する前に、選択の意図を再確認します。 |
+| `CONFIG_INVALID`、`PROMPT_PATH_INVALID`、`TARGET_UNRESOLVED`、`EXECUTOR_UNSUPPORTED`、`PROMPT_AMBIGUOUS` | 該当するリファレンスを読み、値を推測せずに境界を直す |
+| `SECRET_UNRESOLVED`、`SECRET_LITERAL_REJECTED`、`SECRET_ENV_VAR_COLLISION`、`SECRET_SYNTAX_REJECTED` | シークレットの参照と環境変数を直す。値をプロンプトへ書かない |
+| `SECRET_CONSENT_REQUIRED` | 対話で承認を得るか、レビュー済みの名前を`secrets.allow`へ加える。同意済みとして再試行しない |
+| `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION` | 成果物を信頼せず、古い成果物の復旧手順に従う |
+| `GROUNDING_UNRESOLVED` | 依頼の範囲が認めるときだけ`--resolve`を付けて再実行し、認めないなら報告する。それでも失敗するなら`details.reason`を読んで報告し、繰り返さない |
+| `BROWSER_LAUNCH_FAILED`、`AI_EXECUTOR_UNAVAILABLE`、`AI_RESPONSE_INVALID`、`FS_IO_ERROR`、`UNEXPECTED_CRASH` | JSONレポートを残し、環境を直す |
+| `AGENTIC_STEP_FAILED`、`CASE_ABORTED` | `details`を読む。ケースの結果を推測せず、環境か呼び出しの条件を直す |
+| `INTERRUPTED` | 残りの作業を未完了として扱い、ケースの結果を推測しない |
 
-関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#priority)
-
-## レポートエラー別の次のアクション {#next-action-by-report-error}
-
-レポートスキーマは、15個の使用方法コードと8つの環境コードを定義しています。使用方法コードと環境コードは、レポートスキーマ内で種別（kind）ごとに構造的に分離されています。`INTERRUPTED` は実行全体をスコープ（run-scoped）とし、スキップされた結果行は影響を受けたケースを表します。
-
-| エラーファミリー | 次の安全なアクション |
-| --- | --- |
-| 設定、シークレット、またはターゲット | 指定された Reference を読み取り、値を推測することなく境界を修正します。 |
-| `SECRET_CONSENT_REQUIRED` | 一覧の名前について対話的に承認を得るか、レビュー済みの名前を `secrets.allow` に追加します。同意があったものとして再試行してはいけません。 |
-| plan の鮮度または完全性 | アーティファクトを信頼できないものとして扱い、stale（古くなった状態）のアーティファクト復旧手順を使用します。 |
-| ブラウザー、プロバイダー、ストレージ、またはクラッシュ | エンベロープを保持し、環境を修復します。 |
-| 中断 | 残りの作業を未完了として扱います。ケース結果を推測しないでください。 |
-
-関連リンク: [エラーコード](/ambercast/ja/reference/error-codes/), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree), [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
+関連リンク: [エラーコード](/ambercast/ja/reference/error-codes/)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)、[一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
 
 ---
 
 # セットアッププロンプト
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/setup-prompt/
 
-依頼されたテストを扱うエージェントに対し、レビューを最優先とする境界を規定するセットアッププロンプトを提供します。
+このプロンプトをエージェントに渡すと、エージェントは何を読んでから、どの範囲で、どの順に動くかが決まる。内容は英語のまま貼り付ける。
 
 ## コピー用プロンプト {#copy-paste-prompt}
 
-エージェントの運用にあたっては、以下のルールおよび前提が適用されます。
+プロンプトは次の5つの規則を置く。
 
-- プロバイダーの解決では、明示的なオーバーライドが存在する場合はそれを使用し、存在しない場合は設定されたプロバイダーを使用します。auto モードでは codex の前に claude を探索（プローブ）します。
-- `check` は、AI やブラウザの機能を使用せずにアーティファクトを検証できます。
-- このプロンプトにおける既定の動作は diff の提示であり、コミットには要求が必要です。
-- セットアッププロンプトには開発サーバーの境界を明記します。
-- ファイル引数が指定されない場合、`generate`、`run`、`heal` はそれぞれ設定された検出ルールに基づいてテストを選択します。
+1. AIプロバイダーは、明示した指定、設定されたプロバイダーの順に選ぶ。`auto`のときは`claude`、`codex`の順に探す。
+2. `check`は、AIとブラウザを使わずに成果物を調べる。
+3. 既定の動作は差分を示すことで、コミットは依頼があったときだけ行う。
+4. 開発サーバーはオペレーターのものである。エージェントは、設定されたベースURLでアプリがすでに動いていると仮定し、起動や停止をしない。
+5. ファイルを指定しない`generate`、`run`、`heal`は、設定された検出規則に合う全テストを選ぶ。
 
 ~~~markdown
 You are working on ambercast tests in this repository.
@@ -4446,63 +4455,68 @@ Never place literal secret values in prompts, artifacts, commands, reports, or m
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
-関連リンク: [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/), [オペレーション規約](/ambercast/ja/agents/operating-contract/), [環境変数](/ambercast/ja/reference/environment-variables/)
+関連リンク: [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)、[オペレーション規約](/ambercast/ja/agents/operating-contract/)、[環境変数](/ambercast/ja/reference/environment-variables/)
 
 ---
 
 # 構造化出力の読み取り
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/reading-structured-output/
 
-ambercast の構造化出力を処理する際は、スキーマ全体を再構築するのではなく、エンベロープに基づいて分岐を行います。`command`、`reportPersistence`、`errors[].code`、そして `results[].status` を安全な順序で評価し、適切なアクションを決定します。
+エージェントはこのページで、レポートのどこから読み、どの結果で止まり、どの結果なら続けてよいかを決める。レポートは`command`で分かれ、`generate`、`run`、`check`、`heal`、`review`のどれかになる。
 
-## エンベロープ決定木 {#decision-tree}
+## 判断の木 {#decision-tree}
 
-レポートエンベロープは、`command` によって generate、run、check、heal、review の各ブランチに判別されます。このうち `reportPersistence` を含むのは run ブランチのみであり、その値は persisted、failed、not-attempted のいずれかです。また、レポートスキーマは `errors[].code` の安定した公開ボキャブラリを提供しています。
+`command`、`reportPersistence`、`errors[].code`、`results[].status`を、この順に読む。`reportPersistence`を持つのは`run`だけで、値は`persisted`、`failed`、`not-attempted`のいずれかである。スキーマには`review`の分岐があるが、CLIに`review`コマンドはない。
+
+`errors[].code`が1つでもあれば、ファイルを変える前に、オペレーション規約のエラー表を使う。コードがなければ、そのコマンドの規則で`results[].status`を1行ずつ分類する。
 
 ~~~
 Read command.
 ├─ run: read reportPersistence first.
-│  ├─ failed → retain stdout envelope; treat persistence as an environment problem.
-│  └─ persisted/not-attempted → continue to results.
-├─ generate/check/heal/review → continue to results.
+│  ├─ failed → keep the stdout report; treat persistence as an environment problem.
+│  └─ persisted/not-attempted → continue to errors.
+├─ generate/check/heal/review → continue to errors.
 Read every errors[].code.
-├─ any code → use operating-contract's error-code table before changing files.
+├─ any code → use the operating contract's report-error table before changing files.
 └─ none → classify every results[].status for this command.
-   ├─ failed/error/stale/missing/orphaned → stop at the corresponding contract.
-   ├─ skipped/listed → treat as incomplete or discovery-only, not success.
-   └─ healthy status → continue only within approved scope.
+   ├─ listed/skipped → discovery-only or incomplete, not success.
+   ├─ generate failed, run failed/error → read the evidence; do not heal or regenerate automatically.
+   ├─ check other than fresh/fresh-without-grounding → artifacts are untrustworthy; use stale-artifact recovery.
+   ├─ heal unresolved/partially-healed → report it; do not retry automatically.
+   └─ any other status → continue only within approved scope.
 ~~~
 
-リンク: [レポート](/ambercast/ja/reference/reports/), [オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-report-error)
+関連リンク: [レポート](/ambercast/ja/reference/reports/)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-report-error)
 
-## status はコマンド固有のエビデンス {#status-by-command}
+## ステータスはコマンドごとの証拠を表す {#status-by-command}
 
-run の実行結果には passed、failed、または error が使用されます。listed はディスカバリー専用であり、skipped は実行エビデンスを持ちません。generate では generated、would-generate、skipped-fresh、listed、failed、および skipped が区別されます。check には fresh、stale（古くなった状態）、plan-missing または grounding-missing、あるいは orphaned の結果が含まれ、さらに fresh-without-grounding、listed、skipped も含まれます。
+`results[].status`の語彙はコマンドごとに違い、`listed`は検出だけ、`skipped`は実行の証拠を持たない。どちらも成功ではない。
 
-リンク: [レポート](/ambercast/ja/reference/reports/#result-statuses), [プランのライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
+- `generate`は`generated`、`would-generate`、`skipped-fresh`、`listed`、`failed`、`skipped`を使う。
+- `run`は`passed`、`failed`、`error`、`listed`、`skipped`を使う。
+- `check`は`fresh`、`stale`、`missing-plan`、`missing-grounding`、`stale-grounding`、`invalid-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed`、`skipped`を使う。
+- `heal`の完了した行は`status: completed`で、`repairOutcome`が`healed`、`partially-healed`、`unresolved`、`no-changes-needed`のいずれかになる。`listed`と`skipped`の行は識別情報だけを持つ。
 
-## プロセスステータスはバッチレベルのシグナル {#exit-code-signal}
+関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
 
-レポートエラーには、code とともにその scope および kind が記録されます。
+## 終了コードはバッチ全体の合図 {#exit-code-signal}
 
-リンク: [終了コード](/ambercast/ja/reference/exit-codes/#priority), [オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)
+終了コードは、各行とエラーを読んだ後で、バッチ全体の合図として使う。レポートのエラーは、コードに加えて範囲と種別を`errors[]`に持つ。
+
+関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)
 
 ---
 
 # 機械可読リソース
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-resources/
 
-本ドキュメントでは、ambercast のドキュメントサイトで公開されている機械可読リソースと、その提供ルールについて説明します。
+エージェントはこのページで、どのファイルを取得できるか、そのファイルを信頼してよいかを決める。
 
 ## 提供ルール {#availability-rule}
 
-エージェント向けのリソース提供ルールは以下のとおりです。
+利用可能かどうかの最終的な根拠は`capabilities.json`である。計画中のページは`llms.txt`と`llms-full.txt`に含まれず、題名と説明つきで`llms-planned.txt`に並ぶ。
 
-- `capabilities.json` は、エージェントにとっての最終的な提供可否の参照元です。
-- 計画中のページは、既定の `/ambercast/llms.txt` および `/ambercast/llms-full.txt` から除外されます。
-- 本ページに記載されているリソースはすべて、このリリースで公開サイトに公開されています。
-
-## 公開済みのアーティファクト {#planned-artifacts}
+## 公開しているファイル {#planned-artifacts}
 
 | リソース | 状態 |
 | --- | --- |
@@ -4525,53 +4539,61 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-res
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 利用可能 |
 
-`schemas/plan.v2.schema.json`、`schemas/plan.v3.schema.json`、`schemas/plan.v4.schema.json`、`schemas/grounding.v2.schema.json`、`schemas/grounding.v3.schema.json` は、コミット済みの履歴スナップショットをサイトへコピーした凍結アーティファクトです。現在のビルドは config スキーマ、Plan v5 スキーマ、grounding スキーマ、report スキーマ、`capabilities.json`、および `manifest/cli.json` を生成し、サイト向けと npm 配布向けで同一のバイト列になります。
+`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2`、`grounding.v3`のスキーマは、リポジトリにコミットした固定の履歴スナップショットで、サイトへそのまま複製される。設定、計画v5、グラウンディングv4、レポートのスキーマと、`capabilities.json`、`manifest/cli.json`は、npmパッケージに入るビルドと同じバイト列をサイトへ複製する。
 
-本ドキュメントは、このリリースで公開されたアーティファクトを扱います。
-
-関連情報: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [JSON スキーマ](/ambercast/ja/reference/json-schemas/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
+関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[JSON スキーマ](/ambercast/ja/reference/json-schemas/)、[ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
 
 ---
 
 # official skill
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/official-skill/
 
-本ページでは、ambercast が同梱する official skill と、エージェント向けインターフェースにおけるその役割について説明します。
+エージェントはこのページで、skillが何を教えるか、セットアッププロンプトやMCPサーバーとどう使い分けるかを決める。
 
-## official skill とは {#what-it-is}
+## skillの内容 {#what-it-is}
 
-ambercast は `skills/ambercast/SKILL.md` に `ambercast` という名前の [Agent Skills](https://agentskills.io) スキルを同梱しています。コーディングエージェントに `<name>.test.md` プロンプトの書き方、CLI を通じた `generate` / `run` / `check` / `heal` ループの回し方、`--json` レポートの読み取りと終了コードの処理、次に取るべき安全なアクションの選び方を教えます。
+ambercastは、[Agent Skills](https://agentskills.io)のskillを`skills/ambercast/SKILL.md`に同梱している。名前は`ambercast`である。コーディングエージェントに、`<name>.test.md`のプロンプトの書き方、CLIで`generate`、`run`、`check`、`heal`を動かす手順、`--json`のレポートと終了コードの読み方、次の安全な行動の選び方を教える。
 
-インストール方法（Claude Code、Codex CLI、`gh skill` 対応エージェント、skills.sh、またはインストール済みパッケージからの手動コピー）は [README](https://github.com/kotarotsubaki/ambercast#official-skill) を参照してください。依頼されたテストを扱うエージェントに対しレビューを最優先とする境界を規定する、コピー＆ペースト可能な完全な運用プロンプトは [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/) を参照してください。
+導入方法はClaude Code、Codex CLI、`gh skill`対応のエージェント、skills.sh、インストール済みパッケージからの手動コピーで、[README](https://github.com/kotarotsubaki/ambercast#official-skill)にある。
 
-## 想定される役割 {#intended-role}
+## 想定する役割 {#intended-role}
 
-エージェントインターフェースの設計では、人間向けのプロンプトやビューアのサーフェスと並び、コーディングエージェントをファーストクラスのユーザーとして扱います。
+skillは、実行のループを教える。[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)は、依頼された1つのテストに対して、差分を先に示すという境界を置く。[MCP サーバー](/ambercast/ja/agents/mcp-server/)は、シェルではなくツール呼び出しで動くクライアントのための接続である。
 
-関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/), [MCP サーバー](/ambercast/ja/agents/mcp-server/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
+ambercastはコーディングエージェントを、人向けのプロンプトやビューアと並ぶ第一級の利用者として扱う。
+
+関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)、[MCP サーバー](/ambercast/ja/agents/mcp-server/)、[ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
 
 ---
 
 # MCP サーバー
 Source: https://kotarotsubaki.github.io/ambercast/ja/agents/mcp-server/
 
-`ambercast mcp` サブコマンドは、打鍵 E2E テストの実行と修復に使う、ポートを持たない `stdio` 接続を提供します。1つのサーバープロセスは1つの session root を提供し、`--dir` で選択します。省略時はプロセスの現在の作業ディレクトリを使います。ツールに渡すファイルはこの root を基準に解決します。`--sync-wait-ms` で同期待機上限を設定でき、既定値は 45000 ms です。
+エージェントはこのページで、MCPクライアントからambercastの何を呼べるか、各呼び出しの詳細をどこで調べるかを決める。サーバーはambercastのブラウザE2Eワークフロー（generate、run、check、heal）を動かす。
 
-## 接続境界 {#connection-boundary}
+## 接続の境界 {#connection-boundary}
 
-接続では `ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel` を提供します。前の4つはワークフロー、後の2つはサーバー内ジョブの観測と取消です。入力、アノテーション、Job record、`isError`、MCP エラー面は [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table) を参照してください。クライアントへのプロセス登録は [ambercast mcp](/ambercast/ja/reference/cli/mcp/#client-registration) に記載しています。
+`ambercast mcp`は、ポートを開かないstdioの接続を提供する。1つのサーバープロセスは1つのセッションルートを担当する。ルートは`--dir`で指定し、省略するとプロセスのカレントディレクトリになる。
+
+ツールへ渡すファイルは、このルートからの相対で解決する。`--sync-wait-ms`は同期応答を待つ上限で、既定は45000 msである。
+
+公開するツールは`ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel`の6つである。前の4つはワークフローで、後ろの2つはサーバー内のジョブの確認と取り消しに使う。
+
+[MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)のとおり、`target`を受け取るのは`ambercast_generate`だけである。ほかのワークフローのツールは、計画からターゲットを選ぶ。
+
+入力、アノテーション、ジョブの記録、`isError`、MCPのエラーも同じページにある。クライアントへの登録は[ambercast mcp](/ambercast/ja/reference/cli/mcp/#client-registration)に従う。
 
 ## 計画時の設計からの変更 {#changes-from-the-planned-design}
 
-| 旧 planned ページ | 実装済みの接続 |
+| 以前の計画ページ | 実装した接続 |
 | --- | --- |
-| 計画された5ツール | ジョブ状態と取消を含む6ツール |
-| report `outputSchema` を公開 | `outputSchema` を省略 |
-| heal preview のみ | `applyToken` による二段階 heal |
-| 同期ワークフローのみ | 長い呼び出しはジョブとなり、ID なしの status は一覧を返す |
-| server flags 未指定 | `ambercast mcp` は `--dir` と `--sync-wait-ms` に対応 |
-| MCP error 未指定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED` は独立したエラー面 |
-| CLI 入力未指定 | 入力から `headed`、`list`、`stale`、`json`、`yes`、`configPath` を除外 |
-| report から exit code を推測 | `_meta.exitCode` に明示 |
+| `review`を含む5つのツール | ジョブの状態確認と取り消しを含む6つのツール。`review`は公開しない |
+| レポートの`outputSchema`を公開 | `outputSchema`は省略 |
+| healはプレビューのみ | `applyToken`を使う2段階のheal |
+| 同期のワークフローのみ | 長い`generate`、`run`、healのプレビューはジョブになる。IDなしの状態確認は一覧を返す |
+| サーバーのフラグは未定 | `ambercast mcp`は`--dir`と`--sync-wait-ms`に対応 |
+| MCPのエラーは未定 | `HEAL_APPLY_TOKEN_INVALID`、`HEAL_APPLY_FAILED`、`JOB_NOT_FOUND`、`JOB_FAILED`は別のエラー面を使う |
+| CLIの入力は未定 | 入力は`headed`、`list`、`stale`、`json`、`yes`、`configPath`を含まない |
+| 終了コードはレポートから推測 | `_meta.exitCode`が明示的に持つ |
 
-関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)。
+関連リンク: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)

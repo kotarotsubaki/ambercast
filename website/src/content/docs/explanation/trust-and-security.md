@@ -3,7 +3,7 @@ title: Trust and security
 description: ambercast trusts only what it has validated locally, and page content, provider output, and secret values each cross a boundary that fails closed.
 ---
 
-ambercast trusts only what it has validated locally. Page content, provider output, and secret values each pass a check or a redaction at a boundary, and anything that fails stops there.
+ambercast checks each input at a boundary before it uses it, and anything that fails the check stops there.
 
 ## Artifacts and provider output are validated {#artifact-and-provider-boundaries}
 

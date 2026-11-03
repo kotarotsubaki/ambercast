@@ -3984,7 +3984,7 @@ One rejected alternative tracked only package releases; it was rejected because 
 # Plan lifecycle and freshness
 Source: https://kotarotsubaki.github.io/ambercast/explanation/plan-lifecycle/
 
-A plan can be replayed only when it still matches the inputs that produced it and its grounding is bound to it. `check` answers both questions without running anything.
+Freshness and the grounding binding are judged separately, and `check` reports each one on its own.
 
 ## What a plan is built from {#provenance-inputs}
 
@@ -4047,7 +4047,7 @@ Related: [Replay and grounding](/ambercast/explanation/replay-and-grounding/#dri
 # Replay and grounding
 Source: https://kotarotsubaki.github.io/ambercast/explanation/replay-and-grounding/
 
-When grounding covers every step, replay runs without an AI call. A miss fails closed by default. Only `--resolve` lets ambercast resolve a miss live.
+Replay reuses what ambercast recorded. Where the record is missing or unusable, replay stops unless you opt in to live resolution.
 
 ## Grounding as replay evidence {#grounding-as-replay-evidence}
 
@@ -4168,7 +4168,7 @@ Related: [ambercast heal](/ambercast/reference/cli/heal/#confirmation), [Operati
 # Trust and security
 Source: https://kotarotsubaki.github.io/ambercast/explanation/trust-and-security/
 
-ambercast trusts only what it has validated locally. Page content, provider output, and secret values each pass a check or a redaction at a boundary, and anything that fails stops there.
+ambercast checks each input at a boundary before it uses it, and anything that fails the check stops there.
 
 ## Artifacts and provider output are validated {#artifact-and-provider-boundaries}
 
@@ -4221,7 +4221,7 @@ Related: [Manage secrets](/ambercast/how-to/manage-secrets/), [Environment varia
 # Determinism in CI
 Source: https://kotarotsubaki.github.io/ambercast/explanation/determinism-in-ci/
 
-In CI, inspection has no side effects. By default ambercast writes only the run report and contained evidence. It refuses to repair, and it reports the strongest problem as a single exit code.
+These rules keep a CI run predictable: inspection cannot change anything, and the exit code does not depend on iteration order.
 
 ## Read-only inspection {#read-only-check}
 

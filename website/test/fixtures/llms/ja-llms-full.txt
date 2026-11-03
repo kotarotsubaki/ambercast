@@ -4034,6 +4034,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/
 `planDigest` は、再生に関わる計画の内容から `generatorMeta` を除いてハッシュにした値だ。グラウンディングを現在のものと見なすのは、記録した `planDigest` と計画から計算した値が等しいときだけである。計画の鮮度と、グラウンディングの結び付きは、別々に判定する。
 
 `check` は、グラウンディングが無ければ `missing-grounding`、不正なら `invalid-grounding`、別の計画に結び付いていれば `stale-grounding` と報告する。
+
 リポジトリのポリシーが `uncommitted` のときは、有効なグラウンディングの無い `fresh` な計画を `fresh-without-grounding` と報告する。これは鮮度の失敗ではない。
 
 `check` は逆向きにも走査する。対応するテストの無い成果物は `orphaned-plan` または `orphaned-grounding`、対応するテストを逆引きできない名前は `invalid-artifact-name` と報告する。
@@ -4086,7 +4087,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grou
 
 グラウンディングの整合性が壊れていると、`--resolve` を付けてもフェイルクローズする。JSONが不正な場合や、カバレッジか検証の証明に失敗した場合が当てはまる。
 
-`--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。要素に結び付くステップを持つ計画では、`--resolve` を付けない `run` がこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
+`--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。要素に結び付くステップを持つ計画（plan）では、`--resolve` を付けない `run` がこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
 
 `--resolve` を付けると、要素のミスはその場で解決する。解決したエントリを書くのは、バインディングを確かめる全ステップが合格し、ライトバックのゲートが許したときだけだ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
 
@@ -4186,7 +4187,7 @@ ambercastが信頼するのは、手元で検証を終えたものだけだ。�
 
 シークレットでは、提案と許可を分ける。プロバイダーが提案できるのは、シークレットの名前だけだ。確定したシークレット参照は、すべて手元で解決する。候補を保存するのは、名前が許可リストにあるか、対話で同意を得たときだけである。
 
-`secrets.allow: "*"` は、名前ごとの確認を省く。リスクの高い設定なので、意図して選ぶ必要がある。
+`secrets.allow: "*"` は、名前ごとの確認を省く。暗黙の既定値ではなく、リスクの高い設定なので、意図して選ぶ必要がある。
 
 関連リンク: [計画ドキュメント](/ambercast/ja/spec/plan-document/)、[適合性](/ambercast/ja/spec/conformance/)、[エラーコード](/ambercast/ja/reference/error-codes/)
 
@@ -4299,7 +4300,7 @@ ambercastは、確認してコミットした成果物に頼る。計画はプ�
 # ステータスとロードマップ
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/status-and-roadmap/
 
-現行のCLIは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを持つ。`review` とbaseline/restoreは計画中だ。1.0より前は、スキーマとプロデューサーの変更で計画の再生成が必要になる。
+現行のCLIは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを持つ。`review` とbaseline/restoreは計画中だ。1.0より前は、スキーマとプロデューサーの変更で計画（plan）の再生成が必要になる。
 
 ## 現行リリースで実装済み {#implemented}
 
@@ -4307,7 +4308,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 ブラウザーはChromiumだけに対応する。
 
-1.0より前は、マイナーリリースにも破壊的変更が入りうる。スキーマやプロデューサーの変更は、既存の計画（plan）の再生成を求める。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
+1.0より前は、マイナーリリースにも破壊的変更が入りうる。スキーマやプロデューサーの変更は、既存の計画の再生成を求める。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[互換性と再生成](/ambercast/ja/reference/compatibility/)、[変更履歴](/ambercast/ja/reference/changelog/)
 

@@ -3,7 +3,7 @@ title: Determinism in CI
 description: In CI, ambercast inspects without side effects, writes only the run report and contained evidence by default, refuses to repair, and reports one exit code.
 ---
 
-In CI, inspection has no side effects. By default ambercast writes only the run report and contained evidence. It refuses to repair, and it reports the strongest problem as a single exit code.
+These rules keep a CI run predictable: inspection cannot change anything, and the exit code does not depend on iteration order.
 
 ## Read-only inspection {#read-only-check}
 

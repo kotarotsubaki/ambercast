@@ -46,6 +46,7 @@ description: 計画が再生できる状態かどうかを、`check` が何も�
 `planDigest` は、再生に関わる計画の内容から `generatorMeta` を除いてハッシュにした値だ。グラウンディングを現在のものと見なすのは、記録した `planDigest` と計画から計算した値が等しいときだけである。計画の鮮度と、グラウンディングの結び付きは、別々に判定する。
 
 `check` は、グラウンディングが無ければ `missing-grounding`、不正なら `invalid-grounding`、別の計画に結び付いていれば `stale-grounding` と報告する。
+
 リポジトリのポリシーが `uncommitted` のときは、有効なグラウンディングの無い `fresh` な計画を `fresh-without-grounding` と報告する。これは鮮度の失敗ではない。
 
 `check` は逆向きにも走査する。対応するテストの無い成果物は `orphaned-plan` または `orphaned-grounding`、対応するテストを逆引きできない名前は `invalid-artifact-name` と報告する。

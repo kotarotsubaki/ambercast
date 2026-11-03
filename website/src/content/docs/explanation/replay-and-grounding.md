@@ -3,7 +3,7 @@ title: Replay and grounding
 description: Replay reuses recorded grounding, so a fully covered run needs no AI call, and a miss either fails closed or is resolved live only with `--resolve`.
 ---
 
-When grounding covers every step, replay runs without an AI call. A miss fails closed by default. Only `--resolve` lets ambercast resolve a miss live.
+Replay reuses what ambercast recorded. Where the record is missing or unusable, replay stops unless you opt in to live resolution.
 
 ## Grounding as replay evidence {#grounding-as-replay-evidence}
 

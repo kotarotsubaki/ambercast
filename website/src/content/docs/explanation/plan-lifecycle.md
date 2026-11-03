@@ -3,7 +3,7 @@ title: Plan lifecycle and freshness
 description: A plan can be replayed only while it matches the inputs that produced it, and `check` decides that without running anything.
 ---
 
-A plan can be replayed only when it still matches the inputs that produced it and its grounding is bound to it. `check` answers both questions without running anything.
+Freshness and the grounding binding are judged separately, and `check` reports each one on its own.
 
 ## What a plan is built from {#provenance-inputs}
 

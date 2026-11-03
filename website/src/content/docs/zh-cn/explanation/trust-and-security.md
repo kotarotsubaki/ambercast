@@ -3,7 +3,7 @@ title: 信任与安全
 description: ambercast 只信任在本地验证过的内容，页面内容、提供方输出和机密值各自越过一条失败关闭的边界。
 ---
 
-ambercast 只信任在本地验证过的内容。页面内容、提供方输出和机密值在边界处各自经过校验或脱敏，通不过就停止。
+ambercast 在使用每项输入之前，先在边界处检查它，检查不通过就在此处停止。
 
 ## 产物与提供方输出都会校验 {#artifact-and-provider-boundaries}
 

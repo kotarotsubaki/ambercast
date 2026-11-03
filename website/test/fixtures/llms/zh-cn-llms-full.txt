@@ -3985,7 +3985,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 # 执行计划的生命周期与新鲜度
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecycle/
 
-执行计划只有在与生成它的输入保持一致，且定位缓存已绑定到它时，才能回放。`check` 无需运行任何内容，就能回答这两个问题。
+执行计划的新鲜度和定位缓存的绑定是分开判定的，`check` 对二者分别报告。
 
 ## 出处输入 {#provenance-inputs}
 
@@ -4048,7 +4048,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecyc
 # 回放与定位缓存
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-grounding/
 
-定位缓存覆盖全部步骤时，回放无需调用 AI。未命中默认失败关闭，只有加上 `--resolve`，ambercast 才会实时解析未命中的步骤。
+回放复用 ambercast 已记录的内容。记录缺失或不可用时，除非你选择实时解析，否则回放会停止。
 
 ## 作为回放依据的定位缓存 {#grounding-as-replay-evidence}
 
@@ -4169,7 +4169,7 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 # 信任与安全
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/trust-and-security/
 
-ambercast 只信任在本地验证过的内容。页面内容、提供方输出和机密值在边界处各自经过校验或脱敏，通不过就停止。
+ambercast 在使用每项输入之前，先在边界处检查它，检查不通过就在此处停止。
 
 ## 产物与提供方输出都会校验 {#artifact-and-provider-boundaries}
 
@@ -4222,7 +4222,7 @@ ambercast 在实时页面上观察到的内容，不会原样进入提供方输�
 # CI 中的确定性
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/
 
-在 CI 中，检查没有副作用。ambercast 默认只写运行报告和受限证据，拒绝自动修复，并把最严重的问题作为单一退出码返回。
+这些规则让 CI 运行可预测：检查不会改变任何内容，退出码也不取决于迭代顺序。
 
 ## 只读检查 {#read-only-check}
 

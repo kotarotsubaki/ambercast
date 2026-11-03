@@ -1,19 +1,19 @@
 ---
 title: セットアッププロンプト
-description: 依頼されたテストを扱うエージェントに対し、レビューを最優先とする境界を規定するセットアッププロンプトを提供します。
+description: 依頼された1つのテストだけを扱い、差分を示し、依頼のない書き込みの前に確認するよう、コーディングエージェントへ貼り付ける1本のプロンプトである。
 ---
 
-依頼されたテストを扱うエージェントに対し、レビューを最優先とする境界を規定するセットアッププロンプトを提供します。
+このプロンプトをエージェントに渡すと、エージェントは何を読んでから、どの範囲で、どの順に動くかが決まる。内容は英語のまま貼り付ける。
 
 ## コピー用プロンプト {#copy-paste-prompt}
 
-エージェントの運用にあたっては、以下のルールおよび前提が適用されます。
+プロンプトは次の5つの規則を置く。
 
-- プロバイダーの解決では、明示的なオーバーライドが存在する場合はそれを使用し、存在しない場合は設定されたプロバイダーを使用します。auto モードでは codex の前に claude を探索（プローブ）します。
-- `check` は、AI やブラウザの機能を使用せずにアーティファクトを検証できます。
-- このプロンプトにおける既定の動作は diff の提示であり、コミットには要求が必要です。
-- セットアッププロンプトには開発サーバーの境界を明記します。
-- ファイル引数が指定されない場合、`generate`、`run`、`heal` はそれぞれ設定された検出ルールに基づいてテストを選択します。
+1. AIプロバイダーは、明示した指定、設定されたプロバイダーの順に選ぶ。`auto`のときは`claude`、`codex`の順に探す。
+2. `check`は、AIとブラウザを使わずに成果物を調べる。
+3. 既定の動作は差分を示すことで、コミットは依頼があったときだけ行う。
+4. 開発サーバーはオペレーターのものである。エージェントは、設定されたベースURLでアプリがすでに動いていると仮定し、起動や停止をしない。
+5. ファイルを指定しない`generate`、`run`、`heal`は、設定された検出規則に合う全テストを選ぶ。
 
 ~~~markdown
 You are working on ambercast tests in this repository.
@@ -27,4 +27,4 @@ Never place literal secret values in prompts, artifacts, commands, reports, or m
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
-関連リンク: [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/), [オペレーション規約](/ambercast/ja/agents/operating-contract/), [環境変数](/ambercast/ja/reference/environment-variables/)
+関連リンク: [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)、[オペレーション規約](/ambercast/ja/agents/operating-contract/)、[環境変数](/ambercast/ja/reference/environment-variables/)

@@ -12,7 +12,7 @@ The prompt sets five rules.
 1. The AI provider comes from an explicit override, then the configured provider. In `auto` mode, ambercast tries `claude` before `codex`.
 2. `check` inspects artifacts without AI or a browser.
 3. The default is to present a diff; commit only when asked.
-4. The dev server belongs to the operator. The agent assumes the app already runs at the configured base URL and never starts or stops it.
+4. The dev server belongs to the operator. The agent assumes the app already runs at the configured base URL and does not start, stop, or reconfigure it unless the operator explicitly asks.
 5. With no file arguments, `generate`, `run`, and `heal` select every test that the configured discovery rules match.
 
 ~~~markdown

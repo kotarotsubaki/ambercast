@@ -12,14 +12,14 @@ description: 针对每个命令，说明运行前必须满足什么条件、会�
 | 命令 | 前置条件 | 副作用 | 是否需要批准 | CI 中使用 |
 | --- | --- | --- | --- | --- |
 | `init` | 对目标目录有写权限。 | 可能写入配置、示例提示词、两行 `.gitignore` 内容和 `AGENTS.md` 区块。 | 需要用户明确批准；`--yes` 不等于 Agent 授权。 | 不带 `--yes` 的非交互运行会被拒绝。在 CI 中使用不改变批准边界。 |
-| `generate` | 提示词和目标有效。 | 写入执行计划和定位缓存；经交互同意后，把接受的机密名称加入 `secrets.allow`。 | 同意与写入需要批准；提交前先展示差异。 | 评审过的名称已在 `secrets.allow` 中时可用。 |
+| `generate` | 提示词和目标有效。 | 除非设置 `--list` 或 `--dry-run`，否则写入执行计划和定位缓存；`--dry-run` 不写入任何内容。经交互同意后，把接受的机密名称加入 `secrets.allow`。 | 同意与写入需要批准；提交前先展示差异。 | 评审过的名称已在 `secrets.allow` 中时可用。 |
 | `run` | 所选提示词有可信的执行计划。 | 保存报告；仅在通过回写条件时写入定位缓存。 | 请求范围未允许写入时需要批准。 | 可用，遵循回写策略。 |
-| `check` | 发现机制能找到所选测试。 | 只读取提示词和产物。 | 不需要。 | 可用。 |
+| `check` | 明确给出测试路径，或发现机制能找到所选测试。 | 只读取提示词和产物。 | 不需要。 | 可用。 |
 | `heal` | 执行计划引用的每个目标都设置了 `healReplayIsolation: "idempotent"`（默认是 `stateful`）。 | 可能写入尝试证据；执行计划与定位缓存的改动只在确认后写入。 | 需要用户明确批准；`--yes` 不等于 Agent 授权。 | 除 `--list` 外，`ci.heal` 不为 `true` 时被拒绝。 |
-| `view` | stdin 与 stderr 都是终端且 `CI` 未启用，或传入 `--allow-headless`。不带 `--port` 时最多尝试 20 个连续端口。 | 无；以只读方式提供已保存的运行报告。 | 不需要。 | 没有终端时需要 `--allow-headless`。 |
+| `view` | stdin 与 stderr 都是终端且 `CI` 未启用，或传入 `--allow-headless`。不带 `--port` 时最多尝试 20 个连续端口。 | 启动只读 HTTP 服务器提供已保存的运行报告；不写入任何内容。 | 不需要。 | 没有终端时需要 `--allow-headless`。 |
 | `mcp` | 会话根目录已存在。 | 启动 stdio 服务器；各工具遵循自己的写入与批准边界。 | 取决于所调用的工具。 | 取决于所调用的工具。 |
 
-`heal` 的目标不是幂等时，命令以退出码 2 失败，错误码为 `CONFIG_INVALID`。
+除 `--list` 外，`heal` 的目标不是幂等时，命令以退出码 2 失败，错误码为 `CONFIG_INVALID`。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[ambercast init](/ambercast/zh-cn/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 

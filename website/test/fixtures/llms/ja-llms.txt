@@ -68,13 +68,13 @@
 - [仕様変更履歴](https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/): アーティファクトのバージョン受け入れは、リリース番号の直感ではなく、Ambercast Plan 仕様 に従わなければならない（MUST）。
 
 ## EXPLANATION
-- [プランのライフサイクルと鮮度](https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/): アーティファクトがリプレイ可能かどうかを判断するための来歴と鮮度判定の仕組みを解説します。
-- [リプレイとグラウンディング](https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grounding/): リプレイの実行パスと、キャッシュされたグラウンディングが提供する安全性境界の仕組みを解説します。
+- [計画のライフサイクルと鮮度](https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/): 計画が再生できる状態かどうかを、`check` が何も実行せずに判定する仕組みを説明する。
+- [再生とグラウンディング](https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grounding/): 再生が記録済みのグラウンディングを使ってAIを呼ばずに動く仕組みと、ミスしたときの扱いを説明する。
 - [ヒーリングモデル](https://kotarotsubaki.github.io/ambercast/ja/explanation/healing-model/): UIが変わってテストが失敗したとき、ambercastがどこまで自動で直し、どこから人の判断に委ねるかを説明する。
-- [トラストとセキュリティ](https://kotarotsubaki.github.io/ambercast/ja/explanation/trust-and-security/): ambercastにおける信頼境界とフェイルクローズな設計選択について説明します。
-- [CIにおける決定性](https://kotarotsubaki.github.io/ambercast/ja/explanation/determinism-in-ci/): CI環境における動作の背後にある信頼境界について解説します。
-- [ambercastの比較](https://kotarotsubaki.github.io/ambercast/ja/explanation/comparison/): コード生成、Record & Replay、自律型エージェントとの設計モデルの違いと、ambercastが導出されたプランを採用する理由を解説します。
-- [ステータスとロードマップ](https://kotarotsubaki.github.io/ambercast/ja/explanation/status-and-roadmap/): ambercastの現在の実装境界、今後の計画、およびバージョン方針について解説します。
+- [トラストとセキュリティ](https://kotarotsubaki.github.io/ambercast/ja/explanation/trust-and-security/): ページの内容、プロバイダーの出力、シークレットの値が、それぞれどの境界で止められるかを説明する。
+- [CIにおける決定性](https://kotarotsubaki.github.io/ambercast/ja/explanation/determinism-in-ci/): CIで検査が副作用を持たず、書き込みが限られ、修復が既定で断られ、終了コードが1つに決まる仕組みを説明する。
+- [ambercastの比較](https://kotarotsubaki.github.io/ambercast/ja/explanation/comparison/): ambercastは自然言語のプロンプトをテストとして残し、そこから確認済みの計画を導く。他の手法はスクリプトやライブのセッションを残す。
+- [ステータスとロードマップ](https://kotarotsubaki.github.io/ambercast/ja/explanation/status-and-roadmap/): 現行リリースが実装している範囲、計画中の機能、1.0より前のバージョンの扱いを説明する。
 
 ## FOR AI AGENTS
 - [AIエージェントからのambercastの利用](https://kotarotsubaki.github.io/ambercast/ja/agents/overview/): AIエージェントがテストアセットを変更・操作する際の読む順序と安全な実行ループを定めます。

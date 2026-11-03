@@ -3988,115 +3988,126 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 ---
 
-# プランのライフサイクルと鮮度
+# 計画のライフサイクルと鮮度
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/
 
-アーティファクトをリプレイできるかどうかを判断する際には、そのプランが持つ来歴（Provenance）と鮮度（Freshness）の確認が必要です。ambercastでは、プロンプトテキストやスキーマバージョン、テンプレートやプロデューサバンドルのフィンガープリント、ターゲット定義といった入力要素一式をもとに来歴を特定し、プランが現在の状態に対して有効であるかを判定します。
+計画（plan）を再生できるのは、生成時の入力と今も一致し、グラウンディングが計画に結び付いているときだけだ。`check` はまず鮮度を判定し、`fresh` の計画に限ってグラウンディングを調べる。`stale` の計画には、グラウンディングの状態が付かない。
 
-## 来歴の入力要素 {#provenance-inputs}
+## 来歴の入力 {#provenance-inputs}
 
-プランの来歴は、`inputsDigest` によって保護される入力セット全体によって定義されます。`inputsDigest` は、正規化されたプロンプトテキスト、Planスキーマのバージョン、generator-template（ジェネレーターテンプレート）のフィンガープリント、`producerBundleFingerprint`（プロデューサバンドルのフィンガープリント）、および名前付きターゲット定義を含む正規化JSON（canonical JSON）のSHA-256ハッシュです。
+`inputsDigest` は、計画が何から作られたかを表すSHA-256の値だ。次の入力を正規化JSONにまとめて計算する。
 
-この構造により、プロンプトテキストやターゲット定義に変更がない場合であっても、Planスキーマやgenerator-templateに変更があれば、既存のプランはstale（古くなった状態）になります。
+- 正規化したプロンプト
+- 計画のスキーマバージョン
+- 生成テンプレートのフィンガープリント
+- プロデューサーバンドルのフィンガープリント（`producerBundleFingerprint`）
+- 計画が参照するターゲットの定義（計画の `targets` に挙げた名前を、名前順に並べる）
 
-また、`producerBundleFingerprint` はテンプレートのフィンガープリントから独立しています。プロンプト、スキーマ、テンプレートのバイト列に変更がない場合でも、プロデューサのコントラクト（producer-contract）の変更によって生成結果が変わる可能性があるためです。
+参照していないターゲットを変えても、ダイジェストと鮮度は変わらない。`executor` はハッシュに入らない。
 
-関連リンク:
-- [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)
-- [設定](/ambercast/ja/reference/configuration/#targets)
-- [互換性と再生成](/ambercast/ja/reference/compatibility/)
+プロンプトが同じでも、スキーマ、テンプレート、プロデューサー契約のどれかが変わると、計画は `stale` になる。プロデューサーバンドルのフィンガープリントは、テンプレートのものとは別に持つ。契約が変わっただけでも、生成結果は変わりうるからだ。
 
-## プラン鮮度の判定 {#fresh-plan-decision}
+関連リンク: [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)、[設定](/ambercast/ja/reference/configuration/#targets)、[互換性と再生成](/ambercast/ja/reference/compatibility/)
 
-プランが現在も有効であるかどうかの鮮度判定は、`check` コマンドにおける比較処理によって確立されます。`check` は正規化されたプロンプトテキストと選択されたターゲット定義から現在の来歴情報を導出し、それをプラン内に記録されている `plan.source.inputsDigest` と比較します。
+## 鮮度の判定 {#fresh-plan-decision}
 
-ダイジェスト値が一致した場合は `fresh` と判定されます。一方でダイジェスト値が不一致となった場合は、現在のプロンプトまたはターゲットに対してプランがstale（古くなった状態）であるという理由とともに、`stale` という結果が返されます。
+`check` は、現在のプロンプトと計画が参照するターゲットの定義から `inputsDigest` を計算し直し、`plan.source.inputsDigest` と比べる。一致すれば `fresh`、一致しなければ `stale` を返す。
 
-また、入力ダイジェストの不一致だけでなく、無効なJSON、スキーマ検証の失敗、非正規化シリアライズ、あるいは無効な命令カバレッジ（invalid instruction coverage）が検出された場合にも、信頼できるフレッシュな結果ではなく `stale` と判定されます。
+`stale` になる原因は、ダイジェストの不一致だけではない。次の場合も `stale` になる。
 
-関連リンク:
-- [ambercast check](/ambercast/ja/reference/cli/check/#results)
-- [stale（古くなった状態）のアーティファクトの復旧](/ambercast/ja/how-to/recover-stale-artifacts/#stale)
+- JSONが不正である
+- スキーマ検証に失敗する
+- シリアライズが正規形でない
+- 命令カバレッジが不正である
+- 要素の意図（intent）またはソーススパンが不正である
+- 廃止された計画の `schemaVersion`（4）を使っている
+- 計画の参照先ターゲットが設定に見つからない
 
-## グラウンディングのバインドと1対1の対応関係 {#grounding-binding}
+構造が壊れた計画を、`fresh` と報告しないためだ。
 
-フレッシュなプランが存在することと、有効なリプレイ用のコンパニオンが存在することは明確に区別されます。`planDigest` は、`generatorMeta` を除外した上で、リプレイに関連するプラン内容をハッシュ化した値です。グラウンディング（grounding）は、そこに記録されている `planDigest` が計算されたプランダイジェストと等しい場合にのみ有効（current）と見なされます。
+関連リンク: [ambercast check](/ambercast/ja/reference/cli/check/#results)、[古くなった成果物の復旧](/ambercast/ja/how-to/recover-stale-artifacts/#stale)
 
-プラン自体がフレッシュであっても、コンパニオンとなるグラウンディングが存在しないときは `missing-grounding`、無効であるときは `invalid-grounding`、別のプランにバインドされているときは `stale-grounding` として `check` により報告されます。
+## グラウンディングの結び付き {#grounding-binding}
 
-リポジトリのポリシーが `uncommitted` である場合、有効なグラウンディングを持たないフレッシュなプランは、プラン自体の鮮度エラーではなく `fresh-without-grounding` として報告されます。
+`fresh` な計画があっても、再生できるとは限らない。再生にはグラウンディングも要る。
 
-さらに、`check` はコンパニオンアーティファクトの逆スキャンも行います。対応するテストが存在しないアーティファクトが見つかった場合は `orphaned-plan` または `orphaned-grounding` として報告され、逆解決が不可能な名前を持つアーティファクトは `invalid-artifact-name` として報告されます。
+`planDigest` は、再生に関わる計画の内容から `generatorMeta` を除いてハッシュにした値だ。グラウンディングを現在のものと見なすのは、記録した `planDigest` と計画から計算した値が等しいときだけである。計画の鮮度と、グラウンディングの結び付きは、別々に判定する。
 
-関連リンク:
-- [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#plan-digest)
-- [レポート](/ambercast/ja/reference/reports/#check-results)
+`check` は、グラウンディングが無ければ `missing-grounding`、不正なら `invalid-grounding`、別の計画に結び付いていれば `stale-grounding` と報告する。
+
+リポジトリのポリシーが `uncommitted` のときは、有効なグラウンディングの無い `fresh` な計画を `fresh-without-grounding` と報告する。これは鮮度の失敗ではない。
+
+`check` は逆向きにも走査する。対応するテストの無い成果物は `orphaned-plan` または `orphaned-grounding`、対応するテストを逆引きできない名前は `invalid-artifact-name` と報告する。
+
+関連リンク: [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#plan-digest)、[レポート](/ambercast/ja/reference/reports/#check-results)
 
 ## 鮮度判定が引き渡すもの {#freshness-handoff}
 
-鮮度の検査は、修復手順を直接規定することなく、その後の実行処理へと連携します。`check` は読み取り専用ストレージに加え、レイアウトおよびディスカバリーの依存関係のみを使用します。その依存性コントラクトには、AIエグゼキューター、ブラウザードライバー、シークレット、クロック、イベントポートは公開されていません。
+`check` はAIを呼ばず、ブラウザーを起動せず、何も書き込まない。鮮度の判定結果は、計画が今の入力と合っているかどうかだけだ。
 
-プランがフレッシュであるという結論は来歴情報から導かれるものであり、グラウンディングの検査はプランの鮮度を再定義することなく、リプレイキャッシュのライフサイクルに関する証拠を追加します。
+再生中に起きる問題は、鮮度とは別に扱う。UIが変わって要素のフィンガープリントが合わなくなると、`fingerprint-mismatch` と分類される。これはドリフトという実行時の状態で、`inputsDigest` を変えない。
 
-リプレイ実行中に生じるドリフトは、鮮度とは切り離されたランタイム固有の状態です。要素フィンガープリントの解決によって `fingerprint-mismatch` が分類された場合、その情報は `inputsDigest` を変更するのではなく、リプレイのフォールバックや修復（healing）へと引き渡されます。
+再生かヒーリングが、この状態を引き継ぐ。
 
-関連リンク:
-- [リプレイとグラウンディング](/ambercast/ja/explanation/replay-and-grounding/#drift-handoff)
-- [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages)
-- [オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)
+関連リンク: [再生とグラウンディング](/ambercast/ja/explanation/replay-and-grounding/#drift-handoff)、[ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)
 
 ---
 
-# リプレイとグラウンディング
+# 再生とグラウンディング
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grounding/
 
-ambercastのリプレイ実行において、グラウンディングは実行パスとその安全性境界を明確に定める中核的な仕組みです。テスト実行パイプラインが各ステップを評価する際、キャッシュされたグラウンディング情報が存在するかどうかが、以後の処理経路を決定づける基準となります。
+グラウンディングが全ステップを覆っている実行では、AIを呼ばずに再生できる。覆えないミスは、既定ではフェイルクローズする。`--resolve` を付けたときだけ、ミスをその場で解決する。
 
-## リプレイのエビデンスとしてのグラウンディング {#grounding-as-replay-evidence}
+## 再生の証拠としてのグラウンディング {#grounding-as-replay-evidence}
 
-`run` は、AIステップおよび要素グラウンディングのステップバリアントに対してグラウンディングを消費します。一方で、ナビゲーション（navigation）、テキスト可視（text-visible）、URLマッチ（URL-match）、要素カウント（element-count）の各バリアントではグラウンディングの参照は行われません。カバレッジを満たす有効なAIトレース（covered, valid AI trace）が存在する場合、AIエグゼキューター（AI executor）を解決することなくリプレイできます。
+`run` がグラウンディングを参照するのは、`ai` ステップと、要素に結び付くステップ（click、press、fill、fill-secret、capture）だ。ナビゲーションとすべてのアサーションは、グラウンディングを引かず、実ページを直接確かめる。
 
-要素グラウンディングにはアクセシビリティフィンガープリント（accessibility fingerprint）が保存されており、解決処理では保存されているアルゴリズムとハッシュを、マッチしたノードから新たに取得したフィンガープリントと比較します。
+要素のエントリは、ロケーター、フィンガープリント、意図のダイジェスト、来歴を持つ。解決では保存済みのロケーターを使い、フィンガープリントを照合する。エントリの形は、グラウンディングドキュメントで確かめられる。
 
-リゾルバー（resolver）はヒット（hit）を、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid` から明確に区別して判定します。ここでミスマッチがヒットとして扱われることはありません。
+リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。不一致を命中として扱うことはない。`snapshot-invalid` と `secret-contaminated` は、ケースを中止させる。
 
-関連情報: [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/), [要素フィンガープリント](/ambercast/ja/spec/fingerprint/), [ambercast run](/ambercast/ja/reference/cli/run/#ai-calls)
+再生中の判断は、次の4つに分かれる。
 
-## リプレイパス: グラウンディングヒット {#grounding-hit}
+- 有効なエントリがある場合は、AIを呼ばずに再生する。
+- 整合性が壊れている場合は、`--resolve` の有無に関わらずフェイルクローズする。
+- 回復できるミスで `--resolve` がある場合は、その場で解決する。
+- 回復できるミスで `--resolve` がない場合は、`GROUNDING_UNRESOLVED`（終了コード4）で止まる。
 
-キャッシュされたエビデンスが完全に合致するグラウンディングヒットの経路では、外部プロバイダーとの通信を伴わない実行パスが選択されます。カバレッジを満たす有効なAIトレースは、遅延エージェントフォールバック（lazy agentic fallback）が選択される前にリプレイされます。
+関連リンク: [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/)、[要素フィンガープリント](/ambercast/ja/spec/fingerprint/)、[ambercast run](/ambercast/ja/reference/cli/run/#ai-calls)
 
-要素の分類が成功した場合、新たなライブ解決を要求するのではなく、保存されているフィンガープリントをリプレイコンテキストに提供します。このように、`run` の実行パイプラインは、完全なキャッシュが存在するときにプロバイダーへの問い合わせ（プロバイダーの解決）を行わずに実行できるように設計されています。
+## 命中したときの再生 {#grounding-hit}
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#replay), [CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
+記録済みで有効なAIトレースは、AIエグゼキューターを解決せずに再生する。エージェント的なフォールバックを選ぶより前に、この経路を使う。
 
-## リプレイパス: 明示的な解決を伴うミス {#miss-with-explicit-resolution}
+要素の解決が命中したときは、保存済みのフィンガープリントを再生に渡す。新しい解決は要求しない。キャッシュが揃っていれば、プロバイダーを調べずに実行でき、AI呼び出しのイベントも出ない。
 
-整合性検証に失敗したグラウンディング（無効な JSON やカバレッジまたは検証証明の失敗を含む）は、`--resolve` に関係なくフェイルクローズします。不在のグラウンディングと構造的に有効な legacy または recoverable のエントリだけが、`--resolve` でゲートされるミスパスです。
+関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#replay)、[CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
 
-`--resolve` を指定した場合、要素グラウンディングのミスはライブで解決（resolve live）でき、解決された要素フィンガープリントでグラウンディングエントリを更新できます。
+## 解決を明示したときのミス {#miss-with-explicit-resolution}
 
-グラウンディングヒットの経路では、AI呼び出しイベント（AI-call event）は発行されません。
+グラウンディングの整合性が壊れていると、`--resolve` を付けてもフェイルクローズする。JSONが不正な場合や、カバレッジか検証の証明に失敗した場合が当てはまる。
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back), [グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
+`--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。要素に結び付くステップを持つ計画（plan）では、`--resolve` を付けない `run` がこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
 
-## リプレイパス: 未解決のミス {#unresolved-miss}
+`--resolve` を付けると、要素のミスはその場で解決する。解決したエントリを書くのは、バインディングを確かめる全ステップが合格し、ライトバックのゲートが許したときだけだ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
 
-`--resolve` を指定しない場合、run はコールドスタートおよび回復可能なミスの双方でライブ解決を抑制します。AI-directed replay で使用可能なトレースがない AI ディレクテッドステップは、`grounding-unresolved`（終了コード 4）としてフェイルクローズし、`--resolve` を使うよう案内します。
+関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)、[グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
 
-要素グラウンディングのミスも、要素をライブで解決するのではなく、フェイルクローズします。
+## 解決しないミス {#unresolved-miss}
 
-関連情報: [ambercast run](/ambercast/ja/reference/cli/run/#resolve), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+`--resolve` を付けないと、`run` はコールドスタートのミスと回復できるミスを、その場では解決しない。AI主導の再生で使えるトレースを持たない `ai` ステップは、`grounding-unresolved`（終了コード4）でフェイルクローズし、`--resolve` を案内する。
 
-## ドリフトのハンドオフ {#drift-handoff}
+要素のミスも同じで、その場で解決せず、終了コード4でフェイルクローズする。
 
-UIの変更などによってリプレイが単純なキャッシュ判定にとどまらなくなった段階で、関心はリプレイからヒーリング（healing）へと移行します。
+関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#resolve)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
 
-`fingerprint-mismatch` は、マッチしたノードの現在のアクセシビリティフィンガープリントが、保存されているフィンガープリントと異なることを意味します。`run` のユースケースでは、`fingerprint-mismatch` をグラウンディング解決が成功した場合とは明確に異なる分類ケースとして記録します。
+## ドリフトの引き継ぎ {#drift-handoff}
 
-ヒーリング処理はまずフェイルクローズのベースラインリプレイから開始され、そこで失敗が残る場合にグラウンディングの修復を試行できます。
+`fingerprint-mismatch` は、一致した要素の現在のフィンガープリントが、保存済みのものと違うことを表す。`run` はこれを、解決に成功した場合とは別の分類として記録する。
 
-関連情報: [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages), [UI変更後にテストを修復する](/ambercast/ja/tutorials/repair-your-first-drift/)
+ヒーリングは、フェイルクローズの基準再生から始める。失敗が残るときだけ、修復を試みる。
+
+関連リンク: [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages)、[UI変更後にテストを修復する](/ambercast/ja/tutorials/repair-your-first-drift/)
 
 ---
 
@@ -4166,207 +4177,152 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 # トラストとセキュリティ
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/trust-and-security/
 
-ambercastにおける信頼境界（trust boundary）と、フェイルクローズ（fail-closed）な設計選択について説明します。テスト実行時（run）においてリプレイ前に読み込まれるプランや、プロバイダーから生成されるステップの受け入れには、それぞれ独立した検証境界が設けられています。
+ambercastが信頼するのは、手元で検証を終えたものだけだ。ページの内容、プロバイダーの出力、シークレットの値は、境界で検証や秘匿を受け、通らなければ止まる。
 
-## 成果物とプロバイダー出力の検証 {#artifact-and-provider-boundaries}
+## 成果物とプロバイダーの出力は検証される {#artifact-and-provider-boundaries}
 
-永続化される成果物の検証と、外部プロバイダー出力の受け入れ境界は分離されています。
+`run` が計画（plan）を使うのは、命令カバレッジを含む計画の検証を通ったあとだけだ。
 
-実行処理（run）では、リプレイを行う前に、指示カバレッジが確認された信頼できるプラン（instruction-covered-plan）の境界を通じてのみプランを読み込みます。
+プロバイダーが生成したステップは、そのまま保存しない。ローカルのレスポンス契約で解析し、命令カバレッジを確かめ、完全な計画として解析できたあとで保存する。
 
-プロバイダーが生成したステップは、まずローカルのレスポンス規約（contract）に照らしてパースされ、指示カバレッジの検査を受けます。その後、完全なプランとして組み立てられ、永続化される前に完全なプランとしてパースされます。
+シークレットでは、提案と許可を分ける。プロバイダーが提案できるのは、シークレットの名前だけだ。確定したシークレット参照は、すべて手元で解決する。候補を保存するのは、名前が許可リストにあるか、対話で同意を得たときだけである。
 
-シークレットについては、生成は提案と認可を分離します。プロバイダーは `SecretNameChoice` を提案できますが、Ambercast はコミットされるすべてのシークレット参照をローカルで解決し、名前がすでに許可リストに含まれているか、対話式の同意を得た場合にのみ候補を永続化します。`secrets.allow: "*"` は名前ごとのレビューを迂回するため、暗黙の既定値ではなく、意図的な高リスク設定です。
+`secrets.allow: "*"` は、名前ごとの確認を省く。暗黙の既定値ではなく、リスクの高い設定なので、意図して選ぶ必要がある。
 
-関連情報:
-- [計画ドキュメント](/ambercast/ja/spec/plan-document/)
-- [適合性](/ambercast/ja/spec/conformance/)
-- [エラーコード](/ambercast/ja/reference/error-codes/)
+関連リンク: [計画ドキュメント](/ambercast/ja/spec/plan-document/)、[適合性](/ambercast/ja/spec/conformance/)、[エラーコード](/ambercast/ja/reference/error-codes/)
 
-## ページの観測内容は指示ではない {#untrusted-page-data}
+## ページの内容は指示ではない {#untrusted-page-data}
 
-テスト対象アプリケーションのコンテンツと、エージェントへの指示との間には明確な境界が存在します。
+ambercastは、テスト対象アプリの内容をデータとして扱い、エージェントへの指示とは見なさない。ページからアクセシビリティの証跡を取るときは、ページ由来の内容を指示として解釈してはならないという固定の注意書きを付ける。この注意書きは緩和策であり、隔離の境界ではない。ページの内容は、確認すべきリスクとして残る。
 
-構造化されたアクセシビリティエビデンスには、ページ由来のコンテンツを指示（directives）として解釈してはならない旨の固定の通知が付与されます。
+レポートのスキーマは、`errors[].code` の公開上の正本である。実装固有のエラークラスは、公開契約に出ない。
 
-エラー設計においては、レポートスキーマを `errors[].code` の外部に対する真実（external truth）として定義し、実装固有のエラークラスをパブリックコントラクトから除外しています。
+関連リンク: [レポート](/ambercast/ja/reference/reports/)、[エラーコード](/ambercast/ja/reference/error-codes/)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)
 
-関連情報:
-- [レポート](/ambercast/ja/reference/reports/)
-- [エラーコード](/ambercast/ja/reference/error-codes/)
-- [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)
+## ページの証跡は再利用の前に伏せられる {#page-evidence-boundary}
 
-## ページエビデンスは再利用前にリダクションされる {#page-evidence-boundary}
+ambercastは、アクセシビリティツリーの文字列とキーに含まれる解決済みのシークレットの値を、送信または保存する前に伏せる。スクリーンショットの画素は伏せない。AIに渡すスナップショットには、スクリーンショットのバイト列を含めない。
 
-ライブページの観測結果が、無制限にプロバイダーへの入力となったり、そのまま永続的なエビデンスとなったりすることはありません。
+実行中に失敗したステップの証跡は、伏せたアクセシビリティデータを使う。シークレットが含まれるか不確かなときは、スクリーンショットを撮らない。
 
-AIアダプターへ渡されるスナップショットでは、スクリーンショットのバイトデータが除外され、AIアダプターの境界を越える前に、アクセシビリティツリーの文字列およびオブジェクトキーから解決済みシークレット値がリダクションされます。
+伏せるのは、再生が知っているシークレットと実行状態の値だけだ。ページ由来の個人情報は、`actual` のテキスト、スナップショット、スクリーンショット、canvas、画像、CSSで描いた画素に残りうる。スキャンからスクリーンショットまでの時間差でも残りうる。保存したレポートと証跡は機微な情報として扱い、アクセスと保持期間を絞る。
 
-失敗したライブステップのエビデンスはリダクション済みのアクセシビリティデータを使用し、シークレットの存在が不確実な場合はスクリーンショットのキャプチャに対して安全ではない（unsafe）ものとして扱います。
+関連リンク: [計画におけるシークレット](/ambercast/ja/spec/secrets/)、[レポート](/ambercast/ja/reference/reports/)
 
-リダクションの対象は、解決済みシークレットおよびリプレイが把握している実行状態の値（run-state values）です。一方で、`actual` のテキスト、アクセシビリティスナップショット、スクリーンショット、canvas、画像、CSSレンダリングされたピクセル、あるいはスキャンからスクリーンショット取得までのタイミング差（scan-to-screenshot timing gap）に起因する、ページ由来の任意の個人データが除去されることは保証されません。永続化されたレポートやエビデンスは機密情報として扱い、アクセスおよび保持期間を制限してください。
+## シークレットの書き込み先は検査される {#secret-sink-boundary}
 
-関連情報:
-- [プランにおけるシークレット](/ambercast/ja/spec/secrets/)
-- [レポート](/ambercast/ja/reference/reports/)
+ブラウザーへの書き込みは、プロセスの環境の境界に頼らない。書き込み先のオリジンごとに検査する。`fill-secret` のトレースアクションは、シークレットを解決し、ブラウザーと結び付ける前に、エントリごとの書き込み先オリジンを確かめる。
 
-## シークレットシンクによるブラウザ入力のゲート処理 {#secret-sink-boundary}
+関連リンク: [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)、[設定](/ambercast/ja/reference/configuration/)
 
-プロバイダープロセスの環境フィルタリングとは別に、ブラウザオリジンの境界も区別して管理されます。
+## シークレットの名前空間はプロバイダーに渡らない {#secret-boundary}
 
-`fill-secret` トレースアクションでは、シークレットの解決およびブラウザへのバインディングを行う前に、エントリごとのシンクオリジンゲート（sink-origin gate）が適用されます。
+設定したAIプロバイダーは、ambercastが管理するシークレットの名前空間にアクセスできない。プロバイダーの子プロセスには、環境変数のコピーを渡す。このコピーから `AMBERCAST_SECRET_*` と `AMBERCAST_ENV_*` を、大文字小文字を区別せずに除く。
 
-関連情報:
-- [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)
-- [設定](/ambercast/ja/reference/configuration/)
+シークレットの検証、ジェネレーターのポリシー、レポートの伏せ字処理は、別々の役割を持つ。スキーマだけでは、秘匿を保証できないからだ。
 
-## プロバイダー子プロセスからのambercast管理シークレット名前空間の除外 {#secret-boundary}
+シークレットの値は、実行時に `AMBERCAST_SECRET_<NAME>` から解決する。プロバイダーが見るのは名前だけで、値は見ない。ただし、説明的な名前が無害とは限らない。承認する前に、提案された名前を確かめる。
 
-設定されたプロバイダーに対して、ambercastが管理するシークレットの名前空間が委ねられることはありません。
-
-プロバイダーの子プロセスには環境変数のコピーが渡されますが、大文字小文字を区別しない一致判定を用いて `AMBERCAST_SECRET_*` および `AMBERCAST_ENV_*` が除外されます。
-
-本設計では、機密性の証明をスキーマ単独に依存するのではなく、シークレットの検証、ジェネレーターポリシー、そしてレポートのリダクションのそれぞれに異なる役割を割り当てています。
-
-シークレット値は実行時に `AMBERCAST_SECRET_<NAME>` からのみ解決されます。プロバイダーには値ではなく名前が渡されるため、値の開示は回避されますが、説明的な名前まで無害になるわけではありません。提案された名前は承認前にレビューしてください。
-
-関連情報:
-- [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)
-- [環境変数](/ambercast/ja/reference/environment-variables/)
-- [セキュリティポリシー](/ambercast/ja/reference/security-policy/)
+関連リンク: [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)、[環境変数](/ambercast/ja/reference/environment-variables/)、[セキュリティポリシー](/ambercast/ja/reference/security-policy/)
 
 ---
 
 # CIにおける決定性
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/determinism-in-ci/
 
-CI環境における ambercast の振る舞いは、明確に定義された信頼境界に基づいています。CIのパイプラインで検査ゲートとして機能させるため、システムは構造的なレベルで読み取り専用の境界を設けています。
+CIでは、検査が副作用を持たない。書き込むのは、既定では実行レポートと閉じた証跡だけだ。修復は既定で断り、混在した結果は最も強い問題を示す1つの終了コードで返す。
 
-## 読み取り専用の検査は構造的である {#read-only-check}
+## 読み取り専用の検査 {#read-only-check}
 
-`check` を検査ゲートとして使用できる理由は、その依存関係の構造にあります。
+`check` は、AIエグゼキューター、ブラウザー、シークレット、クロック、イベントのどれにも触れられない。ストレージへのアクセスも読み取り専用だ。読み取り専用であることは、慣習ではなく構造で保証される。
 
-検査処理を担う `CheckDeps` は、`ReadStorageAdapter`、レイアウト解決、探索、選択された設定、および任意の abort signal のみを公開します。AI エグゼキューター、ブラウザードライバー、シークレット、クロック、イベントポートは意図的に除外されており、コード上でもそれらの不在が読み取り専用の境界として定義されています。
+プロンプト、計画（plan）、グラウンディング、孤立した成果物の検出には、読み取りと存在確認があれば足りる。
 
-ストレージ機能自体も明示的に読み取り専用です。プロンプト、プラン、グラウンディングコンパニオン、および孤立した検出結果に対しては、読み取りと存在確認だけで十分に対応できます。
+関連リンク: [ambercast check](/ambercast/ja/reference/cli/check/#read-only-contract)、[計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#fresh-plan-decision)
 
-関連情報:
-- [ambercast check](/ambercast/ja/reference/cli/check/#read-only-contract)
-- [プランのライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#fresh-plan-decision)
+## 再生の書き込みは限られる {#bounded-side-effects}
 
-## リプレイの永続化範囲は限定されている {#bounded-side-effects}
+`run` が実行レポートのJSONを書く先は、その呼び出しのレポートパスだけだ。書く前に、エンベロープを `persisted` として確定させる。書き込みに成功した場合、ファイルは返したエンベロープと同じ内容になる。
 
-リプレイの実行時には、エビデンスの記録とソースアーティファクトの変更が区別されます。
+書き込みに失敗すると、`run` は `reportPersistence: "failed"` のエンベロープを返す。このとき、終了コードが0だったはずの実行だけが3になる。1、2、4、5は通常そのまま残る。`not-attempted` は書き込みを試していないことを、`failed` は途中までの内容が見える状態で残っていないことを表す。
 
-run コマンドは、まず `persisted` とマークされたエンベロープを確定し、その JSON を当該呼び出しの実行レポートパスにのみ書き込みます。この書き込みが失敗した場合、run は `reportPersistence: "failed"` を持つエンベロープを返します。この条件では、成功したバッチであっても終了コード 3 となります。
+CIでのグラウンディングの書き戻しは、`--update-cache` か `ci.updateGroundingCache: true` を指定したときだけ行う。詳しくは[設定](/ambercast/ja/reference/configuration/#grounding)にある。
 
-エンベロープの状態において、`reportPersistence: "not-attempted"` は永続化の書き込みが試行されなかったことを意味し、`failed` はターゲットパスに部分的なコンテンツが一切可視化されなかったことを意味します。
+関連リンク: [レポート](/ambercast/ja/reference/reports/#persistence)、[ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
 
-関連情報:
-- [レポート](/ambercast/ja/reference/reports/#report-persistence)
-- [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
+## CIでは既定でヒーリングを断る {#heal-refusal}
 
-## CI環境での修復は既定で拒否される {#heal-refusal}
+`--list` 以外の `heal` は、`ci.heal` が true でない限り、CIでは設定エラーで断る。`heal --list` は、書き込まない探索のまま使える。
 
-CI パイプラインにおいて、修復処理がアーティファクトを通知なく変更することはありません。
+ヒーリングは、計画とグラウンディングの候補を非公開の領域にためる。実ファイルへ書くのは、`ambercast heal` の確認プロンプトに答えたあと、または `--yes` で事前に答えたあとだけだ。一方、再生の試行は、`--dry-run` でもrunsディレクトリ下のケースのディレクトリに閉じた証跡を書くことがある。
 
-CI 環境における実際の `heal` 呼び出しは、`config.ci.heal` が true でない限り設定エラーを送出します。この CI 拒否の判定はリストモードの短絡評価の後に評価されるため、`heal --list` は書き込みを行わない探索操作のままとなります。
+関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#ci)、[ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
 
-修復処理では、プランとグラウンディングコンパニオンのみをプライベートなオーバーレイにバッファリングします。確認の前、または `--dry-run` の実行中であっても、リプレイの試行によってケース実行ディレクトリ配下に限定されたエビデンスが書き込まれることはあります。
+## 最も強い問題が終了コードになる {#exit-priority}
 
-バッファリングされたコンパニオン候補から実際のアーティファクトの書き込みに至るルートは、その後のコミット機能のみです。
+結果が混在すると、終了コードは最も強い候補になる。優先順位は `2 > 3 > 4 > 1 > 5 > 0` で固定だ。反復の順序にも、候補の重複にも左右されない。
 
-関連情報:
-- [ambercast heal](/ambercast/ja/reference/cli/heal/#ci)
-- [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
-
-## 1つのプロセスステータスが最も強いブロッカーを表す {#exit-priority}
-
-混合した結果が存在する場合でも、プロセスステータスは1つの値として決定されます。
-
-終了ステータスのセレクターは、イテレーション順序や重複した候補とは無関係に、最も強い候補を選択します。
-
-モジュール読み込み時のアサーションが無効な順位テーブルを拒否し、この選択ルールを実行時不変条件として維持します。
-
-関連情報:
-- [終了コード](/ambercast/ja/reference/exit-codes/#priority)
-- [オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)
-- [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
 
 ---
 
 # ambercastの比較
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/comparison/
 
-ambercastと他のテスト自動化アプローチを比較する際、機能の網羅的な一覧表を作成したり、特定のツールを推奨したり、機能の同等性を主張したりするのではなく、それぞれの根底にある設計モデルの違いに注目することが重要です。コード生成ツールがブラウザ操作の記録からテストコードを生成するのに対し、ambercastはプロンプトテキストを正規化し、プランの出所（provenance）を導出して検証済みの `PlanDocument` を構築します。特定のツールにロックインされないテスト資産を優先する設計思想に基づき、テスト資産をどのように定義し管理するかという観点から各アプローチの設計モデルを比較します。
+テスト自動化の手法を比べるなら、機能表より、何をテストの資産として残すかを見るほうがよい。ambercastはプロンプトを正本とし、計画（plan）はそこから導く。コード生成、記録と再生、直接操作するエージェントは、それぞれ別のものを残す。
 
-## コード生成は記録されたインタラクションから始まる {#code-generation-model}
+## コード生成は記録した操作から始まる {#code-generation-model}
 
-テストコード生成のアプローチでは、ブラウザ上で実行されたインタラクションの記録が処理の起点となります。Playwrightのドキュメントでは、`codegen` はブラウザでの操作を記録し、ユーザーがエディタへコピーして利用するためのコードを生成するものとして説明されています。このモデルでは、記録されたブラウザ操作がそのままテストコードのスクリプトとして出力されます。
+コード生成の手法では、テストの資産は取り込んだ操作から生まれる。Playwrightは、codegenがブラウザー操作を記録し、エディターに貼るコードを生成すると説明している。この手法では、資産は特定のランナー向けのスクリプトになる。
 
-これに対し、ambercastの設計方針では、特定のツールにロックインされないテスト資産を優先しています。ambercastにおける生成処理では、プロンプトのテキストを正規化し、プランの出所（provenance）を導出した上で、検証済みの `PlanDocument` を構築します。操作の記録から生成されたソースコードそのものを成果物とするのではなく、正規化されたプランを導出することで、ツールに依存しないテスト資産を形成します。
+ambercastは、間に中間成果物を置く。プロンプトを正規化し、計画の来歴を導き、検証済みの計画を作る。設計の理由は、特定のツールに縛られない資産を優先することにある。
 
-関連情報:
-- [設計思想](/ambercast/ja/philosophy/)
-- [プランのライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/)
+関連リンク: [設計思想](/ambercast/ja/philosophy/)、[計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/)
 
-## 記録されたテストは観測されたインタラクションを保持する {#record-and-replay-model}
+## 記録と再生は観測した操作を残す {#record-and-replay-model}
 
-Record & Replay型のモデルでは、実行時に観測された実際の操作手順をそのまま保持します。Cypressのドキュメントでは、Studioは実際のインタラクションを記録し、それらをテストコマンドへと変換するものとして説明されています。このアプローチでは、観測された一連の操作がそのまま固定化されたテストコマンドの列となります。
+記録と再生の手法は、ブラウザーのセッションで行った操作をそのまま残す。CypressのStudioは、実際の操作を記録し、テストコマンドに変えると説明している。この手法では、記録したスクリプトがテストスイートの中の資産になる。
 
-一方、ambercastでは、明示的な意図と、置き換え可能なグラウンディング（grounding）を分離して扱います。`PlanDocument` は `inputsDigest` を記録する一方、グラウンディングは別個に `planDigest` にバインドされるため、両者の出所契約（provenance contracts）は明確に分離されています。観測された操作手順をそのまま固定化するのではなく、意図を表すプランと実行時の要素解決を行うグラウンディングのライフサイクルを独立させる設計をとっています。
+ambercastでは、意図と要素の対応を別の契約で持つ。計画は `inputsDigest` を記録し、グラウンディングは `planDigest` に結び付く。導いた計画と、実行時に要素を指すグラウンディングは、別々に更新できる。
 
-関連情報:
-- [リプレイとグラウンディング](/ambercast/ja/explanation/replay-and-grounding/)
-- [設計思想](/ambercast/ja/philosophy/)
+関連リンク: [再生とグラウンディング](/ambercast/ja/explanation/replay-and-grounding/)、[設計思想](/ambercast/ja/philosophy/)
 
-## 直接操作型エージェントは現在のセッションに基づいて動作する {#direct-driving-agent-model}
+## 直接操作するエージェントは今のセッションで動く {#direct-driving-agent-model}
 
-ブラウザを自律的に操作する直接操作型エージェント（direct-driving agent）のモデルでは、現在のセッション情報に基づいて判断と実行が行われます。一般的な直接操作型エージェントのモデルでは、スクリーンショットやライブのツール呼び出しを使用し、ambercastと同等のコミットされたプランやグラウンディングのアーティファクトを生成しない可能性があります。ただし、この点が特定のあらゆるエージェント製品に当てはまるかどうかは未確認です。
+ブラウザーを直接操作するエージェントは、開いているセッションの中で動く。画面のスクリーンショットとライブのツール呼び出しだけで動き、コミットできる計画やグラウンディングを残さないことがある。
 
-対照的に、ambercastで生成されるプランは、スキーマ検証（schema validation）を経た正規化されたステップと、プロデューサバンドルのフィンガープリント（producer-bundle fingerprint）を保持します。リアルタイムにブラウザを駆動するループだけに依存するのではなく、スキーマ検証済みの構造化された成果物を保持することにより、人間によるレビューやバージョン管理システムへのコミットが可能なテスト資産として管理できます。
+ambercastは、確認してコミットした成果物に頼る。計画はプロデューサーバンドルのフィンガープリントと、スキーマで検証したステップを持つ。実行する前にこれらを作って検証するので、読めて検査できる成果物が手元に残る。
 
-関連情報:
-- [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)
-- [トラストとセキュリティ](/ambercast/ja/explanation/trust-and-security/)
+関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[トラストとセキュリティ](/ambercast/ja/explanation/trust-and-security/)
 
 ---
 
 # ステータスとロードマップ
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/status-and-roadmap/
 
-ambercastの現在の実装境界を明確にし、実装済みの機能と今後の計画を区別して説明します。現行バージョンのCLIパーサーの公開コマンドとプラン再生成の要件を整理し、現時点でのツールの境界を把握できるようにします。
+現行のCLIは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを持つ。`review` とbaseline/restoreは計画中だ。1.0より前は、鮮度の入力が変わると計画（plan）の再生成が必要になる。
 
 ## 現行リリースで実装済み {#implemented}
 
-CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` を公開しています。MCP サブコマンドは stdio で 6 ツールを提供します。
+CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを公開している。`ambercast mcp` は、stdio上で6つのツールを提供する。
 
-また、0.3.1 ではプロデューサ契約のフィンガープリントが変更されました。これにより、プロデューサバンドルおよび `inputsDigest` がstale（古くなった状態）になるため、0.3.1 では 0.1.0 のプランの再生成が必要です。
+ブラウザーはChromiumだけに対応する。
 
-関連情報:
-- [CLIの概要](/ambercast/ja/reference/cli/overview/)
-- [互換性と再生成](/ambercast/ja/reference/compatibility/)
-- [変更履歴](/ambercast/ja/reference/changelog/)
+1.0より前は、マイナーリリースにも破壊的変更が入りうる。計画のスキーマやプロデューサー契約のように鮮度の入力が変わると、既存の計画の再生成が必要になる。レポートのスキーマだけが変わる場合は、レポートの利用側の更新だけが必要だ。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
 
-## 現行境界以降の計画 {#planned-after-current-boundary}
+関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[互換性と再生成](/ambercast/ja/reference/compatibility/)、[変更履歴](/ambercast/ja/reference/changelog/)
 
-`review`、baseline/restore は引き続き計画中です。MCP ツールは利用できます。
+## 現行の範囲より後の計画 {#planned-after-current-boundary}
 
-また、ブラウザ対応に関しては、1.0までにFirefoxとWebKitが計画されています。
+`review` と、baseline/restoreは計画中だ。ブラウザーは、FirefoxとWebKitへの対応を計画している。クラウド版も計画している。MCPツールは、すでに使える。
 
-関連情報:
-- [ambercast review](/ambercast/ja/reference/cli/review/)
-- [MCP サーバー](/ambercast/ja/agents/mcp-server/)
+関連リンク: [ambercast review](/ambercast/ja/reference/cli/review/)、[MCPサーバー](/ambercast/ja/agents/mcp-server/)
 
 ## バージョン方針 {#version-policy}
 
-現在公開されているパッケージバージョンは[互換性テーブル](/ambercast/ja/reference/compatibility/#compatibility-table)に記載しています。
+公開済みのパッケージバージョンは、[互換性テーブル](/ambercast/ja/reference/compatibility/#compatibility-table)にまとめている。製品は、MVPまで0.x系にとどまる。
 
-プロダクトの方針として、0.x の間はCLIのみを提供し、クラウド版とともに 1.0.0 をリリースします。
-
-関連情報:
-- [変更履歴](/ambercast/ja/reference/changelog/)
-- [設計思想](/ambercast/ja/philosophy/)
+関連リンク: [変更履歴](/ambercast/ja/reference/changelog/)、[設計思想](/ambercast/ja/philosophy/)
 
 ---
 

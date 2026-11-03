@@ -1,30 +1,30 @@
 ---
 title: ambercast 的设计模型对比
-description: 对比 ambercast 与代码生成、录制测试及直接驱动型 Agent 的核心设计模型。
+description: ambercast 把自然语言提示词作为测试本身，并由它派生出经过审阅的执行计划，而其他模型保留的是脚本或实时会话。
 ---
 
-在评估端到端测试方案时，考察其背后的设计模型往往比单纯对比功能更有价值。ambercast 的设计重点在于优先考虑不绑定于特定工具的测试资产。通过规范化提示词文本、推导计划来源并构建经过校验的 PlanDocument，ambercast 将测试的核心意图转化为独立的衍生计划，这与代码生成、录制回放以及直接驱动型 Agent 所依托的设计模型有着明确的区别。
+比较测试方法时，应看各自把什么作为测试产物保留下来，而不是比较功能清单。ambercast 以提示词为源，执行计划由它派生。代码生成、录制回放和直接操作的代理，保留的是别的东西。
 
-## 代码生成始于录制交互 {#code-generation-model}
+## 代码生成始于录制的交互 {#code-generation-model}
 
-Playwright 将 `codegen` 阐述为录制浏览器操作并生成代码，供用户复制到编辑器中。在该模型下，生成的产物直接体现为特定运行环境下的测试源代码，测试逻辑与具体的测试框架实现紧密交织。
+在代码生成模型中，测试产物来自捕获的交互。Playwright 文档把 codegen 描述为录制浏览器操作，并生成可复制到编辑器的代码。这时的产物是针对某个运行器编写的脚本。
 
-与之相对，ambercast 的设计考量优先关注不锁定于特定工具的测试资产。在生成阶段，ambercast 会规范化提示词文本，推导计划来源，并构建经过校验的 PlanDocument。测试意图借此被沉淀为结构化的衍生计划，而非直接捆绑在某一个具体工具的代码脚本中。
+ambercast 在中间放了一层产物：它先规范化提示词，派生执行计划的出处，再构建经过校验的执行计划。这样的设计倾向于不绑定特定工具的产物。
 
-相关链接：[设计哲学](/ambercast/zh-cn/philosophy/)、[计划生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)
+相关链接：[设计哲学](/ambercast/zh-cn/philosophy/)、[执行计划的生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)
 
-## 录制测试保留观察到的交互 {#record-and-replay-model}
+## 录制回放保留观察到的交互 {#record-and-replay-model}
 
-在 Cypress 的文档中，Studio 被描述为录制真实交互并将其转换为测试命令。传统的录制回放模型侧重于保留所观察到的操作步骤，并将其转换为连续的测试命令。
+录制回放工具保留在浏览器会话中执行的操作。Cypress 文档把 Studio 描述为录制真实交互，并把它们转换成测试命令。录制下来的脚本就成为测试套件中的产物。
 
-ambercast 则将明确的意图与可替换的交互定位区分开来。在 ambercast 中，PlanDocument 记录 inputsDigest，而 grounding 则独立绑定至 planDigest，因此两者的来源契约是相互独立的。这种分离使测试所声明的意图不会直接与某次观察到的具体界面定位强行绑定。
+ambercast 把意图和元素绑定放在不同的契约下。执行计划记录 `inputsDigest`，定位缓存则绑定到 `planDigest`。因此，派生的执行计划和负责定位元素的定位缓存可以分别变化。
 
-相关链接：[重放与 grounding](/ambercast/zh-cn/explanation/replay-and-grounding/)、[设计哲学](/ambercast/zh-cn/philosophy/)
+相关链接：[回放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/)、[设计哲学](/ambercast/zh-cn/philosophy/)
 
-## 直接驱动型 Agent 基于当前会话行动 {#direct-driving-agent-model}
+## 直接操作的代理依赖当前会话 {#direct-driving-agent-model}
 
-直接驱动型 Agent 通常依赖当前会话中的即时交互进行动态操作。一般的直接驱动型 Agent 模型可能会使用屏幕截图和实时工具调用，而不生成与 ambercast 等效的、已提交的计划与 grounding 资产；不过，这一特征是否适用于所有具体的 Agent 产品，目前尚未确认。
+直接操作的代理在实时浏览器会话中工作。它可能依据截图和实时工具调用行动，并且可能不留下已提交的执行计划或定位缓存。
 
-相比之下，ambercast 在完成 Schema 校验后，生成的计划会明确携带 producer-bundle 指纹以及规范化步骤。它并不在每次测试执行时依赖实时的会话驱动循环，而是产出可供审查与提交的固定测试资产。
+ambercast 则依赖经过审阅并提交的产物。执行计划带有生成器捆绑包指纹和经过模式校验的步骤。由于 ambercast 在执行前就构建并校验这些内容，你得到的是可阅读、可检查的产物。
 
 相关链接：[在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)、[信任与安全](/ambercast/zh-cn/explanation/trust-and-security/)

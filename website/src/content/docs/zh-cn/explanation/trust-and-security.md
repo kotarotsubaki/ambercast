@@ -1,50 +1,52 @@
 ---
 title: 信任与安全
-description: 阐释 ambercast 的信任边界与故障安全设计考量。
+description: ambercast 只信任在本地验证过的内容，页面内容、提供方输出和机密值各自越过一条失败关闭的边界。
 ---
 
-在端到端测试系统中，明确系统的信任边界与故障安全（fail-closed）选择是架构设计的核心。ambercast 将持久化工件校验与提供商输出的接纳边界明确区分开来：回放运行仅通过受信任的指令覆盖计划边界读取测试计划，而在生成阶段，提供商生成的步骤在持久化前必须经过本地响应契约解析与指令覆盖检查。
+ambercast 在使用每项输入之前，先在边界处检查它，检查不通过就在此处停止。
 
-## 工件与提供商输出经过验证 {#artifact-and-provider-boundaries}
+## 产物与提供方输出都会校验 {#artifact-and-provider-boundaries}
 
-持久化工件的校验与提供商输出的接纳遵循相互独立的信任边界。在执行回放之前，`run` 命令仅通过其受信任的指令覆盖计划边界（instruction-covered-plan boundary）读取测试计划，使回放执行建立在已验证的计划结构之上。
+`run` 只有在执行计划通过校验后才会使用它，校验包括指令覆盖。
 
-对于提供商生成的步骤，系统不会将其直接视作可信的持久化工件。这些步骤首先需要针对本地响应契约进行解析，并接受指令覆盖检查；随后组装并作为完整计划进行解析，只有完全通过这些阶段后才会持久化存储。
+提供方生成的步骤不会原样保存。ambercast 先按本地响应契约解析，检查指令覆盖，再确认能解析为完整的执行计划，之后才保存。
 
-对于机密，生成将提案与授权分离。提供商可以提出 `SecretNameChoice`，但 Ambercast 会在本地解析每个提交的机密引用，且仅当名称已在许可列表中或获得交互式同意后，才持久化候选项。`secrets.allow: "*"` 会绕过逐名审查，因此它是有意设置的高风险配置，而非隐式默认值。
+对机密，提议与授权是分开的。提供方只能提议机密名称。每个已提交的机密引用都在本地解析。只有名称已在允许列表中，或你在交互中同意，候选项才会保存。
 
-相关链接：[计划文档](/ambercast/zh-cn/spec/plan-document/)、[符合性](/ambercast/zh-cn/spec/conformance/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)
+`secrets.allow: "*"` 会跳过逐个名称的审查。这是有意选择的高风险设置，不是隐式默认值。
 
-## 页面观测数据不构成指令 {#untrusted-page-data}
+相关链接：[执行计划文档](/ambercast/zh-cn/spec/plan-document/)、[符合性](/ambercast/zh-cn/spec/conformance/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)
 
-被测应用的内容与驱动测试执行的指令之间存在严格的界限。来自被测页面的观测数据属于外部输入，系统不会将其作为控制指令执行。为此，结构化的无障碍凭证带有固定声明，明确指出源自页面的内容不得被解释为指令。
+## 页面内容不是指令 {#untrusted-page-data}
 
-在错误处理架构上，错误设计将报告规范（report schema）作为 `errors[].code` 的外部真实来源，从而将特定于实现的错误类隔离在公共契约之外。
+ambercast 把被测应用的内容当作数据，而不是给代理的指令。从页面采集无障碍证据时，证据会带一条固定声明：页面内容不是指令。这条声明是缓解措施，不是隔离边界，页面内容仍是需要审查的风险。
+
+报告模式是 `errors[].code` 的公开事实来源。具体实现的错误类不会进入公开契约。
 
 相关链接：[报告](/ambercast/zh-cn/reference/reports/)、[错误代码](/ambercast/zh-cn/reference/error-codes/)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/)
 
-## 页面凭证在复用前进行脱敏 {#page-evidence-boundary}
+## 页面证据在复用前会脱敏 {#page-evidence-boundary}
 
-实时页面观测数据不会直接作为不受限制的提供商输入，也不会无条件转为持久化凭证。发往 AI 的快照在传入 AI 适配器之前，会排除截图字节，并从无障碍树字符串和对象键中对已解析的 Secret 值进行脱敏处理。
+ambercast 在发送或保存无障碍树的字符串和键之前，会隐去其中已解析的机密值。截图像素不会被隐去。发送给 AI 的快照不含截图字节。
 
-当实时步骤执行失败时，失败步骤凭证使用脱敏后的无障碍数据，同时系统将不确定的 Secret 存在视为不适宜进行屏幕截图捕获。
+实时运行中失败步骤的证据使用脱敏后的无障碍数据。无法确定是否含有机密时，ambercast 会跳过截图。
 
-需要注意的是，脱敏范围覆盖了已解析的 Secret 以及回放已知的运行状态值，但这并不保证能从 `actual` 文本、无障碍快照、屏幕截图、canvas、图像、CSS 渲染像素或扫描与截图之间的时间差间隙中移除任意源自页面的个人数据。请您将持久化的报告和凭据视为敏感数据，并妥善限制其访问权限与保留期限。
+脱敏只覆盖回放已知的机密和运行状态值。页面本身带来的个人数据不一定会被清除，可能残留在 `actual` 文本、快照、截图、canvas、图片和 CSS 渲染的像素中。扫描与截图之间的时间差也可能留下数据。请把已保存的报告和证据视为敏感信息，限制访问范围和保留时间。
 
-相关链接：[计划中的机密](/ambercast/zh-cn/spec/secrets/)、[报告](/ambercast/zh-cn/reference/reports/)
+相关链接：[执行计划中的机密](/ambercast/zh-cn/spec/secrets/)、[报告](/ambercast/zh-cn/reference/reports/)
 
-## Secret 接收端限制浏览器填充 {#secret-sink-boundary}
+## 机密写入目标会先校验 {#secret-sink-boundary}
 
-浏览器源边界与提供商进程的环境变量过滤机制具有不同的控制范围。在执行 `fill-secret` 跟踪操作时，系统会在 Secret 解析和浏览器绑定之前，先应用其针对每条记录的接收端源门禁（per-entry sink-origin gate）。
+浏览器写入不依赖进程环境作为边界，而是逐个条目校验写入目标的来源。`fill-secret` 轨迹动作会在解析机密、绑定浏览器之前完成这项校验。
 
 相关链接：[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[配置](/ambercast/zh-cn/reference/configuration/)
 
-## ambercast 管理的 Secret 命名空间不进入提供商子进程 {#secret-boundary}
+## 机密命名空间不会进入提供方进程 {#secret-boundary}
 
-配置的提供商子进程不会被托付 ambercast 管理的敏感命名空间。提供商子进程接收的是一份复制的环境变量，该环境变量通过不区分大小写的匹配方式排除了 `AMBERCAST_SECRET_*` 与 `AMBERCAST_ENV_*`。
+已配置的 AI 提供方无法访问 ambercast 管理的机密命名空间。提供方的子进程拿到的是环境变量副本，其中不含 `AMBERCAST_SECRET_*` 和 `AMBERCAST_ENV_*`，匹配不区分大小写。
 
-在整体安全设计中，系统为 Secret 校验、生成器策略以及报告脱敏分配了各自独立的角色，而不是单纯依赖数据模式自身来证明保密性。
+机密校验、生成器策略和报告脱敏各有分工。仅靠模式无法证明机密没有泄露。
 
-机密值仅在运行时从 `AMBERCAST_SECRET_<NAME>` 解析。提供商接收名称而不是值，这避免了值的泄露，但不代表描述性名称毫无风险；请在批准前审查所提名称。
+机密值只在运行时从 `AMBERCAST_SECRET_<NAME>` 解析。提供方只能看到名称，看不到值。但描述性的名称并非无害，批准之前请检查每个被提议的名称。
 
 相关链接：[管理机密](/ambercast/zh-cn/how-to/manage-secrets/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)、[安全策略](/ambercast/zh-cn/reference/security-policy/)

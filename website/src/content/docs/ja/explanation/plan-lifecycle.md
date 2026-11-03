@@ -1,58 +1,64 @@
 ---
-title: プランのライフサイクルと鮮度
-description: アーティファクトがリプレイ可能かどうかを判断するための来歴と鮮度判定の仕組みを解説します。
+title: 計画のライフサイクルと鮮度
+description: 計画が再生できる状態かどうかを、`check` が何も実行せずに判定する仕組みを説明する。
 ---
 
-アーティファクトをリプレイできるかどうかを判断する際には、そのプランが持つ来歴（Provenance）と鮮度（Freshness）の確認が必要です。ambercastでは、プロンプトテキストやスキーマバージョン、テンプレートやプロデューサバンドルのフィンガープリント、ターゲット定義といった入力要素一式をもとに来歴を特定し、プランが現在の状態に対して有効であるかを判定します。
+計画（plan）を再生できるのは、生成時の入力と今も一致し、グラウンディングが計画に結び付いているときだけだ。`check` はまず鮮度を判定し、`fresh` の計画に限ってグラウンディングを調べる。`stale` の計画には、グラウンディングの状態が付かない。
 
-## 来歴の入力要素 {#provenance-inputs}
+## 来歴の入力 {#provenance-inputs}
 
-プランの来歴は、`inputsDigest` によって保護される入力セット全体によって定義されます。`inputsDigest` は、正規化されたプロンプトテキスト、Planスキーマのバージョン、generator-template（ジェネレーターテンプレート）のフィンガープリント、`producerBundleFingerprint`（プロデューサバンドルのフィンガープリント）、および名前付きターゲット定義を含む正規化JSON（canonical JSON）のSHA-256ハッシュです。
+`inputsDigest` は、計画が何から作られたかを表すSHA-256の値だ。次の入力を正規化JSONにまとめて計算する。
 
-この構造により、プロンプトテキストやターゲット定義に変更がない場合であっても、Planスキーマやgenerator-templateに変更があれば、既存のプランはstale（古くなった状態）になります。
+- 正規化したプロンプト
+- 計画のスキーマバージョン
+- 生成テンプレートのフィンガープリント
+- プロデューサーバンドルのフィンガープリント（`producerBundleFingerprint`）
+- 計画が参照するターゲットの定義（計画の `targets` に挙げた名前を、名前順に並べる）
 
-また、`producerBundleFingerprint` はテンプレートのフィンガープリントから独立しています。プロンプト、スキーマ、テンプレートのバイト列に変更がない場合でも、プロデューサのコントラクト（producer-contract）の変更によって生成結果が変わる可能性があるためです。
+参照していないターゲットを変えても、ダイジェストと鮮度は変わらない。`executor` はハッシュに入らない。
 
-関連リンク:
-- [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)
-- [設定](/ambercast/ja/reference/configuration/#targets)
-- [互換性と再生成](/ambercast/ja/reference/compatibility/)
+プロンプトが同じでも、スキーマ、テンプレート、プロデューサー契約のどれかが変わると、計画は `stale` になる。プロデューサーバンドルのフィンガープリントは、テンプレートのものとは別に持つ。契約が変わっただけでも、生成結果は変わりうるからだ。
 
-## プラン鮮度の判定 {#fresh-plan-decision}
+関連リンク: [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)、[設定](/ambercast/ja/reference/configuration/#targets)、[互換性と再生成](/ambercast/ja/reference/compatibility/)
 
-プランが現在も有効であるかどうかの鮮度判定は、`check` コマンドにおける比較処理によって確立されます。`check` は正規化されたプロンプトテキストと選択されたターゲット定義から現在の来歴情報を導出し、それをプラン内に記録されている `plan.source.inputsDigest` と比較します。
+## 鮮度の判定 {#fresh-plan-decision}
 
-ダイジェスト値が一致した場合は `fresh` と判定されます。一方でダイジェスト値が不一致となった場合は、現在のプロンプトまたはターゲットに対してプランがstale（古くなった状態）であるという理由とともに、`stale` という結果が返されます。
+`check` は、現在のプロンプトと計画が参照するターゲットの定義から `inputsDigest` を計算し直し、`plan.source.inputsDigest` と比べる。一致すれば `fresh`、一致しなければ `stale` を返す。
 
-また、入力ダイジェストの不一致だけでなく、無効なJSON、スキーマ検証の失敗、非正規化シリアライズ、あるいは無効な命令カバレッジ（invalid instruction coverage）が検出された場合にも、信頼できるフレッシュな結果ではなく `stale` と判定されます。
+`stale` になる原因は、ダイジェストの不一致だけではない。次の場合も `stale` になる。
 
-関連リンク:
-- [ambercast check](/ambercast/ja/reference/cli/check/#results)
-- [stale（古くなった状態）のアーティファクトの復旧](/ambercast/ja/how-to/recover-stale-artifacts/#stale)
+- JSONが不正である
+- スキーマ検証に失敗する
+- シリアライズが正規形でない
+- 命令カバレッジが不正である
+- 要素の意図（intent）またはソーススパンが不正である
+- 廃止された計画の `schemaVersion`（4）を使っている
+- 計画の参照先ターゲットが設定に見つからない
 
-## グラウンディングのバインドと1対1の対応関係 {#grounding-binding}
+構造が壊れた計画を、`fresh` と報告しないためだ。
 
-フレッシュなプランが存在することと、有効なリプレイ用のコンパニオンが存在することは明確に区別されます。`planDigest` は、`generatorMeta` を除外した上で、リプレイに関連するプラン内容をハッシュ化した値です。グラウンディング（grounding）は、そこに記録されている `planDigest` が計算されたプランダイジェストと等しい場合にのみ有効（current）と見なされます。
+関連リンク: [ambercast check](/ambercast/ja/reference/cli/check/#results)、[古くなった成果物の復旧](/ambercast/ja/how-to/recover-stale-artifacts/#stale)
 
-プラン自体がフレッシュであっても、コンパニオンとなるグラウンディングが存在しないときは `missing-grounding`、無効であるときは `invalid-grounding`、別のプランにバインドされているときは `stale-grounding` として `check` により報告されます。
+## グラウンディングの結び付き {#grounding-binding}
 
-リポジトリのポリシーが `uncommitted` である場合、有効なグラウンディングを持たないフレッシュなプランは、プラン自体の鮮度エラーではなく `fresh-without-grounding` として報告されます。
+`fresh` な計画があっても、再生できるとは限らない。再生にはグラウンディングも要る。
 
-さらに、`check` はコンパニオンアーティファクトの逆スキャンも行います。対応するテストが存在しないアーティファクトが見つかった場合は `orphaned-plan` または `orphaned-grounding` として報告され、逆解決が不可能な名前を持つアーティファクトは `invalid-artifact-name` として報告されます。
+`planDigest` は、再生に関わる計画の内容から `generatorMeta` を除いてハッシュにした値だ。グラウンディングを現在のものと見なすのは、記録した `planDigest` と計画から計算した値が等しいときだけである。計画の鮮度と、グラウンディングの結び付きは、別々に判定する。
 
-関連リンク:
-- [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#plan-digest)
-- [レポート](/ambercast/ja/reference/reports/#check-results)
+`check` は、グラウンディングが無ければ `missing-grounding`、不正なら `invalid-grounding`、別の計画に結び付いていれば `stale-grounding` と報告する。
+
+リポジトリのポリシーが `uncommitted` のときは、有効なグラウンディングの無い `fresh` な計画を `fresh-without-grounding` と報告する。これは鮮度の失敗ではない。
+
+`check` は逆向きにも走査する。対応するテストの無い成果物は `orphaned-plan` または `orphaned-grounding`、対応するテストを逆引きできない名前は `invalid-artifact-name` と報告する。
+
+関連リンク: [グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#plan-digest)、[レポート](/ambercast/ja/reference/reports/#check-results)
 
 ## 鮮度判定が引き渡すもの {#freshness-handoff}
 
-鮮度の検査は、修復手順を直接規定することなく、その後の実行処理へと連携します。`check` は読み取り専用ストレージに加え、レイアウトおよびディスカバリーの依存関係のみを使用します。その依存性コントラクトには、AIエグゼキューター、ブラウザードライバー、シークレット、クロック、イベントポートは公開されていません。
+`check` はAIを呼ばず、ブラウザーを起動せず、何も書き込まない。鮮度の判定結果は、計画が今の入力と合っているかどうかだけだ。
 
-プランがフレッシュであるという結論は来歴情報から導かれるものであり、グラウンディングの検査はプランの鮮度を再定義することなく、リプレイキャッシュのライフサイクルに関する証拠を追加します。
+再生中に起きる問題は、鮮度とは別に扱う。UIが変わって要素のフィンガープリントが合わなくなると、`fingerprint-mismatch` と分類される。これはドリフトという実行時の状態で、`inputsDigest` を変えない。
 
-リプレイ実行中に生じるドリフトは、鮮度とは切り離されたランタイム固有の状態です。要素フィンガープリントの解決によって `fingerprint-mismatch` が分類された場合、その情報は `inputsDigest` を変更するのではなく、リプレイのフォールバックや修復（healing）へと引き渡されます。
+再生かヒーリングが、この状態を引き継ぐ。
 
-関連リンク:
-- [リプレイとグラウンディング](/ambercast/ja/explanation/replay-and-grounding/#drift-handoff)
-- [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages)
-- [オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)
+関連リンク: [再生とグラウンディング](/ambercast/ja/explanation/replay-and-grounding/#drift-handoff)、[ヒーリングモデル](/ambercast/ja/explanation/healing-model/#three-stages)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)

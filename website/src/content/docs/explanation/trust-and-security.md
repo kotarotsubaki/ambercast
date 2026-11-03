@@ -1,50 +1,52 @@
 ---
 title: Trust and security
-description: Trust boundaries and fail-closed architectural choices across plan validation, page observations, evidence collection, and secret handling.
+description: ambercast trusts only what it has validated locally, and page content, provider output, and secret values each cross a boundary that fails closed.
 ---
 
-Ambercast defines explicit trust boundaries and fail-closed choices across plan validation, replay execution, page observations, and secret handling. During execution, run reads a plan only through its trusted instruction-covered-plan boundary before replay, establishing a strict separation between accepted execution inputs and unvalidated provider outputs.
+ambercast checks each input at a boundary before it uses it, and anything that fails the check stops there.
 
 ## Artifacts and provider output are validated {#artifact-and-provider-boundaries}
 
-Durable artifact validation and the provider-output acceptance boundary remain strictly separated. When executing a test, run reads a plan only through its trusted instruction-covered-plan boundary before replay.
+`run` uses a plan only after it passes plan validation, including instruction coverage.
 
-Provider-generated steps are not trusted directly into persistent storage. When steps are produced, they are parsed against the local response contract, subjected to instruction-coverage checks, and then assembled into and parsed as a complete plan before persistence.
+Steps that a provider generates are not saved as they arrive. ambercast parses them against the local response contract and checks instruction coverage. It saves them only after they parse as a complete plan.
 
-For secrets, generation separates proposal from authorization. The provider can propose a `SecretNameChoice`, but Ambercast resolves every committed secret reference locally and persists a candidate only after the name is already allowlisted or receives interactive consent. `secrets.allow: "*"` bypasses per-name review and is therefore a deliberate high-risk configuration, not an implicit default.
+For secrets, proposing and authorizing are separate. The provider can only propose a secret name. ambercast resolves every committed secret reference locally. It saves a candidate only when the name is on the allowlist or you give consent interactively.
 
-Links: [Plan document](/ambercast/spec/plan-document/), [Conformance](/ambercast/spec/conformance/), [Error codes](/ambercast/reference/error-codes/)
+`secrets.allow: "*"` skips the per-name review. It is a deliberate high-risk setting, never an implicit default.
 
-## Page observations are not instructions {#untrusted-page-data}
+Related: [Plan document](/ambercast/spec/plan-document/), [Conformance](/ambercast/spec/conformance/), [Error codes](/ambercast/reference/error-codes/)
 
-Content from a tested application cannot act as instructions for an agent. When ambercast captures structured accessibility evidence from a page, that evidence carries a fixed notice that page-derived content must not be interpreted as directives.
+## Page content is not an instruction {#untrusted-page-data}
 
-Public reporting contracts maintain this boundary at the interface level. The error design makes the report schema the external truth for `errors[].code`, keeping implementation-specific error classes out of the public contract.
+ambercast treats content from the application under test as data, not as an instruction to an agent. When it captures accessibility evidence from a page, the evidence carries a fixed notice that page content is not an instruction. The notice is a mitigation, not an isolation boundary, so page content stays a risk to review.
 
-Links: [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/reference/error-codes/), [Reading structured output](/ambercast/agents/reading-structured-output/)
+The report schema is the public source of truth for `errors[].code`. Implementation-specific error classes stay out of the public contract.
 
-## Page evidence is redacted before it is reused {#page-evidence-boundary}
+Related: [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/reference/error-codes/), [Reading structured output](/ambercast/agents/reading-structured-output/)
 
-Live observations from a tested page do not become unrestricted provider inputs or durable evidence. Before data crosses into the AI adapter, AI-bound snapshots exclude screenshot bytes and redact resolved secret values from accessibility-tree strings and object keys.
+## Page evidence is redacted before reuse {#page-evidence-boundary}
 
-When a step fails during live execution, failed-live-step evidence uses redacted accessibility data and treats uncertain secret presence as unsafe for screenshot capture.
+ambercast redacts resolved secret values from accessibility-tree strings and keys before it sends or saves that data. It does not redact screenshot pixels. Snapshots sent to the AI exclude screenshot bytes.
 
-Redaction covers resolved secrets and run-state values known to the replay, but it does not guarantee removal of arbitrary page-derived personal data from `actual` text, accessibility snapshots, screenshots, canvas, image, CSS-rendered pixels, or a scan-to-screenshot timing gap. Treat persisted reports and evidence as sensitive and restrict access and retention.
+Evidence for a step that fails during a live run uses redacted accessibility data. When it is uncertain whether a secret is present, ambercast skips the screenshot.
 
-Links: [Secrets in plans](/ambercast/spec/secrets/), [Reports](/ambercast/reference/reports/)
+Redaction covers the resolved secrets and run-state values that replay knows. It does not remove arbitrary personal data that comes from the page. That data can remain in `actual` text, snapshots, screenshots, canvas, images, and CSS-rendered pixels. A gap between the scan and the screenshot can also leave data behind. Treat persisted reports and evidence as sensitive, and limit who can access them and how long you keep them.
 
-## Secret sinks gate browser fills {#secret-sink-boundary}
+Related: [Secrets in plans](/ambercast/spec/secrets/), [Reports](/ambercast/reference/reports/)
 
-Browser sink interactions apply origin-specific gating rather than relying on process environment boundaries. A `fill-secret` trace action applies its per-entry sink-origin gate before secret resolution and browser binding.
+## Secret sinks are checked before a fill {#secret-sink-boundary}
 
-Links: [Manage secrets](/ambercast/how-to/manage-secrets/), [Configuration](/ambercast/reference/configuration/)
+Browser writes do not rely on the process environment as a boundary. ambercast checks the sink origin of each entry. A `fill-secret` trace action performs that check before it resolves the secret and binds the browser.
 
-## Ambercast-managed secret namespaces stay out of provider children {#secret-boundary}
+Related: [Manage secrets](/ambercast/how-to/manage-secrets/), [Configuration](/ambercast/reference/configuration/)
 
-Configured AI providers run without access to ambercast-managed secret namespaces. When spawning child processes for a provider, provider child processes receive a copied environment that excludes `AMBERCAST_SECRET_*` and `AMBERCAST_ENV_*`, using case-insensitive matching.
+## Secret namespaces stay out of provider processes {#secret-boundary}
 
-The design assigns secret validation, generator policy, and report redaction distinct roles rather than trusting a schema alone to prove secrecy.
+Configured AI providers run without access to the secret namespaces that ambercast manages. A provider child process receives a copy of the environment without `AMBERCAST_SECRET_*` and `AMBERCAST_ENV_*`. The match is case-insensitive.
 
-Secret values resolve only at runtime from `AMBERCAST_SECRET_<NAME>`. Providers receive names rather than values, which avoids value disclosure but does not make descriptive names harmless; review proposed names before approving them.
+Secret validation, generator policy, and report redaction each have their own role. A schema alone cannot prove that a value stayed secret.
 
-Links: [Manage secrets](/ambercast/how-to/manage-secrets/), [Environment variables](/ambercast/reference/environment-variables/), [Security policy](/ambercast/reference/security-policy/)
+Secret values resolve only at runtime, from `AMBERCAST_SECRET_<NAME>`. Providers see names, never values. A descriptive name is still not harmless, so review each proposed name before you approve it.
+
+Related: [Manage secrets](/ambercast/how-to/manage-secrets/), [Environment variables](/ambercast/reference/environment-variables/), [Security policy](/ambercast/reference/security-policy/)

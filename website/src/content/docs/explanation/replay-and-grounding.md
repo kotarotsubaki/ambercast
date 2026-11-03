@@ -1,46 +1,57 @@
 ---
 title: Replay and grounding
-description: Explain replay paths and their safety boundary.
+description: Replay reuses recorded grounding, so a fully covered run needs no AI call, and a miss either fails closed or is resolved live only with `--resolve`.
 ---
 
-Replay paths and their safety boundaries govern how test execution consumes cached grounding data. During a run, ambercast consumes grounding for AI steps and element-grounding step variants, allowing covered and valid AI traces to replay without resolving an AI executor.
+Replay reuses what ambercast recorded. Where the record is missing or unusable, replay stops unless you opt in to live resolution.
 
 ## Grounding as replay evidence {#grounding-as-replay-evidence}
 
-Run consumes grounding for AI steps and element-grounding step variants; navigation, text-visible, URL-match, and element-count variants have no grounding lookup. In an AI-directed replay, a covered, valid AI trace can replay without resolving an AI executor.
+`run` consumes grounding for `ai` steps and for element-binding steps: click, press, fill, fill-secret, and capture. Navigation and every assertion check the live page directly, without a grounding lookup.
 
-Element grounding stores an accessibility fingerprint, and resolution compares the stored algorithm and hash with a fresh fingerprint for the matched node. The resolver distinguishes a hit from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, and `snapshot-invalid`; a mismatch is not treated as a hit.
+An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
 
-Links: [Grounding document](/ambercast/spec/grounding-document/), [Element fingerprint](/ambercast/spec/fingerprint/), [ambercast run](/ambercast/reference/cli/run/#ai-calls)
+The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. A mismatch is never treated as a hit. `snapshot-invalid` and `secret-contaminated` abort the case.
 
-## Replay path: grounding hit {#grounding-hit}
+Replay then follows one of four paths:
 
-A covered-valid AI trace replays before any lazy agentic fallback is selected. A successful element classification supplies its stored fingerprint to the replay context rather than requesting a new live resolution.
+- A valid entry replays with zero AI calls.
+- An integrity failure fails closed, whether or not you pass `--resolve`.
+- A recoverable miss with `--resolve` is resolved live.
+- A recoverable miss without `--resolve` stops with `GROUNDING_UNRESOLVED` (exit 4).
 
-The run pipeline is designed so a complete cache can execute without probing a provider.
+Related: [Grounding document](/ambercast/spec/grounding-document/), [Element fingerprint](/ambercast/spec/fingerprint/), [ambercast run](/ambercast/reference/cli/run/#ai-calls)
 
-Links: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#bounded-side-effects)
+## When grounding hits {#grounding-hit}
 
-## Replay path: miss with explicit resolution {#miss-with-explicit-resolution}
+A covered, valid AI trace replays without resolving an AI executor. Replay takes this path before it considers any agentic fallback.
 
-Grounding that fails integrity validation, including invalid JSON or failed coverage or verification proof, fails closed regardless of `--resolve`. Only absent grounding and structurally valid legacy or recoverable entries are miss paths gated by `--resolve`; cache hits emit no AI-call event.
+When an element resolves as a hit, replay passes the stored fingerprint along and requests no new resolution. A complete cache runs without probing a provider, and a hit emits no AI-call event.
 
-With `--resolve`, an element grounding miss can resolve live and update the grounding entry with the resolved element fingerprint.
+Related: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#bounded-side-effects)
 
-Links: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
+## A miss with explicit resolution {#miss-with-explicit-resolution}
 
-## Replay path: unresolved miss {#unresolved-miss}
+Grounding that fails its integrity checks fails closed even with `--resolve`. Invalid JSON and a failed coverage or verification proof are examples.
 
-Without `--resolve`, run suppresses live resolution for both cold-start and recoverable misses. During an AI-directed replay, an AI-directed step with no usable trace fails closed as `grounding-unresolved` (exit 4) and points to `--resolve`.
+`--resolve` applies to two cases: grounding that is absent, and entries that are structurally valid but recoverable. Grounding written by a retired format version is one of the recoverable cases. For a plan with element-binding steps, `run` reports it as `GROUNDING_UNRESOLVED` without `--resolve`, and `run --resolve --update-cache` regenerates it.
 
-An element grounding miss also fails closed instead of resolving the element live.
+With `--resolve`, an element miss is resolved live. ambercast writes the entry only when every step that confirms the binding passes and the write-back gate allows it. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
 
-Links: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+Related: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
 
-## Drift hand-off {#drift-handoff}
+## A miss without resolution {#unresolved-miss}
 
-A `fingerprint-mismatch` means a matched node's current accessibility fingerprint differs from the stored fingerprint. The run use case records `fingerprint-mismatch` as a classification case distinct from a successful grounded resolution.
+Without `--resolve`, `run` resolves neither a cold-start miss nor a recoverable miss live. During an AI-directed replay, an `ai` step with no usable trace fails closed as `grounding-unresolved` (exit 4) and points to `--resolve`.
 
-Healing starts with a fail-closed baseline replay, then can attempt grounding repair when a failure remains.
+An element miss fails closed in the same way, with exit 4, instead of resolving the element live.
 
-Links: [Healing model](/ambercast/explanation/healing-model/#three-stages), [Healing a test after a UI change](/ambercast/tutorials/repair-your-first-drift/)
+Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+
+## Handing drift over {#drift-handoff}
+
+A `fingerprint-mismatch` means the current fingerprint of the matched element differs from the stored one. `run` records it as a classification of its own, distinct from a successful resolution.
+
+Healing starts with a fail-closed baseline replay. It attempts a repair only when a failure remains.
+
+Related: [Healing model](/ambercast/explanation/healing-model/#three-stages), [Healing a test after a UI change](/ambercast/tutorials/repair-your-first-drift/)

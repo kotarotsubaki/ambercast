@@ -3,7 +3,7 @@ title: Plan lifecycle and freshness
 description: A plan can be replayed only while it matches the inputs that produced it, and `check` decides that without running anything.
 ---
 
-Freshness and the grounding binding are judged separately, and `check` reports each one on its own.
+`check` judges freshness first. It inspects grounding only for a `fresh` plan, so a `stale` plan gets no grounding status.
 
 ## What a plan is built from {#provenance-inputs}
 
@@ -53,7 +53,7 @@ Related: [Grounding document](/ambercast/spec/grounding-document/#plan-digest), 
 
 ## What freshness hands off {#freshness-handoff}
 
-`check` makes no AI call, launches no browser, and writes nothing. Its answer says only whether the plan matches today's inputs.
+`check` makes no AI call, launches no browser, and writes nothing. Its freshness answer says only whether the plan matches today's inputs.
 
 Problems that appear during replay are separate. When the UI changes and an element fingerprint no longer matches, the result is `fingerprint-mismatch`. That is drift, a runtime condition, and it does not change `inputsDigest`.
 

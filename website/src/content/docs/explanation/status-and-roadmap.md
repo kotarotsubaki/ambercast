@@ -3,7 +3,7 @@ title: Status and roadmap
 description: What the current release implements, what is planned, and how versions move before 1.0.
 ---
 
-The CLI has seven subcommands today: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. `review` and baseline/restore are planned. Before 1.0, schema and producer changes can require you to regenerate plans.
+The CLI has seven subcommands today: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. `review` and baseline/restore are planned. Before 1.0, a change to a freshness input can require you to regenerate plans.
 
 ## Implemented in the current release {#implemented}
 
@@ -11,7 +11,7 @@ The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, `view`, and `
 
 Chromium is the only supported browser.
 
-Before 1.0, a minor release can include breaking changes. A schema or producer change forces you to regenerate existing plans. In 0.2.0, for example, a producer-contract change made 0.1.0 plans stale. The [regeneration boundary](/ambercast/reference/compatibility/#regeneration-boundary) and the [0.2.0 changelog entry](/ambercast/reference/changelog/#release-020) show where regeneration is required.
+Before 1.0, a minor release can include breaking changes. A change to a freshness input, such as the plan schema or the producer contract, forces you to regenerate existing plans. A report schema change alone only requires report consumers to update. In 0.2.0, for example, a producer-contract change made 0.1.0 plans stale. The [regeneration boundary](/ambercast/reference/compatibility/#regeneration-boundary) and the [0.2.0 changelog entry](/ambercast/reference/changelog/#release-020) show where regeneration is required.
 
 Related: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambercast/reference/compatibility/), [Changelog](/ambercast/reference/changelog/)
 

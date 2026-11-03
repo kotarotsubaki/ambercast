@@ -1,6 +1,6 @@
 ---
 title: CI 中的确定性
-description: 在 CI 中，ambercast 的检查没有副作用，默认只写运行报告和受限证据，拒绝自动修复，并只返回一个退出码。
+description: 在 CI 中，ambercast 的检查没有副作用，默认只写运行报告和受限证据，默认拒绝自动修复，并只返回一个退出码。
 ---
 
 这些规则让 CI 运行可预测：检查不会改变任何内容，退出码也不取决于迭代顺序。
@@ -15,7 +15,7 @@ description: 在 CI 中，ambercast 的检查没有副作用，默认只写运�
 
 ## 回放的写入有边界 {#bounded-side-effects}
 
-`run` 只把运行报告 JSON 写到本次调用的报告路径。写入之前，它先把信封定稿为 `persisted`，所以文件与返回的信封一致。
+`run` 只把运行报告 JSON 写到本次调用的报告路径。写入之前，它先把信封定稿为 `persisted`，写入成功后，文件与返回的信封一致。
 
 写入失败时，`run` 返回带有 `reportPersistence: "failed"` 的信封。此时只有原本退出码为 0 的运行会变成 3，退出码 1、2、4、5 通常保持不变。`not-attempted` 表示没有尝试写入，`failed` 表示没有留下可见的部分内容。
 
@@ -27,7 +27,7 @@ description: 在 CI 中，ambercast 的检查没有副作用，默认只写运�
 
 除 `--list` 外，除非 `ci.heal` 为 true，否则 CI 中的 `heal` 会以配置错误失败。`heal --list` 仍是不写入任何内容的发现操作。
 
-自愈把执行计划和定位缓存的候选项缓存在私有区域，只通过提交步骤写入。回放尝试仍可能在用例运行目录下写入受限证据，`--dry-run` 下的尝试也不例外。
+自愈把执行计划和定位缓存的候选项缓存在私有区域，只有在你回答 `ambercast heal` 的确认提示后，或用 `--yes` 预先回答后才写入。回放尝试仍可能在 runs 目录下的用例目录中写入受限证据，`--dry-run` 下的尝试也不例外。
 
 相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#ci)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#confirmation-and-writes)
 

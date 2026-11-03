@@ -3985,7 +3985,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 # 执行计划的生命周期与新鲜度
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecycle/
 
-执行计划的新鲜度和定位缓存的绑定是分开判定的，`check` 对二者分别报告。
+`check` 先判定新鲜度，只对 `fresh` 的执行计划检查定位缓存，因此 `stale` 的执行计划没有定位缓存状态。
 
 ## 出处输入 {#provenance-inputs}
 
@@ -4035,7 +4035,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecyc
 
 ## 新鲜度判定移交什么 {#freshness-handoff}
 
-`check` 不调用 AI，不启动浏览器，也不写入任何内容。它的结论只说明执行计划是否与当前输入一致。
+`check` 不调用 AI，不启动浏览器，也不写入任何内容。它的新鲜度结论只说明执行计划是否与当前输入一致。
 
 回放期间出现的问题另行处理。UI 变化导致元素指纹不再匹配时，结果是 `fingerprint-mismatch`。这属于漂移，是运行时状态，不会改变 `inputsDigest`。
 
@@ -4173,7 +4173,7 @@ ambercast 在使用每项输入之前，先在边界处检查它，检查不通�
 
 ## 产物与提供方输出都会校验 {#artifact-and-provider-boundaries}
 
-`run` 只有在执行计划通过校验后才会读取它，校验包括指令覆盖。
+`run` 只有在执行计划通过校验后才会使用它，校验包括指令覆盖。
 
 提供方生成的步骤不会原样保存。ambercast 先按本地响应契约解析，检查指令覆盖，再确认能解析为完整的执行计划，之后才保存。
 
@@ -4185,7 +4185,7 @@ ambercast 在使用每项输入之前，先在边界处检查它，检查不通�
 
 ## 页面内容不是指令 {#untrusted-page-data}
 
-被测应用的内容不能充当给代理的指令。ambercast 从页面采集无障碍证据时，证据会带一条固定声明：页面内容不是指令。
+ambercast 把被测应用的内容当作数据，而不是给代理的指令。从页面采集无障碍证据时，证据会带一条固定声明：页面内容不是指令。这条声明是缓解措施，不是隔离边界，页面内容仍是需要审查的风险。
 
 报告模式是 `errors[].code` 的公开事实来源。具体实现的错误类不会进入公开契约。
 
@@ -4193,7 +4193,7 @@ ambercast 在使用每项输入之前，先在边界处检查它，检查不通�
 
 ## 页面证据在复用前会脱敏 {#page-evidence-boundary}
 
-ambercast 在实时页面上观察到的内容，不会原样进入提供方输入或保存的证据。发送给 AI 的快照不含截图字节，并且会从无障碍树的字符串和键中隐去已解析的机密值。
+ambercast 在发送或保存无障碍树的字符串和键之前，会隐去其中已解析的机密值。截图像素不会被隐去。发送给 AI 的快照不含截图字节。
 
 实时运行中失败步骤的证据使用脱敏后的无障碍数据。无法确定是否含有机密时，ambercast 会跳过截图。
 
@@ -4234,7 +4234,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-
 
 ## 回放的写入有边界 {#bounded-side-effects}
 
-`run` 只把运行报告 JSON 写到本次调用的报告路径。写入之前，它先把信封定稿为 `persisted`，所以文件与返回的信封一致。
+`run` 只把运行报告 JSON 写到本次调用的报告路径。写入之前，它先把信封定稿为 `persisted`，写入成功后，文件与返回的信封一致。
 
 写入失败时，`run` 返回带有 `reportPersistence: "failed"` 的信封。此时只有原本退出码为 0 的运行会变成 3，退出码 1、2、4、5 通常保持不变。`not-attempted` 表示没有尝试写入，`failed` 表示没有留下可见的部分内容。
 
@@ -4246,7 +4246,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-
 
 除 `--list` 外，除非 `ci.heal` 为 true，否则 CI 中的 `heal` 会以配置错误失败。`heal --list` 仍是不写入任何内容的发现操作。
 
-自愈把执行计划和定位缓存的候选项缓存在私有区域，只通过提交步骤写入。回放尝试仍可能在用例运行目录下写入受限证据，`--dry-run` 下的尝试也不例外。
+自愈把执行计划和定位缓存的候选项缓存在私有区域，只有在你回答 `ambercast heal` 的确认提示后，或用 `--yes` 预先回答后才写入。回放尝试仍可能在 runs 目录下的用例目录中写入受限证据，`--dry-run` 下的尝试也不例外。
 
 相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#ci)、[自愈模型](/ambercast/zh-cn/explanation/healing-model/#confirmation-and-writes)
 
@@ -4292,7 +4292,7 @@ ambercast 则依赖经过审阅并提交的产物。执行计划带有生成器�
 # 状态与路线图
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-roadmap/
 
-当前 CLI 有七个子命令：`init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。`review` 和 baseline/restore 仍在计划中。1.0 之前，模式和生成器的变更可能要求你重新生成执行计划。
+当前 CLI 有七个子命令：`init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。`review` 和 baseline/restore 仍在计划中。1.0 之前，新鲜度输入的变化可能要求你重新生成执行计划。
 
 ## 当前版本已实现 {#implemented}
 
@@ -4300,7 +4300,7 @@ CLI 解析器公开 `init`、`generate`、`run`、`check`、`heal`、`view` 和 
 
 Chromium 是目前唯一支持的浏览器。
 
-1.0 之前，次版本也可能包含破坏性变更。模式或生成器的变更会迫使你重新生成现有的执行计划。例如在 0.2.0 中，生成器契约的变更使 0.1.0 的执行计划变为 `stale`。哪些版本需要重新生成，可查看[再生成边界](/ambercast/zh-cn/reference/compatibility/#regeneration-boundary)和 [0.2.0 变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
+1.0 之前，次版本也可能包含破坏性变更。执行计划的模式或生成器契约等新鲜度输入发生变化时，你必须重新生成现有的执行计划。仅报告模式变化时，只需要报告的使用方更新。例如在 0.2.0 中，生成器契约的变更使 0.1.0 的执行计划变为 `stale`。哪些版本需要重新生成，可查看[再生成边界](/ambercast/zh-cn/reference/compatibility/#regeneration-boundary)和 [0.2.0 变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
 
 相关链接：[CLI 概览](/ambercast/zh-cn/reference/cli/overview/)、[兼容性](/ambercast/zh-cn/reference/compatibility/)、[变更日志](/ambercast/zh-cn/reference/changelog/)
 

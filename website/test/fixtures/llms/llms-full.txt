@@ -3984,7 +3984,7 @@ One rejected alternative tracked only package releases; it was rejected because 
 # Plan lifecycle and freshness
 Source: https://kotarotsubaki.github.io/ambercast/explanation/plan-lifecycle/
 
-Freshness and the grounding binding are judged separately, and `check` reports each one on its own.
+`check` judges freshness first. It inspects grounding only for a `fresh` plan, so a `stale` plan gets no grounding status.
 
 ## What a plan is built from {#provenance-inputs}
 
@@ -4034,7 +4034,7 @@ Related: [Grounding document](/ambercast/spec/grounding-document/#plan-digest), 
 
 ## What freshness hands off {#freshness-handoff}
 
-`check` makes no AI call, launches no browser, and writes nothing. Its answer says only whether the plan matches today's inputs.
+`check` makes no AI call, launches no browser, and writes nothing. Its freshness answer says only whether the plan matches today's inputs.
 
 Problems that appear during replay are separate. When the UI changes and an element fingerprint no longer matches, the result is `fingerprint-mismatch`. That is drift, a runtime condition, and it does not change `inputsDigest`.
 
@@ -4172,7 +4172,7 @@ ambercast checks each input at a boundary before it uses it, and anything that f
 
 ## Artifacts and provider output are validated {#artifact-and-provider-boundaries}
 
-`run` reads a plan only after it passes plan validation, including instruction coverage.
+`run` uses a plan only after it passes plan validation, including instruction coverage.
 
 Steps that a provider generates are not saved as they arrive. ambercast parses them against the local response contract and checks instruction coverage. It saves them only after they parse as a complete plan.
 
@@ -4184,7 +4184,7 @@ Related: [Plan document](/ambercast/spec/plan-document/), [Conformance](/amberca
 
 ## Page content is not an instruction {#untrusted-page-data}
 
-Content from the application under test cannot act as an instruction to an agent. When ambercast captures accessibility evidence from a page, the evidence carries a fixed notice. The notice says that page content is not an instruction.
+ambercast treats content from the application under test as data, not as an instruction to an agent. When it captures accessibility evidence from a page, the evidence carries a fixed notice that page content is not an instruction. The notice is a mitigation, not an isolation boundary, so page content stays a risk to review.
 
 The report schema is the public source of truth for `errors[].code`. Implementation-specific error classes stay out of the public contract.
 
@@ -4192,7 +4192,7 @@ Related: [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/refe
 
 ## Page evidence is redacted before reuse {#page-evidence-boundary}
 
-What ambercast observes on a live page does not flow unfiltered into provider input or saved evidence. Snapshots sent to the AI exclude screenshot bytes. Resolved secret values are redacted from accessibility-tree strings and keys.
+ambercast redacts resolved secret values from accessibility-tree strings and keys before it sends or saves that data. It does not redact screenshot pixels. Snapshots sent to the AI exclude screenshot bytes.
 
 Evidence for a step that fails during a live run uses redacted accessibility data. When it is uncertain whether a secret is present, ambercast skips the screenshot.
 
@@ -4233,7 +4233,7 @@ Related: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), 
 
 ## Replay writes are bounded {#bounded-side-effects}
 
-`run` writes its report JSON only to the report path of that invocation. It finalizes the envelope as `persisted` before the write, so the file equals the returned envelope.
+`run` writes its report JSON only to the report path of that invocation. It finalizes the envelope as `persisted` before the write. After a successful write, the file equals the returned envelope.
 
 If the write fails, `run` returns the envelope with `reportPersistence: "failed"`. In that case only an otherwise-0 exit becomes 3. Exits 1, 2, 4, and 5 normally stay as they are. `not-attempted` means no write was tried, and `failed` means no partial content became visible.
 
@@ -4245,7 +4245,7 @@ Related: [Reports](/ambercast/reference/reports/#persistence), [ambercast run](/
 
 Outside `--list`, `heal` in CI fails with a configuration error unless `ci.heal` is true. `heal --list` stays a discovery operation that writes nothing.
 
-Healing buffers plan and grounding candidates privately. It writes them only through the commit step. Replay attempts, including those under `--dry-run`, can still write contained evidence below the case run directory.
+Healing buffers plan and grounding candidates privately. It writes them only after you answer the `ambercast heal` confirmation prompt, or after `--yes` answers it in advance. Replay attempts, including those under `--dry-run`, can still write contained evidence in the case directory under the runs directory.
 
 Related: [ambercast heal](/ambercast/reference/cli/heal/#ci), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
 
@@ -4291,7 +4291,7 @@ Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Trust
 # Status and roadmap
 Source: https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/
 
-The CLI has seven subcommands today: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. `review` and baseline/restore are planned. Before 1.0, schema and producer changes can require you to regenerate plans.
+The CLI has seven subcommands today: `init`, `generate`, `run`, `check`, `heal`, `view`, and `mcp`. `review` and baseline/restore are planned. Before 1.0, a change to a freshness input can require you to regenerate plans.
 
 ## Implemented in the current release {#implemented}
 
@@ -4299,7 +4299,7 @@ The CLI parser exposes `init`, `generate`, `run`, `check`, `heal`, `view`, and `
 
 Chromium is the only supported browser.
 
-Before 1.0, a minor release can include breaking changes. A schema or producer change forces you to regenerate existing plans. In 0.2.0, for example, a producer-contract change made 0.1.0 plans stale. The [regeneration boundary](/ambercast/reference/compatibility/#regeneration-boundary) and the [0.2.0 changelog entry](/ambercast/reference/changelog/#release-020) show where regeneration is required.
+Before 1.0, a minor release can include breaking changes. A change to a freshness input, such as the plan schema or the producer contract, forces you to regenerate existing plans. A report schema change alone only requires report consumers to update. In 0.2.0, for example, a producer-contract change made 0.1.0 plans stale. The [regeneration boundary](/ambercast/reference/compatibility/#regeneration-boundary) and the [0.2.0 changelog entry](/ambercast/reference/changelog/#release-020) show where regeneration is required.
 
 Related: [CLI overview](/ambercast/reference/cli/overview/), [Compatibility](/ambercast/reference/compatibility/), [Changelog](/ambercast/reference/changelog/)
 

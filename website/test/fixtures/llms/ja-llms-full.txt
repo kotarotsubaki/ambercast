@@ -3991,7 +3991,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 # 計画のライフサイクルと鮮度
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/
 
-計画（plan）を再生できるのは、生成時の入力と今も一致し、グラウンディングが計画に結び付いているときだけだ。`check` は、この2つを判定する。
+計画（plan）を再生できるのは、生成時の入力と今も一致し、グラウンディングが計画に結び付いているときだけだ。`check` はまず鮮度を判定し、`fresh` の計画に限ってグラウンディングを調べる。`stale` の計画には、グラウンディングの状態が付かない。
 
 ## 来歴の入力 {#provenance-inputs}
 
@@ -4043,7 +4043,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/
 
 ## 鮮度判定が引き渡すもの {#freshness-handoff}
 
-`check` はAIを呼ばず、ブラウザーを起動せず、何も書き込まない。判定の結果は、計画が今の入力と合っているかどうかだけだ。
+`check` はAIを呼ばず、ブラウザーを起動せず、何も書き込まない。鮮度の判定結果は、計画が今の入力と合っているかどうかだけだ。
 
 再生中に起きる問題は、鮮度とは別に扱う。UIが変わって要素のフィンガープリントが合わなくなると、`fingerprint-mismatch` と分類される。これはドリフトという実行時の状態で、`inputsDigest` を変えない。
 
@@ -4181,7 +4181,7 @@ ambercastが信頼するのは、手元で検証を終えたものだけだ。�
 
 ## 成果物とプロバイダーの出力は検証される {#artifact-and-provider-boundaries}
 
-`run` が計画（plan）を読むのは、命令カバレッジを含む計画の検証を通ったあとだけだ。
+`run` が計画（plan）を使うのは、命令カバレッジを含む計画の検証を通ったあとだけだ。
 
 プロバイダーが生成したステップは、そのまま保存しない。ローカルのレスポンス契約で解析し、命令カバレッジを確かめ、完全な計画として解析できたあとで保存する。
 
@@ -4193,7 +4193,7 @@ ambercastが信頼するのは、手元で検証を終えたものだけだ。�
 
 ## ページの内容は指示ではない {#untrusted-page-data}
 
-テスト対象アプリの内容は、エージェントへの指示として扱わない。ambercastがページからアクセシビリティの証跡を取るときは、固定の注意書きを付ける。ページ由来の内容を、指示として解釈してはならないという注意だ。
+ambercastは、テスト対象アプリの内容をデータとして扱い、エージェントへの指示とは見なさない。ページからアクセシビリティの証跡を取るときは、ページ由来の内容を指示として解釈してはならないという固定の注意書きを付ける。この注意書きは緩和策であり、隔離の境界ではない。ページの内容は、確認すべきリスクとして残る。
 
 レポートのスキーマは、`errors[].code` の公開上の正本である。実装固有のエラークラスは、公開契約に出ない。
 
@@ -4201,7 +4201,7 @@ ambercastが信頼するのは、手元で検証を終えたものだけだ。�
 
 ## ページの証跡は再利用の前に伏せられる {#page-evidence-boundary}
 
-実ページの観測は、そのままプロバイダーの入力や保存する証跡にならない。AIに渡すスナップショットには、スクリーンショットのバイト列を含めない。アクセシビリティツリーの文字列とキーからは、解決済みのシークレットの値を伏せる。
+ambercastは、アクセシビリティツリーの文字列とキーに含まれる解決済みのシークレットの値を、送信または保存する前に伏せる。スクリーンショットの画素は伏せない。AIに渡すスナップショットには、スクリーンショットのバイト列を含めない。
 
 実行中に失敗したステップの証跡は、伏せたアクセシビリティデータを使う。シークレットが含まれるか不確かなときは、スクリーンショットを撮らない。
 
@@ -4242,7 +4242,7 @@ CIでは、検査が副作用を持たない。書き込むのは、既定では
 
 ## 再生の書き込みは限られる {#bounded-side-effects}
 
-`run` が実行レポートのJSONを書く先は、その呼び出しのレポートパスだけだ。書く前に、エンベロープを `persisted` として確定させる。ファイルは、返したエンベロープと同じ内容になる。
+`run` が実行レポートのJSONを書く先は、その呼び出しのレポートパスだけだ。書く前に、エンベロープを `persisted` として確定させる。書き込みに成功した場合、ファイルは返したエンベロープと同じ内容になる。
 
 書き込みに失敗すると、`run` は `reportPersistence: "failed"` のエンベロープを返す。このとき、終了コードが0だったはずの実行だけが3になる。1、2、4、5は通常そのまま残る。`not-attempted` は書き込みを試していないことを、`failed` は途中までの内容が見える状態で残っていないことを表す。
 
@@ -4254,7 +4254,7 @@ CIでのグラウンディングの書き戻しは、`--update-cache` か `ci.up
 
 `--list` 以外の `heal` は、`ci.heal` が true でない限り、CIでは設定エラーで断る。`heal --list` は、書き込まない探索のまま使える。
 
-ヒーリングは、計画とグラウンディングの候補を非公開の領域にためる。実ファイルへ書くのは、確認後のコミット手順だけだ。一方、再生の試行は、`--dry-run` でもケースの実行ディレクトリの下に閉じた証跡を書くことがある。
+ヒーリングは、計画とグラウンディングの候補を非公開の領域にためる。実ファイルへ書くのは、`ambercast heal` の確認プロンプトに答えたあと、または `--yes` で事前に答えたあとだけだ。一方、再生の試行は、`--dry-run` でもrunsディレクトリ下のケースのディレクトリに閉じた証跡を書くことがある。
 
 関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#ci)、[ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
 
@@ -4300,7 +4300,7 @@ ambercastは、確認してコミットした成果物に頼る。計画はプ�
 # ステータスとロードマップ
 Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/status-and-roadmap/
 
-現行のCLIは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを持つ。`review` とbaseline/restoreは計画中だ。1.0より前は、スキーマとプロデューサーの変更で計画（plan）の再生成が必要になる。
+現行のCLIは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのサブコマンドを持つ。`review` とbaseline/restoreは計画中だ。1.0より前は、鮮度の入力が変わると計画（plan）の再生成が必要になる。
 
 ## 現行リリースで実装済み {#implemented}
 
@@ -4308,7 +4308,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 ブラウザーはChromiumだけに対応する。
 
-1.0より前は、マイナーリリースにも破壊的変更が入りうる。スキーマやプロデューサーの変更は、既存の計画の再生成を求める。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
+1.0より前は、マイナーリリースにも破壊的変更が入りうる。計画のスキーマやプロデューサー契約のように鮮度の入力が変わると、既存の計画の再生成が必要になる。レポートのスキーマだけが変わる場合は、レポートの利用側の更新だけが必要だ。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[互換性と再生成](/ambercast/ja/reference/compatibility/)、[変更履歴](/ambercast/ja/reference/changelog/)
 

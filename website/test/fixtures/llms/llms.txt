@@ -72,7 +72,7 @@
 - [Replay and grounding](https://kotarotsubaki.github.io/ambercast/explanation/replay-and-grounding/): Replay reuses recorded grounding, so a fully covered run needs no AI call, and a miss either fails closed or is resolved live only with `--resolve`.
 - [Healing model](https://kotarotsubaki.github.io/ambercast/explanation/healing-model/): Explains how far ambercast repairs a test automatically when a UI change breaks it, and where it hands off to your judgment.
 - [Trust and security](https://kotarotsubaki.github.io/ambercast/explanation/trust-and-security/): ambercast trusts only what it has validated locally, and page content, provider output, and secret values each cross a boundary that fails closed.
-- [Determinism in CI](https://kotarotsubaki.github.io/ambercast/explanation/determinism-in-ci/): In CI, ambercast inspects without side effects, writes only the run report and contained evidence by default, refuses to repair, and reports one exit code.
+- [Determinism in CI](https://kotarotsubaki.github.io/ambercast/explanation/determinism-in-ci/): In CI, ambercast inspects without side effects, writes only the run report and contained evidence by default, refuses to repair by default, and reports one exit code.
 - [How ambercast compares](https://kotarotsubaki.github.io/ambercast/explanation/comparison/): ambercast keeps the natural-language prompt as the test and derives a reviewed plan from it, while other models keep a script or a live session.
 - [Status and roadmap](https://kotarotsubaki.github.io/ambercast/explanation/status-and-roadmap/): What the current release implements, what is planned, and how versions move before 1.0.
 

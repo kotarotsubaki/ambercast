@@ -7,7 +7,7 @@ ambercast checks each input at a boundary before it uses it, and anything that f
 
 ## Artifacts and provider output are validated {#artifact-and-provider-boundaries}
 
-`run` reads a plan only after it passes plan validation, including instruction coverage.
+`run` uses a plan only after it passes plan validation, including instruction coverage.
 
 Steps that a provider generates are not saved as they arrive. ambercast parses them against the local response contract and checks instruction coverage. It saves them only after they parse as a complete plan.
 
@@ -19,7 +19,7 @@ Related: [Plan document](/ambercast/spec/plan-document/), [Conformance](/amberca
 
 ## Page content is not an instruction {#untrusted-page-data}
 
-Content from the application under test cannot act as an instruction to an agent. When ambercast captures accessibility evidence from a page, the evidence carries a fixed notice. The notice says that page content is not an instruction.
+ambercast treats content from the application under test as data, not as an instruction to an agent. When it captures accessibility evidence from a page, the evidence carries a fixed notice that page content is not an instruction. The notice is a mitigation, not an isolation boundary, so page content stays a risk to review.
 
 The report schema is the public source of truth for `errors[].code`. Implementation-specific error classes stay out of the public contract.
 
@@ -27,7 +27,7 @@ Related: [Reports](/ambercast/reference/reports/), [Error codes](/ambercast/refe
 
 ## Page evidence is redacted before reuse {#page-evidence-boundary}
 
-What ambercast observes on a live page does not flow unfiltered into provider input or saved evidence. Snapshots sent to the AI exclude screenshot bytes. Resolved secret values are redacted from accessibility-tree strings and keys.
+ambercast redacts resolved secret values from accessibility-tree strings and keys before it sends or saves that data. It does not redact screenshot pixels. Snapshots sent to the AI exclude screenshot bytes.
 
 Evidence for a step that fails during a live run uses redacted accessibility data. When it is uncertain whether a secret is present, ambercast skips the screenshot.
 

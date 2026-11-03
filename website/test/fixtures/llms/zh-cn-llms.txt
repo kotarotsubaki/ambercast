@@ -72,7 +72,7 @@
 - [回放与定位缓存](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-grounding/): 回放复用已记录的定位缓存，因此完全覆盖的运行无需调用 AI，未命中时默认失败关闭，只有加上 `--resolve` 才会实时解析。
 - [自愈模型](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/healing-model/): 说明界面变化导致测试失败时，ambercast 会自动修复到什么程度，以及什么时候交给人工判断。
 - [信任与安全](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/trust-and-security/): ambercast 只信任在本地验证过的内容，页面内容、提供方输出和机密值各自越过一条失败关闭的边界。
-- [CI 中的确定性](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/): 在 CI 中，ambercast 的检查没有副作用，默认只写运行报告和受限证据，拒绝自动修复，并只返回一个退出码。
+- [CI 中的确定性](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-in-ci/): 在 CI 中，ambercast 的检查没有副作用，默认只写运行报告和受限证据，默认拒绝自动修复，并只返回一个退出码。
 - [ambercast 的设计模型对比](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/comparison/): ambercast 把自然语言提示词作为测试本身，并由它派生出经过审阅的执行计划，而其他模型保留的是脚本或实时会话。
 - [状态与路线图](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/status-and-roadmap/): 说明当前版本已实现的内容、计划中的内容，以及 1.0 之前版本的演进方式。
 

@@ -1,6 +1,6 @@
 ---
 title: Determinism in CI
-description: In CI, ambercast inspects without side effects, writes only the run report and contained evidence by default, refuses to repair, and reports one exit code.
+description: In CI, ambercast inspects without side effects, writes only the run report and contained evidence by default, refuses to repair by default, and reports one exit code.
 ---
 
 These rules keep a CI run predictable: inspection cannot change anything, and the exit code does not depend on iteration order.
@@ -15,7 +15,7 @@ Related: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), 
 
 ## Replay writes are bounded {#bounded-side-effects}
 
-`run` writes its report JSON only to the report path of that invocation. It finalizes the envelope as `persisted` before the write, so the file equals the returned envelope.
+`run` writes its report JSON only to the report path of that invocation. It finalizes the envelope as `persisted` before the write. After a successful write, the file equals the returned envelope.
 
 If the write fails, `run` returns the envelope with `reportPersistence: "failed"`. In that case only an otherwise-0 exit becomes 3. Exits 1, 2, 4, and 5 normally stay as they are. `not-attempted` means no write was tried, and `failed` means no partial content became visible.
 
@@ -27,7 +27,7 @@ Related: [Reports](/ambercast/reference/reports/#persistence), [ambercast run](/
 
 Outside `--list`, `heal` in CI fails with a configuration error unless `ci.heal` is true. `heal --list` stays a discovery operation that writes nothing.
 
-Healing buffers plan and grounding candidates privately. It writes them only through the commit step. Replay attempts, including those under `--dry-run`, can still write contained evidence below the case run directory.
+Healing buffers plan and grounding candidates privately. It writes them only after you answer the `ambercast heal` confirmation prompt, or after `--yes` answers it in advance. Replay attempts, including those under `--dry-run`, can still write contained evidence in the case directory under the runs directory.
 
 Related: [ambercast heal](/ambercast/reference/cli/heal/#ci), [Healing model](/ambercast/explanation/healing-model/#confirmation-and-writes)
 

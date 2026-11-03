@@ -4497,7 +4497,7 @@ Read every errors[].code.
 - `check`は`fresh`、`stale`、`missing-plan`、`missing-grounding`、`stale-grounding`、`invalid-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed`、`skipped`を使う。
 - `heal`の完了した行は`status: completed`で、`repairOutcome`が`healed`、`partially-healed`、`unresolved`、`no-changes-needed`のいずれかになる。`listed`と`skipped`の行は識別情報だけを持つ。
 
-関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
+関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画（plan）のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
 
 ## 終了コードはバッチ全体の合図 {#exit-code-signal}
 
@@ -4539,7 +4539,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-res
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 利用可能 |
 
-`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2`、`grounding.v3`のスキーマは、リポジトリにコミットした固定の履歴スナップショットで、サイトへそのまま複製される。設定、計画v5、グラウンディングv4、レポートのスキーマと、`capabilities.json`、`manifest/cli.json`は、npmパッケージに入るビルドと同じバイト列をサイトへ複製する。
+`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2`、`grounding.v3`のスキーマは、リポジトリにコミットした固定の履歴スナップショットで、サイトへそのまま複製される。設定、計画（plan）v5、グラウンディングv4、レポートのスキーマと、`capabilities.json`、`manifest/cli.json`は、npmパッケージに入るビルドと同じバイト列をサイトへ複製する。
 
 関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[JSON スキーマ](/ambercast/ja/reference/json-schemas/)、[ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
 
@@ -4579,7 +4579,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/mcp-server/
 
 公開するツールは`ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel`の6つである。前の4つはワークフローで、後ろの2つはサーバー内のジョブの確認と取り消しに使う。
 
-[MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)のとおり、`target`を受け取るのは`ambercast_generate`だけである。ほかのワークフローのツールは、計画からターゲットを選ぶ。
+[MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)のとおり、`target`を受け取るのは`ambercast_generate`だけである。ほかのワークフローのツールは、計画（plan）からターゲットを選ぶ。
 
 入力、アノテーション、ジョブの記録、`isError`、MCPのエラーも同じページにある。クライアントへの登録は[ambercast mcp](/ambercast/ja/reference/cli/mcp/#client-registration)に従う。
 

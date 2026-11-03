@@ -13,7 +13,7 @@ description: "`ambercast mcp`は1つのセッションルートをstdioでMCPク
 
 公開するツールは`ambercast_generate`、`ambercast_run`、`ambercast_check`、`ambercast_heal`、`ambercast_job_status`、`ambercast_job_cancel`の6つである。前の4つはワークフローで、後ろの2つはサーバー内のジョブの確認と取り消しに使う。
 
-[MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)のとおり、`target`を受け取るのは`ambercast_generate`だけである。ほかのワークフローのツールは、計画からターゲットを選ぶ。
+[MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)のとおり、`target`を受け取るのは`ambercast_generate`だけである。ほかのワークフローのツールは、計画（plan）からターゲットを選ぶ。
 
 入力、アノテーション、ジョブの記録、`isError`、MCPのエラーも同じページにある。クライアントへの登録は[ambercast mcp](/ambercast/ja/reference/cli/mcp/#client-registration)に従う。
 

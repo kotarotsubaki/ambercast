@@ -39,7 +39,7 @@ This chapter defines `GroundingDocument`, the committed grounding cache bound to
 | `TraceFill` | `type`, `element`, `value` | string, locator, text | required | literal `fill`; no secret marker | Recorded ordinary fill. | repo:src/core/ir/schema.ts:1283 |
 | `TraceFillSecret` | `type`, `element`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | Recorded secret fill without literal value. | repo:src/core/ir/schema.ts:1299 |
 
-`TraceAction` is the `type` union of the five action records. The `key` enum is `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp`; `ElementRef`, `InterpolatableText`, and `SecretRef` retain their constraints from [[spec/value-types#shared-types]]. [repo:src/core/ir/schema.ts:567-570,1267-1270,1315-1321]
+`TraceAction` is the `type` union of the five action records. The `key` enum is `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp`; `ElementRef`, `InterpolatableText`, and `SecretRef` retain their constraints from [[spec/value-types#shared-types]]. [repo:src/core/ir/schema.ts:567-572,1267-1270,1315-1321]
 
 ## Trace verification records {#trace-verification-records}
 

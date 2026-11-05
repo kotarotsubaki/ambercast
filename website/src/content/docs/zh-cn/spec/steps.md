@@ -227,11 +227,11 @@ description: "本章定义每一种已提交的步骤类型及其字段和示例
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | 等待本地命名的提供商形式。 | `src/core/ir/schema.ts:1022-1029` |
-|  | `secret` | `SecretNameChoice` | optional | strict choice | 瞬态验证提议。 | `src/core/ir/schema.ts:144-147,1028` |
+|  | `secret` | `SecretNameChoice` | optional | strict choice | 对现有允许列表名称的请求，或新名称提示。 | `src/core/ir/schema.ts:144-147,1028` |
 | `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | 等待本地解析的提供商命名意图。 | `src/core/ir/schema.ts:1146` |
 | `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | 共享的 AI 契约。 | `src/core/ir/schema.ts:1156` |
-|  | `secrets` | generated uses[] | optional | strict entries | 瞬态验证提议。 | `src/core/ir/schema.ts:1157` |
-|  | `instructionCoverage` | generated criteria[] | required | min 1 | 瞬态验证提议。 | `src/core/ir/schema.ts:1158` |
+|  | `secrets` | generated uses[] | optional | strict entries | 等待机密名称解析。 | `src/core/ir/schema.ts:1157` |
+|  | `instructionCoverage` | generated criteria[] | required | min 1 | 等待准则归属。 | `src/core/ir/schema.ts:1158` |
 |  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | 瞬态验证提议。 | `src/core/ir/schema.ts:1159` |
 
 ## 设计理由 {#rationale}

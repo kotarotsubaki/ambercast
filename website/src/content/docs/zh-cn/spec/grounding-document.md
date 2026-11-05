@@ -34,13 +34,13 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 | `TraceRecord` | `events` | `TraceEntry[]` | 必填 | 可为空 | 按时间顺序的操作/断言日志。 | `src/core/ir/schema.ts:1403` |
 |  | `verification` | `TraceAssert[]` | 必填 | 最小为 1 | 可回放成功所必需的终结断言。 | `src/core/ir/schema.ts:1404` |
 |  | `verificationCoverage` | record `InstructionCriterionId` → integer | 可选 | 非负整数 | 累加式的覆盖到验证索引映射。 | `src/core/ir/schema.ts:1405` |
-| `TraceClick` | `type`, `target` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。 | `src/core/ir/schema.ts:1235` |
+| `TraceClick` | `type`, `element` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。 | `src/core/ir/schema.ts:1235` |
 | `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | 必填 | 字面量 `navigate`；无 secret 标记 | 已记录的导航。 | `src/core/ir/schema.ts:1251` |
-| `TracePress` | `type`, `target`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。 | `src/core/ir/schema.ts:1267` |
-| `TraceFill` | `type`, `target`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。 | `src/core/ir/schema.ts:1283` |
-| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。 | `src/core/ir/schema.ts:1299` |
+| `TracePress` | `type`, `element`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。 | `src/core/ir/schema.ts:1267` |
+| `TraceFill` | `type`, `element`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。 | `src/core/ir/schema.ts:1283` |
+| `TraceFillSecret` | `type`, `element`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。 | `src/core/ir/schema.ts:1299` |
 
-`TraceAction` 是这五种动作记录按 `type` 区分的联合。`key` 的枚举值是 `Enter`、`Tab`、`Escape`、`ArrowDown` 和 `ArrowUp`。`ElementRef`、`InterpolatableText` 和 `SecretRef` 保留[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的约束 (`src/core/ir/schema.ts:567-570,1267-1270,1315-1321`)。
+`TraceAction` 是这五种动作记录按 `type` 区分的联合。`key` 的枚举值是 `Enter`、`Tab`、`Escape`、`ArrowDown` 和 `ArrowUp`。`ElementRef`、`InterpolatableText` 和 `SecretRef` 保留[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的约束 (`src/core/ir/schema.ts:567-572,1267-1270,1315-1321`)。
 
 ## 轨迹验证记录 {#trace-verification-records}
 
@@ -49,10 +49,10 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 | 变体 | 字段 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
 | `text-visible` | `type`, `check`, `text` | 全部必填 | 字面量 `assert`、`text-visible`；非 secret 文本 | 可见性观察。 | `src/core/ir/schema.ts:1343` |
-| `element-visible` | `type`, `check`, `target` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。 | `src/core/ir/schema.ts:1348` |
-| `text-equals` | `type`, `check`, `target`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。 | `src/core/ir/schema.ts:1353` |
+| `element-visible` | `type`, `check`, `element` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。 | `src/core/ir/schema.ts:1348` |
+| `text-equals` | `type`, `check`, `element`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。 | `src/core/ir/schema.ts:1353` |
 | `url-matches` | `type`, `check`, `pattern` | 全部必填 | 字面量 `assert`、`url-matches`；非 secret 文本 | URL 观察。 | `src/core/ir/schema.ts:1358` |
-| `element-count` | `type`, `check`, `target`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。 | `src/core/ir/schema.ts:1363` |
+| `element-count` | `type`, `check`, `element`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。 | `src/core/ir/schema.ts:1363` |
 
 `TraceEntry` 是 `TraceAction` 与 `TraceAssert` 按外层 `type` 区分的联合 (`src/core/ir/schema.ts:1384`)。
 

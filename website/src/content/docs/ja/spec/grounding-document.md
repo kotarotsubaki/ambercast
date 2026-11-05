@@ -34,13 +34,13 @@ description: "この章は、1 つの計画ダイジェストに束縛してコ�
 | `TraceRecord` | `events` | `TraceEntry[]` | required | may be empty | 時系列のアクション／アサーションジャーナル。 | `src/core/ir/schema.ts:1403` |
 |  | `verification` | `TraceAssert[]` | required | min 1 | 再生可能な成功に必要とされる終了アサーション。 | `src/core/ir/schema.ts:1404` |
 |  | `verificationCoverage` | record `InstructionCriterionId` → integer | optional | integer nonnegative | カバレッジから検証インデックスへの加法的なマッピング。 | `src/core/ir/schema.ts:1405` |
-| `TraceClick` | `type`, `target` | string, `ElementRef` | required | literal `click`; strict target | 記録されたクリック。 | `src/core/ir/schema.ts:1235` |
+| `TraceClick` | `type`, `element` | string, `ElementRef` | required | literal `click`; strict element | 記録されたクリック。 | `src/core/ir/schema.ts:1235` |
 | `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | required | literal `navigate`; no secret marker | 記録されたナビゲーション。 | `src/core/ir/schema.ts:1251` |
-| `TracePress` | `type`, `target`, `key` | string, locator, string | required | literal `press`; key enum | 記録されたキー押下。 | `src/core/ir/schema.ts:1267` |
-| `TraceFill` | `type`, `target`, `value` | string, locator, text | required | literal `fill`; no secret marker | 記録された通常の入力。 | `src/core/ir/schema.ts:1283` |
-| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | リテラル値を持たない、記録されたシークレット入力。 | `src/core/ir/schema.ts:1299` |
+| `TracePress` | `type`, `element`, `key` | string, locator, string | required | literal `press`; key enum | 記録されたキー押下。 | `src/core/ir/schema.ts:1267` |
+| `TraceFill` | `type`, `element`, `value` | string, locator, text | required | literal `fill`; no secret marker | 記録された通常の入力。 | `src/core/ir/schema.ts:1283` |
+| `TraceFillSecret` | `type`, `element`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | リテラル値を持たない、記録されたシークレット入力。 | `src/core/ir/schema.ts:1299` |
 
-`TraceAction` は、5 つのアクションレコードを `type` で区別する共用体である。`key` の列挙値は `Enter`、`Tab`、`Escape`、`ArrowDown`、`ArrowUp` である。`ElementRef`、`InterpolatableText`、`SecretRef` は、[値型](/ambercast/ja/spec/value-types/#shared-types)の制約をそのまま保つ（`src/core/ir/schema.ts:567-570,1267-1270,1315-1321`）。
+`TraceAction` は、5 つのアクションレコードを `type` で区別する共用体である。`key` の列挙値は `Enter`、`Tab`、`Escape`、`ArrowDown`、`ArrowUp` である。`ElementRef`、`InterpolatableText`、`SecretRef` は、[値型](/ambercast/ja/spec/value-types/#shared-types)の制約をそのまま保つ（`src/core/ir/schema.ts:567-572,1267-1270,1315-1321`）。
 
 ## トレース検証レコード {#trace-verification-records}
 
@@ -49,10 +49,10 @@ description: "この章は、1 つの計画ダイジェストに束縛してコ�
 | variant | fields | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
 | `text-visible` | `type`, `check`, `text` | all required | literals `assert`, `text-visible`; non-secret text | 可視性の観測。 | `src/core/ir/schema.ts:1343` |
-| `element-visible` | `type`, `check`, `target` | all required | literals `assert`, `element-visible`; strict locator | 要素の可視性の観測。 | `src/core/ir/schema.ts:1348` |
-| `text-equals` | `type`, `check`, `target`, `text` | all required | literals `assert`, `text-equals`; non-secret text | 正確なテキストの観測。 | `src/core/ir/schema.ts:1353` |
+| `element-visible` | `type`, `check`, `element` | all required | literals `assert`, `element-visible`; strict locator | 要素の可視性の観測。 | `src/core/ir/schema.ts:1348` |
+| `text-equals` | `type`, `check`, `element`, `text` | all required | literals `assert`, `text-equals`; non-secret text | 正確なテキストの観測。 | `src/core/ir/schema.ts:1353` |
 | `url-matches` | `type`, `check`, `pattern` | all required | literals `assert`, `url-matches`; non-secret text | URL の観測。 | `src/core/ir/schema.ts:1358` |
-| `element-count` | `type`, `check`, `target`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | カウントの観測。 | `src/core/ir/schema.ts:1363` |
+| `element-count` | `type`, `check`, `element`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | カウントの観測。 | `src/core/ir/schema.ts:1363` |
 
 `TraceEntry` は、`TraceAction` と `TraceAssert` を外側の `type` で区別する共用体である（`src/core/ir/schema.ts:1384`）。
 

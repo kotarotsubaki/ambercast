@@ -24,7 +24,7 @@ description: "本仕様は、ambercast 0.9.0 が受け付けるアーティフ�
 <div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>グラウンディング文書は planDigest に束縛され、再計算したダイジェストと等しいときだけ受け入れられる</b></span></div>
 <div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">GROUNDING</span></div><p class="ac-flow-title">GroundingDocument</p></div>
 <div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>再生は、束縛されたグラウンディングを読む</b></span></div>
-<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">グラウンディングが完全なら AI を呼ばない</span></div><p class="ac-flow-title">再生</p></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">キャッシュしたグラウンディングを再生できれば AI を呼ばない</span></div><p class="ac-flow-title">再生</p></div>
 </figure>
 
 すべてのダイジェストの経路は、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)を使わなければならない（MUST）。`inputsDigest` は、正規化したプロンプト、スキーマ、プロデューサの入力、ターゲットを束縛する。`planDigest` は、再生に関わる計画の内容を束縛する（`src/core/ir/digest.ts:130`、`src/core/ir/digest.ts:153`）。

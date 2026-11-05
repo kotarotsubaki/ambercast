@@ -24,7 +24,7 @@ description: "本规范描述了 ambercast 0.9.0 接受的工件。"
 <div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>定位缓存文档绑定到 planDigest，只有与重新计算的摘要相等时才会被接受</b></span></div>
 <div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">GROUNDING</span></div><p class="ac-flow-title">GroundingDocument</p></div>
 <div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>回放读取已绑定的定位缓存</b></span></div>
-<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">定位缓存完整时不调用 AI</span></div><p class="ac-flow-title">回放</p></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">缓存的定位缓存可直接回放时不调用 AI</span></div><p class="ac-flow-title">回放</p></div>
 </figure>
 
 每条摘要路径都必须 (MUST) 使用[规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form)。`inputsDigest` 绑定规范化提示词、模式、生产者输入以及目标，`planDigest` 绑定与回放相关的执行计划内容 (`src/core/ir/digest.ts:130`) (`src/core/ir/digest.ts:153`)。

@@ -111,9 +111,9 @@ describe('TEST-21 v4 documentation golden expectations', () => {
   it('documents target names and element references in all eight step examples', () => {
     const steps = spec('steps');
     for (const discriminator of expected.elementSteps) {
-      const heading = discriminator === 'capture' ? '### `capture`' : discriminator.includes('visible') || discriminator.includes('equals') || discriminator === 'element-count'
-        ? `### \`assert\` / \`${discriminator}\`` : `### \`action\` / \`${discriminator}\``;
-      const section = steps.split(heading)[1]?.split(/^### /m)[0];
+      const heading = discriminator === 'capture' ? '## `capture`' : discriminator.includes('visible') || discriminator.includes('equals') || discriminator === 'element-count'
+        ? `## \`assert\` / \`${discriminator}\`` : `## \`action\` / \`${discriminator}\``;
+      const section = steps.split(heading)[1]?.split(/^## /m)[0];
       expect(section, heading).toBeDefined();
       expect(section, heading).toMatch(/\| `target` \| (?:string|`TargetName`)/);
       expect(section, heading).toMatch(/\| `intent` \| `(?:Quoted)?ElementIntent`/);
@@ -121,7 +121,7 @@ describe('TEST-21 v4 documentation golden expectations', () => {
       expect(section, heading).toMatch(/"intent":\{"description":"[^"]+","sourceSpan":\{"startLine":\d+,"startColumn":\d+,"endLine":\d+,"endColumn":\d+\}/);
     }
     for (const check of expected.assertChecks) {
-      const section = steps.split(`### \`assert\` / \`${check}\``)[1]?.split(/^### /m)[0];
+      const section = steps.split(`## \`assert\` / \`${check}\``)[1]?.split(/^## /m)[0];
       expect(section, check).toMatch(/\| `timeoutMs` \|/);
     }
     expect(steps).toMatch(/poll(?:ing)?/i);

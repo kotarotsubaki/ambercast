@@ -55,12 +55,12 @@
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/mcp/): MCP 服务器的启动、传输、关闭和客户端注册参考。
 
 ## PLAN SPECIFICATION
-- [Ambercast 计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.9.0 接受的工件。
-- [计划文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/plan-document/): `PlanDocument` 是一个严格对象。
-- [步骤](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/steps/): 每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严格分支；每个分支都具有 `id: StepId`。
-- [值类型](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/): 所有其他章节必须（MUST）使用这些定义，而不是重新陈述其形态。
-- [Grounding 文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/): `GroundingDocument` 是一个严格对象，绑定到恰好一个 Plan 摘要。
-- [元素指纹](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/): `Fingerprint.
+- [Ambercast 执行计划规范](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/): 本规范描述了 ambercast 0.9.0 接受的工件。
+- [执行计划文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/plan-document/): 本章定义已提交的执行计划文件的顶层对象 `PlanDocument`、它的最小示例，以及本地生成据以转换为该对象的生成响应。
+- [步骤](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/steps/): 本章定义每一种已提交的步骤类型及其字段和示例，以及本地生成据以转换为已提交步骤的生成形式。
+- [值类型](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/): 本章定义其他章节按名称引用的共享对象和标量契约。
+- [定位缓存文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/): 本章定义 `GroundingDocument`，即绑定到一个执行计划摘要并提交的定位缓存，以及它的条目、轨迹记录，还有实现何时写入或保留条目。
+- [元素指纹](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/): 本章定义定位缓存为元素步骤保存的元素指纹、指纹的计算方法，以及已保存指纹的匹配方法。
 - [新鲜度与摘要](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/): `inputsDigest` 必须（MUST）是对新构建对象的规范 JSON（canonical JSON）计算得出的小写 SHA-256，该对象精确包含以下五个成员：`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint` 和 `targetDefinitions`。
 - [规范 JSON](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/canonical-json/): 摘要输入必须（MUST）使用以 UTF-8 编码且不含标记间空白的紧凑 RFC 8785 兼容 JSON。
 - [计划中的机密](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/secrets/): 计划必须（MUST）仅使用 值类型 `SecretRef` 来表示机密值；连续的 `{{secrets.

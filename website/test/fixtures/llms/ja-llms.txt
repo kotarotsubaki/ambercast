@@ -55,12 +55,12 @@
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/ja/reference/cli/mcp/): MCP サーバーの起動、転送、終了処理、クライアント登録のリファレンス。
 
 ## PLAN SPECIFICATION
-- [Ambercast Plan 仕様](https://kotarotsubaki.github.io/ambercast/ja/spec/overview/): 本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。
-- [計画ドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/plan-document/): `PlanDocument` は厳格なオブジェクトである。
-- [ステップ](https://kotarotsubaki.github.io/ambercast/ja/spec/steps/): コミットされたすべてのステップは、`kind` によって判別される `Step` の厳格なブランチであり、すべてのブランチは `id: StepId` を持つ。
-- [値型](https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/): 他のすべての章は、それらの形状を再記述するのではなく、これらの定義を使用しなければならない（MUST）。
-- [グラウンディングドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/): `GroundingDocument` は、厳密に1つの Plan ダイジェストにバインドされた厳格なオブジェクトである。
-- [要素フィンガープリント](https://kotarotsubaki.github.io/ambercast/ja/spec/fingerprint/): `Fingerprint.
+- [Ambercast 計画仕様](https://kotarotsubaki.github.io/ambercast/ja/spec/overview/): 本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。
+- [計画ドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/plan-document/): この章は、コミットする計画ファイルの最上位オブジェクトである `PlanDocument`、その最小の例、およびローカル生成がそれに変換する生成レスポンスを定義する。
+- [ステップ](https://kotarotsubaki.github.io/ambercast/ja/spec/steps/): この章は、コミットするすべてのステップの種類とそのフィールドおよび例、ならびにローカル生成がコミット済みステップに変換する生成形式を定義する。
+- [値型](https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/): この章は、他の章が名前で参照する共有オブジェクトとスカラーの契約を定義する。
+- [グラウンディングドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/): この章は、1 つの計画ダイジェストに束縛してコミットするグラウンディングのキャッシュである `GroundingDocument`、そのエントリとトレースレコード、および実装がエントリを書き込む条件と保持する条件を定義する。
+- [要素フィンガープリント](https://kotarotsubaki.github.io/ambercast/ja/spec/fingerprint/): この章は、グラウンディングが要素ステップごとに保存する要素フィンガープリントを定義し、その算出方法と、保存済みフィンガープリントの照合方法を述べる。
 - [鮮度とダイジェスト](https://kotarotsubaki.github.io/ambercast/ja/spec/freshness/): `inputsDigest` は、正確にこれら5つのメンバー（`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint`、および `targetDefinitions`）を持つ新規に構築されたオブジェクトの正規JSONに対する、小文字のSHA-256でなければならない（MUST）。
 - [正準 JSON](https://kotarotsubaki.github.io/ambercast/ja/spec/canonical-json/): ダイジェスト入力は、トークン間の空白を含まず、UTF-8 でエンコードされたコンパクトな RFC 8785 互換 JSON を使用しなければならない（MUST）。
 - [プランにおけるシークレット](https://kotarotsubaki.github.io/ambercast/ja/spec/secrets/): プランはシークレット値を 値型 `SecretRef` のみによって表現しなければならず（MUST）、連続する `{{secrets.

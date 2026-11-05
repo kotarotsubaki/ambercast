@@ -3163,74 +3163,81 @@ Claude Desktop 在其配置中接受同样的服务器条目：
 
 ---
 
-# Ambercast 计划规范
+# Ambercast 执行计划规范
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.9.0 接受的工件。该实现接受 Plan 模式版本 5 和 Grounding 模式版本 4。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:74]
+本规范描述了 ambercast 0.9.0 接受的工件。该实现接受执行计划模式版本 5 和定位缓存模式版本 4 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:74`)。
 
 ## 规范性用语 {#normative-language}
 
-词语 **MUST**、**SHOULD** 与 **MAY** 均按 RFC 2119 要求用语进行解释。符合规范的生产者必须（MUST）仅生成此处定义的版本和结构；消费者必须（MUST）拒绝其无法验证的结构。
+词语 **MUST**、**SHOULD** 与 **MAY** 均按 RFC 2119 的要求用语解释。符合规范的生产者必须 (MUST) 只生成此处定义的版本和结构；消费者必须 (MUST) 拒绝其无法验证的结构。
 
 ## 依赖模型 {#dependency-model}
 
-```mermaid alt="从规范化提示词经由inputsDigest、PlanDocument、planDigest和GroundingDocument到重放的流程图"
-flowchart LR
-  P[normalized prompt] --> I[inputsDigest]
-  I --> D[PlanDocument]
-  D --> PD[planDigest]
-  PD --> G[GroundingDocument]
-  G --> R[replay]
-```
+<figure class="ac-flow" aria-label="从规范化提示词到回放的依赖链。摘要绑定规范化提示词、模式、生产者输入和目标。执行计划把该摘要记录为 inputsDigest。planDigest 绑定与回放相关的执行计划内容。定位缓存文档绑定到 planDigest，只有与重新计算的摘要相等时才会被接受。回放读取已绑定的定位缓存。">
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">PROMPT</span></div><p class="ac-flow-title">规范化提示词</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>摘要绑定规范化提示词、模式、生产者输入和目标</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">DIGEST</span></div><p class="ac-flow-title">inputsDigest</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>执行计划把该摘要记录为 inputsDigest</b></span></div>
+<div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">PLAN</span><span class="ac-flow-chip ac-flow-chip-ai">可能调用 AI</span></div><p class="ac-flow-title">PlanDocument</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>planDigest 绑定与回放相关的执行计划内容</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">DIGEST</span></div><p class="ac-flow-title">planDigest</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>定位缓存文档绑定到 planDigest，只有与重新计算的摘要相等时才会被接受</b></span></div>
+<div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">GROUNDING</span></div><p class="ac-flow-title">GroundingDocument</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>回放读取已绑定的定位缓存</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">定位缓存完整时不调用 AI</span></div><p class="ac-flow-title">回放</p></div>
+</figure>
 
-每条摘要路径都必须（MUST）使用 [规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form)。`inputsDigest` 绑定规范化提示词、模式、生产者输入以及目标；`planDigest` 绑定与重放相关的计划内容。[src/core/ir/digest.ts:91](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L91) [src/core/ir/digest.ts:118](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L118)
+每条摘要路径都必须 (MUST) 使用[规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form)。`inputsDigest` 绑定规范化提示词、模式、生产者输入以及目标，`planDigest` 绑定与回放相关的执行计划内容 (`src/core/ir/digest.ts:130`) (`src/core/ir/digest.ts:153`)。
+
+执行计划记录自己的 `inputsDigest`，`planDigest` 由执行计划计算得出。定位缓存文档只有在其 `planDigest` 与重新计算的摘要相等时才会被接受，定义见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/#authority-and-binding)。回放读取已绑定的定位缓存。
 
 ## 兼容性 {#compatibility}
 
-| 工件 | 接受的值 | 证据 |
+| 产物 | 接受的值 | 证据 |
 | --- | --- | --- |
-| Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
-| Grounding `schemaVersion` | `4` | repo:src/core/ir/schema.ts:74 |
-| 指纹算法 | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
-| Report `schemaVersion` | `3.11` | repo:src/report/schema.ts:58 |
+| 执行计划的 `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
+| 定位缓存的 `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
+| 指纹算法 | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
+| Report `schemaVersion` | `3.11` | `src/report/schema.ts:58` |
 
 ## 阅读顺序 {#reading-order}
 
-先阅读 [计划文档](/ambercast/zh-cn/spec/plan-document/#document-shape)、[步骤](/ambercast/zh-cn/spec/steps/#step-union) 与 [值类型](/ambercast/zh-cn/spec/value-types/#shared-types)；然后阅读 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#inputs-digest)、[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/#grounding-shape) 与 [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm)。实现者必须（MUST）以 [规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form)、[计划中的机密](/ambercast/zh-cn/spec/secrets/#authorization) 和 [符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation) 结束。
+先阅读[执行计划文档](/ambercast/zh-cn/spec/plan-document/#document-shape)、[步骤](/ambercast/zh-cn/spec/steps/#step-union)与[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)，再阅读[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#inputs-digest)、[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/#grounding-shape)与[元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm)。实现者必须 (MUST) 最后阅读[规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form)、[执行计划中的机密](/ambercast/zh-cn/spec/secrets/#authorization)和[符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation)。
 
 ## 设计理由 {#rationale}
 
-问题在于，读者在能够安全地解释各字段之前，必须区分编写意图、派生执行与易失的 grounding。
+问题在于，读者在安全地解释各字段之前，必须先把作者的意图、派生出的执行和易变的定位缓存区分开。
 
-所选用的依赖优先呈现方式，使得在展示详细模式之前，摘要边界与兼容性版本就已经清晰可见。
+所选的依赖优先的呈现方式，让摘要边界和兼容性版本先于详细模式显现出来。
 
-一个被否决的备选方案是单一无差别的工件；它被否决是因为计划与 UI 证据具有不同的失效规则。另一个被否决的方案是章节局部版本控制；它被否决是因为兼容性属于文档系统级的契约。
+被否决的备选方案之一是单一而无区分的产物，因为执行计划与 UI 证据的失效规则不同。另一个是各章各自维护版本，因为兼容性是文档体系级的契约。
 
 ---
 
-# 计划文档
+# 执行计划文档
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/plan-document/
 
 ## 文档形态 {#document-shape}
 
-`PlanDocument` 是一个严格对象。生成方必须（MUST）输出字面量版本 5，且消费方必须（MUST）拒绝未知属性及其他版本。[src/core/ir/schema.ts:1205-1224](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1224)
+`PlanDocument` 是一个严格对象。生产者必须 (MUST) 输出字面量 `5`，消费者必须 (MUST) 拒绝未知属性和其他版本 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:1541-1546`)。
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `5` | 计划格式版本。 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1207) |
-| `source` | strict object | required | exactly `inputsDigest` | 新鲜度包装器。 | [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
-| `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | 生成输入的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
-| `generatorMeta` | record string → `JsonValue` | optional | JSON only | 从 `planDigest` 中排除的元数据。 | [src/core/ir/schema.ts:1189-1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189-L1193); [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128-L131) |
-| `targets` | record string → `TargetDefinition` | required | strict value; [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 目标快照。 | [src/core/ir/schema.ts:1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1193) |
-| `steps` | `Step[]` | required | ordered strict branches | 计划序列；[步骤](/ambercast/zh-cn/spec/steps/#step-union)。 | [src/core/ir/schema.ts:1194](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1194) |
+| `schemaVersion` | integer | required | literal `5` | 执行计划格式版本。 | `src/core/ir/schema.ts:62,1542` |
+| `source` | strict object | required | exactly `inputsDigest` | 新鲜度包装器。 | `src/core/ir/schema.ts:1543` |
+| `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | 生成输入的摘要。 | `src/core/ir/schema.ts:35,1543` |
+| `generatorMeta` | record string → `JsonValue` | optional | JSON only | 从 `planDigest` 中排除的元数据。 | `src/core/ir/schema.ts:1544`、`src/core/ir/digest.ts:153-157` |
+| `targets` | record string → `TargetDefinition` | required | strict value; [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 被引用的目标快照；每个键都必须被某个步骤使用。 | `src/core/ir/schema.ts:1545,1569-1578` |
+| `steps` | `Step[]` | required | ordered strict branches | 执行计划序列；[步骤](/ambercast/zh-cn/spec/steps/#step-union)。 | `src/core/ir/schema.ts:1546` |
 
-对于 `generatorMeta`，省略与 `{}` 仍是不同的序列化 Plan 值，但二者均不影响 `planDigest`：摘要视图整体排除了 `generatorMeta`。[src/core/ir/schema.ts:1189-1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189-L1193) [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128-L131)
+对于 `generatorMeta`，省略与 `{}` 仍是不同的序列化值，但二者都不影响 `planDigest`，因为摘要视图整体排除了 `generatorMeta` (`src/core/ir/schema.ts:1544`) (`src/core/ir/digest.ts:153-157`)。
 
 ## 完整最小文档 {#complete-minimal-document}
 
-摘要字符串为说明性占位符。Grounding 示例使用了相同的说明性 `planDigest`，并声明其指向该确切的 Plan 示例。
+摘要字符串只是示意用的占位符。定位缓存示例使用同一个示意用的 `planDigest`，并声明它指向这个执行计划示例。
 
 ```json
 {
@@ -3243,32 +3250,32 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/plan-document/
 
 ## 语义约束 {#semantic-constraints}
 
-步骤 ID 必须唯一（MUST）；重复项会在靠后的 `steps[index].id` 处报告 `duplicate step id: <id>`。[src/core/ir/schema.ts:1180-1204](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1180-L1204) 指令覆盖率要求在 [符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation) 中进行绑定提示词的本地归因与集合检查。[src/usecases/instruction-coverage-policy.ts:379-538](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L379-L538)
+步骤 ID 必须 (MUST) 唯一；出现重复时，会在靠后的 `steps[index].id` 处报告 `duplicate step id: <id>` (`src/core/ir/schema.ts:1551-1558`)。指令覆盖要求进行[符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation)中规定的、与提示词绑定的本地归属和集合检查 (`src/usecases/instruction-coverage-policy.ts:379-538`)。
 
 ## 仅提供方生成响应 {#provider-generation-response}
 
-提供方不创作 `schemaVersion`、`source` 或 `targets`；本地生成会在已提交计划验证之前添加它们。provider 的机密命名意图会在形成已提交的 `SecretRef` 前于本地解析。[src/core/ir/schema.ts:729-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L729-L833) [src/core/ir/schema.ts:1242-1254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1242-L1254)
+提供方不编写 `schemaVersion`、`source` 或 `targets`。在校验已提交的执行计划之前，本地生成会补上这些字段。提供方对机密命名的意图，会在形成已提交的 `SecretRef` 之前于本地解析 (`src/core/ir/schema.ts:1611-1624`) (`src/core/ir/schema.ts:1022-1029,1146`)。
 
-带有元素的步骤提议还使用与 `GeneratedInstructionCriterion` 相同锚点坐标的瞬态 `GeneratedElementIntent`／`GeneratedQuotedElementIntent`，而非已提交的 `ElementIntent`／`QuotedElementIntent`。
+提供方为含元素的步骤提议的形式，使用瞬态的 `GeneratedElementIntent` 和 `GeneratedQuotedElementIntent`，而不是已提交的 `ElementIntent` 和 `QuotedElementIntent`。它们的锚点坐标与 `GeneratedInstructionCriterion` 一致 (`src/core/ir/schema.ts:392-400,435-457`)。
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [步骤](/ambercast/zh-cn/spec/steps/#generated-forms) | 提供方提议。 | [src/core/ir/schema.ts:1234](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1234) |
-|  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | 提供方元数据。 | [src/core/ir/schema.ts:1236](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1236) |
-|  | `ambiguities` | `JsonValue[]` | required | none | 无法分配目标的步骤。 | repo:src/core/ir/schema.ts |
-|  | `assumptions` | `string[]` | optional | string items only | 提示词未说明的其他假设。作为报告警告，不保存到执行计划中。 | repo:src/core/ir/schema.ts |
-| `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | 提议的成功准则。 | [src/core/ir/schema.ts:844](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L844) |
-|  | `assertion` | `TraceAssert` | required | strict trace assertion | 瞬态终态证据。 | [src/core/ir/schema.ts:846](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L846) |
+| `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [步骤](/ambercast/zh-cn/spec/steps/#generated-forms) | 提供方提议。 | `src/core/ir/schema.ts:1612` |
+|  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | 提供方元数据。 | `src/core/ir/schema.ts:1613` |
+|  | `ambiguities` | `JsonValue[]` | required | none | 无法分配目标的步骤。 | `src/core/ir/schema.ts:1622` |
+|  | `assumptions` | `string[]` | optional | string items only | 提示词未说明的其他假设。作为报告警告，不保存到执行计划中。 | `src/core/ir/schema.ts:1623` |
+| `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | 提议的成功准则。 | `src/core/ir/schema.ts:1187` |
+|  | `assertion` | `TraceAssert` | required | strict trace assertion | 瞬态终态证据。 | `src/core/ir/schema.ts:1188` |
 
-`GeneratedPlanResponseForPolicy` 将 AI 的 `verificationIntent` 断言放宽为 `JsonValue`；`GeneratedPlanResponseRequest` 允许空的 `verificationIntent`。二者均为瞬态形式，绝非已提交的 Plan 形式。[src/core/ir/schema.ts:1250](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1250), [src/core/ir/schema.ts:1286](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1286)
+`GeneratedPlanResponseForPolicy` 把 AI 的 `verificationIntent` 断言放宽为 `JsonValue`。`GeneratedPlanResponseRequest` 允许空的 `verificationIntent`。两者都是瞬态形式，绝不会成为已提交的执行计划形式 (`src/core/ir/schema.ts:1636,1672`)。
 
 ## 设计理由 {#rationale}
 
-所面临的问题是在允许生成的执行细节具有可复现性的同时，保留经过评审的测试意图。计划是派生数据，因此它在暴露生成出处的同时不会变成源提示词。
+问题在于，既要保留经过评审的测试意图，又要让生成出的执行细节可以复现。执行计划是派生数据，所以它记录生成来源，但不会取代源提示词。
 
-所选定的严格且带版本的文档捕获了目标快照和有序步骤，同时将执行结果保留在文档之外。这使得计划摘要在重放时保持稳定，并在输入发生变更时显式重新生成。
+所选的严格、带版本的文档记录目标快照和有序步骤，把结果留在文档之外。这使执行计划摘要在多次回放之间保持稳定，也让输入变化时的重新生成变得明确。
 
-一个被否决的替代方案是将 trace 合并到计划中；它之所以被否决，是因为成功的执行会改写经过评审的意图。另一个被否决的替代方案是就地迁移旧计划；它之所以被否决，是因为对于语义发生变更的派生构件而言，重新生成比隐式重新解释更加安全。
+被否决的备选方案之一是把轨迹合并进执行计划，因为一次成功的执行就会改写经过评审的意图。另一个是原地迁移旧的执行计划，因为语义已变化的派生产物，重新生成比悄悄重新解释更安全。
 
 ---
 
@@ -3277,230 +3284,246 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/steps/
 
 ## 步骤联合体 {#step-union}
 
-每个已提交的步骤都是由 `kind` 辨识的 `Step` 的严格分支；每个分支都具有 `id: StepId`。[src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:742](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L742)
+每个已提交的步骤都是 `Step` 的严格分支，由 `kind` 辨识。每个分支都有 `id: StepId` 和必填的 `target`，后者指向 `Plan.targets` 中的某个键 (`src/core/ir/schema.ts:561,930`)。
 
-### 确认引用 {#confirmation-references}
+## 确认引用 {#confirmation-references}
 
-断言或 `ai` 步骤可包含非空的 `confirms` 数组，列出此前的 `click`、`press`、`fill`、`fill-secret` 或 `capture` 步骤；当当前步骤通过时，它将确认这些步骤的 grounding。未知 ID 报告 `confirms-unknown-step`，引用自身或后续步骤报告 `confirms-not-earlier`，引用不符合条件的步骤报告 `confirms-not-action`，重复 ID 报告 `confirms-duplicate`，未按 Plan 顺序升序排列则报告 `confirms-unsorted`；参见 [符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation)。`generate` 和 `heal` 在验证前移除 `confirms` 中指向 `navigate` 步骤的引用。不检查 Target 标识是否相同。
+断言或 `ai` 步骤可以带有非空的 `confirms` 数组，指向此前的 `click`、`press`、`fill`、`fill-secret` 或 `capture` 步骤；断言或步骤通过时，会确认这些步骤的定位缓存。`generate` 和 `heal` 在校验前会删除指向 `navigate` 步骤的 `confirms` 引用。校验会报告以下五种代码之一，详见[符合性](/ambercast/zh-cn/spec/conformance/#semantic-validation)。目标的一致性不做检查 (`src/core/ir/confirms-validation.ts:45`) (`src/core/ir/confirms-validation.ts:96`)。
 
-### `action` / `click` {#action-click}
+- `confirms-unknown-step`：ID 未知。
+- `confirms-not-earlier`：引用的是同一个或之后的步骤。
+- `confirms-not-action`：引用的步骤不符合条件。
+- `confirms-duplicate`：ID 重复。
+- `confirms-unsorted`：ID 没有按执行计划中的升序排列。
+
+## `action` / `click` {#action-click}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | Stable step identifier. | [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:438](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L438) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `click` | Action discriminator. | [src/core/ir/schema.ts:439](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L439) |
-| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的点击元素描述。 | repo:src/core/ir/schema.ts:540 |
+| `id` | `StepId` | required | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | 稳定的步骤标识符。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外层辨识符。 | `src/core/ir/schema.ts:613` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `click` | 动作辨识符。 | `src/core/ir/schema.ts:614` |
+| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的点击元素描述。 | `src/core/ir/schema.ts:573` |
 
 ```json
 {"id":"click-login","kind":"action","action":"click","target":"app","intent":{"description":"Click Log in","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}}}
 ```
 
-### `action` / `navigate` {#action-navigate}
+## `action` / `navigate` {#action-navigate}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L455) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:457](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L457) |
-| `action` | string | required | literal `navigate` | Action discriminator. | [src/core/ir/schema.ts:458](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L458) |
-| `url` | `InterpolatableText` | required | no `{{secrets.` marker | Navigation text. | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L455) |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外层辨识符。 | `src/core/ir/schema.ts:632` |
+| `action` | string | required | literal `navigate` | 动作辨识符。 | `src/core/ir/schema.ts:633` |
+| `url` | `InterpolatableText` | required | no `{{secrets.` marker | 导航文本。 | `src/core/ir/schema.ts:566` |
 
 ```json
 {"id":"open-home","kind":"action","action":"navigate","target":"app","url":"https://example.test"}
 ```
 
-在执行时，每个 Plan 导航、缓存的 trace 导航以及全新 agentic 导航都必须（MUST）针对实时目标的 `baseUrl` 进行解析，使用 HTTP(S)，并保持在该目标的原点（origin）上。不可解析、非 HTTP(S) 或跨原点的目标地址属于完整性故障。[src/usecases/run.ts:701](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L701) [src/usecases/run.ts:746](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L746)
+执行时，每一次执行计划导航、缓存的轨迹导航和全新的智能体导航，都必须 (MUST) 满足以下条件 (`src/usecases/run.ts:993`)：
 
-### `action` / `press` {#action-press}
+- 以运行中目标的 `baseUrl` 为基准解析。
+- 使用 HTTP(S)。
+- 保持在该目标的来源之内。
+
+无法解析、非 HTTP(S) 或跨来源的目的地属于完整性失败。
+
+## `action` / `press` {#action-press}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:476](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L476) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `press` | Action discriminator. | [src/core/ir/schema.ts:477](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L477) |
-| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的按键接收元素描述。 | repo:src/core/ir/schema.ts:574-579 |
-| `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | Key. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外层辨识符。 | `src/core/ir/schema.ts:652` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `press` | 动作辨识符。 | `src/core/ir/schema.ts:653` |
+| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的按键接收元素描述。 | `src/core/ir/schema.ts:574` |
+| `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | 按键。 | `src/core/ir/schema.ts:569` |
 
 ```json
 {"id":"submit","kind":"action","action":"press","target":"app","intent":{"description":"Press Enter in Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21}},"key":"Enter"}
 ```
 
-### `action` / `fill` {#action-fill}
+## `action` / `fill` {#action-fill}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:495](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L495) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `fill` | Action discriminator. | [src/core/ir/schema.ts:496](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L496) |
-| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的字段描述。 | repo:src/core/ir/schema.ts:594-599 |
-| `value` | `InterpolatableText` | required | no secret marker | Non-secret or run-state text. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外层辨识符。 | `src/core/ir/schema.ts:672` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `fill` | 动作辨识符。 | `src/core/ir/schema.ts:673` |
+| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的字段描述。 | `src/core/ir/schema.ts:575` |
+| `value` | `InterpolatableText` | required | no secret marker | 非机密文本或运行状态文本。 | `src/core/ir/schema.ts:571` |
 
 ```json
 {"id":"fill-email","kind":"action","action":"fill","target":"app","intent":{"description":"Fill Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":11}},"value":"a@example.test"}
 ```
 
-### `action` / `fill-secret` {#action-fill-secret}
+## `action` / `fill-secret` {#action-fill-secret}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `fill-secret` | Action discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的 secret 接收字段描述。 | repo:src/core/ir/schema.ts:617-622 |
-| `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外层辨识符。 | `src/core/ir/schema.ts:695` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `fill-secret` | 动作辨识符。 | `src/core/ir/schema.ts:696` |
+| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的 secret 接收字段描述。 | `src/core/ir/schema.ts:576` |
+| `secretRef` | `SecretRef` | required | whole secret-ref grammar | 机密值引用。 | `src/core/ir/schema.ts:108,572` |
 
 ```json
 {"id":"fill-password","kind":"action","action":"fill-secret","target":"app","intent":{"description":"Fill Password","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":14}},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
-### `assert` / `text-visible` {#assert-text-visible}
+## `assert` / `text-visible` {#assert-text-visible}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:558](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L558) |
-| `check` | string | required | literal `text-visible` | Assertion discriminator. | [src/core/ir/schema.ts:559](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L559) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `text` | `InterpolatableText` | required | no secret marker | Expected visible text. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 grounding 的步骤。 | repo:src/core/ir/schema.ts:521,663 |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外层辨识符。 | `src/core/ir/schema.ts:735` |
+| `check` | string | required | literal `text-visible` | 断言辨识符。 | `src/core/ir/schema.ts:736` |
+| `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
+| `text` | `InterpolatableText` | required | no secret marker | 期望可见的文本。 | `src/core/ir/schema.ts:587` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
 ```
-### `assert` / `element-visible` {#assert-element-visible}
+## `assert` / `element-visible` {#assert-element-visible}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:577](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L577) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `check` | string | required | literal `element-visible` | Assertion discriminator. | [src/core/ir/schema.ts:578](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L578) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用元素描述。 | repo:src/core/ir/schema.ts:680 |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 grounding 的步骤。 | repo:src/core/ir/schema.ts:521,684 |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外层辨识符。 | `src/core/ir/schema.ts:756` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `check` | string | required | literal `element-visible` | 断言辨识符。 | `src/core/ir/schema.ts:757` |
+| `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
+| `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用元素描述。 | `src/core/ir/schema.ts:594` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","intent":{"description":"Main navigation 「Main」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":23},"quote":{"text":"Main","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":22}}}}
 ```
-### `assert` / `text-equals` {#assert-text-equals}
+## `assert` / `text-equals` {#assert-text-equals}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:596](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L596) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `check` | string | required | literal `text-equals` | Assertion discriminator. | [src/core/ir/schema.ts:597](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L597) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用测试元素。 | repo:src/core/ir/schema.ts:703 |
-| `text` | `InterpolatableText` | required | no secret marker | Exact expected text. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 grounding 的步骤。 | repo:src/core/ir/schema.ts:521,707 |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外层辨识符。 | `src/core/ir/schema.ts:779` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `check` | string | required | literal `text-equals` | 断言辨识符。 | `src/core/ir/schema.ts:780` |
+| `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
+| `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用测试元素。 | `src/core/ir/schema.ts:595` |
+| `text` | `InterpolatableText` | required | no secret marker | 期望的精确文本。 | `src/core/ir/schema.ts:591` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account overview"}
 ```
-### `assert` / `url-matches` {#assert-url-matches}
+## `assert` / `url-matches` {#assert-url-matches}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:616](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L616) |
-| `check` | string | required | literal `url-matches` | Assertion discriminator. | [src/core/ir/schema.ts:617](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L617) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `pattern` | `InterpolatableText` | required | no secret marker | Expected URL matching text. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 grounding 的步骤。 | repo:src/core/ir/schema.ts:521,730 |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外层辨识符。 | `src/core/ir/schema.ts:802` |
+| `check` | string | required | literal `url-matches` | 断言辨识符。 | `src/core/ir/schema.ts:803` |
+| `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
+| `pattern` | `InterpolatableText` | required | no secret marker | 期望匹配的 URL 文本。 | `src/core/ir/schema.ts:592` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
 ```
-### `assert` / `element-count` {#assert-element-count}
+## `assert` / `element-count` {#assert-element-count}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:635](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L635) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `check` | string | required | literal `element-count` | Assertion discriminator. | [src/core/ir/schema.ts:636](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L636) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用匹配元素。 | repo:src/core/ir/schema.ts:749 |
-| `count` | integer | required | nonnegative | Expected count, including zero. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 grounding 的步骤。 | repo:src/core/ir/schema.ts:521,753 |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外层辨识符。 | `src/core/ir/schema.ts:825` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `check` | string | required | literal `element-count` | 断言辨识符。 | `src/core/ir/schema.ts:826` |
+| `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
+| `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用匹配元素。 | `src/core/ir/schema.ts:596` |
+| `count` | integer | required | nonnegative | 期望的数量，包括零。 | `src/core/ir/schema.ts:593` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"one-alert","kind":"assert","check":"element-count","target":"app","intent":{"description":"Error alerts 「Error」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21},"quote":{"text":"Error","sourceSpan":{"startLine":1,"startColumn":15,"endLine":1,"endColumn":20}}},"count":1}
 ```
-### `capture` {#capture}
+## 断言轮询 {#assertion-polling}
+
+断言检查在观测失败后，以最多 100ms 的间隔轮询，直到步骤截止时间。`timeoutMs` 会覆盖目标的 `resolveTimeoutMs` 作为该截止时间；取值为零时仍会求值一次。
+
+轮询适用于首次绑定的第一阶段、执行计划中的断言，以及由 AI 指挥的断言工具。它也适用于轨迹回放的两种判定，即事件判定和验证判定。执行计划中的断言包括三种带引文元素的检查，以及 `text-visible` 和 `url-matches` 的浏览器检查路径。由 AI 指挥的断言工具和轨迹回放使用目标的 `resolveTimeoutMs`。这些位置在等待到达截止时间后，各自做最后一次观测，由这次观测决定结果。
+
+`element-visible`、`text-equals` 和 `element-count` 从不查询或更新定位缓存，也不调用 AI：无论是否带 `--resolve`，它们都会轮询 `accessibilitySnapshot()` 和 `matchQuotedCandidates`，直到截止时间 (`src/usecases/run.ts:3071-3184`)。
+
+## `capture` {#capture}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
-| `kind` | string | required | literal `capture` | Step discriminator. | [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的捕获元素描述。 | repo:src/core/ir/schema.ts:788 |
-| `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | Bare run-state variable name. | [src/core/ir/schema.ts:675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L675) |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `capture` | 步骤辨识符。 | `src/core/ir/schema.ts:866` |
+| `target` | string | required | name in Plan `targets` | 执行目标。 | `src/core/ir/schema.ts:561` |
+| `intent` | `ElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据、用于首次绑定的捕获元素描述。 | `src/core/ir/schema.ts:867` |
+| `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | 不带前缀的运行状态变量名。 | `src/core/ir/schema.ts:868` |
 
 ```json
 {"id":"capture-code","kind":"capture","target":"app","intent":{"description":"Capture Code","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}},"variable":"code"}
 ```
 
-### `ai` {#ai}
+## `ai` {#ai}
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:416-420](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L416-L420) |
-| `kind` | string | required | literal `ai` | Step discriminator. | [src/core/ir/schema.ts:418](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L418) |
-| `instruction` | `InterpolatableText` | required | no secret marker | Agent instruction. | [src/core/ir/schema.ts:419](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L419) |
-| `secrets` | `AiStepSecretUse[]` | optional | strict entries | Committed secret uses. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
-| `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 通过时此智能体执行所确认 grounding 的步骤。 | repo:src/core/ir/schema.ts:521,824 |
+| `id` | `StepId` | required | step-ID regex | 稳定 ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `ai` | 步骤辨识符。 | `src/core/ir/schema.ts:582` |
+| `instruction` | `InterpolatableText` | required | no secret marker | 智能体指令。 | `src/core/ir/schema.ts:583` |
+| `secrets` | `AiStepSecretUse[]` | optional | strict entries | 已提交的机密使用。 | `src/core/ir/schema.ts:901` |
+| `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | 在本地归属的准则。 | `src/core/ir/schema.ts:902` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 通过时此智能体执行所确认 定位缓存 的步骤。 | `src/core/ir/schema.ts:900` |
 
 ```json
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
-### 已提交的 AI 机密使用 {#committed-ai-secret-grants}
+## 已提交的 AI 机密使用 {#committed-ai-secret-grants}
 
-已提交的 AI 步骤的可选 `secrets` 数组中的每个成员都是严格的 `AiStepSecretUse`；它仅记录已解析的引用。同意和允许列表授权在 Plan 持久化之前进行，而非 Plan 溯源字段。[src/core/ir/schema.ts:667-692](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L667-L692) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493)
+已提交的 AI 步骤的可选 `secrets` 数组中的每个成员都是严格的 `AiStepSecretUse`，只记录解析后的引用。同意和允许列表授权发生在执行计划持久化之前，不是执行计划的溯源字段 (`src/core/ir/schema.ts:883,898-903`) (`src/usecases/generate.ts:1652-1728`)。
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `ref` | `SecretRef` | required | whole secret-reference grammar | Committed secret reference. | [src/core/ir/schema.ts:674-675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674-L675) |
+| `ref` | `SecretRef` | required | whole secret-reference grammar | 已提交的机密引用。 | `src/core/ir/schema.ts:883` |
 
 ```json
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-断言检查在观测失败后以最多 100ms 的间隔轮询，直至步骤截止时间。`timeoutMs` 会覆盖 Target 的 `resolveTimeoutMs`；即使为零也会求值一次。`run.ts` 中的八个轮询站点为：首次绑定阶段 1；四个 plan assert 循环（三种带引用元素检查，以及 `text-visible` / `url-matches` 的浏览器检查路径）；AI 引导的断言工具；以及追踪重放的两个合格/不合格判定（事件与验证）。AI 引导的断言工具和追踪重放使用 Target 的 `resolveTimeoutMs`；每个站点都会在到达截止时间的等待之后进行最后一次观测，并以该次观测结果判定最终结果。
-
-`element-visible`、`text-equals` 和 `element-count` 从不查询或更新 grounding，也不会调用 AI：无论是否启用 `--resolve`，均通过 `accessibilitySnapshot()` 和 `matchQuotedCandidates` 轮询求值，直至截止时间。
-
 ## 生成形式 {#generated-forms}
 
-生成的 click、press、fill、fill-secret 和 capture 形式携带 `GeneratedElementIntent`；生成的 `element-visible`、`text-equals` 和 `element-count` 形式携带 `GeneratedQuotedElementIntent`。二者都在本地归因后形成 [共享类型](/ambercast/zh-cn/spec/value-types/#shared-types) 中的已提交形状。
+生成的 click、press、fill、fill-secret 和 capture 形式携带 `GeneratedElementIntent`；生成的 `element-visible`、`text-equals` 和 `element-count` 形式携带 `GeneratedQuotedElementIntent`。二者都在本地归属到[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的共享已提交形状 (`src/core/ir/schema.ts:435-457,985-1166`)。
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | 等待本地命名的提供商形式。 | [src/core/ir/schema.ts:773-805](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L773-L805) |
-|  | `secret` | `SecretNameChoice` | optional | strict choice | 瞬态验证提议。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L104-L115), [src/core/ir/schema.ts:779-785](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L779-L785) |
-| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | 等待本地解析的提供商命名意图。 | [src/core/ir/schema.ts:813-821](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L813-L821) |
-| `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | 共享的 AI 契约。 | [src/core/ir/schema.ts:814](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L814) |
-|  | `secrets` | generated uses[] | optional | strict entries | 瞬态验证提议。 | [src/core/ir/schema.ts:824-833](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L824-L833) |
-|  | `instructionCoverage` | generated criteria[] | required | min 1 | 瞬态验证提议。 | [src/core/ir/schema.ts:817](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L817) |
-|  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | 瞬态验证提议。 | [src/core/ir/schema.ts:818](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L818) |
+| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | 等待本地命名的提供商形式。 | `src/core/ir/schema.ts:1022-1029` |
+|  | `secret` | `SecretNameChoice` | optional | strict choice | 瞬态验证提议。 | `src/core/ir/schema.ts:144-147,1028` |
+| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | 等待本地解析的提供商命名意图。 | `src/core/ir/schema.ts:1146` |
+| `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | 共享的 AI 契约。 | `src/core/ir/schema.ts:1156` |
+|  | `secrets` | generated uses[] | optional | strict entries | 瞬态验证提议。 | `src/core/ir/schema.ts:1157` |
+|  | `instructionCoverage` | generated criteria[] | required | min 1 | 瞬态验证提议。 | `src/core/ir/schema.ts:1158` |
+|  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | 瞬态验证提议。 | `src/core/ir/schema.ts:1159` |
 
 ## 设计理由 {#rationale}
 
-该问题在于防止将动作误认为是证据，特别是在 UI 可能会产生错误通过（wrong pass）的情况下。显式断言分支使观察到的成功准则具备可检查性。
+问题在于防止把动作误当作证据，尤其是在 UI 可能产生错误通过 (wrong pass) 的场景。明确的断言分支让观测到的成功准则可以被检查。
 
-所选定的可辨识联合体为每个操作码（opcode）赋予了封闭的字段契约，并将机密填充与普通文本分离开来。提供商命名意图会在计划提交前于本地解析并取得同意。
+所选的可辨识联合体为每个操作码赋予封闭的字段契约，并把机密填写与普通文本分开。提供方的命名意图在本地解析并取得同意之后，执行计划才会被提交。
 
-provider 提供的锚点与列坐标将每个准则绑定到一个经本地解析的提示词摘录；本地解析为四坐标 `InstructionSourceSpan` 使得提交的归属变得精确，而 provider 返回的 `citation` 仅是确认该解析结果的校验和，并不作为结合键使用。 [src/usecases/instruction-coverage-policy.ts:407-443](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L407-L443)
+提供方给出的锚点和列坐标，把每条准则绑定到一段经本地解析的提示词摘录。针对四坐标 `InstructionSourceSpan` 的本地解析，使已提交的归属足够精确。提供方的 `citation` 只是用来确认该解析的校验和，绝不是连接键 (`src/usecases/instruction-coverage-policy.ts:405-479`)。
 
-终结性 `url-matches` 被否决，因为它是同义反复的成功形式，而不是所引用的成功准则的独立证明。请使用受支持且非重复的终结性 `TraceAssert`；如果无法表示成功条件，则生成失败。 [src/usecases/instruction-coverage-policy.ts:403-407](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L403-L407) [src/usecases/instruction-coverage-policy.ts:622-625](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L622-L625)
+终结的 `url-matches` 被否决，因为它是同义反复的成功形式，不能独立证明所引用的成功准则。应使用受支持且不重复的终结 `TraceAssert`；如果成功条件无法表示，生成就会失败 (`src/usecases/instruction-coverage-policy.ts:468-469`) (`src/usecases/instruction-coverage-policy.ts:630-631`)。
 
-一种被否决的备选方案曾使用带有可选负载字段的单个 action 对象；该方案被否决是因为无效组合在模式（schema）层面变得不可见。另一种备选方案允许通用文本携带机密；它被否决是因为机密出处和脱敏（redaction）将变得模棱两可。
+被否决的备选方案之一是用带可选负载字段的单个动作对象，因为无效组合在模式中不可见。另一个是让普通文本承载机密，因为同意边界和脱敏会变得含混。
 
 ---
 
@@ -3509,61 +3532,61 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/
 
 ## 共享类型 {#shared-types}
 
-所有其他章节必须（MUST）使用这些定义，而不是重新陈述其形态。下述每个对象都是严格的：未知属性必须（MUST）被拒绝。[src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) 正则表达式逐字引用自运行时权威定义。
+所有其他章节必须 (MUST) 使用这些定义，而不是重述它们的形状。下列每个对象都是严格对象，必须 (MUST) 拒绝未知属性 (`src/core/ir/schema.ts:231`) (`src/core/ir/schema.ts:254`)。正则表达式逐字引自运行时的权威定义。
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TargetDefinition` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | 无 secret 标记的已创作 HTTP(S) 基准 URL。 | [src/core/ir/schema.ts:37-38](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37-L38), [src/core/ir/schema.ts:165-166](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165-L166) |
-|  | `surface` | string | required | literal `web` | 执行界面。 | repo:src/core/ir/schema.ts |
-|  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | 每个 secret 允许的源。 | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L168) |
-|  | `locale` | string | optional | min length 1 | 由配置加载器规范化后的 BCP-47 格式 locale 标签。 | repo:src/core/ir/schema.ts:210 |
-| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) |
-|  | `role` | string | required | min 1 | 精确的可访问性角色。 | [src/core/ir/schema.ts:256](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L256) |
-|  | `name` | string | required | min 1 | 可访问名称。 | [src/core/ir/schema.ts:257](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L257) |
-| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | repo:src/core/ir/schema.ts:276 |
-|  | `role` | string | required | min 1 | 精确匹配的无障碍角色。 | repo:src/core/ir/schema.ts:278 |
-|  | `name` | string | required | may be empty | 空字符串表示没有 accessible name 的元素，仅匹配规范化后名称为空的节点。 | repo:src/core/ir/schema.ts:279 |
-| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 字面引用的摘录文本。 | repo:src/core/ir/schema.ts:359 |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用摘录的位置。 | repo:src/core/ir/schema.ts:360 |
-| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | 有来源依据的自然语言元素描述。 | repo:src/core/ir/schema.ts:367 |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 描述摘录的位置。 | repo:src/core/ir/schema.ts:368 |
-|  | `roleHint` | string | optional | `/^[a-z]+$/` | 可选的小写无障碍角色提示。 | repo:src/core/ir/schema.ts:369 |
-|  | `quote` | `Quote` | optional | strict nested object | 可选的 UI 文本字面引用，在提示词中独立定位。 | repo:src/core/ir/schema.ts:370 |
-| `QuotedElementIntent`（扩展 `ElementIntent`） | `quote` | `Quote` | required | strict nested object | 必需的 UI 文本字面引用。 | repo:src/core/ir/schema.ts:376 |
-| `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | 定位器证据格式。 | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-|  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小写 SHA-256。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:223](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L223) |
-| `InstructionSourceSpan` | `startLine` | integer | required | positive | 基于 1 的 UTF-16 起始行。 | [src/core/ir/schema.ts:332](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L332) |
-|  | `startColumn` | integer | required | positive | 基于 1 的 UTF-16 起始列。 | [src/core/ir/schema.ts:333](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L333) |
-|  | `endLine` | integer | required | positive | 基于 1 的 UTF-16 结束行。 | [src/core/ir/schema.ts:334](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L334) |
-|  | `endColumn` | integer | required | positive | 不包含边界的 UTF-16 结束列。 | [src/core/ir/schema.ts:335](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L335) |
-| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 待归因的准则。 | [src/core/ir/schema.ts:338](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L338) |
-|  | `kind` | string | required | enum `success`, `action` | 子句角色。 | [src/core/ir/schema.ts:339](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L339) |
-|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | provider 声称的起始行锚点（`L<n>`）。 | [src/core/ir/schema.ts:340](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L340) |
-|  | `startColumn` | integer | required | none (range checked by usecase policy) | provider 声称的基于 1 的 UTF-16 起始列。 | [src/core/ir/schema.ts:341](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L341) |
-|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | provider 声称的结束行锚点（`L<n>`）。 | [src/core/ir/schema.ts:342](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L342) |
-|  | `endColumn` | integer | required | none (range checked by usecase policy) | provider 声称的不包含边界的 UTF-16 结束列。 | [src/core/ir/schema.ts:343](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L343) |
-|  | `citation` | string | required | min 1; max `4096` | 逐字引用的提供方摘录(仅作校验和使用，不用于定位)。 | [src/core/ir/schema.ts:344](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L344) |
-| `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 已提交的准则 ID。 | [src/core/ir/schema.ts:366](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L366) |
-|  | `kind` | string | required | enum `success`, `action` | 子句角色。 | [src/core/ir/schema.ts:367](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L367) |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 本地派生的 prompt 位置。 | [src/core/ir/schema.ts:368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L368) |
-| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | provider 请求复用已投影的允许列表名称。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
-|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | provider 对新发现名称的提议。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
+| `TargetDefinition` | `baseUrl` | string | required | `/^https?:\/\/[^\s/?#]\S*$/`; `/^(?![\s\S]*\{\{secrets\.)[\s\S]*$/` | 无 secret 标记的已创作 HTTP(S) 基准 URL。 | `src/core/ir/schema.ts:37-38,233` |
+|  | `surface` | string | required | literal `web` | 执行界面。 | `src/core/ir/schema.ts:232` |
+|  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | 每个 secret 允许的源。 | `src/core/ir/schema.ts:234` |
+|  | `locale` | string | optional | min length 1 | 由配置加载器规范化后的 BCP-47 格式 locale 标签。 | `src/core/ir/schema.ts:235` |
+| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | `src/core/ir/schema.ts:254` |
+|  | `role` | string | required | min 1 | 精确的可访问性角色。 | `src/core/ir/schema.ts:256` |
+|  | `name` | string | required | min 1 | 可访问名称。 | `src/core/ir/schema.ts:257` |
+| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | 定位器鉴别器。 | `src/core/ir/schema.ts:276` |
+|  | `role` | string | required | min 1 | 精确匹配的无障碍角色。 | `src/core/ir/schema.ts:278` |
+|  | `name` | string | required | may be empty | 空字符串表示没有 accessible name 的元素，仅匹配规范化后名称为空的节点。 | `src/core/ir/schema.ts:279` |
+| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 字面引用的摘录文本。 | `src/core/ir/schema.ts:407` |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用摘录的位置。 | `src/core/ir/schema.ts:408` |
+| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | 有来源依据的自然语言元素描述。 | `src/core/ir/schema.ts:415` |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 描述摘录的位置。 | `src/core/ir/schema.ts:416` |
+|  | `roleHint` | string | optional | `/^[a-z]+$/` | 可选的小写无障碍角色提示。 | `src/core/ir/schema.ts:417` |
+|  | `quote` | `Quote` | optional | strict nested object | 可选的 UI 文本字面引用，在提示词中独立定位。 | `src/core/ir/schema.ts:418` |
+| `QuotedElementIntent`（扩展 `ElementIntent`） | `quote` | `Quote` | required | strict nested object | 必需的 UI 文本字面引用。 | `src/core/ir/schema.ts:424` |
+| `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | 定位器证据格式。 | `src/core/ir/schema.ts:320` |
+|  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小写 SHA-256。 | `src/core/ir/schema.ts:35,321` |
+| `InstructionSourceSpan` | `startLine` | integer | required | positive | 基于 1 的 UTF-16 起始行。 | `src/core/ir/schema.ts:372` |
+|  | `startColumn` | integer | required | positive | 基于 1 的 UTF-16 起始列。 | `src/core/ir/schema.ts:373` |
+|  | `endLine` | integer | required | positive | 基于 1 的 UTF-16 结束行。 | `src/core/ir/schema.ts:374` |
+|  | `endColumn` | integer | required | positive | 不包含边界的 UTF-16 结束列。 | `src/core/ir/schema.ts:375` |
+| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 待归因的准则。 | `src/core/ir/schema.ts:393` |
+|  | `kind` | string | required | enum `success`, `action` | 子句角色。 | `src/core/ir/schema.ts:394` |
+|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | provider 声称的起始行锚点（`L<n>`）。 | `src/core/ir/schema.ts:395` |
+|  | `startColumn` | integer | required | none (range checked by usecase policy) | provider 声称的基于 1 的 UTF-16 起始列。 | `src/core/ir/schema.ts:396` |
+|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | provider 声称的结束行锚点（`L<n>`）。 | `src/core/ir/schema.ts:397` |
+|  | `endColumn` | integer | required | none (range checked by usecase policy) | provider 声称的不包含边界的 UTF-16 结束列。 | `src/core/ir/schema.ts:398` |
+|  | `citation` | string | required | min 1; max `4096` | 逐字引用的提供方摘录(仅作校验和使用，不用于定位)。 | `src/core/ir/schema.ts:399` |
+| `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 已提交的准则 ID。 | `src/core/ir/schema.ts:506` |
+|  | `kind` | string | required | enum `success`, `action` | 子句角色。 | `src/core/ir/schema.ts:507` |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 本地派生的 prompt 位置。 | `src/core/ir/schema.ts:508` |
+| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | provider 请求复用已投影的允许列表名称。 | `src/core/ir/schema.ts:144-147` |
+|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | provider 对新发现名称的提议。 | `src/core/ir/schema.ts:144-147` |
 
-`ElementRef` 目前仅有 `AccessibilityElementRef`。`HexSha256` 为 `/^[0-9a-f]{64}$/`；`StepId` 与 `InstructionCriterionId` 为 `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/`；`RunVariableName` 为 `/^[a-z][a-zA-Z0-9]*$/`；`RunRef` 为 `/^\\{\\{run\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/`。[src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:198](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L198), [src/core/ir/schema.ts:237](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L237), [src/core/ir/schema.ts:311](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L311), [src/core/ir/schema.ts:381](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L381), [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L396)
+`ElementRef` 目前只有 `AccessibilityElementRef`。`HexSha256` 是 `/^[0-9a-f]{64}$/`。`StepId` 和 `InstructionCriterionId` 是 `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/`。`RunVariableName` 是 `/^[a-z][a-zA-Z0-9]*$/`。`RunRef` 是 `/^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/` (`src/core/ir/schema.ts:35,41,42,43,290,335,353,520,535`)。
 
 ## 标量与引用契约 {#scalar-contracts}
 
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | 完整的 secret 引用。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L33), [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L74) |
-| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 供同意和配置使用的裸逻辑名称。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L92) |
-| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | provider 的回退命名候选，而非已提交引用。 | [src/core/ir/schema.ts:94-102](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L94-L102) |
-| `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | 仅限 HTTP(S) 源。 | [src/core/ir/schema.ts:40](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L40), [src/core/ir/schema.ts:95-97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L95-L97) |
-| `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | 文本可包含 run 插值，但不得包含 secret 令牌。 | [src/core/ir/schema.ts:37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37), [src/core/ir/schema.ts:125](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L125) |
-| `Citation` | string | value | min 1; max `4096` | 归因前精确的 prompt 子字符串。 | [src/core/ir/schema.ts:273](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L273), [src/core/ir/schema.ts:279](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L279) |
-| `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | 元数据或提供方歧义值。 | [src/core/ir/schema.ts:1167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1167) |
+| `SecretRef` | string | value | `/^\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/` | 完整的 secret 引用。 | `src/core/ir/schema.ts:32,33,108` |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/` | 供同意和配置使用的裸逻辑名称。 | `src/core/ir/schema.ts:32,123` |
+| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | provider 的回退命名候选，而非已提交引用。 | `src/core/ir/schema.ts:133` |
+| `SecretSinkOrigin` | string | value | `/^https?:\/\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]\|655[0-2][0-9]\|65[0-4][0-9]{2}\|6[0-4][0-9]{3}\|[1-5][0-9]{4}\|[1-9][0-9]{0,3}))?$/`; no-secret pattern | 仅限 HTTP(S) 源。 | `src/core/ir/schema.ts:40,163-165` |
+| `InterpolatableText` | string | value | `/^(?![\s\S]*\{\{secrets\.)[\s\S]*$/` | 文本可包含 run 插值，但不得包含 secret 令牌。 | `src/core/ir/schema.ts:37,193` |
+| `Citation` | string | value | min 1; max `4096` | 归因前精确的 prompt 子字符串。 | `src/core/ir/schema.ts:342,399` |
+| `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | 元数据或提供方歧义值。 | `src/core/ir/schema.ts:1516` |
 
-`secretSinkOrigins` 中缺失的 secret 条目默认将该 secret 指向 `baseUrl`；显式的空数组拒绝所有源；非空数组则替换默认值。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) 所有 `InstructionSourceSpan` 的 prompt 坐标检查均属于语义验证。[src/usecases/instruction-coverage-policy.ts:509-538](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L509-L538)
+`secretSinkOrigins` 中没有某个机密的条目时，该机密默认使用 `baseUrl`；显式的空数组拒绝所有来源；非空数组则替换默认值 (`src/core/ir/schema.ts:220-223`)。`InstructionSourceSpan` 的所有提示词坐标检查都属于语义校验 (`src/usecases/instruction-coverage-policy.ts:501-531`)。
 
 ## 示例 {#examples}
 
@@ -3577,73 +3600,73 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/
 
 ## 设计理由 {#rationale}
 
-共享对象解决了计划（plan）、生成响应（generation response）与 grounding逐渐引入互不兼容的定位器、引用和溯源信息的问题。该设计将严格的运行时定义统一置于一个 schema 中，并从中派生 JSON Schema。
+共享对象解决的问题是：执行计划、生成响应和定位缓存会逐渐引入互不兼容的定位器、引用和溯源信息。该设计把严格的运行时定义放进同一个模式，并由它派生 JSON Schema。
 
-所选设计将完整值的 secret 和 run 引用与普通文本分离开来，并将 provider 命名意图与已提交的 secret 引用分离开来。因此，本地命名和同意而非 AI 生成的引用，对持久授权具有权威性。
+所选设计把整值的机密引用和运行引用与普通文本分开，也把提供方的命名意图与已提交的机密引用分开。对持久授权具有权威的是本地命名和同意，而不是 AI 生成的引用。
 
-一个被否决的备选方案是在每个文档中独立定义定位器和 secret 语法；该方案被否决是因为审查无法发现看似兼容的漂移。另一个被否决的方案是将引文视为持久权威；该方案被否决是因为相对于 prompt 的验证必须具有确定性且在本地进行。
+被否决的备选方案之一是在每个文档中独立定义定位器和机密语法，因为评审无法发现看似兼容的漂移。另一个是把引文当作持久的权威，因为针对提示词的验证必须是确定性的，并且在本地完成。
 
 ---
 
-# Grounding 文档
+# 定位缓存文档
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 
-## Grounding 形状 {#grounding-shape}
+## 定位缓存的形态 {#grounding-shape}
 
-`GroundingDocument` 是一个严格对象，绑定到恰好一个 Plan 摘要。 [repo:src/core/ir/schema.ts:1367]
+`GroundingDocument` 是一个严格对象，只绑定到一个执行计划摘要 (`src/core/ir/schema.ts:1753`)。
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | 必填 | 字面量 `4` | Grounding 格式版本。 | repo:src/core/ir/schema.ts:74,1663 |
-| `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联计划的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
-| `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 grounding。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
+| `schemaVersion` | integer | 必填 | 字面量 `4` | 定位缓存格式版本。 | `src/core/ir/schema.ts:74,1754` |
+| `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联执行计划的摘要。 | `src/core/ir/schema.ts:35,1755` |
+| `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 定位缓存。 | `src/core/ir/schema.ts:1756` |
 
 ## 条目变体 {#entry-variants}
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV4` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | repo:src/core/ir/schema.ts:1442 |
-|  | `locator` | `GroundingElementLocator` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | repo:src/core/ir/schema.ts:1444 |
-|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | repo:src/core/ir/schema.ts:1445 |
-|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | repo:src/core/ir/schema.ts:1446 |
-|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | repo:src/core/ir/schema.ts:1447 |
-| `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。 | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114) |
-|  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可重放的成功 trace。 | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1116) |
+| `ElementGroundingEntryV4` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | `src/core/ir/schema.ts:1443` |
+|  | `locator` | `GroundingElementLocator` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | `src/core/ir/schema.ts:1444` |
+|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | `src/core/ir/schema.ts:1445` |
+|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | `src/core/ir/schema.ts:1446` |
+|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | `src/core/ir/schema.ts:1447` |
+| `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。 | `src/core/ir/schema.ts:1464` |
+|  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可回放的成功 轨迹。 | `src/core/ir/schema.ts:1465` |
 
-`GroundingEntry` 是这两种确切严格形状的 `kind` 联合。缺失 AI 条目意味着未记录任何 trace；带有空验证（verification）的 `ai` 条目是无效的。 [src/core/ir/schema.ts:1057-1061](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1057-L1061), [src/core/ir/schema.ts:1114-1117](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114-L1117), [src/core/ir/schema.ts:1131-1134](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1131-L1134)
+`GroundingEntry` 是这两种严格形状按 `kind` 区分的联合。缺少 AI 条目表示尚未记录轨迹；验证为空的 `ai` 条目无效 (`src/core/ir/schema.ts:1402-1406,1463-1466,1480-1483`)。
 
-## Trace 记录 {#trace-record}
+## 轨迹记录 {#trace-record}
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TraceRecord` | `events` | `TraceEntry[]` | 必填 | 可为空 | 按时间顺序的操作/断言日志。 | [src/core/ir/schema.ts:1057](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1057) |
-|  | `verification` | `TraceAssert[]` | 必填 | 最小为 1 | 可重放成功所必需的终结断言。 | [src/core/ir/schema.ts:1059](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1059) |
-|  | `verificationCoverage` | record `InstructionCriterionId` → integer | 可选 | 非负整数 | 累加式的覆盖到验证索引映射。 | [src/core/ir/schema.ts:1060](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1060) |
-| `TraceClick` | `type`, `target` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。 | [src/core/ir/schema.ts:890](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L890) |
-| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | 必填 | 字面量 `navigate`；无 secret 标记 | 已记录的导航。 | [src/core/ir/schema.ts:906](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L906) |
-| `TracePress` | `type`, `target`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。 | [src/core/ir/schema.ts:922](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L922) |
-| `TraceFill` | `type`, `target`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。 | [src/core/ir/schema.ts:938](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L938) |
-| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。 | [src/core/ir/schema.ts:954](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L954) |
+| `TraceRecord` | `events` | `TraceEntry[]` | 必填 | 可为空 | 按时间顺序的操作/断言日志。 | `src/core/ir/schema.ts:1403` |
+|  | `verification` | `TraceAssert[]` | 必填 | 最小为 1 | 可回放成功所必需的终结断言。 | `src/core/ir/schema.ts:1404` |
+|  | `verificationCoverage` | record `InstructionCriterionId` → integer | 可选 | 非负整数 | 累加式的覆盖到验证索引映射。 | `src/core/ir/schema.ts:1405` |
+| `TraceClick` | `type`, `target` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。 | `src/core/ir/schema.ts:1235` |
+| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | 必填 | 字面量 `navigate`；无 secret 标记 | 已记录的导航。 | `src/core/ir/schema.ts:1251` |
+| `TracePress` | `type`, `target`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。 | `src/core/ir/schema.ts:1267` |
+| `TraceFill` | `type`, `target`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。 | `src/core/ir/schema.ts:1283` |
+| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。 | `src/core/ir/schema.ts:1299` |
 
-`TraceAction` 是这五种操作记录的 `type` 联合。`key` 枚举为 `Enter`、`Tab`、`Escape`、`ArrowDown`、`ArrowUp`；`ElementRef`、`InterpolatableText` 和 `SecretRef` 保留其来自 [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) 的约束。 [src/core/ir/schema.ts:407-410](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L407-L410), [src/core/ir/schema.ts:922-925](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L922-L925), [src/core/ir/schema.ts:970-976](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L970-L976)
+`TraceAction` 是这五种动作记录按 `type` 区分的联合。`key` 的枚举值是 `Enter`、`Tab`、`Escape`、`ArrowDown` 和 `ArrowUp`。`ElementRef`、`InterpolatableText` 和 `SecretRef` 保留[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的约束 (`src/core/ir/schema.ts:567-570,1267-1270,1315-1321`)。
 
-## Trace 验证记录 {#trace-verification-records}
+## 轨迹验证记录 {#trace-verification-records}
 
-每个 `TraceAssert` 分支都是严格的，且要求 `type: "assert"`；它与 Plan 断言共享相同的特定检查字段包。 [src/core/ir/schema.ts:997](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L997)
+每个 `TraceAssert` 分支都是严格的，并且要求 `type: "assert"`；它与执行计划中的断言共用同一组按检查类型区分的字段 (`src/core/ir/schema.ts:1342`)。
 
 | 变体 | 字段 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `text-visible` | `type`, `check`, `text` | 全部必填 | 字面量 `assert`、`text-visible`；非 secret 文本 | 可见性观察。 | [src/core/ir/schema.ts:998](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L998) |
-| `element-visible` | `type`, `check`, `target` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。 | [src/core/ir/schema.ts:1003](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1003) |
-| `text-equals` | `type`, `check`, `target`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。 | [src/core/ir/schema.ts:1008](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1008) |
-| `url-matches` | `type`, `check`, `pattern` | 全部必填 | 字面量 `assert`、`url-matches`；非 secret 文本 | URL 观察。 | [src/core/ir/schema.ts:1013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1013) |
-| `element-count` | `type`, `check`, `target`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。 | [src/core/ir/schema.ts:1018](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1018) |
+| `text-visible` | `type`, `check`, `text` | 全部必填 | 字面量 `assert`、`text-visible`；非 secret 文本 | 可见性观察。 | `src/core/ir/schema.ts:1343` |
+| `element-visible` | `type`, `check`, `target` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。 | `src/core/ir/schema.ts:1348` |
+| `text-equals` | `type`, `check`, `target`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。 | `src/core/ir/schema.ts:1353` |
+| `url-matches` | `type`, `check`, `pattern` | 全部必填 | 字面量 `assert`、`url-matches`；非 secret 文本 | URL 观察。 | `src/core/ir/schema.ts:1358` |
+| `element-count` | `type`, `check`, `target`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。 | `src/core/ir/schema.ts:1363` |
 
-`TraceEntry` 是 `TraceAction` 和 `TraceAssert` 的外层 `type` 联合。 [src/core/ir/schema.ts:1039](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1039)
+`TraceEntry` 是 `TraceAction` 与 `TraceAssert` 按外层 `type` 区分的联合 (`src/core/ir/schema.ts:1384`)。
 
 ## 完整最小文档 {#complete-minimal-document}
 
-此说明性的 `planDigest` 引用了 [计划文档](/ambercast/zh-cn/spec/plan-document/#complete-minimal-document) 中的完整 Plan 示例。它不是计算得出的摘要。
+这个示意用的 `planDigest` 指向[执行计划文档](/ambercast/zh-cn/spec/plan-document/#complete-minimal-document)中的完整执行计划示例。它不是计算出来的摘要。
 
 ```json
 {
@@ -3655,27 +3678,27 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 
 ## 权威性与绑定 {#authority-and-binding}
 
-消费方必须（MUST）重新计算 Plan 摘要，且仅当其等于 `planDigest` 时才接受 Grounding。 [src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+消费方必须 (MUST) 重新计算执行计划摘要，并且只有当它等于 `planDigest` 时才接受定位缓存 (`src/core/ir/digest.ts:153`) (`src/core/ir/digest.ts:170`)。
 
-## Plan digest 绑定 {#plan-digest}
+## 执行计划摘要绑定 {#plan-digest}
 
-在成功重放现有 trace 之后，实现必须（MUST）保持该条目不变。它必须（MUST）仅在伴随确切终结成功标准覆盖的智能体执行成功后，才写入或覆盖 AI 条目。对于以快照或失败断言结束的成功智能体执行，冷路径必须（MUST）不写入任何条目，而后备路径必须（MUST）删除导致后备的陈旧条目。在智能体执行失败或中止后，它必须（MUST）保持现有条目不变。 [src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
+成功回放现有轨迹之后，实现必须 (MUST) 保持该条目不变。实现必须 (MUST) 只在智能体执行成功且精确覆盖了终态成功准则之后，才写入或覆盖 AI 条目。智能体执行成功但最后一次观测是快照或失败的断言时，冷路径必须 (MUST) 不写入任何条目。在同样的结果下，回退路径必须 (MUST) 删除引发回退的陈旧条目。智能体执行失败或中止之后，实现必须 (MUST) 保持已有条目不变 (`src/usecases/run.ts:2255-2266`) (`src/usecases/run.ts:2565`)。
 
-元素条目仅在其绑定达到 `confirmed` 时才可写入或覆盖：至少一个步骤须在自身非空且已提交的 `confirms` 列表中指定该元素步骤，并且所有此类步骤均须在同一用例中通过。若确认步骤是 `element-visible` 断言，其通过仅在恰好一个候选元素匹配时才构成有效的确认依据；多个候选元素匹配时，即使断言通过，也不能确认绑定。仅达到 `acted` 的绑定在回写时被丢弃，绝不持久化。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
+元素条目只有在其绑定达到 `confirmed` 时，才可以写入或覆盖，这一点是必须 (MUST) 遵守的。为此，至少有一个步骤必须在自己的非空已提交 `confirms` 列表中列出该元素步骤，并且每个这样的步骤都必须在同一个用例中通过。对于 `element-visible` 的确认断言，只有恰好一个候选匹配时，这次通过才算有效的确认依据。多个匹配的通过不会确认该绑定。只达到 `acted` 的绑定在写回时丢弃，从不持久化 (`src/usecases/run.ts:149-180`) (`src/usecases/run.ts:3472-3495`) (`src/usecases/run.ts:4238-4247`)。
 
-对于每个 `TraceFillSecret`，`secretRef` 必须（MUST）属于所在 Plan AI 步骤已提交的 `secrets[].ref` 集合。违规属于完整性故障，且严禁（MUST NOT）回退到智能体执行。 [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
+对于每个 `TraceFillSecret`，`secretRef` 必须 (MUST) 属于包含它的执行计划 AI 步骤中已提交的 `secrets[].ref` 集合。违反属于完整性失败，并且不得 (MUST NOT) 回退到智能体执行 (`src/usecases/run.ts:1158`) (`src/usecases/run.ts:1356`)。
 
-定位缓存 v2 和 v3 已废弃。`check` 在 committed 策略下于 schema 校验前报告 `stale-grounding`，在 uncommitted 策略下报告 `fresh-without-grounding`。不带 `--resolve` 的 `run` 在执行计划摘要相符且元素步骤需要重新定位时报告 `GROUNDING_UNRESOLVED`，原因为 `recoverable-miss`。摘要不符时原因为 `missing`。
+定位缓存的版本 2 和 3 已废弃。在已提交的策略下，`check` 会在模式校验之前报告 `stale-grounding`；在未提交的策略下，则得到 `fresh-without-grounding`。没有 `--resolve` 时，若执行计划摘要匹配且有元素步骤需要定位缓存，`run` 会报告带 `recoverable-miss` 的 `GROUNDING_UNRESOLVED`；摘要不同则得到 `missing`。
 
-`run --resolve` 从空缓存重新绑定，并在满足现有写回条件时保存 v4。`generate` 将未改变的 fresh 执行计划的旧缓存替换为空的 v4。`heal` 报告 `FS_IO_ERROR`，因此必须先运行 `ambercast run --resolve --update-cache` 重新生成。v1 和未知版本仍在 `check` 中为 invalid，在 `run` 中为缓存未命中。
+`run --resolve` 从空缓存开始，并可以在现有写回条件下持久化 v4。对于未变化的新鲜执行计划，`generate` 会用空的 v4 定位缓存替换已废弃的缓存。在用 `ambercast run --resolve --update-cache` 重新生成缓存之前，`heal` 会报告 `FS_IO_ERROR`。版本 1 和未知版本在 `check` 中仍然无效，在 `run` 中仍然是缓存未命中。
 
 ## 设计理由 {#rationale}
 
-问题在于元素解析与 AI 执行证据是易失的，而计划意图应当保持可审查。独立的缓存需要明确无歧义地绑定回该意图。 
+问题在于，元素解析和 AI 执行的证据是易变的，而执行计划的意图应当保持可评审。独立的缓存需要一个明确的绑定，指回该意图。
 
-所选设计为元素步骤赋予有界的指纹，并为 AI 步骤赋予带有终结验证的完整 trace，全部以稳定的步骤 ID 为键并通过摘要进行绑定。这使得 grounding 成为 trace 的唯一权威来源。 
+所选设计为元素步骤提供有界的指纹，为 AI 步骤提供带终态验证的完整轨迹，全部以稳定的步骤 ID 为键，并由摘要绑定。这使定位缓存成为轨迹的唯一权威。
 
-一个被否决的备选方案是将 trace 嵌入到计划中；它被否决的原因是正常的成功运行会导致已审查的工件频繁变动。另一个备选方案是将空 trace 视为成功；它被否决是因为重放需要显式的终结证据。
+被否决的备选方案之一是把轨迹嵌入执行计划，因为正常的成功运行会不断改动经过评审的产物。另一个是把空轨迹当作成功，因为回放需要明确的终态证据。
 
 ---
 
@@ -3684,37 +3707,57 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/
 
 ## 算法 {#algorithm}
 
-`Fingerprint.algorithm` 必须为（MUST）`a11y-neighborhood-v2`。[src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) 其描述符包含目标 role/name 以及直接父级和紧邻的前后兄弟节点的 role/name。仅当相邻兄弟节点缺失时才为 `null`；匹配的节点始终具有直接父级，且顶层节点使用合成根节点作为该父级。[src/core/ir/fingerprint.ts:164](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L164) [src/core/ir/fingerprint.ts:259](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L259) 名称必须（MUST）经过 NFC 规范化、空白折叠并去除首尾空白；role 保持精确。[src/core/ir/fingerprint.ts:82](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L82)
+`Fingerprint.algorithm` 必须 (MUST) 为 `a11y-neighborhood-v2` (`src/core/ir/schema.ts:303`) (`src/core/ir/schema.ts:320`)。
 
-该算法必须（MUST）：(1) 解析一棵有效的无障碍树；(2) 找到恰好一个节点，其 role 与引用完全相等，且其 name 在经过 NFC、连续空白折叠及修剪后相匹配；(3) 构建 `{role,name,parent,siblingBefore,siblingAfter}`；(4) 将缺失的兄弟节点编码为 `null`；(5) 将描述符序列化为兼容 RFC 8785 的规范 UTF-8 JSON；(6) 对这些字节计算 SHA-256；以及 (7) 存储带有 v2 标签的小写十六进制输出。[src/core/ir/fingerprint.ts:240](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L240), [src/core/ir/fingerprint.ts:340](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L340) 后代节点和非相邻兄弟节点不得（MUST NOT）进入原像。[src/core/ir/fingerprint.ts:39](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L39)
+描述符包含目标的 role 和 name，以及直接父节点、紧邻的前一个和后一个兄弟节点的 role 和 name。只有不存在的相邻兄弟节点记为 `null`；匹配的节点始终有直接父节点，顶层节点以合成根节点作为父节点 (`src/core/ir/fingerprint.ts:174`) (`src/core/ir/fingerprint.ts:216`)。
+
+名称必须 (MUST) 经过 NFC 规范化、折叠连续空白并去除首尾空白；role 保持精确匹配 (`src/core/ir/fingerprint.ts:106`)。
+
+算法必须 (MUST) 完成以下步骤 (`src/core/ir/fingerprint.ts:241`) (`src/core/ir/fingerprint.ts:348`)：
+
+1. 解析有效的无障碍树。
+2. 找到恰好一个节点，其 role 与引用完全相等，其 name 经过 NFC 规范化、连续空白折叠和首尾空白去除后与引用匹配。
+3. 构建 `{role,name,parent,siblingBefore,siblingAfter}`。
+4. 将缺失的兄弟节点编码为 `null`。
+5. 将描述符序列化为与 RFC 8785 兼容的规范 UTF-8 JSON。
+6. 对这些字节计算 SHA-256。
+7. 存储带有 v2 标签的小写十六进制输出。
+
+后代节点和不相邻的兄弟节点不得 (MUST NOT) 进入原像 (`src/core/ir/fingerprint.ts:46-50`)。
 
 ## 摘要 {#digest}
 
-实现必须（MUST）使用 [规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form) 序列化描述符并对其计算 SHA-256。[src/core/ir/fingerprint.ts:6](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L6) [src/core/ir/digest.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L33) 非 v2 标签无法通过严格的 Grounding schema 校验。在 `run` 中，声明了 `trace.verificationCoverage` 的当前出处原始 Grounding 文档会将随后的严格校验或规范校验失败转化为完整性失败；若无该声明，不可用的伴随项将被视为缓存未命中。[src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L215) [src/usecases/run.ts:498](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L498) 在 `check` 中，grounding 检查在进行出处比对前将 schema 无效的伴随项归类为 `invalid`；公开报告状态为 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences) 中定义的仓库策略映射。[src/usecases/check-grounding.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L45)
+实现必须 (MUST) 使用[规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form) 序列化描述符，并对其计算 SHA-256 (`src/core/ir/fingerprint.ts:6`) (`src/core/ir/digest.ts:35`)。
+
+非 v2 标签无法通过严格的定位缓存模式校验 (`src/core/ir/schema.ts:319-322`)。
+
+在 `run` 中，声明了 `trace.verificationCoverage` 的当前出处原始定位缓存文档，会把随后的严格校验或规范校验失败变成完整性失败。没有该声明时，不可用的伴随文件按缓存未命中处理 (`src/usecases/run.ts:773-851`)。
+
+在 `check` 中，定位缓存检查会在比较出处之前，把模式无效的伴随文件归为 `invalid`。公开报告的状态遵循[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences)中定义的仓库策略映射 (`src/usecases/check-grounding.ts:50`)。
 
 ## 匹配 {#matching}
 
-指纹不匹配必须（MUST）被视为未命中，绝不能作为旧元素可以安全重放的证据。这遵循了已实现的版本门禁和不匹配失效机制。[src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L215) [src/core/ir/fingerprint.ts:39](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L39)
+指纹不匹配必须 (MUST) 按未命中处理，不得把它当作旧元素可以安全回放的证据。这遵循已实现的版本门禁和不匹配失效机制 (`src/core/ir/schema.ts:320`) (`src/core/ir/fingerprint.ts:436`)。
 
-`hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 和 `snapshot-invalid` 是截然不同的解析结果。缺失或畸形的树为 `element-not-found`；存在多个归一化 role/name 匹配项为 `ambiguous-match`；哈希过旧或不同为 `fingerprint-mismatch`。[src/core/ir/fingerprint.ts:347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L347), [src/core/ir/fingerprint.ts:388](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L388) 未配对的代理项在生成时不产生指纹，在解析时产生 `element-not-found`。[src/core/ir/fingerprint.ts:181](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L181)
+`hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 和 `snapshot-invalid` 是互不相同的解析结果。树缺失或格式错误时为 `element-not-found`；归一化后的 role 和 name 匹配多个节点时为 `ambiguous-match`；哈希过旧或不同时为 `fingerprint-mismatch` (`src/core/ir/fingerprint.ts:348`) (`src/core/ir/fingerprint.ts:436`)。未配对的代理项在生成时不产生指纹，在解析时产生 `element-not-found` (`src/core/ir/fingerprint.ts:57-59`) (`src/core/ir/fingerprint.ts:251-253`)。
 
-名称为空的引用仅匹配规范化后名称为空的节点。
+名称为空的引用只匹配规范化后名称为空的节点。
 
 ## 引用匹配 {#quote-matching}
 
-`matchQuotedCandidates(tree, {text, roleHint?})` 按指纹匹配顺序，从合成根节点的子节点开始，对无障碍树进行一次线性遍历。它对字面查询文本和节点名称应用相同的 `normalizeName` 规则（NFC 规范化、连续空白折叠、去除首尾空白），精确比较可选的 role 提示，且绝不插值形如 `{{run.x}}` 的字符串。它返回有序的 `{role, name}` 对；无效的树则返回 `{kind: 'snapshot-invalid'}`。
+`matchQuotedCandidates(tree, {text, roleHint?})` 按指纹匹配的顺序，从合成根节点的子节点开始，对无障碍树做一次线性遍历。它对字面查询文本和节点名称都应用 `normalizeName` (NFC 规范化、连续空白折叠、首尾空白去除)，精确比较可选的 role 提示，且从不插值形如 `{{run.x}}` 的字符串。它返回有序的 `{role, name}` 对；树无效时返回 `{kind: 'snapshot-invalid'}` (`src/core/ir/fingerprint.ts:106-108`) (`src/core/ir/fingerprint.ts:125-172`)。
 
-这一操作用于首次绑定时基于引用的阶段，也用于元素断言在不依赖 grounding 时的求值。
+该原语用于首次绑定时基于字面引用的轮询，也用于对 AI 提议的本地验证，以及元素断言在不依赖定位缓存时的求值，详见[步骤](/ambercast/zh-cn/spec/steps/#step-union)。
 
 ## 设计理由 {#rationale}
 
-要解决的问题是在不允许陈旧定位器在视觉相似元素上重放的前提下检测局部 UI 漂移。有界邻域使该证据得以显式化。
+要解决的问题是，在不允许陈旧的定位器对外观相似的元素回放的前提下，检测局部 UI 漂移。有界邻域让这一证据变得明确。
 
-所选设计在稳定的文本归一化之后，对目标、父级以及紧邻的兄弟节点进行哈希计算。它将未命中与匹配明确区分开来，而不是允许启发式复用。
+所选设计在稳定的文本规范化之后，对目标、父节点和紧邻的兄弟节点做哈希。它把未命中和匹配明确区分开，不允许启发式复用。
 
-一个被否决的备选方案是全树哈希；它之所以被否决，是因为无关变更会导致过多的未命中。另一个被否决的方案是基于选择器派生的标识；它之所以被否决，是因为选择器属于实现细节，而非保留的意图证据。 
+被否决的备选方案之一是整树哈希，因为无关的变更会造成过多未命中。另一个是由选择器派生的标识，因为选择器属于实现细节，不是需要保留的意图证据。
 
-v1 解析器无法提供无障碍证据的故障闭锁扫描。版本 2 更改了算法标签，因此 v1 指纹无法被解释为 v2 证据。其运行结果遵循 [元素指纹](/ambercast/zh-cn/spec/fingerprint/#digest) 中的当前出处与覆盖率声明规则，而不是无条件回退到重新解析。[CHANGELOG.md:78](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L78) [src/usecases/run.ts:498](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L498)
+v1 解析器无法对无障碍证据做故障关闭式扫描。版本 2 更改了算法标签，所以 v1 指纹不会被解释为 v2 证据。其运行结果遵循[元素指纹](/ambercast/zh-cn/spec/fingerprint/#digest)中关于当前出处和覆盖声明的规则，而不是无条件回退到重新解析 (`CHANGELOG.md:257`) (`src/usecases/run.ts:773-851`)。
 
 ---
 

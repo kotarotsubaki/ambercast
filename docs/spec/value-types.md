@@ -1,62 +1,64 @@
 # Value types
 
+This chapter defines the shared objects and scalar contracts that the other chapters reference by name.
+
 ## Shared types {#shared-types}
 
-All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [repo:src/core/ir/schema.ts:165] [repo:src/core/ir/schema.ts:254] Regexes are quoted verbatim from the runtime authority.
+All other chapters MUST use these definitions rather than restating their shapes. Every object below is strict: unknown properties MUST be rejected. [repo:src/core/ir/schema.ts:231] [repo:src/core/ir/schema.ts:254] Regexes are quoted verbatim from the runtime authority.
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TargetDefinition` with `surface` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Authored HTTP(S) base URL with no secret marker. | repo:src/core/ir/schema.ts:37-38,165-166 |
-|  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts |
-|  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | repo:src/core/ir/schema.ts:168 |
-|  | `locale` | string | optional | min length 1 | Authored BCP-47-shaped locale tag, canonicalized by the config loader before this point. | repo:src/core/ir/schema.ts:210 |
+| `TargetDefinition` with `surface` | `baseUrl` | string | required | `/^https?:\/\/[^\s/?#]\S*$/`; `/^(?![\s\S]*\{\{secrets\.)[\s\S]*$/` | Authored HTTP(S) base URL with no secret marker. | repo:src/core/ir/schema.ts:37-38,233 |
+|  | `surface` | string | required | literal `web` | Execution surface. | repo:src/core/ir/schema.ts:232 |
+|  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | Permitted origins per secret. | repo:src/core/ir/schema.ts:234 |
+|  | `locale` | string | optional | min length 1 | Authored BCP-47-shaped locale tag, canonicalized by the config loader before this point. | repo:src/core/ir/schema.ts:235 |
 | `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | repo:src/core/ir/schema.ts:254 |
 |  | `role` | string | required | min 1 | Exact accessibility role. | repo:src/core/ir/schema.ts:256 |
 |  | `name` | string | required | min 1 | Accessible name. | repo:src/core/ir/schema.ts:257 |
 | `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | Locator discriminator. | repo:src/core/ir/schema.ts:276 |
 |  | `role` | string | required | min 1 | Exact accessibility role. | repo:src/core/ir/schema.ts:278 |
 |  | `name` | string | required | may be empty | An empty string denotes an element without an accessible name and matches only nodes whose normalized name is empty. | repo:src/core/ir/schema.ts:279 |
-| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | Literal quoted excerpt text. | repo:src/core/ir/schema.ts:359 |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the quoted excerpt. | repo:src/core/ir/schema.ts:360 |
-| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | Source-backed natural-language element description. | repo:src/core/ir/schema.ts:367 |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the description excerpt. | repo:src/core/ir/schema.ts:368 |
-|  | `roleHint` | string | optional | `/^[a-z]+$/` | Optional lowercase accessibility role hint. | repo:src/core/ir/schema.ts:369 |
-|  | `quote` | `Quote` | optional | strict nested object | Optional literal UI-text quote independently located in the prompt. | repo:src/core/ir/schema.ts:370 |
-| `QuotedElementIntent` (extends `ElementIntent`) | `quote` | `Quote` | required | strict nested object | Required literal UI-text quote. | repo:src/core/ir/schema.ts:376 |
-| `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | Locator-evidence format. | repo:src/core/ir/schema.ts:221 |
-|  | `hash` | string | required | `/^[0-9a-f]{64}$/` | Lowercase SHA-256. | repo:src/core/ir/schema.ts:35,223 |
-| `InstructionSourceSpan` | `startLine` | integer | required | positive | One-based UTF-16 start line. | repo:src/core/ir/schema.ts:332 |
-|  | `startColumn` | integer | required | positive | One-based UTF-16 start column. | repo:src/core/ir/schema.ts:333 |
-|  | `endLine` | integer | required | positive | One-based UTF-16 end line. | repo:src/core/ir/schema.ts:334 |
-|  | `endColumn` | integer | required | positive | Exclusive UTF-16 end column. | repo:src/core/ir/schema.ts:335 |
-| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Criterion pending attribution. | repo:src/core/ir/schema.ts:338 |
-|  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:339 |
-|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | Provider-claimed start-line anchor (`L<n>`). | repo:src/core/ir/schema.ts:340 |
-|  | `startColumn` | integer | required | none (range checked by usecase policy) | Provider-claimed one-based UTF-16 start column. | repo:src/core/ir/schema.ts:341 |
-|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | Provider-claimed end-line anchor (`L<n>`). | repo:src/core/ir/schema.ts:342 |
-|  | `endColumn` | integer | required | none (range checked by usecase policy) | Provider-claimed exclusive UTF-16 end column. | repo:src/core/ir/schema.ts:343 |
-|  | `citation` | string | required | min 1; max `4096` | Verbatim provider excerpt (checksum only; never a locator). | repo:src/core/ir/schema.ts:344 |
-| `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Committed criterion ID. | repo:src/core/ir/schema.ts:366 |
-|  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:367 |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Locally derived prompt location. | repo:src/core/ir/schema.ts:368 |
-| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | Provider request to reuse a projected allowlisted name. | repo:src/core/ir/schema.ts:104-115 |
-|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | Provider proposal for a newly discovered name. | repo:src/core/ir/schema.ts:104-115 |
+| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | Literal quoted excerpt text. | repo:src/core/ir/schema.ts:407 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the quoted excerpt. | repo:src/core/ir/schema.ts:408 |
+| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | Source-backed natural-language element description. | repo:src/core/ir/schema.ts:415 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Location of the description excerpt. | repo:src/core/ir/schema.ts:416 |
+|  | `roleHint` | string | optional | `/^[a-z]+$/` | Optional lowercase accessibility role hint. | repo:src/core/ir/schema.ts:417 |
+|  | `quote` | `Quote` | optional | strict nested object | Optional literal UI-text quote independently located in the prompt. | repo:src/core/ir/schema.ts:418 |
+| `QuotedElementIntent` (extends `ElementIntent`) | `quote` | `Quote` | required | strict nested object | Required literal UI-text quote. | repo:src/core/ir/schema.ts:424 |
+| `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | Locator-evidence format. | repo:src/core/ir/schema.ts:320 |
+|  | `hash` | string | required | `/^[0-9a-f]{64}$/` | Lowercase SHA-256. | repo:src/core/ir/schema.ts:35,321 |
+| `InstructionSourceSpan` | `startLine` | integer | required | positive | One-based UTF-16 start line. | repo:src/core/ir/schema.ts:372 |
+|  | `startColumn` | integer | required | positive | One-based UTF-16 start column. | repo:src/core/ir/schema.ts:373 |
+|  | `endLine` | integer | required | positive | One-based UTF-16 end line. | repo:src/core/ir/schema.ts:374 |
+|  | `endColumn` | integer | required | positive | Exclusive UTF-16 end column. | repo:src/core/ir/schema.ts:375 |
+| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Criterion pending attribution. | repo:src/core/ir/schema.ts:393 |
+|  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:394 |
+|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | Provider-claimed start-line anchor (`L<n>`). | repo:src/core/ir/schema.ts:395 |
+|  | `startColumn` | integer | required | none (range checked by usecase policy) | Provider-claimed one-based UTF-16 start column. | repo:src/core/ir/schema.ts:396 |
+|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | Provider-claimed end-line anchor (`L<n>`). | repo:src/core/ir/schema.ts:397 |
+|  | `endColumn` | integer | required | none (range checked by usecase policy) | Provider-claimed exclusive UTF-16 end column. | repo:src/core/ir/schema.ts:398 |
+|  | `citation` | string | required | min 1; max `4096` | Verbatim provider excerpt (checksum only; never a locator). | repo:src/core/ir/schema.ts:399 |
+| `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | Committed criterion ID. | repo:src/core/ir/schema.ts:506 |
+|  | `kind` | string | required | enum `success`, `action` | Clause role. | repo:src/core/ir/schema.ts:507 |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | Locally derived prompt location. | repo:src/core/ir/schema.ts:508 |
+| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | Provider request to reuse a projected allowlisted name. | repo:src/core/ir/schema.ts:144-147 |
+|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | Provider proposal for a newly discovered name. | repo:src/core/ir/schema.ts:144-147 |
 
-`ElementRef` has only `AccessibilityElementRef` today. `HexSha256` is `/^[0-9a-f]{64}$/`; `StepId` and `InstructionCriterionId` are `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/`; `RunVariableName` is `/^[a-z][a-zA-Z0-9]*$/`; `RunRef` is `/^\\{\\{run\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/`. [repo:src/core/ir/schema.ts:35,41,198,237,311,381,396]
+`ElementRef` has only `AccessibilityElementRef` today. `HexSha256` is `/^[0-9a-f]{64}$/`; `StepId` and `InstructionCriterionId` are `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/`; `RunVariableName` is `/^[a-z][a-zA-Z0-9]*$/`; `RunRef` is `/^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/`. [repo:src/core/ir/schema.ts:35,41,42,43,290,335,353,520,535]
 
 ## Scalar and reference contracts {#scalar-contracts}
 
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | Whole secret reference. | repo:src/core/ir/schema.ts:31,33,74 |
-| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | Bare logical name used by consent and configuration. | repo:src/core/ir/schema.ts:31,83-92 |
-| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | Provider fallback naming candidate, not a committed reference. | repo:src/core/ir/schema.ts:94-102 |
-| `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | HTTP(S) origin only. | repo:src/core/ir/schema.ts:40,95-97 |
-| `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | Text may contain run interpolation but no secret token. | repo:src/core/ir/schema.ts:37,125 |
-| `Citation` | string | value | min 1; max `4096` | Exact prompt substring before attribution. | repo:src/core/ir/schema.ts:273,279 |
-| `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | Metadata or provider ambiguity value. | repo:src/core/ir/schema.ts:1167 |
+| `SecretRef` | string | value | `/^\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/` | Whole secret reference. | repo:src/core/ir/schema.ts:32,33,108 |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/` | Bare logical name used by consent and configuration. | repo:src/core/ir/schema.ts:32,123 |
+| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | Provider fallback naming candidate, not a committed reference. | repo:src/core/ir/schema.ts:133 |
+| `SecretSinkOrigin` | string | value | `/^https?:\/\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]\|655[0-2][0-9]\|65[0-4][0-9]{2}\|6[0-4][0-9]{3}\|[1-5][0-9]{4}\|[1-9][0-9]{0,3}))?$/`; no-secret pattern | HTTP(S) origin only. | repo:src/core/ir/schema.ts:40,163-165 |
+| `InterpolatableText` | string | value | `/^(?![\s\S]*\{\{secrets\.)[\s\S]*$/` | Text may contain run interpolation but no secret token. | repo:src/core/ir/schema.ts:37,193 |
+| `Citation` | string | value | min 1; max `4096` | Exact prompt substring before attribution. | repo:src/core/ir/schema.ts:342,399 |
+| `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | Metadata or provider ambiguity value. | repo:src/core/ir/schema.ts:1516 |
 
-An absent secret entry in `secretSinkOrigins` defaults that secret to `baseUrl`; an explicit empty array denies all origins; a non-empty array replaces the default. [repo:src/core/ir/schema.ts:152-157] All `InstructionSourceSpan` prompt-coordinate checks are semantic validation. [repo:src/usecases/instruction-coverage-policy.ts:509-538]
+An absent secret entry in `secretSinkOrigins` defaults that secret to `baseUrl`; an explicit empty array denies all origins; a non-empty array replaces the default. [repo:src/core/ir/schema.ts:220-223] All `InstructionSourceSpan` prompt-coordinate checks are semantic validation. [repo:src/usecases/instruction-coverage-policy.ts:501-531]
 
 ## Examples {#examples}
 

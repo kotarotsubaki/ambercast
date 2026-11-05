@@ -1,64 +1,64 @@
 ---
-title: "Grounding 文档"
-description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 Plan 摘要。"
+title: "定位缓存文档"
+description: "本章定义 `GroundingDocument`，即绑定到一个执行计划摘要并提交的定位缓存，以及它的条目、轨迹记录，还有实现何时写入或保留条目。"
 ---
 
-## Grounding 形状 {#grounding-shape}
+## 定位缓存的形态 {#grounding-shape}
 
-`GroundingDocument` 是一个严格对象，绑定到恰好一个 Plan 摘要。 [repo:src/core/ir/schema.ts:1367]
+`GroundingDocument` 是一个严格对象，只绑定到一个执行计划摘要 (`src/core/ir/schema.ts:1753`)。
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | 必填 | 字面量 `4` | Grounding 格式版本。 | repo:src/core/ir/schema.ts:74,1663 |
-| `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联计划的摘要。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
-| `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 grounding。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
+| `schemaVersion` | integer | 必填 | 字面量 `4` | 定位缓存格式版本。 | `src/core/ir/schema.ts:74,1754` |
+| `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联执行计划的摘要。 | `src/core/ir/schema.ts:35,1755` |
+| `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 定位缓存。 | `src/core/ir/schema.ts:1756` |
 
 ## 条目变体 {#entry-variants}
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV4` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | repo:src/core/ir/schema.ts:1442 |
-|  | `locator` | `GroundingElementLocator` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | repo:src/core/ir/schema.ts:1444 |
-|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | repo:src/core/ir/schema.ts:1445 |
-|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | repo:src/core/ir/schema.ts:1446 |
-|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | repo:src/core/ir/schema.ts:1447 |
-| `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。 | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114) |
-|  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可重放的成功 trace。 | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1116) |
+| `ElementGroundingEntryV4` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | `src/core/ir/schema.ts:1443` |
+|  | `locator` | `GroundingElementLocator` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | `src/core/ir/schema.ts:1444` |
+|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | `src/core/ir/schema.ts:1445` |
+|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | `src/core/ir/schema.ts:1446` |
+|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | `src/core/ir/schema.ts:1447` |
+| `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。 | `src/core/ir/schema.ts:1464` |
+|  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可回放的成功 轨迹。 | `src/core/ir/schema.ts:1465` |
 
-`GroundingEntry` 是这两种确切严格形状的 `kind` 联合。缺失 AI 条目意味着未记录任何 trace；带有空验证（verification）的 `ai` 条目是无效的。 [src/core/ir/schema.ts:1057-1061](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1057-L1061), [src/core/ir/schema.ts:1114-1117](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114-L1117), [src/core/ir/schema.ts:1131-1134](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1131-L1134)
+`GroundingEntry` 是这两种严格形状按 `kind` 区分的联合。缺少 AI 条目表示尚未记录轨迹；验证为空的 `ai` 条目无效 (`src/core/ir/schema.ts:1402-1406,1463-1466,1480-1483`)。
 
-## Trace 记录 {#trace-record}
+## 轨迹记录 {#trace-record}
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TraceRecord` | `events` | `TraceEntry[]` | 必填 | 可为空 | 按时间顺序的操作/断言日志。 | [src/core/ir/schema.ts:1057](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1057) |
-|  | `verification` | `TraceAssert[]` | 必填 | 最小为 1 | 可重放成功所必需的终结断言。 | [src/core/ir/schema.ts:1059](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1059) |
-|  | `verificationCoverage` | record `InstructionCriterionId` → integer | 可选 | 非负整数 | 累加式的覆盖到验证索引映射。 | [src/core/ir/schema.ts:1060](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1060) |
-| `TraceClick` | `type`, `target` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。 | [src/core/ir/schema.ts:890](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L890) |
-| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | 必填 | 字面量 `navigate`；无 secret 标记 | 已记录的导航。 | [src/core/ir/schema.ts:906](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L906) |
-| `TracePress` | `type`, `target`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。 | [src/core/ir/schema.ts:922](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L922) |
-| `TraceFill` | `type`, `target`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。 | [src/core/ir/schema.ts:938](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L938) |
-| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。 | [src/core/ir/schema.ts:954](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L954) |
+| `TraceRecord` | `events` | `TraceEntry[]` | 必填 | 可为空 | 按时间顺序的操作/断言日志。 | `src/core/ir/schema.ts:1403` |
+|  | `verification` | `TraceAssert[]` | 必填 | 最小为 1 | 可回放成功所必需的终结断言。 | `src/core/ir/schema.ts:1404` |
+|  | `verificationCoverage` | record `InstructionCriterionId` → integer | 可选 | 非负整数 | 累加式的覆盖到验证索引映射。 | `src/core/ir/schema.ts:1405` |
+| `TraceClick` | `type`, `target` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。 | `src/core/ir/schema.ts:1235` |
+| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | 必填 | 字面量 `navigate`；无 secret 标记 | 已记录的导航。 | `src/core/ir/schema.ts:1251` |
+| `TracePress` | `type`, `target`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。 | `src/core/ir/schema.ts:1267` |
+| `TraceFill` | `type`, `target`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。 | `src/core/ir/schema.ts:1283` |
+| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。 | `src/core/ir/schema.ts:1299` |
 
-`TraceAction` 是这五种操作记录的 `type` 联合。`key` 枚举为 `Enter`、`Tab`、`Escape`、`ArrowDown`、`ArrowUp`；`ElementRef`、`InterpolatableText` 和 `SecretRef` 保留其来自 [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) 的约束。 [src/core/ir/schema.ts:407-410](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L407-L410), [src/core/ir/schema.ts:922-925](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L922-L925), [src/core/ir/schema.ts:970-976](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L970-L976)
+`TraceAction` 是这五种动作记录按 `type` 区分的联合。`key` 的枚举值是 `Enter`、`Tab`、`Escape`、`ArrowDown` 和 `ArrowUp`。`ElementRef`、`InterpolatableText` 和 `SecretRef` 保留[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的约束 (`src/core/ir/schema.ts:567-570,1267-1270,1315-1321`)。
 
-## Trace 验证记录 {#trace-verification-records}
+## 轨迹验证记录 {#trace-verification-records}
 
-每个 `TraceAssert` 分支都是严格的，且要求 `type: "assert"`；它与 Plan 断言共享相同的特定检查字段包。 [src/core/ir/schema.ts:997](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L997)
+每个 `TraceAssert` 分支都是严格的，并且要求 `type: "assert"`；它与执行计划中的断言共用同一组按检查类型区分的字段 (`src/core/ir/schema.ts:1342`)。
 
 | 变体 | 字段 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `text-visible` | `type`, `check`, `text` | 全部必填 | 字面量 `assert`、`text-visible`；非 secret 文本 | 可见性观察。 | [src/core/ir/schema.ts:998](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L998) |
-| `element-visible` | `type`, `check`, `target` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。 | [src/core/ir/schema.ts:1003](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1003) |
-| `text-equals` | `type`, `check`, `target`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。 | [src/core/ir/schema.ts:1008](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1008) |
-| `url-matches` | `type`, `check`, `pattern` | 全部必填 | 字面量 `assert`、`url-matches`；非 secret 文本 | URL 观察。 | [src/core/ir/schema.ts:1013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1013) |
-| `element-count` | `type`, `check`, `target`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。 | [src/core/ir/schema.ts:1018](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1018) |
+| `text-visible` | `type`, `check`, `text` | 全部必填 | 字面量 `assert`、`text-visible`；非 secret 文本 | 可见性观察。 | `src/core/ir/schema.ts:1343` |
+| `element-visible` | `type`, `check`, `target` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。 | `src/core/ir/schema.ts:1348` |
+| `text-equals` | `type`, `check`, `target`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。 | `src/core/ir/schema.ts:1353` |
+| `url-matches` | `type`, `check`, `pattern` | 全部必填 | 字面量 `assert`、`url-matches`；非 secret 文本 | URL 观察。 | `src/core/ir/schema.ts:1358` |
+| `element-count` | `type`, `check`, `target`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。 | `src/core/ir/schema.ts:1363` |
 
-`TraceEntry` 是 `TraceAction` 和 `TraceAssert` 的外层 `type` 联合。 [src/core/ir/schema.ts:1039](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1039)
+`TraceEntry` 是 `TraceAction` 与 `TraceAssert` 按外层 `type` 区分的联合 (`src/core/ir/schema.ts:1384`)。
 
 ## 完整最小文档 {#complete-minimal-document}
 
-此说明性的 `planDigest` 引用了 [计划文档](/ambercast/zh-cn/spec/plan-document/#complete-minimal-document) 中的完整 Plan 示例。它不是计算得出的摘要。
+这个示意用的 `planDigest` 指向[执行计划文档](/ambercast/zh-cn/spec/plan-document/#complete-minimal-document)中的完整执行计划示例。它不是计算出来的摘要。
 
 ```json
 {
@@ -70,24 +70,24 @@ description: "`GroundingDocument` 是一个严格对象，绑定到恰好一个 
 
 ## 权威性与绑定 {#authority-and-binding}
 
-消费方必须（MUST）重新计算 Plan 摘要，且仅当其等于 `planDigest` 时才接受 Grounding。 [src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+消费方必须 (MUST) 重新计算执行计划摘要，并且只有当它等于 `planDigest` 时才接受定位缓存 (`src/core/ir/digest.ts:153`) (`src/core/ir/digest.ts:170`)。
 
-## Plan digest 绑定 {#plan-digest}
+## 执行计划摘要绑定 {#plan-digest}
 
-在成功重放现有 trace 之后，实现必须（MUST）保持该条目不变。它必须（MUST）仅在伴随确切终结成功标准覆盖的智能体执行成功后，才写入或覆盖 AI 条目。对于以快照或失败断言结束的成功智能体执行，冷路径必须（MUST）不写入任何条目，而后备路径必须（MUST）删除导致后备的陈旧条目。在智能体执行失败或中止后，它必须（MUST）保持现有条目不变。 [src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
+成功回放现有轨迹之后，实现必须 (MUST) 保持该条目不变。实现必须 (MUST) 只在智能体执行成功且精确覆盖了终态成功准则之后，才写入或覆盖 AI 条目。智能体执行成功但最后一次观测是快照或失败的断言时，冷路径必须 (MUST) 不写入任何条目。在同样的结果下，回退路径必须 (MUST) 删除引发回退的陈旧条目。智能体执行失败或中止之后，实现必须 (MUST) 保持已有条目不变 (`src/usecases/run.ts:2255-2266`) (`src/usecases/run.ts:2565`)。
 
-元素条目仅在其绑定达到 `confirmed` 时才可写入或覆盖：至少一个步骤须在自身非空且已提交的 `confirms` 列表中指定该元素步骤，并且所有此类步骤均须在同一用例中通过。若确认步骤是 `element-visible` 断言，其通过仅在恰好一个候选元素匹配时才构成有效的确认依据；多个候选元素匹配时，即使断言通过，也不能确认绑定。仅达到 `acted` 的绑定在回写时被丢弃，绝不持久化。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
+元素条目只有在其绑定达到 `confirmed` 时，才可以写入或覆盖，这一点是必须 (MUST) 遵守的。为此，至少有一个步骤必须在自己的非空已提交 `confirms` 列表中列出该元素步骤，并且每个这样的步骤都必须在同一个用例中通过。对于 `element-visible` 的确认断言，只有恰好一个候选匹配时，这次通过才算有效的确认依据。多个匹配的通过不会确认该绑定。只达到 `acted` 的绑定在写回时丢弃，从不持久化 (`src/usecases/run.ts:149-180`) (`src/usecases/run.ts:3472-3495`) (`src/usecases/run.ts:4238-4247`)。
 
-对于每个 `TraceFillSecret`，`secretRef` 必须（MUST）属于所在 Plan AI 步骤已提交的 `secrets[].ref` 集合。违规属于完整性故障，且严禁（MUST NOT）回退到智能体执行。 [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
+对于每个 `TraceFillSecret`，`secretRef` 必须 (MUST) 属于包含它的执行计划 AI 步骤中已提交的 `secrets[].ref` 集合。违反属于完整性失败，并且不得 (MUST NOT) 回退到智能体执行 (`src/usecases/run.ts:1158`) (`src/usecases/run.ts:1356`)。
 
-定位缓存 v2 和 v3 已废弃。`check` 在 committed 策略下于 schema 校验前报告 `stale-grounding`，在 uncommitted 策略下报告 `fresh-without-grounding`。不带 `--resolve` 的 `run` 在执行计划摘要相符且元素步骤需要重新定位时报告 `GROUNDING_UNRESOLVED`，原因为 `recoverable-miss`。摘要不符时原因为 `missing`。
+定位缓存的版本 2 和 3 已废弃。在已提交的策略下，`check` 会在模式校验之前报告 `stale-grounding`；在未提交的策略下，则得到 `fresh-without-grounding`。没有 `--resolve` 时，若执行计划摘要匹配且有元素步骤需要定位缓存，`run` 会报告带 `recoverable-miss` 的 `GROUNDING_UNRESOLVED`；摘要不同则得到 `missing`。
 
-`run --resolve` 从空缓存重新绑定，并在满足现有写回条件时保存 v4。`generate` 将未改变的 fresh 执行计划的旧缓存替换为空的 v4。`heal` 报告 `FS_IO_ERROR`，因此必须先运行 `ambercast run --resolve --update-cache` 重新生成。v1 和未知版本仍在 `check` 中为 invalid，在 `run` 中为缓存未命中。
+`run --resolve` 从空缓存开始，并可以在现有写回条件下持久化 v4。对于未变化的新鲜执行计划，`generate` 会用空的 v4 定位缓存替换已废弃的缓存。在用 `ambercast run --resolve --update-cache` 重新生成缓存之前，`heal` 会报告 `FS_IO_ERROR`。版本 1 和未知版本在 `check` 中仍然无效，在 `run` 中仍然是缓存未命中。
 
 ## 设计理由 {#rationale}
 
-问题在于元素解析与 AI 执行证据是易失的，而计划意图应当保持可审查。独立的缓存需要明确无歧义地绑定回该意图。 
+问题在于，元素解析和 AI 执行的证据是易变的，而执行计划的意图应当保持可评审。独立的缓存需要一个明确的绑定，指回该意图。
 
-所选设计为元素步骤赋予有界的指纹，并为 AI 步骤赋予带有终结验证的完整 trace，全部以稳定的步骤 ID 为键并通过摘要进行绑定。这使得 grounding 成为 trace 的唯一权威来源。 
+所选设计为元素步骤提供有界的指纹，为 AI 步骤提供带终态验证的完整轨迹，全部以稳定的步骤 ID 为键，并由摘要绑定。这使定位缓存成为轨迹的唯一权威。
 
-一个被否决的备选方案是将 trace 嵌入到计划中；它被否决的原因是正常的成功运行会导致已审查的工件频繁变动。另一个备选方案是将空 trace 视为成功；它被否决是因为重放需要显式的终结证据。  
+被否决的备选方案之一是把轨迹嵌入执行计划，因为正常的成功运行会不断改动经过评审的产物。另一个是把空轨迹当作成功，因为回放需要明确的终态证据。

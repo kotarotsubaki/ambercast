@@ -3165,50 +3165,61 @@ Claude Desktop は、設定に同じサーバーのエントリを書けば使�
 
 ---
 
-# Ambercast Plan 仕様
+# Ambercast 計画仕様
 Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 4 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:74]
+本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 4 を受け付ける（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
 
 ## 規範的文言 {#normative-language}
 
-単語 **MUST**、**SHOULD**、および **MAY** は、RFC 2119 の要求語として解釈されるものとする。適合するプロデューサは、ここで定義されたバージョンおよび構造のみを出力しなければならない（MUST）。コンシューマは、自身が検証できない構造を拒絶しなければならない（MUST）。
+単語 **MUST**、**SHOULD**、**MAY** は、RFC 2119 の要求語として解釈する。適合するプロデューサは、ここで定義するバージョンと構造だけを出力しなければならない（MUST）。コンシューマは、検証できない構造を拒絶しなければならない（MUST）。
 
 ## 依存関係モデル {#dependency-model}
 
-```mermaid alt="正規化されたプロンプトからinputsDigest、PlanDocument、planDigest、GroundingDocumentを経てリプレイに至るフローチャート"
-flowchart LR
-  P[normalized prompt] --> I[inputsDigest]
-  I --> D[PlanDocument]
-  D --> PD[planDigest]
-  PD --> G[GroundingDocument]
-  G --> R[replay]
-```
+<figure class="ac-flow" aria-label="正規化したプロンプトから再生までの依存の連鎖。ダイジェストは、正規化したプロンプト、スキーマ、プロデューサの入力、ターゲットを束縛する。計画は、そのダイジェストを inputsDigest として記録する。planDigest は、再生に関わる計画の内容を束縛する。グラウンディング文書は planDigest に束縛され、再計算したダイジェストと等しいときだけ受け入れられる。再生は、束縛されたグラウンディングを読む。">
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">PROMPT</span></div><p class="ac-flow-title">正規化したプロンプト</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>ダイジェストは、正規化したプロンプト、スキーマ、プロデューサの入力、ターゲットを束縛する</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">DIGEST</span></div><p class="ac-flow-title">inputsDigest</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>計画は、そのダイジェストを inputsDigest として記録する</b></span></div>
+<div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">PLAN</span><span class="ac-flow-chip ac-flow-chip-ai">AI を呼びうる</span></div><p class="ac-flow-title">PlanDocument</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>planDigest は、再生に関わる計画の内容を束縛する</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">DIGEST</span></div><p class="ac-flow-title">planDigest</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>グラウンディング文書は planDigest に束縛され、再計算したダイジェストと等しいときだけ受け入れられる</b></span></div>
+<div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">GROUNDING</span></div><p class="ac-flow-title">GroundingDocument</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>再生は、束縛されたグラウンディングを読む</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">グラウンディングが完全なら AI を呼ばない</span></div><p class="ac-flow-title">再生</p></div>
+</figure>
 
-すべてのダイジェストパスは、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form) を使用しなければならない（MUST）。`inputsDigest` は正規化されたプロンプト、スキーマ、プロデューサ入力、およびターゲットをバインドし、`planDigest` はリプレイに関連する計画内容をバインドする。[src/core/ir/digest.ts:91](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L91) [src/core/ir/digest.ts:118](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L118)
+すべてのダイジェストの経路は、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)を使わなければならない（MUST）。`inputsDigest` は、正規化したプロンプト、スキーマ、プロデューサの入力、ターゲットを束縛する。`planDigest` は、再生に関わる計画の内容を束縛する（`src/core/ir/digest.ts:130`、`src/core/ir/digest.ts:153`）。
+
+計画は自身の `inputsDigest` を記録し、`planDigest` は計画から計算する。グラウンディングドキュメントは、その `planDigest` が再計算したダイジェストと等しいときだけ受け入れる。定義は[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#authority-and-binding)にある。再生は、束縛されたグラウンディングを読む。
 
 ## 互換性 {#compatibility}
 
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
-| Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
-| Grounding `schemaVersion` | `4` | repo:src/core/ir/schema.ts:74 |
-| Fingerprint アルゴリズム | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
-| Report `schemaVersion` | `3.11` | repo:src/report/schema.ts:58 |
+| 計画の `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
+| グラウンディングの `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
+| フィンガープリントのアルゴリズム | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
+| Report `schemaVersion` | `3.11` | `src/report/schema.ts:58` |
 
 ## 読解順序 {#reading-order}
 
-まず [計画ドキュメント](/ambercast/ja/spec/plan-document/#document-shape)、[ステップ](/ambercast/ja/spec/steps/#step-union)、および [値型](/ambercast/ja/spec/value-types/#shared-types) を読み、次に [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)、[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#grounding-shape)、および [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) を読むこと。実装者は、最後に [正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)、[プランにおけるシークレット](/ambercast/ja/spec/secrets/#authorization)、および [適合性](/ambercast/ja/spec/conformance/#semantic-validation) を読まなければならない（MUST）。
+読む順序は次のとおりである。
+
+1. [計画ドキュメント](/ambercast/ja/spec/plan-document/#document-shape)、[ステップ](/ambercast/ja/spec/steps/#step-union)、[値型](/ambercast/ja/spec/value-types/#shared-types)を最初に読む。
+2. [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)、[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#grounding-shape)、[要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm)を次に読む。
+3. 実装者は、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)、[計画におけるシークレット](/ambercast/ja/spec/secrets/#authorization)、[適合性](/ambercast/ja/spec/conformance/#semantic-validation)を最後に読まなければならない（MUST）。
 
 ## 設計根拠 {#rationale}
 
-問題は、読者がフィールドを安全に解釈できるようになる前に、作成された意図を、派生した実行および揮発的なグラウンディングから区別しなければならないことである。
+課題は、読者がフィールドを安全に解釈する前に、書き手の意図を、派生した実行と揮発するグラウンディングから区別しなければならないことである。
 
-選定された依存関係優先の提示構成により、詳細なスキーマに先立ってダイジェスト境界と互換性バージョンが可視化される。
+採用した依存関係優先の構成は、詳細なスキーマより先に、ダイジェストの境界と互換性のバージョンを見えるようにする。
 
-却下された代替案の1つは、単一の未分化なアーティファクトであった。計画と UI エビデンスでは無効化ルールが異なるため、これは却下された。もう1つは章ごとの局所的なバージョニングであった。互換性はドキュメントシステム全体の規約であるため、これは却下された。
+却下した代替案の 1 つは、区別のない単一のアーティファクトである。計画と UI の証拠では無効化の規則が異なるため、却下した。もう 1 つは、章ごとのバージョン管理である。互換性はドキュメント体系全体の契約であるため、却下した。
 
 ---
 
@@ -3217,22 +3228,22 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/plan-document/
 
 ## ドキュメントの形状 {#document-shape}
 
-`PlanDocument` は厳格なオブジェクトである。プロデューサはリテラルバージョン 5 を出力しなければならず（MUST）、コンシューマは未知のプロパティおよび他のバージョンを拒絶しなければならない（MUST）。[src/core/ir/schema.ts:1205-1224](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1224)
+`PlanDocument` は厳格なオブジェクトである。プロデューサはリテラルの `5` を出力しなければならず（MUST）、コンシューマは未知のプロパティと他のバージョンを拒絶しなければならない（MUST）（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:1541-1546`）。
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `5` | 計画フォーマットのバージョン。 | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:1205-1207](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1205-L1207) |
-| `source` | strict object | required | exactly `inputsDigest` | 鮮度ラッパー。 | [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
-| `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | 生成入力のダイジェスト。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1191) |
-| `generatorMeta` | record string → `JsonValue` | optional | JSON only | `planDigest` から除外されるメタデータ。 | [src/core/ir/schema.ts:1189-1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189-L1193); [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128-L131) |
-| `targets` | record string → `TargetDefinition` | required | strict value; [値型](/ambercast/ja/spec/value-types/#shared-types) | ターゲットのスナップショット。 | [src/core/ir/schema.ts:1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1193) |
-| `steps` | `Step[]` | required | ordered strict branches | 計画シーケンス; [ステップ](/ambercast/ja/spec/steps/#step-union)。 | [src/core/ir/schema.ts:1194](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1194) |
+| `schemaVersion` | integer | required | literal `5` | 計画（plan）フォーマットのバージョン。 | `src/core/ir/schema.ts:62,1542` |
+| `source` | strict object | required | exactly `inputsDigest` | 鮮度のラッパー。 | `src/core/ir/schema.ts:1543` |
+| `source.inputsDigest` | string | required | `/^[0-9a-f]{64}$/` | 生成入力のダイジェスト。 | `src/core/ir/schema.ts:35,1543` |
+| `generatorMeta` | record string → `JsonValue` | optional | JSON only | `planDigest` から除外されるメタデータ。 | `src/core/ir/schema.ts:1544`、`src/core/ir/digest.ts:153-157` |
+| `targets` | record string → `TargetDefinition` | required | strict value; [値型](/ambercast/ja/spec/value-types/#shared-types) | 参照されるターゲットのスナップショット。すべてのキーをいずれかのステップが使う必要がある。 | `src/core/ir/schema.ts:1545,1569-1578` |
+| `steps` | `Step[]` | required | ordered strict branches | 計画のシーケンス; [ステップ](/ambercast/ja/spec/steps/#step-union)。 | `src/core/ir/schema.ts:1546` |
 
-`generatorMeta` の省略と `{}` は、シリアライズされた Plan の値としては区別されたままであるが、いずれも `planDigest` には影響しない：ダイジェストビューは `generatorMeta` を全体として除外する。[src/core/ir/schema.ts:1189-1193](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1189-L1193) [src/core/ir/digest.ts:128-131](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128-L131)
+`generatorMeta` の省略と `{}` は、シリアライズした計画の値としては別のままだが、どちらも `planDigest` には影響しない。ダイジェスト用のビューが `generatorMeta` の全体を除外するためである（`src/core/ir/schema.ts:1544`、`src/core/ir/digest.ts:153-157`）。
 
 ## 完全な最小ドキュメント {#complete-minimal-document}
 
-ダイジェスト文字列は例示用のプレースホルダーである。Grounding の例は、まさにこの Plan の例を参照すると宣言された、同一の例示用 `planDigest` を使用する。
+ダイジェストの文字列は、例示用のプレースホルダーである。グラウンディングの例は、この計画の例を指すと宣言した、同じ例示用の `planDigest` を使う。
 
 ```json
 {
@@ -3245,32 +3256,32 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/plan-document/
 
 ## セマンティック制約 {#semantic-constraints}
 
-ステップ ID は一意でなければならず（MUST）、重複がある場合は後続の `steps[index].id` において `duplicate step id: <id>` が報告される。[src/core/ir/schema.ts:1180-1204](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1180-L1204) インストラクションカバレッジは、[適合性](/ambercast/ja/spec/conformance/#semantic-validation) におけるプロンプト束縛のローカル帰属と集合チェックを要求する。[src/usecases/instruction-coverage-policy.ts:379-538](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L379-L538)
+ステップ ID は一意でなければならない（MUST）。重複があると、後ろの `steps[index].id` に `duplicate step id: <id>` を報告する（`src/core/ir/schema.ts:1551-1558`）。命令のカバレッジは、[適合性](/ambercast/ja/spec/conformance/#semantic-validation)が定める、プロンプトに結び付いたローカルの帰属と集合の検査を要求する（`src/usecases/instruction-coverage-policy.ts:379-538`）。
 
 ## プロバイダー専用の生成レスポンス {#provider-generation-response}
 
-プロバイダーは `schemaVersion`、`source`、または `targets` を作成しない。コミット済み計画のバリデーションの前に、ローカル生成がこれらを追加する。プロバイダーのシークレット命名意図は、コミット済み `SecretRef` が形成される前にローカルで解決される。[src/core/ir/schema.ts:729-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L729-L833) [src/core/ir/schema.ts:1242-1254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1242-L1254)
+プロバイダーは、`schemaVersion`、`source`、`targets` を作成しない。コミット済みの計画を検証する前に、ローカル生成がこれらを追加する。プロバイダーのシークレット命名の意図は、コミット済みの `SecretRef` を作る前にローカルで解決する（`src/core/ir/schema.ts:1611-1624`、`src/core/ir/schema.ts:1022-1029,1146`）。
 
-要素を含むステップについてプロバイダーが提案する形式では、コミット済みの `ElementIntent` / `QuotedElementIntent` ではなく、`GeneratedInstructionCriterion` と同じアンカー座標を持つ一時的な `GeneratedElementIntent` / `GeneratedQuotedElementIntent` を使用する。
+要素を含むステップについてプロバイダーが提案する形式は、コミット済みの `ElementIntent` と `QuotedElementIntent` ではなく、`GeneratedInstructionCriterion` と同じアンカー座標を持つ一時的な `GeneratedElementIntent` と `GeneratedQuotedElementIntent` を使う（`src/core/ir/schema.ts:392-400,435-457`）。
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [ステップ](/ambercast/ja/spec/steps/#generated-forms) | プロバイダーの提案。 | [src/core/ir/schema.ts:1234](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1234) |
-|  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | プロバイダーのメタデータ。 | [src/core/ir/schema.ts:1236](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1236) |
-|  | `ambiguities` | `JsonValue[]` | required | none | ターゲットを割り当てられないステップ。 | repo:src/core/ir/schema.ts |
-|  | `assumptions` | `string[]` | optional | string items only | プロンプトにない他の仮定。レポートの警告であり、計画には保存しない。 | repo:src/core/ir/schema.ts |
-| `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | 提案された成功基準。 | [src/core/ir/schema.ts:844](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L844) |
-|  | `assertion` | `TraceAssert` | required | strict trace assertion | 一時的な終端エビデンス。 | [src/core/ir/schema.ts:846](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L846) |
+| `GeneratedPlanResponse` | `steps` | `GeneratedStep[]` | required | generated forms in [ステップ](/ambercast/ja/spec/steps/#generated-forms) | プロバイダーの提案。 | `src/core/ir/schema.ts:1612` |
+|  | `generatorMeta` | record string → `JsonValue` | optional | JSON only | プロバイダーのメタデータ。 | `src/core/ir/schema.ts:1613` |
+|  | `ambiguities` | `JsonValue[]` | required | none | ターゲットを割り当てられないステップ。 | `src/core/ir/schema.ts:1622` |
+|  | `assumptions` | `string[]` | optional | string items only | プロンプトにない他の仮定。レポートの警告であり、計画には保存しない。 | `src/core/ir/schema.ts:1623` |
+| `VerificationIntent` | `criterionId` | `InstructionCriterionId` | required | step-ID regex | 提案された成功基準。 | `src/core/ir/schema.ts:1187` |
+|  | `assertion` | `TraceAssert` | required | strict trace assertion | 一時的な終端エビデンス。 | `src/core/ir/schema.ts:1188` |
 
-`GeneratedPlanResponseForPolicy` は AI の `verificationIntent` アサーションを `JsonValue` に緩和する。`GeneratedPlanResponseRequest` は空の `verificationIntent` を許可する。双方は一時的であり、コミットされた Plan 形式となることは決してない。[src/core/ir/schema.ts:1250](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1250), [src/core/ir/schema.ts:1286](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1286)
+`GeneratedPlanResponseForPolicy` は、AI の `verificationIntent` のアサーションを `JsonValue` に緩める。`GeneratedPlanResponseRequest` は、空の `verificationIntent` を許す。どちらも一時的な形式であり、コミットする計画の形式にはならない（`src/core/ir/schema.ts:1636,1672`）。
 
 ## 設計根拠 {#rationale}
 
-課題は、レビュー済みのテスト意図を保持しつつ、生成された実行詳細の再現性を可能にすることである。計画は派生データであるため、ソースプロンプトになることなく生成来歴を公開する。
+課題は、レビュー済みのテストの意図を保ちながら、生成する実行の詳細を再現できるようにすることである。計画は派生データなので、ソースのプロンプトの代わりにはならず、生成の来歴だけを示す。
 
-選定された厳格でバージョン管理されたドキュメントは、結果をドキュメント外に残したまま、ターゲットのスナップショットと順序付きステップを捕捉する。これにより、リプレイをまたいでも計画ダイジェストが安定し、入力が変更された際の再生成が明示的になる。
+採用した厳格でバージョン管理されたドキュメントは、結果を含めずに、ターゲットのスナップショットと順序付きのステップを記録する。これにより、計画のダイジェストは再生をまたいで安定し、入力が変わったときの再生成が明確になる。
 
-却下された代替案の一つはトレースを計画にマージするものであったが、実行の成功によってレビュー済みの意図が書き換えられてしまうため却下された。もう一つの代替案は古い計画をインプレースで移行するものであったが、セマンティクスが変更された派生物は、暗黙のうちに再解釈するよりも再生成する方が安全であるため却下された。
+却下した代替案の 1 つは、トレースを計画に統合することである。実行が成功するたびに、レビュー済みの意図が書き換わるため、却下した。もう 1 つは、古い計画をその場で移行することである。意味が変わった派生物は、黙って再解釈するより再生成する方が安全なため、却下した。
 
 ---
 
@@ -3279,236 +3290,252 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/steps/
 
 ## Step 共用体 {#step-union}
 
-コミットされたすべてのステップは、`kind` によって判別される `Step` の厳格なブランチであり、すべてのブランチは `id: StepId` を持つ。[src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:742](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L742)
+コミットするすべてのステップは `Step` の厳格な分岐であり、`kind` で判別する。どの分岐も `id: StepId` を持ち、`Plan.targets` のキーを指す `target` を必須とする（`src/core/ir/schema.ts:561,930`）。
 
-### 確認参照 {#confirmation-references}
+## 確認参照 {#confirmation-references}
 
-アサーションまたは `ai` ステップは、成功時にそのグラウンディングを確認する、先行する `click`、`press`、`fill`、`fill-secret`、または `capture` ステップの ID を、空でない任意の `confirms` 配列に指定できる。未知の ID は `confirms-unknown-step`、同じ位置または後続のステップは `confirms-not-earlier`、対象外のステップは `confirms-not-action`、重複 ID は `confirms-duplicate`、Plan の順序に対して昇順でない ID は `confirms-unsorted` として報告される。`generate` と `heal` は検証前に `navigate` ステップを指す `confirms` 参照を取り除く。ターゲットの同一性は検査しない。
+アサーションまたは `ai` ステップは、空でない `confirms` 配列を持てる。この配列は、成功したときにそのグラウンディングを確認する、先行する `click`、`press`、`fill`、`fill-secret`、`capture` のステップを指す。`generate` と `heal` は、検証の前に `navigate` ステップを指す `confirms` の参照を取り除く。検証が報告するコードは次の 5 つである。詳細は[適合性](/ambercast/ja/spec/conformance/#semantic-validation)を参照。ターゲットの同一性は検査しない（`src/core/ir/confirms-validation.ts:45`、`src/core/ir/confirms-validation.ts:96`）。
 
-### `action` / `click` {#action-click}
+- `confirms-unknown-step`: 未知の ID。
+- `confirms-not-earlier`: 同じステップまたは後続のステップ。
+- `confirms-not-action`: 対象にならないステップ。
+- `confirms-duplicate`: 重複した ID。
+- `confirms-unsorted`: ID が計画（plan）内の昇順でない。
+
+## `action` / `click` {#action-click}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | Stable step identifier. | [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:436](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L436) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:438](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L438) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `click` | Action discriminator. | [src/core/ir/schema.ts:439](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L439) |
-| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:540 |
+| `id` | `StepId` | required | `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` | 安定したステップ ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外側の判別子。 | `src/core/ir/schema.ts:613` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `click` | アクションの判別子。 | `src/core/ir/schema.ts:614` |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:573` |
 
 ```json
 {"id":"click-login","kind":"action","action":"click","target":"app","intent":{"description":"Click Log in","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}}}
 ```
 
-### `action` / `navigate` {#action-navigate}
+## `action` / `navigate` {#action-navigate}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L455) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:457](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L457) |
-| `action` | string | required | literal `navigate` | Action discriminator. | [src/core/ir/schema.ts:458](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L458) |
-| `url` | `InterpolatableText` | required | no `{{secrets.` marker | Navigation text. | [src/core/ir/schema.ts:455](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L455) |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外側の判別子。 | `src/core/ir/schema.ts:632` |
+| `action` | string | required | literal `navigate` | アクションの判別子。 | `src/core/ir/schema.ts:633` |
+| `url` | `InterpolatableText` | required | no `{{secrets.` marker | ナビゲーション先のテキスト。 | `src/core/ir/schema.ts:566` |
 
 ```json
 {"id":"open-home","kind":"action","action":"navigate","target":"app","url":"https://example.test"}
 ```
 
-実行時において、すべての Plan ナビゲーション、キャッシュされたトレースナビゲーション、および新規のエージェントによるナビゲーションは、稼働中のターゲットの `baseUrl` に対して解決され、HTTP(S) を使用し、かつそのターゲットのオリジン上にとどまらなければならない（MUST）。解決不能、非 HTTP(S)、またはクロスオリジンの宛先は整合性の失敗（integrity failure）である。[src/usecases/run.ts:701](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L701) [src/usecases/run.ts:746](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L746)
+実行時には、計画、キャッシュしたトレース、新規のエージェントのどのナビゲーションも、次を満たさなければならない（MUST）。
 
-### `action` / `press` {#action-press}
+- 稼働中のターゲットの `baseUrl` を基準に解決する。
+- HTTP(S) を使う。
+- そのターゲットのオリジンにとどまる。
+
+解決できない宛先、HTTP(S) 以外の宛先、別オリジンの宛先は、整合性の失敗である（`src/usecases/run.ts:993`）。
+
+## `action` / `press` {#action-press}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:476](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L476) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `press` | Action discriminator. | [src/core/ir/schema.ts:477](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L477) |
-| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:574-579 |
-| `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | Key. | [src/core/ir/schema.ts:474](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L474) |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外側の判別子。 | `src/core/ir/schema.ts:652` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `press` | アクションの判別子。 | `src/core/ir/schema.ts:653` |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:574` |
+| `key` | string | required | enum `Enter`, `Tab`, `Escape`, `ArrowDown`, `ArrowUp` | キー。 | `src/core/ir/schema.ts:569` |
 
 ```json
 {"id":"submit","kind":"action","action":"press","target":"app","intent":{"description":"Press Enter in Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21}},"key":"Enter"}
 ```
 
-### `action` / `fill` {#action-fill}
+## `action` / `fill` {#action-fill}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:495](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L495) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `fill` | Action discriminator. | [src/core/ir/schema.ts:496](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L496) |
-| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:594-599 |
-| `value` | `InterpolatableText` | required | no secret marker | Non-secret or run-state text. | [src/core/ir/schema.ts:493](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L493) |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外側の判別子。 | `src/core/ir/schema.ts:672` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `fill` | アクションの判別子。 | `src/core/ir/schema.ts:673` |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:575` |
+| `value` | `InterpolatableText` | required | no secret marker | シークレットでないテキスト、または実行状態のテキスト。 | `src/core/ir/schema.ts:571` |
 
 ```json
 {"id":"fill-email","kind":"action","action":"fill","target":"app","intent":{"description":"Fill Email","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":11}},"value":"a@example.test"}
 ```
 
-### `action` / `fill-secret` {#action-fill-secret}
+## `action` / `fill-secret` {#action-fill-secret}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `kind` | string | required | literal `action` | Outer discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `action` | string | required | literal `fill-secret` | Action discriminator. | [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
-| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:617-622 |
-| `secretRef` | `SecretRef` | required | whole secret-ref grammar | Secret value reference. | [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L396), [src/core/ir/schema.ts:499-504](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L499-L504) |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `action` | 外側の判別子。 | `src/core/ir/schema.ts:695` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `action` | string | required | literal `fill-secret` | アクションの判別子。 | `src/core/ir/schema.ts:696` |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:576` |
+| `secretRef` | `SecretRef` | required | whole secret-ref grammar | シークレット値への参照。 | `src/core/ir/schema.ts:108,572` |
 
 ```json
 {"id":"fill-password","kind":"action","action":"fill-secret","target":"app","intent":{"description":"Fill Password","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":14}},"secretRef":"{{secrets.LOGIN_PASSWORD}}"}
 ```
 
-### `assert` / `text-visible` {#assert-text-visible}
+## `assert` / `text-visible` {#assert-text-visible}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:558](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L558) |
-| `check` | string | required | literal `text-visible` | Assertion discriminator. | [src/core/ir/schema.ts:559](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L559) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `text` | `InterpolatableText` | required | no secret marker | Expected visible text. | [src/core/ir/schema.ts:556](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L556) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,663 |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外側の判別子。 | `src/core/ir/schema.ts:735` |
+| `check` | string | required | literal `text-visible` | アサーションの判別子。 | `src/core/ir/schema.ts:736` |
+| `timeoutMs` | integer | optional | 0–120000 | アサーションの再試行の締切（ミリ秒）。 | `src/core/ir/schema.ts:601` |
+| `text` | `InterpolatableText` | required | no secret marker | 表示されると期待するテキスト。 | `src/core/ir/schema.ts:587` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
 ```
 
-### `assert` / `element-visible` {#assert-element-visible}
+## `assert` / `element-visible` {#assert-element-visible}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:575](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L575) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:577](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L577) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `check` | string | required | literal `element-visible` | Assertion discriminator. | [src/core/ir/schema.ts:578](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L578) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:680 |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,684 |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外側の判別子。 | `src/core/ir/schema.ts:756` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `check` | string | required | literal `element-visible` | アサーションの判別子。 | `src/core/ir/schema.ts:757` |
+| `timeoutMs` | integer | optional | 0–120000 | アサーションの再試行の締切（ミリ秒）。 | `src/core/ir/schema.ts:601` |
+| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:594` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","intent":{"description":"Main navigation 「Main」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":23},"quote":{"text":"Main","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":22}}}}
 ```
 
-### `assert` / `text-equals` {#assert-text-equals}
+## `assert` / `text-equals` {#assert-text-equals}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:596](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L596) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `check` | string | required | literal `text-equals` | Assertion discriminator. | [src/core/ir/schema.ts:597](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L597) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:703 |
-| `text` | `InterpolatableText` | required | no secret marker | Exact expected text. | [src/core/ir/schema.ts:594](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L594) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,707 |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外側の判別子。 | `src/core/ir/schema.ts:779` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `check` | string | required | literal `text-equals` | アサーションの判別子。 | `src/core/ir/schema.ts:780` |
+| `timeoutMs` | integer | optional | 0–120000 | アサーションの再試行の締切（ミリ秒）。 | `src/core/ir/schema.ts:601` |
+| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:595` |
+| `text` | `InterpolatableText` | required | no secret marker | 期待する完全一致のテキスト。 | `src/core/ir/schema.ts:591` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account overview"}
 ```
 
-### `assert` / `url-matches` {#assert-url-matches}
+## `assert` / `url-matches` {#assert-url-matches}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:616](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L616) |
-| `check` | string | required | literal `url-matches` | Assertion discriminator. | [src/core/ir/schema.ts:617](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L617) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `pattern` | `InterpolatableText` | required | no secret marker | Expected URL matching text. | [src/core/ir/schema.ts:614](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L614) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,730 |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外側の判別子。 | `src/core/ir/schema.ts:802` |
+| `check` | string | required | literal `url-matches` | アサーションの判別子。 | `src/core/ir/schema.ts:803` |
+| `timeoutMs` | integer | optional | 0–120000 | アサーションの再試行の締切（ミリ秒）。 | `src/core/ir/schema.ts:601` |
+| `pattern` | `InterpolatableText` | required | no secret marker | 期待する URL に一致させるテキスト。 | `src/core/ir/schema.ts:592` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
 ```
 
-### `assert` / `element-count` {#assert-element-count}
+## `assert` / `element-count` {#assert-element-count}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
-| `kind` | string | required | literal `assert` | Outer discriminator. | [src/core/ir/schema.ts:635](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L635) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `check` | string | required | literal `element-count` | Assertion discriminator. | [src/core/ir/schema.ts:636](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L636) |
-| `timeoutMs` | integer | optional | 0–120000 | Assertion retry deadline in milliseconds. | repo:src/core/ir/schema.ts |
-| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:749 |
-| `count` | integer | required | nonnegative | Expected count, including zero. | [src/core/ir/schema.ts:633](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L633) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,753 |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `assert` | 外側の判別子。 | `src/core/ir/schema.ts:825` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `check` | string | required | literal `element-count` | アサーションの判別子。 | `src/core/ir/schema.ts:826` |
+| `timeoutMs` | integer | optional | 0–120000 | アサーションの再試行の締切（ミリ秒）。 | `src/core/ir/schema.ts:601` |
+| `intent` | `QuotedElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:596` |
+| `count` | integer | required | nonnegative | 期待する個数（0 を含む）。 | `src/core/ir/schema.ts:593` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"one-alert","kind":"assert","check":"element-count","target":"app","intent":{"description":"Error alerts 「Error」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21},"quote":{"text":"Error","sourceSpan":{"startLine":1,"startColumn":15,"endLine":1,"endColumn":20}}},"count":1}
 ```
 
-### `capture` {#capture}
+## アサーションのポーリング {#assertion-polling}
+
+アサーションの検査は、観測に失敗した後、ステップの締切まで最大 100ms の間隔でポーリングする。`timeoutMs` はこの締切について Target の `resolveTimeoutMs` を上書きし、0 でも 1 回は評価する。
+
+ポーリングは、初回バインディングの第 1 段階、計画のアサーション、AI によるアサーションのツールに適用する。トレース再生の 2 つの判定、すなわちイベントの判定と検証の判定にも適用する。計画のアサーションには、3 種類の引用要素の検査と、`text-visible` と `url-matches` のブラウザ検査の経路が含まれる。AI によるアサーションのツールとトレース再生は、Target の `resolveTimeoutMs` を使う。これらはいずれも、締切に届く待機の後に最後の観測を 1 回行い、その観測が結果を決める。
+
+`element-visible`、`text-equals`、`element-count` は、グラウンディングを参照せず、更新せず、AI も呼び出さない。`--resolve` の有無にかかわらず、締切まで `accessibilitySnapshot()` と `matchQuotedCandidates` でポーリングする（`src/usecases/run.ts:3071-3184`）。
+
+## `capture` {#capture}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:672](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L672) |
-| `kind` | string | required | literal `capture` | Step discriminator. | [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674) |
-| `target` | string | required | name in Plan `targets` | Execution Target. | repo:src/core/ir/schema.ts |
-| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | repo:src/core/ir/schema.ts:788 |
-| `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | Bare run-state variable name. | [src/core/ir/schema.ts:675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L675) |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `capture` | ステップの判別子。 | `src/core/ir/schema.ts:866` |
+| `target` | string | required | name in Plan `targets` | 実行ターゲット。 | `src/core/ir/schema.ts:561` |
+| `intent` | `ElementIntent` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | プロンプトの根拠に結び付いた要素の記述。 | `src/core/ir/schema.ts:867` |
+| `variable` | `RunVariableName` | required | `/^[a-z][a-zA-Z0-9]*$/` | 実行状態の変数名（接頭辞なし）。 | `src/core/ir/schema.ts:868` |
 
 ```json
 {"id":"capture-code","kind":"capture","target":"app","intent":{"description":"Capture Code","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":13}},"variable":"code"}
 ```
 
-### `ai` {#ai}
+## `ai` {#ai}
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `StepId` | required | step-ID regex | Stable ID. | [src/core/ir/schema.ts:404](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L404), [src/core/ir/schema.ts:416-420](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L416-L420) |
-| `kind` | string | required | literal `ai` | Step discriminator. | [src/core/ir/schema.ts:418](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L418) |
-| `instruction` | `InterpolatableText` | required | no secret marker | Agent instruction. | [src/core/ir/schema.ts:419](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L419) |
-| `secrets` | `AiStepSecretUse[]` | optional | strict entries | Committed secret uses. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
-| `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | Locally attributed criteria. | [src/core/ir/schema.ts:688-692](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L688-L692) |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | repo:src/core/ir/schema.ts:521,824 |
+| `id` | `StepId` | required | step-ID regex | 安定した ID。 | `src/core/ir/schema.ts:41,561` |
+| `kind` | string | required | literal `ai` | ステップの判別子。 | `src/core/ir/schema.ts:582` |
+| `instruction` | `InterpolatableText` | required | no secret marker | エージェントへの指示。 | `src/core/ir/schema.ts:583` |
+| `secrets` | `AiStepSecretUse[]` | optional | strict entries | コミット済みのシークレット使用。 | `src/core/ir/schema.ts:901` |
+| `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | ローカルで帰属させた基準。 | `src/core/ir/schema.ts:902` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 成功時にグラウンディングを確認するステップ。 | `src/core/ir/schema.ts:900` |
 
 ```json
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-### コミット済み AI シークレット使用 {#committed-ai-secret-grants}
+## コミット済み AI シークレット使用 {#committed-ai-secret-grants}
 
-コミット済み AI ステップの任意の `secrets` 配列の各要素は厳格な `AiStepSecretUse` であり、解決済み参照のみを記録する。同意および許可リスト認可は Plan の永続化前に行われ、Plan の来歴フィールドではない。[src/core/ir/schema.ts:667-692](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L667-L692) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493)
+コミット済みの AI ステップの任意の `secrets` 配列の各要素は、厳格な `AiStepSecretUse` であり、解決済みの参照だけを記録する。同意と許可リストによる認可は計画の永続化より前に行われ、計画の来歴フィールドではない（`src/core/ir/schema.ts:883,898-903`、`src/usecases/generate.ts:1652-1728`）。
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `ref` | `SecretRef` | required | whole secret-reference grammar | Committed secret reference. | [src/core/ir/schema.ts:674-675](https://github.com/kotarotsubaki/ambercast/blob/v0.6.0/src/core/ir/schema.ts#L674-L675) |
+| `ref` | `SecretRef` | required | whole secret-reference grammar | コミット済みのシークレット参照。 | `src/core/ir/schema.ts:883` |
 
 ```json
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","secrets":[{"ref":"{{secrets.CARD_NUMBER}}"}],"instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}
 ```
 
-アサーションは、観測に失敗した後、ステップの締切まで最大 100ms 間隔で再度ポーリングする。`timeoutMs` はこの締切について Target の `resolveTimeoutMs` を上書きし、0 でも 1 回は評価する。`run.ts` の 8 箇所のポーリング箇所は、初回 binding 段 1、4 つの plan assert ループ（3 種の引用要素チェックと `text-visible` / `url-matches` の browser-check 経路）、AI による assert ツール、trace 再生の合否判定 2 箇所（イベントと検証）である。AI による assert ツールと trace 再生は Target の `resolveTimeoutMs` を使う。各箇所は締切に届く待機の後に最後の 1 回を観測し、その観測が結果を決定する。
-
-アサーションの `element-visible`、`text-equals`、`element-count` はグラウンディングを参照も更新もせず、AI も呼び出さない。`--resolve` の有無にかかわらず、期限まで `accessibilitySnapshot()` と `matchQuotedCandidates` を使って同じように評価する。
-
 ## 生成形式 {#generated-forms}
 
-生成された `click`、`press`、`fill`、`fill-secret`、`capture` の形式は `GeneratedElementIntent` を持ち、生成された `element-visible`、`text-equals`、`element-count` の形式は `GeneratedQuotedElementIntent` を持つ。
+生成された `click`、`press`、`fill`、`fill-secret`、`capture` の形式は `GeneratedElementIntent` を持ち、生成された `element-visible`、`text-equals`、`element-count` の形式は `GeneratedQuotedElementIntent` を持つ。どちらも、[値型](/ambercast/ja/spec/value-types/#shared-types)の共有されたコミット済みの形に、ローカルで帰属させる（`src/core/ir/schema.ts:435-457,985-1166`）。
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | ローカル命名を待つプロバイダー形式。 | [src/core/ir/schema.ts:773-805](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L773-L805) |
-|  | `secret` | `SecretNameChoice` | optional | strict choice | 既存の許可リスト名の要求または新しい名前のヒント。 | [src/core/ir/schema.ts:104-115,779-785](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
-| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | ローカル解決を待つプロバイダー命名意図。 | [src/core/ir/schema.ts:813-821](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L813-L821) |
-| `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | 共有AIコントラクト。 | [src/core/ir/schema.ts:814](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L814) |
-|  | `secrets` | generated uses[] | optional | strict entries | 保留中のシークレット名解決。 | [src/core/ir/schema.ts:824-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L824-L833) |
-|  | `instructionCoverage` | generated criteria[] | required | min 1 | 保留中の基準帰属。 | [src/core/ir/schema.ts:817](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L817) |
-|  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | 一時的な検証提案。 | [src/core/ir/schema.ts:818](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L818) |
+| `GeneratedFillSecretAction` | `id`, `kind`, `action`, `target` | as committed fill-secret except `secretRef` | required | `kind: action`, `action: fill-secret` | ローカル命名を待つプロバイダー形式。 | `src/core/ir/schema.ts:1022-1029` |
+|  | `secret` | `SecretNameChoice` | optional | strict choice | 既存の許可リスト名の要求または新しい名前のヒント。 | `src/core/ir/schema.ts:144-147,1028` |
+| `GeneratedAiStepSecretUse` | choice | `SecretNameChoice` or `{}` | required per array member | strict choice or no provider preference | ローカル解決を待つプロバイダー命名意図。 | `src/core/ir/schema.ts:1146` |
+| `GeneratedAiStep` | `id`, `kind`, `instruction` | as committed AI | required | `kind: ai` | 共有AIコントラクト。 | `src/core/ir/schema.ts:1156` |
+|  | `secrets` | generated uses[] | optional | strict entries | 保留中のシークレット名解決。 | `src/core/ir/schema.ts:1157` |
+|  | `instructionCoverage` | generated criteria[] | required | min 1 | 保留中の基準帰属。 | `src/core/ir/schema.ts:1158` |
+|  | `verificationIntent` | `VerificationIntent[]` | required | min 1 in strict form | 一時的な検証提案。 | `src/core/ir/schema.ts:1159` |
 
 ## 設計根拠 {#rationale}
 
-問題は、特に UI が誤った合格（wrong pass）を生じさせ得る箇所において、アクションが証明と誤認されるのを防ぐことである。明示的なアサーションブランチにより、観測された成功基準が検査可能になる。
+課題は、特に UI が誤った合格（wrong pass）を生み得る場面で、アクションが証明と取り違えられるのを防ぐことである。明示的なアサーションの分岐は、観測した成功基準を検査できるようにする。
 
-選択された判別共用体により、すべてのオペコードに閉じたフィールド規約が与えられ、シークレットの投入が通常のテキストから分離される。プロバイダーの命名意図は、計画がコミットされる前にローカルで解決され同意される。
+採用した判別共用体は、すべてのオペコードに閉じたフィールドの契約を与え、シークレットの入力を通常のテキストから分ける。プロバイダーの命名意図は、計画をコミットする前にローカルで解決し、同意を得る。
 
-プロバイダが提供する anchor と列の座標は、各基準をローカルで解決された 1 つのプロンプト抜粋にバインドする。4 座標の `InstructionSourceSpan` へのローカル解決により、コミットされる帰属付けが正確なものとなる一方、プロバイダの `citation` はその解決を確認するチェックサムに過ぎず、結合キーとしては使われない。 [src/usecases/instruction-coverage-policy.ts:407-443](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L407-L443)
+プロバイダーが渡すアンカーと列の座標は、各基準を、ローカルで解決した 1 つのプロンプトの抜粋に結び付ける。4 座標の `InstructionSourceSpan` に対するローカルの解決が、コミットする帰属を正確にする。プロバイダーの `citation` は、その解決を確かめるチェックサムにすぎず、結合キーではない（`src/usecases/instruction-coverage-policy.ts:405-479`）。
 
-末尾の `url-matches` は、引用された成功基準の独立した証明ではなく同義反復的な成功形式であるため、拒絶される。サポートされている重複のない末尾の `TraceAssert` を使用する。成功条件を表現できない場合、生成は失敗する。 [src/usecases/instruction-coverage-policy.ts:403-407](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L403-L407) [src/usecases/instruction-coverage-policy.ts:622-625](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L622-L625)
+末尾の `url-matches` は、引用した成功基準の独立した証明ではなく、自明に成り立つ成功の形であるため、拒否する。サポートされていて重複しない、末尾の `TraceAssert` を使う。成功条件を表現できない場合、生成は失敗する（`src/usecases/instruction-coverage-policy.ts:468-469`、`src/usecases/instruction-coverage-policy.ts:630-631`）。
 
-却下された代替案の 1 つは、任意のペイロードフィールドを持つ 1 つのアクションオブジェクトを使用するものであったが、無効な組み合わせがスキーマ上で不可視になるため却下された。もう 1 つは一般的なテキストにシークレットを含めることを許容するものであったが、シークレットの来歴とマスキング（redaction）が曖昧になるため却下された。
+却下した代替案の 1 つは、任意のペイロードフィールドを持つ単一のアクションオブジェクトである。無効な組み合わせがスキーマから見えなくなるため、却下した。もう 1 つは、汎用のテキストにシークレットを載せることである。同意の境界とマスキングが曖昧になるため、却下した。
 
 ---
 
@@ -3517,61 +3544,61 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/
 
 ## 共有型 {#shared-types}
 
-他のすべての章は、それらの形状を再記述するのではなく、これらの定義を使用しなければならない（MUST）。以下のすべてのオブジェクトは厳格（strict）であり、未知のプロパティは拒絶されなければならない（MUST）。[src/core/ir/schema.ts:165](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165) [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) 正規表現はランタイムオーソリティから逐語的に引用されている。
+他のすべての章は、形状を再記述せず、これらの定義を使わなければならない（MUST）。以下のオブジェクトはすべて厳格であり、未知のプロパティを拒絶しなければならない（MUST）（`src/core/ir/schema.ts:231`、`src/core/ir/schema.ts:254`）。正規表現は、実行時の正本からそのまま引用する。
 
 | Type | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TargetDefinition` | `baseUrl` | string | required | `/^https?:\\/\\/[^\\s/?#]\\S*$/`; `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | シークレットマーカーを含まない、作成されたHTTP(S)ベースURL。 | [src/core/ir/schema.ts:37-38](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37-L38), [src/core/ir/schema.ts:165-166](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L165-L166) |
-|  | `surface` | string | required | literal `web` | 実行サーフェス。 | repo:src/core/ir/schema.ts |
-|  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | シークレットごとの許可されたオリジン。 | [src/core/ir/schema.ts:168](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L168) |
-|  | `locale` | string | optional | min length 1 | config loader が正規化した後の BCP-47 形式の locale タグ。 | repo:src/core/ir/schema.ts:210 |
-| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | [src/core/ir/schema.ts:254](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L254) |
-|  | `role` | string | required | min 1 | 正確なアクセシビリティロール。 | [src/core/ir/schema.ts:256](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L256) |
-|  | `name` | string | required | min 1 | アクセシブル名。 | [src/core/ir/schema.ts:257](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L257) |
-| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | repo:src/core/ir/schema.ts:276 |
-|  | `role` | string | required | min 1 | 完全一致のアクセシビリティロール。 | repo:src/core/ir/schema.ts:278 |
-|  | `name` | string | required | may be empty | 空文字は accessible name を持たない要素を表し、正規化後の名前が空のノードにだけ一致する。 | repo:src/core/ir/schema.ts:279 |
-| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 引用された抜粋のリテラルテキスト。 | repo:src/core/ir/schema.ts:359 |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用された抜粋の位置。 | repo:src/core/ir/schema.ts:360 |
-| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | プロンプトの根拠に結び付いた自然言語の要素記述。 | repo:src/core/ir/schema.ts:367 |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 記述の抜粋位置。 | repo:src/core/ir/schema.ts:368 |
-|  | `roleHint` | string | optional | `/^[a-z]+$/` | 任意の小文字アクセシビリティロールのヒント。 | repo:src/core/ir/schema.ts:369 |
-|  | `quote` | `Quote` | optional | strict nested object | プロンプト内の位置を独立して特定した任意の UI テキスト引用。 | repo:src/core/ir/schema.ts:370 |
-| `QuotedElementIntent` (`ElementIntent` を拡張) | `quote` | `Quote` | required | strict nested object | 必須の UI テキスト引用。 | repo:src/core/ir/schema.ts:376 |
-| `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | ロケータエビデンスの形式。 | [src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) |
-|  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小文字のSHA-256。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:223](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L223) |
-| `InstructionSourceSpan` | `startLine` | integer | required | positive | 1始まりのUTF-16開始行。 | [src/core/ir/schema.ts:332](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L332) |
-|  | `startColumn` | integer | required | positive | 1始まりのUTF-16開始列。 | [src/core/ir/schema.ts:333](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L333) |
-|  | `endLine` | integer | required | positive | 1始まりのUTF-16終了行。 | [src/core/ir/schema.ts:334](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L334) |
-|  | `endColumn` | integer | required | positive | 境界を含まないUTF-16終了列。 | [src/core/ir/schema.ts:335](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L335) |
-| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 帰属待ちのクライテリア。 | [src/core/ir/schema.ts:338](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L338) |
-|  | `kind` | string | required | enum `success`, `action` | 節の役割。 | [src/core/ir/schema.ts:339](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L339) |
-|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | プロバイダーが主張する開始行アンカー（`L<n>`）。 | [src/core/ir/schema.ts:340](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L340) |
-|  | `startColumn` | integer | required | none (range checked by usecase policy) | プロバイダーが主張する1始まりのUTF-16開始列。 | [src/core/ir/schema.ts:341](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L341) |
-|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | プロバイダーが主張する終了行アンカー（`L<n>`）。 | [src/core/ir/schema.ts:342](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L342) |
-|  | `endColumn` | integer | required | none (range checked by usecase policy) | プロバイダーが主張する境界を含まないUTF-16終了列。 | [src/core/ir/schema.ts:343](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L343) |
-|  | `citation` | string | required | min 1; max `4096` | プロバイダの逐語的な抜粋(チェックサム専用で位置特定には使われない)。 | [src/core/ir/schema.ts:344](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L344) |
-| `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 確定されたクライテリアID。 | [src/core/ir/schema.ts:366](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L366) |
-|  | `kind` | string | required | enum `success`, `action` | 節の役割。 | [src/core/ir/schema.ts:367](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L367) |
-|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | ローカルで導出されたプロンプト位置。 | [src/core/ir/schema.ts:368](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L368) |
-| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | 投影済み許可リスト名を再利用するプロバイダー要求。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
-|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | 新たに発見した名前に対するプロバイダー提案。 | [src/core/ir/schema.ts:104-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L104-L115) |
+| `TargetDefinition` | `baseUrl` | string | required | `/^https?:\/\/[^\s/?#]\S*$/`; `/^(?![\s\S]*\{\{secrets\.)[\s\S]*$/` | シークレットマーカーを含まない、作成されたHTTP(S)ベースURL。 | `src/core/ir/schema.ts:37-38,233` |
+|  | `surface` | string | required | literal `web` | 実行サーフェス。 | `src/core/ir/schema.ts:232` |
+|  | `secretSinkOrigins` | record `SecretRef` → `SecretSinkOrigin[]` | optional | See scalar table | シークレットごとの許可されたオリジン。 | `src/core/ir/schema.ts:234` |
+|  | `locale` | string | optional | min length 1 | config loader が正規化した後の BCP-47 形式の locale タグ。 | `src/core/ir/schema.ts:235` |
+| `AccessibilityElementRef` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | `src/core/ir/schema.ts:254` |
+|  | `role` | string | required | min 1 | 正確なアクセシビリティロール。 | `src/core/ir/schema.ts:256` |
+|  | `name` | string | required | min 1 | アクセシブル名。 | `src/core/ir/schema.ts:257` |
+| `GroundingElementLocator` | `strategy` | string | required | literal `accessibility` | ロケータ判別子。 | `src/core/ir/schema.ts:276` |
+|  | `role` | string | required | min 1 | 完全一致のアクセシビリティロール。 | `src/core/ir/schema.ts:278` |
+|  | `name` | string | required | may be empty | 空文字は accessible name を持たない要素を表し、正規化後の名前が空のノードにだけ一致する。 | `src/core/ir/schema.ts:279` |
+| `Quote` | `text` | string | required | min 1; max 4096; no-secrets-literal pattern | 引用された抜粋のリテラルテキスト。 | `src/core/ir/schema.ts:407` |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 引用された抜粋の位置。 | `src/core/ir/schema.ts:408` |
+| `ElementIntent` | `description` | string | required | min 1; max 4096; no-secrets-literal pattern | プロンプトの根拠に結び付いた自然言語の要素記述。 | `src/core/ir/schema.ts:415` |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | 記述の抜粋位置。 | `src/core/ir/schema.ts:416` |
+|  | `roleHint` | string | optional | `/^[a-z]+$/` | 任意の小文字アクセシビリティロールのヒント。 | `src/core/ir/schema.ts:417` |
+|  | `quote` | `Quote` | optional | strict nested object | プロンプト内の位置を独立して特定した任意の UI テキスト引用。 | `src/core/ir/schema.ts:418` |
+| `QuotedElementIntent` (`ElementIntent` を拡張) | `quote` | `Quote` | required | strict nested object | 必須の UI テキスト引用。 | `src/core/ir/schema.ts:424` |
+| `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | ロケータエビデンスの形式。 | `src/core/ir/schema.ts:320` |
+|  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小文字のSHA-256。 | `src/core/ir/schema.ts:35,321` |
+| `InstructionSourceSpan` | `startLine` | integer | required | positive | 1始まりのUTF-16開始行。 | `src/core/ir/schema.ts:372` |
+|  | `startColumn` | integer | required | positive | 1始まりのUTF-16開始列。 | `src/core/ir/schema.ts:373` |
+|  | `endLine` | integer | required | positive | 1始まりのUTF-16終了行。 | `src/core/ir/schema.ts:374` |
+|  | `endColumn` | integer | required | positive | 境界を含まないUTF-16終了列。 | `src/core/ir/schema.ts:375` |
+| `GeneratedInstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 帰属待ちのクライテリア。 | `src/core/ir/schema.ts:393` |
+|  | `kind` | string | required | enum `success`, `action` | 節の役割。 | `src/core/ir/schema.ts:394` |
+|  | `startAnchor` | string | required | none (format and range checked by usecase policy) | プロバイダーが主張する開始行アンカー（`L<n>`）。 | `src/core/ir/schema.ts:395` |
+|  | `startColumn` | integer | required | none (range checked by usecase policy) | プロバイダーが主張する1始まりのUTF-16開始列。 | `src/core/ir/schema.ts:396` |
+|  | `endAnchor` | string | required | none (format and range checked by usecase policy) | プロバイダーが主張する終了行アンカー（`L<n>`）。 | `src/core/ir/schema.ts:397` |
+|  | `endColumn` | integer | required | none (range checked by usecase policy) | プロバイダーが主張する境界を含まないUTF-16終了列。 | `src/core/ir/schema.ts:398` |
+|  | `citation` | string | required | min 1; max `4096` | プロバイダの逐語的な抜粋(チェックサム専用で位置特定には使われない)。 | `src/core/ir/schema.ts:399` |
+| `InstructionCriterion` | `id` | string | required | `STEP_ID_PATTERN` | 確定されたクライテリアID。 | `src/core/ir/schema.ts:506` |
+|  | `kind` | string | required | enum `success`, `action` | 節の役割。 | `src/core/ir/schema.ts:507` |
+|  | `sourceSpan` | `InstructionSourceSpan` | required | strict nested object | ローカルで導出されたプロンプト位置。 | `src/core/ir/schema.ts:508` |
+| `SecretNameChoice` | `allowedName` | `SecretName` | exclusive alternative | strict one-field object | 投影済み許可リスト名を再利用するプロバイダー要求。 | `src/core/ir/schema.ts:144-147` |
+|  | `nameHint` | `SecretNameHint` | exclusive alternative | strict one-field object | 新たに発見した名前に対するプロバイダー提案。 | `src/core/ir/schema.ts:144-147` |
 
-現在、`ElementRef` は `AccessibilityElementRef` のみを持つ。`HexSha256` は `/^[0-9a-f]{64}$/` であり、`StepId` および `InstructionCriterionId` は `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` であり、`RunVariableName` は `/^[a-z][a-zA-Z0-9]*$/` であり、`RunRef` は `/^\\{\\{run\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` である。[src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:41](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L41), [src/core/ir/schema.ts:198](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L198), [src/core/ir/schema.ts:237](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L237), [src/core/ir/schema.ts:311](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L311), [src/core/ir/schema.ts:381](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L381), [src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L396)
+`ElementRef` は、現在 `AccessibilityElementRef` だけを持つ。`HexSha256` は `/^[0-9a-f]{64}$/` である。`StepId` と `InstructionCriterionId` は `/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/` である。`RunVariableName` は `/^[a-z][a-zA-Z0-9]*$/` である。`RunRef` は `/^\{\{run\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/` である（`src/core/ir/schema.ts:35,41,42,43,290,335,353,520,535`）。
 
-## スカラーと参照の規約 {#scalar-contracts}
+## スカラーと参照の契約 {#scalar-contracts}
 
 | Type | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `SecretRef` | string | value | `/^\\{\\{secrets\\.[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*\\}\\}$/` | 完全なシークレット参照。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L33), [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L74) |
-| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*$/` | 同意と構成で使用する裸の論理名。 | [src/core/ir/schema.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31), [src/core/ir/schema.ts:83-92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L92) |
-| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | プロバイダーのフォールバック命名候補であり、コミット済み参照ではない。 | [src/core/ir/schema.ts:94-102](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L94-L102) |
-| `SecretSinkOrigin` | string | value | `/^https?:\\/\\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$/`; no-secret pattern | HTTP(S)オリジンのみ。 | [src/core/ir/schema.ts:40](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L40), [src/core/ir/schema.ts:95-97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L95-L97) |
-| `InterpolatableText` | string | value | `/^(?![\\s\\S]*\\{\\{secrets\\.)[\\s\\S]*$/` | テキストはrunの補間を含み得るが、シークレットトークンを含まない。 | [src/core/ir/schema.ts:37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L37), [src/core/ir/schema.ts:125](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L125) |
-| `Citation` | string | value | min 1; max `4096` | 帰属前の正確なプロンプト部分文字列。 | [src/core/ir/schema.ts:273](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L273), [src/core/ir/schema.ts:279](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L279) |
-| `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | メタデータまたはプロバイダの曖昧性の値。 | [src/core/ir/schema.ts:1167](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1167) |
+| `SecretRef` | string | value | `/^\{\{secrets\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\}\}$/` | 完全なシークレット参照。 | `src/core/ir/schema.ts:32,33,108` |
+| `SecretName` | string | value | `/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/` | 同意と構成で使用する裸の論理名。 | `src/core/ir/schema.ts:32,123` |
+| `SecretNameHint` | string | value | `/^[a-z][a-z0-9_]{0,63}$/` | プロバイダーのフォールバック命名候補であり、コミット済み参照ではない。 | `src/core/ir/schema.ts:133` |
+| `SecretSinkOrigin` | string | value | `/^https?:\/\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(?::(?:6553[0-5]\|655[0-2][0-9]\|65[0-4][0-9]{2}\|6[0-4][0-9]{3}\|[1-5][0-9]{4}\|[1-9][0-9]{0,3}))?$/`; no-secret pattern | HTTP(S)オリジンのみ。 | `src/core/ir/schema.ts:40,163-165` |
+| `InterpolatableText` | string | value | `/^(?![\s\S]*\{\{secrets\.)[\s\S]*$/` | テキストはrunの補間を含み得るが、シークレットトークンを含まない。 | `src/core/ir/schema.ts:37,193` |
+| `Citation` | string | value | min 1; max `4096` | 帰属前の正確なプロンプト部分文字列。 | `src/core/ir/schema.ts:342,399` |
+| `JsonValue` | JSON scalar/array/object | value | RFC 8259 recursive union | メタデータまたはプロバイダの曖昧性の値。 | `src/core/ir/schema.ts:1516` |
 
-`secretSinkOrigins` にシークレットのエントリが存在しない場合、そのシークレットのデフォルトは `baseUrl` となる。明示的な空配列はすべてのオリジンを拒否し、空でない配列はデフォルトを置き換える。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) すべての `InstructionSourceSpan` のプロンプト座標チェックはセマンティックバリデーションである。[src/usecases/instruction-coverage-policy.ts:509-538](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L509-L538)
+`secretSinkOrigins` にシークレットのエントリがなければ、そのシークレットの既定は `baseUrl` になる。明示した空配列はすべてのオリジンを拒否し、空でない配列は既定を置き換える（`src/core/ir/schema.ts:220-223`）。`InstructionSourceSpan` のプロンプト座標の検査は、すべてセマンティック検証である（`src/usecases/instruction-coverage-policy.ts:501-531`）。
 
 ## 例 {#examples}
 
@@ -3585,11 +3612,11 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/
 
 ## 設計根拠 {#rationale}
 
-共有オブジェクトは、プラン、生成レスポンス、およびグラウンディングが、互換性のないロケータ、参照、および出所情報（provenance）を徐々に獲得していく問題を解決する。本設計は厳格なランタイム定義を1つのスキーマに配置し、そこから JSON Schema を導出する。
+共有オブジェクトは、計画（plan）、生成レスポンス、グラウンディングが、互換性のないロケータ、参照、来歴を少しずつ持ち込む問題を解決する。この設計は、厳格な実行時の定義を 1 つのスキーマに置き、JSON Schema をそこから導出する。
 
-選択された設計は、値全体のシークレット参照および run 参照を通常のテキストから分離し、プロバイダーの命名意図をコミット済みシークレット参照から分離する。したがって、AI が生成した参照ではなくローカルの命名と同意が、永続的認可に対するオーソリティとなる。
+採用した設計は、値全体のシークレット参照と run 参照を通常のテキストから分け、プロバイダーの命名意図をコミット済みのシークレット参照から分ける。永続的な認可の権威は、AI が作った参照ではなく、ローカルの命名と同意にある。
 
-却下された代替案の1つは、各ドキュメントでロケータとシークレットの構文を独立して定義することであった。レビューでは一見互換性があるように見える乖離（drift）を検出できないため、これは却下された。もう1つは、引用を永続的なオーソリティとして扱うことであった。プロンプト相対の検証は決定論的かつローカルでなければならないため、これは却下された。
+却下した代替案の 1 つは、ドキュメントごとにロケータとシークレットの構文を独立に定義することである。レビューでは、一見互換に見える乖離を見つけられないため、却下した。もう 1 つは、引用を永続的な権威として扱うことである。プロンプトに対する検証は、決定的でローカルでなければならないため、却下した。
 
 ---
 
@@ -3598,60 +3625,60 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 
 ## グラウンディングの形状 {#grounding-shape}
 
-`GroundingDocument` は、厳密に1つの Plan ダイジェストにバインドされた厳格なオブジェクトである。[repo:src/core/ir/schema.ts:1367]
+`GroundingDocument` は、1 つの計画（plan）ダイジェストだけに束縛された厳格なオブジェクトである（`src/core/ir/schema.ts:1753`）。
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `4` | グラウンディングフォーマットのバージョン。 | repo:src/core/ir/schema.ts:74,1663 |
-| `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | 関連する計画のダイジェスト。 | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1369](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1369) |
-| `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | ID をキーとするキャッシュされたステップグラウンディング。 | [src/core/ir/schema.ts:1370](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1370) |
+| `schemaVersion` | integer | required | literal `4` | グラウンディングフォーマットのバージョン。 | `src/core/ir/schema.ts:74,1754` |
+| `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | 関連する計画のダイジェスト。 | `src/core/ir/schema.ts:35,1755` |
+| `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | ID をキーとするキャッシュされたステップグラウンディング。 | `src/core/ir/schema.ts:1756` |
 
 ## エントリバリアント {#entry-variants}
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element エントリの識別子。 | repo:src/core/ir/schema.ts:1442 |
-|  | `locator` | `GroundingElementLocator` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | 意図に結び付けられた観測済みロケータ。 | repo:src/core/ir/schema.ts:1444 |
-|  | `fingerprint` | `Fingerprint` | required | [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) | アクセシビリティ近傍のエビデンス。 | repo:src/core/ir/schema.ts:1445 |
-|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | repo:src/core/ir/schema.ts:1446 |
-|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | repo:src/core/ir/schema.ts:1447 |
-| `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | [src/core/ir/schema.ts:1114](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114) |
-|  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | [src/core/ir/schema.ts:1116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1116) |
+| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element エントリの識別子。 | `src/core/ir/schema.ts:1443` |
+|  | `locator` | `GroundingElementLocator` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | 意図に結び付けられた観測済みロケータ。 | `src/core/ir/schema.ts:1444` |
+|  | `fingerprint` | `Fingerprint` | required | [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) | アクセシビリティ近傍のエビデンス。 | `src/core/ir/schema.ts:1445` |
+|  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | `src/core/ir/schema.ts:1446` |
+|  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | `src/core/ir/schema.ts:1447` |
+| `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | `src/core/ir/schema.ts:1464` |
+|  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | `src/core/ir/schema.ts:1465` |
 
-`GroundingEntry` は、これら2つの厳密な形状の `kind` 共用体である。AI エントリの欠落はトレースが記録されていないことを意味し、空の検証（verification）を持つ `ai` エントリは無効である。[src/core/ir/schema.ts:1057-1061](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1057-L1061), [src/core/ir/schema.ts:1114-1117](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1114-L1117), [src/core/ir/schema.ts:1131-1134](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1131-L1134)
+`GroundingEntry` は、この 2 つの厳密な形状を `kind` で区別する共用体である。AI エントリがないことは、トレースを記録していないことを意味する。検証が空の `ai` エントリは無効である（`src/core/ir/schema.ts:1402-1406,1463-1466,1480-1483`）。
 
 ## トレースレコード {#trace-record}
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TraceRecord` | `events` | `TraceEntry[]` | required | may be empty | 時系列のアクション／アサーションジャーナル。 | [src/core/ir/schema.ts:1057](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1057) |
-|  | `verification` | `TraceAssert[]` | required | min 1 | 再生可能な成功に必要とされる終了アサーション。 | [src/core/ir/schema.ts:1059](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1059) |
-|  | `verificationCoverage` | record `InstructionCriterionId` → integer | optional | integer nonnegative | カバレッジから検証インデックスへの加法的なマッピング。 | [src/core/ir/schema.ts:1060](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1060) |
-| `TraceClick` | `type`, `target` | string, `ElementRef` | required | literal `click`; strict target | 記録されたクリック。 | [src/core/ir/schema.ts:890](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L890) |
-| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | required | literal `navigate`; no secret marker | 記録されたナビゲーション。 | [src/core/ir/schema.ts:906](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L906) |
-| `TracePress` | `type`, `target`, `key` | string, locator, string | required | literal `press`; key enum | 記録されたキー押下。 | [src/core/ir/schema.ts:922](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L922) |
-| `TraceFill` | `type`, `target`, `value` | string, locator, text | required | literal `fill`; no secret marker | 記録された通常の入力。 | [src/core/ir/schema.ts:938](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L938) |
-| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | リテラル値を持たない、記録されたシークレット入力。 | [src/core/ir/schema.ts:954](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L954) |
+| `TraceRecord` | `events` | `TraceEntry[]` | required | may be empty | 時系列のアクション／アサーションジャーナル。 | `src/core/ir/schema.ts:1403` |
+|  | `verification` | `TraceAssert[]` | required | min 1 | 再生可能な成功に必要とされる終了アサーション。 | `src/core/ir/schema.ts:1404` |
+|  | `verificationCoverage` | record `InstructionCriterionId` → integer | optional | integer nonnegative | カバレッジから検証インデックスへの加法的なマッピング。 | `src/core/ir/schema.ts:1405` |
+| `TraceClick` | `type`, `target` | string, `ElementRef` | required | literal `click`; strict target | 記録されたクリック。 | `src/core/ir/schema.ts:1235` |
+| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | required | literal `navigate`; no secret marker | 記録されたナビゲーション。 | `src/core/ir/schema.ts:1251` |
+| `TracePress` | `type`, `target`, `key` | string, locator, string | required | literal `press`; key enum | 記録されたキー押下。 | `src/core/ir/schema.ts:1267` |
+| `TraceFill` | `type`, `target`, `value` | string, locator, text | required | literal `fill`; no secret marker | 記録された通常の入力。 | `src/core/ir/schema.ts:1283` |
+| `TraceFillSecret` | `type`, `target`, `secretRef` | string, locator, ref | required | literal `fill-secret`; whole ref | リテラル値を持たない、記録されたシークレット入力。 | `src/core/ir/schema.ts:1299` |
 
-`TraceAction` は、5つのアクションレコードの `type` 共用体である。`key` 列挙型は `Enter`、`Tab`、`Escape`、`ArrowDown`、`ArrowUp` である。`ElementRef`、`InterpolatableText`、および `SecretRef` は、[値型](/ambercast/ja/spec/value-types/#shared-types) による制約を維持する。[src/core/ir/schema.ts:407-410](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L407-L410), [src/core/ir/schema.ts:922-925](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L922-L925), [src/core/ir/schema.ts:970-976](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L970-L976)
+`TraceAction` は、5 つのアクションレコードを `type` で区別する共用体である。`key` の列挙値は `Enter`、`Tab`、`Escape`、`ArrowDown`、`ArrowUp` である。`ElementRef`、`InterpolatableText`、`SecretRef` は、[値型](/ambercast/ja/spec/value-types/#shared-types)の制約をそのまま保つ（`src/core/ir/schema.ts:567-570,1267-1270,1315-1321`）。
 
 ## トレース検証レコード {#trace-verification-records}
 
-すべての `TraceAssert` 分岐は厳格であり、`type: "assert"` を要求する。これは Plan のアサーションと同じチェック固有のフィールドバンドルを共有する。[src/core/ir/schema.ts:997](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L997)
+すべての `TraceAssert` の分岐は厳格であり、`type: "assert"` を必須とする。計画のアサーションと同じ、検査ごとのフィールドの組を共有する（`src/core/ir/schema.ts:1342`）。
 
 | variant | fields | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `text-visible` | `type`, `check`, `text` | all required | literals `assert`, `text-visible`; non-secret text | 可視性の観測。 | [src/core/ir/schema.ts:998](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L998) |
-| `element-visible` | `type`, `check`, `target` | all required | literals `assert`, `element-visible`; strict locator | 要素の可視性の観測。 | [src/core/ir/schema.ts:1003](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1003) |
-| `text-equals` | `type`, `check`, `target`, `text` | all required | literals `assert`, `text-equals`; non-secret text | 正確なテキストの観測。 | [src/core/ir/schema.ts:1008](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1008) |
-| `url-matches` | `type`, `check`, `pattern` | all required | literals `assert`, `url-matches`; non-secret text | URL の観測。 | [src/core/ir/schema.ts:1013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1013) |
-| `element-count` | `type`, `check`, `target`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | カウントの観測。 | [src/core/ir/schema.ts:1018](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1018) |
+| `text-visible` | `type`, `check`, `text` | all required | literals `assert`, `text-visible`; non-secret text | 可視性の観測。 | `src/core/ir/schema.ts:1343` |
+| `element-visible` | `type`, `check`, `target` | all required | literals `assert`, `element-visible`; strict locator | 要素の可視性の観測。 | `src/core/ir/schema.ts:1348` |
+| `text-equals` | `type`, `check`, `target`, `text` | all required | literals `assert`, `text-equals`; non-secret text | 正確なテキストの観測。 | `src/core/ir/schema.ts:1353` |
+| `url-matches` | `type`, `check`, `pattern` | all required | literals `assert`, `url-matches`; non-secret text | URL の観測。 | `src/core/ir/schema.ts:1358` |
+| `element-count` | `type`, `check`, `target`, `count` | all required | literals `assert`, `element-count`; integer ≥ 0 | カウントの観測。 | `src/core/ir/schema.ts:1363` |
 
-`TraceEntry` は、`TraceAction` と `TraceAssert` の外側の `type` 共用体である。[src/core/ir/schema.ts:1039](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1039)
+`TraceEntry` は、`TraceAction` と `TraceAssert` を外側の `type` で区別する共用体である（`src/core/ir/schema.ts:1384`）。
 
 ## 完全な最小ドキュメント {#complete-minimal-document}
 
-この例示的な `planDigest` は、[計画ドキュメント](/ambercast/ja/spec/plan-document/#complete-minimal-document) の完全な Plan の例を参照している。これは計算されたダイジェストではない。
+この例示用の `planDigest` は、[計画ドキュメント](/ambercast/ja/spec/plan-document/#complete-minimal-document)の完全な計画の例を指す。計算したダイジェストではない。
 
 ```json
 {
@@ -3663,27 +3690,27 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 
 ## 権威とバインディング {#authority-and-binding}
 
-コンシューマは Plan ダイジェストを再計算しなければならず（MUST）、それが `planDigest` と等しい場合にのみ Grounding を受け入れなければならない（MUST）。[src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+コンシューマは、計画のダイジェストを再計算しなければならず（MUST）、それが `planDigest` と等しいときにだけグラウンディングを受け入れなければならない（MUST）（`src/core/ir/digest.ts:153`、`src/core/ir/digest.ts:170`）。
 
-## Plan ダイジェストのバインディング {#plan-digest}
+## 計画ダイジェストの束縛 {#plan-digest}
 
-既存のトレースの再生に成功した後、実装はそのエントリを変更せずそのまま残さなければならない（MUST）。実装は、終了成功基準の厳密なカバレッジを伴うエージェント実行に成功した後にのみ、AI エントリを書き込むか上書きしなければならない（MUST）。スナップショットまたは失敗したアサーションで終了する成功したエージェント実行の場合、コールドパスはいかなるエントリも書き込んではならず（MUST NOT）、フォールバックパスはフォールバックを引き起こした古いエントリを削除しなければならない（MUST）。実装は、エージェント実行の失敗または中断の後は、既存のエントリに手を触れずに残さなければならない（MUST）。[src/usecases/run.ts:1895-1912](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1895-L1912) [src/usecases/run.ts:2051-2127](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2127)
+既存のトレースの再生が成功した後、実装はそのエントリを変更せずに残さなければならない（MUST）。実装は、終端の成功基準を正確に被覆したエージェント実行が成功した後にだけ、AI エントリを書き込み、上書きしなければならない（MUST）。エージェント実行が成功しても、最後の観測がスナップショットか失敗したアサーションなら、コールドパスはエントリを書き込んではならない（MUST NOT）。同じ結果では、フォールバックパスが、フォールバックの原因になった古いエントリを削除しなければならない（MUST）。エージェント実行が失敗するか中断した後、実装は既存のエントリを変更せずに残さなければならない（MUST）（`src/usecases/run.ts:2255-2266`、`src/usecases/run.ts:2565`）。
 
-要素エントリは、そのバインディングが `confirmed` に達した場合にのみ書き込むか上書きしなければならない（MUST）。これは、少なくとも1つのステップがその要素ステップを自身の空でないコミット済み `confirms` リストに挙げ、該当するすべてのステップが同じケースで成功した状態を指す。確認ステップが `element-visible` アサーションの場合、その成功は候補がちょうど1つ一致した場合にのみ有効な確認根拠となる。複数の候補が一致して成功しても、バインディングは確認されない。`acted` のみに達したバインディングは書き戻し時に破棄され、永続化されない。[repo:src/usecases/run.ts:2877-2892] [repo:src/usecases/run.ts:3251-3295]
+要素エントリは、そのバインディングが `confirmed` に達したときにだけ、書き込む、または上書きしなければならない（MUST）。そのためには、少なくとも 1 つのステップがその要素ステップを自身の空でないコミット済み `confirms` リストに挙げ、該当するすべてのステップが同じケースで成功しなければならない。確認するアサーションが `element-visible` の場合、成功が有効な確認の根拠になるのは、一致した候補がちょうど 1 つのときだけである。複数の候補が一致した成功では、バインディングを確認しない。`acted` だけのバインディングは、書き戻しの時点で破棄し、永続化しない（`src/usecases/run.ts:149-180`、`src/usecases/run.ts:3472-3495`、`src/usecases/run.ts:4238-4247`）。
 
-すべての `TraceFillSecret` について、`secretRef` はそれを含む Plan の AI ステップのコミットされた `secrets[].ref` セットに属していなければならない（MUST）。違反は整合性の失敗（integrity failure）であり、エージェント実行にフォールバックしてはならない（MUST NOT）。[src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
+すべての `TraceFillSecret` について、`secretRef` は、それを含む計画の AI ステップのコミット済み `secrets[].ref` の集合に属さなければならない（MUST）。違反は整合性の失敗であり、エージェント実行へフォールバックしてはならない（MUST NOT）（`src/usecases/run.ts:1158`、`src/usecases/run.ts:1356`）。
 
-グラウンディング v2 と v3 は廃止済みである。`check` は committed ポリシーではスキーマ検証前に `stale-grounding`、uncommitted では `fresh-without-grounding` を返す。`--resolve` なしの `run` は、計画ダイジェストが一致し要素ステップの再束縛が必要な場合、`GROUNDING_UNRESOLVED` の `recoverable-miss` となる。ダイジェストが異なる場合は `missing` となる。
+グラウンディングのバージョン 2 と 3 は廃止した。`check` は、コミット済みのポリシーではスキーマ検証の前に `stale-grounding` を報告し、未コミットのポリシーでは `fresh-without-grounding` を報告する。`--resolve` なしの `run` は、計画のダイジェストが一致し、要素ステップにグラウンディングが必要な場合、`GROUNDING_UNRESOLVED` を `recoverable-miss` として報告する。ダイジェストが異なる場合は `missing` になる。
 
-`run --resolve` は空のキャッシュから束縛し直し、既存の書き戻し条件を満たす場合に v4 を保存する。`generate` は変更のない fresh な計画の旧キャッシュを空の v4 に置き換える。`heal` は `FS_IO_ERROR` となるため、先に `ambercast run --resolve --update-cache` で再生成する必要がある。v1 と未知のバージョンは従来どおり、`check` では invalid、`run` ではキャッシュミスとなる。
+`run --resolve` は空のキャッシュから始まり、既存の書き戻しの条件のもとで v4 を保存できる。`generate` は、変更のない新しい計画に対して、廃止したキャッシュを空の v4 グラウンディングに置き換える。`heal` は、`ambercast run --resolve --update-cache` でキャッシュを再生成するまで `FS_IO_ERROR` を報告する。バージョン 1 と未知のバージョンは、`check` では無効のまま、`run` ではキャッシュミスのままである。
 
 ## 設計根拠 {#rationale}
 
-課題は、計画の意図はレビュー可能な状態を維持すべきであるのに対し、要素解決と AI 実行のエビデンスは揮発的である点である。独立したキャッシュには、その意図への曖昧さのないバインディングが必要である。
+課題は、要素の解決と AI 実行の証拠が揮発的である一方、計画の意図はレビューできる状態を保つ必要があることである。別のキャッシュには、その意図への曖昧さのない束縛が要る。
 
-採用された設計では、要素ステップには境界付けられたフィンガープリントを与え、AI ステップには終了検証を伴う完全なトレースを与え、これらすべてが安定したステップ ID でキー付けされ、ダイジェストによってバインドされる。これにより、グラウンディングがトレースの唯一の権威となる。
+採用した設計は、要素ステップに範囲を限ったフィンガープリントを与え、AI ステップに終端の検証を持つ完全なトレースを与える。どちらも安定したステップ ID で引き、ダイジェストで束縛する。これにより、グラウンディングがトレースの唯一の権威になる。
 
-却下された代替案の1つは、トレースを計画に埋め込むものであった。これは、通常の成功実行によってレビュー済みの成果物が頻繁に変更されてしまうため却下された。別の代替案は空のトレースを成功として扱うものであったが、再生には明示的な終了エビデンスが必要であるため却下された。
+却下した代替案の 1 つは、トレースを計画に埋め込むことである。通常の成功した実行が、レビュー済みの成果物を何度も変更してしまうため、却下した。もう 1 つは、空のトレースを成功として扱うことである。再生には明示的な終端の証拠が必要なため、却下した。
 
 ---
 
@@ -3692,35 +3719,57 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/fingerprint/
 
 ## アルゴリズム {#algorithm}
 
-`Fingerprint.algorithm` は `a11y-neighborhood-v2` でなければならない（MUST）。[src/core/ir/schema.ts:221](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L221) その記述子は、対象のロール／名前、ならびに直接の親および直前／直後の兄弟のロール／名前で構成される。存在しない隣接兄弟のみが `null` となる。一致するノードには常に直接の親が存在し、最上位ノードはその親として合成ルートを使用する。[src/core/ir/fingerprint.ts:164](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L164) [src/core/ir/fingerprint.ts:259](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L259) 名前は NFC 正規化され、空白の連続が縮約され、トリムされなければならない（MUST）。ロールは完全一致のままとする。[src/core/ir/fingerprint.ts:82](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L82)
+`Fingerprint.algorithm` は `a11y-neighborhood-v2` でなければならない（MUST）（`src/core/ir/schema.ts:303`、`src/core/ir/schema.ts:320`）。
 
-アルゴリズムは以下を行わなければならない（MUST）：(1) 有効なアクセシビリティツリーをパースする、(2) ロールが参照と厳密に一致し、NFC、連続する空白の縮約、およびトリムを行った後に名前が一致するノードを厳密に1つ見つける、(3) `{role,name,parent,siblingBefore,siblingAfter}` を構築する、(4) 存在しない兄弟を `null` としてエンコードする、(5) 記述子を RFC 8785 互換の正規 UTF-8 JSON としてシリアライズする、(6) それらのバイト列を SHA-256 でハッシュ化する、(7) 小文字の16進数出力を v2 タグとともに格納する。[src/core/ir/fingerprint.ts:240](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L240), [src/core/ir/fingerprint.ts:340](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L340) 子孫および隣接していない兄弟はプリイメージに含まれてはならない（MUST NOT）。[src/core/ir/fingerprint.ts:39](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L39)
+記述子は、対象のロールと名前に、直接の親と、直前および直後の兄弟のロールと名前を加えて構成する。存在しない隣接兄弟だけが `null` になる。一致したノードには必ず直接の親があり、最上位のノードは合成ルートを親とする（`src/core/ir/fingerprint.ts:174`、`src/core/ir/fingerprint.ts:216`）。
+
+名前は、NFC 正規化し、連続する空白を縮約し、前後の空白を除かなければならない（MUST）。ロールは完全一致のままとする（`src/core/ir/fingerprint.ts:106`）。
+
+アルゴリズムは次の処理を行わなければならない（MUST）（`src/core/ir/fingerprint.ts:241`、`src/core/ir/fingerprint.ts:348`）。
+
+1. 有効なアクセシビリティツリーを解析する。
+2. ロールが参照と厳密に一致し、名前が NFC 正規化と連続空白の縮約と前後空白の除去の後に一致するノードを、ちょうど 1 つ見つける。
+3. `{role,name,parent,siblingBefore,siblingAfter}` を組み立てる。
+4. 存在しない兄弟を `null` で表す。
+5. 記述子を RFC 8785 互換の正準 UTF-8 JSON に直列化する。
+6. そのバイト列の SHA-256 を計算する。
+7. 小文字の 16 進数の出力を v2 タグとともに保存する。
+
+子孫と、隣接しない兄弟は、プリイメージに含めてはならない（MUST NOT）（`src/core/ir/fingerprint.ts:46-50`）。
 
 ## ダイジェスト {#digest}
 
-実装は [正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form) を用いて記述子をシリアライズし、それを SHA-256 でハッシュ化しなければならない（MUST）。[src/core/ir/fingerprint.ts:6](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L6) [src/core/ir/digest.ts:33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L33) v2 以外のタグは、厳格な Grounding スキーマ検証に失敗する。`run` において、`trace.verificationCoverage` を主張する現在の来歴を持つ生の Grounding ドキュメントは、その後の厳格または正規化の失敗を整合性の失敗（integrity failure）とする。その主張がない場合、使用不能なコンパニオンはキャッシュミスとなる。[src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L215) [src/usecases/run.ts:498](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L498) `check` において、grounding 検査は、来歴比較の前にスキーマが無効なコンパニオンを `invalid` として分類する。公開レポートのステータスは、[鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences) で定義されているリポジトリポリシーのマッピングに従う。[src/usecases/check-grounding.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L45)
+実装は、記述子を[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)で直列化し、その SHA-256 を計算しなければならない（MUST）（`src/core/ir/fingerprint.ts:6`、`src/core/ir/digest.ts:35`）。
+
+v2 以外のタグは、厳格なグラウンディングのスキーマ検証に失敗する（`src/core/ir/schema.ts:319-322`）。
+
+`run` では、現在の来歴を持つ生のグラウンディング文書が `trace.verificationCoverage` を主張している場合、その後の厳格検証または正準化の失敗は整合性の失敗になる。その主張がなければ、使えない付随ファイルはキャッシュミスになる（`src/usecases/run.ts:773-851`）。
+
+`check` では、グラウンディングの検査が、スキーマに反する付随ファイルを、来歴の比較より前に `invalid` と分類する。公開レポートの状態は、[鮮度とダイジェスト](/ambercast/ja/spec/freshness/#freshness-consequences)で定めるリポジトリ方針の対応に従う（`src/usecases/check-grounding.ts:50`）。
 
 ## マッチング {#matching}
 
-フィンガープリントの不一致はミスとして扱われなければならず（MUST）、古い要素を安全にリプレイできる証拠として扱ってはならない。これは実装されたバージョンゲートおよび不一致の無効化に従う。[src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L215) [src/core/ir/fingerprint.ts:39](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L39)
+フィンガープリントの不一致は、古い要素を安全に再生できる証拠とせず、ミスとして扱わなければならない（MUST）。これは、実装済みのバージョン判定と、不一致時の無効化に従う（`src/core/ir/schema.ts:320`、`src/core/ir/fingerprint.ts:436`）。
 
-`hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、および `snapshot-invalid` は、それぞれ異なる解決結果である。ツリーが存在しないか不正な形式である場合は `element-not-found` となり、正規化されたロール／名前の一致が複数存在する場合は `ambiguous-match` となり、古いハッシュまたは異なるハッシュである場合は `fingerprint-mismatch` となる。[src/core/ir/fingerprint.ts:347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L347), [src/core/ir/fingerprint.ts:388](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L388) 孤立サロゲートは、生成時にはフィンガープリントを生成せず、解決時には `element-not-found` を生じさせる。[src/core/ir/fingerprint.ts:181](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L181)
+`hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid` は、それぞれ別の解決結果である。ツリーがないか形式が不正なら `element-not-found`、正規化後のロールと名前に一致するノードが複数あれば `ambiguous-match`、ハッシュが古いか異なれば `fingerprint-mismatch` になる（`src/core/ir/fingerprint.ts:348`、`src/core/ir/fingerprint.ts:436`）。対にならないサロゲートがあると、生成時にはフィンガープリントが作られず、解決時には `element-not-found` になる（`src/core/ir/fingerprint.ts:57-59`、`src/core/ir/fingerprint.ts:251-253`）。
 
 名前が空の参照は、正規化後の名前が空のノードにだけ一致する。
 
 ## 引用のマッチング {#quote-matching}
 
-`matchQuotedCandidates(tree, {text, roleHint?})` は、フィンガープリントのマッチングと同じ順序で、合成ルートの子からアクセシビリティツリーを1回だけ線形走査する。名前には同じ `normalizeName` 規則（NFC、連続する空白の縮約、トリム）を適用し、`roleHint` はロールと厳密に比較する。`{{run.x}}` 形式の文字列は補間せず、順序付きの `{role,name}` ペア、または無効なツリーに対して `{kind: 'snapshot-invalid'}` を返す。この関数は、初回バインディングの引用ベースの段階と、グラウンディングを使わない要素アサーションの評価で使用される。
+`matchQuotedCandidates(tree, {text, roleHint?})` は、合成ルートの子から、フィンガープリントの照合と同じ順序でアクセシビリティツリーを 1 回だけ線形に走査する。照会する文字列とノード名の両方に `normalizeName`（NFC、連続空白の縮約、前後空白の除去）を適用し、任意のロールヒントは完全一致で比べる。`{{run.x}}` の形の文字列は補間しない。結果は順序付きの `{role, name}` の組であり、ツリーが無効なら `{kind: 'snapshot-invalid'}` を返す（`src/core/ir/fingerprint.ts:106-108`、`src/core/ir/fingerprint.ts:125-172`）。
+
+この関数は、初回バインディングのリテラル引用の待機と、AI の提案のローカル検証に使われる。グラウンディングを使わない要素アサーションの評価にも使われる。詳細は[ステップ](/ambercast/ja/spec/steps/#step-union)を参照。
 
 ## 設計根拠 {#rationale}
 
-課題は、古くなったロケータが視覚的に類似した要素に対してリプレイされることを許容せずに、局所的な UI ドリフトを検出することである。境界付けられた近傍は、その証拠を明示的なものにする。
+課題は、古くなったロケータが見た目の似た要素に対して再生されることを許さずに、局所的な UI のドリフトを検出することである。範囲を限った近傍が、その証拠を明示する。
 
-採用された設計では、安定したテキスト正規化を行った後に、対象、親、および直接隣接する兄弟をハッシュ化する。これは、ヒューリスティックな再利用を許容するのではなく、ミスと一致を区別する。
+採用した設計は、安定した文字列の正規化の後に、対象、親、直接隣接する兄弟をハッシュ化する。ミスと一致を区別し、ヒューリスティックな再利用は認めない。
 
-却下された代替案の1つはツリー全体のハッシュであった。無関係な変更によって過剰なミスが発生するため、これは却下された。もう1つの代替案はセレクタ由来の識別子であった。セレクタは保持された意図の証拠ではなく実装の詳細であるため、これも却下された。 
+却下した代替案の 1 つは、ツリー全体のハッシュである。無関係な変更でミスが過剰に生じるため、却下した。もう 1 つは、セレクタに由来する識別子である。セレクタは保持すべき意図の証拠ではなく実装の詳細であるため、却下した。
 
-v1 パーサーはアクセシビリティの証拠に対するフェイルクローズなスキャンを提供できなかった。バージョン2ではアルゴリズムタグが変更されており、v1 フィンガープリントが v2 の証拠として解釈されることはない。その運用の結果は、無条件に再解決へとフォールバックするのではなく、[要素フィンガープリント](/ambercast/ja/spec/fingerprint/#digest) における現在の来歴およびカバレッジ主張のルールに従う。[CHANGELOG.md:78](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L78) [src/usecases/run.ts:498](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L498)
+v1 のパーサーは、アクセシビリティの証拠をフェイルクローズで走査できなかった。バージョン 2 ではアルゴリズムのタグを変え、v1 のフィンガープリントを v2 の証拠として解釈できないようにした。運用上の結果は、無条件に再解決へ戻すのではなく、[要素フィンガープリント](/ambercast/ja/spec/fingerprint/#digest)の、現在の来歴と被覆の主張に関する規則に従う（`CHANGELOG.md:257`、`src/usecases/run.ts:773-851`）。
 
 ---
 

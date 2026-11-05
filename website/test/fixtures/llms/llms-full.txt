@@ -3285,13 +3285,15 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 
 ## Confirmation references {#confirmation-references}
 
-An assertion or `ai` step may have a non-empty `confirms` array naming earlier `click`, `press`, `fill`, `fill-secret`, or `capture` steps whose grounding it confirms when it passes. `generate` and `heal` remove `confirms` references to `navigate` steps before validation. Validation reports one of five codes; see [Conformance](/ambercast/spec/conformance/#semantic-validation). Target identity is not checked. [src/core/ir/confirms-validation.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/confirms-validation.ts#L45) [src/core/ir/confirms-validation.ts:96](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/confirms-validation.ts#L96)
+An assertion or `ai` step may have a non-empty `confirms` array naming earlier `click`, `press`, `fill`, `fill-secret`, or `capture` steps whose grounding it confirms when it passes. `generate` and `heal` remove `confirms` references to `navigate` steps before validation. Validation reports one of five codes; see [Conformance](/ambercast/spec/conformance/#semantic-validation):
 
 - `confirms-unknown-step` for an unknown ID.
 - `confirms-not-earlier` for the same or a later step.
 - `confirms-not-action` for an ineligible step.
 - `confirms-duplicate` for a repeated ID.
 - `confirms-unsorted` when IDs are not in ascending Plan order.
+
+Target identity is not checked. [src/core/ir/confirms-validation.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/confirms-validation.ts#L45) [src/core/ir/confirms-validation.ts:96](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/core/ir/confirms-validation.ts#L96)
 
 ## `action` / `click` {#action-click}
 
@@ -3683,7 +3685,7 @@ A consumer MUST recompute the Plan digest and accept Grounding only when it equa
 
 ## Plan digest binding {#plan-digest}
 
-After successful replay of an existing trace, an implementation MUST leave that entry unchanged. It MUST write or overwrite an AI entry only after successful agentic execution with exact terminal success-criterion coverage. For a successful agentic execution ending in a snapshot or failed assertion, a cold path MUST write no entry. For the same outcome, a fallback path MUST delete the stale entry that caused fallback. It MUST leave an existing entry untouched after agentic failure or abort. [src/usecases/run.ts:2255-2266](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L2255-L2266) [src/usecases/run.ts:2565](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L2565)
+After successful replay of an existing trace, an implementation MUST leave that entry unchanged. It MUST write or overwrite an AI entry only after successful agentic execution with exact terminal success-criterion coverage. For a successful agentic execution ending in a snapshot or failed assertion, a cold path MUST write no entry. For a successful agentic execution ending in a snapshot or failed assertion, a fallback path MUST delete the stale entry that caused fallback. It MUST leave an existing entry untouched after agentic failure or abort. [src/usecases/run.ts:2255-2266](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L2255-L2266) [src/usecases/run.ts:2565](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L2565)
 
 An element entry MUST be written or overwritten only when its binding reaches `confirmed`. For that, at least one step must name that element step in its own non-empty committed `confirms` list, and every such step must pass in the same case. For an `element-visible` confirming assertion, a pass counts as a valid confirmation basis only when exactly one candidate matches. A pass with multiple matches does not confirm the binding. An `acted`-only binding is discarded at write-back and never persisted. [src/usecases/run.ts:149-180](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L149-L180) [src/usecases/run.ts:3472-3495](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L3472-L3495) [src/usecases/run.ts:4238-4247](https://github.com/kotarotsubaki/ambercast/blob/v0.9.0/src/usecases/run.ts#L4238-L4247)
 

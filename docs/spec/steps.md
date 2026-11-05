@@ -8,13 +8,15 @@ Every committed step is a strict branch of `Step`, discriminated by `kind`; ever
 
 ## Confirmation references {#confirmation-references}
 
-An assertion or `ai` step may have a non-empty `confirms` array naming earlier `click`, `press`, `fill`, `fill-secret`, or `capture` steps whose grounding it confirms when it passes. `generate` and `heal` remove `confirms` references to `navigate` steps before validation. Validation reports one of five codes; see [[spec/conformance#semantic-validation]]. Target identity is not checked. [repo:src/core/ir/confirms-validation.ts:45] [repo:src/core/ir/confirms-validation.ts:96]
+An assertion or `ai` step may have a non-empty `confirms` array naming earlier `click`, `press`, `fill`, `fill-secret`, or `capture` steps whose grounding it confirms when it passes. `generate` and `heal` remove `confirms` references to `navigate` steps before validation. Validation reports one of five codes; see [[spec/conformance#semantic-validation]]:
 
 - `confirms-unknown-step` for an unknown ID.
 - `confirms-not-earlier` for the same or a later step.
 - `confirms-not-action` for an ineligible step.
 - `confirms-duplicate` for a repeated ID.
 - `confirms-unsorted` when IDs are not in ascending Plan order.
+
+Target identity is not checked. [repo:src/core/ir/confirms-validation.ts:45] [repo:src/core/ir/confirms-validation.ts:96]
 
 ## `action` / `click` {#action-click}
 

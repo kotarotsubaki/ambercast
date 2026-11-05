@@ -106,7 +106,7 @@ description: "本章定义每一种已提交的步骤类型及其字段和示例
 | `check` | string | required | literal `text-visible` | 断言辨识符。 | `src/core/ir/schema.ts:736` |
 | `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
 | `text` | `InterpolatableText` | required | no secret marker | 期望可见的文本。 | `src/core/ir/schema.ts:587` |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其定位缓存的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"welcome-visible","kind":"assert","check":"text-visible","target":"app","text":"Welcome"}
@@ -121,7 +121,7 @@ description: "本章定义每一种已提交的步骤类型及其字段和示例
 | `check` | string | required | literal `element-visible` | 断言辨识符。 | `src/core/ir/schema.ts:757` |
 | `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
 | `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用元素描述。 | `src/core/ir/schema.ts:594` |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其定位缓存的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"menu-visible","kind":"assert","check":"element-visible","target":"app","intent":{"description":"Main navigation 「Main」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":23},"quote":{"text":"Main","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":22}}}}
@@ -137,7 +137,7 @@ description: "本章定义每一种已提交的步骤类型及其字段和示例
 | `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
 | `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用测试元素。 | `src/core/ir/schema.ts:595` |
 | `text` | `InterpolatableText` | required | no secret marker | 期望的精确文本。 | `src/core/ir/schema.ts:591` |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其定位缓存的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"title","kind":"assert","check":"text-equals","target":"app","intent":{"description":"Account heading 「Account」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":26},"quote":{"text":"Account","sourceSpan":{"startLine":1,"startColumn":18,"endLine":1,"endColumn":25}}},"text":"Account overview"}
@@ -151,7 +151,7 @@ description: "本章定义每一种已提交的步骤类型及其字段和示例
 | `check` | string | required | literal `url-matches` | 断言辨识符。 | `src/core/ir/schema.ts:803` |
 | `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
 | `pattern` | `InterpolatableText` | required | no secret marker | 期望匹配的 URL 文本。 | `src/core/ir/schema.ts:592` |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其定位缓存的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"on-account","kind":"assert","check":"url-matches","target":"app","pattern":"/account"}
@@ -167,7 +167,7 @@ description: "本章定义每一种已提交的步骤类型及其字段和示例
 | `timeoutMs` | integer | optional | 0–120000 | 断言重试的截止时间，单位为毫秒。 | `src/core/ir/schema.ts:601` |
 | `intent` | `QuotedElementIntent` | required | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 有来源依据的被引用匹配元素。 | `src/core/ir/schema.ts:596` |
 | `count` | integer | required | nonnegative | 期望的数量，包括零。 | `src/core/ir/schema.ts:593` |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其 定位缓存 的步骤。 | `src/core/ir/schema.ts:597` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 此断言通过时确认其定位缓存的步骤。 | `src/core/ir/schema.ts:597` |
 
 ```json
 {"id":"one-alert","kind":"assert","check":"element-count","target":"app","intent":{"description":"Error alerts 「Error」","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":21},"quote":{"text":"Error","sourceSpan":{"startLine":1,"startColumn":15,"endLine":1,"endColumn":20}}},"count":1}
@@ -203,7 +203,7 @@ description: "本章定义每一种已提交的步骤类型及其字段和示例
 | `instruction` | `InterpolatableText` | required | no secret marker | 智能体指令。 | `src/core/ir/schema.ts:583` |
 | `secrets` | `AiStepSecretUse[]` | optional | strict entries | 已提交的机密使用。 | `src/core/ir/schema.ts:901` |
 | `instructionCoverage` | `InstructionCriterion[]` | required | min 1 | 在本地归属的准则。 | `src/core/ir/schema.ts:902` |
-| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 通过时此智能体执行所确认 定位缓存 的步骤。 | `src/core/ir/schema.ts:900` |
+| `confirms` | `StepId[]` | optional | non-empty; earlier action-kind or capture steps in ascending Plan order | 通过时此智能体执行所确认定位缓存的步骤。 | `src/core/ir/schema.ts:900` |
 
 ```json
 {"id":"complete-flow","kind":"ai","target":"app","instruction":"Finish checkout.","instructionCoverage":[{"id":"finish","kind":"success","sourceSpan":{"startLine":1,"startColumn":1,"endLine":1,"endColumn":17}}]}

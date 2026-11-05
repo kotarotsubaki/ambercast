@@ -57,6 +57,8 @@ const APPROVED_EXTERNAL_ANCHOR_URLS = [
   { origin: 'https://github.com', pathname: '/kotarotsubaki/ambercast' },
   { origin: 'https://github.com', pathname: '/kotarotsubaki/ambercast/blob/main/CHANGELOG.md' },
   { origin: 'https://github.com', pathnamePrefix: '/kotarotsubaki/ambercast/edit/main/website/' },
+  { origin: 'https://github.com', pathnamePrefix: '/kotarotsubaki/ambercast/blob/' },
+  { origin: 'https://github.com', pathnamePrefix: '/kotarotsubaki/ambercast/edit/main/docs/spec/' },
   { origin: 'https://www.npmjs.com', pathname: '/package/ambercast' },
 ];
 
@@ -720,7 +722,79 @@ const SCREENSHOTS = [
   { name: 'mcp-server-zh-cn-1440-dark', path: '/zh-cn/agents/mcp-server/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
   { name: 'mcp-server-zh-cn-1440-light', path: '/zh-cn/agents/mcp-server/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
   { name: 'mcp-server-zh-cn-390-dark', path: '/zh-cn/agents/mcp-server/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
-  { name: 'mcp-server-zh-cn-390-light', path: '/zh-cn/agents/mcp-server/', viewport: { width: 390, height: 844 }, colorScheme: 'light' }
+  { name: 'mcp-server-zh-cn-390-light', path: '/zh-cn/agents/mcp-server/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'spec-overview-1440-dark', path: '/spec/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'spec-overview-1440-light', path: '/spec/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'spec-overview-390-dark', path: '/spec/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'spec-overview-390-light', path: '/spec/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'spec-overview-ja-1440-dark', path: '/ja/spec/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'spec-overview-ja-1440-light', path: '/ja/spec/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'spec-overview-ja-390-dark', path: '/ja/spec/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'spec-overview-ja-390-light', path: '/ja/spec/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'spec-overview-zh-cn-1440-dark', path: '/zh-cn/spec/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'spec-overview-zh-cn-1440-light', path: '/zh-cn/spec/overview/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'spec-overview-zh-cn-390-dark', path: '/zh-cn/spec/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'spec-overview-zh-cn-390-light', path: '/zh-cn/spec/overview/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'plan-document-1440-dark', path: '/spec/plan-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'plan-document-1440-light', path: '/spec/plan-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'plan-document-390-dark', path: '/spec/plan-document/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'plan-document-390-light', path: '/spec/plan-document/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'plan-document-ja-1440-dark', path: '/ja/spec/plan-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'plan-document-ja-1440-light', path: '/ja/spec/plan-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'plan-document-ja-390-dark', path: '/ja/spec/plan-document/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'plan-document-ja-390-light', path: '/ja/spec/plan-document/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'plan-document-zh-cn-1440-dark', path: '/zh-cn/spec/plan-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'plan-document-zh-cn-1440-light', path: '/zh-cn/spec/plan-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'plan-document-zh-cn-390-dark', path: '/zh-cn/spec/plan-document/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'plan-document-zh-cn-390-light', path: '/zh-cn/spec/plan-document/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'steps-1440-dark', path: '/spec/steps/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'steps-1440-light', path: '/spec/steps/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'steps-390-dark', path: '/spec/steps/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'steps-390-light', path: '/spec/steps/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'steps-ja-1440-dark', path: '/ja/spec/steps/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'steps-ja-1440-light', path: '/ja/spec/steps/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'steps-ja-390-dark', path: '/ja/spec/steps/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'steps-ja-390-light', path: '/ja/spec/steps/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'steps-zh-cn-1440-dark', path: '/zh-cn/spec/steps/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'steps-zh-cn-1440-light', path: '/zh-cn/spec/steps/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'steps-zh-cn-390-dark', path: '/zh-cn/spec/steps/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'steps-zh-cn-390-light', path: '/zh-cn/spec/steps/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'value-types-1440-dark', path: '/spec/value-types/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'value-types-1440-light', path: '/spec/value-types/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'value-types-390-dark', path: '/spec/value-types/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'value-types-390-light', path: '/spec/value-types/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'value-types-ja-1440-dark', path: '/ja/spec/value-types/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'value-types-ja-1440-light', path: '/ja/spec/value-types/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'value-types-ja-390-dark', path: '/ja/spec/value-types/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'value-types-ja-390-light', path: '/ja/spec/value-types/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'value-types-zh-cn-1440-dark', path: '/zh-cn/spec/value-types/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'value-types-zh-cn-1440-light', path: '/zh-cn/spec/value-types/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'value-types-zh-cn-390-dark', path: '/zh-cn/spec/value-types/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'value-types-zh-cn-390-light', path: '/zh-cn/spec/value-types/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'grounding-document-1440-dark', path: '/spec/grounding-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'grounding-document-1440-light', path: '/spec/grounding-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'grounding-document-390-dark', path: '/spec/grounding-document/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'grounding-document-390-light', path: '/spec/grounding-document/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'grounding-document-ja-1440-dark', path: '/ja/spec/grounding-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'grounding-document-ja-1440-light', path: '/ja/spec/grounding-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'grounding-document-ja-390-dark', path: '/ja/spec/grounding-document/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'grounding-document-ja-390-light', path: '/ja/spec/grounding-document/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'grounding-document-zh-cn-1440-dark', path: '/zh-cn/spec/grounding-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'grounding-document-zh-cn-1440-light', path: '/zh-cn/spec/grounding-document/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'grounding-document-zh-cn-390-dark', path: '/zh-cn/spec/grounding-document/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'grounding-document-zh-cn-390-light', path: '/zh-cn/spec/grounding-document/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'fingerprint-1440-dark', path: '/spec/fingerprint/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'fingerprint-1440-light', path: '/spec/fingerprint/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'fingerprint-390-dark', path: '/spec/fingerprint/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'fingerprint-390-light', path: '/spec/fingerprint/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'fingerprint-ja-1440-dark', path: '/ja/spec/fingerprint/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'fingerprint-ja-1440-light', path: '/ja/spec/fingerprint/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'fingerprint-ja-390-dark', path: '/ja/spec/fingerprint/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'fingerprint-ja-390-light', path: '/ja/spec/fingerprint/', viewport: { width: 390, height: 844 }, colorScheme: 'light' },
+  { name: 'fingerprint-zh-cn-1440-dark', path: '/zh-cn/spec/fingerprint/', viewport: { width: 1440, height: 1100 }, colorScheme: 'dark' },
+  { name: 'fingerprint-zh-cn-1440-light', path: '/zh-cn/spec/fingerprint/', viewport: { width: 1440, height: 1100 }, colorScheme: 'light' },
+  { name: 'fingerprint-zh-cn-390-dark', path: '/zh-cn/spec/fingerprint/', viewport: { width: 390, height: 844 }, colorScheme: 'dark' },
+  { name: 'fingerprint-zh-cn-390-light', path: '/zh-cn/spec/fingerprint/', viewport: { width: 390, height: 844 }, colorScheme: 'light' }
 ];
 
 function sleep(milliseconds) {
@@ -2200,7 +2274,9 @@ async function assertIssue297IntroFigures(browser) {
   }
 }
 
-const AC_FLOW_PAGES = ['explanation/healing-model'];
+// A page's meters are its only quantity axis: the healing model compares three budget sizes, while the spec overview shows a dependency chain with none.
+const AC_FLOW_METER_SIZES = { 'explanation/healing-model': ['l', 'm', 's'], 'spec/overview': [] };
+const AC_FLOW_PAGES = Object.keys(AC_FLOW_METER_SIZES);
 const AC_FLOW_LOCALES = ['', 'ja/', 'zh-cn/'];
 const AC_FLOW_CLASSES = ['ac-flow', 'ac-flow-node', 'ac-flow-stage', 'ac-flow-head', 'ac-flow-num', 'ac-flow-chip', 'ac-flow-chip-replay', 'ac-flow-chip-ai', 'ac-flow-title', 'ac-flow-meter', 'ac-flow-meter-s', 'ac-flow-meter-m', 'ac-flow-meter-l', 'ac-flow-track', 'ac-flow-fill', 'ac-flow-body', 'ac-flow-note', 'ac-flow-link', 'ac-flow-link-stage', 'ac-flow-cond'];
 
@@ -2435,7 +2511,7 @@ async function assertFlowLayout(browser) {
       geometry.nodes.forEach((node, index) => { if (index) assert.ok(node.top >= geometry.nodes[index - 1].bottom, `${label} node order`); });
       assert.ok(geometry.figureWidth <= geometry.contentWidth + 1, `${label} figure width`);
       assert.ok(geometry.scrollWidth <= geometry.clientWidth, `${label} horizontal overflow`);
-      assert.deepEqual([...new Set(geometry.meters.map((meter) => meter.size))].sort(), ['l', 'm', 's'], `${label} meter sizes`);
+      assert.deepEqual([...new Set(geometry.meters.map((meter) => meter.size))].sort(), AC_FLOW_METER_SIZES[slug], `${label} meter sizes`);
       for (const meter of geometry.meters) {
         assert.ok(meter.track > 0, `${label} ${meter.size} visible track`);
         assert.ok(Math.abs(meter.fill / meter.track - { s: 0.22, m: 0.55, l: 1 }[meter.size]) <= 0.01, `${label} ${meter.size} fill ratio`);
@@ -2528,42 +2604,6 @@ async function assertIssue298MachineReadableResourceLinks(browser) {
   }
 }
 
-async function assertOverviewDiagrams(browser) {
-  const paths = ['/spec/overview/', '/ja/spec/overview/', '/zh-cn/spec/overview/'];
-  for (const [localeIndex, path] of paths.entries()) {
-    for (const colorScheme of ['dark', 'light']) {
-      const context = await browser.newContext({ colorScheme, viewport: { width: 1440, height: 1100 } });
-      const page = await context.newPage();
-      try {
-        await page.goto(pageUrl(path), { waitUntil: 'networkidle' });
-        await waitForFonts(page);
-        const diagram = await page.evaluate(() => {
-          const figures = [...document.querySelectorAll('figure.ac-diagram')];
-          const figure = figures[0];
-          const images = figure ? [...figure.querySelectorAll('img')] : [];
-          const light = figure?.querySelector('img.ac-diagram-light');
-          const dark = figure?.querySelector('img.ac-diagram-dark');
-          return {
-            figures: figures.length, images: images.length,
-            mermaidCodeBlocks: document.querySelectorAll('pre[data-language="mermaid"]').length,
-            lightDisplay: light && getComputedStyle(light).display,
-            darkDisplay: dark && getComputedStyle(dark).display,
-          };
-        });
-        assert.equal(diagram.figures, 1, `${path} must contain one diagram figure.`);
-        assert.equal(diagram.images, 2, `${path} must contain two diagram images.`);
-        assert.equal(diagram.mermaidCodeBlocks, 0, `${path} must not render Mermaid as code.`);
-        assert.equal(diagram.lightDisplay === 'none', colorScheme === 'dark', `${path} light image visibility must follow ${colorScheme}.`);
-        assert.equal(diagram.darkDisplay === 'none', colorScheme === 'light', `${path} dark image visibility must follow ${colorScheme}.`);
-        if (localeIndex === 0) {
-          await mkdir(SCREENSHOT_DIRECTORY, { recursive: true });
-          await page.screenshot({ path: resolve(SCREENSHOT_DIRECTORY, `spec-overview-diagram-${colorScheme}.png`), fullPage: true });
-        }
-      } finally { await context.close(); }
-    }
-  }
-}
-
 async function assertDiagramRenderDeterminism() {
   const root = mkdtempSync(join(tmpdir(), 'ambercast-diagram-'));
   try {
@@ -2647,7 +2687,6 @@ async function main() {
     await assertBashCodeTokenPalette(browser);
     await assertMarkdownCodeTokenPalette(browser);
     await assertJsonCodeTokenPalette(browser);
-    await assertOverviewDiagrams(browser);
     await assertDiagramRenderDeterminism();
     await assertCodeFrameVariants(browser);
     await assertCodeBlockScroll(browser);

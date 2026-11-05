@@ -1,46 +1,57 @@
 ---
-title: "Ambercast Plan 仕様"
+title: "Ambercast 計画仕様"
 description: "本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。"
 ---
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、Plan スキーマバージョン 5 および Grounding スキーマバージョン 4 を受け付ける。[repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:74]
+本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 4 を受け付ける（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
 
 ## 規範的文言 {#normative-language}
 
-単語 **MUST**、**SHOULD**、および **MAY** は、RFC 2119 の要求語として解釈されるものとする。適合するプロデューサは、ここで定義されたバージョンおよび構造のみを出力しなければならない（MUST）。コンシューマは、自身が検証できない構造を拒絶しなければならない（MUST）。
+単語 **MUST**、**SHOULD**、**MAY** は、RFC 2119 の要求語として解釈する。適合するプロデューサは、ここで定義するバージョンと構造だけを出力しなければならない（MUST）。コンシューマは、検証できない構造を拒絶しなければならない（MUST）。
 
 ## 依存関係モデル {#dependency-model}
 
-```mermaid alt="正規化されたプロンプトからinputsDigest、PlanDocument、planDigest、GroundingDocumentを経てリプレイに至るフローチャート"
-flowchart LR
-  P[normalized prompt] --> I[inputsDigest]
-  I --> D[PlanDocument]
-  D --> PD[planDigest]
-  PD --> G[GroundingDocument]
-  G --> R[replay]
-```
+<figure class="ac-flow" aria-label="正規化したプロンプトから再生までの依存の連鎖。ダイジェストは、正規化したプロンプト、スキーマ、プロデューサの入力、ターゲットを束縛する。計画は、そのダイジェストを inputsDigest として記録する。planDigest は、再生に関わる計画の内容を束縛する。グラウンディング文書は planDigest に束縛され、再計算したダイジェストと等しいときだけ受け入れられる。再生は、束縛されたグラウンディングを読む。">
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">PROMPT</span></div><p class="ac-flow-title">正規化したプロンプト</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>ダイジェストは、正規化したプロンプト、スキーマ、プロデューサの入力、ターゲットを束縛する</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">DIGEST</span></div><p class="ac-flow-title">inputsDigest</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>計画は、そのダイジェストを inputsDigest として記録する</b></span></div>
+<div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">PLAN</span><span class="ac-flow-chip ac-flow-chip-ai">AI を呼びうる</span></div><p class="ac-flow-title">PlanDocument</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>planDigest は、再生に関わる計画の内容を束縛する</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">DIGEST</span></div><p class="ac-flow-title">planDigest</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>グラウンディング文書は planDigest に束縛され、再計算したダイジェストと等しいときだけ受け入れられる</b></span></div>
+<div class="ac-flow-node ac-flow-stage"><div class="ac-flow-head"><span class="ac-flow-num">GROUNDING</span></div><p class="ac-flow-title">GroundingDocument</p></div>
+<div class="ac-flow-link"><svg aria-hidden="true" viewbox="0 0 28 52" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v46M8 42l6 6 6-6"></path></svg><span class="ac-flow-cond"><b>再生は、束縛されたグラウンディングを読む</b></span></div>
+<div class="ac-flow-node"><div class="ac-flow-head"><span class="ac-flow-num">REPLAY</span><span class="ac-flow-chip ac-flow-chip-replay">キャッシュ再生では AI 不要</span></div><p class="ac-flow-title">再生</p></div>
+</figure>
 
-すべてのダイジェストパスは、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form) を使用しなければならない（MUST）。`inputsDigest` は正規化されたプロンプト、スキーマ、プロデューサ入力、およびターゲットをバインドし、`planDigest` はリプレイに関連する計画内容をバインドする。[src/core/ir/digest.ts:91](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L91) [src/core/ir/digest.ts:118](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L118)
+すべてのダイジェストの経路は、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)を使わなければならない（MUST）。`inputsDigest` は、正規化したプロンプト、スキーマ、プロデューサの入力、ターゲットを束縛する。`planDigest` は、再生に関わる計画の内容を束縛する（`src/core/ir/digest.ts:130`、`src/core/ir/digest.ts:153`）。
+
+計画は自身の `inputsDigest` を記録し、`planDigest` は計画から計算する。グラウンディングドキュメントは、その `planDigest` が再計算したダイジェストと等しいときだけ受け入れる。定義は[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#authority-and-binding)にある。再生は、束縛されたグラウンディングを読む。
 
 ## 互換性 {#compatibility}
 
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
-| Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
-| Grounding `schemaVersion` | `4` | repo:src/core/ir/schema.ts:74 |
-| Fingerprint アルゴリズム | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:258 |
-| Report `schemaVersion` | `3.11` | repo:src/report/schema.ts:58 |
+| 計画の `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
+| グラウンディングの `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
+| フィンガープリントのアルゴリズム | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
+| Report `schemaVersion` | `3.11` | `src/report/schema.ts:58` |
 
 ## 読解順序 {#reading-order}
 
-まず [計画ドキュメント](/ambercast/ja/spec/plan-document/#document-shape)、[ステップ](/ambercast/ja/spec/steps/#step-union)、および [値型](/ambercast/ja/spec/value-types/#shared-types) を読み、次に [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)、[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#grounding-shape)、および [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) を読むこと。実装者は、最後に [正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)、[プランにおけるシークレット](/ambercast/ja/spec/secrets/#authorization)、および [適合性](/ambercast/ja/spec/conformance/#semantic-validation) を読まなければならない（MUST）。
+読む順序は次のとおりである。
+
+1. [計画ドキュメント](/ambercast/ja/spec/plan-document/#document-shape)、[ステップ](/ambercast/ja/spec/steps/#step-union)、[値型](/ambercast/ja/spec/value-types/#shared-types)を最初に読む。
+2. [鮮度とダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)、[グラウンディングドキュメント](/ambercast/ja/spec/grounding-document/#grounding-shape)、[要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm)を次に読む。
+3. 実装者は、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)、[計画におけるシークレット](/ambercast/ja/spec/secrets/#authorization)、[適合性](/ambercast/ja/spec/conformance/#semantic-validation)を最後に読まなければならない（MUST）。
 
 ## 設計根拠 {#rationale}
 
-問題は、読者がフィールドを安全に解釈できるようになる前に、作成された意図を、派生した実行および揮発的なグラウンディングから区別しなければならないことである。
+課題は、読者がフィールドを安全に解釈する前に、書き手の意図を、派生した実行と揮発するグラウンディングから区別しなければならないことである。
 
-選定された依存関係優先の提示構成により、詳細なスキーマに先立ってダイジェスト境界と互換性バージョンが可視化される。
+採用した依存関係優先の構成は、詳細なスキーマより先に、ダイジェストの境界と互換性のバージョンを見えるようにする。
 
-却下された代替案の1つは、単一の未分化なアーティファクトであった。計画と UI エビデンスでは無効化ルールが異なるため、これは却下された。もう1つは章ごとの局所的なバージョニングであった。互換性はドキュメントシステム全体の規約であるため、これは却下された。 
+却下した代替案の 1 つは、区別のない単一のアーティファクトである。計画と UI の証拠では無効化の規則が異なるため、却下した。もう 1 つは、章ごとのバージョン管理である。互換性はドキュメント体系全体の契約であるため、却下した。

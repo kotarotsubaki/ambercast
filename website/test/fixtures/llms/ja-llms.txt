@@ -77,10 +77,10 @@
 - [ステータスとロードマップ](https://kotarotsubaki.github.io/ambercast/ja/explanation/status-and-roadmap/): 現行リリースが実装している範囲、計画中の機能、1.0より前のバージョンの扱いを説明する。
 
 ## FOR AI AGENTS
-- [AIエージェントからのambercastの利用](https://kotarotsubaki.github.io/ambercast/ja/agents/overview/): AIエージェントがテストアセットを変更・操作する際の読む順序と安全な実行ループを定めます。
-- [オペレーション規約](https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/): エージェントが安全にコマンドを実行・判断するためのアクション境界、禁止事項、およびプロセス終了時やエラー発生時の次の安全なアクションを定めます。
-- [セットアッププロンプト](https://kotarotsubaki.github.io/ambercast/ja/agents/setup-prompt/): 依頼されたテストを扱うエージェントに対し、レビューを最優先とする境界を規定するセットアッププロンプトを提供します。
-- [構造化出力の読み取り](https://kotarotsubaki.github.io/ambercast/ja/agents/reading-structured-output/): エージェントがレポートエンベロープに基づいて安全な順序で分岐処理を行い、実行結果を正しく判定するための手順を解説します。
-- [機械可読リソース](https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-resources/): ambercast で公開されている機械可読リソースと、その提供ルールについて説明します。
-- [official skill](https://kotarotsubaki.github.io/ambercast/ja/agents/official-skill/): ambercast が同梱する AI コーディングエージェント向け official skill と、エージェント向けインターフェースにおけるその役割について説明します。
-- [MCP サーバー](https://kotarotsubaki.github.io/ambercast/ja/agents/mcp-server/): ambercast MCP サーバーを使用するエージェント向けの接続境界。
+- [AIエージェントからのambercastの利用](https://kotarotsubaki.github.io/ambercast/ja/agents/overview/): エージェントはテストアセットを変える前に4ページをこの順で読み、実装・プロンプトの記述・実行・レポートからの修正というループで進める。
+- [オペレーション規約](https://kotarotsubaki.github.io/ambercast/ja/agents/operating-contract/): コマンドごとに、実行前に満たすべき条件、書き込みの範囲、ユーザーの承認の要否と、終了コードやレポートのエラーを受けた次の行動を定める。
+- [セットアッププロンプト](https://kotarotsubaki.github.io/ambercast/ja/agents/setup-prompt/): 依頼された1つのテストだけを扱い、差分を示し、依頼のない書き込みの前に確認するよう、コーディングエージェントへ貼り付ける1本のプロンプトである。
+- [構造化出力の読み取り](https://kotarotsubaki.github.io/ambercast/ja/agents/reading-structured-output/): JSONレポートは`command`、`run`の`reportPersistence`、`errors[].code`、各`results[].status`の順に読み、最初に対応が要るものから動く。
+- [機械可読リソース](https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-resources/): サイトが公開する機械可読ファイルの一覧と、何が利用可能かを`capabilities.json`で決めるという規則を示す。
+- [official skill](https://kotarotsubaki.github.io/ambercast/ja/agents/official-skill/): ambercastは、プロンプトを書き、実行し、レポートを読むループをコーディングエージェントに教えるAgent Skillsのskill`ambercast`を同梱している。
+- [MCP サーバー](https://kotarotsubaki.github.io/ambercast/ja/agents/mcp-server/): `ambercast mcp`は1つのセッションルートをstdioでMCPクライアントへ提供し、このページは呼べるツールと詳細の所在を示す。

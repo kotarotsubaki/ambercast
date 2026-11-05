@@ -1,21 +1,19 @@
 ---
 title: 设置提示词
-description: 为处理指定测试的 AI Agent 提供轻量、以审查为先的完整可复制运行提示词。
+description: 一段可以贴给编码 Agent 的提示词，让它只处理所要求的测试、展示差异，并在没有被要求的写入前先征求同意。
 ---
 
-本页提供了一套可直接复制的完整运行提示词，旨在为处理指定测试的 Agent 建立轻量且以审查为先的工作边界。
+把这段提示词交给 Agent，它就知道要读什么、做到哪一步、按什么顺序工作。请按原样以英文粘贴。
 
 ## 可复制的提示词 {#copy-paste-prompt}
 
-本提示词遵循以下明确的契约与行为规则：
+提示词设定了五条规则。
 
-- **声明开发服务器边界**：设置提示词明确声明了开发服务器的边界。
-- **无依赖工件检查**：`check` 可以在无需 AI 或浏览器能力的情况下检查工件。
-- **Diff 优先与提交限制**：提示词将展示 diff 设定为默认行为；提交代码必须经过请求。
-- **未传参发现规则**：在未提供文件参数时，`generate`、`run` 和 `heal` 会各自根据配置好的发现规则来选择测试。
-- **提供商解析机制**：提供商解析在存在显式覆盖时使用该覆盖，否则使用配置的提供商；在 `auto` 模式下，会先探测 claude 再探测 codex。
-
-您可以将以下提示词完整复制并提供给 Agent：
+1. AI 提供方先取显式指定的值，再取配置的提供方。在 `auto` 模式下，先尝试 `claude`，再尝试 `codex`。
+2. `check` 不使用 AI 和浏览器，只检查产物。
+3. 默认只展示差异，只有被要求时才提交。
+4. 开发服务器归操作者所有。Agent 假定应用已在配置的基础 URL 上运行，除非操作者明确要求，否则不启动、不停止也不重新配置它。
+5. 不带文件参数时，`generate`、`run` 和 `heal` 会选中配置的发现规则匹配的全部测试。
 
 ~~~markdown
 You are working on ambercast tests in this repository.
@@ -29,4 +27,4 @@ Never place literal secret values in prompts, artifacts, commands, reports, or m
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
-相关链接：[5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)、[操作契约](/ambercast/zh-cn/agents/operating-contract/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)
+相关链接：[5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)、[操作契约](/ambercast/zh-cn/agents/operating-contract/)、[环境变量](/ambercast/zh-cn/reference/environment-variables/)

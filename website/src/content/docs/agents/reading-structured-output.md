@@ -1,46 +1,47 @@
 ---
 title: Reading structured output
-description: Branch on the report envelope, inspect reportPersistence and errors, and evaluate command-specific result statuses in ambercast.
+description: Read a JSON report in a fixed order, `command`, then `reportPersistence` for `run`, then `errors[].code`, then each `results[].status`, and act on the first that calls for it.
 ---
 
-When you consume structured output from ambercast, branch on the report envelope to inspect execution details in a fixed, safe order. A report envelope is discriminated by `command` into `generate`, `run`, `check`, `heal`, and `review` branches, each pairing shared error records with command-specific result structures.
+A report belongs to the `generate`, `run`, `check`, `heal`, or `review` branch, selected by `command`. The sections below say where to start reading, when to stop, and when a result lets you continue.
 
-## Envelope decision tree {#decision-tree}
+## Decision tree {#decision-tree}
 
-Process `command`, `reportPersistence`, `errors[].code`, and `results[].status` in a fixed order.
+Read `command`, `reportPersistence`, `errors[].code`, and `results[].status` in that order. Only `run` has `reportPersistence`, with the values `persisted`, `failed`, and `not-attempted`. The schema defines a `review` branch, but the CLI has no `review` command.
 
-The top-level envelope is discriminated by `command` into `generate`, `run`, `check`, `heal`, and `review` branches. Only the `run` branch contains `reportPersistence`, whose values are `persisted`, `failed`, and `not-attempted`. For other commands, proceed directly to evaluating results.
-
-Across all commands, the report schema supplies a stable public vocabulary of `errors[].code`. Inspect these codes before taking action on files. If no errors are present, classify each `results[].status` according to the rules for that specific command.
+If `errors[].code` holds any code, use the operating contract's report-error table before you change files. If it holds none, classify each `results[].status` by the rules for that command.
 
 ~~~
 Read command.
 ├─ run: read reportPersistence first.
-│  ├─ failed → retain stdout envelope; treat persistence as an environment problem.
-│  └─ persisted/not-attempted → continue to results.
-├─ generate/check/heal/review → continue to results.
+│  ├─ failed → keep the stdout report; treat persistence as an environment problem.
+│  └─ persisted/not-attempted → continue to errors.
+├─ generate/check/heal/review → continue to errors.
 Read every errors[].code.
-├─ any code → use operating-contract's error-code table before changing files.
+├─ any code → use the operating contract's report-error table before changing files.
 └─ none → classify every results[].status for this command.
-   ├─ failed/error/stale/missing/orphaned → stop at the corresponding contract.
-   ├─ skipped/listed → treat as incomplete or discovery-only, not success.
-   └─ healthy status → continue only within approved scope.
+   ├─ listed/skipped → discovery-only or incomplete, not success.
+   ├─ generate failed, run failed/error → read the evidence; do not heal or regenerate automatically.
+   ├─ check other than fresh/fresh-without-grounding → artifacts are untrustworthy; use stale-artifact recovery.
+   ├─ heal unresolved/partially-healed → report it; do not retry automatically.
+   └─ any other status → continue only within approved scope.
 ~~~
 
-Links: [Reports](/ambercast/reference/reports/), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-report-error)
+Related: [Reports](/ambercast/reference/reports/), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-report-error)
 
 ## Status means command-specific evidence {#status-by-command}
 
-Each command maintains its own vocabulary for `results[].status`, and each status communicates distinct execution evidence:
+Each command has its own `results[].status` vocabulary. `listed` is discovery only, and `skipped` carries no execution evidence. Neither is success.
 
-- **`run`**: Execution results use `passed`, `failed`, or `error`. The `listed` status is discovery-only, and `skipped` carries no execution evidence.
-- **`generate`**: Distinguishes `generated`, `would-generate`, `skipped-fresh`, `listed`, `failed`, and `skipped`.
-- **`check`**: Includes `fresh`/`stale`, plan/grounding-missing or `orphaned` outcomes, plus `fresh-without-grounding`, `listed`, and `skipped`.
+- `generate` uses `generated`, `would-generate`, `skipped-fresh`, `listed`, `failed`, and `skipped`.
+- `run` uses `passed`, `failed`, `error`, `listed`, and `skipped`.
+- `check` uses `fresh`, `stale`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding`, `orphaned-plan`, `orphaned-grounding`, `invalid-artifact-name`, `listed`, and `skipped`.
+- A completed `heal` row has `status: completed`, and `repairOutcome` is `healed`, `partially-healed`, `unresolved`, or `no-changes-needed`. `listed` and `skipped` rows carry identity only.
 
-Links: [Reports](/ambercast/reference/reports/#result-statuses), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#grounding-binding)
+Related: [Generate results](/ambercast/reference/reports/#generate-results), [Run results](/ambercast/reference/reports/#run-results), [Check results](/ambercast/reference/reports/#check-results), [Heal results](/ambercast/reference/reports/#heal-results), [Plan lifecycle and freshness](/ambercast/explanation/plan-lifecycle/#grounding-binding)
 
-## Process status is a batch-level signal {#exit-code-signal}
+## The exit code is a batch-level signal {#exit-code-signal}
 
-Use the process status as a batch-level signal only after retaining the more specific rows and errors from the envelope. Alongside its code, a report error records its scope and kind in `errors[]`.
+Read the exit code only after the rows and errors, as a signal for the whole batch. Each report error also records its scope and kind in `errors[]`.
 
-Links: [Exit codes](/ambercast/reference/exit-codes/#priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code)
+Related: [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority), [Operating contract](/ambercast/agents/operating-contract/#next-action-by-exit-code)

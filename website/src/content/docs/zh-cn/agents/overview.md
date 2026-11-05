@@ -1,28 +1,34 @@
 ---
 title: 在 AI Agent 中使用 ambercast
-description: 为 AI Agent 提供修改测试资产前的操作阅读顺序、副作用范围与有界运行循环指引。
+description: Agent 在修改测试资产前按顺序阅读四个页面，然后按“实现、编写提示词、运行、依据报告修复”的循环工作。
 ---
 
-在修改测试资产前，本文档为 AI Agent 梳理所需的操作阅读顺序、副作用范围与操作分支。可用的 CLI 命令包括 `init`、`generate`、`run`、`check` 和 `heal`；确切的规范归属 Reference，具体操作流程归属 How-to。
+本页帮助 Agent 决定开始前读什么、按什么顺序行动。Agent 页面负责阅读顺序、副作用和行动分支，精确规格由参考页负责，操作步骤由操作指南负责。
 
 ## 行动前阅读 {#read-before-acting}
 
-在修改测试资产前，您需要建立最基本的上下文认知。在考虑执行任何命令之前，请先查阅对应的确切契约：
+CLI 有七个命令：`init`、`generate`、`run`、`check`、`heal`、`view` 和 `mcp`。修改测试资产前，按顺序阅读下面四个页面。
 
-| 阅读文档 | 原因 |
+| 阅读 | 得到什么 |
 | --- | --- |
-| [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/) | 建立产物循环与前提条件。 |
-| [操作契约](/ambercast/zh-cn/agents/operating-contract/) | 确立副作用与审批边界。 |
-| [CLI 概览](/ambercast/zh-cn/reference/cli/overview/) | 选择确切的命令契约。 |
-| [报告](/ambercast/zh-cn/reference/reports/) | 在命令执行后解读结构化输出。 |
+| [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/) | 产物循环与前置条件 |
+| [操作契约](/ambercast/zh-cn/agents/operating-contract/) | 副作用与审批边界 |
+| [CLI 概览](/ambercast/zh-cn/reference/cli/overview/) | 每个命令的精确契约 |
+| [报告](/ambercast/zh-cn/reference/reports/) | 命令执行后如何读取 JSON 报告 |
 
-## 在有界循环中操作 {#bounded-loop}
+相关链接：[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/)、[机器可读资源](/ambercast/zh-cn/agents/machine-readable-resources/)
 
-Agent 所需的基础循环为：实现 → 编写或调整所请求的 `.test.md` → 运行 → 根据报告修复。生成（generation）过程会从规范化的 prompt 文本与选定的目标中获取来源依据（provenance），进而构建 plan 及其相邻的 grounding 路径。完全 grounding 的运行可以在无需解析 AI 提供商的情况下进行。
+## 在有界循环中工作 {#bounded-loop}
 
-1. 在批准的范围内实现所请求的产品变更。→ 实现已就绪，可用于其所请求的测试意图。
-2. 编写或调整所请求的 `.test.md`。→ prompt 表达了待验证的行为。
-3. 运行选定的 `.test.md` 并读取其结构化结果。→ 在选择下一步行动前，使用 [报告](/ambercast/zh-cn/reference/reports/) 解读 envelope。
-4. 根据报告进行修复，随后按需重复选定的循环。→ [操作契约](/ambercast/zh-cn/agents/operating-contract/) 规定了审批边界与安全的操作分支；切勿仅凭结果自行推断。
+基本循环是：实现，编写或调整所要求的 `.test.md`，运行，依据报告修复。审批边界以操作契约为准，不要从单个结果推断。
 
-相关链接：[设置提示词](/ambercast/zh-cn/agents/setup-prompt/), [操作契约](/ambercast/zh-cn/agents/operating-contract/), [读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/), [机器可读资源](/ambercast/zh-cn/agents/machine-readable-resources/), [报告](/ambercast/zh-cn/reference/reports/)
+1. 在获批的范围内实现所要求的产品改动。
+2. 编写或调整所要求的 `.test.md`，让提示词写明要验证的行为。
+3. 运行该 `.test.md`，读取它的 JSON 报告。
+4. 依据报告修复，必要时再次运行。
+
+`run` 需要可信的执行计划，没有时要先对所要求的 `.test.md` 运行 `generate`。`generate` 会在提示词旁写入执行计划和定位缓存文件。
+
+定位缓存完整时，回放不调用 AI，也不需要可用的提供方。定位缓存未命中时，除非传入 `--resolve`，否则命令以退出码 4 失败。
+
+相关链接：[操作契约](/ambercast/zh-cn/agents/operating-contract/)、[报告](/ambercast/zh-cn/reference/reports/)

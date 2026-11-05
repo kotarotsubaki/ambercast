@@ -1,30 +1,34 @@
 ---
 title: AIエージェントからのambercastの利用
-description: AIエージェントがテストアセットを変更・操作する際の読む順序と安全な実行ループを定めます。
+description: エージェントはテストアセットを変える前に4ページをこの順で読み、実装・プロンプトの記述・実行・レポートからの修正というループで進める。
 ---
 
-AIエージェントがテストアセットを変更するにあたり、事前に把握すべき運用上の読む順序と安全な実行ループを定めます。
+このページで、エージェントは何を読んでから作業を始めるか、どの順で動くかを決める。読み順、副作用、行動の分岐はエージェント向けページが扱い、正確な仕様はリファレンスが、手順はHow-toが扱う。
 
-## 操作の前に読むべきドキュメント {#read-before-acting}
+## 動く前に読むページ {#read-before-acting}
 
-AIエージェント向けのドキュメントでは、読む順序、副作用、およびアクションの分岐を定めています。正確な仕様はリファレンスが、手順はHow-toが扱います。利用可能なCLIコマンドは `init`、`generate`、`run`、`check`、`heal` です。
+CLIには`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp`の7つのコマンドがある。テストアセットを変える前に、次の4ページを上から順に読む。
 
-| 参照ドキュメント | 理由 |
+| 読むページ | 得られるもの |
 | --- | --- |
-| [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/) | 成果物ループと前提条件を確立するため。 |
-| [オペレーション規約](/ambercast/ja/agents/operating-contract/) | 副作用と承認境界を確立するため。 |
-| [CLIの概要](/ambercast/ja/reference/cli/overview/) | 正確なコマンドコントラクトを選択するため。 |
-| [レポート](/ambercast/ja/reference/reports/) | コマンド実行後の構造化出力を解釈するため。 |
+| [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/) | 成果物のループと前提条件 |
+| [オペレーション規約](/ambercast/ja/agents/operating-contract/) | 副作用と承認の境界 |
+| [CLIの概要](/ambercast/ja/reference/cli/overview/) | 各コマンドの正確な仕様 |
+| [レポート](/ambercast/ja/reference/reports/) | コマンド実行後のJSONレポートの読み方 |
 
-## 境界づけられたループでの実行 {#bounded-loop}
+関連リンク: [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/)、[機械可読リソース](/ambercast/ja/agents/machine-readable-resources/)
 
-必須となる基本的なエージェントループは、実装 → 要求された `.test.md` の記述または調整 → 実行 → レポートからの修正、です。
+## 範囲を決めたループで進める {#bounded-loop}
 
-生成（`generate`）は、正規化されたプロンプトテキストと選択されたターゲットから出所（provenance）を導出し、プランとそれに隣接する grounding パスを構築します。完全な grounding が行われた実行は、AIプロバイダーを解決することなく進めることができます。
+基本のループは、実装、依頼された`.test.md`の記述または調整、実行、レポートからの修正の順である。承認の境界は個々の結果から推測せず、オペレーション規約に従う。
 
-1. 承認されたスコープ内で要求された製品変更を実装します。→ 実装が要求されたテスト意図に対して準備できた状態になります。
-2. 要求された `.test.md` を記述または調整します。→ プロンプトによって検証する振る舞いを表現します。
-3. 選択した `.test.md` を実行し、その構造化された結果を読み取ります。→ 次のアクションを選択する前に、エンベロープを解釈するために [レポート](/ambercast/ja/reference/reports/) を使用します。
-4. レポートから修正を行い、必要に応じて選択したループを繰り返します。→ 承認境界と安全なアクション分岐は [オペレーション規約](/ambercast/ja/agents/operating-contract/) が定めています。実行結果のみからこれらを推測して判断しないでください。
+1. 承認された範囲で、依頼された製品の変更を実装する。
+2. 依頼された`.test.md`を書くか調整し、検証したい振る舞いをプロンプトに表す。
+3. その`.test.md`を実行し、JSONレポートを読む。
+4. レポートに従って直し、必要ならもう一度実行する。
 
-関連リンク: [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/), [オペレーション規約](/ambercast/ja/agents/operating-contract/), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/), [機械可読リソース](/ambercast/ja/agents/machine-readable-resources/), [レポート](/ambercast/ja/reference/reports/)
+`run`には信頼できる計画（plan）が要るため、計画がなければ先に、依頼された`.test.md`を指定して`generate`を実行する。`generate`は計画とグラウンディングのファイルをプロンプトの隣に書く。
+
+グラウンディングがそろっていれば、再生はAIを呼ばず、使えるプロバイダーも要らない。グラウンディングが見つからないときは、`--resolve`を付けない限り終了コード4で失敗する。
+
+関連リンク: [オペレーション規約](/ambercast/ja/agents/operating-contract/)、[レポート](/ambercast/ja/reference/reports/)

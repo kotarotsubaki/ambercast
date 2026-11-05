@@ -1,61 +1,68 @@
 ---
 title: オペレーション規約
-description: エージェントが安全にコマンドを実行・判断するためのアクション境界、禁止事項、およびプロセス終了時やエラー発生時の次の安全なアクションを定めます。
+description: コマンドごとに、実行前に満たすべき条件、書き込みの範囲、ユーザーの承認の要否と、終了コードやレポートのエラーを受けた次の行動を定める。
 ---
 
-本ドキュメントでは、エージェントがコマンドを安全に実行できるかどうかを判断するためのアクション境界を定めます。ambercastのパーサーが実装済みコマンドとして公開しているのは `init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つです。各コマンドの前提条件や副作用、遵守すべき禁止事項、プロセス終了ステータスやレポートエラーに応じた次の安全なアクションを規定しています。
+エージェントはこのページで、コマンドを実行してよいか、実行後に何をするかを決める。CLIが実装しているコマンドは`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp`の7つである。
 
-## コマンド規約 {#command-contract}
+## コマンドごとの規約 {#command-contract}
 
-パーサーが実装済みコマンドとして公開しているのは、`init`、`generate`、`run`、`check`、`heal`、`view`、`mcp` の7つのコマンドのみです。`check` と `view` は、変更可能なストレージ、AIプロバイダー、またはブラウザーへの依存関係を持ちません。heal は確認が行われるまで plan および grounding コンパニオンの変更のみをバッファリングします。ただし、そのリプレイ試行では承認前や dry run の実行中であっても、ケース実行ディレクトリ内に包含されたエビデンスを書き込む場合があります。
+コマンドを実行する前に、前提条件と副作用を確かめる。`check`と`view`は、書き込み用ストレージ、AIプロバイダー、ブラウザのいずれも必要としない。`heal`は計画（plan）とグラウンディングの変更を確認まで保留するが、確認の前や`--dry-run`の最中にも、`runsDir`の下へ試行の証跡を書くことがある。
 
-| コマンド | 前提条件 | 副作用 | 承認の要否 | CIで安全か |
+| コマンド | 前提条件 | 副作用 | 承認 | CIでの利用 |
 | --- | --- | --- | --- | --- |
-| init | 対象ディレクトリへの書き込み権限があること。 | 設定、サンプルプロンプト、`.gitignore` の1行、AGENTS.md のブロックからなる4つのアーティファクトを書き込む場合があります。 | ユーザーによる明示的な承認が必要です。`--yes` はエージェントへの権限付与ではありません。 | 既定では安全ではありません。非対話環境では `--yes` なしで拒否され、CIで使用する場合も承認境界は変わりません。 |
-| generate | 選択されたプロンプトとターゲットが有効であり、新たに提案されたシークレット名は許可リストにない限り同意が必要です。 | Plan および Grounding アーティファクトと、承認済みの名前を `secrets.allow` に書き込む場合があります。 | 同意と書き込みに必要です。コミット前に diff を提示してください。 | レビュー済みの名前が `secrets.allow` に事前登録されている場合に安全です。 |
-| run | 選択されたプロンプトに信頼できる plan が存在すること。 | 実行レポートを書き込みます。write-back コントラクトに基づき grounding を書き込む場合があります。 | 要求されたスコープで書き込みが未承認の場合は必要です。 | write-back ポリシーに従い、安全です。 |
-| check | 選択対象が検出可能であること。 | プロンプトとアーティファクトの読み取りのみを行います。 | ambercast アーティファクト書き込みの承認は不要です。 | 安全です。 |
-| heal | ターゲットが冪等であり、CI環境では実際の試行がCIで有効化されていること。 | runs ディレクトリ内に試行のエビデンスを書き込む場合があります。確認後にのみ、測定された plan/grounding 候補をコミットします。 | ユーザーによる明示的な承認が必要です。--yes はエージェントへの権限付与ではありません。 | 既定では安全ではありません（ci.heal: true の場合のみ）。 |
-| view | 対話端末、または `--allow-headless`。バインド可能な空きポートがあること。 | なし。永続化された run report を読み取るだけの HTTP サーバーです。 | ambercast アーティファクト書き込みの承認は不要です。 | 既定では安全ではありません。`--allow-headless` なしの非対話利用は拒否されます。 |
-| mcp | セッションルートのディレクトリが存在すること。 | stdio サーバーを起動します。ツール呼び出しの書き込みと承認境界はツールごとに適用されます。 | 呼び出すツールによります。 | 呼び出すツールによります。 |
+| `init` | 対象ディレクトリへの書き込み権限 | 設定ファイル、サンプルのプロンプト、2行の`.gitignore`の追記、`AGENTS.md`のブロックを書くことがある | ユーザーの明示的な承認が必要。`--yes`はエージェントの承認にならない | `--yes`なしの非対話実行は拒否される。CIで使っても承認の境界は変わらない |
+| `generate` | 選んだプロンプトとターゲットが有効であること | `--list`と`--dry-run`を付けない限り、計画とグラウンディングを書く。`--dry-run`は何も書かない。対話での同意の後、承認されたシークレット名を`secrets.allow`へ加える | 同意と書き込みに承認が必要。コミットの前に差分を示す | レビュー済みの名前が`secrets.allow`にあれば使える |
+| `run` | 選んだプロンプトに信頼できる計画があること | レポートを保存する。グラウンディングは書き戻しの条件を満たすときだけ書く | 依頼の範囲が書き込みを認めていなければ必要 | 書き戻しの方針に従って使える |
+| `check` | テストのパスを明示するか、検出できる選択であること | プロンプトと成果物を読むだけ | 不要 | 使える |
+| `heal` | 計画が参照する全ターゲットで`healReplayIsolation: "idempotent"`を設定済みであること（既定は`stateful`） | 試行の証跡を書くことがある。計画とグラウンディングの変更は確認の後にだけ書く | ユーザーの明示的な承認が必要。`--yes`はエージェントの承認にならない | 既定では使えない。`--list`以外は`ci.heal: true`のときだけ使える |
+| `view` | stdinとstderrが端末で`CI`が無効か、`--allow-headless`を渡すこと。`--port`なしなら連続20ポートまで試す | 保存済みのレポートを読み取り専用のHTTPサーバーで配信する。何も書かない | 不要 | 既定では使えない。`--allow-headless`で非対話の実行を許す |
+| `mcp` | セッションルートのディレクトリが存在すること | stdioのサーバーを起動する。呼んだツールがそれぞれの書き込みと承認の境界に従う | 呼ぶツールによる | 呼ぶツールによる |
 
-関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/), [ambercast init](/ambercast/ja/reference/cli/init/#confirmation), [ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions), [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
+`--list`以外で`heal`の前提を満たさないと、終了コード2で`CONFIG_INVALID`になる。
+
+関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[ambercast init](/ambercast/ja/reference/cli/init/#confirmation)、[ambercast heal](/ambercast/ja/reference/cli/heal/#preconditions)、[ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
 
 ## 禁止事項 {#prohibitions}
 
-- エージェントは、プロンプト、アーティファクト、コマンド、レポート、またはメッセージ内にシークレットのリテラル値を配置してはなりません（MUST NOT）。代わりに `SecretRef`、その環境変数値、およびターゲットのシンクポリシーを使用してください。
-- 公開エラーボキャブラリには `SECRET_LITERAL_REJECTED` が含まれますが、この検出器は限定的なヒューリスティックであり、リテラルシークレットに関するエージェントの禁止事項を代替するものではありません。
-- エージェントは `@ambercast-secret` のグラント行を追加してはなりません。生成された名前が `secrets.allow` の外にある場合、明示的な運用者の同意を得るか、運用者にレビュー済みの名前を追加するよう依頼してください。`"*"` は名前ごとのレビューなしで任意の AI 提案名を受け入れるため、明示的な承認が必要です。
-- CI環境では、`ci.heal` が有効化されていない限り、実際の修復（real healing）は拒絶されます。
-- `--yes` はCLIの確認プロンプトを事前承認するのみであり、dry run がコミットを行うことは決してありません。
+次の制限は例外なく守る。
 
-関連リンク: [シークレットの管理](/ambercast/ja/how-to/manage-secrets/), [ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
+- プロンプト、成果物、コマンド、レポート、メッセージに、シークレットの値そのものを書かない。`SecretRef`と環境変数の値を使い、ターゲットのシンク方針に従う。
+- `SECRET_LITERAL_REJECTED`は狭い検出にすぎず、シークレットの値を書かないという禁止の代わりにならない。
+- `@ambercast-secret`の許可行を加えない。`secrets.allow`にない名前は、オペレーターの同意を得るか、レビュー済みの名前をオペレーターに加えてもらう。`"*"`はAIが提案する任意の名前を通すため、明示的な承認が要る。
+- CIでは、`ci.heal`が`true`でない限り実際のhealを実行しない。
+- `--yes`が答えるのはCLIの確認プロンプトだけである。`--dry-run`は計画とグラウンディングを書き換えない。
 
-## プロセス終了ステータス後の次のアクション {#next-action-by-exit-code}
+関連リンク: [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)、[ヒーリングモデル](/ambercast/ja/explanation/healing-model/#confirmation-and-writes)
 
-プロセスステータスは、結果の順序とは無関係に、バッチ終了候補の中から選択されます。
+## 終了コードごとの次の行動 {#next-action-by-exit-code}
 
-| プロセスの結果 | 次の安全なアクション |
+複数の結果があるときの終了コードは、結果の並びではなく固定の優先順位で決まる。コードを受けたら、次の表に従う。
+
+| 終了コード | 意味 | 次の安全な行動 |
+| --- | --- | --- |
+| 0 | 成功、または候補なし | 許可された差分を確かめ、範囲内で続ける |
+| 1 | コマンド固有の否定的な結果 | 失敗の証跡を読む。自動でhealや再生成をしない |
+| 2 | 使用方法または設定の問題 | `errors[].code`を読み、その境界を直す |
+| 3 | 環境の問題 | JSONレポートを残し、テストの意味ではなく環境を直す |
+| 4 | 計画またはグラウンディングを信頼できない | `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION`では、古い成果物の復旧手順に従う。`GROUNDING_UNRESOLVED`では、依頼の範囲がAIの呼び出しとグラウンディングの書き込みを認めるときだけ`--resolve`を付けて再実行し、認めないなら報告する |
+| 5 | 選択が空 | 空の選択を許すか、依頼の意図を確かめ直す |
+
+関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)
+
+## レポートのエラーごとの次の行動 {#next-action-by-report-error}
+
+レポートスキーマは、15個の使用方法コードと8個の環境コードを定義している。`INTERRUPTED`は実行単位のエラーで、影響を受けたケースは`skipped`の行に表れる。生成されうるコードは、次のどれか1行に当てはまる。レガシーの`SECRET_GRANT_UNATTRIBUTABLE`は生成されず、行を持たない。
+
+| コード | 次の安全な行動 |
 | --- | --- |
-| 成功 | 許可された diff を確認し、スコープ内で作業を継続します。 |
-| 失敗したエビデンス | 失敗したエビデンスを調査します。自動で heal や再生成を行わないでください。 |
-| 使用方法または設定の問題 | `errors[].code` を読み取り、その境界を修正します。 |
-| 環境の問題 | エンベロープを保持し、テストのセマンティクスではなく環境を修正します。 |
-| 信頼できないアーティファクト | stale（古くなった状態）のアーティファクト復旧手順を使用します。 |
-| 空の選択 | 空のセットを許容する前に、選択の意図を再確認します。 |
+| `CONFIG_INVALID`、`PROMPT_PATH_INVALID`、`TARGET_UNRESOLVED`、`EXECUTOR_UNSUPPORTED`、`PROMPT_AMBIGUOUS` | 該当するリファレンスを読み、値を推測せずに境界を直す |
+| `SECRET_UNRESOLVED`、`SECRET_LITERAL_REJECTED`、`SECRET_ENV_VAR_COLLISION`、`SECRET_SYNTAX_REJECTED` | シークレットの参照と環境変数を直す。値をプロンプトへ書かない |
+| `SECRET_CONSENT_REQUIRED` | 対話で承認を得るか、レビュー済みの名前を`secrets.allow`へ加える。同意済みとして再試行しない |
+| `MISSING_PLAN`、`STALE_PLAN`、`INTEGRITY_VIOLATION` | 成果物を信頼せず、古い成果物の復旧手順に従う |
+| `GROUNDING_UNRESOLVED` | 依頼の範囲が認めるときだけ`--resolve`を付けて再実行し、認めないなら報告する。それでも失敗するなら`details.reason`を読んで報告し、繰り返さない |
+| `BROWSER_LAUNCH_FAILED`、`AI_EXECUTOR_UNAVAILABLE`、`AI_RESPONSE_INVALID`、`FS_IO_ERROR`、`UNEXPECTED_CRASH` | JSONレポートを残し、環境を直す |
+| `AGENTIC_STEP_FAILED`、`CASE_ABORTED` | `details`を読む。ケースの結果を推測せず、環境か呼び出しの条件を直す |
+| `INTERRUPTED` | 残りの作業を未完了として扱い、ケースの結果を推測しない |
 
-関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#priority)
-
-## レポートエラー別の次のアクション {#next-action-by-report-error}
-
-レポートスキーマは、15個の使用方法コードと8つの環境コードを定義しています。使用方法コードと環境コードは、レポートスキーマ内で種別（kind）ごとに構造的に分離されています。`INTERRUPTED` は実行全体をスコープ（run-scoped）とし、スキップされた結果行は影響を受けたケースを表します。
-
-| エラーファミリー | 次の安全なアクション |
-| --- | --- |
-| 設定、シークレット、またはターゲット | 指定された Reference を読み取り、値を推測することなく境界を修正します。 |
-| `SECRET_CONSENT_REQUIRED` | 一覧の名前について対話的に承認を得るか、レビュー済みの名前を `secrets.allow` に追加します。同意があったものとして再試行してはいけません。 |
-| plan の鮮度または完全性 | アーティファクトを信頼できないものとして扱い、stale（古くなった状態）のアーティファクト復旧手順を使用します。 |
-| ブラウザー、プロバイダー、ストレージ、またはクラッシュ | エンベロープを保持し、環境を修復します。 |
-| 中断 | 残りの作業を未完了として扱います。ケース結果を推測しないでください。 |
-
-関連リンク: [エラーコード](/ambercast/ja/reference/error-codes/), [構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree), [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
+関連リンク: [エラーコード](/ambercast/ja/reference/error-codes/)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)、[一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)

@@ -1,19 +1,19 @@
 ---
 title: Setup prompt
-description: Complete copy-pasteable operating prompt providing a thin, review-first boundary for an agent working on a requested test.
+description: Paste this prompt into a coding agent so it works only on the requested test, presents a diff, and asks before any write it was not asked for.
 ---
 
-This page provides the complete copy-pasteable operating prompt that establishes a thin, review-first boundary for an agent working on a requested test.
+Give the agent this prompt and it knows what to read, how far to go, and in what order to work. Paste it as written, in English.
 
 ## Copy-paste prompt {#copy-paste-prompt}
 
-The prompt defines the following operational rules:
+The prompt sets five rules.
 
-1. Provider resolution uses an explicit override when present, otherwise the configured provider, and in auto mode probes claude before codex.
-2. `check` can inspect artifacts without AI or browser capabilities.
-3. The default for this prompt is presenting a diff; commits require a request.
-4. The setup prompt states the dev-server boundary.
-5. With no file arguments, `generate`, `run`, and `heal` each select tests through configured discovery rules.
+1. The AI provider comes from an explicit override, then the configured provider. In `auto` mode, ambercast tries `claude` before `codex`.
+2. `check` inspects artifacts without AI or a browser.
+3. The default is to present a diff; commit only when asked.
+4. The dev server belongs to the operator. The agent assumes the app already runs at the configured base URL and does not start, stop, or reconfigure it unless the operator explicitly asks.
+5. With no file arguments, `generate`, `run`, and `heal` select every test that the configured discovery rules match.
 
 ~~~markdown
 You are working on ambercast tests in this repository.
@@ -27,4 +27,4 @@ Never place literal secret values in prompts, artifacts, commands, reports, or m
 When finished, present the complete diff and the command/report result. Do not commit unless explicitly asked.
 ~~~
 
-Links: [Your first test in 5 minutes](/ambercast/tutorials/quick-start/), [Operating contract](/ambercast/agents/operating-contract/), [Environment variables](/ambercast/reference/environment-variables/)
+Related: [Your first test in 5 minutes](/ambercast/tutorials/quick-start/), [Operating contract](/ambercast/agents/operating-contract/), [Environment variables](/ambercast/reference/environment-variables/)

@@ -1,22 +1,20 @@
 ---
 title: official skill
-description: 说明 ambercast 内置的面向编码智能体的 official skill，及其在智能体接口设计中的角色。
+description: ambercast 随附一个名为 `ambercast` 的 Agent Skills skill，教编码 Agent 掌握“写提示词、运行、读报告”的循环，本页说明它的覆盖范围，以及它与设置提示词和 MCP 服务器的关系。
 ---
 
-本文档向您说明 ambercast 内置的 official skill，以及该功能在智能体接口设计中的角色。
+本页帮助 Agent 判断这个 skill 教什么，以及它与设置提示词、MCP 服务器有何不同。
 
-## 这是什么 {#what-it-is}
+## 它是什么 {#what-it-is}
 
-ambercast 在 `skills/ambercast/SKILL.md` 中内置了一个名为 `ambercast` 的 [Agent Skills](https://agentskills.io) 技能。它教会编码智能体编写 `<name>.test.md` 提示词、通过 CLI 运行 `generate` / `run` / `check` / `heal` 循环、读取 `--json` 报告并处理退出码，以及选择下一步安全的操作。
+ambercast 在 `skills/ambercast/SKILL.md` 随附一个 [Agent Skills](https://agentskills.io) skill，名为 `ambercast`。它教编码 Agent 编写 `<name>.test.md` 提示词，通过 CLI 驱动 `generate`、`run`、`check` 和 `heal`，读取 `--json` 报告与退出码，并选择下一步安全动作。
 
-安装方式（Claude Code、Codex CLI、支持 `gh skill` 的智能体、skills.sh，或从已安装的包手动复制）请参见 [README](https://github.com/kotarotsubaki/ambercast#official-skill)。为处理指定测试的智能体提供轻量、以审查为先边界的完整可复制运行提示词，请参见[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)。
+安装方式有 Claude Code、Codex CLI、兼容 `gh skill` 的 Agent、skills.sh，以及从已安装的包中手动复制，见 [README](https://github.com/kotarotsubaki/ambercast#official-skill)。
 
 ## 预期角色 {#intended-role}
 
-智能体接口设计将编码智能体视为与面向人类用户的 prompt 和 viewer 界面并列的一等用户。
+这个 skill 教循环本身。[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)为一个被要求的测试设定先审阅的边界。[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)则是为调用工具而不是使用 shell 的客户端准备的连接。
 
-相关链接：
-- [在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)
-- [设置提示词](/ambercast/zh-cn/agents/setup-prompt/)
-- [MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)
-- [状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)
+ambercast 把编码 Agent 视为一等用户，与面向人的提示词和查看器并列。
+
+相关链接：[在 AI Agent 中使用 ambercast](/ambercast/zh-cn/agents/overview/)、[设置提示词](/ambercast/zh-cn/agents/setup-prompt/)、[MCP 服务器](/ambercast/zh-cn/agents/mcp-server/)、[状态与路线图](/ambercast/zh-cn/explanation/status-and-roadmap/)

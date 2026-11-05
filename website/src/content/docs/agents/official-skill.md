@@ -1,18 +1,20 @@
 ---
 title: Official skill
-description: The official Agent Skills skill ambercast ships for AI coding agents, and its role within the agent-facing interface.
+description: ambercast ships an Agent Skills skill named `ambercast` that teaches a coding agent the prompt, run, and report loop, and this page says what it covers and where it sits next to the setup prompt and the MCP server.
 ---
 
-This page describes the official skill ambercast ships and its role within the ambercast agent-facing interface.
+The skill teaches an agent the ambercast loop. This page explains how it differs from the setup prompt and the MCP server.
 
 ## What it is {#what-it-is}
 
-ambercast ships an [Agent Skills](https://agentskills.io) skill at `skills/ambercast/SKILL.md`, named `ambercast`. It teaches a coding agent to author `<name>.test.md` prompts, drive the `generate` / `run` / `check` / `heal` loop through the CLI, read the `--json` report and process the exit code, and choose the next safe action.
+ambercast ships an [Agent Skills](https://agentskills.io) skill at `skills/ambercast/SKILL.md`, named `ambercast`. It teaches a coding agent to write `<name>.test.md` prompts, drive `generate`, `run`, `check`, and `heal` through the CLI, read the `--json` report and the exit code, and choose the next safe action.
 
-For the install methods (Claude Code, Codex CLI, `gh skill`-compatible agents, skills.sh, or a manual copy from the installed package) see the [README](https://github.com/kotarotsubaki/ambercast#official-skill). For the complete copy-pasteable operating prompt that establishes a thin, review-first boundary for an agent working on a requested test, see [Setup prompt](/ambercast/agents/setup-prompt/).
+The [README](https://github.com/kotarotsubaki/ambercast#official-skill) covers the install methods: Claude Code, Codex CLI, `gh skill`-compatible agents, skills.sh, or a manual copy from the installed package.
 
 ## Intended role {#intended-role}
 
-The agent-interface design treats coding agents as first-class users alongside the human-facing prompt and viewer surfaces.
+The skill teaches the loop. The [setup prompt](/ambercast/agents/setup-prompt/) sets the review-first boundary for one requested test. The [MCP server](/ambercast/agents/mcp-server/) is the connection for clients that call tools instead of a shell.
 
-Links: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Setup prompt](/ambercast/agents/setup-prompt/), [MCP server](/ambercast/agents/mcp-server/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
+ambercast treats coding agents as first-class users next to the prompt and viewer surfaces for people.
+
+Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [Setup prompt](/ambercast/agents/setup-prompt/), [MCP server](/ambercast/agents/mcp-server/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)

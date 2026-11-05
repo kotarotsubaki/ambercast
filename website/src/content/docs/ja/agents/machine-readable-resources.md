@@ -1,19 +1,15 @@
 ---
 title: 機械可読リソース
-description: ambercast で公開されている機械可読リソースと、その提供ルールについて説明します。
+description: サイトが公開する機械可読ファイルの一覧と、何が利用可能かを`capabilities.json`で決めるという規則を示す。
 ---
 
-本ドキュメントでは、ambercast のドキュメントサイトで公開されている機械可読リソースと、その提供ルールについて説明します。
+エージェントはこのページで、どのファイルを取得できるか、そのファイルを信頼してよいかを決める。
 
 ## 提供ルール {#availability-rule}
 
-エージェント向けのリソース提供ルールは以下のとおりです。
+利用可能かどうかの最終的な根拠は`capabilities.json`である。計画中のページは`llms.txt`と`llms-full.txt`に含まれず、題名と説明つきで`llms-planned.txt`に並ぶ。
 
-- `capabilities.json` は、エージェントにとっての最終的な提供可否の参照元です。
-- 計画中のページは、既定の `/ambercast/llms.txt` および `/ambercast/llms-full.txt` から除外されます。
-- 本ページに記載されているリソースはすべて、このリリースで公開サイトに公開されています。
-
-## 公開済みのアーティファクト {#planned-artifacts}
+## 公開しているファイル {#planned-artifacts}
 
 | リソース | 状態 |
 | --- | --- |
@@ -36,8 +32,6 @@ description: ambercast で公開されている機械可読リソースと、そ
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 利用可能 |
 
-`schemas/plan.v2.schema.json`、`schemas/plan.v3.schema.json`、`schemas/plan.v4.schema.json`、`schemas/grounding.v2.schema.json`、`schemas/grounding.v3.schema.json` は、コミット済みの履歴スナップショットをサイトへコピーした凍結アーティファクトです。現在のビルドは config スキーマ、Plan v5 スキーマ、grounding スキーマ、report スキーマ、`capabilities.json`、および `manifest/cli.json` を生成し、サイト向けと npm 配布向けで同一のバイト列になります。
+`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2`、`grounding.v3`のスキーマは、リポジトリにコミットした固定の履歴スナップショットで、サイトへそのまま複製される。設定、計画（plan）v5、グラウンディングv4、レポートのスキーマと、`capabilities.json`、`manifest/cli.json`は、npmパッケージに入るビルドと同じバイト列をサイトへ複製する。
 
-本ドキュメントは、このリリースで公開されたアーティファクトを扱います。
-
-関連情報: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/), [JSON スキーマ](/ambercast/ja/reference/json-schemas/), [ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
+関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[JSON スキーマ](/ambercast/ja/reference/json-schemas/)、[ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)

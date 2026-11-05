@@ -1,38 +1,47 @@
 ---
 title: 構造化出力の読み取り
-description: エージェントがレポートエンベロープに基づいて安全な順序で分岐処理を行い、実行結果を正しく判定するための手順を解説します。
+description: JSONレポートは`command`、`run`の`reportPersistence`、`errors[].code`、各`results[].status`の順に読み、最初に対応が要るものから動く。
 ---
 
-ambercast の構造化出力を処理する際は、スキーマ全体を再構築するのではなく、エンベロープに基づいて分岐を行います。`command`、`reportPersistence`、`errors[].code`、そして `results[].status` を安全な順序で評価し、適切なアクションを決定します。
+エージェントはこのページで、レポートのどこから読み、どの結果で止まり、どの結果なら続けてよいかを決める。レポートは`command`で分かれ、`generate`、`run`、`check`、`heal`、`review`のどれかになる。
 
-## エンベロープ決定木 {#decision-tree}
+## 判断の木 {#decision-tree}
 
-レポートエンベロープは、`command` によって generate、run、check、heal、review の各ブランチに判別されます。このうち `reportPersistence` を含むのは run ブランチのみであり、その値は persisted、failed、not-attempted のいずれかです。また、レポートスキーマは `errors[].code` の安定した公開ボキャブラリを提供しています。
+`command`、`reportPersistence`、`errors[].code`、`results[].status`を、この順に読む。`reportPersistence`を持つのは`run`だけで、値は`persisted`、`failed`、`not-attempted`のいずれかである。スキーマには`review`の分岐があるが、CLIに`review`コマンドはない。
+
+`errors[].code`が1つでもあれば、ファイルを変える前に、オペレーション規約のエラー表を使う。コードがなければ、そのコマンドの規則で`results[].status`を1行ずつ分類する。
 
 ~~~
 Read command.
 ├─ run: read reportPersistence first.
-│  ├─ failed → retain stdout envelope; treat persistence as an environment problem.
-│  └─ persisted/not-attempted → continue to results.
-├─ generate/check/heal/review → continue to results.
+│  ├─ failed → keep the stdout report; treat persistence as an environment problem.
+│  └─ persisted/not-attempted → continue to errors.
+├─ generate/check/heal/review → continue to errors.
 Read every errors[].code.
-├─ any code → use operating-contract's error-code table before changing files.
+├─ any code → use the operating contract's report-error table before changing files.
 └─ none → classify every results[].status for this command.
-   ├─ failed/error/stale/missing/orphaned → stop at the corresponding contract.
-   ├─ skipped/listed → treat as incomplete or discovery-only, not success.
-   └─ healthy status → continue only within approved scope.
+   ├─ listed/skipped → discovery-only or incomplete, not success.
+   ├─ generate failed, run failed/error → read the evidence; do not heal or regenerate automatically.
+   ├─ check other than fresh/fresh-without-grounding → artifacts are untrustworthy; use stale-artifact recovery.
+   ├─ heal unresolved/partially-healed → report it; do not retry automatically.
+   └─ any other status → continue only within approved scope.
 ~~~
 
-リンク: [レポート](/ambercast/ja/reference/reports/), [オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-report-error)
+関連リンク: [レポート](/ambercast/ja/reference/reports/)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-report-error)
 
-## status はコマンド固有のエビデンス {#status-by-command}
+## ステータスはコマンドごとの証拠を表す {#status-by-command}
 
-run の実行結果には passed、failed、または error が使用されます。listed はディスカバリー専用であり、skipped は実行エビデンスを持ちません。generate では generated、would-generate、skipped-fresh、listed、failed、および skipped が区別されます。check には fresh、stale（古くなった状態）、plan-missing または grounding-missing、あるいは orphaned の結果が含まれ、さらに fresh-without-grounding、listed、skipped も含まれます。
+`results[].status`の語彙はコマンドごとに違い、`listed`は検出だけ、`skipped`は実行の証拠を持たない。どちらも成功ではない。
 
-リンク: [レポート](/ambercast/ja/reference/reports/#result-statuses), [プランのライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
+- `generate`は`generated`、`would-generate`、`skipped-fresh`、`listed`、`failed`、`skipped`を使う。
+- `run`は`passed`、`failed`、`error`、`listed`、`skipped`を使う。
+- `check`は`fresh`、`stale`、`missing-plan`、`missing-grounding`、`stale-grounding`、`invalid-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed`、`skipped`を使う。
+- `heal`の完了した行は`status: completed`で、`repairOutcome`が`healed`、`partially-healed`、`unresolved`、`no-changes-needed`のいずれかになる。`listed`と`skipped`の行は識別情報だけを持つ。
 
-## プロセスステータスはバッチレベルのシグナル {#exit-code-signal}
+関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画（plan）のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
 
-レポートエラーには、code とともにその scope および kind が記録されます。
+## 終了コードはバッチ全体の合図 {#exit-code-signal}
 
-リンク: [終了コード](/ambercast/ja/reference/exit-codes/#priority), [オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)
+終了コードは、各行とエラーを読んだ後で、バッチ全体の合図として使う。レポートのエラーは、コードに加えて範囲と種別を`errors[]`に持つ。
+
+関連リンク: [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#next-action-by-exit-code)

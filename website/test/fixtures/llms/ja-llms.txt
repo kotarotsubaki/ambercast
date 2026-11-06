@@ -61,11 +61,11 @@
 - [値型](https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/): この章は、他の章が名前で参照する共有オブジェクトとスカラーの契約を定義する。
 - [グラウンディングドキュメント](https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/): この章は、1 つの計画ダイジェストに束縛してコミットするグラウンディングのキャッシュである `GroundingDocument`、そのエントリとトレースレコード、および実装がエントリを書き込む条件と保持する条件を定義する。
 - [要素フィンガープリント](https://kotarotsubaki.github.io/ambercast/ja/spec/fingerprint/): この章は、グラウンディングが要素ステップごとに保存する要素フィンガープリントを定義し、その算出方法と、保存済みフィンガープリントの照合方法を述べる。
-- [鮮度とダイジェスト](https://kotarotsubaki.github.io/ambercast/ja/spec/freshness/): `inputsDigest` は、正確にこれら5つのメンバー（`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint`、および `targetDefinitions`）を持つ新規に構築されたオブジェクトの正規JSONに対する、小文字のSHA-256でなければならない（MUST）。
-- [正準 JSON](https://kotarotsubaki.github.io/ambercast/ja/spec/canonical-json/): ダイジェスト入力は、トークン間の空白を含まず、UTF-8 でエンコードされたコンパクトな RFC 8785 互換 JSON を使用しなければならない（MUST）。
-- [プランにおけるシークレット](https://kotarotsubaki.github.io/ambercast/ja/spec/secrets/): プランはシークレット値を 値型 `SecretRef` のみによって表現しなければならず（MUST）、連続する `{{secrets.
-- [適合性](https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/): Ambercast の公開パイプラインは、手書きの並行スキーマを維持するのではなく、Zod ランタイムスキーマから Plan、Grounding、構成、および report の JSON Schema を導出しなければならない（MUST）。
-- [仕様変更履歴](https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/): アーティファクトのバージョン受け入れは、リリース番号の直感ではなく、Ambercast Plan 仕様 に従わなければならない（MUST）。
+- [鮮度とダイジェスト](https://kotarotsubaki.github.io/ambercast/ja/spec/freshness/): この章は `inputsDigest` と `planDigest` を定め、計画とグラウンディングが最新かどうかの判定と、そこから導く `check` のステータスを扱う。
+- [正準 JSON](https://kotarotsubaki.github.io/ambercast/ja/spec/canonical-json/): この章は、コンパクトなダイジェスト形式、インデント付きのアーティファクト形式、ストレージ書き込みの原子的な可視性の契約を定める。
+- [計画におけるシークレット](https://kotarotsubaki.github.io/ambercast/ja/spec/secrets/): この章は、計画がシークレットを参照する方法、シークレット名を認可する方法、解決した値の送信先、リテラルのシークレットを拒否する方法を定める。
+- [適合性](https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/): この章は、適合するバリデーターが検査する、JSON Schema の射影、課題コードを持つ意味的な制約、検証の順序を定める。
+- [仕様変更履歴](https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/): アーティファクトのバージョン受け入れは、リリース番号の直感ではなく、Ambercast 計画仕様に従わなければならない（MUST）。
 
 ## EXPLANATION
 - [計画のライフサイクルと鮮度](https://kotarotsubaki.github.io/ambercast/ja/explanation/plan-lifecycle/): 計画が再生できる状態かどうかを、`check` が何も実行せずに判定する仕組みを説明する。

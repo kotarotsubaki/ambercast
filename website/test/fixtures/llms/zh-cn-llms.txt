@@ -61,11 +61,11 @@
 - [值类型](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/value-types/): 本章定义其他章节按名称引用的共享对象和标量契约。
 - [定位缓存文档](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/): 本章定义 `GroundingDocument`，即绑定到一个执行计划摘要并提交的定位缓存，以及它的条目、轨迹记录，还有实现何时写入或保留条目。
 - [元素指纹](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/): 本章定义定位缓存为元素步骤保存的元素指纹、指纹的计算方法，以及已保存指纹的匹配方法。
-- [新鲜度与摘要](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/): `inputsDigest` 必须（MUST）是对新构建对象的规范 JSON（canonical JSON）计算得出的小写 SHA-256，该对象精确包含以下五个成员：`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint` 和 `targetDefinitions`。
-- [规范 JSON](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/canonical-json/): 摘要输入必须（MUST）使用以 UTF-8 编码且不含标记间空白的紧凑 RFC 8785 兼容 JSON。
-- [计划中的机密](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/secrets/): 计划必须（MUST）仅使用 值类型 `SecretRef` 来表示机密值；连续的 `{{secrets.
-- [符合性](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/conformance/): Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding、配置和 report 的 JSON Schema，而不是维护手写的并行模式。
-- [规范变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/): 工件版本的接受必须（MUST）遵循 Ambercast 计划规范，而非凭借发布版本号的直觉。
+- [新鲜度与摘要](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/): 本章定义 `inputsDigest` 和 `planDigest`，它们决定执行计划及其定位缓存是否仍然有效，并由此推导出 `check` 的状态。
+- [规范 JSON](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/canonical-json/): 本章定义紧凑的摘要形式、带缩进的产物形式，以及存储写入的原子可见性约定。
+- [执行计划中的机密](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/secrets/): 本章定义执行计划如何引用机密、如何授权机密名称、解析后的值可以发送到哪里，以及如何拒绝字面量机密。
+- [符合性](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/conformance/): 本章定义符合规范的验证器需要检查的内容：JSON Schema 投影、带有问题代码的语义约束，以及验证顺序。
+- [规范变更日志](https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/): 产物版本的接受必须 (MUST) 遵循 Ambercast 执行计划规范，而非凭借发布版本号的直觉。
 
 ## EXPLANATION
 - [执行计划的生命周期与新鲜度](https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecycle/): 说明执行计划何时仍可回放，以及 `check` 如何在不运行任何内容的情况下作出判断。

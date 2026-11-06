@@ -3766,46 +3766,65 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/
 
 ## 输入摘要 {#inputs-digest}
 
-`inputsDigest` 必须（MUST）是对新构建对象的规范 JSON（canonical JSON）计算得出的小写 SHA-256，该对象精确包含以下五个成员：`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint` 和 `targetDefinitions`。成员插入顺序没有任何意义，因为规范 JSON 会对对象键进行排序。[src/core/ir/digest.ts:93](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L93) [src/core/ir/digest.ts:105](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L105) [src/core/ir/canonical-json.ts:147](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L147) 不得直接对输入对象本身进行哈希计算（MUST NOT）。[src/core/ir/digest.ts:97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L97) 生成器包指纹独立表示计划语义的生成器配置，因此单凭模板字节是不充分的。[src/core/ir/digest.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L70)
+`inputsDigest` 必须 (MUST) 是对新构建对象的规范 JSON 计算得出的小写 SHA-256。该对象恰好包含五个成员：`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint` 和 `targetDefinitions` (`src/core/ir/digest.ts:130-139`)。
 
-## 计划摘要 {#plan-digest}
+`targetDefinitions` 只投影 `Plan.targets` 所引用的 Target 定义，并按名称排序 (`src/core/target/resolve.ts:12-43`)。修改未被引用的 Target，不会使执行计划过期，也不会改变其摘要。配置中的 `executor` 值不计入摘要。
 
-`planDigest` 必须（MUST）对排除了 `generatorMeta` 的 PlanDocument 计算哈希。[src/core/ir/digest.ts:118](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L118) Grounding 的当前有效性是指其存储的 `planDigest` 与计算出的计划摘要完全相等。[src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+规范 JSON 会对对象键排序，所以成员的插入顺序没有意义 (`src/core/ir/canonical-json.ts:153`)。不得直接对输入对象本身计算哈希 (MUST NOT) (`src/core/ir/digest.ts:118-125`)。生成器包指纹独立表示与执行计划语义相关的生成器配置，因此仅靠模板字节是不够的 (`src/core/ir/digest.ts:95-102`)。
 
-要计算 `planDigest`，复制除 `generatorMeta` 外的所有 Plan 字段，按照 [规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form) 规范化剩余对象，对其 UTF-8 字节进行 SHA-256 计算，并将摘要编码为小写十六进制。[src/core/ir/digest.ts:128](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128) 规范化提示词、模式版本、模板指纹、生成器包指纹、目标名称或目标定义的变更，都会使存储的 `inputsDigest` 变陈旧。[src/core/ir/digest.ts:52](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L52), [src/core/ir/digest.ts:60](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L60), [src/core/ir/digest.ts:68](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L68), [src/core/ir/digest.ts:77](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L77), [src/core/ir/digest.ts:87](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L87)
+## 执行计划摘要 {#plan-digest}
+
+`planDigest` 必须 (MUST) 对排除了 `generatorMeta` 的 PlanDocument 计算哈希 (`src/core/ir/digest.ts:153-156`)。定位缓存是否为最新，取决于其存储的 `planDigest` 是否与计算出的执行计划摘要完全相等 (`src/core/ir/digest.ts:170-175`)。
+
+计算 `planDigest` 分四步 (`src/core/ir/digest.ts:153-156`)。
+
+1. 复制除 `generatorMeta` 之外的所有执行计划字段。
+2. 对剩余对象做规范化，规则见[规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form)。
+3. 对其 UTF-8 字节计算 SHA-256。
+4. 将摘要编码为小写十六进制。
+
+下列任一项发生变化，都会使存储的 `inputsDigest` 过期：规范化后的提示词、模式版本、模板指纹、生成器包指纹、目标名称和目标定义 (`src/core/ir/digest.ts:77,85,93,102,112`)。
 
 ## 新鲜度后果 {#freshness-consequences}
 
-当存储的 `inputsDigest` 与当前值不同时，消费者必须（MUST）将计划标记为 `stale`。[src/usecases/check.ts:500](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check.ts#L500) 生成器包指纹是独立的新鲜度输入，因此即使提示词和目标数据未发生变化，实现的变更也会使计划变陈旧。[src/core/ir/digest.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L70) 当 `planDigest` 不同时，消费者必须（MUST）将 plan/grounding 配对视为未绑定。[src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+当存储的 `inputsDigest` 与当前值不同时，消费者必须 (MUST) 将执行计划标记为 `stale` (`src/usecases/check.ts:461-465,535`)。生成器包指纹是独立的新鲜度输入。因此，即使提示词和目标数据没有变化，实现的变更也可能使执行计划过期 (`src/core/ir/digest.ts:95-102`)。
 
-本节是 `check` 状态推导的规范权威（canonical owner）。参考页面必须仅（MUST）出于其局部目的对其进行概述，并链接至此处。下表对 `check` 结果值具有规范性约束。下方的 `missing`、`invalid` 和 `stale` 是 grounding 检查分类，而非报告 `status` 值。[src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/report/schema.ts:525](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L525)
+当 `planDigest` 不同时，消费者必须 (MUST) 把执行计划与定位缓存的配对视为未绑定 (`src/core/ir/digest.ts:170-175`)。
+
+本节是 `check` 状态推导的规范权威。参考页面只能概述它以满足各自的局部目的，并且必须 (MUST) 链接到这里。下表对 `check` 的结果值具有规范性。表中的 `missing`、`invalid` 和 `stale` 是定位缓存的检查分类，不是报告的 `status` 值 (`src/usecases/check-grounding.ts:18`) (`src/report/schema.ts:1111-1117`)。
 
 | id | `check` 状态 | 推导 | 结果分类 |
 | --- | --- | --- | --- |
-| CHK-01 | `fresh` | Plan 解析成功、符合规范格式、具有有效的已提交覆盖范围，其 `inputsDigest` 匹配且其伴生项有效。 | pass |
-| CHK-02 | `stale` | Plan 为无效 JSON/模式/规范格式或已提交覆盖范围无效，或使用已废弃的 `schemaVersion: 4`，或已提交的 `ElementIntent`／`QuotedElementIntent` 来源跨度无效，或其 `inputsDigest` 不一致。 | fail |
-| CHK-03 | `fresh-without-grounding` | Plan 为 fresh；伴生项无效；仓库策略为 `uncommitted`。 | pass |
-| CHK-04 | `missing-grounding` | Plan 为 fresh；伴生项检查结果为 `missing`；策略要求已提交的 grounding。 | fail |
-| CHK-05 | `invalid-grounding` | Plan 为 fresh；伴生项检查结果为 `invalid`（JSON/模式/规范覆盖范围失败）。 | fail |
-| CHK-06 | `stale-grounding` | Plan 为 fresh；伴生项检查结果为 `stale`（存在另一个 `planDigest`，或使用已废弃的 grounding `schemaVersion: 2` 或 `3`；后者先于伴生项自身的 schema 形状验证进行检查）。 | fail |
-| CHK-07 | `missing-plan` | 选定的测试没有 plan 制品。 | fail |
-| CHK-08 | `orphaned-plan` | 范围内的 plan 反向映射到不存在的测试路径。 | fail |
-| CHK-09 | `orphaned-grounding` | 范围内的 grounding 制品反向映射到不存在对应测试提示词的路径。 | fail |
-| CHK-10 | `invalid-artifact-name` | 制品路径无法反向推导出测试标识。 | fail |
-| CHK-11 | `listed` | 仅发现式的列出操作不检查选定的路径。 | skipped |
-| CHK-12 | `skipped` | 中断留下了仅包含标识的待处理行。 | skipped |
+| CHK-01 | `fresh` | 执行计划可解析，是规范形式，已提交的覆盖范围有效，`inputsDigest` 一致，且配套的定位缓存有效。 | pass |
+| CHK-02 | `stale` | 执行计划的 JSON、模式、规范形式或已提交的覆盖范围无效，或使用已废弃的 `schemaVersion: 4`，或已提交的 `ElementIntent` 或 `QuotedElementIntent` 的源码范围无效，或 `inputsDigest` 不同。 | fail |
+| CHK-03 | `fresh-without-grounding` | 执行计划是 fresh，配套的定位缓存无效，且仓库策略为 `uncommitted`。 | pass |
+| CHK-04 | `missing-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `missing`，且策略要求已提交的定位缓存。 | fail |
+| CHK-05 | `invalid-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `invalid`（JSON 或模式的检查失败，或规范形式的覆盖范围检查失败）。 | fail |
+| CHK-06 | `stale-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `stale`（`planDigest` 不同，或使用已废弃的定位缓存 `schemaVersion: 2` 或 `3`；后者先于模式形状校验检查）。 | fail |
+| CHK-07 | `missing-plan` | 所选测试没有执行计划产物。 | fail |
+| CHK-08 | `orphaned-plan` | 范围内的执行计划反向映射到一个不存在的测试路径。 | fail |
+| CHK-09 | `orphaned-grounding` | 范围内的定位缓存产物反向映射到一个没有对应测试提示词的路径。 | fail |
+| CHK-10 | `invalid-artifact-name` | 无法从产物路径反向推出测试标识。 | fail |
+| CHK-11 | `listed` | 仅做发现的列表不检查所选路径。 | skipped |
+| CHK-12 | `skipped` | 中断留下一个只含标识的待处理行。 | skipped |
 
-对于其他方面有效且处于当前版本的 grounding 文档，条目中的 `intentDigest` 不匹配、ID 不存在于 Plan 中，或条目属于非操作类步骤，均不会改变本表的文档级分类；`run` 在相应步骤边界将该条目视为缺失。
+对于其余方面有效且最新的定位缓存文档，只要某个条目有下列任一缺陷，文档级分类就保持不变：
 
-`fresh` 与 `fresh-without-grounding` 行判定为 pass；上方分类为 fail 的所有行均计入 failure；`listed` 与 `skipped` 为 skipped。[src/usecases/check-report.ts:71](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-report.ts#L71)
+- `intentDigest` 不一致。
+- ID 不在执行计划中。
+- 该条目对应的步骤不是动作类型。
 
-## 设计理由 {#rationale}
+`run` 在自己的逐步骤边界上，把这样的条目当作不存在。
 
-所面临的问题在于判定派生计划是否仍能代表创建它的输入与生成器契约。仅对比提示词无法察觉生成器的语义变更。
+`fresh` 和 `fresh-without-grounding` 两行是 pass；上面所有归为 fail 的行都计入失败；`listed` 和 `skipped` 是 skipped (`src/usecases/check-report.ts:72-75`)。
 
-所选取的封闭原像包含了生成器包的出处以及独立的 plan 到 grounding 摘要连接。它使每一项失效输入都明确化，并维持了一对一的单个计划与单个当前 grounding 关联。
+## 设计依据 {#rationale}
 
-一个被否决的替代方案省略了生成器出处；该方案之所以被否决，是因为改变后的生成行为可能会伪装成 fresh。另一个替代方案使用了时间戳；该方案被否决是因为时间戳既不能标识内容，也不允许确定性的缓存复用。
+问题在于判断一份派生出来的执行计划，是否仍然代表生成它的输入和生成器约定。只比较提示词，无法发现生成器语义的变化。
+
+所选的封闭原像包含生成器包的来源信息，以及一个独立的执行计划到定位缓存的摘要关联。这样每个失效输入都是明确的，并且保持一份执行计划对应一份有效定位缓存的关联。
+
+被否决的方案有两个。一个省略了生成器的来源信息，因为生成行为变化后，它仍会显示为 fresh，所以被否决。另一个使用时间戳，因为时间戳既不能标识内容，也不能支持确定性的缓存复用，所以被否决。
 
 ---
 
@@ -3814,105 +3833,122 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/canonical-json/
 
 ## 摘要形式 {#digest-form}
 
-摘要输入必须（MUST）使用以 UTF-8 编码且不含标记间空白的紧凑 RFC 8785 兼容 JSON。[src/core/ir/canonical-json.ts:172](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L172) 对象键必须（MUST）按 UTF-16 顺序排序。[src/core/ir/canonical-json.ts:147](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L147) 非有限数值与未配对的 UTF-16 代理项必须（MUST）被拒绝。[src/core/ir/canonical-json.ts:9](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L9) [src/core/ir/canonical-json.ts:20](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L20)
+摘要输入必须 (MUST) 使用紧凑的、兼容 RFC 8785 的 JSON，以 UTF-8 编码，且标记之间不含空白 (`src/core/ir/canonical-json.ts:173-182`)。对象键必须 (MUST) 按 UTF-16 顺序排序 (`src/core/ir/canonical-json.ts:153`)。非有限数和未配对的 UTF-16 代理项必须 (MUST) 被拒绝 (`src/core/ir/canonical-json.ts:100-101`) (`src/core/ir/canonical-json.ts:20`)。
 
-JCS 的应用是递归的：字符串在拒绝未配对代理项后进行 JSON 转义；有限数值使用 ECMAScript 数值渲染；布尔值为 `true`/`false`；null 为 `null`；数组保留顺序；对象对键进行排序；undefined、bigint、function、symbol 以及非普通对象均被拒绝。[src/core/ir/canonical-json.ts:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L55), [src/core/ir/canonical-json.ts:92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L92), [src/core/ir/canonical-json.ts:112](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L112), [src/core/ir/canonical-json.ts:130](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L130) 该紧凑文本的 UTF-8 字节，而非 JavaScript 对象标识或美化文本，才是摘要原像。[src/core/ir/canonical-json.ts:172](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L172)
+JCS 以递归方式应用 (`src/core/ir/canonical-json.ts:91-128`) (`src/core/ir/canonical-json.ts:130-145`) (`src/core/ir/canonical-json.ts:147-170`)。
 
-## 工件形式 {#artifact-form}
+- 字符串先拒绝未配对的代理项，再做 JSON 转义。
+- 有限数使用 ECMAScript 的数字表示。
+- 布尔值写作 `true` 或 `false`，null 写作 `null`。
+- 数组保持顺序。
+- 对象的键要排序。
+- undefined、bigint、function、symbol 和非普通对象会被拒绝。
 
-已提交的工件必须（MUST）使用规范工件形式：采用与摘要形式相同的键排序及标量渲染、两空格缩进，以及末尾换行符。[src/core/ir/canonical-json.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L186) 生成者不得（MUST NOT）使用美化 JSON 字节作为摘要原像。[src/core/ir/canonical-json.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L23)
+摘要的原像是该紧凑文本的 UTF-8 字节，而不是 JavaScript 对象的标识或格式化后的文本 (`src/core/ir/canonical-json.ts:181-182`)。
+
+## 产物形式 {#artifact-form}
+
+已提交的产物必须 (MUST) 使用规范的产物形式。该形式的键顺序和标量表示与摘要形式相同，缩进为两个空格，末尾有一个换行 (`src/core/ir/canonical-json.ts:190-196`)。生产方不得 (MUST NOT) 把格式化后的 JSON 字节用作摘要原像 (`src/core/ir/canonical-json.ts:23`)。
 
 ## 持久化 {#persistence}
 
-存储写入必须（MUST）具备原子可见性：读取者看到的是完整的旧文件或完整的新文件，绝不会看到部分写入。[src/ports/storage.ts:89](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L89) 若在写入中断后列出保留的 `.ambercast-tmp-` 暂存名称，调用方必须（MUST）予以忽略。[src/ports/storage.ts:56](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L56)
+存储写入必须 (MUST) 具有原子可见性。读取方看到的要么是完整的旧文件，要么是完整的新文件，不会看到写了一半的内容 (`src/ports/storage.ts:178-182`)。中断的写入之后，如果列出了预留的 `.ambercast-tmp-` 暂存名，调用方必须 (MUST) 忽略它们 (`src/ports/storage.ts:111-114`)。
 
-原子写入器可以（MAY）使用文件系统适配器所采用的保留临时前缀与重命名策略，但该暂存机制并不是可移植的一致性要求。每个 `StorageAdapter.writeText` 实现都必须（MUST）提供上述原子可见性契约。[src/ports/storage.ts:56](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L56), [src/ports/storage.ts:89](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L89) 磁盘存储形式采用两空格缩进，排序并使用与摘要形式相同的标量渲染，且以单个换行符结尾。[src/core/ir/canonical-json.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L186)
+原子写入方可以 (MAY) 使用文件系统适配器所用的预留临时前缀和重命名策略。但这种暂存机制不是可移植的符合性要求。每个 `StorageAdapter.writeText` 实现都必须 (MUST) 提供上述原子可见性约定 (`src/ports/storage.ts:111-114`) (`src/ports/storage.ts:178-182`)。磁盘上的形式使用两个空格缩进，键顺序和标量表示与摘要形式相同，并以一个换行结尾 (`src/core/ir/canonical-json.ts:190-196`)。
 
-## 设计理由 {#rationale}
+## 设计依据 {#rationale}
 
-面临的问题在于使哈希独立于附带的 JSON 格式，同时保留人类可审查的工件。
+问题在于让哈希不受偶然的 JSON 格式影响，同时保留人可以审阅的产物。
 
-所选的单一值遍历器同时具有紧凑摘要与美化工件输出，因此两者的排序与标量语义不会发生漂移。
+所选方案用同一个取值遍历器，输出紧凑的摘要和格式化的产物。因此两者的顺序和标量语义不会漂移。
 
-一个被否决的备选方案曾使用美化字节进行哈希；它被否决是因为空白字符会因此带上语义。另一个备选方案将排序委托给各个调用方；它被否决是因为等价的值随后会产生不可重复的摘要。
+被否决的方案有两个。一个用格式化后的字节计算哈希，因为空白会因此带上语义，所以被否决。另一个把排序交给每个调用方，因为等价的值会得到不可重复的摘要，所以被否决。
 
 ---
 
-# 计划中的机密
+# 执行计划中的机密
 Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/secrets/
 
 ## 授权 {#authorization}
 
-计划必须（MUST）仅使用 [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) `SecretRef` 来表示机密值；连续的 `{{secrets.` 插值标记禁止出现在 `InterpolatableText` 中。[src/core/ir/schema.ts:31-33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L31-L33) [src/core/ir/schema.ts:159](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L159)
+执行计划必须 (MUST) 只通过[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的 `SecretRef` 来表示机密值。`InterpolatableText` 禁止出现连续的 `{{secrets.` 插值标记 (`src/core/ir/schema.ts:31-33`) (`src/core/ir/schema.ts:37,193`)。
 
-已提交的 `fill-secret` 必须（MUST）恰好包含 `target: ElementRef` 和 `secretRef: SecretRef`。已提交 AI 步骤的可选 `secrets` 数组包含恰好为 `{ "ref": SecretRef }` 的 `AiStepSecretUse` 条目。两种已提交形式均不包含 provider 命名数据、引文数据或 prompt 源出处信息。[src/core/ir/schema.ts:396](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L396) [src/core/ir/schema.ts:489-504](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L489-L504) [src/core/ir/schema.ts:667-692](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L667-L692)
+已提交的 `fill-secret` 必须 (MUST) 恰好包含 `target: ElementRef` 和 `secretRef: SecretRef`。已提交的 AI 步骤中，可选的 `secrets` 数组包含 `AiStepSecretUse` 条目，每个条目恰好是 `{ "ref": SecretRef }`。两种已提交形式都不包含提供方命名数据、引用数据或提示词来源信息 (`src/core/ir/schema.ts:572,576`) (`src/core/ir/schema.ts:876-884`) (`src/core/ir/schema.ts:682-698`)。
 
-在运行时，`{{secrets.NAME}}` 仅通过 `AMBERCAST_SECRET_<NAME>` 解析：先将 `NAME` 中的每个 `.` 替换为 `_`，再转换为大写。解析后的值严禁（MUST NOT）进入 Plan。[src/core/secrets/env-var-name.ts:8-16](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/secrets/env-var-name.ts#L8-L16) [src/adapters/system/env-secrets-provider.ts:14-34](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/adapters/system/env-secrets-provider.ts#L14-L34)
+运行时，`{{secrets.NAME}}` 只通过 `AMBERCAST_SECRET_<NAME>` 解析，其中 `NAME` 里的每个 `.` 都先替换为 `_` 并转成大写。解析出的值不得 (MUST NOT) 进入执行计划 (`src/core/secrets/env-var-name.ts:8-16`) (`src/adapters/system/env-secrets-provider.ts:14-34`)。
 
 ## 同意与允许列表 {#grant-origin}
 
-生成必须（MUST）先构建候选 Plan，再在持久化该 Plan 或其 Grounding 前决定同意。候选阶段在本地将每个 provider 提案解析为 `SecretName`，将其包装为 `SecretRef`，并报告每次使用；同意阶段只允许 `ambercast.config.json` 的 `secrets.allow` 中已有的名称，或用户已接受的名称。[src/usecases/generate.ts:1094-1155](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1094-L1155) [src/usecases/generate.ts:1405-1424](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1424) [src/core/config/schema.ts:78-84](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L78-L84)
+生成必须 (MUST) 先构造候选执行计划，再在持久化该执行计划或其定位缓存之前决定是否同意。候选阶段在本地把提供方的每个提议解析为 `SecretName`，包装成 `SecretRef`，并报告每一处使用。同意阶段只放行 `ambercast.config.json` 的 `secrets.allow` 中已有的名称，以及用户接受的名称 (`src/usecases/generate.ts:1314-1326,1564-1624`) (`src/usecases/generate.ts:1670-1741`) (`src/core/config/schema.ts:139-145`)。
 
-`SecretName` 是配置与同意使用的裸逻辑名称；`SecretRef` 是其 `{{secrets.NAME}}` Plan 包装。面向 provider 的 `fill-secret` 可以（MAY）改为携带 `secret?: SecretNameChoice`：`{ "allowedName": SecretName }` 请求复用已投影的允许列表名称，而 `{ "nameHint": SecretNameHint }` 提议新发现的名称。`SecretNameChoice` 是严格的互斥联合，`SecretNameHint` 为 `/^[a-z][a-z0-9_]{0,63}$/`。面向 provider 的 AI 机密使用采用相同 choice；若 provider 未提供 choice，则使用空的严格对象。每个已提交的 `SecretRef` 都由本地确定性命名产生，而不是由 provider 引用产生。[src/core/ir/schema.ts:83-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L115) [src/core/ir/schema.ts:729-785](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L729-L785) [src/core/ir/schema.ts:813-833](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L813-L833) [src/usecases/secret-naming.ts:156-188](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/secret-naming.ts#L156-L188)
+`SecretName` 是配置和同意所用的裸逻辑名称。`SecretRef` 是它在执行计划中的 `{{secrets.NAME}}` 包装形式。面向提供方的 `fill-secret` 可以 (MAY) 改为携带 `secret?: SecretNameChoice`。`{ "allowedName": SecretName }` 请求一个已投影的、在允许列表中的名称。`{ "nameHint": SecretNameHint }` 提议一个新发现的名称。
 
-接受时，新接受的名称必须（MUST）合并到 `secrets.allow`，以便后续生成跳过对这些名称的进一步决定。`secrets.allow: "*"` 接受每个名称并绕过同意门。该通配符是有意设计的低摩擦、高风险逃生口：它无需逐名称审查便接受任意 AI 提议的机密名称，因此只能（MUST）在理解该风险的情况下使用。[src/usecases/generate.ts:1423-1482](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1423-L1482) [src/config/write-secrets-allow.ts:52-82](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/config/write-secrets-allow.ts#L52-L82)
+`SecretNameChoice` 是严格的互斥联合类型，`SecretNameHint` 是 `/^[a-z][a-z0-9_]{0,63}$/`。面向提供方的 AI 机密使用采用同样的选择；提供方没有给出选择时，使用空的严格对象。每个已提交的 `SecretRef` 都由本地的确定性命名生成，而不是来自提供方的引用 (`src/core/ir/schema.ts:100-148`) (`src/core/ir/schema.ts:1016-1029`) (`src/core/ir/schema.ts:1139-1160`) (`src/usecases/secret-naming.ts:172-205,320-337`)。
 
-使用 `consentMode: "forbid"` 时，生成必须（MUST）返回包含提议 Plan 和机密使用的 `candidate` 结果，且严禁（MUST NOT）写入工件或请求同意。如果同意被拒绝，或因终端为非交互式而不可用，生成必须（MUST）以 `SECRET_CONSENT_REQUIRED` 失败，且严禁（MUST NOT）静默持久化候选项。[src/usecases/generate.ts:1251-1257](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1251-L1257) [src/usecases/generate.ts:1405-1420](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1420) [src/usecases/generate.ts:1426-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1426-L1493) [src/runtime/secret-consent.ts:293-321](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/runtime/secret-consent.ts#L293-L321)
+接受时，新接受的名称必须 (MUST) 合并进 `secrets.allow`，所以之后的生成不会再次就这些名称做决定。`secrets.allow: "*"` 接受所有名称，并绕过同意关卡。这个通配符有意降低了操作门槛，但风险很高：它会不经逐个名称审查，就接受 AI 提议的任意机密名称。只有在理解该风险时才可以 (MUST) 使用它 (`src/usecases/generate.ts:1670-1671,1711-1729`) (`src/config/write-secrets-allow.ts:52-82`)。
 
-provider 接收的是已投影／协商的机密名称，而非机密值。名称本身可能具有描述性（例如 `stripe_api_key`），因此这是可接受的 provider 披露风险；实现严禁（MUST NOT）将其表示为值披露。[src/usecases/generate.ts:1020-1027](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1020-L1027) [src/core/ir/schema.ts:83-115](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83-L115)
+使用 `consentMode: "forbid"` 时，生成必须 (MUST) 返回 `candidate` 结果，其中包含被提议的执行计划和机密使用情况。此时不得 (MUST NOT) 写入产物或请求同意。如果同意被拒绝，或终端不是交互式而无法获得同意，生成必须 (MUST) 以 `SECRET_CONSENT_REQUIRED` 失败。不得 (MUST NOT) 悄悄持久化候选 (`src/usecases/generate.ts:1652-1668`) (`src/usecases/generate.ts:1673-1674`) (`src/usecases/generate.ts:1498-1505,1730-1740`) (`src/runtime/secret-consent.ts:293-321`)。
 
-Heal 严禁（MUST NOT）作出新的同意决定。如果其 Stage 3 完整 Plan 候选更改了逻辑机密名称集合，它必须（MUST）恢复其 overlay，并返回带有 `stage3Rejection.reason: "secret-set-changed"`、`added` 和 `removed` 的 `secret-set-rejected` 结果分支；其用例结果为 `commit: undefined`。已发布 CLI 会逐字呈现该分支的本地化提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`。当本地命名、允许列表验证或环境变量冲突阻止允许的替换 Plan 时，Stage 2 使用不同的 `secret-name-invalid` 拒绝原因。[src/usecases/heal.ts:191-205](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/heal.ts#L191-L205) [src/usecases/heal.ts:856-878](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/heal.ts#L856-L878) [src/usecases/heal.ts:1012-1019](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/heal.ts#L1012-L1019) [src/usecases/heal.ts:1296-1314](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/heal.ts#L1296-L1314) [src/ports/system.ts:8-33](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/system.ts#L8-L33) [src/cli/main.ts:335-354](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/cli/main.ts#L335-L354)
+提供方收到的是投影或协商后的机密名称，而不是机密值。名称本身可能带有描述性，例如 `stripe_api_key`，所以这是被接受的提供方披露风险。实现不得 (MUST NOT) 把它表述为值的披露 (`src/usecases/generate.ts:927-947,1183`) (`src/core/ir/schema.ts:100-148`)。
 
-## 接收端与脱敏 {#sink-and-redaction}
+`heal` 不得 (MUST NOT) 做出新的同意决定。如果它的 Stage 3 完整执行计划候选改变了逻辑上的机密名称集合，`heal` 必须 (MUST) 恢复其覆盖层。这时 `heal` 必须 (MUST) 返回 `secret-set-rejected` 结果分支。该分支带有 `stage3Rejection.reason: "secret-set-changed"`、`added` 和 `removed`，其用例结果为 `commit: undefined`。
 
-机密接收端源必须（MUST）为 HTTP(S) 源，且严禁（MUST NOT）包含连续的 `{{secrets.` 插值标记；此 schema 约束本身并不足以证明不存在形似机密的任意字面量。[src/core/ir/schema.ts:83](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L83) [src/core/ir/schema.ts:95](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L95) 使用方必须（MUST）在已提交的 grounding trace 数据中保留引用，而非字面量密码。[src/core/ir/schema.ts:949](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L949)
+已发布的 CLI 会原样输出该分支的本地化提示：`秘匿値の構成が変わった。ambercast generate --force <file> で再生成し同意を取り直す`。当本地命名、允许列表校验或环境变量冲突使允许的替换执行计划无法生成时，Stage 2 使用另一个拒绝原因 `secret-name-invalid` (`src/usecases/heal.ts:210-221`) (`src/usecases/heal.ts:1034-1068`) (`src/usecases/heal.ts:1188,1207-1214`) (`src/usecases/heal.ts:1528-1556`) (`src/ports/system.ts:8-33`) (`src/cli/main.ts:299-301`)。
 
-接收端策略在运行时解析并归一化源；若 `secretSinkOrigins` 中缺少所请求机密的配置条目，则仅允许 `baseUrl`；空的条目则不允许任何源；非空条目将替换该默认值。对于每一次实际的 `fill-secret`，运行流水线必须（MUST）在解析其机密前紧接着检查实时页面源；浏览器适配器必须（MUST）在获取元素后且填充前紧接着重复该策略检查，以确保页面导航或 DOM 变更无法绕过实时源边界。[src/core/ir/schema.ts:152-157](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L152-L157) [src/usecases/run.ts:765](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L765) [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/adapters/browser/chromium.ts:413](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/adapters/browser/chromium.ts#L413)
+## 汇点与脱敏 {#sink-and-redaction}
 
-## 字面量机密拒绝 {#literal-secret-rejection}
+机密汇点的来源必须 (MUST) 是 HTTP(S) 来源，且不得 (MUST NOT) 包含连续的 `{{secrets.` 插值标记。这个模式约束本身不能证明不存在任意看起来像机密的字面量。使用方必须 (MUST) 在已提交的定位缓存追踪数据中保留引用，而不是字面量密码 (`src/core/ir/schema.ts:40,163-165`) (`src/core/ir/schema.ts:1293-1302`)。
 
-本节是字面量机密检测器语义的权威所有者。参考页面必须（MUST）仅出于其局部目的概述检测器边界，并链接至此处。在持久化或报告序列化之前，生成过程必须（MUST）按照字典序键和数组索引的遍历顺序，检查来自 provider 的每个 JSON 字符串和对象键，包括 `generatorMeta`、`ambiguities` 和 `assumptions`。对于每个字符串值或对象键，嵌入的 `{{secrets.` 标记（SEC-17）必须（MUST）在检查以下四种 primitive 检测器之前被拒绝；在这四者之间，必须（MUST）按以下固定顺序拒绝首个匹配的检测器。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585)
+汇点策略在运行时解析并规范化来源。`secretSinkOrigins` 中没有所请求机密的配置项时，只允许 `baseUrl`。配置项为空时不允许任何来源，非空配置项则替换这一默认值。
 
-命中机密检测的 `assumptions` 条目必须（MUST）替换为 `An assumption was omitted because it looked like a secret.`。生成必须（MUST）在替换后继续。[repo:src/usecases/generate.ts]
+对每个实际的 `fill-secret`，运行流水线必须 (MUST) 在解析其机密之前，立即检查实时页面的来源。浏览器适配器必须 (MUST) 在获取元素之后、紧接填写之前，再次应用该策略，使导航或 DOM 变化无法绕过实时来源的边界 (`src/core/secrets/sink-policy.ts:59-100`) (`src/usecases/run.ts:3033-3040`) (`src/usecases/run.ts:1045-1059,1164-1166`) (`src/adapters/browser/chromium.ts:424,439,443-444`)。
 
-| id | 检测器 | 匹配值 | 例外 | 分类故障 |
+## 字面量机密的拒绝 {#literal-secret-rejection}
+
+本节是字面量机密检测语义的规范权威。参考页面只能概述检测边界以满足各自的局部目的，并且必须 (MUST) 链接到这里。在持久化或报告序列化之前，生成必须 (MUST) 检查提供方派生的每个 JSON 字符串和对象键，包括 `generatorMeta`、`ambiguities` 和 `assumptions`，遍历顺序是按键的字典序和数组下标。
+
+对每个字符串值或对象键，嵌入的 `{{secrets.` 标记 (SEC-17) 必须 (MUST) 在检查下面四个基础检测器之前被拒绝。在这些检测器中，按下面固定顺序第一个匹配的必须 (MUST) 被拒绝 (`src/usecases/generator-secret-policy.ts:162-250`)。
+
+匹配到机密检测的 `assumptions` 条目必须 (MUST) 变成 `An assumption was omitted because it looked like a secret.`。生成必须 (MUST) 使用该替换文本继续 (`src/usecases/generate.ts:1242-1254`)。
+
+| id | 检测器 | 匹配的值 | 例外 | 归类的失败 |
 | --- | --- | --- | --- | --- |
-| SEC-01 | `credential-prefix-sk` | 以 `sk-` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-02 | `credential-prefix-ghp` | 以 `ghp_` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-03 | `credential-prefix-aws-access-key` | 以 `AKIA` 开头 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-04 | `high-entropy-token` | 具有 token 形状（至少 32 个 UTF-16 代码单元、无空白字符、每个字符均属于 `[A-Za-z0-9+/=_.-]`）且香农熵至少 4.0 比特，其中频数键按 Unicode 码点迭代，但每个概率分母使用 UTF-16 代码单元长度 | 作为字符串值或对象键的有效全值 `SecretRef`；仅限 `source.inputsDigest`；在 `steps[<index>].url`、`steps[<index>].pattern`、`targets[<key>].baseUrl` 的值位置同样例外；此外，当值为可读 slug（匹配 step-id 的语法，具有至少两个以连字符分隔的段，每段为 `[a-z]+`、`[0-9]{1,3}` 或 `[a-z]{1,4}[0-9]{1,3}` 之一，且至少两段为 `[a-z]+`）时，在 `steps[<index>].id`、`steps[<index>].confirms[<index>]`、`steps[<index>].instructionCoverage[<index>].id` 的值位置同样例外；对象键及其他位置不例外 | `SECRET_LITERAL_REJECTED`, exit `2` |
-| SEC-17 | `embedded-secret-reference` | 包含 `{{secrets.` 标记、但不是有效全值 `SecretRef` 的字符串值或对象键 | 仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`, exit `2` |
+| SEC-01 | `credential-prefix-sk` | 以 `sk-` 开头 | 字符串值或对象键是有效的整值 `SecretRef`；仅限 `source.inputsDigest`。 | `SECRET_LITERAL_REJECTED`，退出码 `2` |
+| SEC-02 | `credential-prefix-ghp` | 以 `ghp_` 开头 | 字符串值或对象键是有效的整值 `SecretRef`；仅限 `source.inputsDigest`。 | `SECRET_LITERAL_REJECTED`，退出码 `2` |
+| SEC-03 | `credential-prefix-aws-access-key` | 以 `AKIA` 开头 | 字符串值或对象键是有效的整值 `SecretRef`；仅限 `source.inputsDigest`。 | `SECRET_LITERAL_REJECTED`，退出码 `2` |
+| SEC-04 | `high-entropy-token` | 形如令牌（至少 32 个 UTF-16 码元，不含空白，每个字符都在 `[A-Za-z0-9+/=_.-]` 内），且香农熵至少为 4.0 比特。频率的键按 Unicode 码点遍历，每个概率的分母使用 UTF-16 码元长度。 | 字符串值或对象键是有效的整值 `SecretRef`；仅限 `source.inputsDigest`。值位置是 `steps[<index>].url`、`steps[<index>].pattern` 或 `targets[<key>].baseUrl` 时也豁免。值位置是 `steps[<index>].id`、`steps[<index>].confirms[<index>]` 或 `steps[<index>].instructionCoverage[<index>].id`，且值是可读的 slug 时也豁免。这种 slug 符合步骤 ID 语法，至少有两个用连字符分隔的段，每段是 `[a-z]+`、`[0-9]{1,3}` 或 `[a-z]{1,4}[0-9]{1,3}` 之一，且至少两段是 `[a-z]+`。对象键和其他位置不豁免。 | `SECRET_LITERAL_REJECTED`，退出码 `2` |
+| SEC-17 | `embedded-secret-reference` | 字符串值或对象键不是有效的整值 `SecretRef`，且含有 `{{secrets.` 标记 | 仅限 `source.inputsDigest` | `SECRET_LITERAL_REJECTED`，退出码 `2` |
 
-有效的全值 `SecretRef` 无论作为字符串值还是对象键，均可豁免本节的所有检测器；其余的键在遍历其值之前都会传递给检测器。拒绝诊断信息必须（MUST）仅包含检测器和脱敏后的类 JSON 路径；其严禁（MUST NOT）保留检测到的字面量，且检测到的对象键使用 `[redacted-key]`。[src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585) [src/usecases/generator-secret-policy.ts:615](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L615) [src/report/error-mapping.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/error-mapping.ts#L23) [src/core/errors/exit-codes.ts:31](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/errors/exit-codes.ts#L31)
+有效的整值 `SecretRef` 使该字符串值或对象键免于本节的所有检测器。其他任何键，都在遍历其值之前先交给检测器。拒绝诊断只能包含 (MUST) 检测器和脱敏后的类 JSON 路径。它不得 (MUST NOT) 保留检测到的字面量，检测到的对象键使用 `[redacted-key]` (`src/usecases/generator-secret-policy.ts:182-193`) (`src/usecases/generator-secret-policy.ts:220-250`) (`src/report/error-mapping.ts:82`) (`src/core/errors/exit-codes.ts:45`)。
 
-## 特定边界的机密性要求 {#boundary-specific-secrecy}
+## 各边界的保密要求 {#boundary-specific-secrecy}
 
-| id | 边界 | 要求 | 证据 |
+| id | 边界 | 要求 | 依据 |
 | --- | --- | --- | --- |
-| SEC-05 | 生成 | 来自 provider 的 JSON 在持久化或报告序列化之前，必须（MUST）通过字面量机密拒绝检查。 | [src/usecases/generator-secret-policy.ts:585](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generator-secret-policy.ts#L585) |
-| SEC-06 | 指纹生成 | 包含非空已解析机密作为完全匹配的描述符必须（MUST）产生 `secret-contaminated`；子字符串匹配仅在比较值至少为 3 个 UTF-16 代码单元时适用，且严禁（MUST NOT）生成指纹。 | [src/core/ir/fingerprint.ts:278](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/fingerprint.ts#L278) |
-| SEC-07 | 已提交的 trace | `TraceFillSecret` 必须（MUST）存储 `secretRef`，而非具体化的值。 | [src/core/ir/schema.ts:949](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L949) |
-| SEC-08 | grounding 持久化 | 当扫描的字符串值与任何非空已解析机密完全相等，或包含解析值至少为 3 个 UTF-16 代码单元的机密时，运行流水线必须（MUST）拒绝写入 grounding；且必须（MUST）将其归类为完整性违规。 | [src/usecases/run.ts:1252](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252) [src/usecases/run.ts:3425](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L3425) |
-| SEC-09 | 诊断与可报告错误 | 运行流水线在诊断/报告序列化之前，必须（MUST）对 JSON 字符串和对象键进行脱敏。 | [src/usecases/run.ts:1542](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1542) |
-| SEC-10 | 发往 AI 的无障碍证据 | 发送给 AI provider 的无障碍证据必须（MUST）对字符串值和对象键中的已解析值进行脱敏；截图字节严禁（MUST NOT）跨越此边界。 | [src/usecases/run.ts:2023](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2023) |
-| SEC-11 | 截图持久化 | 当已解析机密检测在无障碍捕获中发现机密值、捕获在解析后无法被检查、或检测失败时，截图严禁（MUST NOT）被保留。 | [src/usecases/run.ts:2550](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2550) |
-| SEC-12 | AI trace 机密标记 | 缓存的 AI trace 中除专用的 `TraceFillSecret.secretRef` 字段外，每个字符串值的后代节点严禁（MUST NOT）包含连续的 `{{secrets.` 标记。违规属于完整性故障，且严禁（MUST NOT）回退到 provider 执行。 | [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984) |
-| SEC-13 | 缓存的 AI trace 具体化机密 | 在回放之前，流水线必须（MUST）解析存储 trace 的事件和验证列表中由所属 Plan AI 步骤授权的每个 `fill-secret` 引用。生成的值将并入当前用例中已解析的值。随后流水线必须（MUST）扫描除固定的 `type`、`check`、`target.strategy`、`key` 和 `secretRef` 词表之外的每个 trace 值；与任何非空已解析机密完全匹配，或在该机密至少具有 3 个 UTF-16 代码单元时发生子字符串匹配，均属于完整性故障，且严禁（MUST NOT）回退到 provider 执行。 | [src/usecases/run.ts:1075-1129](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075-L1129); [src/usecases/run.ts:1252-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1313); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
-| SEC-14 | AI `fill.value` 凭据字面量 | 在浏览器执行之前，存储 trace 和全新 agentic 的 `fill.value` 必须（MUST）无条件拒绝 `sk-`、`ghp_` 和 `AKIA` 检测器。仅当移除捕获的当前用例值后不再匹配任何检测器时，才允许高熵匹配；此例外不适用于前缀检测器。违规属于完整性故障：存储 trace 验证严禁（MUST NOT）回退，且全新 agentic 执行严禁（MUST NOT）进入浏览器执行或 journal 持久化。 | [src/usecases/run.ts:984-1040](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984-L1040); [src/usecases/run.ts:1350-1405](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1350-L1405); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
-| SEC-15 | provider 边界处的运行时捕获值 | 没有 `verificationCoverage` 的旧版存储 trace 严禁（MUST NOT）在任何非固定词表的值中包含非空的当前用例捕获值（未解析的 `{{run.name}}` 占位符除外）；匹配方式为子字符串匹配。全新的 agentic 导航 URL、`fill.value` 以及文本/断言模式严禁（MUST NOT）完全等于当前用例捕获值。存储 trace 违规会在浏览器回放前或 provider 接收到 `priorTrace` 之前判定失败；全新违规会在浏览器执行和持久化之前判定失败。使用方必须（MUST）使用经过授权的 `RunRef` 插值，而不是具体化捕获的值。 | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
-| SEC-16 | 全新 agentic 动作/断言具体化机密 | 在具体化之前，每个全新的 agentic 动作和断言必须（MUST）根据当前用例中的所有非空已解析机密，对其非固定词表的值进行扫描。`type`、`check`、`target.strategy`、`key` 和 `secretRef` 是仅有的封闭词表排除项。扫描的值若完全相等，或包含至少 3 个 UTF-16 代码单元的已解析机密，则必须（MUST）判定失败。该失败是在浏览器执行之前的完整性故障；严禁（MUST NOT）将该动作或通过的断言追加到 journal、更新 Grounding，或进入工件持久化。 | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
+| SEC-05 | 生成 | 提供方派生的 JSON 必须 (MUST) 在持久化或报告序列化之前通过字面量机密拒绝。 | `src/usecases/generator-secret-policy.ts:162-168,219` |
+| SEC-06 | 指纹生成 | 描述符中含有非空的已解析机密且完全匹配时，必须 (MUST) 产生 `secret-contaminated`；只有比较值至少有 3 个 UTF-16 码元时才做子串匹配，并且不得 (MUST NOT) 产生指纹。 | `src/core/ir/fingerprint.ts:266-268,388-390` |
+| SEC-07 | 已提交的追踪 | `TraceFillSecret` 必须 (MUST) 存储 `secretRef`，而不是具体化后的值。 | `src/core/ir/schema.ts:1293-1302` |
+| SEC-08 | 定位缓存持久化 | 当被扫描的字符串值与任何非空的已解析机密完全相等，或包含长度至少为 3 个 UTF-16 码元的已解析值时，运行流水线必须 (MUST) 拒绝写入定位缓存；并且必须 (MUST) 把它归类为完整性违规。 | `src/usecases/run.ts:4445-4459`; `src/usecases/run.ts:1526-1543` |
+| SEC-09 | 诊断与可报告的错误 | 运行流水线必须 (MUST) 在诊断或报告序列化之前，对 JSON 字符串和对象键做脱敏。 | `src/usecases/run.ts:1829-1870,2081-2110` |
+| SEC-10 | 送往 AI 的无障碍证据 | 发送给 AI 提供方的无障碍证据，必须 (MUST) 对字符串值和对象键中的已解析值做脱敏；截图字节不得 (MUST NOT) 越过这一边界。 | `src/usecases/run.ts:2466-2485,2818-2828` |
+| SEC-11 | 截图持久化 | 如果已解析机密的检测在无障碍捕获中发现了值，或解析后的捕获无法检查，或检测失败，则不得 (MUST NOT) 保留截图。 | `src/usecases/run.ts:3318-3331,3396-3399` |
+| SEC-12 | AI 追踪中的机密标记 | 缓存的 AI 追踪中，除专用的 `TraceFillSecret.secretRef` 字段外，每个取字符串值的后代节点都不得 (MUST NOT) 含有连续的 `{{secrets.` 标记。违反即完整性失败，并且不得 (MUST NOT) 回退到提供方执行。 | `src/usecases/run.ts:1250-1264` |
+| SEC-13 | 缓存 AI 追踪中具体化的机密 | 回放之前，流水线必须 (MUST) 解析已存储追踪的事件和验证列表中的每个 `fill-secret` 引用，这些引用须由所属执行计划的 AI 步骤列出。得到的值与当前用例中已解析的值合并。然后必须 (MUST) 扫描追踪中的每个值，但固定词汇 `type`、`check`、`target.strategy`、`key` 和 `secretRef` 除外。与任何非空的已解析机密完全匹配，或在该机密至少有 3 个 UTF-16 码元时子串匹配，都是完整性失败，并且不得 (MUST NOT) 回退到提供方执行。 | `src/usecases/run.ts:1351-1384`; `src/usecases/run.ts:1265-1274,1545-1566`; `src/usecases/run.ts:2680-2684,2719-2722` |
+| SEC-14 | AI `fill.value` 中的凭据字面量 | 浏览器执行之前，已存储追踪和新的代理式 `fill.value` 必须 (MUST) 无条件拒绝 `sk-`、`ghp_` 和 `AKIA` 检测器。只有去掉已捕获的当前用例值后不再匹配任何检测器时，才允许高熵匹配；这一例外不适用于前缀检测器。违反即完整性失败。已存储追踪的校验不得 (MUST NOT) 回退，新的代理式执行不得 (MUST NOT) 到达浏览器执行或日志持久化。 | `src/usecases/run.ts:1295-1302`; `src/usecases/run.ts:1647-1680`; `src/usecases/run.ts:1710-1713,2343`; `src/usecases/run.ts:2680-2684,2719-2722` |
+| SEC-15 | 提供方边界上已捕获的运行值 | 没有 `verificationCoverage` 的旧版已存储追踪，在任何非固定词汇的值中，不得 (MUST NOT) 含有当前用例中已捕获的非空值，未解析的 `{{run.name}}` 占位符除外；按子串匹配。新的代理式导航 URL、`fill.value` 以及文本和断言模式，不得 (MUST NOT) 与当前用例中已捕获的值完全相等。已存储追踪的违规，在浏览器回放之前或提供方收到 `priorTrace` 之前失败；新执行的违规，在浏览器执行和持久化之前失败。使用方必须 (MUST) 使用已授权的 `RunRef` 插值，而不是把已捕获的值具体化。 | `src/usecases/run.ts:1590-1622`; `src/usecases/run.ts:1275-1281`; `src/usecases/run.ts:1704-1733`; `src/usecases/run.ts:2680-2684,2702` |
+| SEC-16 | 新的代理式动作与断言中具体化的机密 | 具体化之前，每个新的代理式动作和断言必须 (MUST) 把其非固定词汇的值，与当前用例中所有非空的已解析机密比对。`type`、`check`、`target.strategy`、`key` 和 `secretRef` 是仅有的封闭词汇例外。被扫描的值如果完全相等，或包含长度至少为 3 个 UTF-16 码元的已解析机密，必须 (MUST) 失败。该失败是浏览器执行之前的完整性失败；它不得 (MUST NOT) 把动作或通过的断言追加到日志、更新定位缓存，或到达产物持久化。 | `src/usecases/run.ts:1526-1543`; `src/usecases/run.ts:1545-1588`; `src/usecases/run.ts:1695-1702`; `src/usecases/run.ts:2333-2343`; `src/usecases/run.ts:2391-2403`; `src/usecases/run.ts:2373` |
 
-Canvas、图像和 CSS 渲染的像素，以及无障碍扫描与截图捕获之间的时间间隔，仍属于残留的泄露风险；本实现并不声称能够检测它们。[src/usecases/run.ts:2610](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2610)
+画布、图像和由 CSS 渲染的像素，以及无障碍扫描与截图捕获之间的间隔，仍然是残留的披露风险；本实现不声称能检测它们 (`src/usecases/run.ts:3358-3359`)。
 
-对于每个 `TraceFillSecret`，记录的 `secretRef` 必须（MUST）包含在所属 Plan AI 步骤的授权集中。未授权的引用属于完整性故障，且严禁（MUST NOT）导致回退。[src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) [src/usecases/run.ts:1075](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075)
+对每个 `TraceFillSecret`，其记录的 `secretRef` 必须 (MUST) 包含在所属执行计划 AI 步骤已提交的 `secrets[].ref` 集合中。未列出的引用是完整性失败，并且不得 (MUST NOT) 引发回退 (`src/usecases/run.ts:1356-1360,2668`) (`src/usecases/run.ts:1158-1162`)。
 
-## 设计理由 {#rationale}
+## 设计依据 {#rationale}
 
-所要解决的问题是允许 agent 填充所需的凭据，同时不将 prompt 文本、日志或 UI 证据变为机密通道。授权必须是可审计且收敛的。
+问题在于让代理填写所需的凭据，同时不把提示词正文、日志或 UI 证据变成机密的传播渠道。授权必须可审计且范围狭窄。
 
-所选设计需要明确的归一化 prompt 授权、局部归因的 span、全值引用以及允许的接收端源。当该链条中的任何环节存在歧义时，系统将采取故障关闭（fail-closed）策略。
+所选设计把提供方的发现与授权分开：在本地推导出的候选名称交给用户确认，持久的允许列表条目可以审计，已提交的执行计划只记录整值引用。同意被拒绝或无法获得时，它以安全方式失败，而汇点来源的边界依然被独立强制执行。
 
-一个被否决的备选方案是从匹配的文本中推断权限；该方案被否决是因为示例和正文文本并非授权。另一个方案是在 trace 中持久化字面量值；该方案被否决是因为已提交的工件和诊断信息是长期存在的泄露面。
+被否决的方案有两个。一个把授权语法嵌入提示词正文，并持久化提示词的范围，因为提示词的措辞不是持久且可审阅的同意控制，所以被否决。另一个在追踪中持久化字面量值，因为已提交的产物和诊断是长期存在的披露面，所以被否决。
 
 ---
 
@@ -3921,62 +3957,62 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/conformance/
 
 ## 结构验证 {#structural-validation}
 
-Ambercast 的发布流水线必须（MUST）从 Zod 运行时模式派生 Plan、Grounding、配置和 report 的 JSON Schema，而不是维护手写的并行模式。[src/core/ir/schema.ts:5](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L5) [src/core/config/schema.ts:1](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/schema.ts#L1) [src/report/schema.ts:788](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L788) 构建工具对以下投影进行序列化，且包导出公开其生成的文件。[src/build-tools/generate-json-schema.ts:29-50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/build-tools/generate-json-schema.ts#L29-L50) [package.json:23-35](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/package.json#L23-L35)
+Ambercast 的发布流水线必须 (MUST) 从 Zod 运行时模式派生 JSON Schema。对象包括执行计划、定位缓存、配置和报告。流水线不维护手写的并行模式 (`src/core/ir/schema.ts:7-8`) (`src/core/config/json-schema.ts:1-2,27-34`) (`src/report/json-schema.ts:1-2,23-25`)。构建工具会序列化下列投影，软件包的导出项公开生成的文件 (`src/build-tools/generate-json-schema.ts:80-83`) (`package.json:23-35`)。
 
-| Zod 投影 | JSON Schema 获取器 | 生成的文件 | 包导出 |
+| Zod 投影 | JSON Schema 获取函数 | 生成的文件 | 软件包导出项 |
 | --- | --- | --- | --- |
 | `PlanDocument` | `getPlanJsonSchema()` | `plan.schema.json` | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `GroundingDocument` | `getGroundingJsonSchema()` | `grounding.schema.json` | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `RawConfig` | `getConfigJsonSchema()` | `config.schema.json` | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `ReportEnvelope` | `getReportJsonSchema()` | `report.schema.json` | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
-Plan 和 Grounding 获取器从 `PlanDocument` 和 `GroundingDocument` 派生其值；配置获取器从 `RawConfig` 派生其值；report 获取器从 `ReportEnvelope` 派生其值。[src/core/ir/json-schema.ts:15-37](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/json-schema.ts#L15-L37) [src/core/config/json-schema.ts:7-24](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/config/json-schema.ts#L7-L24) [src/report/json-schema.ts:23-29](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/json-schema.ts#L23-L29) 外部使用者只要验证已发布的结构与语义契约即符合规范；它不需要使用 Zod 或重现 Ambercast 的发布流水线。
+执行计划和定位缓存的获取函数，分别从 `PlanDocument` 和 `GroundingDocument` 派生其值。配置的获取函数从 `RawConfig` 派生，报告的获取函数从 `ReportEnvelope` 派生 (`src/core/ir/json-schema.ts:16-55`) (`src/core/config/json-schema.ts:20-39`) (`src/report/json-schema.ts:23-29`)。外部使用方只要验证已发布的结构约定和语义约定，就算符合。它不必使用 Zod，也不必复现 Ambercast 的发布流水线。
 
 ## 语义验证 {#semantic-validation}
 
-仅进行 JSON Schema 验证是不够的。符合规范的验证器必须（MUST）额外强制执行以下内容。问题代码是稳定的实现值；策略问题由其调用方（generation、check 或 run）映射，而不是在此处定义第二个公共状态。[src/usecases/instruction-coverage-policy.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L70)
+仅靠 JSON Schema 验证是不够的。符合规范的验证器还必须 (MUST) 强制执行下列约束。问题代码是稳定的实现值。策略问题由调用方映射，调用方可以是生成、check 或 run，这里不再定义第二个公开状态 (`src/usecases/instruction-coverage-policy.ts:73-82`)。
 
-| id | 适用目标 | 约束 | 问题代码 / 失败 | 证据 |
+| id | 适用对象 | 约束 | 问题代码 / 失败 | 依据 |
 | --- | --- | --- | --- | --- |
-| CON-01 | Plan | Plan 步骤 ID 必须唯一（MUST）。 | `duplicate step id: <id>` | [src/core/ir/schema.ts:1195](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1195) |
-| CON-02 | 生成的机密名称选择 | 显式 `allowedName` 必须（MUST）在本地解析前出现于 provider 上下文投影的允许列表名称集合中。 | `secret-allowed-name-not-projected` | [src/usecases/secret-naming.ts:190-239](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/secret-naming.ts#L190-L239) |
-| CON-03 | 生成的准则 | 每条准则的 `startAnchor`/`endAnchor` 必须指定一个已知的 `L<n>` 行锚点，并在其从 1 开始的 UTF-16 列处构成有效、非空、非纯空白且按文档顺序排列的范围（MUST）；provider 返回的 `citation` 必须与该已解析的原始规范化 prompt 子串完全一致（MUST）。当锚点或列不正确或超出范围时，报告出错的具体坐标（`startAnchor`、`startColumn`、`endAnchor` 或 `endColumn` 之一）而不是 `citation`，因为重试反馈只携带失败路径。 | `anchor-invalid`, `citation-whitespace-only`, `citation-checksum-mismatch` | [src/usecases/instruction-coverage-policy.ts:407-443](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L407-L443) |
-| CON-04 | 生成的准则 | 准则 ID 和解析后的坐标范围必须唯一（MUST）；解析后的边界不得拆分（MUST NOT）代理对。 | `criterion-id-duplicate`, `criterion-range-duplicate`, `anchor-invalid` | [src/usecases/instruction-coverage-policy.ts:407-443](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L407-L443) |
-| CON-05 | 生成的 AI 步骤 | 至少一个准则必须为（MUST）`success`；成功 ID 与验证意图 ID 必须构成（MUST）精确的双射。 | `success-criterion-missing`, `intent-id-duplicate`, `intent-id-missing`, `intent-id-unknown`, `intent-id-action` | [src/usecases/instruction-coverage-policy.ts:460](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L460) |
-| CON-06 | 生成的验证意图 | 终端断言必须是（MUST）受支持的 `TraceAssert`，且不得为（MUST NOT）`url-matches`。 | `intent-assertion-unsupported`, `terminal-url-matches-forbidden` | [src/usecases/instruction-coverage-policy.ts:475](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L475) |
-| CON-07 | 已提交的准则 | 准则必须非空（MUST），具有唯一的 ID 和跨度，重新提取为非空白 prompt 文本，并使用有效的非零宽度 UTF-16 坐标。 | `criterion-id-duplicate`, `criterion-range-duplicate`, `source-span-invalid`, `source-span-whitespace-only`, `success-criterion-missing` | [src/usecases/instruction-coverage-policy.ts:509](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L509) |
-| CON-08 | 已提交的准则 | 准则必须已经处于（MUST）规范的 source/end/kind/ID 顺序中。 | `criterion-order-invalid` | [src/usecases/instruction-coverage-policy.ts:531](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L531) |
-| CON-09 | 生成的机密名称 | provider 的机密选择必须（MUST）在本地解析为有效的已提交 `SecretRef` 值；映射到同一个环境变量的不同引用必须（MUST）被拒绝。 | `SECRET_ENV_VAR_COLLISION` | [src/usecases/secret-naming.ts:190-319](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/secret-naming.ts#L190-L319); [src/core/secrets/env-var-name.ts:28-45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/secrets/env-var-name.ts#L28-L45) |
-| CON-10 | 候选 Plan 同意 | 包含 `secrets.allow` 以外名称的候选项必须（MUST）在持久化前获得同意决定，`secrets.allow: "*"` 除外；`consentMode: "forbid"` 必须（MUST）返回 `candidate` 而不持久化。 | `SECRET_CONSENT_REQUIRED`; `candidate` | [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493) |
-| CON-11 | grounding 覆盖 | `verificationCoverage` 必须将每个且仅将成功准则映射到（MUST）一个不同的范围内终端验证索引；每个终端索引都必须被映射（MUST）。 | `verification-coverage-id-missing`, `verification-coverage-id-unknown`, `verification-coverage-id-action`, `verification-coverage-index-duplicate`, `verification-coverage-index-invalid` | [src/usecases/instruction-coverage-policy.ts:602](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L602) |
-| CON-12 | grounding 终端证据 | 终端断言在运行值具体化之后不得为（MUST NOT）`url-matches` 或重复事件断言。 | `terminal-url-matches-forbidden`, `verification-assertion-repeated` | [src/usecases/instruction-coverage-policy.ts:631](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L631) |
-| CON-13 | grounding 绑定 | Grounding 仅在其 `planDigest` 等于重新计算的 Plan 摘要时才必须被接受（MUST）。 | 检查分类 `stale` | [src/usecases/check-grounding.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L45) |
-| CON-14 | 携带覆盖率的 grounding 字节 | 声称具有覆盖率的 grounding 文档必须使用（MUST）规范化工件字节。 | 检查分类 `invalid` | [src/usecases/check-grounding.ts:57](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L57) |
-| CON-15 | 缓存的 AI trace 机密使用 | 每个 `TraceFillSecret.secretRef` 都必须属于（MUST）所在 Plan AI 步骤的已提交 `secrets[].ref` 集合。违规属于完整性失败，且不得回退（MUST NOT）。 | 完整性失败 | [src/usecases/run.ts:896](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L896) |
-| CON-16 | 导航 | 每个 Plan、缓存 trace 以及全新 agentic 导航都必须基于（MUST）目标 `baseUrl` 解析，使用 HTTP(S)，并保持与目标同源。 | 完整性失败 | [src/usecases/run.ts:701](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L701) |
-| CON-17 | 缓存的 AI trace 机密标记 | 缓存的 AI trace 中除专用的 `TraceFillSecret.secretRef` 字段外，每个字符串值的后代节点均不得包含（MUST NOT）连续的 `{{secrets.` 标记。违规属于完整性失败，且不得回退（MUST NOT）。 | 完整性失败 | [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984) |
-| CON-18 | 缓存的 AI trace `RunRef` | `RunRef` 必须格式良好（MUST），仅命名在所在 AI 步骤之前声明的捕获变量，并在当前用例中具有可用值。格式错误、未授权或不可用的引用属于完整性失败，且不得回退（MUST NOT）。 | 完整性失败 | [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:3180](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L3180) |
-| CON-19 | 缓存的 AI trace 具体化机密 | 在重放之前，解析 trace 的事件和验证列表中每个已授权的 `fill-secret` 引用；连同当前用例已解析的值，扫描除固定的 `type`、`check`、`target.strategy`、`key` 和 `secretRef` 词汇表之外的每个值。非空的已解析机密通过完全匹配予以禁止，且当其具有至少 3 个 UTF-16 代码单元时，通过子字符串匹配予以禁止。 | 完整性失败；不得回退（MUST NOT） | [src/usecases/run.ts:1075-1129](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1075-L1129); [src/usecases/run.ts:1252-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1313); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
-| CON-20 | 存储及全新的 AI `fill.value` 凭据字面量 | 存储的 trace 和全新的 agentic 操作必须无条件拒绝（MUST）`sk-`、`ghp_` 以及 `AKIA` 填充值。高熵填充值仅在其移除当前用例捕获值后的剩余文本没有检测器匹配项时才被接受。存储 trace 失败不得回退（MUST NOT）；全新操作失败发生在浏览器执行或日志持久化之前。 | 完整性失败 | [src/usecases/run.ts:984-1040](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984-L1040); [src/usecases/run.ts:1350-1405](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1350-L1405); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
-| CON-21 | 跨 AI 边界的捕获值 | 不带 `verificationCoverage` 的旧版存储 trace 在任何非固定词汇表值中均不得包含（MUST NOT）非空的当前用例捕获值（未解析的 `{{run.name}}` 占位符除外）；该检查采用子字符串匹配。全新的 agentic 导航 URL、填充值和断言文本/模式均不得完全等于（MUST NOT）捕获值。这些值必须改用（MUST）授权的 `RunRef` 插值；违规将在存储 trace 到达浏览器/提供方回退之前，或全新输入到达浏览器/持久化之前失败。 | 完整性失败 | [src/usecases/run.ts:1013-1063](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1013-L1063); [src/usecases/run.ts:1316-1347](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1316-L1347); [src/usecases/run.ts:1420-1458](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1458); [src/usecases/run.ts:2190-2209](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2190-L2209) |
-| CON-22 | 全新 agentic 操作/断言具体化机密 | 在具体化之前，每个全新的 agentic 操作和断言都必须根据（MUST）在该用例中观察到的每个非空已解析机密，对非固定词汇表的值进行扫描。仅有的封闭词汇表排除项为 `type`、`check`、`target.strategy`、`key` 和 `secretRef`。对任何非空机密都禁止完全相等；当机密至少为 3 个 UTF-16 代码单元时，禁止子字符串匹配。匹配项在浏览器执行、日志追加、Grounding 更新或持久化之前构成完整性失败。 | 完整性失败 | [src/usecases/run.ts:1252-1263](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1252-L1263); [src/usecases/run.ts:1286-1313](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1286-L1313); [src/usecases/run.ts:1420-1427](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1420-L1427); [src/usecases/run.ts:1954-1975](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1954-L1975); [src/usecases/run.ts:1991-2013](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L1991-L2013); [src/usecases/run.ts:2051-2116](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L2051-L2116) |
-| CON-23 | 位置参数／发现的 prompt 路径选择 | 所选 prompt 路径必须（MUST）解析到 `testDir` 内，具有精确的 `.test.md` 后缀及非空名称组成部分；此检查必须在任何逐文件工作开始前对整个选择仅执行一次，且不得（MUST NOT）应用于 `--list`。 | `PROMPT_PATH_INVALID` | [src/core/layout/resolve.ts:191](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/layout/resolve.ts#L191); [src/usecases/prompt-path-eligibility.ts:25](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/prompt-path-eligibility.ts#L25) |
-| CON-24 | 已提交和已生成的元素意图 | 归因和已提交意图的重新验证必须分别检查意图与引用的来源跨度，拒绝只有空白的摘录，按适用情况验证提供方引文或已提交引用文本，要求成对的外围引号，并要求引用位于意图范围内（包括接触边界）。已提交意图的重新验证不比较引文。生成（Generation）还必须拒绝期望文本与其目标意图引用相同的 `text-equals` 断言，因为这样两个引用都无法支持对方的角色。 | `anchor-invalid`、`intent-span-invalid`、`intent-span-whitespace-only`、`intent-citation-mismatch`、`quote-span-invalid`、`quote-text-mismatch`、`quote-unpaired`、`quote-outside-intent`、`quote-whitespace-only`、`text-equals-self-quote` | repo:src/usecases/element-intent-policy.ts:61,84; repo:src/usecases/generate.ts:222 |
-| CON-25 | Plan 的 `confirms` 字段 | 每个 ID 必须指向同一 Plan 中更早的 click、press、fill、fill-secret 或 capture 步骤，只能出现一次，并按 Plan 顺序升序排列；`generate` 和 `heal` 在验证前移除 `confirms` 中指向 `navigate` 步骤的引用。不检查 Target 标识是否相同。 | `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action`、`confirms-duplicate`、`confirms-unsorted` | repo:src/core/ir/confirms-validation.ts:35 |
+| CON-01 | 执行计划 | 执行计划的步骤 ID 必须 (MUST) 唯一。 | `duplicate step id: <id>` | `src/core/ir/schema.ts:1547-1558` |
+| CON-02 | 生成的机密名称选择 | 显式的 `allowedName` 必须 (MUST) 在本地解析之前，出现在提供方上下文中已投影的允许列表名称集合里。 | `secret-allowed-name-not-projected` | `src/usecases/secret-naming.ts:190-239` |
+| CON-03 | 生成的准则 | 每条准则的 `startAnchor` 和 `endAnchor` 必须 (MUST) 指向已知的 `L<n>` 行锚点，这些锚点按从 1 开始的 UTF-16 列，构成有效、非空、非纯空白且按文档顺序排列的范围。提供方的 `citation` 必须 (MUST) 与解析出的规范化提示词原文子串一致。锚点或列格式错误、超出范围时，报告出错的具体坐标，即 `startAnchor`、`startColumn`、`endAnchor` 或 `endColumn`，而不是 `citation`，因为重试反馈只携带失败路径。 | `anchor-invalid`, `citation-whitespace-only`, `citation-checksum-mismatch` | `src/usecases/instruction-coverage-policy.ts:407-443` |
+| CON-04 | 生成的准则 | 准则 ID 和解析出的坐标范围必须 (MUST) 唯一。解析出的边界不得 (MUST NOT) 拆开代理对。 | `criterion-id-duplicate`, `criterion-range-duplicate`, `anchor-invalid` | `src/usecases/instruction-coverage-policy.ts:407-443` |
+| CON-05 | 生成的 AI 步骤 | 至少一条准则必须 (MUST) 是 `success`。success ID 与验证意图 ID 必须 (MUST) 构成严格的双射。 | `success-criterion-missing`, `intent-id-duplicate`, `intent-id-missing`, `intent-id-unknown`, `intent-id-action` | `src/usecases/instruction-coverage-policy.ts:456-476` |
+| CON-06 | 生成的验证意图 | 终端断言必须 (MUST) 是受支持的 `TraceAssert`，并且不得 (MUST NOT) 是 `url-matches`。 | `intent-assertion-unsupported`, `terminal-url-matches-forbidden` | `src/usecases/instruction-coverage-policy.ts:467-472` |
+| CON-07 | 已提交的准则 | 准则必须 (MUST) 非空、ID 和范围唯一，重新提取后是非空白的提示词文本，并使用有效且宽度非零的 UTF-16 坐标。 | `criterion-id-duplicate`, `criterion-range-duplicate`, `source-span-invalid`, `source-span-whitespace-only`, `success-criterion-missing` | `src/usecases/instruction-coverage-policy.ts:509-522` |
+| CON-08 | 已提交的准则 | 准则必须 (MUST) 已经按规范的来源、结束、种类、ID 顺序排列。 | `criterion-order-invalid` | `src/usecases/instruction-coverage-policy.ts:523-529` |
+| CON-09 | 生成的机密名称 | 提供方的机密选择必须 (MUST) 在本地解析为有效的已提交 `SecretRef`。映射到同一个环境变量的不同引用必须 (MUST) 被拒绝。 | `SECRET_ENV_VAR_COLLISION` | `src/usecases/secret-naming.ts:205-344`; `src/core/secrets/env-var-name.ts:28-45` |
+| CON-10 | 候选执行计划的同意 | 含有 `secrets.allow` 之外名称的候选，除 `secrets.allow: "*"` 外，必须 (MUST) 在持久化之前获得同意决定。`consentMode: "forbid"` 必须 (MUST) 返回 `candidate` 且不持久化。 | `SECRET_CONSENT_REQUIRED`; `candidate` | `src/usecases/generate.ts:1652-1741` |
+| CON-11 | 定位缓存覆盖 | `verificationCoverage` 必须 (MUST) 把每条 success 准则，且只把 success 准则，映射到一个互不相同、在范围内的终端验证索引。每个终端索引都必须 (MUST) 被映射。 | `verification-coverage-id-missing`, `verification-coverage-id-unknown`, `verification-coverage-id-action`, `verification-coverage-index-duplicate`, `verification-coverage-index-invalid` | `src/usecases/instruction-coverage-policy.ts:605-621` |
+| CON-12 | 定位缓存的终端证据 | 终端断言不得 (MUST NOT) 是 `url-matches`，也不得重复运行值具体化之后的事件断言。 | `terminal-url-matches-forbidden`, `verification-assertion-repeated` | `src/usecases/instruction-coverage-policy.ts:623-636` |
+| CON-13 | 定位缓存的绑定 | 定位缓存必须 (MUST) 仅在其 `planDigest` 等于重新计算出的执行计划摘要时被接受。 | 检查分类 `stale` | `src/usecases/check-grounding.ts:64` |
+| CON-14 | 带覆盖信息的定位缓存字节 | 声称带有覆盖信息的定位缓存文档必须 (MUST) 使用规范的产物字节。 | 检查分类 `invalid` | `src/usecases/check-grounding.ts:66-72` |
+| CON-15 | 缓存 AI 追踪中的机密使用 | 每个 `TraceFillSecret.secretRef` 必须 (MUST) 属于所属执行计划 AI 步骤已提交的 `secrets[].ref` 集合。违反即完整性失败，且不得 (MUST NOT) 回退。 | 完整性失败 | `src/usecases/run.ts:1356-1360` |
+| CON-16 | 导航 | 每个执行计划导航、缓存追踪导航和新的代理式导航，都必须 (MUST) 相对目标的 `baseUrl` 解析，使用 HTTP(S)，并保持与目标同源。 | 完整性失败 | `src/usecases/run.ts:993-1021` |
+| CON-17 | 缓存 AI 追踪中的机密标记 | 缓存的 AI 追踪中，除专用的 `TraceFillSecret.secretRef` 字段外，每个取字符串值的后代节点都不得 (MUST NOT) 含有连续的 `{{secrets.` 标记。违反即完整性失败，且不得 (MUST NOT) 回退。 | 完整性失败 | `src/usecases/run.ts:1250-1264` |
+| CON-18 | 缓存 AI 追踪的 `RunRef` | `RunRef` 必须 (MUST) 格式正确，只指向在所属 AI 步骤之前声明的捕获变量，并且在当前用例中有可用的值。格式错误、未授权或不可用的引用都是完整性失败，且不得 (MUST NOT) 回退。 | 完整性失败 | `src/usecases/run.ts:917-935`; `src/usecases/run.ts:4334-4336` |
+| CON-19 | 缓存 AI 追踪中具体化的机密 | 回放之前，解析追踪的事件和验证列表中、由所属执行计划 AI 步骤列出的每个 `fill-secret` 引用。连同当前用例的已解析值，扫描所有值，但固定词汇 `type`、`check`、`target`、`timeoutMs`、`element.strategy`、`key` 和 `secretRef` 除外。非空的已解析机密，完全匹配即被禁止；在其至少有 3 个 UTF-16 码元时，子串匹配也被禁止。 | 完整性失败; 不得 (MUST NOT) 回退 | `src/usecases/run.ts:1351-1384`; `src/usecases/run.ts:1265-1274,1545-1566`; `src/usecases/run.ts:2680-2684,2719-2722` |
+| CON-20 | 已存储追踪与新的 AI `fill.value` 中的凭据字面量 | 已存储追踪和新的代理式动作必须 (MUST) 无条件拒绝以 `sk-`、`ghp_` 和 `AKIA` 开头的填写值。高熵的填写值，只有在去掉已捕获的当前用例值后，剩余文本不匹配任何检测器时才被接受。已存储追踪的失败不得 (MUST NOT) 回退。新执行的失败发生在浏览器执行或日志持久化之前。 | 完整性失败 | `src/usecases/run.ts:1295-1302`; `src/usecases/run.ts:1647-1680`; `src/usecases/run.ts:1710-1713,2343`; `src/usecases/run.ts:2680-2684,2719-2722` |
+| CON-21 | 跨 AI 边界的已捕获值 | 没有 `verificationCoverage` 的旧版已存储追踪，在任何非固定词汇的值中，不得 (MUST NOT) 含有当前用例中已捕获的非空值，未解析的 `{{run.name}}` 占位符除外。该检查是子串匹配。新的代理式导航 URL、填写值以及断言文本和模式，不得 (MUST NOT) 与已捕获的值完全相等。这些值必须 (MUST) 改用已授权的 `RunRef` 插值。违反会在已存储追踪到达浏览器或提供方回退之前，或新输入到达浏览器或持久化之前失败。 | 完整性失败 | `src/usecases/run.ts:1590-1622`; `src/usecases/run.ts:1275-1281`; `src/usecases/run.ts:1704-1733`; `src/usecases/run.ts:2680-2684,2702` |
+| CON-22 | 新的代理式动作与断言中具体化的机密 | 具体化之前，每个新的代理式动作和断言必须 (MUST) 把非固定词汇的值，与用例中观察到的每个非空已解析机密比对。仅有的封闭词汇例外是 `type`、`check`、`target`、`timeoutMs`、`element.strategy`、`key` 和 `secretRef`。任何非空机密，完全相等都被禁止；机密至少有 3 个 UTF-16 码元时，子串匹配也被禁止。匹配即完整性失败，发生在浏览器执行、日志追加、定位缓存更新或持久化之前。 | 完整性失败 | `src/usecases/run.ts:1526-1543`; `src/usecases/run.ts:1545-1588`; `src/usecases/run.ts:1695-1702`; `src/usecases/run.ts:2333-2343`; `src/usecases/run.ts:2391-2403`; `src/usecases/run.ts:2373` |
+| CON-23 | 位置参数或发现得到的提示词路径选择 | 所选的提示词路径必须 (MUST) 解析到 `testDir` 内，后缀恰为 `.test.md`，且名称部分非空。这项检查在任何逐文件处理开始之前，对整个选择只做一次。`--list` 不得 (MUST NOT) 应用这项检查。 | `PROMPT_PATH_INVALID` | `src/core/layout/resolve.ts:191`; `src/usecases/prompt-path-eligibility.ts:25` |
+| CON-24 | 已提交和生成的元素意图 | 归属检查和已提交内容的重新验证，必须 (MUST) 各自独立地确认下列五点。第一，意图和引用的范围有效。第二，拒绝纯空白的摘录。第三，视情况核对提供方的引用或已提交的引用文本。第四，前后的引号成对出现。第五，引用包含在意图之内，边界相接也算。已提交内容的重新验证不比较 citation。生成（Generation）还必须拒绝期望文本与其目标意图引用相同的 `text-equals` 断言 (MUST)，因为这样两个引用都无法支持对方的角色。 | `anchor-invalid`, `intent-span-invalid`, `intent-span-whitespace-only`, `intent-citation-mismatch`, `quote-span-invalid`, `quote-text-mismatch`, `quote-unpaired`, `quote-outside-intent`, `quote-whitespace-only`, `text-equals-self-quote` | `src/usecases/element-intent-policy.ts:75-105,129-188,211-231`; `src/usecases/generate.ts:246-254` |
+| CON-25 | 执行计划的 `confirms` 字段 | `generate` 和 `heal` 在验证之前，会移除指向 `navigate` 步骤的 `confirms` 引用。其余每个 ID 都必须 (MUST) 指向同一执行计划中靠前的 click、press、fill、fill-secret 或 capture 步骤，只出现一次，并遵循执行计划的升序。不检查目标标识。 | `confirms-unknown-step`, `confirms-not-earlier`, `confirms-not-action`, `confirms-duplicate`, `confirms-unsorted` | `src/core/ir/confirms-validation.ts:19-57,76-96` |
 
-CON-23 在文件选择期间、所有其他 CON 项目之前适用。CON-01 至 CON-06、CON-09、CON-10 以及 CON-24 适用于 Plan 持久化之前；CON-01、CON-07、CON-08、CON-24 和 CON-25 适用于已提交的 Plan；CON-11 至 CON-22 适用于 Grounding/重放验证。Grounding/重放验证在浏览器操作接收具体化值之前，检查 trace 机密标记、已解析机密、凭据字面量和捕获值边界，以及动态 `RunRef` 授权。[src/usecases/instruction-coverage-policy.ts:379](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/instruction-coverage-policy.ts#L379) [src/usecases/generate.ts:1405-1493](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/generate.ts#L1405-L1493) [src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/usecases/run.ts:648](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L648) [src/usecases/run.ts:984](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L984)
+CON-23 在文件选择期间应用，先于其他所有 CON 项。CON-01 到 CON-06、CON-09、CON-10 和 CON-24 在执行计划持久化之前应用。CON-01、CON-07、CON-08、CON-24 和 CON-25 应用于已提交的执行计划。CON-11 到 CON-22 应用于定位缓存与回放验证。在浏览器操作收到具体化的值之前，定位缓存与回放验证会检查几类边界。这些边界是追踪中的机密标记、已解析的机密、凭据字面量和已捕获的值。它还检查动态 `RunRef` 的权限 (`src/usecases/instruction-coverage-policy.ts:380-381,496-499`) (`src/usecases/generate.ts:1652-1741`) (`src/usecases/check-grounding.ts:18`) (`src/usecases/run.ts:917-935`) (`src/usecases/run.ts:1250-1264`)。
 
-## 验证规程 {#verification-procedure}
+## 验证流程 {#verification-procedure}
 
-使用者必须从结构上解析（MUST）工件，在 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#inputs-digest) 下计算当前摘要，并在重放之前应用语义检查。失败的 Grounding 验证绝不得授权（MUST NOT）缓存重放。[src/core/ir/schema.ts:215](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L215) [src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+使用方必须 (MUST) 先按结构解析产物，再按[新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#inputs-digest)中的规则计算当前摘要，然后在回放之前应用语义检查。定位缓存验证失败，不得 (MUST NOT) 授权使用缓存回放 (`src/core/ir/schema.ts:1541,1753`) (`src/usecases/run.ts:820-851`) (`src/core/ir/digest.ts:170-175`)。
 
-## 设计理由 {#rationale}
+## 设计依据 {#rationale}
 
-问题在于可移植的 JSON Schema 可以验证形状，但无法比较同级值、prompt 源或跨记录的关系。
+问题在于，可移植的 JSON Schema 能验证结构，却无法比较同级的值、提示词原文，或跨记录的关系。
 
-所选设计显式化了轻量语义层，并在结构解析后报告稳定的错误代码。它将所有可表达的约束保留在 Zod/派生的 JSON Schema 中。
+所选设计把小规模的语义层明确出来，在结构解析之后报告稳定的错误代码。凡是能够表达的约束，都保留在 Zod 以及由它派生的 JSON Schema 中。
 
-一个被否决的备选方案是将所有规则隐藏在不可移植的细化（refinements）中；它被否决是因为模式使用者会丢失这些规则。另一个方案仅依赖 JSON Schema；它被否决是因为无法从孤立的 JSON 值中证明出处和覆盖范围。
+被否决的方案有两个。一个把所有规则藏进不可移植的 refinement，因为模式的使用方会因此丢失这些规则，所以被否决。另一个只依赖 JSON Schema，因为仅凭孤立的 JSON 值无法证明来源和覆盖情况，所以被否决。
 
 ---
 
@@ -3987,41 +4023,41 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
-| provider 响应新增可选 `assumptions`；`ambiguities` 仅表示目标分配未确定。producer 指纹改变，已有执行计划过期。 | repo:src/core/ir/schema.ts, repo:src/core/ai/plan-producer-bundle.ts | 按[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change) 重新生成执行计划并重建定位缓存。 |
-| report 3.10 → 3.11 新增 `generator-assumption` 警告。Stage 3 接受的假设仅出现在 `healed` 行的可选 `warnings` 中。假设不会阻止 generate 或 heal。单目标响应的歧义变为可重试的 `AI_RESPONSE_INVALID`，退出码为 3。多目标分配未确定时仍为 `PROMPT_AMBIGUOUS`，退出码为 2。 | repo:src/report/schema.ts, repo:src/usecases/generate.ts, repo:src/usecases/heal.ts | 验证封闭 union 的使用者必须（MUST）使用 3.11 Schema。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |
-| 移除 CLI 的 `--strict` 及 MCP generate 输入 `strict`。 | repo:src/core/cli/manifest.ts, repo:src/adapters/mcp/tool-schemas.ts | 从调用中删除两者。`generate --strict` 因未知选项以退出码 2 结束，MCP 拒绝 `strict`。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |
-| 生成器的 confirms 指令不再让提供方排除前面的动作。它会列出那些其预期效果有已验证状态作为证据的前置 click、press、fill、fill-secret 或 capture 步骤，因此位于提交之前的 fill 也可以被确认并保存。producer bundle 指纹会变化。Plan 5、Grounding 4 和 report 3.10 保持不变。 | repo:src/core/ai/prompt-envelope.ts | 早期版本生成的所有执行计划都已过期。先运行 `ambercast generate`，再运行 `ambercast run --resolve --update-cache`。重新生成会把定位缓存替换为空缓存，因此每个元素步骤都会重新绑定。没有逐字引用的步骤会调用一次 AI。然后确认普通的 `ambercast run` 以零次 AI 调用通过。执行计划始终提交；只有 `grounding.repositoryPolicy` 为 `committed` 时才将定位缓存与执行计划一起提交，为 `uncommitted` 时保留在本地。 |
-| Grounding v3 → v4 允许按 role 唯一的无名称元素的定位器携带空 accessible name。v2 和 v3 已废弃：check 报告 stale-grounding，不带 --resolve 的 run 以 GROUNDING_UNRESOLVED 失败，heal 在定位缓存重新生成前失败。 | repo:src/core/ir/schema.ts | 运行 ambercast run --resolve --update-cache 重新生成定位缓存；AI 步骤会重新执行。generate 将未改变执行计划的 v2 或 v3 定位缓存替换为空的 v4。旧版 ambercast 无法读取 v4，其 generate 会将 v4 替换为空的 v3。 回退后需要使用旧版本重新生成定位缓存。旧版本拒绝空名称，因此无法恢复无名称元素的绑定。不得用不同 ambercast 版本处理同一定位缓存。 |
-| report 3.9 → 3.10：新增 `CASE_ABORTED`（environment、case 作用域、退出码 3、`{reason, stepId}` details）和 `PROMPT_AMBIGUOUS`（usage、case 作用域、退出码 2、`{ambiguities}` details）。每个 `run` CaseAbort、agentic 目标拒绝和未分类异常结果行现在都携带对应的 case 错误，而不是没有错误；`heal` 将 Stage 3 和最终回放的失败作为 case 错误报告，涵盖所有 kind，而非仅限 agentic。generate 或 heal 的 Stage 3 因提示词歧义而失败时，会产生 `PROMPT_AMBIGUOUS`（退出码 2），而不是无错误代码的崩溃（退出码 3）。 | repo:src/report/schema.ts, repo:src/usecases/run.ts, repo:src/usecases/heal-report.ts, repo:src/usecases/generate.ts | Report 消费者必须（MUST）接受当前的 `3.10` 契约，包括携带 case 作用域 details 的 `CASE_ABORTED` 和 `PROMPT_AMBIGUOUS`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。`heal` 报告中每个 case 的 `errors` 会增多，`summary` 中标记为 `errored` 的结果行也会增多；断言这些结果行的 `errors` 为空的测试必须考虑新的 case 错误。依赖提示词歧义时旧有无错误代码的退出码 3 崩溃的测试，必须改为期待退出码 2 和一条结果行。[repo:src/report/schema.ts] |
-| report 3.8 → 3.9：为 `AiResponseIssueCode` 新增四个确认引用 issue code，并为 case 范围的 environment 错误新增 `AGENTIC_STEP_FAILED`。同一版本中，AI 引导的断言工具和追踪重放的合格/不合格判定采用了带截止时间的轮询。 | repo:src/report/schema.ts:57, repo:src/usecases/run.ts | Report 消费者必须（MUST）接受当前的 `3.9` 契约，包括 `AiResponseIssueCode` 中的 `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action` 和 `confirms-duplicate`，以及携带 case 范围 details 的 `AGENTIC_STEP_FAILED`。此 report 变更仅为新增内容，无需重新生成 Plan 或 grounding。依赖 AI 引导的断言工具或追踪重放单次不合格观测的测试，需要考虑截止时间前的轮询。[repo:src/report/schema.ts:57] |
-| 带截止时间的轮询（`run.ts` 中的八个站点：首次绑定阶段 1、四个 plan assert 循环（包括 `text-visible` / `url-matches` 的浏览器检查路径）、AI 引导的断言工具，以及追踪重放的两个合格/不合格判定（事件与验证））在到达截止时间的等待之后，总会再进行一次观测，并将该次观测判定为最终结果（即使真实计时器在截止时间之后才触发）。元素 assert 的 `expected` 文字在没有 `roleHint` 时不包含角色部分。 | repo:src/usecases/run.ts | 无需重新生成 Plan、grounding 或 report。依赖截止前陈旧样本（或无 roleHint 时含双空格的 `expected` 文字）的测试需要更新期望值。 |
-| Plan v4 → v5 为涉及元素的步骤新增有来源依据的 `intent`／`confirms` 字段及限定于 Target 的 `locale`；Grounding v2 → v3 将单独的指纹证据替换为 `{locator, fingerprint, intentDigest, provenance}`；report 3.7 → 3.8 新增 heal Stage 1 的 `binding` 诊断和原因词汇。 | repo:src/core/ir/schema.ts, repo:src/report/schema.ts | 重新生成 v4 Plan；v5 是接受的 Plan 格式。v2 grounding 伴生文档也已废弃，必须随对应 Plan 一起重新生成。 |
-| TP3：通过完整的 registry 统一 executor 的 kind 词汇，并删除 TP2 引入但不可达的 `executor-unregistered` 原因。未启用 `--resolve` 时，element step 的 grounding 未命中统一报告 `GROUNDING_UNRESOLVED`：退出码由 3 变为 4，且从无错误代码变为有代码。Plan v4、grounding v2 和 config schema 保持不变；report 3.7 仅缩小 browser launch 的 reason 枚举。 | repo:src/core/executor/kinds.ts, repo:src/adapters/browser/registry.ts, repo:src/usecases/run.ts, repo:src/report/schema.ts | 报告使用方应移除 `executor-unregistered`，并接受 element step 的 `GROUNDING_UNRESOLVED`。无需重新生成 Plan 或 grounding。 |
-| TP2：目标配置由 `targets.<name>.browser` 改为 `targets.<name>.executor`，删除 `RunCaseOutcome.engine`，在报告契约中新增 `sessions[name].executor`；新增 `EXECUTOR_UNSUPPORTED` 错误代码，并将 `BROWSER_LAUNCH_FAILED` 原因的旧 `engine` 前缀改为 `executor`（`executor-unregistered`）；Plan schema 不变 | repo:src/core/config/schema.ts, repo:src/report/schema.ts, repo:src/report/error-mapping.ts | 若无需显式指定 executor，应删除旧 browser 键；否则迁移至 `executor: { kind: "playwright", browser: "chromium" }`（`executor.browser`）。loader 会以 `ConfigInvalidError` 拒绝旧键。报告使用方须处理已删除和新增的字段、新错误代码及更名后的原因；此次 schema 变更无需重新生成 Plan。 |
-| Plan v3 → v4 adds required step Target names, renames element references, and removes Plan browser selection | repo:src/core/ir/schema.ts | Regenerate v3 plans; v4 is the accepted Plan format. |
-| grounding v1 → v2 renames trace locator fields to `element` | repo:src/core/ir/schema.ts | Regenerate grounding with Plan v4. |
-| report 3.6 → 3.7 adds step Target names and per-Target sessions | repo:src/report/schema.ts | Consumers MUST accept report `3.7` fields. |
-| Plan v1 → v2 增加指令覆盖率 | [src/core/ir/schema.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L45), [src/core/ir/schema.ts:1185](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L1185) | 生成者与消费者必须（MUST）拒绝 v1 并重新生成或报告其过时；不得（MUST NOT）对其进行就地迁移。[src/core/ir/schema.ts:50](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L50) |
-| fingerprint v1 → v2 | [CHANGELOG.md:78](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L78) | v2 是唯一被接受的标签。带有覆盖声明的当前出处文档在随后的严格/规范验证失败时，完整性必须（MUST）判定为失败；未带有该声明的伴随文档在 `run` 中可能发生缓存未命中，而 `check` grounding 检查将模式无效的内容归类为 `invalid`（公开状态依据 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences)）。[src/usecases/run.ts:498](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/run.ts#L498) [src/usecases/check-grounding.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L45) |
-| 生成者 bundle 指纹进入 `inputsDigest` | [CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) | 变更前生成的 Plan 必须（MUST）重新生成，因为它们已过时。[CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) |
-| report 2.0 → 3.0 | [CHANGELOG.md:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L55), [CHANGELOG.md:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L58) | Report 消费者必须（MUST）接受当前的 `3.0` 契约，而不是从 Plan 版本推断兼容性。[src/report/schema.ts:15](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L15) |
-| report 3.0 → 3.1 | [src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) | Report 消费者必须（MUST）接受当前的 `3.1` 契约（包括可选的结构化错误诊断），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:22](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L22) |
-| report 3.1 → 3.2 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.2` 契约（包括可选的 `PROMPT_PATH_INVALID` details 分支），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
-| report 3.2 → 3.3 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.3` 契约（包括可选的 AI 调用计量字段），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
-| report 3.3 → 3.4 | [src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) | Report 消费者必须（MUST）接受当前的 `3.4` 契约（包括可选的 `BROWSER_LAUNCH_FAILED` details 分支），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:30](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L30) |
-| Plan v2 → v3 删除 secret-grant provenance | [src/core/ir/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L58), [src/core/ir/schema.ts:674](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L674) | 生成者与消费者必须（MUST）拒绝 v2 并重新生成或报告其过时；不得（MUST NOT）对其进行就地迁移。[src/core/ir/schema.ts:49](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L49) |
-| report 3.4 → 3.5 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) | Report 消费者必须（MUST）接受当前的 `3.5` 契约（包括三个新的 secret-policy error code：`SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、可选的 `GROUNDING_UNRESOLVED` details 分支（`stepId`、`reason`），以及可选的 `GenerateResult.secrets`/`warnings` fields），而不是从 Plan 版本推断兼容性。[src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L42) |
-| report 3.5 → 3.6 | [src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/787ac3dd8f07b95a303d265ea65ef1493e97a8a8/src/report/schema.ts#L42) | Report 消费者必须（MUST）接受当前的 `3.6` 契约，包括所有四个 completed heal-result 分支新增的可选 `repairTrace` 诊断字段，而不是从 Plan 版本推断兼容性。该字段投影每个案例的 Stage 1/2/3 尝试与结果历史（issue #383 / SPEC-9 至 SPEC-12）。admission-denied 阶段不会添加 `repairTrace` 条目，仅通过 `stopReason: "attempt-limit" \| "deadline"` 体现；被中断（interrupted）的工作完全不会产生 completed 结果（报告为 `skipped`），因此既没有 `repairTrace` 条目，也没有 `stopReason`。[src/report/schema.ts:42](https://github.com/kotarotsubaki/ambercast/blob/787ac3dd8f07b95a303d265ea65ef1493e97a8a8/src/report/schema.ts#L42) |
+| provider 响应新增可选 `assumptions`；`ambiguities` 仅表示目标分配未确定。producer 指纹改变，已有执行计划过期。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | 按[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change) 重新生成执行计划并重建定位缓存。 |
+| report 3.10 → 3.11 新增 `generator-assumption` 警告。Stage 3 接受的假设仅出现在 `healed` 行的可选 `warnings` 中。假设不会阻止 generate 或 heal。单目标响应的歧义变为可重试的 `AI_RESPONSE_INVALID`，退出码为 3。多目标分配未确定时仍为 `PROMPT_AMBIGUOUS`，退出码为 2。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 验证封闭 union 的使用者必须 (MUST) 使用 3.11 Schema。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |
+| 移除 CLI 的 `--strict` 及 MCP generate 输入 `strict`。 | `repo:src/core/cli/manifest.ts`, `repo:src/adapters/mcp/tool-schemas.ts` | 从调用中删除两者。`generate --strict` 因未知选项以退出码 2 结束，MCP 拒绝 `strict`。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |
+| 生成器的 confirms 指令不再让提供方排除前面的动作。它会列出那些其预期效果有已验证状态作为证据的前置 click、press、fill、fill-secret 或 capture 步骤，因此位于提交之前的 fill 也可以被确认并保存。producer bundle 指纹会变化。执行计划 5、定位缓存 4 和 report 3.10 保持不变。 | `repo:src/core/ai/prompt-envelope.ts` | 早期版本生成的所有执行计划都已过期。先运行 `ambercast generate`，再运行 `ambercast run --resolve --update-cache`。重新生成会把定位缓存替换为空缓存，因此每个元素步骤都会重新绑定。没有逐字引用的步骤会调用一次 AI。然后确认普通的 `ambercast run` 以零次 AI 调用通过。执行计划始终提交；只有 `grounding.repositoryPolicy` 为 `committed` 时才将定位缓存与执行计划一起提交，为 `uncommitted` 时保留在本地。 |
+| 定位缓存 v3 → v4 允许按 role 唯一的无名称元素的定位器携带空 accessible name。v2 和 v3 已废弃：check 报告 stale-grounding，不带 --resolve 的 run 以 GROUNDING_UNRESOLVED 失败，heal 在定位缓存重新生成前失败。 | `repo:src/core/ir/schema.ts` | 运行 ambercast run --resolve --update-cache 重新生成定位缓存；AI 步骤会重新执行。generate 将未改变执行计划的 v2 或 v3 定位缓存替换为空的 v4。旧版 ambercast 无法读取 v4，其 generate 会将 v4 替换为空的 v3。 回退后需要使用旧版本重新生成定位缓存。旧版本拒绝空名称，因此无法恢复无名称元素的绑定。不得用不同 ambercast 版本处理同一定位缓存。 |
+| report 3.9 → 3.10：新增 `CASE_ABORTED`（environment、case 作用域、退出码 3、`{reason, stepId}` details）和 `PROMPT_AMBIGUOUS`（usage、case 作用域、退出码 2、`{ambiguities}` details）。每个 `run` CaseAbort、agentic 目标拒绝和未分类异常结果行现在都携带对应的 case 错误，而不是没有错误；`heal` 将 Stage 3 和最终回放的失败作为 case 错误报告，涵盖所有 kind，而非仅限 agentic。generate 或 heal 的 Stage 3 因提示词歧义而失败时，会产生 `PROMPT_AMBIGUOUS`（退出码 2），而不是无错误代码的崩溃（退出码 3）。 | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts`, `repo:src/usecases/heal-report.ts`, `repo:src/usecases/generate.ts` | Report 消费者必须 (MUST) 接受当前的 `3.10` 契约，包括携带 case 作用域 details 的 `CASE_ABORTED` 和 `PROMPT_AMBIGUOUS`。此 report 变更仅为新增内容，无需重新生成 执行计划 或 定位缓存。`heal` 报告中每个 case 的 `errors` 会增多，`summary` 中标记为 `errored` 的结果行也会增多；断言这些结果行的 `errors` 为空的测试必须考虑新的 case 错误。依赖提示词歧义时旧有无错误代码的退出码 3 崩溃的测试，必须改为期待退出码 2 和一条结果行 (`repo:src/report/schema.ts`)。 |
+| report 3.8 → 3.9：为 `AiResponseIssueCode` 新增四个确认引用 issue code，并为 case 范围的 environment 错误新增 `AGENTIC_STEP_FAILED`。同一版本中，AI 引导的断言工具和追踪回放的合格/不合格判定采用了带截止时间的轮询。 | `repo:src/report/schema.ts:98,169-174`, `repo:src/usecases/run.ts` | Report 消费者必须 (MUST) 接受当前的 `3.9` 契约，包括 `AiResponseIssueCode` 中的 `confirms-unknown-step`、`confirms-not-earlier`、`confirms-not-action` 和 `confirms-duplicate`，以及携带 case 范围 details 的 `AGENTIC_STEP_FAILED`。此 report 变更仅为新增内容，无需重新生成 执行计划 或 定位缓存。依赖 AI 引导的断言工具或追踪回放单次不合格观测的测试，需要考虑截止时间前的轮询 (`repo:src/report/schema.ts:98,169-174`)。 |
+| 带截止时间的轮询（`run.ts` 中的八个站点：首次绑定阶段 1、四个 执行计划 assert 循环（包括 `text-visible` / `url-matches` 的浏览器检查路径）、AI 引导的断言工具，以及追踪回放的两个合格/不合格判定（事件与验证））在到达截止时间的等待之后，总会再进行一次观测，并将该次观测判定为最终结果（即使真实计时器在截止时间之后才触发）。元素 assert 的 `expected` 文字在没有 `roleHint` 时不包含角色部分。 | `repo:src/usecases/run.ts` | 无需重新生成 执行计划、定位缓存 或 report。依赖截止前陈旧样本（或无 roleHint 时含双空格的 `expected` 文字）的测试需要更新期望值。 |
+| 执行计划 v4 → v5 为涉及元素的步骤新增有来源依据的 `intent`／`confirms` 字段及限定于 Target 的 `locale`；定位缓存 v2 → v3 将单独的指纹证据替换为 `{locator, fingerprint, intentDigest, provenance}`；report 3.7 → 3.8 新增 heal Stage 1 的 `binding` 诊断和原因词汇。 | `repo:src/core/ir/schema.ts`, `repo:src/report/schema.ts` | 重新生成 v4 执行计划；v5 是接受的 执行计划 格式。v2 定位缓存 伴生文档也已废弃，必须随对应 执行计划 一起重新生成。 |
+| TP3：通过完整的 registry 统一 executor 的 kind 词汇，并删除 TP2 引入但不可达的 `executor-unregistered` 原因。未启用 `--resolve` 时，element step 的 grounding 未命中统一报告 `GROUNDING_UNRESOLVED`：退出码由 3 变为 4，且从无错误代码变为有代码。Plan v4、grounding v2 和 config schema 保持不变；report 3.7 仅缩小 browser launch 的 reason 枚举。 | `repo:src/core/executor/kinds.ts`, `repo:src/adapters/browser/registry.ts`, `repo:src/usecases/run.ts`, `repo:src/report/schema.ts` | 报告使用方应移除 `executor-unregistered`，并接受 element step 的 `GROUNDING_UNRESOLVED`。无需重新生成执行计划或定位缓存。 |
+| TP2：目标配置由 `targets.<name>.browser` 改为 `targets.<name>.executor`，删除 `RunCaseOutcome.engine`，在报告契约中新增 `sessions[name].executor`；新增 `EXECUTOR_UNSUPPORTED` 错误代码，并将 `BROWSER_LAUNCH_FAILED` 原因的旧 `engine` 前缀改为 `executor` (`executor-unregistered`)；执行计划 schema 不变 | `repo:src/core/config/schema.ts`, `repo:src/report/schema.ts`, `repo:src/report/error-mapping.ts` | 若无需显式指定 executor，应删除旧 browser 键；否则迁移至 `executor: { kind: "playwright", browser: "chromium" }` (`executor.browser`)。loader 会以 `ConfigInvalidError` 拒绝旧键。报告使用方须处理已删除的 `RunCaseOutcome.engine`、新增的 `sessions[name].executor`、新的 `EXECUTOR_UNSUPPORTED` 代码及更名后的原因；此次 schema 变更无需重新生成 执行计划。 |
+| 执行计划 v3 → v4 为步骤新增必填的目标名称，重命名元素引用，并移除执行计划中的浏览器选择。 | `repo:src/core/ir/schema.ts` | 重新生成 v3 的执行计划；v4 是被接受的执行计划格式。 |
+| 定位缓存 v1 → v2 把追踪定位器的字段改名为 `element`。 | `repo:src/core/ir/schema.ts` | 与执行计划 v4 一起重新生成定位缓存。 |
+| report 3.6 → 3.7 新增步骤的目标名称和每个目标的会话。 | `repo:src/report/schema.ts` | 使用方必须 (MUST) 接受 report `3.7` 的字段。 |
+| 执行计划 v1 → v2 增加指令覆盖率 | `repo:src/core/ir/schema.ts:46-62`,, `repo:src/core/ir/schema.ts:902` | 生成者与消费者必须 (MUST) 拒绝 v1 并重新生成或报告其过时；不得 (MUST NOT) 对其进行就地迁移 (`repo:src/core/ir/schema.ts:1542`)。 |
+| fingerprint v1 → v2 | `repo:CHANGELOG.md:257` | v2 是唯一被接受的标签。带有覆盖声明的当前出处文档在随后的严格/规范验证失败时，完整性必须 (MUST) 判定为失败；未带有该声明的伴随文档在 `run` 中可能发生缓存未命中，而 `check` 定位缓存 检查将模式无效的内容归类为 `invalid`（公开状态依据 [新鲜度与摘要](/ambercast/zh-cn/spec/freshness/#freshness-consequences)） (`repo:src/usecases/run.ts:794-801`) (`repo:src/usecases/check-grounding.ts:62-63`)。 |
+| 生成者 bundle 指纹进入 `inputsDigest` | `repo:CHANGELOG.md:219` | 变更前生成的 执行计划 必须 (MUST) 重新生成，因为它们已过时 (`repo:CHANGELOG.md:219`)。 |
+| report 2.0 → 3.0 | `repo:CHANGELOG.md:237`,, `repo:CHANGELOG.md:234` | Report 消费者必须 (MUST) 接受当前的 `3.0` 契约，而不是从 执行计划 版本推断兼容性 (`repo:src/report/schema.ts:58`)。 |
+| report 3.0 → 3.1 | `repo:src/report/schema.ts:393-436` | Report 消费者必须 (MUST) 接受当前的 `3.1` 契约（包括可选的结构化错误诊断），而不是从 执行计划 版本推断兼容性 (`repo:src/report/schema.ts:393-436`)。 |
+| report 3.1 → 3.2 | `repo:src/report/schema.ts:243,397` | Report 消费者必须 (MUST) 接受当前的 `3.2` 契约（包括可选的 `PROMPT_PATH_INVALID` details 分支），而不是从 执行计划 版本推断兼容性 (`repo:src/report/schema.ts:243,397`)。 |
+| report 3.2 → 3.3 | `repo:src/report/schema.ts:614,1032` | Report 消费者必须 (MUST) 接受当前的 `3.3` 契约（包括可选的 AI 调用计量字段），而不是从 执行计划 版本推断兼容性 (`repo:src/report/schema.ts:614,1032`)。 |
+| report 3.3 → 3.4 | `repo:src/report/schema.ts:317,405,430` | Report 消费者必须 (MUST) 接受当前的 `3.4` 契约（包括可选的 `BROWSER_LAUNCH_FAILED` details 分支），而不是从 执行计划 版本推断兼容性 (`repo:src/report/schema.ts:317,405,430`)。 |
+| 执行计划 v2 → v3 删除 secret-grant provenance | `repo:src/core/ir/schema.ts:876-884`,, `repo:src/core/ir/schema.ts:682-698` | 生成者与消费者必须 (MUST) 拒绝 v2 并重新生成或报告其过时；不得 (MUST NOT) 对其进行就地迁移 (`repo:src/core/ir/schema.ts:1542`)。 |
+| report 3.4 → 3.5 | `repo:src/report/schema.ts:86-88,281,421-424,1029-1030` | Report 消费者必须 (MUST) 接受当前的 `3.5` 契约（包括三个新的 secret-policy error code：`SECRET_ENV_VAR_COLLISION`、`SECRET_CONSENT_REQUIRED`、`SECRET_SYNTAX_REJECTED`、可选的 `GROUNDING_UNRESOLVED` details 分支 (`stepId`) (`reason`)，以及可选的 `GenerateResult.secrets`/`warnings` fields），而不是从 执行计划 版本推断兼容性 (`repo:src/report/schema.ts:86-88,281,421-424,1029-1030`)。 |
+| report 3.5 → 3.6 | `repo:src/report/schema.ts:834,843,857,866` | Report 消费者必须 (MUST) 接受当前的 `3.6` 契约，包括所有四个 completed heal-result 分支新增的可选 `repairTrace` 诊断字段，而不是从 执行计划 版本推断兼容性。该字段投影每个案例的 Stage 1/2/3 尝试与结果历史（issue #383 / SPEC-9 至 SPEC-12）。admission-denied 阶段不会添加 `repairTrace` 条目，仅通过 `stopReason: "attempt-limit" \| "deadline"` 体现；被中断（interrupted）的工作完全不会产生 completed 结果（报告为 `skipped`），因此既没有 `repairTrace` 条目，也没有 `stopReason` (`repo:src/report/schema.ts:834,843,857,866`)。 |
 
 ## 兼容性策略 {#compatibility-policy}
 
-工件版本的接受必须（MUST）遵循 [Ambercast 计划规范](/ambercast/zh-cn/spec/overview/#compatibility)，而非凭借发布版本号的直觉。模式版本变更可以（MAY）在次要版本中要求重新生成，因为计划是派生工件。[src/core/ir/schema.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L45) 
+产物版本的接受必须 (MUST) 遵循 [Ambercast 执行计划规范](/ambercast/zh-cn/spec/overview/#compatibility)，而非凭借发布版本号的直觉。模式版本变更可以 (MAY) 在次要版本中要求重新生成，因为执行计划是派生产物 (`repo:src/core/ir/schema.ts:46-62`)。
 
 ## 设计理由 {#rationale}
 
-变更日志在一个规范位置记录了兼容性变更及其重新生成后果，因此消费者无需从软件包版本控制中推断工件兼容性。
+变更日志在一个规范位置记录了兼容性变更及其重新生成后果，因此消费者无需从软件包版本控制中推断产物兼容性。
 
-一个被否决的备选方案是仅跟踪软件包发布；该方案之所以被否决，是因为生成者契约指纹的变更可能会在不改变 Plan 模式版本的情况下使计划过时。[CHANGELOG.md:8](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/CHANGELOG.md#L8) [src/core/ir/schema.ts:45](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/schema.ts#L45)
+被否决的备选方案是仅跟踪软件包发布。生成者契约指纹的变更，可能在执行计划的模式版本不变时使执行计划过期，所以该方案被否决 (`repo:CHANGELOG.md:219`) (`repo:src/core/ir/schema.ts:46-62`)。
 
 ---
 

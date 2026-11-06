@@ -19,6 +19,6 @@ describe('CON-24 conformance documentation', () => {
     expect(cells[3]).toContain(rationale);
     expect(cells[3]).toContain(reason);
     expect(cells[4]).toContain('`text-equals-self-quote`');
-    expect(cells[5]).toContain('generate.ts:222');
+    expect(cells[5]).toContain('generate.ts:246-254');
   });
 });

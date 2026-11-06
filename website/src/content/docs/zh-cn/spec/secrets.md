@@ -35,7 +35,7 @@ description: "本章定义执行计划如何引用机密、如何授权机密名
 
 汇点策略在运行时解析并规范化来源。`secretSinkOrigins` 中没有所请求机密的配置项时，只允许 `baseUrl`。配置项为空时不允许任何来源，非空配置项则替换这一默认值。
 
-对每个实际的 `fill-secret`，运行流水线必须 (MUST) 在解析其机密之前，立即检查实时页面的来源。浏览器适配器必须 (MUST) 在获取元素之后、填写之前，再次应用该策略，使导航或 DOM 变化无法绕过实时来源的边界 (`src/core/secrets/sink-policy.ts:59-100`) (`src/usecases/run.ts:3033-3040`) (`src/usecases/run.ts:1045-1059,1164-1166`) (`src/adapters/browser/chromium.ts:424,439,443-444`)。
+对每个实际的 `fill-secret`，运行流水线必须 (MUST) 在解析其机密之前，立即检查实时页面的来源。浏览器适配器必须 (MUST) 在获取元素之后、紧接填写之前，再次应用该策略，使导航或 DOM 变化无法绕过实时来源的边界 (`src/core/secrets/sink-policy.ts:59-100`) (`src/usecases/run.ts:3033-3040`) (`src/usecases/run.ts:1045-1059,1164-1166`) (`src/adapters/browser/chromium.ts:424,439,443-444`)。
 
 ## 字面量机密的拒绝 {#literal-secret-rejection}
 

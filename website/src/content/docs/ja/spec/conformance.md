@@ -1,6 +1,6 @@
 ---
 title: "適合性"
-description: "この章は、適合するバリデーターが検査する内容を定める。対象は、JSON Schema の射影、課題コードを持つ意味的な制約、検証の順序である。"
+description: "この章は、適合するバリデーターが検査する、JSON Schema の射影、課題コードを持つ意味的な制約、検証の順序を定める。"
 ---
 
 ## 構造の検証 {#structural-validation}
@@ -24,7 +24,7 @@ JSON Schema の検証だけでは足りない。適合するバリデーター�
 | --- | --- | --- | --- | --- |
 | CON-01 | 計画 | 計画のステップ ID は一意でなければならない（MUST）。 | `duplicate step id: <id>` | `src/core/ir/schema.ts:1547-1558` |
 | CON-02 | 生成されたシークレット名の選択 | 明示された `allowedName` は、ローカルでの解決の前に、プロバイダーのコンテキストで投影された許可リスト内の名前の集合に含まれなければならない（MUST）。 | `secret-allowed-name-not-projected` | `src/usecases/secret-naming.ts:190-239` |
-| CON-03 | 生成された基準 | 各基準の `startAnchor` と `endAnchor` は、既知の `L<n>` 行アンカーを指さなければならない（MUST）。その範囲は、1始まりの UTF-16 列で、有効で、空でも空白のみでもなく、文書順でなければならない。プロバイダーの `citation` は、解決した正規化後のプロンプトの原文の部分文字列と一致しなければならない（MUST）。アンカーや列が不正または範囲外のときは、`citation` ではなく、誤りのある座標（`startAnchor`・`startColumn`・`endAnchor`・`endColumn`）を報告する。再試行のフィードバックが失敗パスだけを運ぶためである。 | `anchor-invalid`, `citation-whitespace-only`, `citation-checksum-mismatch` | `src/usecases/instruction-coverage-policy.ts:407-443` |
+| CON-03 | 生成された基準 | 各基準の `startAnchor` と `endAnchor` は、1始まりの UTF-16 列で、有効かつ空でも空白のみでもなく文書順の範囲を成す、既知の `L<n>` 行アンカーを指さなければならない（MUST）。プロバイダーの `citation` は、解決した正規化後のプロンプトの原文の部分文字列と一致しなければならない（MUST）。アンカーや列が不正または範囲外のときは、`citation` ではなく、誤りのある座標（`startAnchor`・`startColumn`・`endAnchor`・`endColumn`）を報告する。再試行のフィードバックが失敗パスだけを運ぶためである。 | `anchor-invalid`, `citation-whitespace-only`, `citation-checksum-mismatch` | `src/usecases/instruction-coverage-policy.ts:407-443` |
 | CON-04 | 生成された基準 | 基準 ID と解決した座標の範囲は一意でなければならない（MUST）。解決した境界はサロゲートペアを分割してはならない（MUST NOT）。 | `criterion-id-duplicate`, `criterion-range-duplicate`, `anchor-invalid` | `src/usecases/instruction-coverage-policy.ts:407-443` |
 | CON-05 | 生成された AI ステップ | 少なくとも1つの基準は `success` でなければならない（MUST）。success の ID と検証意図の ID は、厳密な全単射をなさなければならない（MUST）。 | `success-criterion-missing`, `intent-id-duplicate`, `intent-id-missing`, `intent-id-unknown`, `intent-id-action` | `src/usecases/instruction-coverage-policy.ts:456-476` |
 | CON-06 | 生成された検証意図 | 終端のアサーションは、サポートされる `TraceAssert` でなければならず（MUST）、`url-matches` であってはならない（MUST NOT）。 | `intent-assertion-unsupported`, `terminal-url-matches-forbidden` | `src/usecases/instruction-coverage-policy.ts:467-472` |

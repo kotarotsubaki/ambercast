@@ -64,7 +64,7 @@
 - [鮮度とダイジェスト](https://kotarotsubaki.github.io/ambercast/ja/spec/freshness/): この章は `inputsDigest` と `planDigest` を定め、計画とグラウンディングが最新かどうかの判定と、そこから導く `check` のステータスを扱う。
 - [正準 JSON](https://kotarotsubaki.github.io/ambercast/ja/spec/canonical-json/): この章は、コンパクトなダイジェスト形式、インデント付きのアーティファクト形式、ストレージ書き込みの原子的な可視性の契約を定める。
 - [計画におけるシークレット](https://kotarotsubaki.github.io/ambercast/ja/spec/secrets/): この章は、計画がシークレットを参照する方法、シークレット名を認可する方法、解決した値の送信先、リテラルのシークレットを拒否する方法を定める。
-- [適合性](https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/): この章は、適合するバリデーターが検査する内容を定める。対象は、JSON Schema の射影、課題コードを持つ意味的な制約、検証の順序である。
+- [適合性](https://kotarotsubaki.github.io/ambercast/ja/spec/conformance/): この章は、適合するバリデーターが検査する、JSON Schema の射影、課題コードを持つ意味的な制約、検証の順序を定める。
 - [仕様変更履歴](https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/): アーティファクトのバージョン受け入れは、リリース番号の直感ではなく、Ambercast 計画仕様に従わなければならない（MUST）。
 
 ## EXPLANATION

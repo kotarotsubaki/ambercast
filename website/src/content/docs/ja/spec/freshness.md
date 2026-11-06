@@ -39,7 +39,7 @@ description: "この章は `inputsDigest` と `planDigest` を定め、計画と
 | CHK-03 | `fresh-without-grounding` | 計画は fresh で、対になるグラウンディングは有効でなく、リポジトリのポリシーが `uncommitted` である。 | pass |
 | CHK-04 | `missing-grounding` | 計画は fresh で、グラウンディングの検査結果が `missing` で、ポリシーがコミット済みのグラウンディングを求める。 | fail |
 | CHK-05 | `invalid-grounding` | 計画は fresh で、グラウンディングの検査結果が `invalid` である（JSON・スキーマ・正準形式のカバレッジの失敗）。 | fail |
-| CHK-06 | `stale-grounding` | 計画は fresh で、グラウンディングの検査結果が `stale` である（別の `planDigest`、または廃止された Grounding の `schemaVersion: 2` か `3`。後者はスキーマ形状の検証より先に調べる）。 | fail |
+| CHK-06 | `stale-grounding` | 計画は fresh で、グラウンディングの検査結果が `stale` である（別の `planDigest`、または廃止されたグラウンディングの `schemaVersion: 2` か `3`。後者はスキーマ形状の検証より先に調べる）。 | fail |
 | CHK-07 | `missing-plan` | 選んだテストに計画のアーティファクトがない。 | fail |
 | CHK-08 | `orphaned-plan` | 対象範囲の計画を逆に対応づけると、存在しないテストのパスになる。 | fail |
 | CHK-09 | `orphaned-grounding` | 対象範囲のグラウンディングのアーティファクトを逆に対応づけると、対応するテストのプロンプトがないパスになる。 | fail |

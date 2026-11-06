@@ -39,7 +39,7 @@ description: "本章定义 `inputsDigest` 和 `planDigest`，它们决定执行�
 | CHK-03 | `fresh-without-grounding` | 执行计划是 fresh，配套的定位缓存无效，且仓库策略为 `uncommitted`。 | pass |
 | CHK-04 | `missing-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `missing`，且策略要求已提交的定位缓存。 | fail |
 | CHK-05 | `invalid-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `invalid`（JSON、模式或规范形式的覆盖范围检查失败）。 | fail |
-| CHK-06 | `stale-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `stale`（`planDigest` 不同，或使用已废弃的 Grounding `schemaVersion: 2` 或 `3`；后者先于模式形状校验检查）。 | fail |
+| CHK-06 | `stale-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `stale`（`planDigest` 不同，或使用已废弃的定位缓存 `schemaVersion: 2` 或 `3`；后者先于模式形状校验检查）。 | fail |
 | CHK-07 | `missing-plan` | 所选测试没有执行计划产物。 | fail |
 | CHK-08 | `orphaned-plan` | 范围内的执行计划反向映射到一个不存在的测试路径。 | fail |
 | CHK-09 | `orphaned-grounding` | 范围内的定位缓存产物反向映射到一个没有对应测试提示词的路径。 | fail |

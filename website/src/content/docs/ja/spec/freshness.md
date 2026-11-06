@@ -40,10 +40,10 @@ description: "この章は `inputsDigest` と `planDigest` を定め、計画と
 | CHK-04 | `missing-grounding` | 計画は fresh で、グラウンディングの検査結果が `missing` で、ポリシーがコミット済みのグラウンディングを求める。 | fail |
 | CHK-05 | `invalid-grounding` | 計画は fresh で、グラウンディングの検査結果が `invalid` である（JSON・スキーマ・正準形式のカバレッジの失敗）。 | fail |
 | CHK-06 | `stale-grounding` | 計画は fresh で、グラウンディングの検査結果が `stale` である（別の `planDigest`、または廃止された Grounding の `schemaVersion: 2` か `3`。後者はスキーマ形状の検証より先に調べる）。 | fail |
-| CHK-07 | `missing-plan` | 選んだテストに計画の成果物がない。 | fail |
+| CHK-07 | `missing-plan` | 選んだテストに計画のアーティファクトがない。 | fail |
 | CHK-08 | `orphaned-plan` | 対象範囲の計画を逆に対応づけると、存在しないテストのパスになる。 | fail |
-| CHK-09 | `orphaned-grounding` | 対象範囲のグラウンディングの成果物を逆に対応づけると、対応するテストのプロンプトがないパスになる。 | fail |
-| CHK-10 | `invalid-artifact-name` | 成果物のパスからテストの識別子を逆算できない。 | fail |
+| CHK-09 | `orphaned-grounding` | 対象範囲のグラウンディングのアーティファクトを逆に対応づけると、対応するテストのプロンプトがないパスになる。 | fail |
+| CHK-10 | `invalid-artifact-name` | アーティファクトのパスからテストの識別子を逆算できない。 | fail |
 | CHK-11 | `listed` | 探索だけの一覧表示では、選んだパスを検査しない。 | skipped |
 | CHK-12 | `skipped` | 中断により、識別情報だけの保留行が残る。 | skipped |
 

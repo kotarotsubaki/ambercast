@@ -35,7 +35,7 @@ JSON Schema の検証だけでは足りない。適合するバリデーター�
 | CON-11 | グラウンディングのカバレッジ | `verificationCoverage` は、すべての success の基準と success の基準だけを、範囲内で互いに異なる終端検証のインデックスに1つずつ対応づけなければならない（MUST）。終端のインデックスはすべて対応づけなければならない（MUST）。 | `verification-coverage-id-missing`, `verification-coverage-id-unknown`, `verification-coverage-id-action`, `verification-coverage-index-duplicate`, `verification-coverage-index-invalid` | `src/usecases/instruction-coverage-policy.ts:605-621` |
 | CON-12 | グラウンディングの終端の証拠 | 終端のアサーションは、`url-matches` であってはならず、実行値の具体化の後でイベントのアサーションと重複してもならない（MUST NOT）。 | `terminal-url-matches-forbidden`, `verification-assertion-repeated` | `src/usecases/instruction-coverage-policy.ts:623-636` |
 | CON-13 | グラウンディングの結合 | グラウンディングは、その `planDigest` が再計算した計画のダイジェストと等しいときだけ受け入れなければならない（MUST）。 | 検査の分類 `stale` | `src/usecases/check-grounding.ts:64` |
-| CON-14 | カバレッジを持つグラウンディングのバイト列 | カバレッジを主張するグラウンディング文書は、正準な成果物のバイト列を使わなければならない（MUST）。 | 検査の分類 `invalid` | `src/usecases/check-grounding.ts:66-72` |
+| CON-14 | カバレッジを持つグラウンディングのバイト列 | カバレッジを主張するグラウンディング文書は、正準なアーティファクトのバイト列を使わなければならない（MUST）。 | 検査の分類 `invalid` | `src/usecases/check-grounding.ts:66-72` |
 | CON-15 | キャッシュした AI トレースのシークレット使用 | すべての `TraceFillSecret.secretRef` は、含む計画の AI ステップがコミットした `secrets[].ref` の集合に属さなければならない（MUST）。違反は整合性の失敗であり、フォールバックしてはならない（MUST NOT）。 | 整合性の失敗 | `src/usecases/run.ts:1356-1360` |
 | CON-16 | ナビゲーション | 計画・キャッシュしたトレース・新しいエージェント実行のナビゲーションはすべて、対象の `baseUrl` に対して解決され、HTTP(S) を使い、対象と同一オリジンのままでなければならない（MUST）。 | 整合性の失敗 | `src/usecases/run.ts:993-1021` |
 | CON-17 | キャッシュした AI トレースのシークレットマーカー | キャッシュした AI トレースの文字列値の子孫は、専用の `TraceFillSecret.secretRef` フィールドを除き、連続した `{{secrets.` マーカーを含んではならない（MUST NOT）。違反は整合性の失敗であり、フォールバックしてはならない（MUST NOT）。 | 整合性の失敗 | `src/usecases/run.ts:1250-1264` |
@@ -52,7 +52,13 @@ CON-23 はファイル選択の間に、ほかのすべての CON 項目より�
 
 ## 検証手順 {#verification-procedure}
 
-コンシューマーは、成果物をまず構造として解析し、[入力ダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)の規則で現在のダイジェストを計算し、再生の前に意味の検査を適用しなければならない（MUST）。グラウンディングの検証に失敗したら、キャッシュした再生を認可してはならない（MUST NOT）（`src/core/ir/schema.ts:1541,1753`、`src/usecases/run.ts:820-851`、`src/core/ir/digest.ts:170-175`）。
+コンシューマーは、次の順に処理しなければならない（MUST）。
+
+1. アーティファクトを構造として解析する。
+2. [入力ダイジェスト](/ambercast/ja/spec/freshness/#inputs-digest)の規則で現在のダイジェストを計算する。
+3. 再生の前に意味の検査を適用する。
+
+グラウンディングの検証に失敗したら、キャッシュした再生を認可してはならない（MUST NOT）（`src/core/ir/schema.ts:1541,1753`、`src/usecases/run.ts:820-851`、`src/core/ir/digest.ts:170-175`）。
 
 ## 設計根拠 {#rationale}
 

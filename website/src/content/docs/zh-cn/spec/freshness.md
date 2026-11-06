@@ -13,7 +13,7 @@ description: "本章定义 `inputsDigest` 和 `planDigest`，它们决定执行�
 
 ## 执行计划摘要 {#plan-digest}
 
-`planDigest` 必须 (MUST) 对排除了 `generatorMeta` 的 PlanDocument 计算哈希 (`src/core/ir/digest.ts:153-156`)。定位缓存是否有效，取决于其存储的 `planDigest` 是否与计算出的执行计划摘要完全相等 (`src/core/ir/digest.ts:170-175`)。
+`planDigest` 必须 (MUST) 对排除了 `generatorMeta` 的 PlanDocument 计算哈希 (`src/core/ir/digest.ts:153-156`)。定位缓存是否为最新，取决于其存储的 `planDigest` 是否与计算出的执行计划摘要完全相等 (`src/core/ir/digest.ts:170-175`)。
 
 计算 `planDigest` 分四步 (`src/core/ir/digest.ts:153-156`)。
 
@@ -38,7 +38,7 @@ description: "本章定义 `inputsDigest` 和 `planDigest`，它们决定执行�
 | CHK-02 | `stale` | 执行计划的 JSON、模式、规范形式或已提交的覆盖范围无效，或使用已废弃的 `schemaVersion: 4`，或已提交的 `ElementIntent` 或 `QuotedElementIntent` 的源码范围无效，或 `inputsDigest` 不同。 | fail |
 | CHK-03 | `fresh-without-grounding` | 执行计划是 fresh，配套的定位缓存无效，且仓库策略为 `uncommitted`。 | pass |
 | CHK-04 | `missing-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `missing`，且策略要求已提交的定位缓存。 | fail |
-| CHK-05 | `invalid-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `invalid`（JSON、模式或规范形式的覆盖范围检查失败）。 | fail |
+| CHK-05 | `invalid-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `invalid`（JSON 或模式的检查失败，或规范形式的覆盖范围检查失败）。 | fail |
 | CHK-06 | `stale-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `stale`（`planDigest` 不同，或使用已废弃的定位缓存 `schemaVersion: 2` 或 `3`；后者先于模式形状校验检查）。 | fail |
 | CHK-07 | `missing-plan` | 所选测试没有执行计划产物。 | fail |
 | CHK-08 | `orphaned-plan` | 范围内的执行计划反向映射到一个不存在的测试路径。 | fail |

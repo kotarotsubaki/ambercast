@@ -3774,7 +3774,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/
 
 ## 执行计划摘要 {#plan-digest}
 
-`planDigest` 必须 (MUST) 对排除了 `generatorMeta` 的 PlanDocument 计算哈希 (`src/core/ir/digest.ts:153-156`)。定位缓存是否有效，取决于其存储的 `planDigest` 是否与计算出的执行计划摘要完全相等 (`src/core/ir/digest.ts:170-175`)。
+`planDigest` 必须 (MUST) 对排除了 `generatorMeta` 的 PlanDocument 计算哈希 (`src/core/ir/digest.ts:153-156`)。定位缓存是否为最新，取决于其存储的 `planDigest` 是否与计算出的执行计划摘要完全相等 (`src/core/ir/digest.ts:170-175`)。
 
 计算 `planDigest` 分四步 (`src/core/ir/digest.ts:153-156`)。
 
@@ -3799,7 +3799,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/freshness/
 | CHK-02 | `stale` | 执行计划的 JSON、模式、规范形式或已提交的覆盖范围无效，或使用已废弃的 `schemaVersion: 4`，或已提交的 `ElementIntent` 或 `QuotedElementIntent` 的源码范围无效，或 `inputsDigest` 不同。 | fail |
 | CHK-03 | `fresh-without-grounding` | 执行计划是 fresh，配套的定位缓存无效，且仓库策略为 `uncommitted`。 | pass |
 | CHK-04 | `missing-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `missing`，且策略要求已提交的定位缓存。 | fail |
-| CHK-05 | `invalid-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `invalid`（JSON、模式或规范形式的覆盖范围检查失败）。 | fail |
+| CHK-05 | `invalid-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `invalid`（JSON 或模式的检查失败，或规范形式的覆盖范围检查失败）。 | fail |
 | CHK-06 | `stale-grounding` | 执行计划是 fresh，定位缓存的检查结果为 `stale`（`planDigest` 不同，或使用已废弃的定位缓存 `schemaVersion: 2` 或 `3`；后者先于模式形状校验检查）。 | fail |
 | CHK-07 | `missing-plan` | 所选测试没有执行计划产物。 | fail |
 | CHK-08 | `orphaned-plan` | 范围内的执行计划反向映射到一个不存在的测试路径。 | fail |
@@ -3932,7 +3932,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/secrets/
 | SEC-09 | 诊断与可报告的错误 | 运行流水线必须 (MUST) 在诊断或报告序列化之前，对 JSON 字符串和对象键做脱敏。 | `src/usecases/run.ts:1829-1870,2081-2110` |
 | SEC-10 | 送往 AI 的无障碍证据 | 发送给 AI 提供方的无障碍证据，必须 (MUST) 对字符串值和对象键中的已解析值做脱敏；截图字节不得 (MUST NOT) 越过这一边界。 | `src/usecases/run.ts:2466-2485,2818-2828` |
 | SEC-11 | 截图持久化 | 如果已解析机密的检测在无障碍捕获中发现了值，或解析后的捕获无法检查，或检测失败，则不得 (MUST NOT) 保留截图。 | `src/usecases/run.ts:3318-3331,3396-3399` |
-| SEC-12 | AI 追踪中的机密标记 | 缓存的 AI 追踪中，除专用的 `TraceFillSecret.secretRef` 字段外，每个字符串值的后代都不得 (MUST NOT) 含有连续的 `{{secrets.` 标记。违反即完整性失败，并且不得 (MUST NOT) 回退到提供方执行。 | `src/usecases/run.ts:1250-1264` |
+| SEC-12 | AI 追踪中的机密标记 | 缓存的 AI 追踪中，除专用的 `TraceFillSecret.secretRef` 字段外，每个取字符串值的后代节点都不得 (MUST NOT) 含有连续的 `{{secrets.` 标记。违反即完整性失败，并且不得 (MUST NOT) 回退到提供方执行。 | `src/usecases/run.ts:1250-1264` |
 | SEC-13 | 缓存 AI 追踪中具体化的机密 | 回放之前，流水线必须 (MUST) 解析已存储追踪的事件和验证列表中的每个 `fill-secret` 引用，这些引用须由所属执行计划的 AI 步骤列出。得到的值与当前用例中已解析的值合并。然后必须 (MUST) 扫描追踪中的每个值，但固定词汇 `type`、`check`、`target.strategy`、`key` 和 `secretRef` 除外。与任何非空的已解析机密完全匹配，或在该机密至少有 3 个 UTF-16 码元时子串匹配，都是完整性失败，并且不得 (MUST NOT) 回退到提供方执行。 | `src/usecases/run.ts:1351-1384`; `src/usecases/run.ts:1265-1274,1545-1566`; `src/usecases/run.ts:2680-2684,2719-2722` |
 | SEC-14 | AI `fill.value` 中的凭据字面量 | 浏览器执行之前，已存储追踪和新的代理式 `fill.value` 必须 (MUST) 无条件拒绝 `sk-`、`ghp_` 和 `AKIA` 检测器。只有去掉已捕获的当前用例值后不再匹配任何检测器时，才允许高熵匹配；这一例外不适用于前缀检测器。违反即完整性失败。已存储追踪的校验不得 (MUST NOT) 回退，新的代理式执行不得 (MUST NOT) 到达浏览器执行或日志持久化。 | `src/usecases/run.ts:1295-1302`; `src/usecases/run.ts:1647-1680`; `src/usecases/run.ts:1710-1713,2343`; `src/usecases/run.ts:2680-2684,2719-2722` |
 | SEC-15 | 提供方边界上已捕获的运行值 | 没有 `verificationCoverage` 的旧版已存储追踪，在任何非固定词汇的值中，不得 (MUST NOT) 含有当前用例中已捕获的非空值，未解析的 `{{run.name}}` 占位符除外；按子串匹配。新的代理式导航 URL、`fill.value` 以及文本和断言模式，不得 (MUST NOT) 与当前用例中已捕获的值完全相等。已存储追踪的违规，在浏览器回放之前或提供方收到 `priorTrace` 之前失败；新执行的违规，在浏览器执行和持久化之前失败。使用方必须 (MUST) 使用已授权的 `RunRef` 插值，而不是把已捕获的值具体化。 | `src/usecases/run.ts:1590-1622`; `src/usecases/run.ts:1275-1281`; `src/usecases/run.ts:1704-1733`; `src/usecases/run.ts:2680-2684,2702` |
@@ -3990,7 +3990,7 @@ Ambercast 的发布流水线必须 (MUST) 从 Zod 运行时模式派生 JSON Sch
 | CON-14 | 带覆盖信息的定位缓存字节 | 声称带有覆盖信息的定位缓存文档必须 (MUST) 使用规范的产物字节。 | 检查分类 `invalid` | `src/usecases/check-grounding.ts:66-72` |
 | CON-15 | 缓存 AI 追踪中的机密使用 | 每个 `TraceFillSecret.secretRef` 必须 (MUST) 属于所属执行计划 AI 步骤已提交的 `secrets[].ref` 集合。违反即完整性失败，且不得 (MUST NOT) 回退。 | 完整性失败 | `src/usecases/run.ts:1356-1360` |
 | CON-16 | 导航 | 每个执行计划导航、缓存追踪导航和新的代理式导航，都必须 (MUST) 相对目标的 `baseUrl` 解析，使用 HTTP(S)，并保持与目标同源。 | 完整性失败 | `src/usecases/run.ts:993-1021` |
-| CON-17 | 缓存 AI 追踪中的机密标记 | 缓存的 AI 追踪中，除专用的 `TraceFillSecret.secretRef` 字段外，每个字符串值的后代都不得 (MUST NOT) 含有连续的 `{{secrets.` 标记。违反即完整性失败，且不得 (MUST NOT) 回退。 | 完整性失败 | `src/usecases/run.ts:1250-1264` |
+| CON-17 | 缓存 AI 追踪中的机密标记 | 缓存的 AI 追踪中，除专用的 `TraceFillSecret.secretRef` 字段外，每个取字符串值的后代节点都不得 (MUST NOT) 含有连续的 `{{secrets.` 标记。违反即完整性失败，且不得 (MUST NOT) 回退。 | 完整性失败 | `src/usecases/run.ts:1250-1264` |
 | CON-18 | 缓存 AI 追踪的 `RunRef` | `RunRef` 必须 (MUST) 格式正确，只指向在所属 AI 步骤之前声明的捕获变量，并且在当前用例中有可用的值。格式错误、未授权或不可用的引用都是完整性失败，且不得 (MUST NOT) 回退。 | 完整性失败 | `src/usecases/run.ts:917-935`; `src/usecases/run.ts:4334-4336` |
 | CON-19 | 缓存 AI 追踪中具体化的机密 | 回放之前，解析追踪的事件和验证列表中、由所属执行计划 AI 步骤列出的每个 `fill-secret` 引用。连同当前用例的已解析值，扫描所有值，但固定词汇 `type`、`check`、`target`、`timeoutMs`、`element.strategy`、`key` 和 `secretRef` 除外。非空的已解析机密，完全匹配即被禁止；在其至少有 3 个 UTF-16 码元时，子串匹配也被禁止。 | 完整性失败; 不得 (MUST NOT) 回退 | `src/usecases/run.ts:1351-1384`; `src/usecases/run.ts:1265-1274,1545-1566`; `src/usecases/run.ts:2680-2684,2719-2722` |
 | CON-20 | 已存储追踪与新的 AI `fill.value` 中的凭据字面量 | 已存储追踪和新的代理式动作必须 (MUST) 无条件拒绝以 `sk-`、`ghp_` 和 `AKIA` 开头的填写值。高熵的填写值，只有在去掉已捕获的当前用例值后，剩余文本不匹配任何检测器时才被接受。已存储追踪的失败不得 (MUST NOT) 回退。新执行的失败发生在浏览器执行或日志持久化之前。 | 完整性失败 | `src/usecases/run.ts:1295-1302`; `src/usecases/run.ts:1647-1680`; `src/usecases/run.ts:1710-1713,2343`; `src/usecases/run.ts:2680-2684,2719-2722` |

@@ -7,7 +7,7 @@ description: "この章は、計画がシークレットを参照する方法、
 
 計画（plan）は、シークレットの値を [値型](/ambercast/ja/spec/value-types/#shared-types) の `SecretRef` だけで表さなければならない（MUST）。`InterpolatableText` では、連続した `{{secrets.` という補間マーカーを禁止する（`src/core/ir/schema.ts:31-33`、`src/core/ir/schema.ts:37,193`）。
 
-コミット済みの `fill-secret` ステップは、`id`、`target: TargetName`、`kind`、`action`、`intent: ElementIntent`、`secretRef: SecretRef` だけを含まなければならない（MUST）。解決した `element: ElementRef` は、グラウンディングトレースの `TraceFillSecret` エントリにだけ記録される。コミット済みの AI ステップが持つ任意の `secrets` 配列は、`AiStepSecretUse` のエントリを含み、各エントリは `{ "ref": SecretRef }` だけである。どちらのコミット済み形式にも、プロバイダーの命名データ、引用データ、プロンプト由来の出所情報は含まれない（`src/core/ir/schema.ts:561,576,693-698`、`src/core/ir/schema.ts:572,1299-1302`、`src/core/ir/schema.ts:876-884`、`src/core/ir/schema.ts:682-698`）。
+コミット済みの `fill-secret` ステップは、`id`、`target: TargetName`、`kind`、`action`、`intent: ElementIntent`、`secretRef: SecretRef` だけを含まなければならない（MUST）。解決した `element: ElementRef` は、グラウンディングトレースの `TraceFillSecret` エントリにだけ記録される。コミット済みの AI ステップが持つ任意の `secrets` 配列は、`AiStepSecretUse` のエントリを含み、各エントリは `{ "ref": SecretRef }` だけである。どちらのコミット済み形式にも、プロバイダーの命名データと引用データは含まれない。コミット済みの形式が保持するプロンプト由来の出所情報は、`fill-secret` の intent が持つ `description` の `sourceSpan` と、任意の `quote` だけである（`src/core/ir/schema.ts:561,576,693-698`、`src/core/ir/schema.ts:572,1299-1302`、`src/core/ir/schema.ts:876-884`、`src/core/ir/schema.ts:682-698`）。
 
 実行時には、`NAME` のすべての `.` を `_` に置き換えて大文字にした `AMBERCAST_SECRET_<NAME>` だけが、`{{secrets.NAME}}` の解決元になる。解決した値は計画に入ってはならない（MUST NOT）（`src/core/secrets/env-var-name.ts:8-16`、`src/adapters/system/env-secrets-provider.ts:14-34`）。
 

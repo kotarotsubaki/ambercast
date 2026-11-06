@@ -7,7 +7,7 @@ description: "本章定义执行计划如何引用机密、如何授权机密名
 
 执行计划必须 (MUST) 只通过[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的 `SecretRef` 来表示机密值。`InterpolatableText` 禁止出现连续的 `{{secrets.` 插值标记 (`src/core/ir/schema.ts:31-33`) (`src/core/ir/schema.ts:37,193`)。
 
-已提交的 `fill-secret` 步骤必须 (MUST) 恰好包含 `id`、`target: TargetName`、`kind`、`action`、`intent: ElementIntent` 和 `secretRef: SecretRef`；解析得到的 `element: ElementRef` 只记录在定位缓存追踪的 `TraceFillSecret` 条目中。已提交的 AI 步骤中，可选的 `secrets` 数组包含 `AiStepSecretUse` 条目，每个条目恰好是 `{ "ref": SecretRef }`。两种已提交形式都不包含提供方命名数据、引用数据或提示词来源信息 (`src/core/ir/schema.ts:561,576,693-698`) (`src/core/ir/schema.ts:572,1299-1302`) (`src/core/ir/schema.ts:876-884`) (`src/core/ir/schema.ts:682-698`)。
+已提交的 `fill-secret` 步骤必须 (MUST) 恰好包含 `id`、`target: TargetName`、`kind`、`action`、`intent: ElementIntent` 和 `secretRef: SecretRef`；解析得到的 `element: ElementRef` 只记录在定位缓存追踪的 `TraceFillSecret` 条目中。已提交的 AI 步骤中，可选的 `secrets` 数组包含 `AiStepSecretUse` 条目，每个条目恰好是 `{ "ref": SecretRef }`。两种已提交形式都不包含提供方命名数据和引用数据。已提交形式保留的提示词来源信息，只有 `fill-secret` 的 intent 中 `description` 的 `sourceSpan` 以及可选的 `quote` (`src/core/ir/schema.ts:561,576,693-698`) (`src/core/ir/schema.ts:572,1299-1302`) (`src/core/ir/schema.ts:876-884`) (`src/core/ir/schema.ts:682-698`)。
 
 运行时，`{{secrets.NAME}}` 只通过 `AMBERCAST_SECRET_<NAME>` 解析，其中 `NAME` 里的每个 `.` 都先替换为 `_` 并转成大写。解析出的值不得 (MUST NOT) 进入执行计划 (`src/core/secrets/env-var-name.ts:8-16`) (`src/adapters/system/env-secrets-provider.ts:14-34`)。
 

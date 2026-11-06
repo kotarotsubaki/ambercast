@@ -1,28 +1,37 @@
 ---
 title: "正準 JSON"
-description: "ダイジェスト入力は、トークン間の空白を含まず、UTF-8 でエンコードされたコンパクトな RFC 8785 互換 JSON を使用しなければならない（MUST）。"
+description: "この章は、コンパクトなダイジェスト形式、インデント付きの成果物形式、ストレージ書き込みの原子的な可視性の契約を定める。"
 ---
 
 ## ダイジェスト形式 {#digest-form}
 
-ダイジェスト入力は、トークン間の空白を含まず、UTF-8 でエンコードされたコンパクトな RFC 8785 互換 JSON を使用しなければならない（MUST）。 [src/core/ir/canonical-json.ts:172](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L172) オブジェクトのキーは UTF-16 順でソートしなければならない（MUST）。 [src/core/ir/canonical-json.ts:147](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L147) 非有限数および孤立した UTF-16 サロゲートは拒絶しなければならない（MUST）。 [src/core/ir/canonical-json.ts:9](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L9) [src/core/ir/canonical-json.ts:20](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L20)
+ダイジェストの入力には、トークン間に空白を置かず UTF-8 で符号化した、コンパクトな RFC 8785 互換の JSON を使わなければならない（MUST）（`src/core/ir/canonical-json.ts:173-182`）。オブジェクトのキーは UTF-16 の順に並べなければならない（MUST）（`src/core/ir/canonical-json.ts:153`）。有限でない数と、対になっていない UTF-16 サロゲートは拒否しなければならない（MUST）（`src/core/ir/canonical-json.ts:100-101`、`src/core/ir/canonical-json.ts:20`）。
 
-JCS の適用は再帰的である。文字列は孤立したサロゲートを拒絶した後に JSON エスケープされ、有限数は ECMAScript の数値レンダリングを使用し、ブール値は `true`/`false` となり、null は `null` となり、配列は順序を保持し、オブジェクトはキーをソートし、undefined、bigint、function、symbol、およびプレーンでないオブジェクトは拒絶される。 [src/core/ir/canonical-json.ts:55](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L55), [src/core/ir/canonical-json.ts:92](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L92), [src/core/ir/canonical-json.ts:112](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L112), [src/core/ir/canonical-json.ts:130](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L130) JavaScript のオブジェクト同一性や整形テキストではなく、そのコンパクトなテキストの UTF-8 バイト列がダイジェストのプリイメージである。 [src/core/ir/canonical-json.ts:172](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L172)
+JCS は再帰的に適用する（`src/core/ir/canonical-json.ts:91-128`、`src/core/ir/canonical-json.ts:130-145`、`src/core/ir/canonical-json.ts:147-170`）。
 
-## アーティファクト形式 {#artifact-form}
+- 文字列は、対になっていないサロゲートを拒否したうえで JSON としてエスケープする。
+- 有限の数は ECMAScript の数値表記を使う。
+- 真偽値は `true` と `false`、null は `null` と書く。
+- 配列は順序を保つ。
+- オブジェクトはキーを並べ替える。
+- undefined・bigint・function・symbol・プレーンでないオブジェクトは拒否する。
 
-コミットされるアーティファクトは、正準アーティファクト形式を使用しなければならない（MUST）。すなわち、ダイジェスト形式と同じキー順序およびスカラーレンダリング、2 スペースのインデント、ならびに末尾の改行である。 [src/core/ir/canonical-json.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L186) 生成者は、整形された JSON バイト列をダイジェストのプリイメージとして使用してはならない（MUST NOT）。 [src/core/ir/canonical-json.ts:23](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L23)
+ダイジェストの原像は、このコンパクトなテキストの UTF-8 バイト列である。JavaScript のオブジェクトの同一性や整形したテキストは原像にならない（`src/core/ir/canonical-json.ts:181-182`）。
+
+## 成果物形式 {#artifact-form}
+
+コミットする成果物は、正準な成果物形式を使わなければならない（MUST）。この形式は、キーの順序と値の表記をダイジェスト形式と同じにし、インデントを半角スペース2つ、末尾を改行1つにしたものである（`src/core/ir/canonical-json.ts:190-196`）。プロデューサーは、整形した JSON のバイト列をダイジェストの原像に使ってはならない（MUST NOT）（`src/core/ir/canonical-json.ts:23`）。
 
 ## 永続化 {#persistence}
 
-ストレージへの書き込みはアトミックな可視性を持たなければならない（MUST）。読み取り側は完全な古いファイルまたは完全な新しいファイルを参照し、部分的な書き込みを参照することは決してない。 [src/ports/storage.ts:89](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L89) 呼び出し側は、中断された書き込みの後に一覧表示された場合、予約された `.ambercast-tmp-` ステージング名を無視しなければならない（MUST）。 [src/ports/storage.ts:56](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L56)
+ストレージへの書き込みは、原子的な可視性を持たなければならない（MUST）。読み手には、古いファイル全体か新しいファイル全体のどちらかが見え、書きかけの内容は見えない（`src/ports/storage.ts:178-182`）。中断した書き込みの後に予約済みの `.ambercast-tmp-` で始まるステージング名が一覧に出たとき、呼び出し側はそれを無視しなければならない（MUST）（`src/ports/storage.ts:111-114`）。
 
-アトミックなライターは、ファイルシステムアダプタで使用される予約済みの一時プレフィックスおよびリネーム戦略を使用してもよい（MAY）が、そのステージング機構は移植可能な適合性要件ではない。すべての `StorageAdapter.writeText` 実装は、上記のアトミックな可視性の規約を提供しなければならない（MUST）。 [src/ports/storage.ts:56](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L56), [src/ports/storage.ts:89](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/ports/storage.ts#L89) ディスク上の形式は 2 スペースでインデントされ、ダイジェスト形式と同じスカラーレンダリングでソートされ、1 つの改行で終わる。 [src/core/ir/canonical-json.ts:186](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L186)
+原子的な書き込みでは、ファイルシステムアダプターが使う予約済みの一時ファイル接頭辞と rename の方式を使ってもよい（MAY）。ただし、このステージングの仕組みは移植性のある適合要件ではない。`StorageAdapter.writeText` の実装は、上記の原子的な可視性の契約をすべて満たさなければならない（MUST）（`src/ports/storage.ts:111-114`、`src/ports/storage.ts:178-182`）。ディスク上の形式は、インデントが半角スペース2つで、値の表記と並び順はダイジェスト形式と同じであり、末尾は改行1つである（`src/core/ir/canonical-json.ts:190-196`）。
 
 ## 設計根拠 {#rationale}
 
-課題は、人間がレビュー可能なアーティファクトを維持しつつ、偶発的な JSON フォーマットからハッシュを独立させることである。 
+問題は、偶然の JSON 書式にハッシュを左右されないようにしながら、人が読める成果物を保つことである。
 
-選定された単一の値ウォーカーは、コンパクトなダイジェスト出力と整形されたアーティファクト出力を持つため、両者の間で順序付けやスカラーセマンティクスが乖離することはない。 
+採用した案は、1つの値の走査処理からコンパクトなダイジェストと整形した成果物の両方を出力する。このため、並び順と値の意味が両者の間でずれることはない。
 
-却下された代替案の 1 つは、ハッシュ化に整形バイト列を使用するものであったが、空白に意味が生じてしまうため却下された。もう 1 つは順序付けを各呼び出し側に委譲するものであったが、同等な値であっても再現性のないダイジェストになってしまうため却下された。 
+却下した案は2つある。1つは整形したバイト列でハッシュを取る案で、空白が意味を持ってしまうため却下した。もう1つは並び順を各呼び出し側に任せる案で、同じ値でもダイジェストが再現しなくなるため却下した。

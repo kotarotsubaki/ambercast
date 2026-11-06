@@ -63,7 +63,7 @@ export const enLanding = {
   hero: {
     eyebrow: 'CAST ONCE · REPLAY · 0 AI CALLS',
     title: 'Prompt-native E2E testing.',
-    summary: 'Cast once. Keep the intent intact. Write the test as a Markdown prompt, generate a plan once, replay it deterministically: 0 AI calls whenever the cache hits.',
+    summary: 'Cast once. Keep the intent intact. Write the test as a Markdown prompt and generate a plan once. ambercast replays it deterministically, with 0 AI calls whenever the cache hits.',
     primaryCta: 'Get started',
     installCommand: 'npm install -D ambercast',
   },
@@ -81,10 +81,10 @@ export const enLanding = {
   },
   commands: {
     eyebrow: 'NO. 002 · COMMANDS',
-    heading: 'Three commands. One of them calls AI.',
+    heading: 'Three commands. Two of them call AI by default.',
     rows: [
       { number: '01', command: 'ambercast generate', description: 'Reads the prompt, writes plan and grounding as plain JSON. Review them like a lockfile.', status: 'AI · 1 call' },
-      { number: '02', command: 'ambercast run', description: 'Replays the plan in a real browser. A grounding miss fails closed; --resolve opts into one AI-assisted step.', status: 'REPLAY · 0 AI CALLS' },
+      { number: '02', command: 'ambercast run', description: 'Replays the plan in a real browser. A grounding miss fails closed; --resolve opts into AI resolution of misses.', status: 'REPLAY · 0 AI CALLS' },
       { number: '03', command: 'ambercast heal', description: 'When the UI drifts, re-resolves, repairs or regenerates only the affected steps, and asks before writing.', status: 'AI · ASKS FIRST' },
     ],
   },

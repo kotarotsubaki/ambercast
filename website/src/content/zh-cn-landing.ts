@@ -6,7 +6,7 @@ export const zhCnLanding = {
   hero: {
     eyebrow: 'CAST ONCE · REPLAY · 0 AI CALLS',
     title: siteDescriptions['zh-cn'],
-    summary: '铸造一次，意图完整保留。用 Markdown 提示词编写测试，只生成一次执行计划，然后确定性地回放：只要缓存命中，AI 调用为 0。',
+    summary: '铸造一次，意图完整保留。用 Markdown 提示词编写测试，只生成一次执行计划。ambercast 确定性地回放执行计划，只要缓存命中，AI 调用为 0。',
     primaryCta: '快速开始',
     installCommand: 'npm install -D ambercast',
   },
@@ -24,10 +24,10 @@ export const zhCnLanding = {
   },
   commands: {
     eyebrow: 'NO. 002 · COMMANDS',
-    heading: '三个命令。只有一个会调用 AI。',
+    heading: '三个命令，其中两个默认会调用 AI。',
     rows: [
       { number: '01', command: 'ambercast generate', description: '读取提示词，把执行计划和定位缓存写成纯 JSON。像锁文件一样复核它们。', status: 'AI · 1 call' },
-      { number: '02', command: 'ambercast run', description: '在真实浏览器中回放执行计划。grounding 未命中会失败关闭；--resolve 可显式启用一个步骤的 AI 辅助。', status: 'REPLAY · 0 AI CALLS' },
+      { number: '02', command: 'ambercast run', description: '在真实浏览器中回放执行计划。定位缓存未命中时直接失败；加上 --resolve 才会对未命中的步骤启用 AI 辅助。', status: 'REPLAY · 0 AI CALLS' },
       { number: '03', command: 'ambercast heal', description: '当 UI 发生漂移时，只重新解析、修复或重新生成受影响的步骤，并在写入前请求确认。', status: 'AI · ASKS FIRST' },
     ],
   },

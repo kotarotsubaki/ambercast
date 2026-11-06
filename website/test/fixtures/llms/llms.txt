@@ -61,10 +61,10 @@
 - [Value types](https://kotarotsubaki.github.io/ambercast/spec/value-types/): This chapter defines the shared objects and scalar contracts that the other chapters reference by name.
 - [Grounding document](https://kotarotsubaki.github.io/ambercast/spec/grounding-document/): This chapter defines `GroundingDocument`, the committed grounding cache bound to one plan digest, its entries and trace records, and when an implementation writes or keeps an entry.
 - [Element fingerprint](https://kotarotsubaki.github.io/ambercast/spec/fingerprint/): This chapter defines the element fingerprint that grounding stores for an element step, how the fingerprint is computed, and how a stored fingerprint is matched.
-- [Freshness and digests](https://kotarotsubaki.github.io/ambercast/spec/freshness/): `inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`.
-- [Canonical JSON](https://kotarotsubaki.github.io/ambercast/spec/canonical-json/): Digest inputs MUST use compact RFC 8785-compatible JSON encoded as UTF-8, with no inter-token whitespace.
-- [Secrets in plans](https://kotarotsubaki.github.io/ambercast/spec/secrets/): Plans MUST represent secret values only with Value types `SecretRef`; the contiguous `{{secrets.
-- [Conformance](https://kotarotsubaki.github.io/ambercast/spec/conformance/): Ambercast's publication pipeline MUST derive Plan, Grounding, configuration, and report JSON Schema from the Zod runtime schemas, not maintain a hand-written parallel schema.
+- [Freshness and digests](https://kotarotsubaki.github.io/ambercast/spec/freshness/): This chapter defines `inputsDigest` and `planDigest`, which decide whether a plan and its grounding are current, and the `check` statuses derived from them.
+- [Canonical JSON](https://kotarotsubaki.github.io/ambercast/spec/canonical-json/): This chapter defines the compact digest form, the indented artifact form, and the atomic-visibility contract for storage writes.
+- [Secrets in plans](https://kotarotsubaki.github.io/ambercast/spec/secrets/): This chapter defines how plans refer to secrets, how secret names are authorized, where resolved values can be sent, and how literal secrets are rejected.
+- [Conformance](https://kotarotsubaki.github.io/ambercast/spec/conformance/): This chapter defines what a conforming validator checks: the JSON Schema projections, the semantic constraints with their issue codes, and the verification order.
 - [Specification changelog](https://kotarotsubaki.github.io/ambercast/spec/changelog/): Artifact version acceptance MUST follow Ambercast Plan Specification, not release-number intuition.
 
 ## EXPLANATION

@@ -7,7 +7,9 @@ permissions: {}
 
 jobs:
   agent-hooks:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is Ubuntu 26.04, which has no setup-python 3.9
+    # build, and AGENTS.md requires a 3.9 leg for the hook suites.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.9", "3.x"]

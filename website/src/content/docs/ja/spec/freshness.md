@@ -1,47 +1,66 @@
 ---
 title: "鮮度とダイジェスト"
-description: "`inputsDigest` は、正確にこれら5つのメンバー（`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint`、および `targetDefinitions`）を持つ新規に構築されたオブジェクトの正規JSONに対する、小文字のSHA-256でなければならない（MUST）。"
+description: "この章は `inputsDigest` と `planDigest` を定め、計画とグラウンディングが最新かどうかの判定と、そこから導く `check` のステータスを扱う。"
 ---
 
 ## 入力ダイジェスト {#inputs-digest}
 
-`inputsDigest` は、正確にこれら5つのメンバー（`normalizedTestMd`、`schemaVersion`、`generatorPromptTemplateFingerprint`、`planProducerBundleFingerprint`、および `targetDefinitions`）を持つ新規に構築されたオブジェクトの正規JSONに対する、小文字のSHA-256でなければならない（MUST）。正規JSONはオブジェクトのキーをソートするため、メンバーの挿入順序には意味がない。[src/core/ir/digest.ts:93](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L93) [src/core/ir/digest.ts:105](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L105) [src/core/ir/canonical-json.ts:147](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/canonical-json.ts#L147) 入力オブジェクト自体を直接ハッシュ化してはならない（MUST NOT）。[src/core/ir/digest.ts:97](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L97) プロデューサバンドルのフィンガープリントは計画セマンティックなプロデューサ設定を独立して表すため、テンプレートのバイト列のみでは不十分である。[src/core/ir/digest.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L70)
+`inputsDigest` は、新規に構築したオブジェクトの正規 JSON の小文字 SHA-256 でなければならない（MUST）。このオブジェクトのメンバーは `normalizedTestMd`・`schemaVersion`・`generatorPromptTemplateFingerprint`・`planProducerBundleFingerprint`・`targetDefinitions` の5つだけである（`src/core/ir/digest.ts:130-139`）。
 
-## プランダイジェスト {#plan-digest}
+`targetDefinitions` には、`Plan.targets` が参照するターゲット定義だけを名前順で射影する（`src/core/target/resolve.ts:12-43`）。参照されないターゲットを変えても、計画（plan）は古くならず、ダイジェストも変わらない。設定の `executor` の値はダイジェストに含めない。
 
-`planDigest` は `generatorMeta` を除く PlanDocument をハッシュ化しなければならない（MUST）。[src/core/ir/digest.ts:118](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L118) グラウンディングの最新性は、格納された `planDigest` と計算されたプランダイジェストとの完全な一致である。[src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+正規 JSON はオブジェクトのキーを並べ替えるため、メンバーの挿入順に意味はない（`src/core/ir/canonical-json.ts:153`）。入力オブジェクトそのものを直接ハッシュしてはならない（MUST NOT）（`src/core/ir/digest.ts:118-125`）。プロデューサーバンドルのフィンガープリントは、計画の意味に関わるプロデューサー設定を独立に表す。そのため、テンプレートのバイト列だけでは足りない（`src/core/ir/digest.ts:95-102`）。
 
-`planDigest` を計算するには、`generatorMeta` を除くすべての Plan フィールドをコピーし、残りのオブジェクトを [正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form) に従って正規化し、その UTF-8 バイト列を SHA-256 でハッシュ化して、そのダイジェストを小文字の16進数でエンコードする。[src/core/ir/digest.ts:128](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L128) 正規化されたプロンプト、スキーマバージョン、テンプレートのフィンガープリント、プロデューサバンドルのフィンガープリント、ターゲット名、またはターゲット定義の変更は、格納された `inputsDigest` をステールにする。[src/core/ir/digest.ts:52](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L52), [src/core/ir/digest.ts:60](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L60), [src/core/ir/digest.ts:68](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L68), [src/core/ir/digest.ts:77](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L77), [src/core/ir/digest.ts:87](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L87)
+## 計画ダイジェスト {#plan-digest}
+
+`planDigest` は、`generatorMeta` を除いた PlanDocument をハッシュしなければならない（MUST）（`src/core/ir/digest.ts:153-156`）。グラウンディングが最新であるとは、保存された `planDigest` と計算した計画ダイジェストが一致することである（`src/core/ir/digest.ts:170-175`）。
+
+`planDigest` は次の4段階で計算する（`src/core/ir/digest.ts:153-156`）。
+
+1. `generatorMeta` を除く計画の全フィールドをコピーする。
+2. 残ったオブジェクトを [正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form) に従って正準化する。
+3. その UTF-8 バイト列を SHA-256 でハッシュする。
+4. ダイジェストを小文字の16進数で表す。
+
+次のどれかが変わると、保存された `inputsDigest` は古くなる。正規化したプロンプト、スキーマバージョン、テンプレートのフィンガープリント、プロデューサーバンドルのフィンガープリント、ターゲット名、ターゲット定義である（`src/core/ir/digest.ts:77,85,93,102,112`）。
 
 ## 鮮度の帰結 {#freshness-consequences}
 
-コンシューマは、格納された `inputsDigest` が現在の値と異なる場合、プランを `stale` とマークしなければならない（MUST）。[src/usecases/check.ts:500](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check.ts#L500) プロデューサバンドルのフィンガープリントは独立した鮮度入力であるため、プロンプトやターゲットのデータが変更されない場合でも、実装の変更によってプランがステールになる可能性がある。[src/core/ir/digest.ts:70](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L70) コンシューマは、`planDigest` が異なる場合、プラン／グラウンディングのペアを未バインドとして扱わなければならない（MUST）。[src/core/ir/digest.ts:145](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/core/ir/digest.ts#L145)
+保存された `inputsDigest` が現在の値と異なるとき、コンシューマーは計画を `stale` と判定しなければならない（MUST）（`src/usecases/check.ts:461-465,535`）。プロデューサーバンドルのフィンガープリントは独立した鮮度の入力である。このため、プロンプトとターゲットのデータは同じでも、実装の変更で計画は古くなりうる（`src/core/ir/digest.ts:95-102`）。
 
-本セクションは、`check` ステータス導出の正準な定義元である。参照ページは、それぞれのローカルな目的のためにその要約を記載し、ここにリンクするのみとしなければならない（MUST）。以下の表は、`check` の結果値に対して規範的である。以下の `missing`、`invalid`、および `stale` はグラウンディング検査の分類であり、レポートの `status` 値ではない。[src/usecases/check-grounding.ts:18](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-grounding.ts#L18) [src/report/schema.ts:525](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/report/schema.ts#L525)
+`planDigest` が異なるとき、コンシューマーは計画とグラウンディングの組を未結合として扱わなければならない（MUST）（`src/core/ir/digest.ts:170-175`）。
 
-| id | `check` ステータス | 導出 | 結果分類 |
+この節は `check` のステータス導出の正本である。リファレンスのページは、それぞれの目的に合わせて要約するだけにとどめ、ここへリンクしなければならない（MUST）。次の表は `check` の結果値について規範となる。表中の `missing`・`invalid`・`stale` はグラウンディング検査の分類であり、レポートの `status` の値ではない（`src/usecases/check-grounding.ts:18`、`src/report/schema.ts:1111-1117`）。
+
+| id | `check` ステータス | 導出 | 結果の分類 |
 | --- | --- | --- | --- |
-| CHK-01 | `fresh` | プランがパース可能で、正規形式であり、有効なコミット済みカバレッジを持ち、その `inputsDigest` が一致し、かつそのコンパニオンが有効である。 | pass |
-| CHK-02 | `stale` | プランの JSON／スキーマ／正規形式、またはコミット済みカバレッジが無効であるか、廃止された `schemaVersion: 4` を使用するか、コミット済み `ElementIntent` / `QuotedElementIntent` の source span が無効であるか、あるいはその `inputsDigest` が異なる。 | fail |
-| CHK-03 | `fresh-without-grounding` | プランが fresh であり、コンパニオンが有効ではなく、リポジトリポリシーが `uncommitted` である。 | pass |
-| CHK-04 | `missing-grounding` | プランが fresh であり、コンパニオン検査が `missing` であり、ポリシーがコミット済みグラウンディングを要求している。 | fail |
-| CHK-05 | `invalid-grounding` | プランが fresh であり、コンパニオン検査が `invalid` である（JSON／スキーマ／正規形式カバレッジの失敗）。 | fail |
-| CHK-06 | `stale-grounding` | プランが fresh であり、コンパニオン検査が `stale` である（別の `planDigest`、またはコンパニオン自身のスキーマ形状検証より先に確認される廃止済みの Grounding `schemaVersion: 2` または `3`）。 | fail |
-| CHK-07 | `missing-plan` | 選択されたテストにプランアーティファクトが存在しない。 | fail |
-| CHK-08 | `orphaned-plan` | スコープ内のプランが、存在しないテストパスへと逆マッピングされる。 | fail |
-| CHK-09 | `orphaned-grounding` | スコープ内のグラウンディングアーティファクトが、対応するテストプロンプトが存在しないパスへと逆マッピングされる。 | fail |
-| CHK-10 | `invalid-artifact-name` | アーティファクトのパスからテスト識別子を逆導出できない。 | fail |
-| CHK-11 | `listed` | ディスカバリのみのリスト表示では、選択されたパスを検査しない。 | skipped |
-| CHK-12 | `skipped` | 中断により、識別情報のみの保留行が残される。 | skipped |
+| CHK-01 | `fresh` | 計画が構文として読め、正準形式で、コミット済みのカバレッジが有効で、`inputsDigest` が一致し、対になるグラウンディングが有効である。 | pass |
+| CHK-02 | `stale` | 計画の JSON・スキーマ・正準形式・コミット済みカバレッジのいずれかが無効、廃止された `schemaVersion: 4` を使う、コミット済みの `ElementIntent` または `QuotedElementIntent` のソーススパンが無効、あるいは `inputsDigest` が異なる。 | fail |
+| CHK-03 | `fresh-without-grounding` | 計画は fresh で、対になるグラウンディングは有効でなく、リポジトリのポリシーが `uncommitted` である。 | pass |
+| CHK-04 | `missing-grounding` | 計画は fresh で、グラウンディングの検査結果が `missing` で、ポリシーがコミット済みのグラウンディングを求める。 | fail |
+| CHK-05 | `invalid-grounding` | 計画は fresh で、グラウンディングの検査結果が `invalid` である（JSON・スキーマ・正準形式のカバレッジの失敗）。 | fail |
+| CHK-06 | `stale-grounding` | 計画は fresh で、グラウンディングの検査結果が `stale` である（別の `planDigest`、または廃止された Grounding の `schemaVersion: 2` か `3`。後者はスキーマ形状の検証より先に調べる）。 | fail |
+| CHK-07 | `missing-plan` | 選んだテストに計画の成果物がない。 | fail |
+| CHK-08 | `orphaned-plan` | 対象範囲の計画を逆に対応づけると、存在しないテストのパスになる。 | fail |
+| CHK-09 | `orphaned-grounding` | 対象範囲のグラウンディングの成果物を逆に対応づけると、対応するテストのプロンプトがないパスになる。 | fail |
+| CHK-10 | `invalid-artifact-name` | 成果物のパスからテストの識別子を逆算できない。 | fail |
+| CHK-11 | `listed` | 探索だけの一覧表示では、選んだパスを検査しない。 | skipped |
+| CHK-12 | `skipped` | 中断により、識別情報だけの保留行が残る。 | skipped |
 
-それ以外は有効かつ最新の Grounding ドキュメントでは、エントリの `intentDigest` の不一致、Plan に存在しない ID、またはアクション種別ではないステップのエントリは、この表の分類を変えない。`run` は自身のステップごとの境界で、そのようなエントリを存在しないものとして扱う。
+それ以外は有効で最新のグラウンディング文書でも、エントリに次のいずれかがあれば、文書単位の分類は変わらない。
 
-`fresh` および `fresh-without-grounding` の行は pass であり、上記で fail と分類されたすべての行は failure の要因となり、`listed` および `skipped` は skipped である。[src/usecases/check-report.ts:71](https://github.com/kotarotsubaki/ambercast/blob/v0.3.1/src/usecases/check-report.ts#L71)
+- `intentDigest` が一致しない。
+- ID が計画にない。
+- アクション種別でないステップのエントリである。
+
+`run` は、そのようなエントリを自分のステップ単位の境界で存在しないものとして扱う。
+
+`fresh` と `fresh-without-grounding` の行は pass である。上の表で fail と分類した行はすべて失敗に数える。`listed` と `skipped` は skipped である（`src/usecases/check-report.ts:72-75`）。
 
 ## 設計根拠 {#rationale}
 
-問題は、導出されたプランが、それを生成した入力およびプロデューサ規約を現在も表しているか否かを判断することである。プロンプトのみの比較では、ジェネレーターのセマンティクスの変更を検知できない。
+問題は、導出した計画が、それを作った入力とプロデューサーの規約を今も表しているかどうかを判定することである。プロンプトだけの比較では、ジェネレーターの意味の変更を検出できない。
 
-採用された閉じた原像には、プロデューサバンドルの来歴と、個別のプラン対グラウンディングのダイジェスト結合が含まれている。これにより、すべての無効化入力が明示的になり、1つのプランに対して1つの最新グラウンディングという対応関係が維持される。
+採用した閉じた原像には、プロデューサーバンドルの来歴と、計画とグラウンディングを結ぶ別のダイジェストを含める。これにより、無効化の入力はすべて明示され、1つの計画には最新のグラウンディングが1つだけ対応する。
 
-却下された代替案の1つは、プロデューサの来歴を省略していた。これは、変更された生成挙動が fresh を装う可能性があるため却下された。別の代替案はタイムスタンプを使用していたが、コンテンツを特定することも決定論的なキャッシュの再利用を可能にすることもないため却下された。 
+却下した案は2つある。1つはプロデューサーの来歴を省く案で、生成の挙動が変わっても fresh に見えてしまうため却下した。もう1つはタイムスタンプを使う案で、内容を特定できず、決定論的なキャッシュの再利用もできないため却下した。

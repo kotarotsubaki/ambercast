@@ -1,20 +1,26 @@
 # Freshness and digests
 
+This chapter defines `inputsDigest` and `planDigest`, which decide whether a plan and its grounding are current, and the `check` statuses derived from them.
+
 ## Inputs digest {#inputs-digest}
 
-`inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`. Only referenced Target definitions from `Plan.targets` are projected into `targetDefinitions`, sorted by name. Changing an unreferenced Target does not stale the plan or change its digest. The config `executor` value is not included in the digest. Member insertion order has no meaning because canonical JSON sorts object keys. [repo:src/core/ir/digest.ts:93] [repo:src/core/ir/digest.ts:105] [repo:src/core/ir/canonical-json.ts:147] The input object itself MUST NOT be hashed directly. [repo:src/core/ir/digest.ts:97] The producer-bundle fingerprint independently represents plan-semantic producer configuration, so template bytes alone are insufficient. [repo:src/core/ir/digest.ts:70]
+`inputsDigest` MUST be lowercase SHA-256 of canonical JSON for a freshly constructed object with exactly these five members: `normalizedTestMd`, `schemaVersion`, `generatorPromptTemplateFingerprint`, `planProducerBundleFingerprint`, and `targetDefinitions`. [repo:src/core/ir/digest.ts:130-139]
+
+Only referenced Target definitions from `Plan.targets` are projected into `targetDefinitions`, sorted by name. [repo:src/core/target/resolve.ts:12-43] Changing an unreferenced Target does not stale the plan or change its digest. The config `executor` value is not included in the digest.
+
+Member insertion order has no meaning because canonical JSON sorts object keys. [repo:src/core/ir/canonical-json.ts:153] The input object itself MUST NOT be hashed directly. [repo:src/core/ir/digest.ts:118-125] The producer-bundle fingerprint independently represents plan-semantic producer configuration, so template bytes alone are insufficient. [repo:src/core/ir/digest.ts:95-102]
 
 ## Plan digest {#plan-digest}
 
-`planDigest` MUST hash the PlanDocument excluding `generatorMeta`. [repo:src/core/ir/digest.ts:118] Grounding currentness is exact equality of its stored `planDigest` and the computed plan digest. [repo:src/core/ir/digest.ts:145]
+`planDigest` MUST hash the PlanDocument excluding `generatorMeta`. [repo:src/core/ir/digest.ts:153-156] Grounding currentness is exact equality of its stored `planDigest` and the computed plan digest. [repo:src/core/ir/digest.ts:170-175]
 
-To calculate `planDigest`, copy all Plan fields except `generatorMeta`, canonicalize the remaining object under [[spec/canonical-json#digest-form]], SHA-256 its UTF-8 bytes, and lowercase-hex encode the digest. [repo:src/core/ir/digest.ts:128] A changed normalized prompt, schema version, template fingerprint, producer bundle fingerprint, target name, or target definition makes the stored `inputsDigest` stale. [repo:src/core/ir/digest.ts:52,60,68,77,87]
+To calculate `planDigest`, copy all Plan fields except `generatorMeta`, canonicalize the remaining object under [[spec/canonical-json#digest-form]], SHA-256 its UTF-8 bytes, and lowercase-hex encode the digest. [repo:src/core/ir/digest.ts:153-156] A changed normalized prompt, schema version, template fingerprint, producer bundle fingerprint, target name, or target definition makes the stored `inputsDigest` stale. [repo:src/core/ir/digest.ts:77,85,93,102,112]
 
 ## Freshness consequences {#freshness-consequences}
 
-A consumer MUST mark a plan `stale` when its stored `inputsDigest` differs from the current value. [repo:src/usecases/check.ts:500] The producer bundle fingerprint is an independent freshness input, so an implementation change can stale plans even when prompt and target data do not change. [repo:src/core/ir/digest.ts:70] A consumer MUST treat a plan/grounding pair as unbound when `planDigest` differs. [repo:src/core/ir/digest.ts:145]
+A consumer MUST mark a plan `stale` when its stored `inputsDigest` differs from the current value. [repo:src/usecases/check.ts:461-465,535] The producer bundle fingerprint is an independent freshness input, so an implementation change can stale plans even when prompt and target data do not change. [repo:src/core/ir/digest.ts:95-102] A consumer MUST treat a plan/grounding pair as unbound when `planDigest` differs. [repo:src/core/ir/digest.ts:170-175]
 
-This section is the canonical owner of `check` status derivation. Reference pages MUST only summarize it for their local purpose and link here. The following table is normative for `check` result values. `missing`, `invalid`, and `stale` below are grounding-inspection classifications, not report `status` values. [repo:src/usecases/check-grounding.ts:18] [repo:src/report/schema.ts:525]
+This section is the canonical owner of `check` status derivation. Reference pages MUST only summarize it for their local purpose and link here. The following table is normative for `check` result values. `missing`, `invalid`, and `stale` below are grounding-inspection classifications, not report `status` values. [repo:src/usecases/check-grounding.ts:18] [repo:src/report/schema.ts:1111-1117]
 
 | id | `check` status | derivation | result classification |
 | --- | --- | --- | --- |
@@ -31,9 +37,15 @@ This section is the canonical owner of `check` status derivation. Reference page
 | CHK-11 | `listed` | Discovery-only listing does not inspect the selected path. | skipped |
 | CHK-12 | `skipped` | Interruption leaves an identity-only pending row. | skipped |
 
-An otherwise valid, current grounding document keeps its document-level classification when an entry has a mismatched `intentDigest`, an ID absent from the Plan, or an entry for a non-action-kind step; `run` treats that entry as absent at its own per-step boundary.
+An otherwise valid, current grounding document keeps its document-level classification when one of its entries has any of these defects:
 
-Rows `fresh` and `fresh-without-grounding` are pass; all rows classified fail above contribute failure; `listed` and `skipped` are skipped. [repo:src/usecases/check-report.ts:71]
+- A mismatched `intentDigest`.
+- An ID absent from the Plan.
+- A step of a non-action kind.
+
+The `run` command treats such an entry as absent at its own per-step boundary.
+
+Rows `fresh` and `fresh-without-grounding` are pass; all rows classified fail above contribute failure; `listed` and `skipped` are skipped. [repo:src/usecases/check-report.ts:72-75]
 
 ## Rationale {#rationale}
 

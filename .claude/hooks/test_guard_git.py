@@ -129,6 +129,114 @@ class EvaluateTest(unittest.TestCase):
         ):
             return guard_git.evaluate(command, {"cwd": str(cwd or self.main)})
 
+    def test_release_branch_commit_and_push_from_input_cwd(self) -> None:
+        """Real repositories on the exact release-please branch allow commit and push from data.cwd so release preparation can use its trusted checkout."""
+        release = self.root / "release"
+        init_repo(release, "release-please--branches--main--components--ambercast")
+        for command in ("git commit -m message", "git push"):
+            with self.subTest(command=command):
+                self.assertIsNone(self.evaluate(command, release))
+
+    def test_release_branch_commit_and_push_in_registered_worktree(self) -> None:
+        """Commit and push with git -C targeting a registered release-please worktree pass so the primary checkout can remain on main."""
+        release = self.root / "release"
+        git(self.main, "worktree", "add", "-q", "-b",
+            "release-please--branches--main--components--ambercast", str(release))
+        for operation in ("commit -m message", "push"):
+            with self.subTest(operation=operation):
+                self.assertIsNone(self.evaluate(f"git -C {release} {operation}"))
+
+    def test_release_branch_lookalikes_are_blocked(self) -> None:
+        """A name close to the release branch has no release PR tracking it, so only the exact name may receive the exception."""
+        for index, branch in enumerate((
+            "release-please--branches--main",
+            "release-please--branches--main--components--ambercast-x",
+            "release-please--branches--main--components--ambercast/x",
+            "release-please--branches--main--components--Ambercast",
+            "RELEASE-PLEASE--branches--main--components--ambercast",
+            "xrelease-please--branches--main--components--ambercast",
+            "release-please--branches--other--components--ambercast",
+            "release-please--branches--main--components--other",
+        )):
+            with self.subTest(branch=branch):
+                repo = self.root / f"lookalike-{index}"
+                init_repo(repo, branch)
+                result = self.evaluate("git commit -m message", repo)
+                self.assertIsNotNone(result)
+                self.assertIn("does not match issues/<N>", result[1])
+
+    def test_release_branch_exception_keeps_main_blocked(self) -> None:
+        """Commit and push on main remain blocked because release preparation grants no direct writes to main."""
+        for command in ("git commit -m message", "git push"):
+            with self.subTest(command=command):
+                result = self.evaluate(command)
+                self.assertIsNotNone(result)
+                self.assertIn("commits/pushes on main", result[1])
+
+    def test_release_branch_exception_keeps_detached_head_blocked(self) -> None:
+        """Detached HEAD commits, including at the release branch commit, remain blocked because commit identity does not grant branch authority."""
+        for index, branch in enumerate((
+            "issues/12", "release-please--branches--main--components--ambercast",
+        )):
+            with self.subTest(branch=branch):
+                repo = self.root / f"detached-{index}"
+                init_repo(repo, branch)
+                git(repo, "checkout", "-q", "--detach", "HEAD")
+                result = self.evaluate("git commit -m message", repo)
+                self.assertIsNotNone(result)
+                self.assertIn("does not match issues/<N>", result[1])
+                self.assertIn("Observed branch: HEAD", result[1])
+
+    def test_release_branch_compound_switch_and_commit_stays_blocked(self) -> None:
+        """Switching to the release branch followed by commit is blocked from main and the release branch because compound commands retain their existing rejection."""
+        release = self.root / "release"
+        branch = "release-please--branches--main--components--ambercast"
+        git(self.main, "worktree", "add", "-q", "-b", branch, str(release))
+        for cwd in (self.main, release):
+            with self.subTest(cwd=cwd):
+                result = self.evaluate(f"git switch {branch} && git commit -m message", cwd)
+                self.assertIsNotNone(result)
+                self.assertIn("branch switching and commit/push", result[1])
+
+    def test_release_branch_complex_command_stays_blocked(self) -> None:
+        """The eval command containing git commit remains blocked on the release branch because the exception must not weaken ambiguous shell rejection."""
+        release = self.root / "release"
+        init_repo(release, "release-please--branches--main--components--ambercast")
+        result = self.evaluate('eval "git commit"', release)
+        self.assertIsNotNone(result)
+        self.assertIn("too complex to statically classify", result[1])
+
+    def test_release_branch_git_dir_does_not_promote_worktree(self) -> None:
+        """A git --git-dir target on the release branch does not promote a worktree from main because only registered git -C targets may change the trusted directory."""
+        release = self.root / "release"
+        git(self.main, "worktree", "add", "-q", "-b",
+            "release-please--branches--main--components--ambercast", str(release))
+        result = self.evaluate(f"git --git-dir={release / '.git'} commit -m message")
+        self.assertIsNotNone(result)
+        self.assertIn("commits/pushes on main", result[1])
+
+    def test_release_branch_exception_keeps_push_policy(self) -> None:
+        """Push on a non-issue branch passes and push on main blocks because the release exception changes commit policy only."""
+        self.assertIsNone(self.evaluate("git push", self.malformed_worktree))
+        result = self.evaluate("git push")
+        self.assertIsNotNone(result)
+        self.assertIn("commits/pushes on main", result[1])
+
+    def test_release_branch_exception_keeps_issue_branch_grammar(self) -> None:
+        """The release branch exception is a separate comparison and must leave the issue branch grammar exactly as strict as it was."""
+        for index, branch in enumerate((
+            "issues/12", "issues/12-schema", "issues/12-", "issues/12--a", "issues/12-A",
+        )):
+            with self.subTest(branch=branch):
+                repo = self.root / f"issue-{index}"
+                init_repo(repo, branch)
+                result = self.evaluate("git commit -m message", repo)
+                if branch in ("issues/12", "issues/12-schema"):
+                    self.assertIsNone(result)
+                else:
+                    self.assertIsNotNone(result)
+                    self.assertIn("does not match issues/<N>", result[1])
+
     def test_main_checkout_commit_is_still_blocked(self):
         result = self.evaluate("git commit -m message")
         self.assertIsNotNone(result)
